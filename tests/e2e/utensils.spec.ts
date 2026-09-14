@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { registerAndGoto } from './helpers/auth';
+import { registerWithHousehold } from './helpers/auth';
 
 test.describe('Pantry — utensils tab', () => {
   test.beforeEach(async ({ page }) => {
-    await registerAndGoto(page, '/pantry');
+    // El catalogo de utensilios se siembra junto al hogar
+    await registerWithHousehold(page, '/pantry');
     await page.locator('.tab', { hasText: 'Utensilios' }).click();
     await expect(page.locator('.utensils')).toBeVisible();
   });
@@ -36,15 +37,19 @@ test.describe('Pantry — utensils tab', () => {
   });
 
   test('adds and deletes a custom utensil', async ({ page }) => {
+    // El borrado pide confirmacion con confirm()
+    page.on('dialog', (dialog) => dialog.accept());
+
     await page.fill('input[name="utensilName"]', 'Sous vide');
     await page.locator('.utensils-add__form button[type="submit"]').click();
 
-    await expect(page.locator('.toast__title')).toContainText('Añadido');
+    await expect(page.locator('.toast--success .toast__title')).toContainText('Añadido');
     const custom = page.locator('.utensil-card', { hasText: 'Sous vide' });
     await expect(custom).toHaveCount(1);
     await expect(custom).toHaveClass(/utensil-card--owned/);
 
     await custom.locator('.utensil-card__delete').click();
+    await expect(page.locator('.toast--success .toast__title')).toContainText('Eliminado');
     await expect(page.locator('.utensil-card', { hasText: 'Sous vide' })).toHaveCount(0);
   });
 });

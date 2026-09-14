@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { registerAndGoto } from './helpers/auth';
+import { registerWithHousehold } from './helpers/auth';
 
 test.describe('Pantry', () => {
   test.beforeEach(async ({ page }) => {
-    await registerAndGoto(page, '/pantry');
+    // El seed de ingredientes se crea junto al hogar
+    await registerWithHousehold(page, '/pantry');
     await expect(page.locator('h1.pantry__title')).toBeVisible();
   });
 
@@ -53,8 +54,7 @@ test.describe('Pantry', () => {
 
     await page.locator('app-modal button[type="submit"]').click();
 
-    // Toast de exito y el ingrediente aparece en la lista
-    await expect(page.locator('.toast__title')).toContainText('Agregado');
+    await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
     await expect(page.locator('.ingredient-item', { hasText: 'Tomate' })).toHaveCount(1);
   });
 
@@ -70,10 +70,10 @@ test.describe('Pantry', () => {
 
   test('should show the common ingredients seeded with the household', async ({ page }) => {
     const suggestions = page.locator('.suggestions .chip');
-    // ~68 ingredientes sembrados con cantidad 0
-    await expect(suggestions.first()).toBeVisible();
-    expect(await suggestions.count()).toBeGreaterThan(40);
     await expect(page.locator('.suggestions__title')).toContainText('Sugerencias comunes');
+    await expect(suggestions.first()).toBeVisible();
+    // ~68 ingredientes sembrados con cantidad 0
+    expect(await suggestions.count()).toBeGreaterThan(40);
   });
 
   test('suggestions do not count as pantry stock', async ({ page }) => {
