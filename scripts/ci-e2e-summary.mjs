@@ -38,7 +38,7 @@ const walk = (suites, trail = []) => {
         const bad = (test.results ?? []).filter((r) => r.status === 'failed' || r.status === 'timedOut');
         if (bad.length === 0) continue;
         const err = bad
-          .map((r) => (r.error?.message || r.status).split('\n').slice(0, 8).join(' '))
+          .map((r) => (r.error?.message || r.status).split('\n').slice(0, 4).join(' ').slice(0, 320))
           .join(' || ');
         failures.push({ title: [...path, spec.title].join(' > '), err });
       }
@@ -53,6 +53,6 @@ const total = report.stats?.total ?? '?';
 const failed = report.stats?.failed ?? failures.length;
 annotate(`E2E resumen: ${failed} fallidos / ${total} tests`);
 
-for (const f of failures.slice(0, 25)) {
+for (const f of failures.slice(0, 60)) {
   annotate(`${f.title} :: ${f.err}`);
 }

@@ -4,8 +4,8 @@ test.describe('Recipes', () => {
   test.beforeEach(async ({ page }) => {
     // Login first
     await page.goto('/auth/login');
-    await page.fill('#email', 'test@example.com');
-    await page.fill('#password', 'Password1');
+    await page.fill('input#email', 'test@example.com');
+    await page.fill('input#password', 'Password1');
     await page.click('button[type="submit"]');
     await page.waitForURL(/.*dashboard/);
 

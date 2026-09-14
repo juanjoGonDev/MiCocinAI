@@ -4,9 +4,9 @@ test.describe('Dashboard (new user) — empty states', () => {
   test('shows empty-state messages when no recipes or meals exist', async ({ page }) => {
     const email = `dash-${Date.now()}@example.com`;
     await page.goto('/auth/register');
-    await page.fill('#name', 'Dash');
-    await page.fill('#email', email);
-    await page.fill('#password', 'Test1234');
+    await page.fill('input#name', 'Dash');
+    await page.fill('input#email', email);
+    await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
     await page.waitForURL(/.*dashboard/);
 
@@ -26,9 +26,9 @@ test.describe('Dashboard (new user) — empty states', () => {
   test('quick actions navigate to correct sections', async ({ page }) => {
     const email = `dash-actions-${Date.now()}@example.com`;
     await page.goto('/auth/register');
-    await page.fill('#name', 'QA');
-    await page.fill('#email', email);
-    await page.fill('#password', 'Test1234');
+    await page.fill('input#name', 'QA');
+    await page.fill('input#email', email);
+    await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
     await page.waitForURL(/.*dashboard/);
 

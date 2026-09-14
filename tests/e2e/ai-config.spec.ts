@@ -4,8 +4,8 @@ test.describe('AI Config', () => {
   test.beforeEach(async ({ page }) => {
     // Login first
     await page.goto('/auth/login');
-    await page.fill('#email', 'test@example.com');
-    await page.fill('#password', 'Password1');
+    await page.fill('input#email', 'test@example.com');
+    await page.fill('input#password', 'Password1');
     await page.click('button[type="submit"]');
     await page.waitForURL(/.*dashboard/);
 
@@ -29,10 +29,10 @@ test.describe('AI Config', () => {
     await page.click('text=Agregar configuración');
 
     await expect(page.locator('text=Nueva Configuración')).toBeVisible();
-    await expect(page.locator('#name')).toBeVisible();
-    await expect(page.locator('#model')).toBeVisible();
-    await expect(page.locator('#baseUrl')).toBeVisible();
-    await expect(page.locator('#apiKey')).toBeVisible();
+    await expect(page.locator('input#name')).toBeVisible();
+    await expect(page.locator('input#model')).toBeVisible();
+    await expect(page.locator('input#baseUrl')).toBeVisible();
+    await expect(page.locator('input#apiKey')).toBeVisible();
   });
 
   test('should show config form fields', async ({ page }) => {
@@ -46,16 +46,16 @@ test.describe('AI Config', () => {
     await expect(page.locator('text=Temperatura')).toBeVisible();
 
     // Max tokens
-    await expect(page.locator('#maxTokens')).toBeVisible();
+    await expect(page.locator('input#maxTokens')).toBeVisible();
   });
 
   test('should create a new config', async ({ page }) => {
     await page.click('text=Agregar configuración');
 
-    await page.fill('#name', 'Mi Proveedor');
-    await page.fill('#model', 'gpt-4o-mini');
-    await page.fill('#baseUrl', 'https://api.openai.com/v1');
-    await page.fill('#apiKey', 'sk-test-key');
+    await page.fill('input#name', 'Mi Proveedor');
+    await page.fill('input#model', 'gpt-4o-mini');
+    await page.fill('input#baseUrl', 'https://api.openai.com/v1');
+    await page.fill('input#apiKey', 'sk-test-key');
 
     await page.click('text=Crear');
 

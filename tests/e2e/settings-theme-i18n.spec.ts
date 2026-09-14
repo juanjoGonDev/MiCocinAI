@@ -4,9 +4,9 @@ test.describe('Settings — theme & i18n', () => {
   test.beforeEach(async ({ page }) => {
     const email = `settings-${Date.now()}@example.com`;
     await page.goto('/auth/register');
-    await page.fill('#name', 'Tester');
-    await page.fill('#email', email);
-    await page.fill('#password', 'Test1234');
+    await page.fill('input#name', 'Tester');
+    await page.fill('input#email', email);
+    await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
     await page.waitForURL(/.*dashboard/);
   });

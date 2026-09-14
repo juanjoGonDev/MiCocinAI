@@ -4,16 +4,16 @@ test.describe('Household sharing & invite flow', () => {
   test('invite code appears immediately after creating household and is a full URL', async ({ page }) => {
     const email = `hh-${Date.now()}@example.com`;
     await page.goto('/auth/register');
-    await page.fill('#name', 'Homeowner');
-    await page.fill('#email', email);
-    await page.fill('#password', 'Test1234');
+    await page.fill('input#name', 'Homeowner');
+    await page.fill('input#email', email);
+    await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
     await page.waitForURL(/.*dashboard/);
 
     // Create household
     await page.goto('/household');
     await page.getByRole('button', { name: /Crear hogar/i }).click();
-    await page.fill('#householdName', 'Mi Casa');
+    await page.fill('input#householdName', 'Mi Casa');
     await page.click('button[type="submit"]');
 
     // Invite code should be a full URL (http.../invite/CODE)
@@ -34,14 +34,14 @@ test.describe('Household sharing & invite flow', () => {
     const ownerPage = await ownerCtx.newPage();
     const email = `owner-${Date.now()}@example.com`;
     await ownerPage.goto('/auth/register');
-    await ownerPage.fill('#name', 'Owner');
-    await ownerPage.fill('#email', email);
-    await ownerPage.fill('#password', 'Test1234');
+    await ownerPage.fill('input#name', 'Owner');
+    await ownerPage.fill('input#email', email);
+    await ownerPage.fill('input#password', 'Test1234');
     await ownerPage.click('button[type="submit"]');
     await ownerPage.waitForURL(/.*dashboard/);
     await ownerPage.goto('/household');
     await ownerPage.getByRole('button', { name: /Crear hogar/i }).click();
-    await ownerPage.fill('#householdName', 'Familia López');
+    await ownerPage.fill('input#householdName', 'Familia López');
     await ownerPage.click('button[type="submit"]');
     const inviteUrl = await ownerPage.locator('.invite-card__code').textContent();
     expect(inviteUrl).toContain('/invite/');

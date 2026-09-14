@@ -9,6 +9,10 @@ export type InputSize = 'sm' | 'md' | 'lg';
   selector: 'app-input',
   standalone: true,
   imports: [CommonModule, FormsModule],
+  // El id se aplica SOLO al <input> nativo del template (via @Input() id):
+  // si se deja tambien en el host <app-input> el DOM acaba con ids duplicados
+  // y los selectores #id dejan de apuntar al campo real.
+  host: { '[attr.id]': 'null' },
   template: `
     <div [class]="getGroupClasses()">
       <label *ngIf="label" [for]="id" class="input__label">

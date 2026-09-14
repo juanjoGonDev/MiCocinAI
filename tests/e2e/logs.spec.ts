@@ -5,9 +5,9 @@ test.describe('Logs page', () => {
     // Register a fresh user (random email)
     const email = `logs-${Date.now()}@example.com`;
     await page.goto('/auth/register');
-    await page.fill('#name', 'Logger');
-    await page.fill('#email', email);
-    await page.fill('#password', 'Test1234');
+    await page.fill('input#name', 'Logger');
+    await page.fill('input#email', email);
+    await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
     await page.waitForURL(/.*dashboard/);
     await page.goto('/logs');

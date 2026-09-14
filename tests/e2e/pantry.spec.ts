@@ -4,8 +4,8 @@ test.describe('Pantry', () => {
   test.beforeEach(async ({ page }) => {
     // Login first
     await page.goto('/auth/login');
-    await page.fill('#email', 'test@example.com');
-    await page.fill('#password', 'Password1');
+    await page.fill('input#email', 'test@example.com');
+    await page.fill('input#password', 'Password1');
     await page.click('button[type="submit"]');
     await page.waitForURL(/.*dashboard/);
 
@@ -37,15 +37,15 @@ test.describe('Pantry', () => {
     await page.click('text=Agregar');
 
     await expect(page.locator('text=Agregar Ingrediente')).toBeVisible();
-    await expect(page.locator('#name')).toBeVisible();
-    await expect(page.locator('#quantity')).toBeVisible();
+    await expect(page.locator('input#name')).toBeVisible();
+    await expect(page.locator('input#quantity')).toBeVisible();
   });
 
   test('should add a new ingredient', async ({ page }) => {
     await page.click('text=Agregar');
 
-    await page.fill('#name', 'Tomate');
-    await page.fill('#quantity', '500');
+    await page.fill('input#name', 'Tomate');
+    await page.fill('input#quantity', '500');
 
     // Select category
     await page.selectOption('select[name="category"]', 'vegetables');

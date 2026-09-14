@@ -11,8 +11,8 @@ test.describe('Authentication', () => {
 
   test('should show login form', async ({ page }) => {
     await expect(page.locator('h2')).toContainText('Iniciar Sesión');
-    await expect(page.locator('#email')).toBeVisible();
-    await expect(page.locator('#password')).toBeVisible();
+    await expect(page.locator('input#email')).toBeVisible();
+    await expect(page.locator('input#password')).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeVisible();
   });
 
@@ -39,9 +39,9 @@ test.describe('Authentication', () => {
   test('should show register form with cooking level selection', async ({ page }) => {
     await page.goto('/auth/register');
 
-    await expect(page.locator('#name')).toBeVisible();
-    await expect(page.locator('#email')).toBeVisible();
-    await expect(page.locator('#password')).toBeVisible();
+    await expect(page.locator('input#name')).toBeVisible();
+    await expect(page.locator('input#email')).toBeVisible();
+    await expect(page.locator('input#password')).toBeVisible();
 
     // Cooking level options
     await expect(page.locator('text=Principiante')).toBeVisible();
@@ -51,8 +51,8 @@ test.describe('Authentication', () => {
 
   test('should login successfully', async ({ page }) => {
     // This test assumes a test user exists or mocks the API
-    await page.fill('#email', 'test@example.com');
-    await page.fill('#password', 'Password1');
+    await page.fill('input#email', 'test@example.com');
+    await page.fill('input#password', 'Password1');
     await page.click('button[type="submit"]');
 
     // Should redirect to dashboard
