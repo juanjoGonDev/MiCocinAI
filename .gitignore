@@ -9,9 +9,8 @@ frontend/dist/
 server/dist/
 
 # Database
-data/*.db
-data/*.db-wal
-data/*.db-shm
+server/data/
+!server/data/.gitkeep
 
 # Logs
 logs/

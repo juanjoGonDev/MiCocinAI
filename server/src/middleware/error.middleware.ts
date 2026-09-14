@@ -1,6 +1,7 @@
 import { Context } from 'hono';
 import { ZodError } from 'zod';
 import { config } from '../config/app.config.js';
+import { addServerLog } from '../routes/logs.routes.js';
 
 export class AppError extends Error {
   statusCode: number;
@@ -56,6 +57,9 @@ export class ConflictError extends AppError {
 
 export function errorHandler(err: Error, c: Context) {
   console.error('Error:', err);
+  
+  // Store error in log viewer
+  addServerLog('error', err.message, err.stack);
 
   // Handle Zod validation errors
   if (err instanceof ZodError) {

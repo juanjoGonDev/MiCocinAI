@@ -130,7 +130,8 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
       >
         <form (ngSubmit)="createHousehold()" class="create-form">
           <app-input
-            id="name"
+            id="householdName"
+            name="householdName"
             label="Nombre del hogar"
             placeholder="Ej: Mi hogar"
             [(ngModel)]="createForm.name"
@@ -165,6 +166,7 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
 
           <app-input
             id="inviteCode"
+            name="inviteCode"
             label="Código de invitación"
             placeholder="Ej: ABC12345"
             [(ngModel)]="joinForm.inviteCode"

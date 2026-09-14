@@ -20,6 +20,7 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
       
       <app-input
         id="email"
+        name="email"
         type="email"
         label="Email"
         placeholder="tu@email.com"

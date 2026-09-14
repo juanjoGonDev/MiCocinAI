@@ -212,6 +212,7 @@ export class InputComponent implements ControlValueAccessor {
   @Input() suffixIcon = false;
   @Input() showToggle = true;
   @Input() fullWidth = true;
+  @Input() name = '';
 
   @Output() onBlur = new EventEmitter<Event>();
   @Output() onFocus = new EventEmitter<Event>();

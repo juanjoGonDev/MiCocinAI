@@ -118,6 +118,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
         <form (ngSubmit)="saveConfig()" class="config-form">
           <app-input
             id="name"
+            name="configName"
             label="Nombre"
             placeholder="Mi proveedor IA"
             [(ngModel)]="formData.name"
@@ -135,6 +136,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
 
             <app-input
               id="model"
+              name="model"
               label="Modelo"
               placeholder="gpt-4o-mini"
               [(ngModel)]="formData.model"
@@ -144,6 +146,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
 
           <app-input
             id="baseUrl"
+            name="baseUrl"
             type="url"
             label="URL Base"
             placeholder="https://api.openai.com/v1"
@@ -154,6 +157,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
 
           <app-input
             id="apiKey"
+            name="apiKey"
             type="password"
             label="API Key"
             placeholder="sk-..."
@@ -178,6 +182,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
 
             <app-input
               id="maxTokens"
+              name="maxTokens"
               type="number"
               label="Max Tokens"
               placeholder="2000"
@@ -188,6 +193,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
           <div class="form-row">
             <app-input
               id="timeout"
+              name="timeout"
               type="number"
               label="Timeout (ms)"
               placeholder="30000"
@@ -196,6 +202,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
 
             <app-input
               id="retryAttempts"
+              name="retryAttempts"
               type="number"
               label="Reintentos"
               placeholder="3"

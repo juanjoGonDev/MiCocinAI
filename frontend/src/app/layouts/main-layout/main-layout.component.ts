@@ -339,7 +339,8 @@ export class MainLayoutComponent {
     { path: '/recipes', label: 'Recetas', icon: '📖' },
     { path: '/calendar', label: 'Calendario', icon: '📅' },
     { path: '/household', label: 'Hogar', icon: '👨‍👩‍👧‍👦' },
-    { path: '/ai-config', label: 'IA Config', icon: '🤖' }
+    { path: '/ai-config', label: 'IA Config', icon: '🤖' },
+    { path: '/logs', label: 'Logs', icon: '📋' }
   ];
 
   mobileNavItems: NavItem[] = [

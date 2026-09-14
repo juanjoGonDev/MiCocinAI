@@ -69,6 +69,7 @@ import {
       <div class="pantry__filters">
         <app-input
           id="search"
+          name="search"
           type="search"
           placeholder="Buscar ingredientes..."
           [(ngModel)]="searchTerm"
@@ -146,7 +147,8 @@ import {
       >
         <form (ngSubmit)="saveIngredient()" class="ingredient-form">
           <app-input
-            id="name"
+            id="ingredientName"
+            name="ingredientName"
             label="Nombre"
             placeholder="Ej: Tomate"
             [(ngModel)]="formData.name"
@@ -157,6 +159,7 @@ import {
           <div class="form-row">
             <app-input
               id="quantity"
+              name="quantity"
               type="number"
               label="Cantidad"
               placeholder="0"
@@ -202,6 +205,7 @@ import {
 
           <app-input
             id="expiration"
+            name="expiration"
             type="date"
             label="Fecha de caducidad (opcional)"
             [(ngModel)]="formData.expirationDate"
@@ -209,6 +213,7 @@ import {
 
           <app-input
             id="notes"
+            name="notes"
             label="Notas (opcional)"
             placeholder="Ej: Comprado ayer"
             [(ngModel)]="formData.notes"

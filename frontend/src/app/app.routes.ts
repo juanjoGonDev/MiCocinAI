@@ -47,6 +47,10 @@ export const routes: Routes = [
         loadChildren: () => import('./features/ai-config/ai-config.routes').then(m => m.AI_CONFIG_ROUTES)
       },
       {
+        path: 'logs',
+        loadChildren: () => import('./features/logs/logs.routes').then(m => m.LOGS_ROUTES)
+      },
+      {
         path: 'settings',
         loadChildren: () => import('./features/settings/settings.routes').then(m => m.SETTINGS_ROUTES)
       }

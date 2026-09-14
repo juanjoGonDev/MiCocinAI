@@ -16,6 +16,7 @@ import { householdRoutes } from './routes/household.routes.js';
 import { calendarRoutes } from './routes/calendar.routes.js';
 import { aiRoutes } from './routes/ai.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
+import { logRoutes } from './routes/logs.routes.js';
 import { memoryMonitor } from './utils/memory-monitor.js';
 
 const app = new Hono();
@@ -65,6 +66,7 @@ app.route('/api/recipes', recipeRoutes);
 app.route('/api/household', householdRoutes);
 app.route('/api/calendar', calendarRoutes);
 app.route('/api/ai', aiRoutes);
+app.route('/api/logs', logRoutes);
 
 // Error handling
 app.onError(errorHandler);
@@ -86,11 +88,11 @@ async function startServer() {
   try {
     // Initialize database
     await initializeDatabase();
-    console.log('✓ Database initialized');
+    console.log('[SERVER] ✓ Database initialized');
 
     // Start memory monitor
     memoryMonitor.start();
-    console.log('✓ Memory monitor started');
+    console.log('[SERVER] ✓ Memory monitor started');
 
     // Start server
     const port = config.server.port;
@@ -100,31 +102,30 @@ async function startServer() {
       hostname: '0.0.0.0'
     }, (info) => {
       console.log(`
-╔═══════════════════════════════════════════════════════════════╗
-║                    RecipeApp Server                           ║
-╠═══════════════════════════════════════════════════════════════╣
-║  Status:  Running                                            ║
-║  Port:    ${info.port}                                              ║
-║  Env:     ${config.server.env.padEnd(20)}                           ║
-║  PID:     ${process.pid}                                           ║
-╚═══════════════════════════════════════════════════════════════╝
+[SERVER] ══════════════════════════════════════════════════════════
+[SERVER]   MiCocinAI Server
+[SERVER]   Status:  Running
+[SERVER]   Port:    ${info.port}
+[SERVER]   Env:     ${config.server.env}
+[SERVER]   PID:     ${process.pid}
+[SERVER] ══════════════════════════════════════════════════════════
       `);
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('[SERVER] Failed to start server:', error);
     process.exit(1);
   }
 }
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received. Shutting down gracefully...');
+  console.log('[SERVER] SIGTERM received. Shutting down gracefully...');
   memoryMonitor.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
-  console.log('SIGINT received. Shutting down gracefully...');
+  console.log('[SERVER] SIGINT received. Shutting down gracefully...');
   memoryMonitor.stop();
   process.exit(0);
 });
