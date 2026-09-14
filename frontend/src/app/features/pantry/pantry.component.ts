@@ -703,6 +703,15 @@ export class PantryComponent implements OnInit {
     });
   }
 
+  /** Recarga la lista respetando la busqueda y la categoria activas. */
+  private reloadIngredients(): void {
+    this.pantryService.loadIngredients({
+      search: this.searchTerm,
+      category: this.selectedIngCategory() || undefined
+    });
+    this.pantryService.loadStats();
+  }
+
   saveIngredient(): void {
     this.formErrors.name.set('');
     this.formErrors.quantity.set('');
@@ -723,7 +732,7 @@ export class PantryComponent implements OnInit {
         );
         this.closeIngredientModal();
         this.isSaving.set(false);
-        this.pantryService.loadStats();
+        this.reloadIngredients();
       },
       error: () => {
         this.toastService.error('Error', 'No se pudo guardar el ingrediente');
@@ -737,7 +746,7 @@ export class PantryComponent implements OnInit {
       this.pantryService.deleteIngredient(ingredient.id).subscribe({
         next: () => {
           this.toastService.success('Eliminado', `${ingredient.name} eliminado`);
-          this.pantryService.loadStats();
+          this.reloadIngredients();
         },
         error: () => this.toastService.error('Error', 'No se pudo eliminar')
       });

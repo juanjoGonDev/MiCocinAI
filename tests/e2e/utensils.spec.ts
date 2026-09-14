@@ -31,7 +31,7 @@ test.describe('Pantry — utensils tab', () => {
 
     await page.reload();
     await page.locator('.tab', { hasText: 'Utensilios' }).click();
-    await expect(page.locator('.utensil-card', { hasText: name })).toHaveClass(
+    await expect(page.locator('.utensil-card', { hasText: name }).first()).toHaveClass(
       /utensil-card--owned/
     );
   });
@@ -49,7 +49,7 @@ test.describe('Pantry — utensils tab', () => {
     await expect(custom).toHaveClass(/utensil-card--owned/);
 
     await custom.locator('.utensil-card__delete').click();
-    await expect(page.locator('.toast--success .toast__title')).toContainText('Eliminado');
+    await expect(page.locator('.toast--success').filter({ hasText: 'Eliminado' })).toBeVisible();
     await expect(page.locator('.utensil-card', { hasText: 'Sous vide' })).toHaveCount(0);
   });
 });
