@@ -55,9 +55,9 @@ export class AuthService {
   login(credentials: AuthCredentials): Observable<AuthResponse> {
     this.isLoadingSignal.set(true);
 
-    return this.http.post<AuthResponse>(`${this.apiUrl}/login`, credentials).pipe(
+    return this.http.post<any>(`${this.apiUrl}/login`, credentials).pipe(
       tap(response => {
-        this.handleAuthResponse(response);
+        this.handleAuthResponse(this.unwrap(response));
         this.isLoadingSignal.set(false);
       }),
       catchError(error => {
@@ -70,9 +70,9 @@ export class AuthService {
   register(data: RegisterData): Observable<AuthResponse> {
     this.isLoadingSignal.set(true);
 
-    return this.http.post<AuthResponse>(`${this.apiUrl}/register`, data).pipe(
+    return this.http.post<any>(`${this.apiUrl}/register`, data).pipe(
       tap(response => {
-        this.handleAuthResponse(response);
+        this.handleAuthResponse(this.unwrap(response));
         this.isLoadingSignal.set(false);
       }),
       catchError(error => {
@@ -80,6 +80,17 @@ export class AuthService {
         throw error;
       })
     );
+  }
+
+  /**
+   * The backend wraps responses in `{ success, data: {...} }`.
+   * Accept either shape so the service works if the backend is ever flattened.
+   */
+  private unwrap(response: any): AuthResponse {
+    if (response && response.data && response.data.token) {
+      return response.data as AuthResponse;
+    }
+    return response as AuthResponse;
   }
 
   logout(): void {
@@ -97,8 +108,8 @@ export class AuthService {
       return of();
     }
 
-    return this.http.post<AuthResponse>(`${this.apiUrl}/refresh`, { refreshToken }).pipe(
-      tap(response => this.handleAuthResponse(response)),
+    return this.http.post<any>(`${this.apiUrl}/refresh`, { refreshToken }).pipe(
+      tap(response => this.handleAuthResponse(this.unwrap(response))),
       catchError(() => {
         this.logout();
         return of();
@@ -162,8 +173,9 @@ export class AuthService {
   }
 
   updateProfile(userData: Partial<User>): Observable<User> {
-    return this.http.patch<User>(`${this.apiUrl}/profile`, userData).pipe(
-      tap(user => {
+    return this.http.patch(`${this.apiUrl}/profile`, userData).pipe(
+      tap((response: any) => {
+        const user: User = response?.data ? response.data : response;
         this.currentUserSignal.set(user);
         localStorage.setItem(this.USER_KEY, JSON.stringify(user));
       })

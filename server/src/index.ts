@@ -1,7 +1,6 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { logger } from 'hono/logger';
 import { prettyJSON } from 'hono/pretty-json';
 import { secureHeaders } from 'hono/secure-headers';
 import { rateLimiter } from 'hono-rate-limiter';
@@ -18,6 +17,11 @@ import { aiRoutes } from './routes/ai.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
 import { logRoutes } from './routes/logs.routes.js';
 import { memoryMonitor } from './utils/memory-monitor.js';
+import { installConsoleCapture } from './utils/log-store.js';
+
+// Install console capture BEFORE anything else so that startup messages
+// (including DB init errors) make it into the in-app log viewer.
+installConsoleCapture();
 
 const app = new Hono();
 
@@ -26,7 +30,28 @@ const app = new Hono();
 // ═══════════════════════════════════════════════════════════════════
 
 app.use('*', secureHeaders());
-app.use('*', logger());
+
+// Custom logger: writes to console (which is captured into the log store for
+// the in-app viewer) with the same "← /method /path" / "→ status ms" format
+// that the user saw in their terminal.
+app.use('*', async (c, next) => {
+  const start = Date.now();
+  const { method, url } = c.req;
+  // eslint-disable-next-line no-console
+  console.log(`<-- ${method} ${url}`);
+  await next();
+  const ms = Date.now() - start;
+  const status = c.res.status;
+  const color =
+    status >= 500 ? '\x1b[31m'
+    : status >= 400 ? '\x1b[33m'
+    : status >= 300 ? '\x1b[36m'
+    : '\x1b[32m';
+  const reset = '\x1b[0m';
+  // eslint-disable-next-line no-console
+  console.log(`--> ${color}${method} ${url} ${status}${reset} ${ms}ms`);
+});
+
 app.use('*', prettyJSON());
 
 // CORS
@@ -40,13 +65,38 @@ app.use('*', cors({
 }));
 
 // Rate limiting
-app.use('/api/*', rateLimiter({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 100, // limit each IP to 100 requests per windowMs
+// More generous limits: development use, single user, and we want to avoid
+// accidental lockouts from refresh storms (which should not happen, but still).
+// Logs and health endpoints are exempt from rate limiting.
+app.use('/api/health', (_c, next) => next());
+app.use('/api/logs', (_c, next) => next());
+app.use('/api/auth/refresh', rateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 30,          // 30 refreshes per minute is already a lot
   standardHeaders: 'draft-6',
   keyGenerator: (c) => {
-    return c.req.header('x-forwarded-for') || 
-           c.req.header('x-real-ip') || 
+    return c.req.header('x-forwarded-for') ||
+           c.req.header('x-real-ip') ||
+           'unknown';
+  }
+}));
+app.use('/api/auth/login', rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,          // 20 login attempts per 15 minutes
+  standardHeaders: 'draft-6',
+  keyGenerator: (c) => {
+    return c.req.header('x-forwarded-for') ||
+           c.req.header('x-real-ip') ||
+           'unknown';
+  }
+}));
+app.use('/api/*', rateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  limit: 300,          // 300 req/min is plenty for a single-user app
+  standardHeaders: 'draft-6',
+  keyGenerator: (c) => {
+    return c.req.header('x-forwarded-for') ||
+           c.req.header('x-real-ip') ||
            'unknown';
   }
 }));
