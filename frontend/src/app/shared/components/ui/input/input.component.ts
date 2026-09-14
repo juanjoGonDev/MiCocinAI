@@ -224,14 +224,14 @@ export class InputComponent implements ControlValueAccessor {
   value = '';
   showPassword = false;
 
-  private onChange: (value: string) => void = () => {};
+  private onChange: (value: string | number) => void = () => {};
   private onTouched: () => void = () => {};
 
-  writeValue(value: string): void {
-    this.value = value || '';
+  writeValue(value: string | number): void {
+    this.value = value === null || value === undefined ? '' : String(value);
   }
 
-  registerOnChange(fn: (value: string) => void): void {
+  registerOnChange(fn: (value: string | number) => void): void {
     this.onChange = fn;
   }
 
@@ -245,8 +245,17 @@ export class InputComponent implements ControlValueAccessor {
 
   onInput(event: Event): void {
     const input = event.target as HTMLInputElement;
-    this.value = input.value;
-    this.onChange(this.value);
+    const raw = input.value;
+    this.value = raw;
+
+    // Los inputs numericos deben propagar numbers: el backend valida con
+    // z.number() y un "500" en formato string se rechaza con 400.
+    if (this.type === 'number' && raw !== '' && Number.isFinite(Number(raw))) {
+      this.onChange(Number(raw));
+      return;
+    }
+
+    this.onChange(raw);
     this.onTouched();
   }
 

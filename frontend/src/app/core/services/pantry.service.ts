@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, catchError, of, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   Ingredient,
@@ -74,7 +74,9 @@ export class PantryService {
         this.ingredientsSignal.update(list => [response.data, ...list]);
         this.loadStats();
       }),
-      catchError(() => of(null))
+      // Se propaga el error: si se silencia, la UI muestra "Agregado" aunque
+      // el backend haya rechazado el alta con un 400.
+      catchError(error => throwError(() => error))
     );
   }
 
@@ -84,8 +86,9 @@ export class PantryService {
         this.ingredientsSignal.update(list =>
           list.map(i => i.id === id ? response.data : i)
         );
+        this.loadStats();
       }),
-      catchError(() => of(null))
+      catchError(error => throwError(() => error))
     );
   }
 

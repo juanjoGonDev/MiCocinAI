@@ -22,7 +22,11 @@ export const createIngredientSchema = z.object({
   category: ingredientCategoryEnum,
   quantity: z.number().positive('Quantity must be positive'),
   unit: measurementUnitEnum,
-  expirationDate: z.string().datetime().optional().nullable(),
+  expirationDate: z
+    .string()
+    .refine((value) => !Number.isNaN(Date.parse(value)), 'Invalid date')
+    .optional()
+    .nullable(),
   location: storageLocationEnum.default('pantry'),
   image: z.string().url().optional().nullable(),
   barcode: z.string().optional().nullable(),

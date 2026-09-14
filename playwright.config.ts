@@ -7,7 +7,7 @@ export default defineConfig({
   // Acotados para que una suite completa no se dispare de tiempo en CI.
   timeout: 45000,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 2 : undefined,
+  workers: process.env.CI ? 1 : undefined,
   reporter: [
     ['html'],
     ['json', { outputFile: 'test-results/results.json' }]
