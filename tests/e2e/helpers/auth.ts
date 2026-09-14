@@ -24,7 +24,18 @@ export async function createHousehold(page: Page, name = 'Hogar E2E'): Promise<v
   await page.getByRole('button', { name: /Crear hogar/i }).click();
   await page.fill('input#householdName', name);
   await page.locator('app-modal button[type="submit"]').click();
-  await expect(page.locator('.invite-card__code')).toContainText('/invite/', { timeout: 15000 });
+  try {
+    await expect(page.locator('.invite-card__code')).toContainText('/invite/', { timeout: 15000 });
+  } catch (err) {
+    // TEMP DEBUG
+    const dbg = await page
+      .locator('.household__content, .no-household, .modal-overlay')
+      .first()
+      .innerHTML()
+      .catch(() => 'NO CONTENT');
+    console.log('::error::DEBUG_HH ' + dbg.replace(/\s+/g, ' ').replace(/%/g, '%25').slice(0, 700));
+    throw err;
+  }
 }
 
 /** Registra un usuario, crea su hogar y lo deja en `path`. */

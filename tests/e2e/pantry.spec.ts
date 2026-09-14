@@ -55,6 +55,9 @@ test.describe('Pantry', () => {
     await page.locator('app-modal button[type="submit"]').click();
 
     await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
+    // TEMP DEBUG
+    const dbg = await page.locator('.pantry__list').innerHTML().catch(() => 'NO LIST');
+    console.log('::error::DEBUG_PANTRY ' + dbg.replace(/\s+/g, ' ').replace(/%/g, '%25').slice(0, 700));
     await expect(page.locator('.ingredient-item', { hasText: 'Tomate' })).toHaveCount(1);
   });
 
