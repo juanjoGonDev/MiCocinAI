@@ -17,6 +17,37 @@ const pantryRoutes = new Hono<AppEnv>();
 // Apply auth middleware to all routes
 pantryRoutes.use('*', authMiddleware);
 
+/**
+ * Returns the user's household context:
+ *   { householdId, scope: 'user_id = ?' | '(user_id = ? OR household_id = ?)', params }
+ * If shared_pantry = 1, items belonging to the household are visible to all members.
+ */
+function getUserScope(userId: string) {
+  const db = getDatabase();
+  const user = db.prepare(
+    `SELECT u.household_id as hid, h.shared_pantry
+     FROM users u LEFT JOIN households h ON h.id = u.household_id
+     WHERE u.id = ?`
+  ).get(userId) as any;
+
+  if (user?.hid && user.shared_pantry) {
+    return {
+      householdId: user.hid,
+      userClause: '(user_id = ? OR household_id = ?)',
+      userParams: [userId, user.hid],
+      memberClause: '(user_id = ? OR household_id = ?)',
+      memberParams: [userId, user.hid]
+    };
+  }
+  return {
+    householdId: user?.hid ?? null,
+    userClause: 'user_id = ?',
+    userParams: [userId],
+    memberClause: 'user_id = ?',
+    memberParams: [userId]
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Ingredients
 // ═══════════════════════════════════════════════════════════════════
@@ -28,8 +59,9 @@ pantryRoutes.get('/ingredients', async (c) => {
   const filter = ingredientFilterSchema.parse(query);
 
   const db = getDatabase();
-  const conditions: string[] = ['user_id = ?'];
-  const params: any[] = [userId];
+  const scope = getUserScope(userId);
+  const conditions: string[] = [scope.userClause];
+  const params: any[] = [...scope.userParams];
 
   if (filter.search) {
     conditions.push('name LIKE ?');
@@ -87,44 +119,45 @@ pantryRoutes.get('/ingredients', async (c) => {
 pantryRoutes.get('/ingredients/stats', async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();
+  const scope = getUserScope(userId);
 
   // Get total items
   const totalResult = db.prepare(
-    'SELECT COUNT(*) as total FROM ingredients WHERE user_id = ?'
-  ).get(userId) as any;
+    `SELECT COUNT(*) as total FROM ingredients WHERE ${scope.userClause}`
+  ).get(...scope.userParams) as any;
 
   // Get expiring soon (next 3 days)
   const expiringSoonResult = db.prepare(`
-    SELECT COUNT(*) as total FROM ingredients 
-    WHERE user_id = ? 
-    AND expiration_date IS NOT NULL 
-    AND expiration_date >= datetime('now') 
+    SELECT COUNT(*) as total FROM ingredients
+    WHERE ${scope.userClause}
+    AND expiration_date IS NOT NULL
+    AND expiration_date >= datetime('now')
     AND expiration_date <= datetime('now', '+3 days')
-  `).get(userId) as any;
+  `).get(...scope.userParams) as any;
 
   // Get expired
   const expiredResult = db.prepare(`
-    SELECT COUNT(*) as total FROM ingredients 
-    WHERE user_id = ? 
-    AND expiration_date IS NOT NULL 
+    SELECT COUNT(*) as total FROM ingredients
+    WHERE ${scope.userClause}
+    AND expiration_date IS NOT NULL
     AND expiration_date < datetime('now')
-  `).get(userId) as any;
+  `).get(...scope.userParams) as any;
 
   // Get by category
   const byCategory = db.prepare(`
-    SELECT category, COUNT(*) as count 
-    FROM ingredients 
-    WHERE user_id = ? 
+    SELECT category, COUNT(*) as count
+    FROM ingredients
+    WHERE ${scope.userClause}
     GROUP BY category
-  `).all(userId);
+  `).all(...scope.userParams);
 
   // Get by location
   const byLocation = db.prepare(`
-    SELECT location, COUNT(*) as count 
-    FROM ingredients 
-    WHERE user_id = ? 
+    SELECT location, COUNT(*) as count
+    FROM ingredients
+    WHERE ${scope.userClause}
     GROUP BY location
-  `).all(userId);
+  `).all(...scope.userParams);
 
   return c.json({
     success: true,
@@ -307,8 +340,9 @@ pantryRoutes.get('/utensils', async (c) => {
   const filter = utensilFilterSchema.parse(query);
 
   const db = getDatabase();
-  const conditions: string[] = ['user_id = ?'];
-  const params: any[] = [userId];
+  const scope = getUserScope(userId);
+  const conditions: string[] = [scope.userClause];
+  const params: any[] = [...scope.userParams];
 
   if (filter.search) {
     conditions.push('name LIKE ?');

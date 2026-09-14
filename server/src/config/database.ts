@@ -74,6 +74,8 @@ async function runMigrations(db: Database.Database): Promise<void> {
       name TEXT NOT NULL,
       invite_code TEXT UNIQUE NOT NULL,
       shared_pantry INTEGER DEFAULT 1,
+      share_recipes INTEGER DEFAULT 1,
+      share_calendar INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -84,6 +86,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
       household_id TEXT NOT NULL,
       user_id TEXT NOT NULL,
       role TEXT DEFAULT 'member',
+      permissions TEXT DEFAULT '{}',
       joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (household_id) REFERENCES households(id),
       FOREIGN KEY (user_id) REFERENCES users(id),
@@ -242,6 +245,18 @@ async function runMigrations(db: Database.Database): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_user_recipes_user_id ON user_recipes(user_id);
     CREATE INDEX IF NOT EXISTS idx_ai_configs_user_id ON ai_configs(user_id);
   `);
+
+  // Auto-migrations: add columns that may be missing in older databases
+  const addColumnIfMissing = (table: string, column: string, definition: string) => {
+    const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!cols.some(c => c.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      console.log(`[DB] Added ${table}.${column}`);
+    }
+  };
+  addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
+  addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
+  addColumnIfMissing('household_members', 'permissions', 'TEXT DEFAULT \'{}\'');
 
   console.log('Database tables and indexes created');
 }
