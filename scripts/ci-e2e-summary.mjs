@@ -38,7 +38,14 @@ const walk = (suites, trail = []) => {
         const bad = (test.results ?? []).filter((r) => r.status === 'failed' || r.status === 'timedOut');
         if (bad.length === 0) continue;
         const err = bad
-          .map((r) => (r.error?.message || r.status).split('\n').slice(0, 4).join(' ').slice(0, 320))
+          .map((r) =>
+            (r.error?.message || r.status)
+              .replace(new RegExp(String.fromCharCode(27) + '\\[[0-9;]*m', 'g'), '')
+              .split('\n')
+              .slice(0, 6)
+              .join(' ')
+              .slice(0, 600)
+          )
           .join(' || ');
         failures.push({ title: [...path, spec.title].join(' > '), err });
       }

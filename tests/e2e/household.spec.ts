@@ -20,25 +20,13 @@ test.describe('Household sharing & invite flow', () => {
     await expect(page.locator('.invite-card__code')).toContainText('/invite/');
     // Copy link button present
     await expect(page.getByRole('button', { name: /Copiar enlace/ })).toBeVisible();
-    // TEMP DEBUG
-    const dbg1 = await page
-      .locator('.household-info')
-      .innerHTML()
-      .catch(() => 'NO .household-info');
-    const settingsCount = await page.locator('.settings-section').count();
-    console.log(
-      '::error::DEBUG1 settings=' +
-        settingsCount +
-        ' ' +
-        dbg1.replace(/\s+/g, ' ').replace(/%/g, '%25').slice(0, 700)
-    );
-
     // Share toggles present (admin sees them)
-    await expect(page.getByText(/Despensa compartida/)).toBeVisible();
-    await expect(page.getByText(/Recetas compartidas/)).toBeVisible();
-    await expect(page.getByText(/Calendario compartido/)).toBeVisible();
+    const shareSection = page.locator('.settings-section');
+    await expect(shareSection).toContainText('Despensa compartida');
+    await expect(shareSection).toContainText('Recetas compartidas');
+    await expect(shareSection).toContainText('Calendario compartido');
     // Admin badge on member list
-    await expect(page.locator('text=Admin')).toBeVisible();
+    await expect(page.locator('.member-card').first()).toContainText('Admin');
   });
 
   test('public invite page shows household name and join/login CTAs for logged-out users', async ({ browser }) => {
@@ -65,10 +53,7 @@ test.describe('Household sharing & invite flow', () => {
     const guestCtx = await browser.newContext();
     const guestPage = await guestCtx.newPage();
     await guestPage.goto(`/invite/${code}`);
-    // TEMP DEBUG
-    const dbg2 = await guestPage.locator('.invite-card').innerHTML().catch(() => 'NO .invite-card');
-    console.log('::error::DEBUG2 ' + dbg2.replace(/\s+/g, ' ').replace(/%/g, '%25').slice(0, 800));
-    await expect(guestPage.locator('text=Familia López')).toBeVisible();
+    await expect(guestPage.locator('.invite-card__title')).toContainText('Familia López');
     await expect(guestPage.getByRole('link', { name: /Iniciar sesión/ })).toBeVisible();
     await expect(guestPage.getByRole('link', { name: /Crear cuenta/ })).toBeVisible();
     await guestCtx.close();
