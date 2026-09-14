@@ -31,7 +31,7 @@
     "@lucide/angular": "1.45.0"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "19.2.27",
+    "@angular-devkit/build-angular": "22.1.8",
     "@angular/cli": "19.2.27",
     "@angular/compiler-cli": "19.2.25",
     "@types/jasmine": "5.1.5",
