@@ -1,0 +1,160 @@
+# =============================================================================
+# Dependabot Configuration - MiCocinAI
+# =============================================================================
+# Auto-update dependencies and GitHub Actions
+
+version: 2
+
+updates:
+  # --- GitHub Actions ---
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
+      - "automated"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    reviewers:
+      - "juanjo"
+    groups:
+      # Group all GitHub Actions updates into a single PR
+      github-actions:
+        patterns:
+          - "*"
+
+  # --- Root npm dependencies ---
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "npm"
+      - "automated"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+    reviewers:
+      - "juanjo"
+    # Allow security patches only for root
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    groups:
+      # Group minor/patch updates
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # --- Frontend npm dependencies ---
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "tuesday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "npm"
+      - "frontend"
+      - "automated"
+    commit-message:
+      prefix: "deps(frontend)"
+      include: "scope"
+    reviewers:
+      - "juanjo"
+    # Group Angular updates together
+    groups:
+      angular:
+        patterns:
+          - "@angular/*"
+          - "@angular-devkit/*"
+          - "@angular/cli"
+          - "@angular/compiler-cli"
+      typescript-eslint:
+        patterns:
+          - "@typescript-eslint/*"
+      testing:
+        patterns:
+          - "karma*"
+          - "jasmine*"
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # --- Server npm dependencies ---
+  - package-ecosystem: "npm"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "wednesday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "npm"
+      - "backend"
+      - "automated"
+    commit-message:
+      prefix: "deps(server)"
+      include: "scope"
+    reviewers:
+      - "juanjo"
+    groups:
+      # Group database-related deps
+      database:
+        patterns:
+          - "drizzle-*"
+          - "better-sqlite3"
+      hono:
+        patterns:
+          - "hono*"
+          - "@hono/*"
+      testing:
+        patterns:
+          - "vitest*"
+          - "@vitest/*"
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # --- Docker ---
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "thursday"
+      time: "09:00"
+      timezone: "Europe/Madrid"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+      - "automated"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    reviewers:
+      - "juanjo"
+    groups:
+      docker-images:
+        patterns:
+          - "*"

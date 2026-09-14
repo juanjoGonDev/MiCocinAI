@@ -1,0 +1,56 @@
+{
+  "name": "recipeapp",
+  "version": "1.0.0",
+  "description": "Smart recipe app with AI integration for Raspberry Pi",
+  "private": true,
+  "packageManager": "pnpm@10.15.0",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter frontend run start\" \"pnpm --filter server run dev\"",
+    "dev:client": "pnpm --filter frontend run start",
+    "dev:server": "pnpm --filter server run dev",
+    "build": "pnpm run build:server && pnpm run build:client",
+    "build:client": "pnpm --filter frontend run build:prod",
+    "build:server": "pnpm --filter server run build",
+    "start": "pnpm --filter server run start",
+    "test": "pnpm run test:client && pnpm run test:server",
+    "test:client": "pnpm --filter frontend run test",
+    "test:server": "pnpm --filter server run test",
+    "test:e2e": "npx playwright test",
+    "test:coverage": "pnpm run test:client:coverage && pnpm run test:server:coverage",
+    "test:client:coverage": "pnpm --filter frontend run test:coverage",
+    "test:server:coverage": "pnpm --filter server run test:coverage",
+    "lint": "pnpm run lint:client && pnpm run lint:server",
+    "lint:client": "pnpm --filter frontend run lint",
+    "lint:server": "pnpm --filter server run lint",
+    "lint:fix": "pnpm run lint:client:fix && pnpm run lint:server:fix",
+    "lint:client:fix": "pnpm --filter frontend run lint:fix",
+    "lint:server:fix": "pnpm --filter server run lint:fix",
+    "format": "prettier --write \"**/*.{ts,json,md}\"",
+    "knip": "knip",
+    "knip:fix": "knip --fix",
+    "clean": "rm -rf node_modules frontend/node_modules server/node_modules frontend/dist server/dist",
+    "audit": "pnpm audit --audit-level moderate",
+    "audit:fix": "pnpm audit --fix",
+    "docker:dev": "docker compose -f docker-compose.dev.yml up --build",
+    "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
+    "docker:dev:clean": "docker compose -f docker-compose.dev.yml down -v --rmi local"
+  },
+  "devDependencies": {
+    "concurrently": "10.0.5",
+    "prettier": "3.9.6",
+    "husky": "9.1.7",
+    "knip": "6.35.1",
+    "lint-staged": "17.5.1"
+  },
+  "lint-staged": {
+    "*.{ts,json,md}": "prettier --write",
+    "*.ts": "eslint --fix"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "onlyBuiltDependencies": [
+    "better-sqlite3",
+    "bcryptjs"
+  ]
+}

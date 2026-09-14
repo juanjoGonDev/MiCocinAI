@@ -1,0 +1,57 @@
+# =============================================================================
+# Dockerfile.dev - MiCocinAI Development Environment
+# =============================================================================
+# Multi-stage Dockerfile for development
+
+# --- Base Stage ---
+FROM node:20.18.1-alpine AS base
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    tini \
+    python3 \
+    make \
+    g++ \
+    git
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@12.4.1 --activate
+
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
+COPY frontend/package.json ./frontend/
+COPY server/package.json ./server/
+
+# Install dependencies (with scripts for native modules)
+RUN pnpm install --frozen-lockfile
+
+# --- Frontend Development Stage ---
+FROM base AS frontend
+WORKDIR /app/frontend
+
+# Copy frontend source
+COPY frontend/ ./
+
+# Expose Angular dev server port
+EXPOSE 4200
+
+# Start Angular dev server
+CMD ["pnpm", "start", "--", "--host", "0.0.0.0"]
+
+# --- Server Development Stage ---
+FROM base AS server
+WORKDIR /app/server
+
+# Copy server source
+COPY server/ ./
+
+# Create data directory
+RUN mkdir -p /app/data
+
+# Expose server port
+EXPOSE 3000
+
+# Start server in watch mode
+CMD ["pnpm", "run", "dev"]

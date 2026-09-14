@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+server/node_modules/
+
+# Build output
+dist/
+frontend/dist/
+server/dist/
+
+# Database
+data/*.db
+data/*.db-wal
+data/*.db-shm
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+test-results/
+.e2e-screenshots/
+
+# Angular
+.angular/
+frontend/.angular/
+
+# Misc
+*.tgz
+.cache/
+.parcel-cache/
+
+# pnpm
+.pnpm-store/
+pnpm-debug.log*
+
+# Security
+.npmrc.local
+*.pem
+*.key
+*.crt
+
+# Docker
+docker-compose.override.yml

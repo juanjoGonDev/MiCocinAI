@@ -1,0 +1,72 @@
+{
+  "$schema": "https://unpkg.com/knip@schema.json",
+  "entry": [
+    "frontend/src/main.ts",
+    "frontend/src/app/app.component.ts",
+    "frontend/src/app/app.config.ts",
+    "frontend/src/app/app.routes.ts",
+    "server/src/index.ts"
+  ],
+  "project": [
+    "frontend/src/**/*.ts",
+    "server/src/**/*.ts"
+  ],
+  "ignore": [
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "**/test/**",
+    "**/tests/**",
+    "**/e2e/**",
+    "**/migrations/**",
+    "**/seeds/**"
+  ],
+  "ignoreDependencies": [
+    "@angular/compiler-cli",
+    "@angular-devkit/build-angular",
+    "@angular-eslint/builder",
+    "karma-*",
+    "jasmine-*",
+    "@types/*",
+    "drizzle-kit",
+    "tsx"
+  ],
+  "rules": {
+    "classMembers": "warn",
+    "dependencies": "error",
+    "devDependencies": "warn",
+    "optionalPeerDependencies": "warn",
+    "unlisted": "error",
+    "binaries": "error",
+    "unresolved": "error",
+    "exports": "error",
+    "types": "error",
+    "nsExports": "error",
+    "nsTypes": "error",
+    "duplicates": "error"
+  },
+  "workspaces": {
+    "frontend": {
+      "entry": ["src/main.ts", "src/app/**/*.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": [
+        "@angular/compiler-cli",
+        "@angular-devkit/build-angular",
+        "karma-*",
+        "jasmine-*"
+      ]
+    },
+    "server": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": [
+        "drizzle-kit",
+        "tsx",
+        "@types/*",
+        "vitest",
+        "@vitest/*",
+        "eslint",
+        "@typescript-eslint/*"
+      ]
+    }
+  }
+}

@@ -1,0 +1,101 @@
+# =============================================================================
+# Dependabot Auto-Merge Workflow - MiCocinAI
+# =============================================================================
+# Automatically approve and merge Dependabot PRs that pass all checks
+
+name: Dependabot Auto-Merge
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Auto-Merge Dependabot PRs
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      # Step 1: Fetch Dependabot metadata
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.PAT_FINE }}"
+
+      # Step 2: Auto-approve patch and minor updates
+      - name: Approve patch and minor updates
+        if: >
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.PAT_FINE }}
+
+      # Step 3: Auto-merge patch updates immediately
+      - name: Auto-merge patch updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.PAT_FINE }}
+
+      # Step 4: Auto-merge minor updates (after approval)
+      - name: Auto-merge minor updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.PAT_FINE }}
+
+      # Step 5: Comment on major updates (manual review needed)
+      - name: Comment on major updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          gh pr comment "$PR_URL" --body "
+          ## ⚠️ Major Update Detected
+          
+          This is a major version update that may contain breaking changes.
+          
+          **Update details:**
+          - Dependency: \`${{ steps.metadata.outputs.dependency-names }}\`
+          - Update type: Major
+          
+          **Action required:** Please review this PR manually before merging.
+          
+          ### Checklist:
+          - [ ] Check CHANGELOG for breaking changes
+          - [ ] Run tests locally
+          - [ ] Verify no breaking API changes
+          - [ ] Update any affected code
+          
+          @juanjo Please review this PR.
+          "
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.PAT_FINE }}
+
+      # Step 6: Auto-approve GitHub Actions updates (always safe)
+      - name: Auto-approve GitHub Actions updates
+        if: contains(github.event.pull_request.labels.*.name, 'github-actions')
+        run: |
+          gh pr review --approve "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.PAT_FINE }}
+
+      # Step 7: Log the update
+      - name: Log Dependabot update
+        run: |
+          echo "## Dependabot Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dependency:** ${{ steps.metadata.outputs.dependency-names }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Update type:** ${{ steps.metadata.outputs.update-type }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package:** ${{ steps.metadata.outputs.package-name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **New version:** ${{ steps.metadata.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous version:** ${{ steps.metadata.outputs.previous-version }}" >> $GITHUB_STEP_SUMMARY

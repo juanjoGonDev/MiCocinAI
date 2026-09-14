@@ -1,0 +1,264 @@
+import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core';
+import { relations } from 'drizzle-orm';
+
+// ═══════════════════════════════════════════════════════════════════
+// Users
+// ═══════════════════════════════════════════════════════════════════
+
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(),
+  email: text('email').unique().notNull(),
+  name: text('name').notNull(),
+  passwordHash: text('password_hash').notNull(),
+  avatar: text('avatar'),
+  householdId: text('household_id'),
+  cookingLevel: text('cooking_level').default('beginner'),
+  preferences: text('preferences').default('{}'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
+});
+
+export const usersRelations = relations(users, ({ one, many }) => ({
+  household: one(households, {
+    fields: [users.householdId],
+    references: [households.id]
+  }),
+  ingredients: many(ingredients),
+  recipes: many(recipes),
+  aiConfigs: many(aiConfigs)
+}));
+
+// ═══════════════════════════════════════════════════════════════════
+// Households
+// ═══════════════════════════════════════════════════════════════════
+
+export const households = sqliteTable('households', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  inviteCode: text('invite_code').unique().notNull(),
+  sharedPantry: integer('shared_pantry', { mode: 'boolean' }).default(true),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
+});
+
+export const householdsRelations = relations(households, ({ many }) => ({
+  members: many(users),
+  ingredients: many(ingredients),
+  calendars: many(weeklyCalendars)
+}));
+
+// ═══════════════════════════════════════════════════════════════════
+// Ingredients (Pantry)
+// ═══════════════════════════════════════════════════════════════════
+
+export const ingredients = sqliteTable('ingredients', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  householdId: text('household_id'),
+  name: text('name').notNull(),
+  category: text('category').notNull(),
+  quantity: real('quantity').notNull(),
+  unit: text('unit').notNull(),
+  expirationDate: text('expiration_date'),
+  location: text('location').default('pantry'),
+  image: text('image'),
+  barcode: text('barcode'),
+  notes: text('notes'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
+});
+
+export const ingredientsRelations = relations(ingredients, ({ one }) => ({
+  user: one(users, {
+    fields: [ingredients.userId],
+    references: [users.id]
+  }),
+  household: one(households, {
+    fields: [ingredients.householdId],
+    references: [households.id]
+  })
+}));
+
+// ═══════════════════════════════════════════════════════════════════
+// Utensils
+// ═══════════════════════════════════════════════════════════════════
+
+export const utensils = sqliteTable('utensils', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  householdId: text('household_id'),
+  name: text('name').notNull(),
+  category: text('category').notNull(),
+  available: integer('available', { mode: 'boolean' }).default(true),
+  notes: text('notes'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP')
+});
+
+export const utensilsRelations = relations(utensils, ({ one }) => ({
+  user: one(users, {
+    fields: [utensils.userId],
+    references: [users.id]
+  })
+}));
+
+// ═══════════════════════════════════════════════════════════════════
+// Recipes
+// ═══════════════════════════════════════════════════════════════════
+
+export const recipes = sqliteTable('recipes', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  difficulty: text('difficulty').default('medium'),
+  cuisine: text('cuisine'),
+  mealType: text('meal_type').default('[]'),
+  totalTime: integer('total_time'),
+  prepTime: integer('prep_time'),
+  cookTime: integer('cook_time'),
+  restTime: integer('rest_time'),
+  servings: integer('servings').default(4),
+  calories: real('calories'),
+  image: text('image'),
+  ingredients: text('ingredients').default('[]'),
+  utensils: text('utensils').default('[]'),
+  steps: text('steps').default('[]'),
+  nutrition: text('nutrition'),
+  storage: text('storage'),
+  author: text('author').default('user'),
+  authorId: text('author_id'),
+  rating: real('rating'),
+  timesCooked: integer('times_cooked').default(0),
+  tags: text('tags').default('[]'),
+  isFavorite: integer('is_favorite', { mode: 'boolean' }).default(false),
+  isPublic: integer('is_public', { mode: 'boolean' }).default(false),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
+});
+
+export const recipesRelations = relations(recipes, ({ one, many }) => ({
+  author: one(users, {
+    fields: [recipes.authorId],
+    references: [users.id]
+  }),
+  userRecipes: many(userRecipes)
+}));
+
+// ═══════════════════════════════════════════════════════════════════
+// User Recipes (favorites, history)
+// ═══════════════════════════════════════════════════════════════════
+
+export const userRecipes = sqliteTable('user_recipes', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  recipeId: text('recipe_id').notNull(),
+  isFavorite: integer('is_favorite', { mode: 'boolean' }).default(false),
+  timesCooked: integer('times_cooked').default(0),
+  lastCookedAt: text('last_cooked_at'),
+  rating: integer('rating'),
+  notes: text('notes'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
+});
+
+export const userRecipesRelations = relations(userRecipes, ({ one }) => ({
+  user: one(users, {
+    fields: [userRecipes.userId],
+    references: [users.id]
+  }),
+  recipe: one(recipes, {
+    fields: [userRecipes.recipeId],
+    references: [recipes.id]
+  })
+}));
+
+// ═══════════════════════════════════════════════════════════════════
+// Weekly Calendars
+// ═══════════════════════════════════════════════════════════════════
+
+export const weeklyCalendars = sqliteTable('weekly_calendars', {
+  id: text('id').primaryKey(),
+  householdId: text('household_id').notNull(),
+  userId: text('user_id').notNull(),
+  weekStart: text('week_start').notNull(),
+  weekEnd: text('week_end').notNull(),
+  goals: text('goals').default('{}'),
+  generatedBy: text('generated_by').default('user'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
+});
+
+export const weeklyCalendarsRelations = relations(weeklyCalendars, ({ one, many }) => ({
+  household: one(households, {
+    fields: [weeklyCalendars.householdId],
+    references: [households.id]
+  }),
+  user: one(users, {
+    fields: [weeklyCalendars.userId],
+    references: [users.id]
+  }),
+  meals: many(meals)
+}));
+
+// ═══════════════════════════════════════════════════════════════════
+// Meals
+// ═══════════════════════════════════════════════════════════════════
+
+export const meals = sqliteTable('meals', {
+  id: text('id').primaryKey(),
+  calendarId: text('calendar_id').notNull(),
+  date: text('date').notNull(),
+  mealType: text('meal_type').notNull(),
+  recipeId: text('recipe_id'),
+  customMeal: text('custom_meal'),
+  time: text('time'),
+  servings: integer('servings').default(1),
+  notes: text('notes'),
+  completed: integer('completed', { mode: 'boolean' }).default(false),
+  completedAt: text('completed_at'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP')
+});
+
+export const mealsRelations = relations(meals, ({ one }) => ({
+  calendar: one(weeklyCalendars, {
+    fields: [meals.calendarId],
+    references: [weeklyCalendars.id]
+  }),
+  recipe: one(recipes, {
+    fields: [meals.recipeId],
+    references: [recipes.id]
+  })
+}));
+
+// ═══════════════════════════════════════════════════════════════════
+// AI Configurations
+// ═══════════════════════════════════════════════════════════════════
+
+export const aiConfigs = sqliteTable('ai_configs', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  provider: text('provider').default('custom'),
+  baseUrl: text('base_url').notNull(),
+  apiKey: text('api_key').notNull(),
+  model: text('model').notNull(),
+  temperature: real('temperature').default(0.7),
+  maxTokens: integer('max_tokens').default(2000),
+  topP: real('top_p'),
+  frequencyPenalty: real('frequency_penalty'),
+  presencePenalty: real('presence_penalty'),
+  timeout: integer('timeout').default(30000),
+  retryAttempts: integer('retry_attempts').default(3),
+  isActive: integer('is_active', { mode: 'boolean' }).default(true),
+  lastTested: text('last_tested'),
+  testStatus: text('test_status'),
+  testError: text('test_error'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
+});
+
+export const aiConfigsRelations = relations(aiConfigs, ({ one }) => ({
+  user: one(users, {
+    fields: [aiConfigs.userId],
+    references: [users.id]
+  })
+}));
