@@ -1,100 +1,68 @@
 import { test, expect } from '@playwright/test';
+import { registerAndGoto } from './helpers/auth';
 
 test.describe('AI Config', () => {
   test.beforeEach(async ({ page }) => {
-    // Login first
-    await page.goto('/auth/login');
-    await page.fill('input#email', 'test@example.com');
-    await page.fill('input#password', 'Password1');
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/.*dashboard/);
-
-    // Navigate to AI config
-    await page.goto('/ai-config');
+    await registerAndGoto(page, '/ai-config');
+    await expect(page.locator('h1.ai-config__title')).toBeVisible();
   });
 
   test('should display AI config page', async ({ page }) => {
-    await expect(page.locator('text=Configuración IA')).toBeVisible();
+    await expect(page.locator('h1.ai-config__title')).toContainText('Configuración IA');
   });
 
   test('should show info message', async ({ page }) => {
-    await expect(page.locator('text=Conecta tu proveedor de IA')).toBeVisible();
+    await expect(page.locator('.ai-config__info')).toContainText('Conecta tu proveedor de IA');
   });
 
-  test('should show add config button', async ({ page }) => {
-    await expect(page.locator('text=Agregar configuración')).toBeVisible();
+  test('should show empty state with the add button', async ({ page }) => {
+    await expect(page.locator('.empty-state__title')).toContainText('Sin configuraciones');
+    await expect(page.getByRole('button', { name: /Agregar configuración/ }).first()).toBeVisible();
   });
 
-  test('should open add config modal', async ({ page }) => {
-    await page.click('text=Agregar configuración');
+  test('should open add config modal with its fields', async ({ page }) => {
+    await page.getByRole('button', { name: /Agregar configuración/ }).first().click();
 
-    await expect(page.locator('text=Nueva Configuración')).toBeVisible();
+    const modal = page.locator('.modal-overlay');
+    await expect(modal).toBeVisible();
+    await expect(modal.locator('.modal__title')).toContainText('Nueva Configuración');
     await expect(page.locator('input#name')).toBeVisible();
     await expect(page.locator('input#model')).toBeVisible();
     await expect(page.locator('input#baseUrl')).toBeVisible();
     await expect(page.locator('input#apiKey')).toBeVisible();
   });
 
-  test('should show config form fields', async ({ page }) => {
-    await page.click('text=Agregar configuración');
+  test('should show provider options and temperature', async ({ page }) => {
+    await page.getByRole('button', { name: /Agregar configuración/ }).first().click();
 
-    // Provider selector
-    await expect(page.locator('text=OpenAI')).toBeVisible();
-    await expect(page.locator('text=Custom (OpenAI-like)')).toBeVisible();
+    const provider = page.locator('select[name="provider"]');
+    await expect(provider).toBeVisible();
+    await expect(provider.locator('option')).toContainText(['OpenAI', 'Custom (OpenAI-like)']);
 
-    // Temperature slider
-    await expect(page.locator('text=Temperatura')).toBeVisible();
-
-    // Max tokens
+    await expect(page.locator('.form-label', { hasText: 'Temperatura' })).toBeVisible();
     await expect(page.locator('input#maxTokens')).toBeVisible();
   });
 
   test('should create a new config', async ({ page }) => {
-    await page.click('text=Agregar configuración');
+    await page.getByRole('button', { name: /Agregar configuración/ }).first().click();
 
     await page.fill('input#name', 'Mi Proveedor');
     await page.fill('input#model', 'gpt-4o-mini');
     await page.fill('input#baseUrl', 'https://api.openai.com/v1');
     await page.fill('input#apiKey', 'sk-test-key');
+    await page.locator('app-modal button[type="submit"]').click();
 
-    await page.click('text=Crear');
-
-    // Should show success
-    await expect(page.locator('text=Creado')).toBeVisible();
-  });
-
-  test('should show config card after creation', async ({ page }) => {
-    const configCard = page.locator('text=Mi Proveedor');
-    
-    if (await configCard.isVisible()) {
-      await expect(configCard).toBeVisible();
-    }
-  });
-
-  test('should show test connection button', async ({ page }) => {
-    const testBtn = page.locator('text=Probar');
-    
-    if (await testBtn.isVisible()) {
-      await expect(testBtn).toBeVisible();
-    }
+    // El modal se cierra y la configuracion aparece en el listado
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
+    await expect(page.locator('.config-card__name')).toContainText('Mi Proveedor');
+    await expect(page.locator('.config-detail__label', { hasText: 'Temperatura' })).toBeVisible();
   });
 
   test('should close modal on cancel', async ({ page }) => {
-    await page.click('text=Agregar configuración');
+    await page.getByRole('button', { name: /Agregar configuración/ }).first().click();
+    await expect(page.locator('.modal__title')).toContainText('Nueva Configuración');
 
-    await expect(page.locator('text=Nueva Configuración')).toBeVisible();
-
-    await page.click('text=Cancelar');
-
-    await expect(page.locator('text=Nueva Configuración')).not.toBeVisible();
-  });
-
-  test('should show empty state when no configs', async ({ page }) => {
-    const emptyState = page.locator('text=Sin configuraciones');
-    
-    if (await emptyState.isVisible()) {
-      await expect(emptyState).toBeVisible();
-      await expect(page.locator('text=Agregar configuración')).toBeVisible();
-    }
+    await page.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
   });
 });

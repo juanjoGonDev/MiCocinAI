@@ -143,11 +143,7 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run Playwright tests (webServer config boots frontend + backend)
-        # De momento solo el spec de hogar (el que anade este PR). El resto de
-        # tests/e2e es legacy: nunca llego a ejecutarse porque el CI no
-        # arrancaba, y falla por motivos ajenos a este PR (credenciales
-        # hardcodeadas, variantes i18n, textos de estados vacios...).
-        run: pnpm exec playwright test --project=chromium tests/e2e/household.spec.ts
+        run: pnpm exec playwright test --project=chromium
         env:
           CI: 'true'
 

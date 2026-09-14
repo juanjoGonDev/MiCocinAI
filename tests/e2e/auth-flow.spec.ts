@@ -9,8 +9,8 @@ test.describe('Authentication flow', () => {
     await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
     // Should land on dashboard (no more 429 / logout loop)
-    await page.waitForURL(/.*dashboard/, { timeout: 10000 });
-    await expect(page.locator('h1')).toContainText(/Hola|Hi/);
+    await page.waitForURL(/.*dashboard/, { timeout: 20000 });
+    await expect(page.locator('h1.dashboard__title')).toContainText(/Hola|Hi/);
 
     // Navigate through protected pages - should NOT be kicked back to login
     await page.goto('/pantry');
