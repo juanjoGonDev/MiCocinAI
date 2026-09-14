@@ -1,9 +1,10 @@
 import { Component, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink, Router } from '@angular/router';
+import { RouterLink, Router, ActivatedRoute } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { HouseholdService } from '../../../core/services/household.service';
 import { ButtonComponent } from '../../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../../shared/components/ui/input/input.component';
 
@@ -171,6 +172,8 @@ export class RegisterComponent {
   private authService = inject(AuthService);
   private toastService = inject(ToastService);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
+  private householdService = inject(HouseholdService);
 
   name = '';
   email = '';
@@ -180,6 +183,21 @@ export class RegisterComponent {
   nameError = signal('');
   emailError = signal('');
   passwordError = signal('');
+
+  private redirectAfterAuth(): void {
+    const code = this.route.snapshot.queryParamMap.get('code');
+    if (code) {
+      this.householdService.joinByCode(code).subscribe({
+        next: () => {
+          this.toastService.success('¡Unido!', 'Te has unido al hogar');
+          this.router.navigate(['/household']);
+        },
+        error: () => this.router.navigate(['/dashboard'])
+      });
+    } else {
+      this.router.navigate(['/dashboard']);
+    }
+  }
 
   cookingLevels = [
     { value: 'beginner', label: 'Principiante', icon: '🌱' },
@@ -217,7 +235,8 @@ export class RegisterComponent {
     }).subscribe({
       next: () => {
         this.toastService.success('¡Cuenta creada!', 'Tu cuenta ha sido creada correctamente');
-        this.router.navigate(['/dashboard']);
+        this.householdService.loadHousehold();
+        this.redirectAfterAuth();
       },
       error: (error) => {
         this.isLoading.set(false);

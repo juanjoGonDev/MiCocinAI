@@ -1,11 +1,10 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HouseholdService } from '../../core/services/household.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
-import { CardComponent } from '../../shared/components/ui/card/card.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
@@ -16,7 +15,7 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
   standalone: true,
   imports: [
     CommonModule, FormsModule,
-    ButtonComponent, InputComponent, CardComponent, BadgeComponent,
+    ButtonComponent, InputComponent, BadgeComponent,
     AvatarComponent, ModalComponent, LoadingComponent
   ],
   template: `
@@ -66,14 +65,14 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
           <!-- Invite Code -->
           <div class="invite-card">
             <div class="invite-card__content">
-              <span class="invite-card__label">Código de invitación</span>
-              <span class="invite-card__code">{{ household.inviteCode }}</span>
+              <span class="invite-card__label">Enlace de invitación</span>
+              <span class="invite-card__code">{{ inviteLink() }}</span>
             </div>
             <div class="invite-card__actions">
-              <app-button variant="outline" size="sm" (onClick)="copyCode()">
-                📋 Copiar
+              <app-button variant="outline" size="sm" (onClick)="copyLink()">
+                📋 Copiar enlace
               </app-button>
-              <app-button variant="ghost" size="sm" (onClick)="regenerateCode()">
+              <app-button variant="ghost" size="sm" (onClick)="regenerateCode()" *ngIf="canInvite()">
                 🔄 Regenerar
               </app-button>
             </div>
@@ -110,11 +109,27 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
           </div>
         </div>
 
+        <!-- Sharing & Settings (admins only) -->
+        <section class="settings-section" *ngIf="isAdmin()">
+          <h3 class="settings-section__title">🔗 Compartir en el hogar</h3>
+          <div class="settings-section__options">
+            <label class="setting-toggle">
+              <input type="checkbox" [checked]="household.sharedPantry" (change)="toggleSetting('sharedPantry', $any($event.target).checked)" />
+              <span>Despensa compartida</span>
+            </label>
+            <label class="setting-toggle">
+              <input type="checkbox" [checked]="household.shareRecipes" (change)="toggleSetting('shareRecipes', $any($event.target).checked)" />
+              <span>Recetas compartidas</span>
+            </label>
+            <label class="setting-toggle">
+              <input type="checkbox" [checked]="household.shareCalendar" (change)="toggleSetting('shareCalendar', $any($event.target).checked)" />
+              <span>Calendario compartido</span>
+            </label>
+          </div>
+        </section>
+
         <!-- Actions -->
         <div class="household__actions">
-          <app-button variant="ghost" (onClick)="openSettingsModal()">
-            ⚙️ Configuración
-          </app-button>
           <app-button variant="danger" (onClick)="leaveHousehold()">
             🚪 Salir del hogar
           </app-button>
@@ -368,6 +383,33 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
       gap: var(--space-2);
     }
 
+    /* Settings section */
+    .settings-section {
+      margin-bottom: var(--space-6);
+      padding: var(--space-4);
+      background: var(--bg-secondary);
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--border-default);
+    }
+    .settings-section__title {
+      font-size: var(--text-base);
+      font-weight: var(--font-semibold);
+      margin: 0 0 var(--space-3) 0;
+    }
+    .settings-section__options {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+    .setting-toggle {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-sm);
+      cursor: pointer;
+      input[type="checkbox"] { width: 18px; height: 18px; }
+    }
+
     /* Actions */
     .household__actions {
       display: flex;
@@ -461,8 +503,37 @@ export class HouseholdComponent implements OnInit {
     inviteCode: ''
   };
 
+  inviteLink = signal('');
+
+  constructor() {
+    effect(() => {
+      const h = this.householdService.household();
+      if (h?.inviteCode) this.inviteLink.set(this.householdService.getInviteLink(h.inviteCode));
+    });
+  }
+
   ngOnInit(): void {
     this.householdService.loadHousehold();
+  }
+
+  isAdmin(): boolean {
+    return this.householdService.isAdmin();
+  }
+
+  canInvite(): boolean {
+    return !!this.householdService.household()?.myPermissions?.members?.invite || this.isAdmin();
+  }
+
+  copyLink(): void {
+    navigator.clipboard.writeText(this.inviteLink());
+    this.toastService.success('Copiado', 'Enlace de invitación copiado');
+  }
+
+  toggleSetting(key: 'sharedPantry' | 'shareRecipes' | 'shareCalendar', value: boolean): void {
+    this.householdService.updateSettings({ [key]: value }).subscribe({
+      next: () => this.toastService.success('Actualizado', 'Ajustes del hogar guardados'),
+      error: () => this.toastService.error('Error', 'No se pudo actualizar')
+    });
   }
 
   openCreateModal(): void {
@@ -530,8 +601,7 @@ export class HouseholdComponent implements OnInit {
   }
 
   copyCode(): void {
-    this.householdService.copyInviteCode();
-    this.toastService.success('Copiado', 'Código copiado al portapapeles');
+    this.copyLink();
   }
 
   regenerateCode(): void {

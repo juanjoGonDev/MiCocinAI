@@ -4,8 +4,20 @@ export interface Household {
   inviteCode: string;
   members: HouseholdMember[];
   sharedPantry: boolean;
+  shareRecipes: boolean;
+  shareCalendar: boolean;
+  myRole?: MemberRole;
+  myPermissions?: MemberPermissions;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface MemberPermissions {
+  pantry: { view: boolean; edit: boolean; manage: boolean };
+  recipes: { view: boolean; create: boolean; edit: boolean; delete: boolean; generateAI: boolean };
+  calendar: { view: boolean; edit: boolean };
+  members: { invite: boolean; kick: boolean; manageRoles: boolean };
+  settings: boolean;
 }
 
 export interface HouseholdMember {
@@ -15,11 +27,16 @@ export interface HouseholdMember {
   email: string;
   role: MemberRole;
   cookingLevel: CookingLevel;
-  preferences: FoodPreferences;
-  allergies: Allergy[];
-  dislikes: string[];
   avatar?: string;
   joinedAt: Date;
+  permissions?: MemberPermissions;
+}
+
+export interface InvitePreview {
+  householdId: string;
+  householdName: string;
+  memberCount: number;
+  alreadyMember: boolean;
 }
 
 export type MemberRole = 'admin' | 'member' | 'child';

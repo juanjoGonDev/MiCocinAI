@@ -4,17 +4,18 @@ import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { ToastComponent } from '../../shared/components/ui/toast/toast.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 interface NavItem {
   path: string;
-  label: string;
+  labelKey: string;
   icon: string;
 }
 
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, TranslatePipe],
   template: `
     <div class="layout">
       <!-- Mobile Header -->
@@ -22,7 +23,7 @@ interface NavItem {
         <button type="button" class="header__menu" (click)="toggleSidebar()">
           ☰
         </button>
-        <span class="header__title">RecipeApp</span>
+        <span class="header__title">🍳 {{ 'app.name' | t }}</span>
         <button type="button" class="header__profile" (click)="navigateToProfile()">
           <app-avatar 
             [name]="authService.userName()" 
@@ -34,7 +35,7 @@ interface NavItem {
       <!-- Sidebar (Desktop) -->
       <aside class="sidebar" [class.sidebar--open]="isSidebarOpen()">
         <div class="sidebar__header">
-          <span class="sidebar__logo">🍳 RecipeApp</span>
+          <span class="sidebar__logo">🍳 {{ 'app.name' | t }}</span>
           <button type="button" class="sidebar__close" (click)="closeSidebar()">✕</button>
         </div>
         
@@ -47,18 +48,18 @@ interface NavItem {
             (click)="closeSidebar()"
           >
             <span class="sidebar__icon">{{ item.icon }}</span>
-            <span class="sidebar__label">{{ item.label }}</span>
+            <span class="sidebar__label">{{ item.labelKey | t }}</span>
           </a>
         </nav>
 
         <div class="sidebar__footer">
           <a routerLink="/settings" class="sidebar__item" (click)="closeSidebar()">
             <span class="sidebar__icon">⚙️</span>
-            <span class="sidebar__label">Configuración</span>
+            <span class="sidebar__label">{{ 'nav.settings' | t }}</span>
           </a>
           <button type="button" class="sidebar__item sidebar__item--logout" (click)="logout()">
             <span class="sidebar__icon">🚪</span>
-            <span class="sidebar__label">Cerrar sesión</span>
+            <span class="sidebar__label">{{ 'nav.logout' | t }}</span>
           </button>
         </div>
       </aside>
@@ -84,7 +85,7 @@ interface NavItem {
           class="bottom-nav__item"
         >
           <span class="bottom-nav__icon">{{ item.icon }}</span>
-          <span class="bottom-nav__label">{{ item.label }}</span>
+          <span class="bottom-nav__label">{{ item.labelKey | t }}</span>
         </a>
       </nav>
     </div>
@@ -334,21 +335,21 @@ export class MainLayoutComponent {
   isSidebarOpen = signal(false);
 
   navItems: NavItem[] = [
-    { path: '/dashboard', label: 'Dashboard', icon: '🏠' },
-    { path: '/pantry', label: 'Despensa', icon: '📦' },
-    { path: '/recipes', label: 'Recetas', icon: '📖' },
-    { path: '/calendar', label: 'Calendario', icon: '📅' },
-    { path: '/household', label: 'Hogar', icon: '👨‍👩‍👧‍👦' },
-    { path: '/ai-config', label: 'IA Config', icon: '🤖' },
-    { path: '/logs', label: 'Logs', icon: '📋' }
+    { path: '/dashboard', labelKey: 'nav.dashboard', icon: '🏠' },
+    { path: '/pantry', labelKey: 'nav.pantry', icon: '📦' },
+    { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
+    { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
+    { path: '/household', labelKey: 'nav.household', icon: '👨‍👩‍👧‍👦' },
+    { path: '/ai-config', labelKey: 'nav.ai-config', icon: '🤖' },
+    { path: '/logs', labelKey: 'nav.logs', icon: '📋' }
   ];
 
   mobileNavItems: NavItem[] = [
-    { path: '/dashboard', label: 'Inicio', icon: '🏠' },
-    { path: '/pantry', label: 'Despensa', icon: '📦' },
-    { path: '/recipes', label: 'Recetas', icon: '📖' },
-    { path: '/calendar', label: 'Calendario', icon: '📅' },
-    { path: '/settings', label: 'Más', icon: '⚙️' }
+    { path: '/dashboard', labelKey: 'nav.dashboard', icon: '🏠' },
+    { path: '/pantry', labelKey: 'nav.pantry', icon: '📦' },
+    { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
+    { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
+    { path: '/settings', labelKey: 'nav.settings', icon: '⚙️' }
   ];
 
   toggleSidebar(): void {

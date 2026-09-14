@@ -35,12 +35,19 @@ function generateTokens(userId: string, email: string) {
   return { token, refreshToken };
 }
 
-// Helper to get user without password
-function sanitizeUser(user: any) {
-  const { password_hash, ...sanitized } = user;
+// Helper to get user without password and convert snake_case DB columns to camelCase
+function sanitizeUser(raw: any) {
+  const { password_hash, ...u } = raw;
   return {
-    ...sanitized,
-    preferences: sanitized.preferences ? JSON.parse(sanitized.preferences) : {}
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    avatar: u.avatar ?? undefined,
+    householdId: u.household_id ?? undefined,
+    cookingLevel: u.cooking_level ?? 'beginner',
+    preferences: u.preferences ? JSON.parse(u.preferences) : {},
+    createdAt: u.created_at,
+    updatedAt: u.updated_at,
   };
 }
 

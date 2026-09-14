@@ -17,6 +17,37 @@ const pantryRoutes = new Hono<AppEnv>();
 // Apply auth middleware to all routes
 pantryRoutes.use('*', authMiddleware);
 
+/**
+ * Returns the user's household context:
+ *   { householdId, scope: 'user_id = ?' | '(user_id = ? OR household_id = ?)', params }
+ * If shared_pantry = 1, items belonging to the household are visible to all members.
+ */
+function getUserScope(userId: string) {
+  const db = getDatabase();
+  const user = db.prepare(
+    `SELECT u.household_id as hid, h.shared_pantry
+     FROM users u LEFT JOIN households h ON h.id = u.household_id
+     WHERE u.id = ?`
+  ).get(userId) as any;
+
+  if (user?.hid && user.shared_pantry) {
+    return {
+      householdId: user.hid,
+      userClause: '(user_id = ? OR household_id = ?)',
+      userParams: [userId, user.hid],
+      memberClause: '(user_id = ? OR household_id = ?)',
+      memberParams: [userId, user.hid]
+    };
+  }
+  return {
+    householdId: user?.hid ?? null,
+    userClause: 'user_id = ?',
+    userParams: [userId],
+    memberClause: 'user_id = ?',
+    memberParams: [userId]
+  };
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // Ingredients
 // ═══════════════════════════════════════════════════════════════════
@@ -28,8 +59,9 @@ pantryRoutes.get('/ingredients', async (c) => {
   const filter = ingredientFilterSchema.parse(query);
 
   const db = getDatabase();
-  const conditions: string[] = ['user_id = ?'];
-  const params: any[] = [userId];
+  const scope = getUserScope(userId);
+  const conditions: string[] = [scope.userClause];
+  const params: any[] = [...scope.userParams];
 
   if (filter.search) {
     conditions.push('name LIKE ?');
@@ -87,44 +119,49 @@ pantryRoutes.get('/ingredients', async (c) => {
 pantryRoutes.get('/ingredients/stats', async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();
+  const scope = getUserScope(userId);
 
-  // Get total items
+  // Quantity > 0 = "in pantry"; qty 0 entries are just common suggestions
+  const inPantryClause = `(${scope.userClause}) AND quantity > 0`;
+  const inPantryParams = [...scope.userParams];
+
+  // Get total items (only items actually in pantry)
   const totalResult = db.prepare(
-    'SELECT COUNT(*) as total FROM ingredients WHERE user_id = ?'
-  ).get(userId) as any;
+    `SELECT COUNT(*) as total FROM ingredients WHERE ${inPantryClause}`
+  ).get(...inPantryParams) as any;
 
   // Get expiring soon (next 3 days)
   const expiringSoonResult = db.prepare(`
-    SELECT COUNT(*) as total FROM ingredients 
-    WHERE user_id = ? 
-    AND expiration_date IS NOT NULL 
-    AND expiration_date >= datetime('now') 
+    SELECT COUNT(*) as total FROM ingredients
+    WHERE ${inPantryClause}
+    AND expiration_date IS NOT NULL
+    AND expiration_date >= datetime('now')
     AND expiration_date <= datetime('now', '+3 days')
-  `).get(userId) as any;
+  `).get(...inPantryParams) as any;
 
   // Get expired
   const expiredResult = db.prepare(`
-    SELECT COUNT(*) as total FROM ingredients 
-    WHERE user_id = ? 
-    AND expiration_date IS NOT NULL 
+    SELECT COUNT(*) as total FROM ingredients
+    WHERE ${inPantryClause}
+    AND expiration_date IS NOT NULL
     AND expiration_date < datetime('now')
-  `).get(userId) as any;
+  `).get(...inPantryParams) as any;
 
   // Get by category
   const byCategory = db.prepare(`
-    SELECT category, COUNT(*) as count 
-    FROM ingredients 
-    WHERE user_id = ? 
+    SELECT category, COUNT(*) as count
+    FROM ingredients
+    WHERE ${inPantryClause}
     GROUP BY category
-  `).all(userId);
+  `).all(...inPantryParams);
 
   // Get by location
   const byLocation = db.prepare(`
-    SELECT location, COUNT(*) as count 
-    FROM ingredients 
-    WHERE user_id = ? 
+    SELECT location, COUNT(*) as count
+    FROM ingredients
+    WHERE ${inPantryClause}
     GROUP BY location
-  `).all(userId);
+  `).all(...inPantryParams);
 
   return c.json({
     success: true,
@@ -307,8 +344,9 @@ pantryRoutes.get('/utensils', async (c) => {
   const filter = utensilFilterSchema.parse(query);
 
   const db = getDatabase();
-  const conditions: string[] = ['user_id = ?'];
-  const params: any[] = [userId];
+  const scope = getUserScope(userId);
+  const conditions: string[] = [scope.userClause];
+  const params: any[] = [...scope.userParams];
 
   if (filter.search) {
     conditions.push('name LIKE ?');
@@ -370,6 +408,8 @@ pantryRoutes.post('/utensils', async (c) => {
 });
 
 // PATCH /api/pantry/utensils/:id
+// Household-shared utensils (have household_id) can be toggled by any member
+// of the household, since marking what's available is a household-wide setting.
 pantryRoutes.patch('/utensils/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
@@ -377,10 +417,11 @@ pantryRoutes.patch('/utensils/:id', async (c) => {
   const input = updateUtensilSchema.parse(body);
 
   const db = getDatabase();
+  const scope = getUserScope(userId);
 
   const existing = db.prepare(
-    'SELECT id FROM utensils WHERE id = ? AND user_id = ?'
-  ).get(id, userId);
+    `SELECT id FROM utensils WHERE id = ? AND ${scope.memberClause}`
+  ).get(id, ...scope.memberParams);
 
   if (!existing) {
     return c.json({

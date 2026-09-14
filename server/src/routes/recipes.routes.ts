@@ -14,10 +14,73 @@ const recipeRoutes = new Hono<AppEnv>();
 
 recipeRoutes.use('*', authMiddleware);
 
+// Map from camelCase API field names to snake_case DB column names,
+// plus an allow-list to prevent SQL injection via ORDER BY.
+const SORT_COLUMN_MAP: Record<string, string> = {
+  name: 'name',
+  difficulty: 'difficulty',
+  totalTime: 'total_time',
+  rating: 'rating',
+  createdAt: 'created_at'
+};
+
+// Helper to convert snake_case DB row to camelCase API object
+function mapRecipe(r: Record<string, unknown>) {
+  return {
+    id: r.id,
+    name: r.name,
+    description: r.description,
+    difficulty: r.difficulty,
+    cuisine: r.cuisine,
+    mealType: JSON.parse((r.meal_type as string) || '[]'),
+    totalTime: r.total_time,
+    prepTime: r.prep_time,
+    cookTime: r.cook_time,
+    restTime: r.rest_time,
+    servings: r.servings,
+    calories: r.calories,
+    image: r.image,
+    ingredients: JSON.parse((r.ingredients as string) || '[]'),
+    utensils: JSON.parse((r.utensils as string) || '[]'),
+    steps: JSON.parse((r.steps as string) || '[]'),
+    tags: JSON.parse((r.tags as string) || '[]'),
+    nutrition: r.nutrition ? JSON.parse(r.nutrition as string) : null,
+    storage: r.storage ? JSON.parse(r.storage as string) : null,
+    author: r.author,
+    authorId: r.author_id,
+    rating: r.rating,
+    timesCooked: r.times_cooked,
+    isFavorite: !!r.is_favorite,
+    isPublic: !!r.is_public,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at
+  };
+}
+
+/**
+ * Coerce query-string values (always strings) to the types Zod expects.
+ */
+function coerceQuery(q: Record<string, unknown>) {
+  const out: Record<string, unknown> = { ...q };
+  const intKeys = ['maxTime', 'page', 'pageSize'];
+  for (const k of intKeys) {
+    if (out[k] !== undefined && out[k] !== '') {
+      const n = Number(out[k]);
+      out[k] = Number.isFinite(n) ? n : undefined;
+    } else {
+      delete out[k];
+    }
+  }
+  if (out.isFavorite !== undefined) {
+    out.isFavorite = out.isFavorite === 'true' || out.isFavorite === '1';
+  }
+  return out;
+}
+
 // GET /api/recipes
 recipeRoutes.get('/', async (c) => {
-  const query = c.req.query();
-  const filter = recipeFilterSchema.parse(query);
+  const rawQuery = c.req.query();
+  const filter = recipeFilterSchema.parse(coerceQuery(rawQuery));
 
   const db = getDatabase();
   const conditions: string[] = ['1=1'];
@@ -60,27 +123,22 @@ recipeRoutes.get('/', async (c) => {
   const whereClause = `WHERE ${conditions.join(' AND ')}`;
   const offset = (filter.page - 1) * filter.pageSize;
 
+  // Whitelist ORDER BY columns via our map
+  const sortColumn = SORT_COLUMN_MAP[filter.sortBy] || 'created_at';
+  const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
+
   const countResult = db.prepare(
     `SELECT COUNT(*) as total FROM recipes ${whereClause}`
   ).get(...params) as Record<string, unknown>;
 
   const recipes = db.prepare(
-    `SELECT * FROM recipes ${whereClause} ORDER BY ${filter.sortBy} ${filter.sortOrder} LIMIT ? OFFSET ?`
+    `SELECT * FROM recipes ${whereClause} ORDER BY ${sortColumn} ${sortOrder} LIMIT ? OFFSET ?`
   ).all(...params, filter.pageSize, offset) as Record<string, unknown>[];
 
   return c.json({
     success: true,
     data: {
-      recipes: recipes.map((r: Record<string, unknown>) => ({
-        ...r,
-        mealType: JSON.parse((r.meal_type as string) || '[]'),
-        ingredients: JSON.parse((r.ingredients as string) || '[]'),
-        utensils: JSON.parse((r.utensils as string) || '[]'),
-        steps: JSON.parse((r.steps as string) || '[]'),
-        tags: JSON.parse((r.tags as string) || '[]'),
-        nutrition: r.nutrition ? JSON.parse(r.nutrition as string) : null,
-        storage: r.storage ? JSON.parse(r.storage as string) : null
-      })),
+      recipes: recipes.map(mapRecipe),
       total: countResult.total,
       page: filter.page,
       pageSize: filter.pageSize
@@ -93,7 +151,7 @@ recipeRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');
   const db = getDatabase();
 
-  const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id) as any;
+  const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id) as Record<string, unknown> | undefined;
 
   if (!recipe) {
     return c.json({ success: false, message: 'Recipe not found' }, 404);
@@ -101,16 +159,7 @@ recipeRoutes.get('/:id', async (c) => {
 
   return c.json({
     success: true,
-    data: {
-      ...recipe,
-      mealType: JSON.parse(recipe.meal_type || '[]'),
-      ingredients: JSON.parse(recipe.ingredients || '[]'),
-      utensils: JSON.parse(recipe.utensils || '[]'),
-      steps: JSON.parse(recipe.steps || '[]'),
-      tags: JSON.parse(recipe.tags || '[]'),
-      nutrition: recipe.nutrition ? JSON.parse(recipe.nutrition) : null,
-      storage: recipe.storage ? JSON.parse(recipe.storage) : null
-    }
+    data: mapRecipe(recipe)
   });
 });
 
