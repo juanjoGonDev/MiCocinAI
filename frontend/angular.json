@@ -69,7 +69,16 @@
               ],
               "outputHashing": "all",
               "sourceMap": false,
-              "optimization": true,
+              "optimization": {
+                "scripts": true,
+                "fonts": {
+                  "inline": false
+                },
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": true
+                }
+              },
               "namedChunks": false,
               "extractLicenses": true,
               "aot": true
