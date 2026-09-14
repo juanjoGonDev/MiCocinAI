@@ -147,6 +147,10 @@ jobs:
         env:
           CI: 'true'
 
+      - name: Publish E2E failures as annotations
+        if: failure()
+        run: node scripts/ci-e2e-summary.mjs
+
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
