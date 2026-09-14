@@ -2,6 +2,7 @@ import { Routes } from '@angular/router';
 import { authGuard } from './core/guards/auth.guard';
 import { MainLayoutComponent } from './layouts/main-layout/main-layout.component';
 import { AuthLayoutComponent } from './layouts/auth-layout/auth-layout.component';
+import { InviteComponent } from './features/invite/invite.component';
 
 export const routes: Routes = [
   // Auth routes (no auth required)
@@ -10,6 +11,9 @@ export const routes: Routes = [
     component: AuthLayoutComponent,
     loadChildren: () => import('./features/auth/auth.routes').then(m => m.AUTH_ROUTES)
   },
+
+  // Public invite page (works before & after login)
+  { path: 'invite/:code', component: InviteComponent },
 
   // Protected routes with main layout
   {

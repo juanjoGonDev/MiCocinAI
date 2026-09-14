@@ -1,101 +1,150 @@
-# =============================================================================
-# Dependabot Auto-Merge Workflow - MiCocinAI
-# =============================================================================
-# Automatically approve and merge Dependabot PRs that pass all checks
-
-name: Dependabot Auto-Merge
+name: 🤖 Dependabot auto-merge
 
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened]
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: read-all
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
-  auto-merge:
-    name: Auto-Merge Dependabot PRs
+  dependabot:
+    name: Validate and queue eligible updates
+    if: >-
+      github.event.repository.fork == false &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == github.event.repository.default_branch
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
     steps:
-      # Step 1: Fetch Dependabot metadata
-      - name: Fetch Dependabot metadata
+      - name: Read Dependabot metadata
         id: metadata
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
         with:
-          github-token: "${{ secrets.PAT_FINE }}"
+          github-token: ${{ github.token }}
 
-      # Step 2: Auto-approve patch and minor updates
-      - name: Approve patch and minor updates
-        if: >
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-          steps.metadata.outputs.update-type == 'version-update:semver-minor'
-        run: gh pr review --approve "$PR_URL"
+      - name: Classify update policy
+        id: policy
         env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.PAT_FINE }}
-
-      # Step 3: Auto-merge patch updates immediately
-      - name: Auto-merge patch updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
-        run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.PAT_FINE }}
-
-      # Step 4: Auto-merge minor updates (after approval)
-      - name: Auto-merge minor updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-minor'
-        run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.PAT_FINE }}
-
-      # Step 5: Comment on major updates (manual review needed)
-      - name: Comment on major updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
         run: |
-          gh pr comment "$PR_URL" --body "
-          ## ⚠️ Major Update Detected
-          
-          This is a major version update that may contain breaking changes.
-          
-          **Update details:**
-          - Dependency: \`${{ steps.metadata.outputs.dependency-names }}\`
-          - Update type: Major
-          
-          **Action required:** Please review this PR manually before merging.
-          
-          ### Checklist:
-          - [ ] Check CHANGELOG for breaking changes
-          - [ ] Run tests locally
-          - [ ] Verify no breaking API changes
-          - [ ] Update any affected code
-          
-          @juanjo Please review this PR.
-          "
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.PAT_FINE }}
+          set -euo pipefail
 
-      # Step 6: Auto-approve GitHub Actions updates (always safe)
-      - name: Auto-approve GitHub Actions updates
-        if: contains(github.event.pull_request.labels.*.name, 'github-actions')
-        run: |
-          gh pr review --approve "$PR_URL"
-          gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.PAT_FINE }}
+          classify_update() {
+            case "$1" in
+              version-update:semver-patch|version-update:semver-minor)
+                printf '%s\n' eligible
+                ;;
+              version-update:semver-major)
+                printf '%s\n' manual
+                ;;
+              *)
+                printf '%s\n' ignored
+                ;;
+            esac
+          }
 
-      # Step 7: Log the update
-      - name: Log Dependabot update
+          assert_decision() {
+            input=$1
+            expected=$2
+            actual=$(classify_update "$input")
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::error title=Dependabot policy contract failed::$input resolved to $actual instead of $expected."
+              exit 1
+            fi
+          }
+
+          assert_decision version-update:semver-patch eligible
+          assert_decision version-update:semver-minor eligible
+          assert_decision version-update:semver-major manual
+          assert_decision unknown ignored
+
+          eligible=false
+          requires_manual_qa=false
+          decision=$(classify_update "$UPDATE_TYPE")
+
+          case "$decision" in
+            eligible)
+              eligible=true
+              ;;
+            manual)
+              requires_manual_qa=true
+              ;;
+          esac
+
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          echo "requires_manual_qa=$requires_manual_qa" >> "$GITHUB_OUTPUT"
+
+      - name: Approve eligible update as repository owner
+        if: steps.policy.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PAT_FINE }}
         run: |
-          echo "## Dependabot Update Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Dependency:** ${{ steps.metadata.outputs.dependency-names }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Update type:** ${{ steps.metadata.outputs.update-type }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Package:** ${{ steps.metadata.outputs.package-name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **New version:** ${{ steps.metadata.outputs.new-version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Previous version:** ${{ steps.metadata.outputs.previous-version }}" >> $GITHUB_STEP_SUMMARY
+          set -euo pipefail
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error title=Missing Dependabot secret::Configure PAT_FINE as a Dependabot repository secret. It must be a fine-grained token for this repository with Pull requests read/write permission."
+            exit 1
+          fi
+
+          authenticated_login=$(gh api user --jq .login)
+          if [[ "$authenticated_login" != "$GITHUB_REPOSITORY_OWNER" ]]; then
+            echo "::error title=Invalid Dependabot approval actor::PAT_FINE authenticates as $authenticated_login, but this repository requires $GITHUB_REPOSITORY_OWNER."
+            exit 1
+          fi
+
+          current_head=$(gh pr view "$PR_URL" --json headRefOid --jq .headRefOid)
+          if [[ "$current_head" != "$HEAD_SHA" ]]; then
+            echo "Skipping stale Dependabot event for $HEAD_SHA; current head is $current_head."
+            exit 0
+          fi
+
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/reviews" \
+            -f commit_id="$HEAD_SHA" \
+            -f event=APPROVE \
+            -f body="Approved automatically: patch or minor update." >/dev/null
+
+      - name: Enable squash auto-merge
+        if: steps.policy.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current_head=$(gh pr view "$PR_URL" --json headRefOid --jq .headRefOid)
+          if [[ "$current_head" != "$HEAD_SHA" ]]; then
+            echo "Skipping stale Dependabot event for $HEAD_SHA; current head is $current_head."
+            exit 0
+          fi
+          gh pr merge "$PR_URL" \
+            --auto \
+            --squash \
+            --match-head-commit "$HEAD_SHA"
+
+      - name: Mark major update for manual QA
+        if: steps.policy.outputs.requires_manual_qa == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create "requires-manual-qa" \
+            --repo "$GITHUB_REPOSITORY" \
+            --color "E99695" \
+            --description "Needs manual quality assurance testing before merging" \
+            --force
+          gh pr edit "$PR_URL" --add-label "requires-manual-qa"
