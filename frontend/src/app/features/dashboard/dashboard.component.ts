@@ -2,13 +2,18 @@ import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { RecipeService } from '../../core/services/recipe.service';
+import { PantryService } from '../../core/services/pantry.service';
+import { CalendarService } from '../../core/services/calendar.service';
+import { HouseholdService } from '../../core/services/household.service';
 import { CardComponent } from '../../shared/components/ui/card/card.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { ProgressComponent } from '../../shared/components/ui/progress/progress.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 interface QuickStat {
   icon: string;
-  label: string;
+  labelKey: string;
   value: string | number;
   color: string;
 }
@@ -32,14 +37,14 @@ interface SuggestedRecipe {
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, CardComponent, BadgeComponent, ProgressComponent],
+  imports: [CommonModule, RouterLink, CardComponent, BadgeComponent, ProgressComponent, TranslatePipe],
   template: `
     <div class="dashboard">
       <!-- Welcome Section -->
       <section class="dashboard__welcome">
         <div class="dashboard__greeting">
-          <h1 class="dashboard__title">¡Hola, {{ userName() }}! 👋</h1>
-          <p class="dashboard__subtitle">¿Qué vamos a cocinar hoy?</p>
+          <h1 class="dashboard__title">{{ 'dashboard.greeting' | t:{name: userName()} }}</h1>
+          <p class="dashboard__subtitle">{{ 'dashboard.subtitle' | t }}</p>
         </div>
       </section>
 
@@ -49,34 +54,34 @@ interface SuggestedRecipe {
           <span class="stat-card__icon">{{ stat.icon }}</span>
           <div class="stat-card__content">
             <span class="stat-card__value">{{ stat.value }}</span>
-            <span class="stat-card__label">{{ stat.label }}</span>
+            <span class="stat-card__label">{{ stat.labelKey | t }}</span>
           </div>
         </div>
       </section>
 
       <!-- Quick Actions -->
       <section class="dashboard__actions">
-        <a routerLink="/recipes/generate" class="action-card action-card--primary">
+        <a routerLink="/recipes" fragment="ai" class="action-card action-card--primary">
           <span class="action-card__icon">🤖</span>
-          <span class="action-card__label">Generar con IA</span>
+          <span class="action-card__label">{{ 'dashboard.genAI' | t }}</span>
         </a>
         <a routerLink="/pantry" class="action-card action-card--secondary">
           <span class="action-card__icon">📦</span>
-          <span class="action-card__label">Mi Despensa</span>
+          <span class="action-card__label">{{ 'dashboard.pantry' | t }}</span>
         </a>
         <a routerLink="/calendar" class="action-card action-card--accent">
           <span class="action-card__icon">📅</span>
-          <span class="action-card__label">Planificar</span>
+          <span class="action-card__label">{{ 'dashboard.plan' | t }}</span>
         </a>
       </section>
 
       <!-- Today's Meals -->
       <section class="dashboard__section">
         <div class="dashboard__section-header">
-          <h2 class="dashboard__section-title">Comidas de hoy</h2>
-          <a routerLink="/calendar" class="dashboard__section-link">Ver todo →</a>
+          <h2 class="dashboard__section-title">{{ 'dashboard.todayMeals' | t }}</h2>
+          <a routerLink="/calendar" class="dashboard__section-link">{{ 'dashboard.viewAll' | t }}</a>
         </div>
-        
+
         <div class="meals-list">
           <div *ngFor="let meal of upcomingMeals()" class="meal-card">
             <span class="meal-card__icon">{{ meal.icon }}</span>
@@ -86,11 +91,11 @@ interface SuggestedRecipe {
             </div>
             <span class="meal-card__time">{{ meal.time }}</span>
           </div>
-          
-          <div *ngIf="upcomingMeals().length === 0" class="empty-state">
+
+          <div *ngIf="upcomingMeals().length === 0 && !isLoading()" class="empty-state">
             <span class="empty-state__icon">🍽️</span>
-            <p class="empty-state__text">No hay comidas planificadas para hoy</p>
-            <a routerLink="/calendar" class="empty-state__link">Planificar ahora</a>
+            <p class="empty-state__text">{{ 'dashboard.noMeals' | t }}</p>
+            <a routerLink="/calendar" class="empty-state__link">{{ 'dashboard.planNow' | t }}</a>
           </div>
         </div>
       </section>
@@ -98,10 +103,10 @@ interface SuggestedRecipe {
       <!-- Suggested Recipes -->
       <section class="dashboard__section">
         <div class="dashboard__section-header">
-          <h2 class="dashboard__section-title">Recetas sugeridas</h2>
-          <a routerLink="/recipes" class="dashboard__section-link">Ver todas →</a>
+          <h2 class="dashboard__section-title">{{ 'dashboard.suggested' | t }}</h2>
+          <a routerLink="/recipes" class="dashboard__section-link">{{ 'dashboard.viewAll' | t }}</a>
         </div>
-        
+
         <div class="recipes-grid">
           <a
             *ngFor="let recipe of suggestedRecipes()"
@@ -121,36 +126,11 @@ interface SuggestedRecipe {
               </div>
             </div>
           </a>
-          
-          <div *ngIf="suggestedRecipes().length === 0" class="empty-state">
-            <span class="empty-state__icon">📖</span>
-            <p class="empty-state__text">No hay recetas sugeridas</p>
-            <a routerLink="/recipes/generate" class="empty-state__link">Generar con IA</a>
-          </div>
-        </div>
-      </section>
 
-      <!-- Weekly Progress -->
-      <section class="dashboard__section">
-        <div class="dashboard__section-header">
-          <h2 class="dashboard__section-title">Progreso semanal</h2>
-        </div>
-        
-        <div class="progress-card">
-          <div class="progress-card__item">
-            <div class="progress-card__header">
-              <span class="progress-card__label">Calorías</span>
-              <span class="progress-card__value">1,450 / 2,000</span>
-            </div>
-            <app-progress [value]="72" size="md"></app-progress>
-          </div>
-          
-          <div class="progress-card__item">
-            <div class="progress-card__header">
-              <span class="progress-card__label">Proteínas</span>
-              <span class="progress-card__value">65g / 100g</span>
-            </div>
-            <app-progress [value]="65" size="md" color="var(--secondary)"></app-progress>
+          <div *ngIf="suggestedRecipes().length === 0 && !isLoading()" class="empty-state">
+            <span class="empty-state__icon">📖</span>
+            <p class="empty-state__text">{{ 'dashboard.noSuggested' | t }}</p>
+            <a routerLink="/recipes" fragment="ai" class="empty-state__link">{{ 'dashboard.genAIRecipes' | t }}</a>
           </div>
         </div>
       </section>
@@ -164,15 +144,10 @@ interface SuggestedRecipe {
     }
 
     @media (min-width: 768px) {
-      .dashboard {
-        padding: var(--space-8);
-      }
+      .dashboard { padding: var(--space-8); }
     }
 
-    /* Welcome */
-    .dashboard__welcome {
-      margin-bottom: var(--space-6);
-    }
+    .dashboard__welcome { margin-bottom: var(--space-6); }
 
     .dashboard__title {
       font-family: var(--font-display);
@@ -187,7 +162,6 @@ interface SuggestedRecipe {
       color: var(--text-secondary);
     }
 
-    /* Stats */
     .dashboard__stats {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -196,9 +170,7 @@ interface SuggestedRecipe {
     }
 
     @media (min-width: 480px) {
-      .dashboard__stats {
-        grid-template-columns: repeat(4, 1fr);
-      }
+      .dashboard__stats { grid-template-columns: repeat(4, 1fr); }
     }
 
     .stat-card {
@@ -211,14 +183,8 @@ interface SuggestedRecipe {
       border: 1px solid var(--border-default);
     }
 
-    .stat-card__icon {
-      font-size: var(--text-2xl);
-    }
-
-    .stat-card__content {
-      display: flex;
-      flex-direction: column;
-    }
+    .stat-card__icon { font-size: var(--text-2xl); }
+    .stat-card__content { display: flex; flex-direction: column; }
 
     .stat-card__value {
       font-size: var(--text-xl);
@@ -231,7 +197,6 @@ interface SuggestedRecipe {
       color: var(--text-secondary);
     }
 
-    /* Quick Actions */
     .dashboard__actions {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -248,41 +213,15 @@ interface SuggestedRecipe {
       border-radius: var(--radius-xl);
       text-decoration: none;
       transition: var(--transition-fast);
-
-      &:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-md);
-      }
+      &:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
     }
+    .action-card--primary   { background: var(--primary-subtle); color: var(--primary-dark); }
+    .action-card--secondary { background: var(--secondary-subtle); color: var(--secondary-dark); }
+    .action-card--accent    { background: var(--bg-tertiary); color: var(--text-primary); }
+    .action-card__icon { font-size: var(--text-3xl); }
+    .action-card__label { font-size: var(--text-sm); font-weight: var(--font-medium); }
 
-    .action-card--primary {
-      background: var(--primary-subtle);
-      color: var(--primary-dark);
-    }
-
-    .action-card--secondary {
-      background: var(--secondary-subtle);
-      color: var(--secondary-dark);
-    }
-
-    .action-card--accent {
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-    }
-
-    .action-card__icon {
-      font-size: var(--text-3xl);
-    }
-
-    .action-card__label {
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-    }
-
-    /* Sections */
-    .dashboard__section {
-      margin-bottom: var(--space-8);
-    }
+    .dashboard__section { margin-bottom: var(--space-8); }
 
     .dashboard__section-header {
       display: flex;
@@ -302,18 +241,10 @@ interface SuggestedRecipe {
       font-size: var(--text-sm);
       color: var(--primary);
       text-decoration: none;
-
-      &:hover {
-        color: var(--primary-dark);
-      }
+      &:hover { color: var(--primary-dark); }
     }
 
-    /* Meals */
-    .meals-list {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
+    .meals-list { display: flex; flex-direction: column; gap: var(--space-2); }
 
     .meal-card {
       display: flex;
@@ -325,34 +256,12 @@ interface SuggestedRecipe {
       border: 1px solid var(--border-default);
     }
 
-    .meal-card__icon {
-      font-size: var(--text-2xl);
-    }
+    .meal-card__icon { font-size: var(--text-2xl); }
+    .meal-card__content { flex: 1; display: flex; flex-direction: column; }
+    .meal-card__type { font-size: var(--text-xs); color: var(--text-tertiary); text-transform: uppercase; }
+    .meal-card__name { font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--text-primary); }
+    .meal-card__time { font-size: var(--text-xs); color: var(--text-secondary); }
 
-    .meal-card__content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .meal-card__type {
-      font-size: var(--text-xs);
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-    }
-
-    .meal-card__name {
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-      color: var(--text-primary);
-    }
-
-    .meal-card__time {
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-    }
-
-    /* Recipes Grid */
     .recipes-grid {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -360,9 +269,7 @@ interface SuggestedRecipe {
     }
 
     @media (min-width: 480px) {
-      .recipes-grid {
-        grid-template-columns: repeat(3, 1fr);
-      }
+      .recipes-grid { grid-template-columns: repeat(3, 1fr); }
     }
 
     .recipe-card {
@@ -372,11 +279,7 @@ interface SuggestedRecipe {
       overflow: hidden;
       text-decoration: none;
       transition: var(--transition-fast);
-
-      &:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-md);
-      }
+      &:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
     }
 
     .recipe-card__image {
@@ -387,13 +290,8 @@ interface SuggestedRecipe {
       justify-content: center;
     }
 
-    .recipe-card__placeholder {
-      font-size: var(--text-4xl);
-    }
-
-    .recipe-card__content {
-      padding: var(--space-3);
-    }
+    .recipe-card__placeholder { font-size: var(--text-4xl); }
+    .recipe-card__content { padding: var(--space-3); }
 
     .recipe-card__name {
       font-size: var(--text-sm);
@@ -409,47 +307,10 @@ interface SuggestedRecipe {
       justify-content: space-between;
     }
 
-    .recipe-card__time {
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-    }
+    .recipe-card__time { font-size: var(--text-xs); color: var(--text-secondary); }
 
-    /* Progress */
-    .progress-card {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
-      padding: var(--space-4);
-      background: var(--bg-secondary);
-      border-radius: var(--radius-xl);
-      border: 1px solid var(--border-default);
-    }
-
-    .progress-card__item {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    .progress-card__header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .progress-card__label {
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-    }
-
-    .progress-card__value {
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-      color: var(--text-primary);
-    }
-
-    /* Empty State */
     .empty-state {
+      grid-column: 1 / -1;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -457,10 +318,7 @@ interface SuggestedRecipe {
       text-align: center;
     }
 
-    .empty-state__icon {
-      font-size: 48px;
-      margin-bottom: var(--space-3);
-    }
+    .empty-state__icon { font-size: 48px; margin-bottom: var(--space-3); }
 
     .empty-state__text {
       font-size: var(--text-sm);
@@ -473,20 +331,22 @@ interface SuggestedRecipe {
       font-weight: var(--font-medium);
       color: var(--primary);
       text-decoration: none;
-
-      &:hover {
-        color: var(--primary-dark);
-      }
+      &:hover { color: var(--primary-dark); }
     }
   `]
 })
 export class DashboardComponent implements OnInit {
   private authService = inject(AuthService);
+  private recipeService = inject(RecipeService);
+  private pantryService = inject(PantryService);
+  private calendarService = inject(CalendarService);
+  private householdService = inject(HouseholdService);
 
   userName = signal('');
   quickStats = signal<QuickStat[]>([]);
   upcomingMeals = signal<UpcomingMeal[]>([]);
   suggestedRecipes = signal<SuggestedRecipe[]>([]);
+  isLoading = signal(true);
 
   ngOnInit(): void {
     this.userName.set(this.authService.userName() || 'Chef');
@@ -494,33 +354,49 @@ export class DashboardComponent implements OnInit {
   }
 
   private loadDashboardData(): void {
-    // Mock data - in real app, fetch from API
-    this.quickStats.set([
-      { icon: '📦', label: 'Ingredientes', value: 24, color: 'var(--primary)' },
-      { icon: '📖', label: 'Recetas', value: 12, color: 'var(--secondary)' },
-      { icon: '👨‍👩‍👧‍👦', label: 'Miembros', value: 3, color: 'var(--info)' },
-      { icon: '🍳', label: 'Cocinadas', value: 8, color: 'var(--warning)' }
-    ]);
+    this.isLoading.set(true);
 
-    this.upcomingMeals.set([
-      { id: '1', type: 'Desayuno', name: 'Tostadas con aguacate', time: '08:30', icon: '🥑' },
-      { id: '2', type: 'Almuerzo', name: 'Pasta con pollo', time: '13:00', icon: '🍝' },
-      { id: '3', type: 'Cena', name: 'Ensalada César', time: '20:00', icon: '🥗' }
-    ]);
+    // Load pantry for stats
+    this.pantryService.loadIngredients();
+    this.pantryService.loadStats();
 
-    this.suggestedRecipes.set([
-      { id: '1', name: 'Pasta Carbonara', time: 25, difficulty: 'Fácil' },
-      { id: '2', name: 'Pollo al Curry', time: 40, difficulty: 'Medio' },
-      { id: '3', name: 'Ensalada Griega', time: 15, difficulty: 'Fácil' }
-    ]);
+    // Load recipes (first 6, sorted by newest)
+    this.recipeService.loadRecipes({ pageSize: 6 } as any);
+
+    // Load calendar / household (best-effort)
+    try { (this.calendarService as any).loadCalendar?.(); } catch { /* ignore */ }
+    try { this.householdService.loadHousehold(); } catch { /* ignore */ }
+
+    // Combine signals into view models after a tick
+    setTimeout(() => {
+      const pantryTotal = this.pantryService.total();
+      const recipesTotal = this.recipeService.total();
+      const recipes = this.recipeService.recipes().slice(0, 6).map(r => ({
+        id: r.id,
+        name: r.name,
+        time: r.totalTime ?? 0,
+        difficulty: r.difficulty,
+        image: r.image
+      }));
+      this.suggestedRecipes.set(recipes);
+
+      this.quickStats.set([
+        { icon: '📦', labelKey: 'dashboard.ingredients', value: pantryTotal, color: 'var(--primary)' },
+        { icon: '📖', labelKey: 'dashboard.recipes', value: recipesTotal, color: 'var(--secondary)' },
+        { icon: '👨‍👩‍👧‍👦', labelKey: 'dashboard.members', value: 0, color: 'var(--info)' },
+        { icon: '🍳', labelKey: 'dashboard.cooked', value: 0, color: 'var(--warning)' }
+      ]);
+
+      // Upcoming meals: empty until calendar provides them
+      this.upcomingMeals.set([]);
+      this.isLoading.set(false);
+    }, 400);
   }
 
   getDifficultyVariant(difficulty: string): 'success' | 'warning' | 'error' {
-    switch (difficulty.toLowerCase()) {
-      case 'fácil': return 'success';
-      case 'medio': return 'warning';
-      case 'difícil': return 'error';
-      default: return 'warning';
-    }
+    const d = (difficulty || '').toLowerCase();
+    if (d === 'easy' || d === 'fácil') return 'success';
+    if (d === 'hard' || d === 'difícil' || d === 'expert') return 'error';
+    return 'warning';
   }
 }

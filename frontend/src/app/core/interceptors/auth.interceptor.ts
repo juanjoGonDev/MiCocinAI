@@ -1,7 +1,6 @@
 import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
 import { inject } from '@angular/core';
-import { catchError, switchMap, throwError, shareReplay, take } from 'rxjs';
-import { BehaviorSubject, filter } from 'rxjs';
+import { BehaviorSubject, catchError, filter, switchMap, take, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 
 // Prevent infinite refresh loops when several requests fail with 401 at once.
