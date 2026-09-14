@@ -156,7 +156,7 @@ const COMMON_UTENSILS: SeedUtensil[] = [
   { name: 'Papel de aluminio', category: 'almacenaje' }
 ];
 
-export function seedDefaultsForHousehold(db: Database.Database, householdId: string): void {
+export function seedDefaultsForHousehold(db: Database.Database, householdId: string, userId: string): void {
   // Avoid re-seeding if already seeded
   const existing = db.prepare(
     'SELECT COUNT(*) as c FROM utensils WHERE household_id = ?'
@@ -165,19 +165,19 @@ export function seedDefaultsForHousehold(db: Database.Database, householdId: str
 
   const insertIngredient = db.prepare(`
     INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit, location, created_at, updated_at)
-    VALUES (?, NULL, ?, ?, ?, 0, ?, 'pantry', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, 0, ?, 'pantry', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `);
   const insertUtensil = db.prepare(`
     INSERT INTO utensils (id, user_id, household_id, name, category, available, notes, created_at)
-    VALUES (?, NULL, ?, ?, ?, 1, NULL, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, 1, NULL, CURRENT_TIMESTAMP)
   `);
 
   const seed = db.transaction(() => {
     for (const ing of COMMON_INGREDIENTS) {
-      insertIngredient.run(nanoid(), householdId, ing.name, ing.category, ing.unit || 'unit');
+      insertIngredient.run(nanoid(), userId, householdId, ing.name, ing.category, ing.unit || 'unit');
     }
     for (const ut of COMMON_UTENSILS) {
-      insertUtensil.run(nanoid(), householdId, ut.name, ut.category);
+      insertUtensil.run(nanoid(), userId, householdId, ut.name, ut.category);
     }
   });
   seed();

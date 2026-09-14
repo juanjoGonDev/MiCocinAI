@@ -157,8 +157,8 @@ householdRoutes.post('/', authMiddleware, async (c) => {
 
   db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(id, userId);
 
-  // Seed default pantry items and utensils for the household
-  seedDefaultsForHousehold(db, id);
+  // Seed default pantry items and utensils for the household (assigned to admin)
+  seedDefaultsForHousehold(db, id, userId);
 
   const household = db.prepare('SELECT * FROM households WHERE id = ?').get(id) as any;
   const members = db.prepare(`
