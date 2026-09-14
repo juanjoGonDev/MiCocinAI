@@ -20,6 +20,19 @@ test.describe('Household sharing & invite flow', () => {
     await expect(page.locator('.invite-card__code')).toContainText('/invite/');
     // Copy link button present
     await expect(page.getByRole('button', { name: /Copiar enlace/ })).toBeVisible();
+    // TEMP DEBUG
+    const dbg1 = await page
+      .locator('.household-info')
+      .innerHTML()
+      .catch(() => 'NO .household-info');
+    const settingsCount = await page.locator('.settings-section').count();
+    console.log(
+      '::error::DEBUG1 settings=' +
+        settingsCount +
+        ' ' +
+        dbg1.replace(/\s+/g, ' ').replace(/%/g, '%25').slice(0, 700)
+    );
+
     // Share toggles present (admin sees them)
     await expect(page.getByText(/Despensa compartida/)).toBeVisible();
     await expect(page.getByText(/Recetas compartidas/)).toBeVisible();
@@ -52,6 +65,9 @@ test.describe('Household sharing & invite flow', () => {
     const guestCtx = await browser.newContext();
     const guestPage = await guestCtx.newPage();
     await guestPage.goto(`/invite/${code}`);
+    // TEMP DEBUG
+    const dbg2 = await guestPage.locator('.invite-card').innerHTML().catch(() => 'NO .invite-card');
+    console.log('::error::DEBUG2 ' + dbg2.replace(/\s+/g, ' ').replace(/%/g, '%25').slice(0, 800));
     await expect(guestPage.locator('text=Familia López')).toBeVisible();
     await expect(guestPage.getByRole('link', { name: /Iniciar sesión/ })).toBeVisible();
     await expect(guestPage.getByRole('link', { name: /Crear cuenta/ })).toBeVisible();
