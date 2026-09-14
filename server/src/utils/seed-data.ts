@@ -3,157 +3,158 @@ import { nanoid } from 'nanoid';
 
 /**
  * Seeds a newly created household with a sensible starter set of common
- * ingredients (quantity 0 so they are suggestions, not real stock) and
- * common kitchen utensils (available = true).
+ * ingredients (quantity 0 - they appear as suggestions the user can
+ * "add to pantry") and common kitchen utensils (available = false by
+ * default - the user must mark which ones they actually own).
+ *
+ * Categories MUST match the backend enums (see schemas/pantry.schema.ts):
+ *   ingredient categories: dairy, meat, fish, vegetables, fruits, grains,
+ *       spices, condiments, frozen, canned, beverages, other
+ *   utensil categories: oven, microwave, airfryer, stovetop, blender,
+ *       mixer, food-processor, cookware, bakeware, tools
  */
 
-interface SeedItem {
-  name: string;
-  category: string;
-  unit?: string;
-}
+interface SeedItem { name: string; category: string; unit?: string }
+interface SeedUtensil { name: string; category: string }
 
 const COMMON_INGREDIENTS: SeedItem[] = [
-  // Basics
-  { name: 'Patatas', category: 'verduras', unit: 'kg' },
-  { name: 'Cebolla', category: 'verduras', unit: 'unit' },
-  { name: 'Ajo', category: 'verduras', unit: 'unit' },
-  { name: 'Tomate', category: 'verduras', unit: 'unit' },
-  { name: 'Zanahoria', category: 'verduras', unit: 'unit' },
-  { name: 'Pimiento', category: 'verduras', unit: 'unit' },
-  { name: 'Lechuga', category: 'verduras', unit: 'unit' },
-  { name: 'Pepino', category: 'verduras', unit: 'unit' },
-  { name: 'Calabacín', category: 'verduras', unit: 'unit' },
-  { name: 'Berenjena', category: 'verduras', unit: 'unit' },
-  { name: 'Brócoli', category: 'verduras', unit: 'unit' },
-  { name: 'Espinacas', category: 'verduras', unit: 'g' },
+  // Vegetables
+  { name: 'Patatas', category: 'vegetables', unit: 'kg' },
+  { name: 'Cebolla', category: 'vegetables', unit: 'unit' },
+  { name: 'Ajo', category: 'vegetables', unit: 'unit' },
+  { name: 'Tomate', category: 'vegetables', unit: 'unit' },
+  { name: 'Zanahoria', category: 'vegetables', unit: 'unit' },
+  { name: 'Pimiento', category: 'vegetables', unit: 'unit' },
+  { name: 'Lechuga', category: 'vegetables', unit: 'unit' },
+  { name: 'Pepino', category: 'vegetables', unit: 'unit' },
+  { name: 'Calabacín', category: 'vegetables', unit: 'unit' },
+  { name: 'Berenjena', category: 'vegetables', unit: 'unit' },
+  { name: 'Brócoli', category: 'vegetables', unit: 'g' },
+  { name: 'Espinacas', category: 'vegetables', unit: 'g' },
   // Fruits
-  { name: 'Plátano', category: 'frutas', unit: 'unit' },
-  { name: 'Manzana', category: 'frutas', unit: 'unit' },
-  { name: 'Naranja', category: 'frutas', unit: 'unit' },
-  { name: 'Limón', category: 'frutas', unit: 'unit' },
-  { name: 'Fresas', category: 'frutas', unit: 'g' },
-  { name: 'Uvas', category: 'frutas', unit: 'g' },
-  { name: 'Aguacate', category: 'frutas', unit: 'unit' },
-  { name: 'Piña', category: 'frutas', unit: 'unit' },
-  { name: 'Melocotón', category: 'frutas', unit: 'unit' },
-  { name: 'Pera', category: 'frutas', unit: 'unit' },
-  // Proteins
-  { name: 'Huevos', category: 'proteínas', unit: 'unit' },
-  { name: 'Pollo', category: 'carnes', unit: 'g' },
-  { name: 'Carne picada', category: 'carnes', unit: 'g' },
-  { name: 'Ternera', category: 'carnes', unit: 'g' },
-  { name: 'Cerdo', category: 'carnes', unit: 'g' },
-  { name: 'Bacón', category: 'carnes', unit: 'g' },
-  { name: 'Salmón', category: 'pescado', unit: 'g' },
-  { name: 'Merluza', category: 'pescado', unit: 'g' },
-  { name: 'Atún en lata', category: 'pescado', unit: 'unit' },
-  { name: 'Gambas', category: 'pescado', unit: 'g' },
+  { name: 'Plátano', category: 'fruits', unit: 'unit' },
+  { name: 'Manzana', category: 'fruits', unit: 'unit' },
+  { name: 'Naranja', category: 'fruits', unit: 'unit' },
+  { name: 'Limón', category: 'fruits', unit: 'unit' },
+  { name: 'Fresas', category: 'fruits', unit: 'g' },
+  { name: 'Uvas', category: 'fruits', unit: 'g' },
+  { name: 'Aguacate', category: 'fruits', unit: 'unit' },
+  { name: 'Piña', category: 'fruits', unit: 'unit' },
+  { name: 'Melocotón', category: 'fruits', unit: 'unit' },
+  { name: 'Pera', category: 'fruits', unit: 'unit' },
+  // Meats / Fish / Eggs
+  { name: 'Huevos', category: 'other', unit: 'unit' },
+  { name: 'Pollo', category: 'meat', unit: 'g' },
+  { name: 'Carne picada', category: 'meat', unit: 'g' },
+  { name: 'Ternera', category: 'meat', unit: 'g' },
+  { name: 'Cerdo', category: 'meat', unit: 'g' },
+  { name: 'Bacón', category: 'meat', unit: 'g' },
+  { name: 'Salmón', category: 'fish', unit: 'g' },
+  { name: 'Merluza', category: 'fish', unit: 'g' },
+  { name: 'Atún en lata', category: 'canned', unit: 'unit' },
+  { name: 'Gambas', category: 'fish', unit: 'g' },
   // Dairy
-  { name: 'Leche', category: 'lácteos', unit: 'l' },
-  { name: 'Queso', category: 'lácteos', unit: 'g' },
-  { name: 'Queso rallado', category: 'lácteos', unit: 'g' },
-  { name: 'Yogur', category: 'lácteos', unit: 'unit' },
-  { name: 'Mantequilla', category: 'lácteos', unit: 'g' },
-  { name: 'Nata', category: 'lácteos', unit: 'ml' },
-  // Pantry
-  { name: 'Arroz', category: 'despensa', unit: 'g' },
-  { name: 'Pasta', category: 'despensa', unit: 'g' },
-  { name: 'Pan de molde', category: 'despensa', unit: 'unit' },
-  { name: 'Pan', category: 'despensa', unit: 'unit' },
-  { name: 'Harina', category: 'despensa', unit: 'g' },
-  { name: 'Azúcar', category: 'despensa', unit: 'g' },
-  { name: 'Sal', category: 'especias', unit: 'g' },
-  { name: 'Pimienta', category: 'especias', unit: 'g' },
-  { name: 'Aceite de oliva', category: 'aceites', unit: 'l' },
-  { name: 'Vinagre', category: 'despensa', unit: 'ml' },
-  { name: 'Salsa de tomate', category: 'despensa', unit: 'unit' },
-  { name: 'Mayonesa', category: 'despensa', unit: 'unit' },
-  { name: 'Ketchup', category: 'despensa', unit: 'unit' },
-  { name: 'Mostaza', category: 'despensa', unit: 'unit' },
-  { name: 'Salsa de soja', category: 'despensa', unit: 'ml' },
-  { name: 'Miel', category: 'despensa', unit: 'g' },
-  { name: 'Café', category: 'despensa', unit: 'g' },
-  { name: 'Té', category: 'despensa', unit: 'unit' },
-  { name: 'Chocolate', category: 'despensa', unit: 'g' },
-  { name: 'Pan rallado', category: 'despensa', unit: 'g' },
-  { name: 'Levadura', category: 'despensa', unit: 'g' },
-  { name: 'Garbanzos', category: 'legumbres', unit: 'g' },
-  { name: 'Lentejas', category: 'legumbres', unit: 'g' },
-  { name: 'Alubias', category: 'legumbres', unit: 'g' },
+  { name: 'Leche', category: 'dairy', unit: 'l' },
+  { name: 'Queso', category: 'dairy', unit: 'g' },
+  { name: 'Queso rallado', category: 'dairy', unit: 'g' },
+  { name: 'Yogur', category: 'dairy', unit: 'unit' },
+  { name: 'Mantequilla', category: 'dairy', unit: 'g' },
+  { name: 'Nata', category: 'dairy', unit: 'ml' },
+  // Grains / Pantry staples
+  { name: 'Arroz', category: 'grains', unit: 'g' },
+  { name: 'Pasta', category: 'grains', unit: 'g' },
+  { name: 'Pan de molde', category: 'grains', unit: 'unit' },
+  { name: 'Pan', category: 'grains', unit: 'unit' },
+  { name: 'Harina', category: 'grains', unit: 'g' },
+  { name: 'Azúcar', category: 'other', unit: 'g' },
+  { name: 'Sal', category: 'spices', unit: 'g' },
+  { name: 'Pimienta', category: 'spices', unit: 'g' },
+  { name: 'Aceite de oliva', category: 'condiments', unit: 'l' },
+  { name: 'Vinagre', category: 'condiments', unit: 'ml' },
+  { name: 'Salsa de tomate', category: 'canned', unit: 'unit' },
+  { name: 'Mayonesa', category: 'condiments', unit: 'unit' },
+  { name: 'Ketchup', category: 'condiments', unit: 'unit' },
+  { name: 'Mostaza', category: 'condiments', unit: 'unit' },
+  { name: 'Salsa de soja', category: 'condiments', unit: 'ml' },
+  { name: 'Miel', category: 'other', unit: 'g' },
+  { name: 'Café', category: 'beverages', unit: 'g' },
+  { name: 'Té', category: 'beverages', unit: 'unit' },
+  { name: 'Chocolate', category: 'other', unit: 'g' },
+  { name: 'Pan rallado', category: 'grains', unit: 'g' },
+  { name: 'Levadura', category: 'other', unit: 'g' },
+  { name: 'Garbanzos', category: 'canned', unit: 'g' },
+  { name: 'Lentejas', category: 'canned', unit: 'g' },
+  { name: 'Alubias', category: 'canned', unit: 'g' },
   // Frozen
-  { name: 'Guisantes congelados', category: 'congelados', unit: 'g' },
-  { name: 'Helado', category: 'congelados', unit: 'unit' },
+  { name: 'Guisantes congelados', category: 'frozen', unit: 'g' },
+  { name: 'Helado', category: 'frozen', unit: 'unit' },
   // Drinks
-  { name: 'Agua', category: 'bebidas', unit: 'l' },
-  { name: 'Zumo', category: 'bebidas', unit: 'l' },
-  { name: 'Cerveza', category: 'bebidas', unit: 'unit' },
-  { name: 'Vino tinto', category: 'bebidas', unit: 'unit' }
+  { name: 'Agua', category: 'beverages', unit: 'l' },
+  { name: 'Zumo', category: 'beverages', unit: 'l' },
+  { name: 'Cerveza', category: 'beverages', unit: 'unit' },
+  { name: 'Vino tinto', category: 'beverages', unit: 'unit' }
 ];
 
-interface SeedUtensil {
-  name: string;
-  category: string;
-}
-
 const COMMON_UTENSILS: SeedUtensil[] = [
-  { name: 'Sartén', category: 'cocción' },
-  { name: 'Sartén antiadherente', category: 'cocción' },
-  { name: 'Sartén pequeña', category: 'cocción' },
-  { name: 'Olla', category: 'cocción' },
-  { name: 'Olla a presión', category: 'cocción' },
-  { name: 'Cazuela', category: 'cocción' },
-  { name: 'Cacerola', category: 'cocción' },
-  { name: 'Batería de cocina', category: 'cocción' },
-  { name: 'Freidora de aire (Airfryer)', category: 'electrodomésticos' },
-  { name: 'Microondas', category: 'electrodomésticos' },
-  { name: 'Horno', category: 'electrodomésticos' },
-  { name: 'Vitrocerámica / Placa inducción', category: 'electrodomésticos' },
-  { name: 'Batidora de mano', category: 'electrodomésticos' },
-  { name: 'Batidora de vaso / Blender', category: 'electrodomésticos' },
-  { name: 'Licuadora', category: 'electrodomésticos' },
-  { name: 'Tostadora', category: 'electrodomésticos' },
-  { name: 'Cafetera', category: 'electrodomésticos' },
-  { name: 'Hervidor de agua', category: 'electrodomésticos' },
-  { name: 'Exprimidor', category: 'electrodomésticos' },
-  { name: 'Robot de cocina', category: 'electrodomésticos' },
-  { name: 'Lavavajillas', category: 'electrodomésticos' },
-  { name: 'Frigorífico', category: 'electrodomésticos' },
-  { name: 'Congelador', category: 'electrodomésticos' },
-  // Prep
-  { name: 'Tabla de cortar', category: 'preparación' },
-  { name: 'Cuchillo de chef', category: 'preparación' },
-  { name: 'Cuchillo de pelar', category: 'preparación' },
-  { name: 'Cuchillo de sierra (pan)', category: 'preparación' },
-  { name: 'Pelador', category: 'preparación' },
-  { name: 'Rallador', category: 'preparación' },
-  { name: 'Tijeras de cocina', category: 'preparación' },
-  { name: 'Abrelatas', category: 'preparación' },
-  { name: 'Descorchador', category: 'preparación' },
-  { name: 'Rodillo de cocina', category: 'preparación' },
-  { name: 'Colador', category: 'preparación' },
-  { name: 'Escurridor', category: 'preparación' },
-  { name: 'Bol / Cuenco', category: 'preparación' },
-  { name: 'Báscula de cocina', category: 'preparación' },
-  { name: 'Vaso medidor', category: 'preparación' },
-  { name: 'Cucharas medidoras', category: 'preparación' },
-  { name: 'Espátula de silicona', category: 'preparación' },
-  { name: 'Cuchara de madera', category: 'preparación' },
-  { name: 'Pinzas de cocina', category: 'preparación' },
-  { name: 'Batidor de varillas', category: 'preparación' },
+  // Cookware (ollas, sartenes…)
+  { name: 'Sartén', category: 'cookware' },
+  { name: 'Sartén antiadherente', category: 'cookware' },
+  { name: 'Sartén pequeña', category: 'cookware' },
+  { name: 'Olla', category: 'cookware' },
+  { name: 'Olla a presión', category: 'cookware' },
+  { name: 'Cazuela', category: 'cookware' },
+  { name: 'Cacerola', category: 'cookware' },
+  { name: 'Batería de cocina', category: 'cookware' },
+  // Appliances (cooking)
+  { name: 'Freidora de aire (Airfryer)', category: 'airfryer' },
+  { name: 'Microondas', category: 'microwave' },
+  { name: 'Horno', category: 'oven' },
+  { name: 'Vitrocerámica / Placa inducción', category: 'stovetop' },
+  { name: 'Batidora de mano', category: 'mixer' },
+  { name: 'Batidora de vaso / Blender', category: 'blender' },
+  { name: 'Procesador de alimentos', category: 'food-processor' },
+  { name: 'Tostadora', category: 'tools' },
+  { name: 'Cafetera', category: 'tools' },
+  { name: 'Hervidor de agua', category: 'tools' },
+  { name: 'Exprimidor', category: 'tools' },
+  { name: 'Robot de cocina', category: 'food-processor' },
+  { name: 'Lavavajillas', category: 'tools' },
+  { name: 'Frigorífico', category: 'tools' },
+  { name: 'Congelador', category: 'tools' },
+  // Prep tools
+  { name: 'Tabla de cortar', category: 'tools' },
+  { name: 'Cuchillo de chef', category: 'tools' },
+  { name: 'Cuchillo de pelar', category: 'tools' },
+  { name: 'Cuchillo de sierra (pan)', category: 'tools' },
+  { name: 'Pelador', category: 'tools' },
+  { name: 'Rallador', category: 'tools' },
+  { name: 'Tijeras de cocina', category: 'tools' },
+  { name: 'Abrelatas', category: 'tools' },
+  { name: 'Descorchador', category: 'tools' },
+  { name: 'Rodillo de cocina', category: 'tools' },
+  { name: 'Colador', category: 'tools' },
+  { name: 'Escurridor', category: 'tools' },
+  { name: 'Bol / Cuenco', category: 'tools' },
+  { name: 'Báscula de cocina', category: 'tools' },
+  { name: 'Vaso medidor', category: 'tools' },
+  { name: 'Cucharas medidoras', category: 'tools' },
+  { name: 'Espátula de silicona', category: 'tools' },
+  { name: 'Cuchara de madera', category: 'tools' },
+  { name: 'Pinzas de cocina', category: 'tools' },
+  { name: 'Batidor de varillas', category: 'tools' },
   // Bakeware
-  { name: 'Bandeja de horno', category: 'horno' },
-  { name: 'Molde para bizcocho', category: 'horno' },
-  { name: 'Fuente de cristal', category: 'horno' },
-  { name: 'Papel de horno', category: 'horno' },
+  { name: 'Bandeja de horno', category: 'bakeware' },
+  { name: 'Molde para bizcocho', category: 'bakeware' },
+  { name: 'Fuente de cristal', category: 'bakeware' },
+  { name: 'Papel de horno', category: 'bakeware' },
   // Other
-  { name: 'Paños de cocina', category: 'varios' },
-  { name: 'Papel de cocina', category: 'varios' },
-  { name: 'Delantal', category: 'varios' },
-  { name: 'Guantes de horno', category: 'varios' },
-  { name: 'Tupperware / Recipientes', category: 'almacenaje' },
-  { name: 'Papel film', category: 'almacenaje' },
-  { name: 'Papel de aluminio', category: 'almacenaje' }
+  { name: 'Paños de cocina', category: 'tools' },
+  { name: 'Papel de cocina', category: 'tools' },
+  { name: 'Delantal', category: 'tools' },
+  { name: 'Guantes de horno', category: 'tools' },
+  { name: 'Tupperware / Recipientes', category: 'tools' },
+  { name: 'Papel film', category: 'tools' },
+  { name: 'Papel de aluminio', category: 'tools' }
 ];
 
 export function seedDefaultsForHousehold(db: Database.Database, householdId: string, userId: string): void {
@@ -167,9 +168,10 @@ export function seedDefaultsForHousehold(db: Database.Database, householdId: str
     INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit, location, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, 0, ?, 'pantry', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
   `);
+  // Default available = 0: user must mark what they own
   const insertUtensil = db.prepare(`
     INSERT INTO utensils (id, user_id, household_id, name, category, available, notes, created_at)
-    VALUES (?, ?, ?, ?, ?, 1, NULL, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, 0, NULL, CURRENT_TIMESTAMP)
   `);
 
   const seed = db.transaction(() => {

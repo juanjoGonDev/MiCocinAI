@@ -240,11 +240,23 @@ interface DayMeals {
 
           <div class="generate-form__field">
             <label>Objetivo</label>
-            <select [(ngModel)]="generateOptions.goalType" class="form-select">
+            <select [(ngModel)]="generateOptions.goalType" class="form-select" (change)="onGoalTypeChange()">
               <option *ngFor="let goal of goalOptions" [value]="goal.value">
                 {{ goal.icon }} {{ goal.label }}
               </option>
             </select>
+          </div>
+
+          <div class="generate-form__field" *ngIf="generateOptions.goalType === 'custom'">
+            <label>Describe tu objetivo</label>
+            <textarea
+              [(ngModel)]="generateOptions.customDescription"
+              name="customDescription"
+              rows="4"
+              placeholder="Ej: Quiero cenas ligeras y sin carne los lunes y miércoles, mucha verdura, poco frito, y algo de pasta o arroz 2 veces por semana. Sin gluten."
+              class="form-textarea"
+            ></textarea>
+            <span class="field-hint">Sé lo más específico/a posible: intolerancias, preferencias, días especiales, recetas favoritas…</span>
           </div>
 
           <div class="generate-form__field">
@@ -619,6 +631,29 @@ interface DayMeals {
         border-color: var(--primary);
       }
     }
+
+    .form-textarea {
+      width: 100%;
+      padding: var(--space-3);
+      font-family: var(--font-sans);
+      font-size: var(--text-sm);
+      color: var(--text-primary);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      resize: vertical;
+      min-height: 100px;
+      line-height: 1.5;
+
+      &:focus { outline: none; border-color: var(--primary); }
+    }
+
+    .field-hint {
+      font-size: var(--text-xs);
+      color: var(--text-tertiary);
+      margin-top: 4px;
+      display: block;
+    }
   `]
 })
 export class CalendarComponent implements OnInit {
@@ -648,7 +683,8 @@ export class CalendarComponent implements OnInit {
 
   generateOptions = {
     goalType: 'balanced',
-    calories: 2000
+    calories: 2000,
+    customDescription: ''
   };
 
   mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -658,7 +694,8 @@ export class CalendarComponent implements OnInit {
     { value: 'weight-loss', label: 'Perder peso', icon: '📉' },
     { value: 'weight-gain', label: 'Ganar peso', icon: '📈' },
     { value: 'muscle-gain', label: 'Ganar músculo', icon: '💪' },
-    { value: 'variety', label: 'Variada', icon: '🌈' }
+    { value: 'variety', label: 'Variada', icon: '🌈' },
+    { value: 'custom', label: 'Personalizada', icon: '✏️' }
   ];
 
   weekDays = signal<DayMeals[]>([]);
@@ -831,6 +868,12 @@ export class CalendarComponent implements OnInit {
     this.isGenerateModalOpen.set(false);
   }
 
+  onGoalTypeChange(): void {
+    if (this.generateOptions.goalType !== 'custom') {
+      this.generateOptions.customDescription = '';
+    }
+  }
+
   generateWeeklyPlan(): void {
     this.isGenerating.set(true);
 
@@ -838,13 +881,18 @@ export class CalendarComponent implements OnInit {
     const end = new Date(start);
     end.setDate(end.getDate() + 6);
 
+    const goals: any = {
+      type: this.generateOptions.goalType,
+      caloriesTarget: this.generateOptions.calories
+    };
+    if (this.generateOptions.goalType === 'custom' && this.generateOptions.customDescription.trim()) {
+      goals.customInstructions = this.generateOptions.customDescription.trim();
+    }
+
     this.calendarService.generateWithAi({
       startDate: start.toISOString().split('T')[0],
       endDate: end.toISOString().split('T')[0],
-      goals: {
-        type: this.generateOptions.goalType,
-        caloriesTarget: this.generateOptions.calories
-      }
+      goals
     }).subscribe({
       next: () => {
         this.isGenerating.set(false);
