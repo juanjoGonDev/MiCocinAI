@@ -21,21 +21,11 @@ export async function registerUser(page: Page, name = 'E2E'): Promise<string> {
  */
 export async function createHousehold(page: Page, name = 'Hogar E2E'): Promise<void> {
   await page.goto('/household');
+  await expect(page.locator('.no-household')).toBeVisible({ timeout: 20000 });
   await page.getByRole('button', { name: /Crear hogar/i }).click();
   await page.fill('input#householdName', name);
   await page.locator('app-modal button[type="submit"]').click();
-  try {
-    await expect(page.locator('.invite-card__code')).toContainText('/invite/', { timeout: 15000 });
-  } catch (err) {
-    // TEMP DEBUG
-    const dbg = await page
-      .locator('.household__content, .no-household, .modal-overlay')
-      .first()
-      .innerHTML()
-      .catch(() => 'NO CONTENT');
-    console.log('::error::DEBUG_HH ' + dbg.replace(/\s+/g, ' ').replace(/%/g, '%25').slice(0, 700));
-    throw err;
-  }
+  await expect(page.locator('.invite-card__code')).toContainText('/invite/', { timeout: 20000 });
 }
 
 /** Registra un usuario, crea su hogar y lo deja en `path`. */
