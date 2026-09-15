@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, tap, catchError, of, throwError } from 'rxjs';
+import { Observable, tap, map, catchError, of, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   Ingredient,
@@ -108,30 +108,35 @@ export class PantryService {
   // Utensils
   // ═══════════════════════════════════════════════════════════════
 
-  loadUtensils(): void {
-    this.http.get<any>(`${this.apiUrl}/utensils`).pipe(
-      tap(response => this.utensilsSignal.set(response.data)),
-      catchError(() => of(null))
-    ).subscribe();
+  /**
+   * Devuelve el observable (no se suscribe aqui) para que el componente
+   * sepa cuando termina la carga. Los errores NO se silencian: si el
+   * servidor falla, el componente debe poder avisar al usuario.
+   */
+  loadUtensils(): Observable<Utensil[]> {
+    return this.http.get<any>(`${this.apiUrl}/utensils`).pipe(
+      tap(response => this.utensilsSignal.set(response.data ?? [])),
+      map(response => (response.data ?? []) as Utensil[])
+    );
   }
 
-  createUtensil(data: CreateUtensilInput): Observable<Utensil | null> {
+  createUtensil(data: CreateUtensilInput): Observable<Utensil> {
     return this.http.post<any>(`${this.apiUrl}/utensils`, data).pipe(
       tap(response => {
         this.utensilsSignal.update(list => [...list, response.data]);
       }),
-      catchError(() => of(null))
+      map(response => response.data)
     );
   }
 
-  updateUtensil(id: string, data: UpdateUtensilInput): Observable<Utensil | null> {
+  updateUtensil(id: string, data: UpdateUtensilInput): Observable<Utensil> {
     return this.http.patch<any>(`${this.apiUrl}/utensils/${id}`, data).pipe(
       tap(response => {
         this.utensilsSignal.update(list =>
           list.map(u => u.id === id ? response.data : u)
         );
       }),
-      catchError(() => of(null))
+      map(response => response.data)
     );
   }
 
@@ -140,7 +145,7 @@ export class PantryService {
       tap(() => {
         this.utensilsSignal.update(list => list.filter(u => u.id !== id));
       }),
-      catchError(() => of(false))
+      map(() => true)
     );
   }
 

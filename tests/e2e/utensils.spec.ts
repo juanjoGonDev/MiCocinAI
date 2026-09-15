@@ -3,7 +3,8 @@ import { registerWithHousehold } from './helpers/auth';
 
 test.describe('Pantry — utensils tab', () => {
   test.beforeEach(async ({ page }) => {
-    // El catalogo de utensilios se siembra junto al hogar
+    // El catalogo de utensilios se siembra junto al hogar (y se backfillea
+    // en los hogares que se crearon antes de que existiera el catalogo)
     await registerWithHousehold(page, '/pantry');
     await page.locator('.tab', { hasText: 'Utensilios' }).click();
     await expect(page.locator('.utensils')).toBeVisible();
@@ -36,12 +37,22 @@ test.describe('Pantry — utensils tab', () => {
     );
   });
 
-  test('adds and deletes a custom utensil', async ({ page }) => {
+  test('the header add button opens the utensils modal on this tab', async ({ page }) => {
+    await page.getByRole('button', { name: '+ Agregar' }).click();
+
+    await expect(page.locator('.modal__title')).toContainText('Agregar Utensilio');
+    await expect(page.locator('input#utensilName')).toBeVisible();
+    await expect(page.locator('select#utensilCategory')).toBeVisible();
+  });
+
+  test('adds and deletes a custom utensil from the modal', async ({ page }) => {
     // El borrado pide confirmacion con confirm()
     page.on('dialog', (dialog) => dialog.accept());
 
-    await page.fill('input[name="utensilName"]', 'Sous vide');
-    await page.locator('.utensils-add__form button[type="submit"]').click();
+    await page.getByRole('button', { name: '+ Agregar' }).click();
+    await page.fill('input#utensilName', 'Sous vide');
+    await page.selectOption('select#utensilCategory', 'tools');
+    await page.locator('.modal-overlay button[type="submit"]').click();
 
     await expect(page.locator('.toast--success .toast__title')).toContainText('Añadido');
     const custom = page.locator('.utensil-card', { hasText: 'Sous vide' });
@@ -51,5 +62,14 @@ test.describe('Pantry — utensils tab', () => {
     await custom.locator('.utensil-card__delete').click();
     await expect(page.locator('.toast--success').filter({ hasText: 'Eliminado' })).toBeVisible();
     await expect(page.locator('.utensil-card', { hasText: 'Sous vide' })).toHaveCount(0);
+  });
+
+  test('does not allow duplicated utensil names', async ({ page }) => {
+    await page.getByRole('button', { name: '+ Agregar' }).click();
+    await page.fill('input#utensilName', 'Abrelatas');
+    await page.locator('.modal-overlay button[type="submit"]').click();
+
+    await expect(page.locator('.input__error')).toContainText('Ya existe');
+    await expect(page.locator('.utensil-card', { hasText: 'Abrelatas' })).toHaveCount(1);
   });
 });
