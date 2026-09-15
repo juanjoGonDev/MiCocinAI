@@ -157,30 +157,84 @@ const COMMON_UTENSILS: SeedUtensil[] = [
   { name: 'Papel de aluminio', category: 'tools' }
 ];
 
-export function seedDefaultsForHousehold(db: Database.Database, householdId: string, userId: string): void {
-  // Avoid re-seeding if already seeded
-  const existing = db.prepare(
-    'SELECT COUNT(*) as c FROM utensils WHERE household_id = ?'
-  ).get(householdId) as any;
-  if (existing && existing.c > 0) return;
+/** Ingredientes comunes (cantidad 0: son sugerencias, no inventario). */
+export function seedCommonIngredients(
+  db: Database.Database,
+  householdId: string,
+  userId: string
+): number {
+  const existing = db
+    .prepare('SELECT COUNT(*) as c FROM ingredients WHERE household_id = ?')
+    .get(householdId) as any;
+  if (existing && existing.c > 0) return 0;
 
   const insertIngredient = db.prepare(`
     INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit, location, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, 0, ?, 'pantry', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  `);
-  // Default available = 0: user must mark what they own
-  const insertUtensil = db.prepare(`
-    INSERT INTO utensils (id, user_id, household_id, name, category, available, notes, created_at)
-    VALUES (?, ?, ?, ?, ?, 0, NULL, CURRENT_TIMESTAMP)
   `);
 
   const seed = db.transaction(() => {
     for (const ing of COMMON_INGREDIENTS) {
       insertIngredient.run(nanoid(), userId, householdId, ing.name, ing.category, ing.unit || 'unit');
     }
+  });
+  seed();
+  return COMMON_INGREDIENTS.length;
+}
+
+/** Catalogo de utensilios (available = 0: el usuario marca los que tiene). */
+export function seedCommonUtensils(
+  db: Database.Database,
+  householdId: string,
+  userId: string
+): number {
+  const existing = db
+    .prepare('SELECT COUNT(*) as c FROM utensils WHERE household_id = ?')
+    .get(householdId) as any;
+  if (existing && existing.c > 0) return 0;
+
+  const insertUtensil = db.prepare(`
+    INSERT INTO utensils (id, user_id, household_id, name, category, available, notes, created_at)
+    VALUES (?, ?, ?, ?, ?, 0, NULL, CURRENT_TIMESTAMP)
+  `);
+
+  const seed = db.transaction(() => {
     for (const ut of COMMON_UTENSILS) {
       insertUtensil.run(nanoid(), userId, householdId, ut.name, ut.category);
     }
   });
   seed();
+  return COMMON_UTENSILS.length;
+}
+
+/** Siembra ingredientes + utensilios al crear un hogar. */
+export function seedDefaultsForHousehold(db: Database.Database, householdId: string, userId: string): void {
+  seedCommonIngredients(db, householdId, userId);
+  seedCommonUtensils(db, householdId, userId);
+}
+
+/**
+ * Backfill para hogares creados antes de que existiera el catalogo: siembra
+ * solo lo que falta (ingredientes y/o utensilios) en cada hogar existente.
+ * Es idempotente, asi que se puede ejecutar en cada arranque.
+ */
+export function backfillHouseholdSeeds(db: Database.Database): void {
+  const households = db.prepare('SELECT id FROM households').all() as { id: string }[];
+  const ownerStmt = db.prepare(
+    'SELECT user_id FROM household_members WHERE household_id = ? ORDER BY joined_at ASC LIMIT 1'
+  );
+
+  for (const household of households) {
+    const owner = ownerStmt.get(household.id) as { user_id: string } | undefined;
+    if (!owner) continue;
+
+    const ingredients = seedCommonIngredients(db, household.id, owner.user_id);
+    const utensils = seedCommonUtensils(db, household.id, owner.user_id);
+
+    if (ingredients > 0 || utensils > 0) {
+      console.log(
+        `[DB] Seed backfill hogar ${household.id}: ${ingredients} ingredientes, ${utensils} utensilios`
+      );
+    }
+  }
 }
