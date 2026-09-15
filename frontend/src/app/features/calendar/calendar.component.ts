@@ -95,7 +95,7 @@ const MEAL_TAB_PARAM = 'mealTab';
       <!-- Weekly Grid -->
       <div class="calendar__grid" *ngIf="!calendarService.isLoading()">
         <div
-          *ngFor="let day of weekDays()"
+          *ngFor="let day of weekDays(); trackBy: trackByDate"
           class="day-column"
           [class.day-column--today]="isToday(day.date)"
         >
@@ -752,6 +752,8 @@ export class CalendarComponent implements OnInit {
 
     this.weekDays.set(days);
   }
+
+  trackByDate(_i: number, day: DayMeals): string { return day.date; }
 
   currentWeekLabel(): string {
     const start = this.currentWeekStart();

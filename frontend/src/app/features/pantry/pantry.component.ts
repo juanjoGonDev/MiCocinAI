@@ -195,11 +195,11 @@ const PAGE_SIZE = 100;
         <app-loading *ngIf="utensilsLoading()" message="Cargando utensilios..."></app-loading>
 
         <div *ngIf="!utensilsLoading()" class="utensils">
-          <div *ngFor="let group of utensilGroups()" class="utensil-group">
+          <div *ngFor="let group of utensilGroups(); trackBy: trackByCategory" class="utensil-group">
             <h3 class="utensil-group__title">{{ group.icon }} {{ group.label }}</h3>
             <div class="utensil-grid">
               <label
-                *ngFor="let u of group.items"
+                *ngFor="let u of group.items; trackBy: trackById"
                 class="utensil-card"
                 [class.utensil-card--owned]="u.available"
               >
@@ -949,6 +949,13 @@ export class PantryComponent implements OnInit {
     return null;
   }
   trackById(_i: number, item: Ingredient | Utensil): string { return item.id; }
+
+  /**
+   * Sin trackBy, al marcar un utensilio Angular destruia y volvia a crear
+   * los 10 grupos (las filas del computed son objetos nuevos en cada
+   * recalculo): el checkbox perdia el foco y la pagina saltaba arriba.
+   */
+  trackByCategory(_i: number, group: { value: string }): string { return group.value; }
 
   private resetForm(): void {
     this.formData = {

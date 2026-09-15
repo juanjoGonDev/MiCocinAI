@@ -37,6 +37,28 @@ test.describe('Pantry — utensils tab', () => {
     );
   });
 
+  test('marking a utensil updates the card in place (no scroll jump)', async ({ page }) => {
+    const cards = page.locator('.utensil-card');
+    await expect(cards.first()).toBeVisible();
+
+    const last = cards.nth((await cards.count()) - 1);
+    const check = last.locator('input.utensil-card__check');
+    await last.scrollIntoViewIfNeeded();
+
+    // Se marca el nodo del DOM para detectar si Angular lo reemplaza entero
+    await check.evaluate((el) => el.setAttribute('data-e2e-node', 'original'));
+    const scrollBefore = await page.evaluate(() => window.scrollY);
+    expect(scrollBefore).toBeGreaterThan(0);
+
+    await check.click();
+    await expect(last).toHaveClass(/utensil-card--owned/);
+
+    // trackBy: mismo nodo, mismo foco y la página no se mueve
+    await expect(page.locator('input[data-e2e-node="original"]')).toHaveCount(1);
+    await expect(check).toBeFocused();
+    expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
+  });
+
   test('the header add button opens the utensils modal on this tab', async ({ page }) => {
     await page.getByRole('button', { name: '+ Agregar' }).click();
 
