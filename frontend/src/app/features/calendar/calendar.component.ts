@@ -5,6 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { CalendarService } from '../../core/services/calendar.service';
 import { AiService } from '../../core/services/ai.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { CardComponent } from '../../shared/components/ui/card/card.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
@@ -668,6 +669,7 @@ export class CalendarComponent implements OnInit {
   calendarService = inject(CalendarService);
   aiService = inject(AiService);
   private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
@@ -861,10 +863,15 @@ export class CalendarComponent implements OnInit {
     this.calendarService.completeMeal(meal.id, !meal.completed);
   }
 
-  deleteMeal(meal: any): void {
-    if (confirm('¿Eliminar esta comida?')) {
-      this.calendarService.deleteMeal(meal.id);
-    }
+  async deleteMeal(meal: any): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Eliminar comida',
+      message: '¿Quitar esta comida de la planificación?',
+      confirmText: 'Eliminar'
+    });
+    if (!accepted) return;
+
+    this.calendarService.deleteMeal(meal.id);
   }
 
   openGoalsModal(): void {

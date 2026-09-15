@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LogService, LogEntry, LogLevel, LogSource } from '../../core/services/log.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 
 interface FilterOption<T extends string> {
@@ -114,6 +115,7 @@ interface FilterOption<T extends string> {
             class="terminal__line"
             [class]="'terminal__line--' + entry.level + ' terminal__line--source-' + entry.source"
             [class.terminal__line--selected]="isSelected(entry)"
+            (mousedown)="onLineMouseDown($event)"
             (click)="onLineClick($event, entry, i)"
             title="Clic: seleccionar · Ctrl/Cmd: añadir o quitar · Mayús: seleccionar rango"
           >
@@ -358,6 +360,7 @@ interface FilterOption<T extends string> {
 export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   logService = inject(LogService);
   private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmService);
 
   @ViewChild('bodyEl') bodyEl!: ElementRef<HTMLDivElement>;
 
@@ -412,10 +415,19 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
     return this.selection().has(this.keyOf(entry));
   }
 
+  /**
+   * Mayús + clic extiende la selección de texto en el navegador; se evita
+   * en mousedown para que el gesto signifique "seleccionar el rango".
+   */
+  onLineMouseDown(event: MouseEvent): void {
+    if (event.shiftKey) event.preventDefault();
+  }
+
   onLineClick(event: MouseEvent, entry: LogEntry, index: number): void {
-    // Si el usuario está seleccionando texto a mano, no se toca la selección.
+    // Si el usuario está seleccionando texto a mano (sin Mayús), el clic no
+    // altera la selección de líneas.
     const textSelection = window.getSelection();
-    if (textSelection && !textSelection.isCollapsed) return;
+    if (textSelection && !textSelection.isCollapsed && !event.shiftKey) return;
 
     const key = this.keyOf(entry);
     const add = event.ctrlKey || event.metaKey;
@@ -526,11 +538,16 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.logService.setLevelFilter(v as any);
   }
 
-  clearLogs(): void {
-    if (confirm('¿Borrar todos los logs?')) {
-      this.logService.clear();
-      this.clearSelection();
-    }
+  async clearLogs(): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Borrar logs',
+      message: '¿Borrar todos los logs? Esta acción no se puede deshacer.',
+      confirmText: 'Borrar'
+    });
+    if (!accepted) return;
+
+    this.logService.clear();
+    this.clearSelection();
   }
 
   formatTime(iso: string): string {

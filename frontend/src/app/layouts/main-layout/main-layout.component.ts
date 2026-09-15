@@ -5,6 +5,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ToastComponent } from '../../shared/components/ui/toast/toast.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
 
 interface NavItem {
   path: string;
@@ -15,7 +16,7 @@ interface NavItem {
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, TranslatePipe],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, TranslatePipe, ConfirmDialogComponent],
   template: `
     <div class="layout">
       <!-- Mobile Header -->
@@ -91,6 +92,7 @@ interface NavItem {
     </div>
 
     <app-toast></app-toast>
+    <app-confirm-dialog></app-confirm-dialog>
   `,
   styles: [`
     .layout {

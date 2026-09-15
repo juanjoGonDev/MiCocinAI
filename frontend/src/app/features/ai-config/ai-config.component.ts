@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AiService } from '../../core/services/ai.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { CardComponent } from '../../shared/components/ui/card/card.component';
@@ -515,6 +516,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
 export class AiConfigComponent implements OnInit {
   aiService = inject(AiService);
   private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmService);
 
   isModalOpen = signal(false);
   editingConfig = signal<AIProviderConfig | null>(null);
@@ -629,14 +631,19 @@ export class AiConfigComponent implements OnInit {
     });
   }
 
-  deleteConfig(config: AIProviderConfig): void {
-    if (confirm(`¿Eliminar la configuración "${config.name}"?`)) {
-      this.aiService.deleteConfig(config.id).subscribe({
-        next: () => {
-          this.toastService.success('Eliminada', 'Configuración eliminada correctamente');
-        }
-      });
-    }
+  async deleteConfig(config: AIProviderConfig): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Eliminar configuración',
+      message: `¿Eliminar la configuración "${config.name}"?`,
+      confirmText: 'Eliminar'
+    });
+    if (!accepted) return;
+
+    this.aiService.deleteConfig(config.id).subscribe({
+      next: () => {
+        this.toastService.success('Eliminada', 'Configuración eliminada correctamente');
+      }
+    });
   }
 
   getTestStatusVariant(status: string): 'success' | 'error' | 'warning' {

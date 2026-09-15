@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
@@ -621,6 +622,7 @@ const PAGE_SIZE = 100;
 export class PantryComponent implements OnInit {
   pantryService = inject(PantryService);
   private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmService);
 
   // Tabs
   activeTab = signal<PantryTab>('ingredients');
@@ -845,16 +847,21 @@ export class PantryComponent implements OnInit {
     });
   }
 
-  deleteIngredient(ingredient: Ingredient): void {
-    if (confirm(`¿Eliminar ${ingredient.name}?`)) {
-      this.pantryService.deleteIngredient(ingredient.id).subscribe({
-        next: () => {
-          this.toastService.success('Eliminado', `${ingredient.name} eliminado`);
-          this.reloadIngredients();
-        },
-        error: () => this.toastService.error('Error', 'No se pudo eliminar')
-      });
-    }
+  async deleteIngredient(ingredient: Ingredient): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Eliminar ingrediente',
+      message: `¿Eliminar ${ingredient.name} de la despensa?`,
+      confirmText: 'Eliminar'
+    });
+    if (!accepted) return;
+
+    this.pantryService.deleteIngredient(ingredient.id).subscribe({
+      next: () => {
+        this.toastService.success('Eliminado', `${ingredient.name} eliminado`);
+        this.reloadIngredients();
+      },
+      error: () => this.toastService.error('Error', 'No se pudo eliminar')
+    });
   }
 
   // Utensils
@@ -868,13 +875,18 @@ export class PantryComponent implements OnInit {
     });
   }
 
-  deleteUtensil(u: Utensil): void {
-    if (confirm(`¿Eliminar ${u.name}?`)) {
-      this.pantryService.deleteUtensil(u.id).subscribe({
-        next: () => this.toastService.success('Eliminado', `${u.name} eliminado`),
-        error: () => this.toastService.error('Error', 'No se pudo eliminar')
-      });
-    }
+  async deleteUtensil(u: Utensil): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Eliminar utensilio',
+      message: `¿Quitar ${u.name} del catálogo de tu cocina?`,
+      confirmText: 'Eliminar'
+    });
+    if (!accepted) return;
+
+    this.pantryService.deleteUtensil(u.id).subscribe({
+      next: () => this.toastService.success('Eliminado', `${u.name} eliminado`),
+      error: () => this.toastService.error('Error', 'No se pudo eliminar')
+    });
   }
 
   // Add custom utensil (modal)
