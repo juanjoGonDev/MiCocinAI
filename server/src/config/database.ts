@@ -4,6 +4,7 @@ import { config } from './app.config.js';
 import * as schema from '../models/schema.js';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { backfillHouseholdSeeds } from '../utils/seed-data.js';
 
 let db: Database.Database;
 let drizzleDb: ReturnType<typeof drizzle>;
@@ -257,6 +258,10 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
   addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
   addColumnIfMissing('household_members', 'permissions', 'TEXT DEFAULT \'{}\'');
+
+  // Backfill: los hogares creados antes del catalogo no tienen ni
+  // ingredientes sugeridos ni utensilios que marcar.
+  backfillHouseholdSeeds(db);
 
   console.log('Database tables and indexes created');
 }

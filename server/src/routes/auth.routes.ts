@@ -20,16 +20,18 @@ const authRoutes = new Hono<AppEnv>();
 
 // Helper to generate tokens
 function generateTokens(userId: string, email: string) {
+  // Cast explícito: los tipos de jsonwebtoken exigen `number | StringValue`,
+  // mientras que la configuración tipa las duraciones como `string`.
   const token = jwt.sign(
     { sub: userId, email },
     config.auth.jwtSecret,
-    { expiresIn: config.auth.jwtExpiresIn }
+    { expiresIn: config.auth.jwtExpiresIn as jwt.SignOptions['expiresIn'] }
   );
 
   const refreshToken = jwt.sign(
     { sub: userId, type: 'refresh' },
     config.auth.jwtSecret,
-    { expiresIn: config.auth.refreshTokenExpiresIn }
+    { expiresIn: config.auth.refreshTokenExpiresIn as jwt.SignOptions['expiresIn'] }
   );
 
   return { token, refreshToken };

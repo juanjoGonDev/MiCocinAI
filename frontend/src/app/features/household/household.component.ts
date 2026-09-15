@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HouseholdService } from '../../core/services/household.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
@@ -488,6 +489,7 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
 export class HouseholdComponent implements OnInit {
   householdService = inject(HouseholdService);
   private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmService);
 
   isCreateModalOpen = signal(false);
   isJoinModalOpen = signal(false);
@@ -612,14 +614,19 @@ export class HouseholdComponent implements OnInit {
     });
   }
 
-  leaveHousehold(): void {
-    if (confirm('¿Estás seguro de salir del hogar?')) {
-      this.householdService.leaveHousehold().subscribe({
-        next: () => {
-          this.toastService.success('Saliste', 'Has salido del hogar');
-        }
-      });
-    }
+  async leaveHousehold(): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Salir del hogar',
+      message: '¿Estás seguro de salir del hogar?',
+      confirmText: 'Salir'
+    });
+    if (!accepted) return;
+
+    this.householdService.leaveHousehold().subscribe({
+      next: () => {
+        this.toastService.success('Saliste', 'Has salido del hogar');
+      }
+    });
   }
 
   getRoleVariant(role: string): 'primary' | 'secondary' | 'neutral' {

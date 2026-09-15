@@ -100,7 +100,7 @@ pantryRoutes.get('/ingredients', async (c) => {
 
   // Get paginated results
   const ingredients = db.prepare(
-    `SELECT * FROM ingredients ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?`
+    `SELECT * FROM ingredients ${whereClause} ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`
   ).all(...params, filter.pageSize, offset);
 
   return c.json({

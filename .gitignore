@@ -14,6 +14,9 @@ server/data/
 
 # Logs
 logs/
+# ...pero la pantalla de logs de la app SI se versiona (la regla "logs/" la
+# excluia entera por llamarse igual).
+!frontend/src/app/features/logs/
 *.log
 npm-debug.log*
 

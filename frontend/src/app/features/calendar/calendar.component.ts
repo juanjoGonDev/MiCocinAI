@@ -1,9 +1,11 @@
 import { Component, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { CalendarService } from '../../core/services/calendar.service';
 import { AiService } from '../../core/services/ai.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { CardComponent } from '../../shared/components/ui/card/card.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
@@ -19,12 +21,19 @@ import {
   GOAL_TYPE_LABELS,
   GoalType
 } from '../../shared/models/calendar.model';
+import { clearTabParam, readTabParam, writeTabParam } from '../../core/utils/tab-url';
 
 interface DayMeals {
   day: DayOfWeek;
   date: string;
   meals: Record<MealType, any>;
 }
+
+/** Pestañas del modal de comida: "Escribir" o elegir una receta. */
+type MealTab = 'custom' | 'recipe';
+
+/** Query param que lleva la pestaña del modal de comida en la URL. */
+const MEAL_TAB_PARAM = 'mealTab';
 
 @Component({
   selector: 'app-calendar',
@@ -87,7 +96,7 @@ interface DayMeals {
       <!-- Weekly Grid -->
       <div class="calendar__grid" *ngIf="!calendarService.isLoading()">
         <div
-          *ngFor="let day of weekDays()"
+          *ngFor="let day of weekDays(); trackBy: trackByDate"
           class="day-column"
           [class.day-column--today]="isToday(day.date)"
         >
@@ -149,21 +158,21 @@ interface DayMeals {
           <div class="add-meal-form__tabs">
             <button
               type="button"
-              [class]="'tab' + (addMealTab === 'custom' ? ' tab--active' : '')"
-              (click)="addMealTab = 'custom'"
+              [class]="'tab' + (addMealTab() === 'custom' ? ' tab--active' : '')"
+              (click)="switchAddMealTab('custom')"
             >
               Escribir
             </button>
             <button
               type="button"
-              [class]="'tab' + (addMealTab === 'recipe' ? ' tab--active' : '')"
-              (click)="addMealTab = 'recipe'"
+              [class]="'tab' + (addMealTab() === 'recipe' ? ' tab--active' : '')"
+              (click)="switchAddMealTab('recipe')"
             >
               Receta
             </button>
           </div>
 
-          <div *ngIf="addMealTab === 'custom'" class="add-meal-form__field">
+          <div *ngIf="addMealTab() === 'custom'" class="add-meal-form__field">
             <label>¿Qué vas a comer?</label>
             <input
               type="text"
@@ -173,7 +182,7 @@ interface DayMeals {
             />
           </div>
 
-          <div *ngIf="addMealTab === 'recipe'" class="add-meal-form__field">
+          <div *ngIf="addMealTab() === 'recipe'" class="add-meal-form__field">
             <label>Selecciona una receta</label>
             <select [(ngModel)]="newMealData.recipeId" class="form-select">
               <option value="">Seleccionar...</option>
@@ -660,6 +669,9 @@ export class CalendarComponent implements OnInit {
   calendarService = inject(CalendarService);
   aiService = inject(AiService);
   private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmService);
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
 
   isAddMealModalOpen = signal(false);
   isGoalsModalOpen = signal(false);
@@ -672,7 +684,13 @@ export class CalendarComponent implements OnInit {
   weeklyCalories = signal(0);
   plannedMeals = signal(0);
 
-  addMealTab: 'custom' | 'recipe' = 'custom';
+  /**
+   * Pestañas del modal "Agregar Comida". Igual que en el resto de la web,
+   * la pestaña se refleja en la URL (?mealTab=recipe) mientras el modal
+   * esta abierto, y se limpia al cerrarlo.
+   */
+  readonly MEAL_TABS = ['custom', 'recipe'] as const;
+  addMealTab = signal<MealTab>('custom');
 
   newMealData = {
     date: '',
@@ -736,6 +754,8 @@ export class CalendarComponent implements OnInit {
 
     this.weekDays.set(days);
   }
+
+  trackByDate(_i: number, day: DayMeals): string { return day.date; }
 
   currentWeekLabel(): string {
     const start = this.currentWeekStart();
@@ -803,12 +823,23 @@ export class CalendarComponent implements OnInit {
 
   openAddMealModal(date: string, mealType: MealType): void {
     this.newMealData = { date, mealType, customMeal: '', recipeId: '' };
-    this.addMealTab = 'custom';
+    // Si la URL trae una pestaña valida (?mealTab=recipe) se respeta.
+    readTabParam(this.route, MEAL_TAB_PARAM, this.MEAL_TABS, 'custom', tab =>
+      this.addMealTab.set(tab)
+    );
     this.isAddMealModalOpen.set(true);
+  }
+
+  /** Cambia de pestaña y lo deja reflejado en la URL. */
+  switchAddMealTab(tab: MealTab): void {
+    this.addMealTab.set(tab);
+    writeTabParam(this.router, this.route, MEAL_TAB_PARAM, tab, 'custom');
   }
 
   closeAddMealModal(): void {
     this.isAddMealModalOpen.set(false);
+    // El modal ya no esta: la pestaña deja de tener sentido en la URL.
+    clearTabParam(this.router, this.route, MEAL_TAB_PARAM);
   }
 
   saveMeal(): void {
@@ -832,10 +863,15 @@ export class CalendarComponent implements OnInit {
     this.calendarService.completeMeal(meal.id, !meal.completed);
   }
 
-  deleteMeal(meal: any): void {
-    if (confirm('¿Eliminar esta comida?')) {
-      this.calendarService.deleteMeal(meal.id);
-    }
+  async deleteMeal(meal: any): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Eliminar comida',
+      message: '¿Quitar esta comida de la planificación?',
+      confirmText: 'Eliminar'
+    });
+    if (!accepted) return;
+
+    this.calendarService.deleteMeal(meal.id);
   }
 
   openGoalsModal(): void {

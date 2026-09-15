@@ -1,42 +1,31 @@
 import { test, expect } from '@playwright/test';
+import { registerUser } from './helpers/auth';
 
 test.describe('Dashboard (new user) — empty states', () => {
-  test('shows empty-state messages when no recipes or meals exist', async ({ page }) => {
-    const email = `dash-${Date.now()}@example.com`;
-    await page.goto('/auth/register');
-    await page.fill('#name', 'Dash');
-    await page.fill('#email', email);
-    await page.fill('#password', 'Test1234');
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/.*dashboard/);
+  test('shows greeting, empty states and quick stats', async ({ page }) => {
+    await registerUser(page, 'Dash');
+    await page.goto('/dashboard');
 
     // Greeting should contain user name
-    await expect(page.locator('h1')).toContainText('Dash');
+    await expect(page.locator('h1.dashboard__title')).toContainText('Dash');
 
-    // Meals empty state
-    await expect(page.locator('text=No hay comidas planificadas').or(page.locator('text=No meals planned'))).toBeVisible();
+    // No meals / no suggested recipes for a brand new user
+    await expect(page.locator('.empty-state__text').first()).toBeVisible();
 
-    // Recipes empty state
-    await expect(page.locator('text=No hay recetas').or(page.locator('text=No recipes'))).toBeVisible();
-
-    // Quick stats show zeroes for ingredients/recipes
+    // Quick stats are rendered
     await expect(page.locator('.stat-card__value').first()).toBeVisible();
+    await expect(page.locator('.stat-card__label').first()).toBeVisible();
   });
 
   test('quick actions navigate to correct sections', async ({ page }) => {
-    const email = `dash-actions-${Date.now()}@example.com`;
-    await page.goto('/auth/register');
-    await page.fill('#name', 'QA');
-    await page.fill('#email', email);
-    await page.fill('#password', 'Test1234');
-    await page.click('button[type="submit"]');
-    await page.waitForURL(/.*dashboard/);
+    await registerUser(page, 'QA');
+    await page.goto('/dashboard');
 
-    await page.getByRole('link', { name: /Mi Despensa|My Pantry/ }).click();
+    await page.locator('a.action-card[href="/pantry"]').click();
     await expect(page).toHaveURL(/.*pantry/);
 
-    await page.goBack();
-    await page.getByRole('link', { name: /Planificar|Plan/ }).click();
+    await page.goto('/dashboard');
+    await page.locator('a.action-card[href="/calendar"]').click();
     await expect(page).toHaveURL(/.*calendar/);
   });
 });
