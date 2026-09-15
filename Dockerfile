@@ -1,5 +1,5 @@
 # Stage 1: Build Frontend
-FROM node:20-alpine AS frontend-build
+FROM node:26-alpine AS frontend-build
 WORKDIR /app
 COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm ci --production=false
@@ -7,7 +7,7 @@ COPY frontend/ ./frontend/
 RUN cd frontend && npm run build:prod
 
 # Stage 2: Build Backend
-FROM node:20-alpine AS backend-build
+FROM node:26-alpine AS backend-build
 WORKDIR /app
 COPY server/package*.json ./server/
 RUN cd server && npm ci --production
@@ -15,7 +15,7 @@ COPY server/ ./server/
 RUN cd server && npm run build
 
 # Stage 3: Production
-FROM node:20-alpine AS production
+FROM node:26-alpine AS production
 WORKDIR /app
 
 # Install minimal system dependencies
