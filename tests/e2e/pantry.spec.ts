@@ -58,6 +58,22 @@ test.describe('Pantry', () => {
     await expect(page.locator('.ingredient-item', { hasText: 'Tomate' })).toHaveCount(1);
   });
 
+  test('should add an ingredient with expiration date', async ({ page }) => {
+    await page.getByRole('button', { name: '+ Agregar' }).click();
+
+    await page.fill('input#ingredientName', 'Yogur');
+    await page.fill('input#quantity', '6');
+    await page.selectOption('select[name="category"]', 'dairy');
+    await page.selectOption('select[name="location"]', 'fridge');
+    // <input type="date"> produce YYYY-MM-DD (el backend no debe exigir ISO datetime)
+    await page.fill('input#expiration', '2026-12-31');
+
+    await page.locator('app-modal button[type="submit"]').click();
+
+    await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
+    await expect(page.locator('.ingredient-item', { hasText: 'Yogur' })).toHaveCount(1);
+  });
+
   test('should close modal on cancel', async ({ page }) => {
     await page.getByRole('button', { name: '+ Agregar' }).click();
     await expect(page.locator('.modal__title')).toContainText('Agregar Ingrediente');
@@ -72,9 +88,9 @@ test.describe('Pantry', () => {
     const suggestions = page.locator('.suggestions .chip');
     await expect(page.locator('.suggestions__title')).toContainText('Sugerencias comunes');
     await expect(suggestions.first()).toBeVisible();
-    // El backend pagina el listado: se comprueba que llegan sugerencias
-    // (el seed siembra 68 ingredientes con cantidad 0).
-    expect(await suggestions.count()).toBeGreaterThanOrEqual(10);
+    // El backend pagina de 20 en 20 y la UI no pagina: se pide una pagina
+    // amplia para que lleguen los 68 ingredientes sembrados.
+    expect(await suggestions.count()).toBeGreaterThan(50);
   });
 
   test('suggestions do not count as pantry stock', async ({ page }) => {

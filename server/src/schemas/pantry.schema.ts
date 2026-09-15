@@ -41,8 +41,9 @@ export const ingredientFilterSchema = z.object({
   location: storageLocationEnum.optional(),
   expiringSoon: z.boolean().optional(),
   expired: z.boolean().optional(),
-  page: z.number().int().positive().optional().default(1),
-  pageSize: z.number().int().positive().max(100).optional().default(20)
+  // Los query params llegan como string: hay que coercionarlos.
+  page: z.coerce.number().int().positive().optional().default(1),
+  pageSize: z.coerce.number().int().positive().max(100).optional().default(20)
 });
 
 // Utensil schemas

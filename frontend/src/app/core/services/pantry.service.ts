@@ -47,6 +47,8 @@ export class PantryService {
     if (filter?.location) params = params.set('location', filter.location);
     if (filter?.expiringSoon) params = params.set('expiringSoon', 'true');
     if (filter?.expired) params = params.set('expired', 'true');
+    if (filter?.page) params = params.set('page', String(filter.page));
+    if (filter?.pageSize) params = params.set('pageSize', String(filter.pageSize));
 
     this.http.get<any>(`${this.apiUrl}/ingredients`, { params }).pipe(
       tap(response => {

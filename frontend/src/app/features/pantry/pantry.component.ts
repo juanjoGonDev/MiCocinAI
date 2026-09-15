@@ -24,6 +24,13 @@ import {
 
 type PantryTab = 'ingredients' | 'utensils';
 
+/**
+ * La despensa se pinta entera en pantalla (sin paginacion), asi que se pide
+ * una unica pagina amplia: con el tamano por defecto (20) solo se veian 20
+ * de los 68 ingredientes sembrados al crear el hogar.
+ */
+const PAGE_SIZE = 100;
+
 @Component({
   selector: 'app-pantry',
   standalone: true,
@@ -639,7 +646,7 @@ export class PantryComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.pantryService.loadIngredients();
+    this.pantryService.loadIngredients({ pageSize: PAGE_SIZE });
     this.pantryService.loadStats();
     this.utensilsLoading.set(true);
     this.pantryService.loadUtensils();
@@ -654,7 +661,8 @@ export class PantryComponent implements OnInit {
   onSearch(): void {
     this.pantryService.loadIngredients({
       search: this.searchTerm,
-      category: this.selectedIngCategory() || undefined
+      category: this.selectedIngCategory() || undefined,
+      pageSize: PAGE_SIZE
     });
   }
 
@@ -662,7 +670,8 @@ export class PantryComponent implements OnInit {
     this.selectedIngCategory.set(category as IngredientCategory | '');
     this.pantryService.loadIngredients({
       search: this.searchTerm,
-      category: (category as IngredientCategory) || undefined
+      category: (category as IngredientCategory) || undefined,
+      pageSize: PAGE_SIZE
     });
   }
 
@@ -707,7 +716,8 @@ export class PantryComponent implements OnInit {
   private reloadIngredients(): void {
     this.pantryService.loadIngredients({
       search: this.searchTerm,
-      category: this.selectedIngCategory() || undefined
+      category: this.selectedIngCategory() || undefined,
+      pageSize: PAGE_SIZE
     });
     this.pantryService.loadStats();
   }
