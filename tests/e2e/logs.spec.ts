@@ -49,15 +49,20 @@ test.describe('Logs page', () => {
   // ── Copiar y seleccionar líneas ────────────────────────────────────────
 
   /**
-   * El forwarder de consola manda console.warn al servidor y el SSE lo
-   * devuelve, así que avisamos para tener líneas propias y conocidas.
+   * Escribe tres líneas propias en el servidor (POST /api/logs es público) y
+   * recarga para que el terminal las lea del historial: así el test no
+   * depende de que el stream SSE llegue a través del proxy del dev server.
    */
   async function pushLogs(page: import('@playwright/test').Page, tag: string): Promise<void> {
-    await page.evaluate((t) => {
-      console.warn(`${t} alpha`);
-      console.warn(`${t} beta`);
-      console.warn(`${t} gamma`);
-    }, tag);
+    for (const suffix of ['alpha', 'beta', 'gamma']) {
+      const res = await page.request.post('/api/logs', {
+        data: { level: 'warn', message: `${tag} ${suffix}`, url: 'e2e' }
+      });
+      expect(res.ok()).toBeTruthy();
+    }
+
+    await page.reload();
+    await expect(page.locator('.terminal__body')).toBeVisible();
     await expect(page.locator('.terminal__line', { hasText: `${tag} gamma` }))
       .toBeVisible({ timeout: 20000 });
   }

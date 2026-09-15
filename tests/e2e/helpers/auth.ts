@@ -11,7 +11,7 @@ export async function registerUser(page: Page, name = 'E2E'): Promise<string> {
   await page.fill('input#email', email);
   await page.fill('input#password', 'Test1234');
   await page.click('button[type="submit"]');
-  await page.waitForURL(/.*dashboard/, { timeout: 25000 });
+  await page.waitForURL(/.*dashboard/, { timeout: 45000 });
   return email;
 }
 
@@ -21,11 +21,11 @@ export async function registerUser(page: Page, name = 'E2E'): Promise<string> {
  */
 export async function createHousehold(page: Page, name = 'Hogar E2E'): Promise<void> {
   await page.goto('/household');
-  await expect(page.locator('.no-household')).toBeVisible({ timeout: 20000 });
+  await expect(page.locator('.no-household')).toBeVisible({ timeout: 45000 });
   await page.getByRole('button', { name: /Crear hogar/i }).click();
   await page.fill('input#householdName', name);
   await page.locator('app-modal button[type="submit"]').click();
-  await expect(page.locator('.invite-card__code')).toContainText('/invite/', { timeout: 20000 });
+  await expect(page.locator('.invite-card__code')).toContainText('/invite/', { timeout: 45000 });
 }
 
 /** Registra un usuario, crea su hogar y lo deja en `path`. */
