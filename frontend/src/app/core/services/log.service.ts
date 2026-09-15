@@ -6,6 +6,8 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log';
 export type LogSource = 'server' | 'browser';
 
 export interface LogEntry {
+  /** Id estable asignado al entrar en la lista: permite seleccionar lineas. */
+  id?: string;
   timestamp: string;
   level: LogLevel;
   source: LogSource;
@@ -31,6 +33,7 @@ export class LogService {
   private eventSource?: EventSource;
   private buffer: LogEntry[] = [];
   private flushTimer?: number;
+  private seq = 0;
 
   readonly logs = this.logsSignal.asReadonly();
   readonly connected = this.connectedSignal.asReadonly();
@@ -47,7 +50,7 @@ export class LogService {
       next: (res) => {
         const entries: LogEntry[] = (res?.data?.logs ?? []);
         // Oldest first for terminal scroll
-        this.logsSignal.set(entries.reverse());
+        this.logsSignal.set(entries.reverse().map(e => this.withId(e)));
       },
       error: () => { /* ignore, SSE will still try */ }
     });
@@ -110,9 +113,14 @@ export class LogService {
     return true;
   }
 
+  /** Id unico por entrada: la vista lo usa para seleccionar lineas. */
+  private withId(entry: LogEntry): LogEntry {
+    return entry.id ? entry : { ...entry, id: `log-${++this.seq}` };
+  }
+
   /** Buffer incoming entries so rapid bursts don't cause excessive change detection. */
   private pushEntry(entry: LogEntry): void {
-    this.buffer.push(entry);
+    this.buffer.push(this.withId(entry));
     if (this.flushTimer) return;
     this.flushTimer = window.setTimeout(() => {
       const batch = this.buffer.splice(0);

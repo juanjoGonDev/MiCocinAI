@@ -45,4 +45,74 @@ test.describe('Logs page', () => {
       await expect(lines.nth(i)).toContainText('[SRV]');
     }
   });
+
+  // ── Copiar y seleccionar líneas ────────────────────────────────────────
+
+  /**
+   * El forwarder de consola manda console.warn al servidor y el SSE lo
+   * devuelve, así que avisamos para tener líneas propias y conocidas.
+   */
+  async function pushLogs(page: import('@playwright/test').Page, tag: string): Promise<void> {
+    await page.evaluate((t) => {
+      console.warn(`${t} alpha`);
+      console.warn(`${t} beta`);
+      console.warn(`${t} gamma`);
+    }, tag);
+    await expect(page.locator('.terminal__line', { hasText: `${tag} gamma` }))
+      .toBeVisible({ timeout: 20000 });
+  }
+
+  test('copies all the visible lines when nothing is selected', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const tag = `e2e-${Date.now()}`;
+    await pushLogs(page, tag);
+
+    const copyBtn = page.getByRole('button', { name: /Copiar/ });
+    await expect(copyBtn).toContainText('Copiar todo');
+    await expect(page.getByRole('button', { name: /Limpiar selección/ })).toHaveCount(0);
+
+    await copyBtn.click();
+    await expect(page.locator('.toast--success .toast__title')).toContainText('Copiado');
+
+    await page.bringToFront();
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboard).toContain(`${tag} alpha`);
+    expect(clipboard).toContain(`${tag} gamma`);
+  });
+
+  test('selects lines with click, ctrl and shift and copies just those', async ({ page, context }) => {
+    await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+    const tag = `e2e-${Date.now()}`;
+    await pushLogs(page, tag);
+
+    const lines = page.locator('.terminal__line', { hasText: tag });
+    await expect(lines).toHaveCount(3);
+
+    // Clic normal: una línea
+    await lines.nth(0).click();
+    await expect(lines.nth(0)).toHaveClass(/terminal__line--selected/);
+    await expect(page.getByRole('button', { name: /Copiar seleccionado/ })).toContainText('(1)');
+    await expect(page.getByRole('button', { name: /Limpiar selección/ })).toBeVisible();
+
+    // Mayús + clic: rango completo
+    await lines.nth(2).click({ modifiers: ['Shift'] });
+    await expect(page.getByRole('button', { name: /Copiar seleccionado/ })).toContainText('(3)');
+
+    // Ctrl + clic: quita una del medio
+    await lines.nth(1).click({ modifiers: ['Control'] });
+    await expect(page.getByRole('button', { name: /Copiar seleccionado/ })).toContainText('(2)');
+
+    // Copiar solo lo seleccionado
+    await page.getByRole('button', { name: /Copiar seleccionado/ }).click();
+    await page.bringToFront();
+    const clipboard = await page.evaluate(() => navigator.clipboard.readText());
+    expect(clipboard).toContain(`${tag} alpha`);
+    expect(clipboard).not.toContain(`${tag} beta`);
+    expect(clipboard).toContain(`${tag} gamma`);
+
+    // Limpiar la selección
+    await page.getByRole('button', { name: /Limpiar selección/ }).click();
+    await expect(page.getByRole('button', { name: /Copiar todo/ })).toBeVisible();
+    await expect(page.locator('.terminal__line--selected')).toHaveCount(0);
+  });
 });

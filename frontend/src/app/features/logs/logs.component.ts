@@ -1,7 +1,8 @@
-import { Component, inject, OnInit, OnDestroy, AfterViewChecked, ElementRef, ViewChild, computed } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy, AfterViewChecked, ElementRef, ViewChild, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { LogService, LogEntry, LogLevel, LogSource } from '../../core/services/log.service';
+import { ToastService } from '../../core/services/toast.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 
 interface FilterOption<T extends string> {
@@ -66,6 +67,23 @@ interface FilterOption<T extends string> {
           <app-button
             variant="ghost"
             size="sm"
+            (onClick)="copyVisible()"
+          >
+            {{ hasSelection() ? '📋 Copiar seleccionado (' + selectedCount() + ')' : '📋 Copiar todo' }}
+          </app-button>
+
+          <app-button
+            *ngIf="hasSelection()"
+            variant="ghost"
+            size="sm"
+            (onClick)="clearSelection()"
+          >
+            ✕ Limpiar selección
+          </app-button>
+
+          <app-button
+            variant="ghost"
+            size="sm"
             (onClick)="clearLogs()"
           >
             🗑 Limpiar
@@ -81,14 +99,23 @@ interface FilterOption<T extends string> {
             <span class="terminal__dot terminal__dot--yellow"></span>
             <span class="terminal__dot terminal__dot--green"></span>
           </div>
-          <div class="terminal__title">MiCocinAI — terminal</div>
+          <div class="terminal__title">
+            {{
+              hasSelection()
+                ? selectedCount() + ' línea(s) seleccionadas · Ctrl/Cmd o Mayús + clic para ajustar'
+                : 'MiCocinAI — terminal'
+            }}
+          </div>
           <div class="terminal__spacer"></div>
         </div>
         <div class="terminal__body" #bodyEl>
           <div
-            *ngFor="let entry of filtered()"
+            *ngFor="let entry of filtered(); trackBy: trackByEntry; let i = index"
             class="terminal__line"
             [class]="'terminal__line--' + entry.level + ' terminal__line--source-' + entry.source"
+            [class.terminal__line--selected]="isSelected(entry)"
+            (click)="onLineClick($event, entry, i)"
+            title="Clic: seleccionar · Ctrl/Cmd: añadir o quitar · Mayús: seleccionar rango"
           >
             <span class="terminal__time">{{ formatTime(entry.timestamp) }}</span>
             <span class="terminal__source">{{ entry.source === 'server' ? '[SRV]' : '[CLI]' }}</span>
@@ -272,6 +299,15 @@ interface FilterOption<T extends string> {
       padding: 1px 0;
       word-break: break-word;
       white-space: pre-wrap;
+      cursor: pointer;
+      border-radius: 4px;
+
+      &:hover { background: rgba(255,255,255,0.05); }
+
+      &--selected {
+        background: rgba(99,102,241,0.28);
+        box-shadow: inset 3px 0 0 #818cf8;
+      }
 
       &--error .terminal__msg { color: #ff6b6b; }
       &--warn  .terminal__msg { color: #ffd166; }
@@ -321,6 +357,7 @@ interface FilterOption<T extends string> {
 })
 export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   logService = inject(LogService);
+  private toastService = inject(ToastService);
 
   @ViewChild('bodyEl') bodyEl!: ElementRef<HTMLDivElement>;
 
@@ -344,6 +381,122 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   );
   visibleCount = computed(() => this.filtered().length);
   private lastLen = 0;
+
+  // ── Selección de líneas (clic, Ctrl/Cmd + clic, Mayús + clic) ──────────
+  private selection = signal<Set<string>>(new Set());
+  /** Última línea pulsada: ancla para la selección por rango con Mayús. */
+  private anchorIndex = -1;
+
+  selectedCount = computed(() => this.selection().size);
+  hasSelection = computed(() => this.selection().size > 0);
+
+  /** Selección en el orden en el que se ve en pantalla, no en el de clic. */
+  selectedEntries = computed<LogEntry[]>(() => {
+    const selected = this.selection();
+    if (selected.size === 0) return [];
+    return this.filtered().filter(e => selected.has(this.keyOf(e)));
+  });
+
+  /**
+   * Flecha (no metodo): Angular invoca el trackBy con `this` = el differ,
+   * asi que una funcion normal no podria usar el componente.
+   */
+  trackByEntry = (_i: number, entry: LogEntry): string => this.keyOf(entry);
+
+  keyOf(entry: LogEntry): string {
+    // El servicio asigna id a cada entrada; el fallback solo es por si acaso.
+    return entry.id || `${entry.timestamp}|${entry.source}|${entry.message}`;
+  }
+
+  isSelected(entry: LogEntry): boolean {
+    return this.selection().has(this.keyOf(entry));
+  }
+
+  onLineClick(event: MouseEvent, entry: LogEntry, index: number): void {
+    // Si el usuario está seleccionando texto a mano, no se toca la selección.
+    const textSelection = window.getSelection();
+    if (textSelection && !textSelection.isCollapsed) return;
+
+    const key = this.keyOf(entry);
+    const add = event.ctrlKey || event.metaKey;
+
+    if (event.shiftKey && this.anchorIndex >= 0) {
+      const from = Math.min(this.anchorIndex, index);
+      const to = Math.max(this.anchorIndex, index);
+      const range = this.filtered().slice(from, to + 1).map(e => this.keyOf(e));
+      this.selection.update(current =>
+        add ? new Set([...current, ...range]) : new Set(range)
+      );
+      return;
+    }
+
+    if (add) {
+      this.selection.update(current => {
+        const next = new Set(current);
+        if (next.has(key)) next.delete(key); else next.add(key);
+        return next;
+      });
+      this.anchorIndex = index;
+      return;
+    }
+
+    // Clic normal: selecciona solo esa línea (y la suelta si ya era la única).
+    const onlyThis = this.selection().size === 1 && this.selection().has(key);
+    this.selection.set(onlyThis ? new Set<string>() : new Set([key]));
+    this.anchorIndex = index;
+  }
+
+  clearSelection(): void {
+    this.selection.set(new Set<string>());
+    this.anchorIndex = -1;
+  }
+
+  // ── Copiar al portapapeles ─────────────────────────────────────────────
+
+  /** Con selección copia solo esas líneas; sin selección, todo lo visible. */
+  copyVisible(): void {
+    const entries = this.hasSelection() ? this.selectedEntries() : this.filtered();
+    if (entries.length === 0) {
+      this.toastService.info('Nada que copiar', 'No hay líneas visibles');
+      return;
+    }
+
+    const text = entries.map(e => this.formatEntry(e)).join('\n');
+    this.copyToClipboard(text).then(
+      () => this.toastService.success(
+        'Copiado',
+        `${entries.length} línea${entries.length === 1 ? '' : 's'} en el portapapeles`
+      ),
+      () => this.toastService.error('Error', 'No se pudo copiar al portapapeles')
+    );
+  }
+
+  formatEntry(entry: LogEntry): string {
+    const head = [
+      this.formatTime(entry.timestamp),
+      entry.source === 'server' ? '[SRV]' : '[CLI]',
+      this.levelTag(entry.level),
+      entry.message
+    ].join(' ');
+    return entry.stack ? `${head}\n${entry.stack}` : head;
+  }
+
+  private async copyToClipboard(text: string): Promise<void> {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    // Respaldo para contextos no seguros (http, LAN) sin navigator.clipboard
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }
 
   ngOnInit(): void {
     this.logService.connect();
@@ -376,6 +529,7 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   clearLogs(): void {
     if (confirm('¿Borrar todos los logs?')) {
       this.logService.clear();
+      this.clearSelection();
     }
   }
 
