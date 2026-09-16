@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { registerWithHousehold } from './helpers/auth';
 
 test.describe('Pantry — utensils tab', () => {
@@ -68,9 +68,8 @@ test.describe('Pantry — utensils tab', () => {
   });
 
   test('adds and deletes a custom utensil from the modal', async ({ page }) => {
-    // El borrado pide confirmacion con confirm()
-    page.on('dialog', (dialog) => dialog.accept());
-
+    // El borrado se confirma con el dialogo propio de la app (nunca con
+    // confirm() del navegador: ver tests/e2e/confirm-dialog.spec.ts)
     await page.getByRole('button', { name: '+ Agregar' }).click();
     await page.fill('input#utensilName', 'Sous vide');
     await page.selectOption('select#utensilCategory', 'tools');
@@ -82,6 +81,16 @@ test.describe('Pantry — utensils tab', () => {
     await expect(custom).toHaveClass(/utensil-card--owned/);
 
     await custom.locator('.utensil-card__delete').click();
+
+    // El dialogo propio se abre con el texto de la accion y sus dos botones
+    const confirmDialog = page.locator('.modal-overlay');
+    await expect(confirmDialog).toContainText('Eliminar utensilio');
+    await expect(confirmDialog.locator('.modal__title')).toHaveText('Eliminar utensilio');
+    await expect(confirmDialog.locator('.confirm__message')).toContainText(
+      'Quitar Sous vide del catálogo'
+    );
+
+    await confirmDialog.getByRole('button', { name: 'Eliminar' }).click();
     await expect(page.locator('.toast--success').filter({ hasText: 'Eliminado' })).toBeVisible();
     await expect(page.locator('.utensil-card', { hasText: 'Sous vide' })).toHaveCount(0);
   });

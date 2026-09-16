@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test.describe('Household sharing & invite flow', () => {
   test('invite code appears immediately after creating household and is a full URL', async ({ page }) => {
