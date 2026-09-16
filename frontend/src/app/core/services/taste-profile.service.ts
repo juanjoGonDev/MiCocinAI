@@ -62,11 +62,6 @@ export class TasteProfileService {
       );
   }
 
-  /** Copia del perfil guardado, para editarla sin tocar el estado global. */
-  snapshot(): TasteProfile {
-    return { ...this.taste() };
-  }
-
   private apply(data: TasteResponse): void {
     if (!data) return;
 
