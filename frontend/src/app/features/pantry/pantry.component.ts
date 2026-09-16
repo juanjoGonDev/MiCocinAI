@@ -983,11 +983,11 @@ export class PantryComponent implements OnInit {
   }
 
   previousSectionName(): string {
-    return this.utensilSectionLabel(this.activeUtensilSectionIndex() - 1);
+    return this.utensilSections()[this.activeUtensilSectionIndex() - 1]?.groups[0]?.label ?? '';
   }
 
   nextSectionName(): string {
-    return this.utensilSectionLabel(this.activeUtensilSectionIndex() + 1);
+    return this.utensilSections()[this.activeUtensilSectionIndex() + 1]?.groups[0]?.label ?? '';
   }
 
   /**

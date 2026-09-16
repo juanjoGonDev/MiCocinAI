@@ -32,14 +32,20 @@ test.describe('Pantry — utensils tab', () => {
   });
 
   test('las secciones se recorren con Siguiente/Anterior', async ({ page }) => {
-    await expect(page.getByRole('button', { name: '← Anterior' })).toBeDisabled();
+    // Las etiquetas de los botones cambian (dicen a dónde van), así que se
+    // localizan por posición dentro del navegador de secciones
+    const nav = page.locator('.utensils-nav button');
+    await expect(nav.first()).toBeDisabled();
+    await expect(nav.last()).toContainText('Siguiente: Ollas / Sartenes');
 
-    await page.getByRole('button', { name: /Siguiente:/ }).click();
+    await nav.last().click();
     await expect(page.locator('.utensil-group__title').first()).toContainText('Ollas / Sartenes');
     await expect(page.locator('.utensils-bar__step')).toContainText('Sección 2 de');
 
-    await page.getByRole('button', { name: /Anterior/ }).click();
+    await expect(nav.first()).toContainText('← Horno');
+    await nav.first().click();
     await expect(page.locator('.utensil-group__title').first()).toContainText('Horno');
+    await expect(page.locator('.utensils-bar__step')).toContainText('Sección 1 de');
   });
 
   test('un chip lleva a la sección de su categoría', async ({ page }) => {
