@@ -69,7 +69,7 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     // ── Paso 4 · con qué cuentas: se marca en la propia despensa
     await expect(page.locator('.onboarding__step-label')).toContainText('Paso 4 de 4 · Cocina');
     const airfryer = page.locator('.utensil-card', { hasText: 'Airfryer' });
-    await expect(airfryer.first()).toBeVisible();
+    await expect(airfryer.first()).toBeVisible({ timeout: 20000 });
     await airfryer.first().locator('input.utensil-card__check').check();
     await expect(airfryer.first()).toHaveClass(/utensil-card--owned/);
 

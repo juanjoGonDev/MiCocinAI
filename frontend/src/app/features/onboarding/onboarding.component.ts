@@ -530,6 +530,17 @@ export class OnboardingComponent implements OnInit {
       }
     });
 
+    this.ensureUtensils();
+  }
+
+  /**
+   * El paso 4 no tiene mas datos que la lista de utensilios: si aquella carga
+   * fallo, el usuario se quedaria con el paso vacio y sin manera de salir salvo
+   * recargar. Al entrar se vuelve a pedir si no hay nada en pantalla.
+   */
+  private ensureUtensils(): void {
+    if (this.isLoadingUtensils() || this.pantryService.utensils().length > 0) return;
+
     this.isLoadingUtensils.set(true);
     this.pantryService.loadUtensils().subscribe({
       next: () => this.isLoadingUtensils.set(false),
@@ -560,7 +571,9 @@ export class OnboardingComponent implements OnInit {
   }
 
   next(): void {
-    this.stepIndex.update((step) => Math.min(step + 1, this.steps.length - 1));
+    const target = Math.min(this.stepIndex() + 1, this.steps.length - 1);
+    this.stepIndex.set(target);
+    if (this.steps[target] === 'kitchen') this.ensureUtensils();
   }
 
   back(): void {

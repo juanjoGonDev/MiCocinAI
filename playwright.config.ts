@@ -39,5 +39,9 @@ export default defineConfig({
     url: 'http://localhost:4200',
     reuseExistingServer: !process.env.CI,
     timeout: 120000,
+    // Toda la suite comparte la IP del backend: sin apagar el rate limit, un
+    // pico de peticiones deja algun registro sin redirigir y el test espera su
+    // navegacion hasta el timeout. Las limitaciones no son lo que se prueba aqui.
+    env: { DISABLE_RATE_LIMIT: '1' },
   },
 });
