@@ -22,6 +22,8 @@ import {
   GoalType
 } from '../../shared/models/calendar.model';
 import { clearTabParam, readTabParam, writeTabParam } from '../../core/utils/tab-url';
+import { TasteProfileService } from '../../core/services/taste-profile.service';
+import { GOAL_OPTIONS } from '../../shared/models/taste-profile';
 
 interface DayMeals {
   day: DayOfWeek;
@@ -667,6 +669,7 @@ const MEAL_TAB_PARAM = 'mealTab';
 })
 export class CalendarComponent implements OnInit {
   calendarService = inject(CalendarService);
+  private readonly tasteService = inject(TasteProfileService);
   aiService = inject(AiService);
   private toastService = inject(ToastService);
   private confirmService = inject(ConfirmService);
@@ -707,20 +710,16 @@ export class CalendarComponent implements OnInit {
 
   mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
-  goalOptions = [
-    { value: 'balanced', label: 'Equilibrada', icon: '⚖️' },
-    { value: 'weight-loss', label: 'Perder peso', icon: '📉' },
-    { value: 'weight-gain', label: 'Ganar peso', icon: '📈' },
-    { value: 'muscle-gain', label: 'Ganar músculo', icon: '💪' },
-    { value: 'variety', label: 'Variada', icon: '🌈' },
-    { value: 'custom', label: 'Personalizada', icon: '✏️' }
-  ];
+  /** Mismo listado que en el onboarding: el objetivo se guarda ahí. */
+  goalOptions = GOAL_OPTIONS;
 
   weekDays = signal<DayMeals[]>([]);
   currentWeekStart = signal(new Date());
 
   ngOnInit(): void {
     this.calendarService.loadCalendar();
+    // El perfil de gustos trae el objetivo con el que se abre el planificador
+    this.tasteService.ensureLoaded();
     this.initializeWeek();
   }
 
@@ -897,6 +896,16 @@ export class CalendarComponent implements OnInit {
   }
 
   openGenerateModal(): void {
+    // El objetivo elegido en la configuración inicial es el punto de partida
+    // del plan: si quiere otro para esta semana, lo cambia aquí.
+    const goal = this.tasteService.taste().goal;
+    if (goal && goal !== this.generateOptions.goalType) {
+      this.generateOptions.goalType = goal;
+      if (goal === 'custom' && !this.generateOptions.customDescription) {
+        this.generateOptions.customDescription = this.tasteService.taste().goalNotes;
+      }
+    }
+
     this.isGenerateModalOpen.set(true);
   }
 
