@@ -102,6 +102,8 @@ test.describe('Confirmaciones sin diálogos nativos', () => {
     await expect(page.locator('.ingredient-item', { hasText: 'Tomate' })).toHaveCount(1);
     await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('1');
 
+    // El toast del alta sigue visible cuando se borra: se filtra por texto.
+
     await page
       .locator('.ingredient-item', { hasText: 'Tomate' })
       .locator('.action-btn--danger')
@@ -112,7 +114,7 @@ test.describe('Confirmaciones sin diálogos nativos', () => {
     await expect(dialog.locator('.confirm__message')).toContainText('Tomate');
     await dialog.getByRole('button', { name: 'Eliminar' }).click();
 
-    await expect(page.locator('.toast--success .toast__title')).toContainText('Eliminado');
+    await expect(page.locator('.toast--success').filter({ hasText: 'Eliminado' })).toBeVisible();
     await expect(page.locator('.ingredient-item', { hasText: 'Tomate' })).toHaveCount(0);
     await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('0');
   });
@@ -169,7 +171,7 @@ test.describe('Confirmaciones sin diálogos nativos', () => {
     await expect(confirmDialog(page).locator('.modal__title')).toHaveText('Eliminar configuración');
     await confirmDialog(page).getByRole('button', { name: 'Eliminar' }).click();
 
-    await expect(page.locator('.toast--success .toast__title')).toContainText('Eliminada');
+    await expect(page.locator('.toast--success').filter({ hasText: 'Eliminada' })).toBeVisible();
     await expect(page.locator('.config-card')).toHaveCount(0);
   });
 

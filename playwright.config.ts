@@ -5,7 +5,9 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   // Acotados para que una suite completa no se dispare de tiempo en CI.
-  timeout: 45000,
+  // 60s: cada test registra su usuario y (muchos) crea su hogar, y los
+  // timeout internos de espera llegan a 45s sobre el dev server de CI.
+  timeout: 60000,
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: [
