@@ -15,6 +15,15 @@ export const routes: Routes = [
   // Public invite page (works before & after login)
   { path: 'invite/:code', component: InviteComponent },
 
+  // Configuración inicial (a pantalla completa, justo después de registrarse).
+  // Fuera del layout principal a propósito: no es una vista a la que volver a
+  // diario, es el questionario de bienvenida.
+  {
+    path: 'onboarding',
+    canActivate: [authGuard],
+    loadChildren: () => import('./features/onboarding/onboarding.routes').then(m => m.ONBOARDING_ROUTES)
+  },
+
   // Protected routes with main layout
   {
     path: '',

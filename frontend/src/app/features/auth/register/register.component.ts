@@ -195,7 +195,9 @@ export class RegisterComponent {
         error: () => this.router.navigate(['/dashboard'])
       });
     } else {
-      this.router.navigate(['/dashboard']);
+      // Antes del dashboard, cuatro preguntas de configuración (alergias,
+      // gustos, objetivo y utensilios). Es saltable desde el propio flujo.
+      this.router.navigate(['/onboarding']);
     }
   }
 

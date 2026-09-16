@@ -1,7 +1,8 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { TasteProfileService } from '../../core/services/taste-profile.service';
 import { ToastComponent } from '../../shared/components/ui/toast/toast.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
@@ -332,9 +333,18 @@ interface NavItem {
     }
   `]
 })
-export class MainLayoutComponent {
+export class MainLayoutComponent implements OnInit {
   authService = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly tasteService = inject(TasteProfileService);
   isSidebarOpen = signal(false);
+
+  ngOnInit(): void {
+    // Gustos/alergias/objetivo se leen en varias vistas (planificador semanal,
+    // Ajustes): se cargan al montar el layout para que estén listos al abrir
+    // cualquiera de ellas, sin esperas ni dobles peticiones.
+    this.tasteService.ensureLoaded();
+  }
 
   navItems: NavItem[] = [
     { path: '/dashboard', labelKey: 'nav.dashboard', icon: '🏠' },
@@ -363,7 +373,8 @@ export class MainLayoutComponent {
   }
 
   navigateToProfile(): void {
-    // Navigate to profile
+    // El avatar del header lleva a Ajustes, donde está el perfil de gustos
+    this.router.navigate(['/settings']);
   }
 
   logout(): void {

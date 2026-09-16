@@ -12,3 +12,4 @@ export * from './dropdown/dropdown.component';
 export * from './tooltip/tooltip.component';
 export * from './progress/progress.component';
 export * from './rating/rating.component';
+export * from './chip-select/chip-select.component';

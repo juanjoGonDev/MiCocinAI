@@ -17,6 +17,12 @@ export interface UserPreferences {
   language: Language;
   detailLevel: DetailLevel;
   notifications: NotificationPreferences;
+  /**
+   * Gustos, alergias y objetivo (ver TasteProfile). Lo rellena el onboarding y
+   * se edita en Ajustes; la API lo expone en /api/auth/taste.
+   */
+  taste?: import('./taste-profile').TasteProfile;
+  onboarding?: import('./taste-profile').OnboardingState;
 }
 
 export type Theme = 'light' | 'dark' | 'system';
