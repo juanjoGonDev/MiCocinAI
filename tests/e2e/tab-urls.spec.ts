@@ -42,6 +42,28 @@ test.describe('Pestañas y URL', () => {
     await expect(page).not.toHaveURL(/[?&]tab=/);
   });
 
+  test('la sección del catálogo de utensilios también viaja en la URL', async ({ page }) => {
+    await registerWithHousehold(page, '/pantry?tab=utensils');
+    await expect(page.locator('.utensil-group__title').first()).toContainText('Horno');
+
+    // La primera sección es la por defecto: no ensucia la URL
+    await expect(page).not.toHaveURL(/[?&]section=/);
+
+    await page.getByRole('button', { name: /Siguiente:/ }).click();
+    await expect(page).toHaveURL(/[?&]section=cookware/);
+
+    await page.reload();
+    await expect(page.locator('.utensil-group__title').first()).toContainText('Ollas / Sartenes');
+
+    // Y se puede enlazar directamente a una sección
+    await page.goto('/pantry?tab=utensils&section=tools');
+    await expect(page.locator('.utensil-group__title').first()).toContainText('Herramientas');
+
+    // Fuera de la pestaña de utensilios el parametro no tiene sentido
+    await page.locator('.tab', { hasText: 'Ingredientes' }).click();
+    await expect(page).not.toHaveURL(/section=/);
+  });
+
   test('las pestañas del modal de comida también cambian la URL', async ({ page }) => {
     await registerWithHousehold(page, '/calendar');
     await expect(page.locator('h1.calendar__title')).toBeVisible();
