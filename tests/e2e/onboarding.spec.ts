@@ -1,0 +1,143 @@
+import { test, expect } from './fixtures';
+import { registerToOnboarding, registerUser } from './helpers/auth';
+
+/**
+ * Configuración inicial, nada más registrarse: alergias, gustos, objetivo y
+ * utensilios. Es saltable, se guarda en la cuenta (no en el hogar) y se puede
+ * editar a mano en Ajustes.
+ */
+test.describe('Onboarding — gustos, alergias y objetivo', () => {
+  test('el registro lleva a la configuración inicial y se puede saltar', async ({ page }) => {
+    await registerToOnboarding(page, 'Salta Tester');
+
+    await expect(page.locator('.onboarding__title')).toHaveText('Configura tu cocina');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 1 de 4 · Alergias');
+    // Alérgenos proposés desde el primer paso, sin tener que escribirlos
+    await expect(page.locator('.chip-select__chip').first()).toContainText('Gluten');
+
+    await page.getByRole('button', { name: /Saltar por ahora/i }).click();
+    await expect(page).toHaveURL(/.*dashboard/);
+
+    // Saltar no borra nada: en Ajustes sigue el perfil vacío, listo para editar
+    await page.goto('/settings');
+    await expect(
+      page.locator('.settings-group').filter({ hasText: 'Gustos, alergias' })
+    ).toBeVisible();
+    await expect(
+      page.locator('.settings-hint', { hasText: 'Todavía no has marcado nada' })
+    ).toBeVisible();
+  });
+
+  test('guarda alergias (también una escrita a mano), gustos, objetivo y utensilios', async ({
+    page
+  }) => {
+    await registerToOnboarding(page, 'Perfil Tester');
+
+    // ── Paso 1 · alergias: un chip del catálogo + uno propio
+    await page.locator('.chip-select__chip', { hasText: 'Lactosa' }).click();
+    await page.locator('input[name="chip-select-custom"]').fill('Kiwi');
+    await page.getByRole('button', { name: 'Añadir' }).click();
+
+    const selected = page.locator('.chip-select__chip--on');
+    await expect(selected).toHaveCount(2);
+    await expect(selected.filter({ hasText: 'Kiwi' })).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+
+    // ── Paso 2 · gustos y texto libre
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 2 de 4 · Gustos');
+    await page
+      .getByRole('group', { name: 'Lo que más te gusta' })
+      .locator('.chip-select__chip', { hasText: 'Legumbres' })
+      .click();
+    await page
+      .getByRole('group', { name: 'Lo que prefieres evitar' })
+      .locator('.chip-select__chip', { hasText: 'Setas y champiñones' })
+      .click();
+    await page.fill('textarea#tasteNotes', 'Ceno pronto y como en el trabajo con tupper.');
+
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+
+    // ── Paso 3 · objetivo
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 3 de 4 · Objetivo');
+    await page.locator('.onboarding__goal', { hasText: 'Perder peso' }).click();
+    await expect(page.locator('.onboarding__goal--on')).toContainText('Perder peso');
+    await page.fill('textarea#goalNotes', 'Poco frito y nada de bollería.');
+
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+
+    // ── Paso 4 · con qué cuentas: se marca en la propia despensa
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 4 de 4 · Cocina');
+    const airfryer = page.locator('.utensil-card', { hasText: 'Airfryer' });
+    await expect(airfryer.first()).toBeVisible();
+    await airfryer.first().locator('input.utensil-card__check').check();
+    await expect(airfryer.first()).toHaveClass(/utensil-card--owned/);
+
+    await page.getByRole('button', { name: 'Guardar y empezar' }).click();
+    await expect(page.locator('.toast--success').filter({ hasText: 'Listo' })).toBeVisible();
+    await expect(page).toHaveURL(/.*dashboard/);
+
+    // ── Persistido: Ajustes muestra exactamente lo contestado
+    await page.goto('/settings');
+    await expect(page.locator('.chip-select__chip--on', { hasText: 'Lactosa' })).toHaveCount(1);
+    await expect(page.locator('.chip-select__chip--on', { hasText: 'Kiwi' })).toHaveCount(1);
+    await expect(page.locator('.chip-select__chip--on', { hasText: 'Legumbres' })).toHaveCount(1);
+    await expect(page.locator('.chip-select__chip--on', { hasText: 'Setas' })).toHaveCount(1);
+    await expect(page.locator('.settings-options--goals .settings-option--active')).toContainText(
+      'Perder peso'
+    );
+    await expect(page.locator('textarea#goalNotes')).toHaveValue('Poco frito y nada de bollería.');
+    await expect(page.locator('textarea#tasteNotes')).toHaveValue(
+      'Ceno pronto y como en el trabajo con tupper.'
+    );
+
+    // El utencilio marcado en el onboarding vive en la despensa, no en un sitio aparte
+    await page.goto('/pantry?tab=utensils');
+    await expect(page.locator('.utensil-card', { hasText: 'Airfryer' })).toHaveClass(
+      /utensil-card--owned/
+    );
+    await expect(page.locator('.tab', { hasText: 'Utensilios' })).toContainText('1');
+
+    // Y el onboarding vuelve con las respuestas puestas si se rehace
+    await page.goto('/onboarding');
+    await expect(page.locator('.chip-select__chip--on', { hasText: 'Lactosa' })).toHaveCount(1);
+  });
+
+  test('un chip propio se puede quitar y el atras conserva lo marcado', async ({ page }) => {
+    await registerToOnboarding(page, 'Chip Tester');
+
+    await page.locator('input[name="chip-select-custom"]').fill('Apio');
+    await page.getByRole('button', { name: 'Añadir' }).click();
+    const apio = page.locator('.chip-select__chip--on', { hasText: 'Apio' });
+    await expect(apio).toHaveCount(1);
+
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+    await page.getByRole('button', { name: /Atrás/ }).click();
+
+    // Volver atrás no reinicia lo contestado
+    await expect(apio).toHaveCount(1);
+
+    // Y la chip propia se quita volviendo a pulsarla
+    await apio.click();
+    await expect(page.locator('.chip-select__chip--on')).toHaveCount(0);
+  });
+
+  test('lo guardado en Ajustes es el punto de partida del planificador', async ({ page }) => {
+    await registerUser(page, 'Plan Tester');
+
+    await page.goto('/settings');
+    await page
+      .locator('.settings-options--goals .settings-option', { hasText: 'Ganar músculo' })
+      .click();
+    await page.getByRole('button', { name: 'Guardar gustos' }).click();
+    await expect(page.locator('.toast--success').filter({ hasText: 'Guardado' })).toBeVisible();
+
+    await page.goto('/calendar');
+    await expect(page.locator('h1.calendar__title')).toBeVisible();
+    await page.getByRole('button', { name: /Planificar IA/ }).click();
+
+    await expect(page.locator('.modal-overlay select.form-select').first()).toHaveValue(
+      'muscle-gain'
+    );
+  });
+});

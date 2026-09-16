@@ -1,18 +1,41 @@
 import { Page, expect } from '@playwright/test';
 
 /**
- * Registra un usuario nuevo (email unico) y lo deja autenticado en el
- * dashboard. Los tests no comparten usuario para no pisarse entre si.
+ * El registro pasa por la configuración inicial (alergias, gustos, objetivo y
+ * utensilios). La mayoría de tests no quieren ese formulario: lo saltan y se
+ * quedan en el dashboard.
  */
-export async function registerUser(page: Page, name = 'E2E'): Promise<string> {
-  const email = `e2e-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+export async function skipOnboarding(page: Page): Promise<void> {
+  await page.waitForURL(/.*(dashboard|onboarding)/, { timeout: 45000 });
+  if (!page.url().includes('/onboarding')) return;
+
+  await page.getByRole('button', { name: /Saltar por ahora/i }).click();
+  await page.waitForURL(/.*dashboard/, { timeout: 45000 });
+}
+
+/** Registra un usuario nuevo y lo deja en el onboarding (sin saltarlo). */
+export async function registerToOnboarding(
+  page: Page,
+  name = 'E2E',
+  email = `e2e-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`
+): Promise<string> {
   await page.goto('/auth/register');
   await page.fill('input#name', name);
   await page.fill('input#email', email);
   await page.fill('input#password', 'Test1234');
   await page.click('button[type="submit"]');
-  await page.waitForURL(/.*dashboard/, { timeout: 45000 });
+  await page.waitForURL(/.*onboarding/, { timeout: 45000 });
   return email;
+}
+
+/**
+ * Registra un usuario nuevo (email unico) y lo deja autenticado en el
+ * dashboard. Los tests no comparten usuario para no pisarse entre si.
+ */
+export async function registerUser(page: Page, name = 'E2E', email?: string): Promise<string> {
+  const created = await registerToOnboarding(page, name, email);
+  await skipOnboarding(page);
+  return created;
 }
 
 /**

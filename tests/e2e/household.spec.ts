@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { skipOnboarding } from './helpers/auth';
 
 test.describe('Household sharing & invite flow', () => {
   test('invite code appears immediately after creating household and is a full URL', async ({ page }) => {
@@ -8,6 +9,7 @@ test.describe('Household sharing & invite flow', () => {
     await page.fill('input#email', email);
     await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
+    await skipOnboarding(page);
     await page.waitForURL(/.*dashboard/);
 
     // Create household
@@ -39,6 +41,7 @@ test.describe('Household sharing & invite flow', () => {
     await ownerPage.fill('input#email', email);
     await ownerPage.fill('input#password', 'Test1234');
     await ownerPage.click('button[type="submit"]');
+    await skipOnboarding(ownerPage);
     await ownerPage.waitForURL(/.*dashboard/);
     await ownerPage.goto('/household');
     await ownerPage.getByRole('button', { name: /Crear hogar/i }).click();
