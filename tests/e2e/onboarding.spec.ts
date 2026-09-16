@@ -103,22 +103,26 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Lactosa' })).toHaveCount(1);
   });
 
-  test('un chip propio se puede quitar y el atras conserva lo marcado', async ({ page }) => {
+  test('una alergia escrita a mano se conserva al volver atrás y se puede quitar', async ({
+    page
+  }) => {
     await registerToOnboarding(page, 'Chip Tester');
 
-    await page.locator('input[name="chip-select-custom"]').fill('Apio');
+    // 'Mango' no está en ninguna lista: la IA lo recibe tal cual se escribió
+    await page.locator('input[name="chip-select-custom"]').fill('Mango');
     await page.getByRole('button', { name: 'Añadir' }).click();
-    const apio = page.locator('.chip-select__chip--on', { hasText: 'Apio' });
-    await expect(apio).toHaveCount(1);
+
+    const mango = page.locator('.chip-select__chip--on', { hasText: 'Mango' });
+    await expect(mango).toHaveCount(1);
 
     await page.getByRole('button', { name: 'Siguiente →' }).click();
     await page.getByRole('button', { name: /Atrás/ }).click();
 
     // Volver atrás no reinicia lo contestado
-    await expect(apio).toHaveCount(1);
+    await expect(mango).toHaveCount(1);
 
-    // Y la chip propia se quita volviendo a pulsarla
-    await apio.click();
+    // Y se quita volviendo a pulsar la chip
+    await mango.click();
     await expect(page.locator('.chip-select__chip--on')).toHaveCount(0);
   });
 
