@@ -12,6 +12,9 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: [
     ['html'],
+    // 'list' vuelca cada resultado al log: así se ve por dónde se atasca un run
+    // de CI sin esperar al informe final.
+    ['list'],
     ['json', { outputFile: 'test-results/results.json' }]
   ],
   use: {
@@ -19,6 +22,11 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
+    // Sin tope de accion, un localizador que no aparece se espera hasta el
+    // timeout del test (60s) y con reintentos la suite entera se multiplica x4:
+    // mejor un fallo en 15s y legible.
+    actionTimeout: 15000,
+    navigationTimeout: 20000,
   },
   projects: [
     {
