@@ -2,7 +2,7 @@
  * Perfil de gustos, alergias y objetivo del comensal.
  *
  * Se rellena en el onboarding (justo al registrarse, se puede saltar) y se
- * edita a mano en Ajustes. Lo consume la IA al generar recetas y al planificar
+ * edita a mano en Preferencias. Lo consume la IA al generar recetas y al planificar
  * la semana: sin él no sabe qué ingredientes no puede usar.
  */
 

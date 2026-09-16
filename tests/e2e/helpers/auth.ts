@@ -35,7 +35,7 @@ async function submitRegister(page: Page, name: string, email: string): Promise<
     await page.fill('input#password', TEST_PASSWORD);
     await page.click('button[type="submit"]');
   }
-  return waitAfterRegister(page, 20000);
+  return waitAfterRegister(page, 45000);
 }
 
 /**
@@ -44,11 +44,11 @@ async function submitRegister(page: Page, name: string, email: string): Promise<
  * quedan en el dashboard.
  */
 export async function skipOnboarding(page: Page): Promise<void> {
-  await page.waitForURL(/.*(dashboard|onboarding)/, { timeout: 20000 });
+  await page.waitForURL(/.*(dashboard|onboarding)/, { timeout: 45000 });
   if (!page.url().includes('/onboarding')) return;
 
   await page.getByRole('button', { name: /Saltar por ahora/i }).click();
-  await page.waitForURL(/.*dashboard/, { timeout: 20000 });
+  await page.waitForURL(/.*dashboard/, { timeout: 45000 });
 }
 
 /** Registra un usuario nuevo y lo deja en el onboarding (sin saltarlo). */
@@ -62,7 +62,7 @@ export async function registerToOnboarding(
 
   if (!ok) {
     // Primero por si la navegacion simplemente ha llegado tarde a la prueba.
-    ok = await waitAfterRegister(page, 10000);
+    ok = await waitAfterRegister(page, 30000);
     // Si no, con otra direccion: la anterior puede no haberse registrado nunca.
     if (!ok && !email) ok = await submitRegister(page, name, (target = generatedEmail()));
   }

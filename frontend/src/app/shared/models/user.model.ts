@@ -19,7 +19,7 @@ export interface UserPreferences {
   notifications: NotificationPreferences;
   /**
    * Gustos, alergias y objetivo (ver TasteProfile). Lo rellena el onboarding y
-   * se edita en Ajustes; la API lo expone en /api/auth/taste.
+   * se edita en Preferencias; la API lo expone en /api/auth/taste.
    */
   taste?: import('./taste-profile').TasteProfile;
   onboarding?: import('./taste-profile').OnboardingState;

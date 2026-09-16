@@ -15,6 +15,7 @@ const es: Dict = {
   'nav.ai-config': 'IA Config',
   'nav.logs': 'Logs',
   'nav.settings': 'Configuración',
+  'nav.preferences': 'Preferencias',
   'nav.logout': 'Cerrar sesión',
   'app.name': 'MiCocinAI',
 
@@ -119,6 +120,7 @@ const en: Dict = {
   'nav.ai-config': 'AI Config',
   'nav.logs': 'Logs',
   'nav.settings': 'Settings',
+  'nav.preferences': 'Preferences',
   'nav.logout': 'Log out',
   'app.name': 'MiCocinAI',
 

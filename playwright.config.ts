@@ -4,10 +4,11 @@ export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  // Acotados para que una suite completa no se dispare de tiempo en CI.
-  // 60s: cada test registra su usuario y (muchos) crea su hogar, y los
-  // timeout internos de espera llegan a 45s sobre el dev server de CI.
-  timeout: 60000,
+  // En CI hace falta margen: ng serve compila el chunk de cada ruta perezosa
+  // a la primera, y eso pasa dentro del test (registrarse lleva al onboarding,
+  // que es ruta nueva). 120s por test cubre el arranque frio sin que un fallo
+  // real se convierta en una espera interminable.
+  timeout: process.env.CI ? 120000 : 60000,
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: [
@@ -22,11 +23,10 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    // Sin tope de accion, un localizador que no aparece se espera hasta el
-    // timeout del test (60s) y con reintentos la suite entera se multiplica x4:
-    // mejor un fallo en 15s y legible.
-    actionTimeout: 15000,
-    navigationTimeout: 20000,
+    // Acotados, pero con margen: recortar esto a 15/20s convirtio 5 fallos
+    // reales en 69 (la compilacion en frio del dev server de CI no da abasto).
+    actionTimeout: 45000,
+    navigationTimeout: 60000,
   },
   projects: [
     {

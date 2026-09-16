@@ -18,13 +18,11 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.getByRole('button', { name: /Saltar por ahora/i }).click();
     await expect(page).toHaveURL(/.*dashboard/);
 
-    // Saltar no borra nada: en Ajustes sigue el perfil vacío, listo para editar
-    await page.goto('/settings');
+    // Saltar no borra nada: en Preferencias sigue el perfil vacío, listo para editar
+    await page.goto('/preferences');
+    await expect(page.locator('.preferences__title')).toContainText('Preferencias');
     await expect(
-      page.locator('.settings-group').filter({ hasText: 'Gustos, alergias' })
-    ).toBeVisible();
-    await expect(
-      page.locator('.settings-hint', { hasText: 'Todavía no has marcado nada' })
+      page.locator('.preferences__notice', { hasText: 'Todavía no has marcado nada' })
     ).toBeVisible();
   });
 
@@ -77,19 +75,24 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await expect(page.locator('.toast--success').filter({ hasText: 'Listo' })).toBeVisible();
     await expect(page).toHaveURL(/.*dashboard/);
 
-    // ── Persistido: Ajustes muestra exactamente lo contestado
-    await page.goto('/settings');
+    // ── Persistido: Preferencias muestra exactamente lo contestado, en su pestaña
+    await page.goto('/preferences');
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Lactosa' })).toHaveCount(1);
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Kiwi' })).toHaveCount(1);
+    await expect(page.locator('.tab', { hasText: 'Alergias' })).toContainText('2');
+
+    await page.locator('.tab', { hasText: 'Gustos' }).click();
+    await expect(page).toHaveURL(/tab=tastes/);
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Legumbres' })).toHaveCount(1);
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Setas' })).toHaveCount(1);
-    await expect(page.locator('.settings-options--goals .settings-option--active')).toContainText(
-      'Perder peso'
-    );
-    await expect(page.locator('textarea#goalNotes')).toHaveValue('Poco frito y nada de bollería.');
     await expect(page.locator('textarea#tasteNotes')).toHaveValue(
       'Ceno pronto y como en el trabajo con tupper.'
     );
+
+    await page.locator('.tab', { hasText: 'Objetivo' }).click();
+    await expect(page).toHaveURL(/tab=goal/);
+    await expect(page.locator('.preferences__goal--on')).toContainText('Perder peso');
+    await expect(page.locator('textarea#goalNotes')).toHaveValue('Poco frito y nada de bollería.');
 
     // El utencilio marcado en el onboarding vive en la despensa, no en un sitio aparte
     await page.goto('/pantry?tab=utensils');
@@ -101,6 +104,10 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     // Y el onboarding vuelve con las respuestas puestas si se rehace
     await page.goto('/onboarding');
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Lactosa' })).toHaveCount(1);
+
+    // El enlace de rehacer sale de Preferencias, no de la configuración de la app
+    await page.goto('/preferences');
+    await expect(page.locator('.preferences__redo')).toContainText('Rehacer la configuración');
   });
 
   test('una alergia escrita a mano se conserva al volver atrás y se puede quitar', async ({
@@ -126,14 +133,13 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await expect(page.locator('.chip-select__chip--on')).toHaveCount(0);
   });
 
-  test('lo guardado en Ajustes es el punto de partida del planificador', async ({ page }) => {
+  test('lo guardado en Preferencias es el punto de partida del planificador', async ({ page }) => {
     await registerUser(page, 'Plan Tester');
 
-    await page.goto('/settings');
-    await page
-      .locator('.settings-options--goals .settings-option', { hasText: 'Ganar músculo' })
-      .click();
-    await page.getByRole('button', { name: 'Guardar gustos' }).click();
+    await page.goto('/preferences?tab=goal');
+    await page.locator('.preferences__goal', { hasText: 'Ganar músculo' }).click();
+    await expect(page.locator('.preferences__state')).toContainText('Hay cambios sin guardar');
+    await page.getByRole('button', { name: 'Guardar preferencias' }).click();
     await expect(page.locator('.toast--success').filter({ hasText: 'Guardado' })).toBeVisible();
 
     await page.goto('/calendar');

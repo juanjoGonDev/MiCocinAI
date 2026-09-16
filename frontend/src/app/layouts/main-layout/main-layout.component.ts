@@ -341,7 +341,7 @@ export class MainLayoutComponent implements OnInit {
 
   ngOnInit(): void {
     // Gustos/alergias/objetivo se leen en varias vistas (planificador semanal,
-    // Ajustes): se cargan al montar el layout para que estén listos al abrir
+    // Preferencias): se cargan al montar el layout para que estén listos al abrir
     // cualquiera de ellas, sin esperas ni dobles peticiones.
     this.tasteService.ensureLoaded();
   }
@@ -352,6 +352,7 @@ export class MainLayoutComponent implements OnInit {
     { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
     { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
     { path: '/household', labelKey: 'nav.household', icon: '👨‍👩‍👧‍👦' },
+    { path: '/preferences', labelKey: 'nav.preferences', icon: '🥗' },
     { path: '/ai-config', labelKey: 'nav.ai-config', icon: '🤖' },
     { path: '/logs', labelKey: 'nav.logs', icon: '📋' }
   ];
@@ -373,8 +374,9 @@ export class MainLayoutComponent implements OnInit {
   }
 
   navigateToProfile(): void {
-    // El avatar del header lleva a Ajustes, donde está el perfil de gustos
-    this.router.navigate(['/settings']);
+    // El avatar habla de la persona, no de la app: lleva a Preferencias
+    // (gustos, alergias y objetivo). Configuracion queda para tema e idioma.
+    this.router.navigate(['/preferences']);
   }
 
   logout(): void {

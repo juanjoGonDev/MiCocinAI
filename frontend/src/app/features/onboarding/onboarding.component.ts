@@ -25,7 +25,7 @@ type OnboardingStep = 'allergies' | 'tastes' | 'goal' | 'kitchen';
 /**
  * Configuración inicial, nada más registrarse: alergias, gustos, objetivo y
  * con qué utensilios cuentas. Todo es opcional y se puede saltar (y editar
- * luego en Ajustes), pero es lo que usa la IA para no proponer lo que no
+ * luego en Preferencias), pero es lo que usa la IA para no proponer lo que no
  * puedes comer.
  */
 @Component({
@@ -47,7 +47,7 @@ type OnboardingStep = 'allergies' | 'tastes' | 'goal' | 'kitchen';
           <h1 class="onboarding__title">Configura tu cocina</h1>
           <p class="onboarding__subtitle">
             Cuatro preguntas cortas. Con esto la IA te propone recetas que de verdad puedes comer;
-            podrás cambiarlo cuando quieras en Ajustes.
+            podrás cambiarlo cuando quieras en Preferencias.
           </p>
         </header>
 
@@ -587,7 +587,7 @@ export class OnboardingComponent implements OnInit {
 
   /** Se salta, pero lo que haya escrito se guarda igualmente. */
   skip(): void {
-    this.save('skipped', 'Guardado', 'Puedes completar la configuración en Ajustes.');
+    this.save('skipped', 'Guardado', 'Puedes completarlo cuando quieras en Preferencias.');
   }
 
   private save(status: 'done' | 'skipped', title: string, body: string): void {

@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { registerWithHousehold } from './helpers/auth';
+import { registerAndGoto, registerWithHousehold } from './helpers/auth';
 
 /**
  * Convencion de la aplicacion: toda pestaña que muestra contenido distinto
@@ -40,6 +40,19 @@ test.describe('Pestañas y URL', () => {
 
     await expect(page.locator('.tab--active')).toContainText('Ingredientes');
     await expect(page).not.toHaveURL(/[?&]tab=/);
+  });
+
+  test('las pestañas de Preferencias también viajan en la URL', async ({ page }) => {
+    await registerAndGoto(page, '/preferences', 'urls-prefs');
+
+    await expect(page.locator('.tab--active')).toContainText('Alergias');
+    await expect(page).not.toHaveURL(/tab=/);
+
+    await page.locator('.tab', { hasText: 'Objetivo' }).click();
+    await expect(page).toHaveURL(/[?&]tab=goal/);
+
+    await page.goto('/preferences?tab=tastes');
+    await expect(page.locator('.tab--active')).toContainText('Gustos');
   });
 
   test('la sección del catálogo de utensilios también viaja en la URL', async ({ page }) => {

@@ -14,7 +14,7 @@ import {
 /**
  * Gustos, alergias y objetivo del comensal.
  *
- * Se rellena en el onboarding y se edita en Ajustes; el estado vive aquí para
+ * Se rellena en el onboarding y se edita en Preferencias; el estado vive aquí
  * que las dos vistas vean lo mismo sin recargar la página.
  */
 @Injectable({
