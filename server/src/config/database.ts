@@ -4,7 +4,7 @@ import { config } from './app.config.js';
 import * as schema from '../models/schema.js';
 import { mkdirSync } from 'fs';
 import { dirname } from 'path';
-import { backfillHouseholdSeeds } from '../utils/seed-data.js';
+import { backfillHouseholdSeeds, backfillUserSeeds } from '../utils/seed-data.js';
 
 let db: Database.Database;
 let drizzleDb: ReturnType<typeof drizzle>;
@@ -262,6 +262,10 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // Backfill: los hogares creados antes del catalogo no tienen ni
   // ingredientes sugeridos ni utensilios que marcar.
   backfillHouseholdSeeds(db);
+
+  // ... y las cuentas SIN hogar tampoco: para ellas el catalogo es personal
+  // (household_id NULL), que es lo que se siembra al registrarse.
+  backfillUserSeeds(db);
 
   console.log('Database tables and indexes created');
 }

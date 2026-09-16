@@ -15,6 +15,7 @@ import {
   updateProfileSchema
 } from '../schemas/auth.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
+import { seedDefaultsForUser } from '../utils/seed-data.js';
 
 const authRoutes = new Hono<AppEnv>();
 
@@ -85,6 +86,16 @@ authRoutes.post('/register', async (c) => {
     input.cookingLevel || 'beginner',
     JSON.stringify({ theme: 'system', language: 'es', detailLevel: 'intermediate' })
   );
+
+  // Catálogo de partida (utensilios que marcar + ingredientes de sugerencia).
+  // Al principio solo existía dentro de un hogar, así que una cuenta sin hogar
+  // se encontraba las dos pestañas de la despensa vacías. Si el alta del seed
+  // falla, el usuario se registra igual: no es condición de registro.
+  try {
+    seedDefaultsForUser(db, userId);
+  } catch (err) {
+    console.warn('[DB] No se pudo sembrar el catálogo personal:', err);
+  }
 
   // Get created user
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
