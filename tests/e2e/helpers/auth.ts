@@ -1,5 +1,43 @@
 import { Page, expect } from '@playwright/test';
 
+const TEST_PASSWORD = 'Test1234';
+
+/** Cada prueba registra su propio usuario para no pisarse entre si. */
+function generatedEmail(): string {
+  return `e2e-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+}
+
+/** El registro termina en el onboarding (o en el dashboard si ya se configuro). */
+function waitAfterRegister(page: Page, timeout: number): Promise<boolean> {
+  return page
+    .waitForURL(/.*(dashboard|onboarding)/, { timeout })
+    .then(() => true)
+    .catch(() => false);
+}
+
+/**
+ * Rellena y envia el alta, y espera a la redireccion.
+ *
+ * El backend limita las peticiones por IP (/api/* 300/min) y la suite entera
+ * comparte esa ventana: si el alta cae en un 429 no hay redireccion y la prueba
+ * se quedaba esperando. Se devuelve un booleano para que quien llama reintente.
+ */
+async function submitRegister(page: Page, name: string, email: string): Promise<boolean> {
+  await page.goto('/auth/register');
+  if (
+    await page
+      .locator('input#name')
+      .isVisible()
+      .catch(() => false)
+  ) {
+    await page.fill('input#name', name);
+    await page.fill('input#email', email);
+    await page.fill('input#password', TEST_PASSWORD);
+    await page.click('button[type="submit"]');
+  }
+  return waitAfterRegister(page, 45000);
+}
+
 /**
  * El registro pasa por la configuración inicial (alergias, gustos, objetivo y
  * utensilios). La mayoría de tests no quieren ese formulario: lo saltan y se
@@ -17,15 +55,23 @@ export async function skipOnboarding(page: Page): Promise<void> {
 export async function registerToOnboarding(
   page: Page,
   name = 'E2E',
-  email = `e2e-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`
+  email?: string
 ): Promise<string> {
-  await page.goto('/auth/register');
-  await page.fill('input#name', name);
-  await page.fill('input#email', email);
-  await page.fill('input#password', 'Test1234');
-  await page.click('button[type="submit"]');
-  await page.waitForURL(/.*onboarding/, { timeout: 45000 });
-  return email;
+  let target = email ?? generatedEmail();
+  let ok = await submitRegister(page, name, target);
+
+  if (!ok) {
+    // Primero por si la navegacion simplemente ha llegado tarde a la prueba.
+    ok = await waitAfterRegister(page, 30000);
+    // Si no, con otra direccion: la anterior puede no haberse registrado nunca.
+    if (!ok && !email) ok = await submitRegister(page, name, (target = generatedEmail()));
+  }
+  if (!ok) {
+    throw new Error(`El registro de la prueba no ha llegado al onboarding (${page.url()})`);
+  }
+
+  await expect(page).toHaveURL(/.*(dashboard|onboarding)/);
+  return target;
 }
 
 /**
