@@ -16,6 +16,11 @@ import {
 } from '../schemas/auth.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 import { seedDefaultsForUser } from '../utils/seed-data.js';
+import {
+  readTasteResponse,
+  saveTasteProfile,
+  updateTasteSchema
+} from '../utils/taste-profile.js';
 
 const authRoutes = new Hono<AppEnv>();
 
@@ -273,6 +278,32 @@ authRoutes.get('/profile', authMiddleware, async (c) => {
     success: true,
     data: sanitizeUser(user)
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Perfil de gustos / alergias / objetivo (onboarding + Ajustes)
+// ═══════════════════════════════════════════════════════════════════
+
+// GET /api/auth/taste — lo que contestó en el onboarding
+authRoutes.get('/taste', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+  const db = getDatabase();
+
+  return c.json({ success: true, data: readTasteResponse(db, userId) });
+});
+
+// PATCH /api/auth/taste — guarda el perfil (y el estado del onboarding)
+// Se fusiona sobre `users.preferences`, así que Ajustes y onboarding no se
+// pisan entre sí ni borran tema/idioma al guardar.
+authRoutes.patch('/taste', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json();
+  const input = updateTasteSchema.parse(body);
+
+  const db = getDatabase();
+  const saved = saveTasteProfile(db, userId, input);
+
+  return c.json({ success: true, data: saved });
 });
 
 // PATCH /api/auth/profile (protected)

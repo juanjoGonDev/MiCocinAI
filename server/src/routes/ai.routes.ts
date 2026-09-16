@@ -12,6 +12,7 @@ import {
 } from '../schemas/ai.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 
+import { hasTasteProfile, readTasteProfile, tastePromptLines } from '../utils/taste-profile.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
 
@@ -223,6 +224,11 @@ aiRoutes.post('/generate-recipe', async (c) => {
   const ingredientList = input.ingredients.map(i => `${i.quantity} ${i.unit} de ${i.name}`).join(', ');
   const utensilList = input.utensils.filter(u => u.available).map(u => u.name).join(', ');
 
+  // El perfil del comensal (alergias, gustos, objetivo) se añade siempre: lo
+  // respondió en el onboarding y es lo que hace que la receta sea suya.
+  const taste = readTasteProfile(db, userId);
+  const tasteBlock = hasTasteProfile(taste) ? tastePromptLines(taste) : '';
+
   const detailInstructions: Record<string, string> = {
     basic: 'Instrucciones breves y claras.',
     intermediate: 'Instrucciones detalladas con consejos útiles.',
@@ -239,6 +245,7 @@ Nivel de detalle: ${input.detailLevel} - ${detailInstructions[input.detailLevel]
 ${input.dietaryRestrictions.length > 0 ? `Restricciones dietéticas: ${input.dietaryRestrictions.join(', ')}` : ''}
 ${input.allergies.length > 0 ? `Alergias: ${input.allergies.join(', ')}` : ''}
 ${input.preferences.length > 0 ? `Preferencias: ${input.preferences.join(', ')}` : ''}
+${tasteBlock}
 ${input.cookingTime ? `Tiempo de cocción: entre ${input.cookingTime.min} y ${input.cookingTime.max} minutos` : ''}
 
 Responde SOLO con un JSON válido con esta estructura:
@@ -368,13 +375,16 @@ aiRoutes.post('/plan-week', async (c) => {
 
   const db = getDatabase();
 
+  const taste = readTasteProfile(db, userId);
+  const tasteBlock = hasTasteProfile(taste) ? `\n${tastePromptLines(taste)}\n` : '';
+
   const prompt = `Genera un plan de comidas semanal:
 
 Del ${input.startDate} al ${input.endDate}
 Objetivo: ${input.goals.type}
 ${input.goals.caloriesTarget ? `Calorías diarias objetivo: ${input.goals.caloriesTarget}` : ''}
 ${input.availableIngredients.length > 0 ? `Ingredientes disponibles: ${input.availableIngredients.join(', ')}` : ''}
-${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}` : ''}
+${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}` : ''}${tasteBlock}
 
 Responde SOLO con un JSON válido con esta estructura:
 {
