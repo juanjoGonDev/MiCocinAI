@@ -895,18 +895,38 @@ export class CalendarComponent implements OnInit {
     this.closeGoalsModal();
   }
 
+  private tasteGoalApplied = false;
+
   openGenerateModal(): void {
-    // El objetivo elegido en la configuración inicial es el punto de partida
-    // del plan: si quiere otro para esta semana, lo cambia aquí.
-    const goal = this.tasteService.taste().goal;
-    if (goal && goal !== this.generateOptions.goalType) {
-      this.generateOptions.goalType = goal;
-      if (goal === 'custom' && !this.generateOptions.customDescription) {
-        this.generateOptions.customDescription = this.tasteService.taste().goalNotes;
-      }
+    this.isGenerateModalOpen.set(true);
+    this.applyTasteGoal();
+  }
+
+  /**
+   * El objetivo de la configuración inicial es el punto de partida del plan.
+   * Si el perfil aún no ha llegado, se aplica cuando llegue (mientras el
+   * select siga sin tocar): una semana concreta puede usar otro objetivo, y
+   * eso manda sobre lo guardado.
+   */
+  private applyTasteGoal(): void {
+    if (this.tasteGoalApplied) return;
+
+    if (!this.tasteService.isLoaded()) {
+      this.tasteService.load().subscribe({
+        next: () => this.applyTasteGoal(),
+        error: () => undefined
+      });
+      return;
     }
 
-    this.isGenerateModalOpen.set(true);
+    const { goal, goalNotes } = this.tasteService.taste();
+    if (!goal || goal === 'balanced' || this.generateOptions.goalType !== 'balanced') return;
+
+    this.tasteGoalApplied = true;
+    this.generateOptions.goalType = goal;
+    if (goal === 'custom' && !this.generateOptions.customDescription) {
+      this.generateOptions.customDescription = goalNotes;
+    }
   }
 
   closeGenerateModal(): void {
