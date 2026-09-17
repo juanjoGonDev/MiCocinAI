@@ -1,207 +1,368 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CalendarService } from '../../core/services/calendar.service';
-import { AiService } from '../../core/services/ai.service';
+import { RecipeService } from '../../core/services/recipe.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
-import { ButtonComponent } from '../../shared/components/ui/button/button.component';
-import { CardComponent } from '../../shared/components/ui/card/card.component';
-import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
-import { TagComponent } from '../../shared/components/ui/tag/tag.component';
-import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
-import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
-import { ProgressComponent } from '../../shared/components/ui/progress/progress.component';
-import {
-  DayOfWeek,
-  MealType,
-  DAY_OF_WEEK_LABELS,
-  MEAL_TYPE_LABELS,
-  GOAL_TYPE_LABELS,
-  GoalType
-} from '../../shared/models/calendar.model';
-import { clearTabParam, readTabParam, writeTabParam } from '../../core/utils/tab-url';
 import { TasteProfileService } from '../../core/services/taste-profile.service';
 import { GOAL_OPTIONS } from '../../shared/models/taste-profile';
+import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
+import {
+  CalendarDayView,
+  CalendarMeal,
+  CalendarView,
+  CALENDAR_DATE_PARAM,
+  CALENDAR_VIEWS,
+  CALENDAR_VIEW_LABELS,
+  CALENDAR_VIEW_PARAM,
+  GOAL_TYPE_LABELS,
+  GoalType,
+  MealType,
+  MEAL_ORDER,
+  MEAL_TYPE_META
+} from '../../shared/models/calendar.model';
+import { clearTabParam, readTabParam, writeTabParam } from '../../core/utils/tab-url';
+import {
+  addDays,
+  addMonths,
+  formatNumber,
+  labels,
+  monthGrid,
+  parseISODate,
+  startOfDay,
+  startOfWeek,
+  toISODate,
+  weekDays
+} from './calendar.util';
+import { CalendarMonthComponent } from './calendar-month.component';
+import { CalendarWeekComponent } from './calendar-week.component';
+import { CalendarDayComponent } from './calendar-day.component';
 
-interface DayMeals {
-  day: DayOfWeek;
+/** Días por fila de la vista de mes. */
+const WEEK_LENGTH = 7;
+
+interface MealDraft {
+  id: string | null;
   date: string;
-  meals: Record<MealType, any>;
+  mealType: MealType;
+  customMeal: string;
+  recipeId: string;
+  time: string;
+  servings: number;
+  notes: string;
 }
 
-/** Pestañas del modal de comida: "Escribir" o elegir una receta. */
-type MealTab = 'custom' | 'recipe';
+const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
+  id: null,
+  date,
+  mealType,
+  customMeal: '',
+  recipeId: '',
+  time: '',
+  servings: 1,
+  notes: ''
+});
 
-/** Query param que lleva la pestaña del modal de comida en la URL. */
-const MEAL_TAB_PARAM = 'mealTab';
-
+/**
+ * Calendario de comidas con tres vistas —día, semana y mes— al modo de Google
+ * Calendar: cabecera con navegación, conmutador de vistas y una superficie con
+ * líneas finas donde cada comida es un bloque de color por franja.
+ *
+ * Tres cosas mandan en el diseño:
+ *  - **Lo que se ve es lo que hay.** La rejilla se deriva de `GET /api/calendar/range`
+ *    para el rango visible; antes se pintaban huecos vacíos y las comidas
+ *    guardadas no llegaban nunca a la pantalla.
+ *  - **La vista y la fecha viajan en la URL** (`?view=month&date=2026-09-16`),
+ *    como el resto de pestañas de la app: se puede enlazar, recargar y volver
+ *    atrás. `?view=week` y la fecha de hoy se omiten para que `/calendar` siga
+ *    siendo limpio.
+ *  - **Atajos de teclado** (← →, T, D/S/M) para moverse sin buscar el ratón.
+ */
 @Component({
   selector: 'app-calendar',
   standalone: true,
   imports: [
-    CommonModule, FormsModule,
-    ButtonComponent, CardComponent, BadgeComponent, TagComponent,
-    ModalComponent, LoadingComponent, ProgressComponent
+    CommonModule,
+    FormsModule,
+    ModalComponent,
+    CalendarMonthComponent,
+    CalendarWeekComponent,
+    CalendarDayComponent
   ],
+  host: {
+    '(window:keydown)': 'onKeydown($event)'
+  },
   template: `
     <div class="calendar">
-      <!-- Header -->
-      <div class="calendar__header">
-        <div class="calendar__title-section">
-          <h1 class="calendar__title">📅 Planificación Semanal</h1>
-          <span class="calendar__week">{{ currentWeekLabel() }}</span>
-        </div>
-        <div class="calendar__actions">
-          <app-button variant="outline" (onClick)="previousWeek()">
-            ←
-          </app-button>
-          <app-button variant="outline" (onClick)="goToToday()">
-            Hoy
-          </app-button>
-          <app-button variant="outline" (onClick)="nextWeek()">
-            →
-          </app-button>
-          <app-button variant="primary" (onClick)="openGenerateModal()">
-            🤖 Planificar IA
-          </app-button>
-        </div>
-      </div>
-
-      <!-- Goals -->
-      <div class="calendar__goals" *ngIf="selectedGoal()">
-        <span class="calendar__goal-label">Objetivo:</span>
-        <app-tag [selected]="true">{{ getGoalLabel(selectedGoal()!) }}</app-tag>
-        <app-button variant="ghost" size="sm" (onClick)="openGoalsModal()">
-          Cambiar
-        </app-button>
-      </div>
-
-      <!-- Weekly Progress -->
-      <div class="calendar__progress">
-        <div class="progress-item">
-          <span class="progress-item__label">Calorías</span>
-          <span class="progress-item__value">{{ weeklyCalories() }} / {{ targetCalories }}</span>
-          <app-progress [value]="getCalorieProgress()" size="sm"></app-progress>
-        </div>
-        <div class="progress-item">
-          <span class="progress-item__label">Comidas planificadas</span>
-          <span class="progress-item__value">{{ plannedMeals() }} / 21</span>
-          <app-progress [value]="getMealProgress()" size="sm" color="var(--secondary)"></app-progress>
-        </div>
-      </div>
-
-      <!-- Loading -->
-      <app-loading *ngIf="calendarService.isLoading()" message="Cargando calendario..."></app-loading>
-
-      <!-- Weekly Grid -->
-      <div class="calendar__grid" *ngIf="!calendarService.isLoading()">
-        <div
-          *ngFor="let day of weekDays(); trackBy: trackByDate"
-          class="day-column"
-          [class.day-column--today]="isToday(day.date)"
-        >
-          <div class="day-column__header">
-            <span class="day-column__name">{{ getDayLabel(day.day) }}</span>
-            <span class="day-column__date">{{ formatDate(day.date) }}</span>
+      <section class="calendar__panel">
+        <!-- ══ Cabecera ══ -->
+        <header class="cal-top">
+          <div class="cal-top__title">
+            <span class="cal-top__eyebrow">Planificación</span>
+            <h1 class="calendar__title">{{ periodLabel() }}</h1>
           </div>
 
-          <div class="day-column__meals">
-            <div
-              *ngFor="let mealType of mealTypes"
-              class="meal-slot"
-              [class.meal-slot--filled]="day.meals[mealType]"
-              (click)="openAddMealModal(day.date, mealType)"
+          <div class="cal-top__nav">
+            <button
+              type="button"
+              class="cal-icon-btn"
+              aria-label="Periodo anterior"
+              title="Periodo anterior (←)"
+              (click)="shift(-1)"
             >
-              <span class="meal-slot__type">{{ getMealIcon(mealType) }} {{ getMealLabel(mealType) }}</span>
-              
-              <div *ngIf="day.meals[mealType] as meal" class="meal-slot__content">
-                <span class="meal-slot__name">{{ meal.recipe_name || meal.custom_meal }}</span>
-                <div class="meal-slot__actions">
-                  <button
-                    type="button"
-                    class="meal-action"
-                    [class.meal-action--done]="meal.completed"
-                    (click)="toggleComplete(meal); $event.stopPropagation()"
-                  >
-                    {{ meal.completed ? '✅' : '⬜' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="meal-action meal-action--delete"
-                    (click)="deleteMeal(meal); $event.stopPropagation()"
-                  >
-                    🗑️
-                  </button>
-                </div>
-              </div>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+            </button>
+            <button type="button" class="cal-pill" title="Ir a hoy (T)" (click)="goToToday()">Hoy</button>
+            <button
+              type="button"
+              class="cal-icon-btn"
+              aria-label="Periodo siguiente"
+              title="Periodo siguiente (→)"
+              (click)="shift(1)"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+            </button>
 
-              <span *ngIf="!day.meals[mealType]" class="meal-slot__empty">
-                + Agregar
-              </span>
+            <label class="cal-jump" title="Ir a una fecha concreta">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 3v2M17 3v2M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
+              </svg>
+              <input
+                type="date"
+                [value]="anchorIso()"
+                (change)="jumpTo(input.value)"
+                #input
+                aria-label="Ir a una fecha"
+              />
+            </label>
+          </div>
+
+          <div class="cal-top__right">
+            <div class="cal-segment" role="tablist" aria-label="Vista del calendario">
+              <button
+                *ngFor="let option of viewOptions"
+                type="button"
+                role="tab"
+                class="cal-segment__btn"
+                [id]="'cal-view-' + option"
+                [attr.aria-selected]="view() === option"
+                [class.is-active]="view() === option"
+                (click)="setView(option)"
+              >
+                {{ CALENDAR_VIEW_LABELS[option] }}
+              </button>
+            </div>
+
+            <button type="button" class="cal-pill" (click)="openGoalsModal()">
+              Objetivo<span *ngIf="goalLabel()"> · {{ goalLabel() }}</span>
+            </button>
+            <button type="button" class="cal-btn cal-btn--primary" (click)="openGenerateModal()">
+              Planificar IA
+            </button>
+          </div>
+        </header>
+
+        <!-- ══ Resumen del periodo ══ -->
+        <div class="cal-strip">
+          <div class="cal-strip__item">
+            <span class="cal-strip__label">Comidas</span>
+            <span class="cal-strip__value">
+              {{ plannedCount() }}<small> / {{ expectedMeals() }}</small>
+            </span>
+          </div>
+          <div class="cal-strip__track" [title]="'Comidas planificadas en ' + periodLabel()">
+            <span class="cal-strip__fill" [style.width.%]="plannedPercent()"></span>
+          </div>
+
+          <div class="cal-strip__item" *ngIf="hasNutrition()">
+            <span class="cal-strip__label">Energía</span>
+            <span class="cal-strip__value">
+              {{ fmt(calories()) }}<small> / {{ fmt(calendarService.targetCalories()) }} kcal</small>
+            </span>
+          </div>
+          <div class="cal-strip__track" *ngIf="hasNutrition()">
+            <span class="cal-strip__fill cal-strip__fill--kcal" [style.width.%]="caloriePercent()"></span>
+          </div>
+
+          <span class="cal-strip__done" *ngIf="doneCount() > 0">
+            {{ doneCount() }} {{ doneCount() === 1 ? 'hecha' : 'hechas' }}
+          </span>
+
+          <span class="cal-strip__spacer"></span>
+
+          <span class="cal-strip__hint" *ngIf="plannedCount() === 0 && !isLoading()">
+            Nada planificado en {{ periodShortLabel() }}.
+            <button type="button" class="cal-link" (click)="openGenerateModal()">Que lo haga la IA</button>
+            <span aria-hidden="true">·</span>
+            <button type="button" class="cal-link" (click)="openAddModal(anchorIso(), 'lunch')">
+              Empezar por el almuerzo
+            </button>
+          </span>
+
+          <span class="cal-strip__hint" *ngIf="calendarService.error()">
+            {{ calendarService.error() }}
+            <button type="button" class="cal-link" (click)="reload()">Reintentar</button>
+          </span>
+        </div>
+
+        <!-- ══ Rejilla ══ -->
+        <div class="cal-body" [class.is-loading]="isLoading()" [attr.aria-busy]="isLoading()">
+          <div class="cal-skeleton" *ngIf="showSkeleton()" aria-hidden="true">
+            <span *ngFor="let row of [0, 1, 2]"></span>
+          </div>
+
+          <ng-container [ngSwitch]="view()" *ngIf="!showSkeleton()">
+            <app-calendar-month
+              *ngSwitchCase="'month'"
+              [days]="days()"
+              [anchorIso]="anchorIso()"
+              (addMeal)="openAddModal($event.date, $event.mealType)"
+              (openMeal)="openEditModal($event)"
+              (openDay)="openDayFor($event)"
+            ></app-calendar-month>
+
+            <app-calendar-week
+              *ngSwitchDefault
+              [days]="days()"
+              (addMeal)="openAddModal($event.date, $event.mealType)"
+              (openMeal)="openEditModal($event)"
+              (toggleMeal)="toggleMeal($event)"
+              (removeMeal)="removeMeal($event)"
+              (openDay)="openDayFor($event)"
+            ></app-calendar-week>
+
+            <app-calendar-day
+              *ngSwitchCase="'day'"
+              [day]="singleDay()"
+              [targetCalories]="calendarService.targetCalories()"
+              [goalLabel]="goalLabel()"
+              (addMeal)="openAddModal($event.date, $event.mealType)"
+              (openMeal)="openEditModal($event)"
+              (toggleMeal)="toggleMeal($event)"
+              (removeMeal)="removeMeal($event)"
+            ></app-calendar-day>
+          </ng-container>
+        </div>
+      </section>
+
+      <!-- ══ Añadir / editar comida ══ -->
+      <app-modal
+        [isOpen]="isMealModalOpen()"
+        [title]="draft.id ? 'Editar Comida' : 'Agregar Comida'"
+        size="md"
+        (onClose)="closeMealModal()"
+      >
+        <div class="meal-form">
+          <div class="meal-form__when">
+            <span class="meal-form__band" [attr.data-meal]="draft.mealType" aria-hidden="true"></span>
+            <strong>{{ MEAL_TYPE_META[draft.mealType].label }}</strong>
+            <span class="meal-form__date">{{ draftDateLabel() }}</span>
+            <div class="meal-form__tabs" role="tablist" aria-label="Origen de la comida">
+              <button
+                type="button"
+                role="tab"
+                [class.tab]="true"
+                [class.tab--active]="mealTab() === 'custom'"
+                [attr.aria-selected]="mealTab() === 'custom'"
+                (click)="switchAddMealTab('custom')"
+              >
+                Escribir
+              </button>
+              <button
+                type="button"
+                role="tab"
+                [class.tab]="true"
+                [class.tab--active]="mealTab() === 'recipe'"
+                [attr.aria-selected]="mealTab() === 'recipe'"
+                (click)="switchAddMealTab('recipe')"
+              >
+                Receta
+              </button>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- Add Meal Modal -->
-      <app-modal
-        [isOpen]="isAddMealModalOpen()"
-        title="Agregar Comida"
-        size="md"
-        (onClose)="closeAddMealModal()"
-      >
-        <div class="add-meal-form">
-          <div class="add-meal-form__info">
-            <span>{{ getMealLabel(newMealData.mealType) }} - {{ formatDate(newMealData.date) }}</span>
-          </div>
-
-          <div class="add-meal-form__tabs">
-            <button
-              type="button"
-              [class]="'tab' + (addMealTab() === 'custom' ? ' tab--active' : '')"
-              (click)="switchAddMealTab('custom')"
-            >
-              Escribir
-            </button>
-            <button
-              type="button"
-              [class]="'tab' + (addMealTab() === 'recipe' ? ' tab--active' : '')"
-              (click)="switchAddMealTab('recipe')"
-            >
-              Receta
-            </button>
-          </div>
-
-          <div *ngIf="addMealTab() === 'custom'" class="add-meal-form__field">
-            <label>¿Qué vas a comer?</label>
+          <div class="meal-form__field" *ngIf="mealTab() === 'custom'">
+            <label for="meal-custom">¿Qué vas a comer?</label>
             <input
+              id="meal-custom"
               type="text"
-              [(ngModel)]="newMealData.customMeal"
-              placeholder="Ej: Pasta con tomate"
-              class="form-input"
+              maxlength="200"
+              [(ngModel)]="draft.customMeal"
+              placeholder="Ej: Pasta con tomate y albahaca"
+              class="cal-input"
             />
           </div>
 
-          <div *ngIf="addMealTab() === 'recipe'" class="add-meal-form__field">
-            <label>Selecciona una receta</label>
-            <select [(ngModel)]="newMealData.recipeId" class="form-select">
-              <option value="">Seleccionar...</option>
-              <option *ngFor="let recipe of availableRecipes()" [value]="recipe.id">
-                {{ recipe.name }}
+          <div class="meal-form__field" *ngIf="mealTab() === 'recipe'">
+            <label for="meal-recipe">Selecciona una receta</label>
+            <select id="meal-recipe" [(ngModel)]="draft.recipeId" class="cal-input">
+              <option value="">Seleccionar…</option>
+              <option *ngFor="let recipe of recipeService.recipes()" [value]="recipe.id">
+                {{ recipe.name }}{{ recipe.calories ? ' · ' + recipe.calories + ' kcal' : '' }}
               </option>
             </select>
+            <span class="cal-hint" *ngIf="recipeService.recipes().length === 0">
+              Todavía no hay recetas en tu recetario.
+            </span>
           </div>
 
-          <div class="add-meal-form__actions">
-            <app-button variant="ghost" (onClick)="closeAddMealModal()">Cancelar</app-button>
-            <app-button variant="primary" (onClick)="saveMeal()">Guardar</app-button>
+          <div class="meal-form__row">
+            <div class="meal-form__field meal-form__field--sm">
+              <label for="meal-time">Hora (opcional)</label>
+              <input id="meal-time" type="time" [(ngModel)]="draft.time" class="cal-input" />
+            </div>
+            <div class="meal-form__field meal-form__field--sm">
+              <label for="meal-servings">Raciones</label>
+              <input
+                id="meal-servings"
+                type="number"
+                min="1"
+                max="12"
+                [(ngModel)]="draft.servings"
+                class="cal-input"
+              />
+            </div>
+          </div>
+
+          <div class="meal-form__field">
+            <label for="meal-notes">Notas (opcional)</label>
+            <textarea
+              id="meal-notes"
+              rows="2"
+              maxlength="500"
+              [(ngModel)]="draft.notes"
+              placeholder="Ej: sobras del día anterior, sin gluten…"
+              class="cal-input cal-input--area"
+            ></textarea>
+          </div>
+
+          <div class="meal-form__actions">
+            <button
+              *ngIf="draft.id"
+              type="button"
+              class="cal-btn cal-btn--danger"
+              (click)="removeMealById(draft.id)"
+            >
+              Eliminar
+            </button>
+            <span class="meal-form__grow"></span>
+            <button type="button" class="cal-btn" (click)="closeMealModal()">Cancelar</button>
+            <button
+              type="button"
+              class="cal-btn cal-btn--primary"
+              [disabled]="!draftValid()"
+              (click)="saveMeal()"
+            >
+              {{ draft.id ? 'Guardar cambios' : 'Añadir' }}
+            </button>
           </div>
         </div>
       </app-modal>
 
-      <!-- Goals Modal -->
+      <!-- ══ Objetivos ══ -->
       <app-modal
         [isOpen]="isGoalsModalOpen()"
         title="Objetivos Nutricionales"
@@ -209,671 +370,1114 @@ const MEAL_TAB_PARAM = 'mealTab';
         (onClose)="closeGoalsModal()"
       >
         <div class="goals-form">
+          <p class="cal-muted">
+            Sirven de punto de partida al planificar con IA. El objetivo fino de alergias y
+            gustos se edita en Preferencias.
+          </p>
           <div class="goals-form__options">
             <button
               *ngFor="let goal of goalOptions"
               type="button"
-              [class]="'goal-option' + (selectedGoal() === goal.value ? ' goal-option--selected' : '')"
-              (click)="selectGoal(goal.value)"
+              class="goal-option"
+              [class.goal-option--selected]="goalsDraft.type === goal.value"
+              [attr.aria-pressed]="goalsDraft.type === goal.value"
+              (click)="goalsDraft.type = goal.value"
             >
-              <span class="goal-option__icon">{{ goal.icon }}</span>
+              <span class="goal-option__icon" aria-hidden="true">{{ goal.icon }}</span>
               <span class="goal-option__label">{{ goal.label }}</span>
             </button>
           </div>
 
-          <div class="goals-form__calories">
-            <label>Calorías diarias objetivo</label>
+          <div class="meal-form__field meal-form__field--sm">
+            <label for="goals-calories">Calorías diarias objetivo</label>
             <input
+              id="goals-calories"
               type="number"
-              [(ngModel)]="targetCalories"
-              placeholder="2000"
-              class="form-input"
+              min="800"
+              max="6000"
+              step="50"
+              [(ngModel)]="goalsDraft.dailyCalories"
+              class="cal-input"
             />
           </div>
 
-          <div class="goals-form__actions">
-            <app-button variant="primary" (onClick)="saveGoals()">Guardar</app-button>
+          <div class="meal-form__actions">
+            <span class="meal-form__grow"></span>
+            <button type="button" class="cal-btn" (click)="closeGoalsModal()">Cancelar</button>
+            <button type="button" class="cal-btn cal-btn--primary" (click)="saveGoals()">Guardar</button>
           </div>
         </div>
       </app-modal>
 
-      <!-- Generate with AI Modal -->
+      <!-- ══ Planificar con IA ══ -->
       <app-modal
         [isOpen]="isGenerateModalOpen()"
-        title="🤖 Planificar con IA"
+        title="Planificar con IA"
         size="md"
         (onClose)="closeGenerateModal()"
       >
         <div class="generate-form">
-          <p class="generate-form__description">
-            La IA creará un plan de comidas personalizado para la semana.
+          <p class="cal-muted">
+            La IA prepara la <strong>{{ planWeekLabel() }}</strong>. Rellena los huecos: lo que ya
+            tengas puesto ese día y a esa hora se queda como está.
           </p>
 
-          <div class="generate-form__field">
-            <label>Objetivo</label>
-            <select [(ngModel)]="generateOptions.goalType" class="form-select" (change)="onGoalTypeChange()">
+          <div class="meal-form__field">
+            <label for="gen-goal">Objetivo</label>
+            <select id="gen-goal" [(ngModel)]="generateOptions.goalType" class="cal-input" (change)="onGoalTypeChange()">
               <option *ngFor="let goal of goalOptions" [value]="goal.value">
-                {{ goal.icon }} {{ goal.label }}
+                {{ goal.label }}
               </option>
             </select>
           </div>
 
-          <div class="generate-form__field" *ngIf="generateOptions.goalType === 'custom'">
-            <label>Describe tu objetivo</label>
+          <div class="meal-form__field" *ngIf="generateOptions.goalType === 'custom'">
+            <label for="gen-custom">Describe tu objetivo</label>
             <textarea
-              [(ngModel)]="generateOptions.customDescription"
+              id="gen-custom"
               name="customDescription"
               rows="4"
-              placeholder="Ej: Quiero cenas ligeras y sin carne los lunes y miércoles, mucha verdura, poco frito, y algo de pasta o arroz 2 veces por semana. Sin gluten."
-              class="form-textarea"
+              [(ngModel)]="generateOptions.customDescription"
+              placeholder="Ej: cenas ligeras y sin carne los lunes y miércoles, mucha verdura, poco frito y algo de pasta o arroz dos veces por semana. Sin gluten."
+              class="cal-input cal-input--area"
             ></textarea>
-            <span class="field-hint">Sé lo más específico/a posible: intolerancias, preferencias, días especiales, recetas favoritas…</span>
+            <span class="cal-hint">
+              Cuanto más concreto, mejor: intolerancias, horarios, recetas que te gusten…
+            </span>
           </div>
 
-          <div class="generate-form__field">
-            <label>Calorías diarias (opcional)</label>
-            <input type="number" [(ngModel)]="generateOptions.calories" placeholder="2000" class="form-input" />
+          <div class="meal-form__field meal-form__field--sm">
+            <label for="gen-calories">Calorías diarias (opcional)</label>
+            <input
+              id="gen-calories"
+              type="number"
+              min="800"
+              max="6000"
+              step="50"
+              [(ngModel)]="generateOptions.calories"
+              class="cal-input"
+            />
           </div>
 
-          <div class="generate-form__actions">
-            <app-button
-              variant="primary"
-              [loading]="isGenerating()"
-              (onClick)="generateWeeklyPlan()"
+          <div class="meal-form__actions">
+            <span class="meal-form__grow"></span>
+            <button type="button" class="cal-btn" (click)="closeGenerateModal()">Cancelar</button>
+            <button
+              type="button"
+              class="cal-btn cal-btn--primary"
+              [disabled]="isGenerating()"
+              (click)="generateWeeklyPlan()"
             >
-              🤖 Generar plan
-            </app-button>
+              <span class="cal-spinner" *ngIf="isGenerating()" aria-hidden="true"></span>
+              {{ isGenerating() ? 'Planificando…' : 'Generar plan' }}
+            </button>
           </div>
         </div>
       </app-modal>
     </div>
   `,
   styles: [`
+    :host {
+      --cal-line: var(--border-default);
+    }
+
     .calendar {
-      padding: var(--space-4);
-      max-width: 1200px;
+      padding: var(--space-3) var(--space-4) var(--space-8);
+      max-width: 1280px;
       margin: 0 auto;
     }
 
     @media (min-width: 768px) {
-      .calendar { padding: var(--space-6); }
+      .calendar { padding: var(--space-4) var(--space-6) var(--space-10); }
     }
 
-    .calendar__header {
+    /* Una sola superficie con líneas finas: el aspecto de un calendario real,
+       en vez de siete tarjetas sueltas. */
+    .calendar__panel {
+      display: grid;
+      background: var(--bg-secondary);
+      border: 1px solid var(--cal-line);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-sm);
+      overflow: hidden;
+    }
+
+    /* ── Cabecera ── */
+    .cal-top {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      margin-bottom: var(--space-6);
       flex-wrap: wrap;
-      gap: var(--space-3);
+      gap: var(--space-3) var(--space-4);
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--cal-line);
     }
 
-    .calendar__title-section {
+    .cal-top__title {
       display: flex;
-      align-items: baseline;
-      gap: var(--space-3);
+      flex-direction: column;
+      gap: 1px;
+      margin-right: auto;
+      min-width: 0;
+    }
+
+    .cal-top__eyebrow {
+      font-size: 10px;
+      font-weight: var(--font-semibold);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
     }
 
     .calendar__title {
       font-family: var(--font-display);
-      font-size: var(--text-2xl);
-      font-weight: var(--font-bold);
-    }
-
-    .calendar__week {
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-    }
-
-    .calendar__actions {
-      display: flex;
-      gap: var(--space-2);
-    }
-
-    .calendar__goals {
-      display: flex;
-      align-items: center;
-      gap: var(--space-3);
-      margin-bottom: var(--space-4);
-    }
-
-    .calendar__goal-label {
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-    }
-
-    .calendar__progress {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: var(--space-4);
-      margin-bottom: var(--space-6);
-    }
-
-    .progress-item {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      padding: var(--space-3);
-      background: var(--bg-secondary);
-      border-radius: var(--radius-lg);
-      border: 1px solid var(--border-default);
-    }
-
-    .progress-item__label {
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-    }
-
-    .progress-item__value {
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-    }
-
-    /* Weekly Grid */
-    .calendar__grid {
-      display: grid;
-      grid-template-columns: repeat(7, 1fr);
-      gap: var(--space-2);
-      overflow-x: auto;
-      padding-bottom: var(--space-4);
-    }
-
-    @media (max-width: 768px) {
-      .calendar__grid {
-        grid-template-columns: repeat(7, minmax(120px, 1fr));
-      }
-    }
-
-    .day-column {
-      min-width: 120px;
-    }
-
-    .day-column--today .day-column__header {
-      background: var(--primary-subtle);
-      border-color: var(--primary);
-    }
-
-    .day-column__header {
-      padding: var(--space-2);
-      background: var(--bg-secondary);
-      border-radius: var(--radius-lg);
-      border: 1px solid var(--border-default);
-      text-align: center;
-      margin-bottom: var(--space-2);
-    }
-
-    .day-column__name {
-      font-size: var(--text-xs);
+      font-size: var(--text-xl);
       font-weight: var(--font-semibold);
-      text-transform: uppercase;
-      color: var(--text-secondary);
+      letter-spacing: -0.01em;
+      line-height: 1.2;
+      color: var(--text-primary);
     }
 
-    .day-column__date {
-      font-size: var(--text-lg);
-      font-weight: var(--font-bold);
-    }
-
-    .day-column__meals {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    /* Meal Slot */
-    .meal-slot {
-      padding: var(--space-2);
-      background: var(--bg-secondary);
-      border-radius: var(--radius-md);
-      border: 1px dashed var(--border-default);
-      cursor: pointer;
-      transition: var(--transition-fast);
-      min-height: 60px;
-
-      &:hover {
-        border-color: var(--primary);
-        background: var(--primary-subtle);
-      }
-    }
-
-    .meal-slot--filled {
-      border-style: solid;
-    }
-
-    .meal-slot__type {
-      font-size: 10px;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-    }
-
-    .meal-slot__content {
+    .cal-top__nav,
+    .cal-top__right {
       display: flex;
       align-items: center;
-      justify-content: space-between;
       gap: var(--space-1);
     }
 
-    .meal-slot__name {
+    .cal-top__right {
+      gap: var(--space-2);
+    }
+
+    @media (min-width: 1100px) {
+      .cal-top__title { margin-right: var(--space-6); }
+    }
+
+    .cal-icon-btn {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      padding: 0;
+      color: var(--text-secondary);
+      background: none;
+      border: 1px solid transparent;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+
+    .cal-icon-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.75;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .cal-icon-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+    }
+
+    .cal-pill {
+      padding: 5px 11px;
+      font: inherit;
       font-size: var(--text-xs);
       font-weight: var(--font-medium);
-      flex: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      border: 1px solid var(--cal-line);
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: var(--transition-fast);
       white-space: nowrap;
     }
 
-    .meal-slot__actions {
-      display: flex;
-      gap: 2px;
+    .cal-pill:hover {
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+      background: var(--bg-tertiary);
     }
 
-    .meal-action {
-      width: 20px;
-      height: 20px;
-      border: none;
-      background: none;
+    /* Selector de fecha nativo, disfrazado de botón de icono. */
+    .cal-jump {
+      position: relative;
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      color: var(--text-secondary);
+      border: 1px solid transparent;
+      border-radius: var(--radius-full);
       cursor: pointer;
-      font-size: 12px;
-      padding: 0;
+      transition: var(--transition-fast);
+    }
+
+    .cal-jump:hover {
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+    }
+
+    .cal-jump svg {
+      width: 15px;
+      height: 15px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.6;
+      stroke-linecap: round;
+    }
+
+    .cal-jump input {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    /* Conmutador de vistas: segmentado, como el Day/Week/Month de Google. */
+    .cal-segment {
+      display: inline-flex;
+      padding: 2px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--cal-line);
+      border-radius: var(--radius-full);
+    }
+
+    .cal-segment__btn {
+      padding: 4px 12px;
+      font: inherit;
+      font-size: var(--text-xs);
+      font-weight: var(--font-medium);
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+
+    .cal-segment__btn:hover {
+      color: var(--text-primary);
+    }
+
+    .cal-segment__btn.is-active {
+      color: var(--text-primary);
+      background: var(--bg-secondary);
+      box-shadow: var(--shadow-xs);
+    }
+
+    .cal-segment__btn:focus-visible,
+    .cal-pill:focus-visible,
+    .cal-icon-btn:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    /* ── Botones ── */
+    .cal-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 6px 14px;
+      font: inherit;
+      font-size: var(--text-sm);
+      font-weight: var(--font-medium);
+      color: var(--text-secondary);
+      background: var(--bg-secondary);
+      border: 1px solid var(--cal-line);
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+
+    .cal-btn:hover:not(:disabled) {
+      color: var(--text-primary);
+      border-color: var(--border-strong);
+    }
+
+    .cal-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .cal-btn--primary {
+      color: var(--text-inverse);
+      background: var(--primary);
+      border-color: var(--primary);
+      box-shadow: var(--shadow-xs);
+    }
+
+    .cal-btn--primary:hover:not(:disabled) {
+      color: var(--text-inverse);
+      background: var(--primary-dark);
+      border-color: var(--primary-dark);
+    }
+
+    .cal-btn--danger {
+      color: var(--error);
+      border-color: color-mix(in srgb, var(--error) 35%, var(--cal-line));
+    }
+
+    .cal-btn--danger:hover:not(:disabled) {
+      color: var(--error);
+      background: var(--error-subtle);
+      border-color: var(--error);
+    }
+
+    .cal-spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid color-mix(in srgb, var(--text-inverse) 40%, transparent);
+      border-top-color: var(--text-inverse);
+      border-radius: 50%;
+      animation: cal-spin 0.7s linear infinite;
+    }
+
+    @keyframes cal-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Tira de resumen ── */
+    .cal-strip {
       display: flex;
       align-items: center;
-      justify-content: center;
-    }
-
-    .meal-slot__empty {
+      flex-wrap: wrap;
+      gap: var(--space-2) var(--space-3);
+      padding: 7px var(--space-4);
+      background: color-mix(in srgb, var(--bg-tertiary) 45%, var(--bg-secondary));
+      border-bottom: 1px solid var(--cal-line);
       font-size: var(--text-xs);
-      color: var(--text-tertiary);
     }
 
-    /* Add Meal Form */
-    .add-meal-form {
+    .cal-strip__item {
       display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
+      align-items: baseline;
+      gap: 5px;
+      white-space: nowrap;
     }
 
-    .add-meal-form__info {
-      font-size: var(--text-sm);
+    .cal-strip__label {
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 9px;
+      font-weight: var(--font-semibold);
+    }
+
+    .cal-strip__value {
+      font-weight: var(--font-semibold);
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+    }
+
+    .cal-strip__value small {
+      font-weight: var(--font-normal);
       color: var(--text-secondary);
     }
 
-    .add-meal-form__tabs {
-      display: flex;
-      gap: var(--space-2);
+    .cal-strip__track {
+      flex: 0 1 110px;
+      height: 3px;
+      min-width: 46px;
+      background: var(--border-default);
+      border-radius: var(--radius-full);
+      overflow: hidden;
     }
 
-    .tab {
-      flex: 1;
-      padding: var(--space-2);
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      font-size: var(--text-sm);
-      transition: var(--transition-fast);
-
-      &--active {
-        background: var(--primary-subtle);
-        border-color: var(--primary);
-        color: var(--primary-dark);
-      }
+    .cal-strip__fill {
+      display: block;
+      height: 100%;
+      background: var(--primary);
+      border-radius: inherit;
+      transition: width var(--duration-300) var(--ease-out);
     }
 
-    .add-meal-form__field {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-
-      label {
-        font-size: var(--text-sm);
-        font-weight: var(--font-medium);
-      }
+    .cal-strip__fill--kcal {
+      background: var(--secondary);
     }
 
-    .add-meal-form__actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--space-3);
+    .cal-strip__done {
+      padding: 1px 8px;
+      color: var(--secondary-dark);
+      background: color-mix(in srgb, var(--secondary) 12%, var(--bg-secondary));
+      border-radius: var(--radius-full);
+      font-variant-numeric: tabular-nums;
     }
 
-    /* Goals Form */
-    .goals-form {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-6);
+    .cal-strip__spacer {
+      flex: 1 1 auto;
     }
 
-    .goals-form__options {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: var(--space-2);
-    }
-
-    .goal-option {
-      display: flex;
-      flex-direction: column;
+    .cal-strip__hint {
+      display: inline-flex;
       align-items: center;
       gap: var(--space-2);
-      padding: var(--space-3);
-      background: var(--bg-tertiary);
-      border: 2px solid transparent;
-      border-radius: var(--radius-lg);
-      cursor: pointer;
-      transition: var(--transition-fast);
-
-      &:hover {
-        border-color: var(--border-strong);
-      }
-
-      &--selected {
-        border-color: var(--primary);
-        background: var(--primary-subtle);
-      }
+      color: var(--text-secondary);
+      flex-wrap: wrap;
     }
 
-    .goal-option__icon {
-      font-size: var(--text-2xl);
-    }
-
-    .goal-option__label {
-      font-size: var(--text-xs);
+    .cal-link {
+      padding: 0;
+      font: inherit;
       font-weight: var(--font-medium);
-      text-align: center;
+      color: var(--primary-dark);
+      background: none;
+      border: none;
+      border-bottom: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
+      cursor: pointer;
     }
 
-    .goals-form__calories {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-
-      label {
-        font-size: var(--text-sm);
-        font-weight: var(--font-medium);
-      }
+    .cal-link:hover {
+      border-bottom-color: var(--primary);
     }
 
-    .goals-form__actions {
-      display: flex;
-      justify-content: flex-end;
+    /* ── Cuerpo ── */
+    .cal-body {
+      position: relative;
+      min-height: 260px;
     }
 
-    /* Generate Form */
+    .cal-body.is-loading::after {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--primary), transparent);
+      background-size: 220px 100%;
+      animation: cal-sweep 1.1s var(--ease-in-out) infinite;
+    }
+
+    @keyframes cal-sweep {
+      from { transform: translateX(-220px); }
+      to { transform: translateX(100%); }
+    }
+
+    /* Primera carga (sin dato previo que mantener en pantalla). */
+    .cal-skeleton {
+      display: grid;
+      gap: 1px;
+      padding: var(--space-4);
+    }
+
+    .cal-skeleton span {
+      height: 86px;
+      border-radius: var(--radius-md);
+      background: linear-gradient(
+        90deg,
+        var(--bg-tertiary) 0%,
+        color-mix(in srgb, var(--bg-tertiary) 55%, var(--bg-secondary)) 50%,
+        var(--bg-tertiary) 100%
+      );
+      background-size: 420px 100%;
+      animation: cal-shimmer 1.3s var(--ease-in-out) infinite;
+    }
+
+    @keyframes cal-shimmer {
+      from { background-position: -160px 0; }
+      to { background-position: 420px 0; }
+    }
+
+    /* ── Formularios de los diálogos ── */
+    .meal-form,
+    .goals-form,
     .generate-form {
       display: flex;
       flex-direction: column;
       gap: var(--space-4);
     }
 
-    .generate-form__description {
+    .meal-form__when {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      padding-bottom: var(--space-3);
+      border-bottom: 1px solid var(--cal-line);
       font-size: var(--text-sm);
-      color: var(--text-secondary);
     }
 
-    .generate-form__field {
+    .meal-form__band {
+      width: 3px;
+      height: 15px;
+      border-radius: var(--radius-full);
+      background: var(--primary);
+    }
+
+    .meal-form__band[data-meal='breakfast'] { background: var(--warning); }
+    .meal-form__band[data-meal='dinner'] { background: var(--info); }
+    .meal-form__band[data-meal='snack'] { background: var(--secondary); }
+
+    .meal-form__date {
+      color: var(--text-secondary);
+      font-size: var(--text-xs);
+    }
+
+    .meal-form__tabs {
+      display: flex;
+      gap: var(--space-1);
+      margin-left: auto;
+      padding: 2px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--cal-line);
+      border-radius: var(--radius-full);
+    }
+
+    .meal-form__field {
       display: flex;
       flex-direction: column;
       gap: var(--space-2);
-
-      label {
-        font-size: var(--text-sm);
-        font-weight: var(--font-medium);
-      }
+      min-width: 0;
     }
 
-    .generate-form__actions {
+    .meal-form__field > label {
+      font-size: var(--text-xs);
+      font-weight: var(--font-medium);
+      color: var(--text-secondary);
+    }
+
+    .meal-form__field--sm {
+      max-width: 220px;
+    }
+
+    .meal-form__row {
       display: flex;
-      justify-content: flex-end;
+      flex-wrap: wrap;
+      gap: var(--space-4);
     }
 
-    /* Form elements */
-    .form-select,
-    .form-input {
+    .meal-form__actions {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding-top: var(--space-1);
+    }
+
+    .meal-form__grow {
+      flex: 1 1 auto;
+    }
+
+    .tab {
+      padding: 4px 12px;
+      font: inherit;
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      background: none;
+      border: none;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+
+    .tab--active {
+      color: var(--text-primary);
+      background: var(--bg-secondary);
+      box-shadow: var(--shadow-xs);
+    }
+
+    .cal-input {
       width: 100%;
       padding: var(--space-2) var(--space-3);
       font-family: var(--font-sans);
       font-size: var(--text-sm);
       color: var(--text-primary);
       background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-lg);
-
-      &:focus {
-        outline: none;
-        border-color: var(--primary);
-      }
+      border: 1px solid var(--cal-line);
+      border-radius: var(--radius-md);
+      transition: var(--transition-fast);
     }
 
-    .form-textarea {
-      width: 100%;
-      padding: var(--space-3);
-      font-family: var(--font-sans);
-      font-size: var(--text-sm);
-      color: var(--text-primary);
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-lg);
+    .cal-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+    }
+
+    .cal-input--area {
       resize: vertical;
-      min-height: 100px;
+      min-height: 62px;
       line-height: 1.5;
-
-      &:focus { outline: none; border-color: var(--primary); }
     }
 
-    .field-hint {
+    .cal-hint {
       font-size: var(--text-xs);
       color: var(--text-tertiary);
-      margin-top: 4px;
-      display: block;
+    }
+
+    .cal-muted {
+      margin: 0;
+      font-size: var(--text-sm);
+      line-height: 1.5;
+      color: var(--text-secondary);
+    }
+
+    .goals-form__options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: var(--space-2);
+    }
+
+    .goal-option {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-2) var(--space-3);
+      font: inherit;
+      text-align: left;
+      color: var(--text-primary);
+      background: var(--bg-secondary);
+      border: 1px solid var(--cal-line);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+
+    .goal-option:hover {
+      border-color: var(--border-strong);
+      background: var(--bg-tertiary);
+    }
+
+    .goal-option--selected {
+      border-color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 8%, var(--bg-secondary));
+    }
+
+    .goal-option__icon {
+      font-size: var(--text-lg);
+      line-height: 1;
+    }
+
+    .goal-option__label {
+      font-size: var(--text-sm);
+      font-weight: var(--font-medium);
+    }
+
+    /* Cabecera pegajosa en semanas largas, como en Google. */
+    @media (min-width: 1024px) {
+      .cal-body {
+        max-height: min(72vh, 720px);
+        overflow: auto;
+      }
     }
   `]
 })
 export class CalendarComponent implements OnInit {
   calendarService = inject(CalendarService);
+  recipeService = inject(RecipeService);
+
   private readonly tasteService = inject(TasteProfileService);
-  aiService = inject(AiService);
-  private toastService = inject(ToastService);
-  private confirmService = inject(ConfirmService);
-  private router = inject(Router);
-  private route = inject(ActivatedRoute);
+  private readonly toastService = inject(ToastService);
+  private readonly confirmService = inject(ConfirmService);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly destroyRef = inject(DestroyRef);
 
-  isAddMealModalOpen = signal(false);
-  isGoalsModalOpen = signal(false);
-  isGenerateModalOpen = signal(false);
-  isGenerating = signal(false);
-  availableRecipes = signal<any[]>([]);
+  readonly viewOptions = CALENDAR_VIEWS;
+  readonly CALENDAR_VIEW_LABELS = CALENDAR_VIEW_LABELS;
+  readonly MEAL_TYPE_META = MEAL_TYPE_META;
+  readonly mealTypes = MEAL_ORDER;
+  /**
+   * Miles al estilo `es-ES` («1.450 kcal»). El pipe `number` de Angular sigue el
+   * LOCALE_ID del módulo (en-US aquí) y saldría «1,450», fuera del resto de
+   * etiquetas en español, así que se formatea a mano.
+   */
+  readonly fmt = formatNumber;
 
-  selectedGoal = signal<GoalType | null>(null);
-  targetCalories = 2000;
-  weeklyCalories = signal(0);
-  plannedMeals = signal(0);
+  /** Vista activa. `week` es la por defecto y es la única que no sale en la URL. */
+  readonly view = signal<CalendarView>('week');
+  /** Día de referencia: ancla la semana, el mes o el día que se ve. */
+  readonly anchor = signal<Date>(startOfDay(new Date()));
+
+  readonly isMealModalOpen = signal(false);
+  readonly isGoalsModalOpen = signal(false);
+  readonly isGenerateModalOpen = signal(false);
+  readonly isGenerating = signal(false);
+  /** Pestaña del modal de comida: `?mealTab=recipe` mientras está abierto. */
+  readonly mealTab = signal<'custom' | 'recipe'>('custom');
+  readonly selectedGoal = signal<GoalType | null>(null);
+
+  draft: MealDraft = emptyDraft(toISODate(new Date()), 'lunch');
+  goalsDraft = { type: 'balanced' as GoalType | string, dailyCalories: 2000 };
+  generateOptions = { goalType: 'balanced', calories: 2000, customDescription: '' };
+  readonly goalOptions = GOAL_OPTIONS;
+
+  /** Días que se pinta cada vista, con sus comidas ya repartidas por franja. */
+  readonly days = computed<CalendarDayView[]>(() => {
+    const view = this.view();
+    const anchor = this.anchor();
+    const dates =
+      view === 'month' ? monthGrid(anchor) : view === 'week' ? weekDays(anchor) : [startOfDay(anchor)];
+    const byDate = this.calendarService.mealsByDate();
+    const monthAnchor = anchor;
+
+    return dates.map((date) => {
+      const iso = toISODate(date);
+      const meals = byDate.get(iso) ?? [];
+      const slots = { breakfast: [], lunch: [], dinner: [], snack: [] } as Record<MealType, CalendarMeal[]>;
+      let calories = 0;
+      let hasNutrition = false;
+      let done = 0;
+
+      for (const meal of meals) {
+        slots[meal.mealType].push(meal);
+        if (meal.calories) {
+          hasNutrition = true;
+          calories += meal.calories * (meal.servings || 1);
+        }
+        if (meal.completed) done++;
+      }
+
+      return {
+        date,
+        iso,
+        inCurrentMonth: view !== 'month' ? true : date.getMonth() === monthAnchor.getMonth() && date.getFullYear() === monthAnchor.getFullYear(),
+        isToday: isSameDayAsToday(date),
+        meals,
+        slots,
+        calories: Math.round(calories),
+        hasNutrition,
+        planned: meals.length,
+        done
+      };
+    });
+  });
+
+  readonly singleDay = computed<CalendarDayView | null>(() => this.days()[0] ?? null);
+
+  /** Rango que hay que pedir: cubre la rejilla entera, no solo el mes. */
+  readonly visibleRange = computed<[string, string]>(() => {
+    const days = this.days();
+    return [days[0]?.iso ?? toISODate(this.anchor()), days[days.length - 1]?.iso ?? toISODate(this.anchor())];
+  });
 
   /**
-   * Pestañas del modal "Agregar Comida". Igual que en el resto de la web,
-   * la pestaña se refleja en la URL (?mealTab=recipe) mientras el modal
-   * esta abierto, y se limpia al cerrarlo.
+   * Días que entran en las cuentas del resumen. En la vista de mes la rejilla
+   * completa tiene días del mes anterior y del siguiente: contarlos hincharía el
+   * denominador («4 / 168 comidas») y el progreso no cuadraría con lo que se ve.
    */
-  readonly MEAL_TABS = ['custom', 'recipe'] as const;
-  addMealTab = signal<MealTab>('custom');
+  readonly countedDays = computed(() => {
+    const days = this.days();
+    return this.view() === 'month' ? days.filter((day) => day.inCurrentMonth) : days;
+  });
 
-  newMealData = {
-    date: '',
-    mealType: 'lunch' as MealType,
-    customMeal: '',
-    recipeId: ''
-  };
+  readonly plannedCount = computed(() => sum(this.countedDays(), 'planned'));
+  readonly doneCount = computed(() => sum(this.countedDays(), 'done'));
+  readonly calories = computed(() => sum(this.countedDays(), 'calories'));
+  readonly hasNutrition = computed(() => this.countedDays().some((day) => day.hasNutrition));
 
-  generateOptions = {
-    goalType: 'balanced',
-    calories: 2000,
-    customDescription: ''
-  };
+  /** Cuatro franjas por día del periodo que se está mirando. */
+  readonly expectedMeals = computed(() => this.countedDays().length * MEAL_ORDER.length);
 
-  mealTypes: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
-
-  /** Mismo listado que en el onboarding: el objetivo se guarda ahí. */
-  goalOptions = GOAL_OPTIONS;
-
-  weekDays = signal<DayMeals[]>([]);
-  currentWeekStart = signal(new Date());
-
-  ngOnInit(): void {
-    this.calendarService.loadCalendar();
-    // El perfil de gustos trae el objetivo con el que se abre el planificador
-    this.tasteService.ensureLoaded();
-    this.initializeWeek();
-  }
-
-  private initializeWeek(): void {
-    const today = new Date();
-    const monday = new Date(today);
-    monday.setDate(today.getDate() - today.getDay() + 1);
-    this.currentWeekStart.set(monday);
-    this.generateWeekDays();
-  }
-
-  private generateWeekDays(): void {
-    const days: DayMeals[] = [];
-    const dayNames: DayOfWeek[] = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(this.currentWeekStart());
-      date.setDate(date.getDate() + i);
-
-      days.push({
-        day: dayNames[i],
-        date: date.toISOString().split('T')[0],
-        meals: {
-          breakfast: null,
-          lunch: null,
-          dinner: null,
-          snack: null
-        }
-      });
-    }
-
-    this.weekDays.set(days);
-  }
-
-  trackByDate(_i: number, day: DayMeals): string { return day.date; }
-
-  currentWeekLabel(): string {
-    const start = this.currentWeekStart();
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    return `${start.toLocaleDateString('es', { day: 'numeric', month: 'short' })} - ${end.toLocaleDateString('es', { day: 'numeric', month: 'short' })}`;
-  }
-
-  previousWeek(): void {
-    const current = this.currentWeekStart();
-    current.setDate(current.getDate() - 7);
-    this.currentWeekStart.set(new Date(current));
-    this.generateWeekDays();
-  }
-
-  nextWeek(): void {
-    const current = this.currentWeekStart();
-    current.setDate(current.getDate() + 7);
-    this.currentWeekStart.set(new Date(current));
-    this.generateWeekDays();
-  }
-
-  goToToday(): void {
-    this.initializeWeek();
-  }
-
-  isToday(dateStr: string): boolean {
-    return dateStr === new Date().toISOString().split('T')[0];
-  }
-
-  getDayLabel(day: DayOfWeek): string {
-    return DAY_OF_WEEK_LABELS[day];
-  }
-
-  getMealLabel(type: MealType): string {
-    return MEAL_TYPE_LABELS[type];
-  }
-
-  getMealIcon(type: MealType): string {
-    const icons: Record<MealType, string> = {
-      breakfast: '🌅',
-      lunch: '☀️',
-      dinner: '🌙',
-      snack: '🍎'
-    };
-    return icons[type];
-  }
-
-  getGoalLabel(goal: GoalType): string {
-    return GOAL_TYPE_LABELS[goal];
-  }
-
-  formatDate(dateStr: string): string {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('es', { day: 'numeric' });
-  }
-
-  getCalorieProgress(): number {
-    return Math.min(100, (this.weeklyCalories() / this.targetCalories) * 100);
-  }
-
-  getMealProgress(): number {
-    return Math.min(100, (this.plannedMeals() / 21) * 100);
-  }
-
-  openAddMealModal(date: string, mealType: MealType): void {
-    this.newMealData = { date, mealType, customMeal: '', recipeId: '' };
-    // Si la URL trae una pestaña valida (?mealTab=recipe) se respeta.
-    readTabParam(this.route, MEAL_TAB_PARAM, this.MEAL_TABS, 'custom', tab =>
-      this.addMealTab.set(tab)
+  constructor() {
+    // Convención de la app: lo que se ve, en la URL. Aquí son dos cosas —la vista
+    // y el día ancla—, así que se leen juntas y se escriben en UNA sola
+    // navegacion: dos `router.navigate` seguidos en el mismo tick cancelan el
+    // primero y el resultado es un `?view=` que desaparece a media prueba.
+    readTabParam<CalendarView>(this.route, CALENDAR_VIEW_PARAM, CALENDAR_VIEWS, 'week', (value) =>
+      this.view.set(value)
     );
-    this.isAddMealModalOpen.set(true);
-  }
+    const fromUrl = parseISODate(this.route.snapshot.queryParamMap.get(CALENDAR_DATE_PARAM));
+    if (fromUrl) this.anchor.set(fromUrl);
 
-  /** Cambia de pestaña y lo deja reflejado en la URL. */
-  switchAddMealTab(tab: MealTab): void {
-    this.addMealTab.set(tab);
-    writeTabParam(this.router, this.route, MEAL_TAB_PARAM, tab, 'custom');
-  }
+    effect(() => this.writeViewInUrl());
 
-  closeAddMealModal(): void {
-    this.isAddMealModalOpen.set(false);
-    // El modal ya no esta: la pestaña deja de tener sentido en la URL.
-    clearTabParam(this.router, this.route, MEAL_TAB_PARAM);
-  }
-
-  saveMeal(): void {
-    this.calendarService.addMeal({
-      date: this.newMealData.date,
-      mealType: this.newMealData.mealType,
-      customMeal: this.newMealData.customMeal || undefined,
-      recipeId: this.newMealData.recipeId || undefined
-    }).subscribe({
-      next: () => {
-        this.toastService.success('Agregada', 'Comida agregada al calendario');
-        this.closeAddMealModal();
-      },
-      error: () => {
-        this.toastService.error('Error', 'No se pudo agregar la comida');
-      }
+    // Cambiar de vista o de fecha => se pide exactamente el rango visible.
+    effect(() => {
+      const [start, end] = this.visibleRange();
+      this.calendarService.loadRange(start, end);
     });
   }
 
-  toggleComplete(meal: any): void {
-    this.calendarService.completeMeal(meal.id, !meal.completed);
+  /**
+   * `?view=…&date=…`, omitiendo lo que ya es el valor por defecto (semana de
+   * hoy) para que `/calendar` siga siendo la URL limpia. Un `view=bogus` se
+   * descarta al leer, y aquí se limpia de la URL.
+   */
+  private writeViewInUrl(): void {
+    const view = this.view();
+    const iso = toISODate(this.anchor());
+    const isToday = iso === toISODate(startOfDay(new Date()));
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        [CALENDAR_VIEW_PARAM]: view === 'week' ? null : view,
+        [CALENDAR_DATE_PARAM]: isToday ? null : iso
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
-  async deleteMeal(meal: any): Promise<void> {
+  ngOnInit(): void {
+    // El recetario alimenta la pestaña «Receta» del modal (antes estaba vacío).
+    this.recipeService.loadRecipes();
+    this.tasteService.ensureLoaded();
+  }
+
+  /* ─────────────────────────── Etiquetas ─────────────────────────── */
+
+  periodLabel(): string {
+    const anchor = this.anchor();
+    switch (this.view()) {
+      case 'month':
+        return labels.month(anchor);
+      case 'day':
+        return labels.longDay(anchor);
+      default: {
+        const days = this.days();
+        return labels.weekRange(days[0]?.date ?? anchor, days[days.length - 1]?.date ?? anchor);
+      }
+    }
+  }
+
+  /** Para el texto del hueco, donde «14 – 20 de septiembre» es demasiado largo. */
+  periodShortLabel(): string {
+    switch (this.view()) {
+      case 'month':
+        return labels.month(this.anchor());
+      case 'day':
+        return 'este día';
+      default:
+        return 'esta semana';
+    }
+  }
+
+  anchorIso(): string {
+    return toISODate(this.anchor());
+  }
+
+  draftDateLabel(): string {
+    const date = parseISODate(this.draft.date);
+    return date ? labels.fullDate(date) : this.draft.date;
+  }
+
+  /** La semana que se va a planificar, no la que se esté viendo. */
+  planWeekLabel(): string {
+    const start = startOfWeek(this.anchor());
+    return labels.weekRange(start, addDays(start, 6));
+  }
+
+  goalLabel(): string {
+    const type = this.selectedGoal() ?? this.calendarService.goalType();
+    return type ? (GOAL_TYPE_LABELS[type] ?? type) : '';
+  }
+
+  plannedPercent(): number {
+    const expected = this.expectedMeals();
+    return expected ? Math.min(100, (this.plannedCount() / expected) * 100) : 0;
+  }
+
+  caloriePercent(): number {
+    const target = this.calendarService.targetCalories();
+    return target ? Math.min(100, (this.calories() / target) * 100) : 0;
+  }
+
+  isLoading(): boolean {
+    return this.calendarService.isLoading();
+  }
+
+  /** La primera vez no hay nada que enseñar: esqueleto. Después, barra fina. */
+  showSkeleton(): boolean {
+    return this.isLoading() && this.calendarService.meals().length === 0 && !this.calendarService.error();
+  }
+
+  reload(): void {
+    const [start, end] = this.visibleRange();
+    this.calendarService.loadRange(start, end, true);
+  }
+
+  /* ─────────────────────── Navegación de periodos ─────────────────────── */
+
+  setView(view: CalendarView): void {
+    this.view.set(view);
+  }
+
+  shift(direction: 1 | -1): void {
+    const anchor = this.anchor();
+    const next =
+      this.view() === 'month'
+        ? addMonths(anchor, direction)
+        : this.view() === 'week'
+          ? addDays(anchor, direction * WEEK_LENGTH)
+          : addDays(anchor, direction);
+    this.anchor.set(next);
+  }
+
+  goToToday(): void {
+    this.anchor.set(startOfDay(new Date()));
+  }
+
+  jumpTo(iso: string): void {
+    const date = parseISODate(iso);
+    if (date) this.anchor.set(date);
+  }
+
+  /** Ver el día: desde el número de la celda o desde «+N más». */
+  openDayFor(iso: string): void {
+    const date = parseISODate(iso);
+    if (date) this.anchor.set(date);
+    this.view.set('day');
+  }
+
+  /* ─────────────────────────── Teclado ─────────────────────────── */
+
+  /** ← → periodos · T hoy · D/S/M vistas (como en Google Calendar). */
+  onKeydown(event: KeyboardEvent): void {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (this.isMealModalOpen() || this.isGoalsModalOpen() || this.isGenerateModalOpen()) return;
+
+    const target = event.target as HTMLElement | null;
+    if (target) {
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+    }
+
+    switch (event.key) {
+      case 'ArrowLeft':
+        this.shift(-1);
+        break;
+      case 'ArrowRight':
+        this.shift(1);
+        break;
+      case 't':
+      case 'T':
+        this.goToToday();
+        break;
+      case 'd':
+      case 'D':
+        this.setView('day');
+        break;
+      case 's':
+      case 'S':
+        this.setView('week');
+        break;
+      case 'm':
+      case 'M':
+        this.setView('month');
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+  }
+
+  /* ──────────────────────── Añadir / editar ──────────────────────── */
+
+  openAddModal(date: string, mealType: MealType): void {
+    this.draft = emptyDraft(date, mealType);
+    // Si la URL trae una pestaña válida (?mealTab=recipe) se respeta.
+    readTabParam(this.route, 'mealTab', ['custom', 'recipe'] as const, 'custom', (tab) =>
+      this.mealTab.set(tab)
+    );
+    this.isMealModalOpen.set(true);
+  }
+
+  openEditModal(meal: CalendarMeal): void {
+    this.draft = {
+      id: meal.id,
+      date: meal.date,
+      mealType: meal.mealType,
+      customMeal: meal.recipeId ? '' : (meal.customMeal ?? meal.title),
+      recipeId: meal.recipeId ?? '',
+      time: meal.time ?? '',
+      servings: meal.servings || 1,
+      notes: meal.notes ?? ''
+    };
+    this.mealTab.set(meal.recipeId ? 'recipe' : 'custom');
+    this.isMealModalOpen.set(true);
+  }
+
+  /** Cambia de pestaña y lo deja reflejado en la URL. */
+  switchAddMealTab(tab: 'custom' | 'recipe'): void {
+    this.mealTab.set(tab);
+    writeTabParam(this.router, this.route, 'mealTab', tab, 'custom');
+  }
+
+  closeMealModal(): void {
+    this.isMealModalOpen.set(false);
+    // El modal ya no está: la pestaña deja de tener sentido en la URL.
+    clearTabParam(this.router, this.route, 'mealTab');
+  }
+
+  draftValid(): boolean {
+    return this.mealTab() === 'recipe' ? !!this.draft.recipeId : !!this.draft.customMeal.trim();
+  }
+
+  saveMeal(): void {
+    if (!this.draftValid()) return;
+
+    const payload = {
+      date: this.draft.date,
+      mealType: this.draft.mealType,
+      customMeal: this.draft.customMeal.trim() || undefined,
+      recipeId: this.draft.recipeId || undefined,
+      time: this.draft.time || undefined,
+      servings: this.draft.servings || 1,
+      notes: this.draft.notes.trim() || undefined
+    };
+
+    const request = this.draft.id
+      ? this.calendarService.updateMeal(this.draft.id, {
+          customMeal: payload.customMeal,
+          recipeId: payload.recipeId,
+          time: payload.time,
+          servings: payload.servings,
+          notes: payload.notes
+        })
+      : this.calendarService.addMeal(payload);
+
+    request.subscribe({
+      next: (saved) => {
+        if (!saved) {
+          this.toastService.error('Error', 'No se pudo guardar la comida');
+          return;
+        }
+        const when = parseISODate(this.draft.date);
+        this.toastService.success(
+          this.draft.id ? 'Comida actualizada' : 'Comida añadida',
+          `${MEAL_TYPE_META[this.draft.mealType].label}${when ? ' · ' + labels.longDay(when) : ''}`
+        );
+        this.closeMealModal();
+      },
+      error: () => this.toastService.error('Error', 'No se pudo guardar la comida')
+    });
+  }
+
+  removeMeal(meal: CalendarMeal): void {
+    void this.removeMealById(meal.id, meal.title);
+  }
+
+  async removeMealById(id: string, title = 'esta comida'): Promise<void> {
     const accepted = await this.confirmService.confirm({
       title: 'Eliminar comida',
-      message: '¿Quitar esta comida de la planificación?',
+      message: `¿Quitar «${title}» de la planificación?`,
       confirmText: 'Eliminar'
     });
     if (!accepted) return;
 
-    this.calendarService.deleteMeal(meal.id);
+    this.calendarService.deleteMeal(id).subscribe(() => {
+      this.toastService.success('Quitada', `${title} ya no está en el calendario`);
+      if (this.isMealModalOpen()) this.closeMealModal();
+    });
   }
 
+  toggleMeal(meal: CalendarMeal): void {
+    this.calendarService.toggleComplete(meal);
+  }
+
+  /* ──────────────────────────── Objetivos ──────────────────────────── */
+
   openGoalsModal(): void {
+    const goals = this.calendarService.goals();
+    this.goalsDraft = {
+      type: goals?.type ?? this.selectedGoal() ?? 'balanced',
+      dailyCalories: goals?.dailyCalories ?? this.calendarService.targetCalories()
+    };
     this.isGoalsModalOpen.set(true);
   }
 
@@ -881,19 +1485,23 @@ export class CalendarComponent implements OnInit {
     this.isGoalsModalOpen.set(false);
   }
 
-  selectGoal(goal: GoalType | string): void {
-    this.selectedGoal.set(goal as GoalType);
-  }
-
   saveGoals(): void {
+    const type = (this.goalsDraft.type as GoalType) || 'balanced';
+    this.selectedGoal.set(type);
+    // Se parte de lo guardado: `PATCH /goals` reemplaza el objeto entero, así que
+    // las restricciones que ya estuvieran ahí se copian en vez de borrarse.
+    const previous = this.calendarService.goals();
     this.calendarService.updateGoals({
-      type: this.selectedGoal() || 'balanced',
-      dailyCalories: this.targetCalories,
-      restrictions: []
-    });
-    this.toastService.success('Guardado', 'Objetivos actualizados');
+      ...previous,
+      type,
+      dailyCalories: Number(this.goalsDraft.dailyCalories) || undefined,
+      restrictions: previous?.restrictions ?? []
+    }, toISODate(startOfWeek(this.anchor())));
+    this.toastService.success('Guardado', 'Objetivos de la semana actualizados');
     this.closeGoalsModal();
   }
+
+  /* ────────────────────────── Plan con IA ────────────────────────── */
 
   private tasteGoalApplied = false;
 
@@ -912,10 +1520,13 @@ export class CalendarComponent implements OnInit {
     if (this.tasteGoalApplied) return;
 
     if (!this.tasteService.isLoaded()) {
-      this.tasteService.load().subscribe({
-        next: () => this.applyTasteGoal(),
-        error: () => undefined
-      });
+      this.tasteService
+        .load()
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe({
+          next: () => this.applyTasteGoal(),
+          error: () => undefined
+        });
       return;
     }
 
@@ -942,33 +1553,61 @@ export class CalendarComponent implements OnInit {
   generateWeeklyPlan(): void {
     this.isGenerating.set(true);
 
-    const start = this.currentWeekStart();
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
+    // La IA planifica la semana del día ancla, vea lo que se vea.
+    const start = startOfWeek(this.anchor());
+    const end = addDays(start, 6);
 
-    const goals: any = {
-      type: this.generateOptions.goalType,
-      caloriesTarget: this.generateOptions.calories
+    const goals: { type: string; caloriesTarget?: number; customInstructions?: string } = {
+      type: this.generateOptions.goalType
     };
+    const calories = Number(this.generateOptions.calories);
+    if (calories > 0) goals.caloriesTarget = calories;
     if (this.generateOptions.goalType === 'custom' && this.generateOptions.customDescription.trim()) {
       goals.customInstructions = this.generateOptions.customDescription.trim();
     }
 
-    this.calendarService.generateWithAi({
-      startDate: start.toISOString().split('T')[0],
-      endDate: end.toISOString().split('T')[0],
-      goals
-    }).subscribe({
-      next: () => {
-        this.isGenerating.set(false);
-        this.toastService.success('¡Plan generado!', 'Tu semana ha sido planificada');
-        this.closeGenerateModal();
-        this.calendarService.loadCalendar();
-      },
-      error: () => {
-        this.isGenerating.set(false);
-        this.toastService.error('Error', 'No se pudo generar el plan');
-      }
-    });
+    this.calendarService
+      .generateWithAi({
+        startDate: toISODate(start),
+        endDate: toISODate(end),
+        goals
+      })
+      .subscribe({
+        next: (data) => {
+          this.isGenerating.set(false);
+          const saved = data?.saved;
+          if (!saved) {
+            this.toastService.error('Error', 'La IA no devolvió un plan válido');
+            return;
+          }
+          this.reload();
+          this.closeGenerateModal();
+          this.toastService.success(
+            'Plan guardado',
+            saved.created
+              ? `${saved.created} ${saved.created === 1 ? 'comida añadida' : 'comidas añadidas'}${
+                  saved.skipped ? ` · ${saved.skipped} huecos ya ocupados, intactos` : ''
+                }`
+              : 'La semana ya estaba cubierta: no había huecos que rellenar'
+          );
+        },
+        error: () => {
+          this.isGenerating.set(false);
+          this.toastService.error('Error', 'No se pudo generar el plan');
+        }
+      });
   }
+}
+
+function sum(days: CalendarDayView[], key: 'planned' | 'done' | 'calories'): number {
+  return days.reduce((total, day) => total + day[key], 0);
+}
+
+function isSameDayAsToday(date: Date): boolean {
+  const today = new Date();
+  return (
+    date.getDate() === today.getDate() &&
+    date.getMonth() === today.getMonth() &&
+    date.getFullYear() === today.getFullYear()
+  );
 }

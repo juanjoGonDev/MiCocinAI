@@ -1,65 +1,213 @@
-import { test, expect } from './fixtures';
+import { expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 
-test.describe('Calendar', () => {
+/**
+ * El calendario se ve en tres formatos (día / semana / mes) y lo que se pinta es
+ * lo que hay guardado. Estos tests cubren las dos cosas: la vista y la URL que la
+ * describe, y que una comida añadida desde la rejilla aparece en la rejilla
+ * (antes la cuadrícula se construía con huecos vacíos y no leía el servicio, así
+ * que nunca se veía nada).
+ */
+
+const isoOf = (date: Date): string =>
+  `${date.getFullYear()}-${`${date.getMonth() + 1}`.padStart(2, '0')}-${`${date.getDate()}`.padStart(2, '0')}`;
+
+const daysFromToday = (days: number): string => {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return isoOf(date);
+};
+
+/** Añade una comida escrita a mano por el modal, en el hueco que se le diga. */
+async function addMealThroughModal(page: import('@playwright/test').Page, dish: string): Promise<void> {
+  await page.locator('.meal-slot').first().click();
+  await expect(page.locator('.modal__title')).toContainText('Agregar Comida');
+  await page.fill('#meal-custom', dish);
+  await page.locator('app-modal').getByRole('button', { name: 'Añadir', exact: true }).click();
+  await expect(page.locator('.modal-overlay')).toHaveCount(0);
+}
+
+test.describe('Calendario', () => {
   test.beforeEach(async ({ page }) => {
     await registerAndGoto(page, '/calendar');
     await expect(page.locator('h1.calendar__title')).toBeVisible();
   });
 
-  test('should display calendar page', async ({ page }) => {
-    await expect(page.locator('h1.calendar__title')).toContainText('Planificación Semanal');
+  test('arranca en la vista de semana con la URL limpia', async ({ page }) => {
+    const views = page.locator('.cal-segment__btn');
+    await expect(views).toHaveCount(3);
+    await expect(page.locator('#cal-view-week')).toHaveAttribute('aria-selected', 'true');
+    await expect(page).not.toHaveURL(/view=/);
+
+    // Titulo del periodo: «14 – 20 de septiembre»
+    await expect(page.locator('h1.calendar__title')).toContainText(/\d{1,2} – \d{1,2} de/);
+
+    // Siete dias por cuatro franjas
+    await expect(page.locator('.cal-week .meal-slot')).toHaveCount(28);
   });
 
-  test('should show week navigation', async ({ page }) => {
-    await expect(page.getByRole('button', { name: '←' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Hoy' })).toBeVisible();
-    await expect(page.getByRole('button', { name: '→' })).toBeVisible();
+  test('el conmutador cambia la vista, viaja en la URL y sobrevive a recargar', async ({ page }) => {
+    await page.locator('#cal-view-month').click();
+    await expect(page).toHaveURL(/[?&]view=month/);
+    await expect(page.locator('.cal-cell').first()).toBeVisible();
+    const cells = await page.locator('.cal-cell').count();
+    expect(cells % 7).toBe(0);
+
+    await page.reload();
+    await expect(page.locator('#cal-view-month')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.cal-cell')).toHaveCount(cells);
+
+    await page.locator('#cal-view-day').click();
+    await expect(page).toHaveURL(/[?&]view=day/);
+    await expect(page.locator('.cal-band')).toHaveCount(4);
+
+    // Semana es la por defecto: vuelve a una URL sin parametro
+    await page.locator('#cal-view-week').click();
+    await expect(page).not.toHaveURL(/view=/);
   });
 
-  test('should show AI planning button', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /Planificar IA/ })).toBeVisible();
+  test('en el mes, pinchar el numero de un dia abre ese dia', async ({ page }) => {
+    await page.locator('#cal-view-month').click();
+    await expect(page.locator('.cal-cell.is-today')).toHaveCount(1);
+
+    const target = page.locator('.cal-cell:not(.is-outside) .cal-cell__num').nth(1);
+    const dayNumber = (await target.innerText()).trim();
+    await target.click();
+
+    await expect(page).toHaveURL(/[?&]view=day/);
+    await expect(page).toHaveURL(new RegExp(`[?&]date=\\d{4}-\\d{2}-${dayNumber.padStart(2, '0')}`));
+    await expect(page.locator('h1.calendar__title')).toContainText(dayNumber);
   });
 
-  test('should show a meal slot per day and meal type', async ({ page }) => {
-    // 7 dias x 4 tipos de comida (desayuno, almuerzo, cena, snack)
-    await expect(page.locator('.meal-slot')).toHaveCount(28);
+  test('lo que se añade desde un hueco se ve en la rejilla y sigue despues de recargar', async ({
+    page
+  }) => {
+    await addMealThroughModal(page, 'Tortilla de patatas');
+
+    const event = page.locator('.cal-event');
+    await expect(event).toHaveCount(1);
+    await expect(event).toContainText('Tortilla de patatas');
+
+    await page.reload();
+    await expect(page.locator('.cal-event')).toHaveCount(1);
+    await expect(page.locator('.cal-event__name')).toContainText('Tortilla de patatas');
+
+    // El resumen del periodo se entera
+    await expect(page.locator('.cal-strip__value').first()).toContainText(/1\s*\/\s*28/);
   });
 
-  test('should open add meal modal when clicking an empty slot', async ({ page }) => {
-    await page.locator('.meal-slot').first().click();
-    await expect(page.locator('.modal__title')).toContainText('Agregar Comida');
+  test('una comida se marca como hecha desde la propia rejilla', async ({ page }) => {
+    await addMealThroughModal(page, 'Pollo con arroz');
+
+    const event = page.locator('.cal-event');
+    await event.hover();
+    await event.getByRole('button', { name: 'Marcar como hecha' }).click();
+    await expect(event).toHaveAttribute('data-done', 'true');
+
+    await page.reload();
+    await expect(page.locator('.cal-event')).toHaveAttribute('data-done', 'true');
+    await expect(page.locator('.cal-strip__done')).toContainText('1 hecha');
   });
 
-  test('should switch between custom and recipe tabs in the meal modal', async ({ page }) => {
-    await page.locator('.meal-slot').first().click();
+  test('quitar una comida pasa por el dialogo de la app', async ({ page }) => {
+    await addMealThroughModal(page, 'Ensalada completa');
+    await expect(page.locator('.cal-event')).toHaveCount(1);
 
-    const tabs = page.locator('.add-meal-form__tabs button');
-    await expect(tabs.nth(0)).toContainText('Escribir');
-    await expect(tabs.nth(1)).toContainText('Receta');
+    const event = page.locator('.cal-event');
+    await event.hover();
+    await event.getByRole('button', { name: 'Quitar comida' }).click();
 
-    await tabs.nth(1).click();
-    await expect(page.locator('.modal-overlay')).toContainText('Selecciona una receta');
+    const dialog = page.locator('.confirm');
+    await expect(dialog).toContainText('Eliminar comida');
+    await dialog.getByRole('button', { name: 'Eliminar' }).click();
+
+    await expect(page.locator('.cal-event')).toHaveCount(0);
+    await page.reload();
+    await expect(page.locator('.cal-event')).toHaveCount(0);
   });
 
-  test('should open AI planning modal', async ({ page }) => {
+  test('la navegacion cambia de semana y «Hoy» vuelve a la actual', async ({ page }) => {
+    const title = page.locator('h1.calendar__title');
+    const currentLabel = (await title.innerText()).trim();
+
+    await page.getByRole('button', { name: 'Periodo siguiente' }).click();
+    await expect(title).not.toHaveText(currentLabel);
+    await expect(page).toHaveURL(new RegExp(`[?&]date=${daysFromToday(7)}`));
+
+    await page.getByRole('button', { name: 'Periodo anterior' }).click();
+    await expect(title).toHaveText(currentLabel);
+    await expect(page).not.toHaveURL(/date=/);
+
+    await page.getByRole('button', { name: 'Periodo siguiente' }).click();
+    await page.getByRole('button', { name: 'Hoy' }).click();
+    await expect(title).toHaveText(currentLabel);
+  });
+
+  test('el teclado mueve el calendario (flechas, T y D/S/M)', async ({ page }) => {
+    await page.keyboard.press('ArrowRight');
+    await expect(page).toHaveURL(new RegExp(`[?&]date=${daysFromToday(7)}`));
+
+    await page.keyboard.press('m');
+    await expect(page.locator('#cal-view-month')).toHaveAttribute('aria-selected', 'true');
+
+    await page.keyboard.press('t');
+    await expect(page).not.toHaveURL(/date=/);
+    await expect(page).toHaveURL(/view=month/);
+
+    // De vuelta a la semana: las flechas mueven de 7 en 7 dias
+    await page.keyboard.press('s');
+    await expect(page).not.toHaveURL(/view=/);
+    await page.keyboard.press('ArrowLeft');
+    await expect(page).toHaveURL(new RegExp(`[?&]date=${daysFromToday(-7)}`));
+  });
+
+  test('el selector de fecha salta a cualquier mes', async ({ page }) => {
+    await page.locator('.cal-jump input').fill('2026-12-24');
+    await expect(page).toHaveURL(/[?&]date=2026-12-24/);
+    // La semana que contiene el 24 de diciembre
+    await expect(page.locator('h1.calendar__title')).toContainText('diciembre');
+
+    await page.locator('#cal-view-month').click();
+    await expect(page.locator('h1.calendar__title')).toContainText('diciembre de 2026');
+  });
+
+  test('el plan de la IA anuncia la semana que va a cubrir', async ({ page }) => {
     await page.getByRole('button', { name: /Planificar IA/ }).click();
 
     const modal = page.locator('.modal-overlay');
     await expect(modal).toBeVisible();
     await expect(modal.locator('.modal__title')).toContainText('Planificar con IA');
-    await expect(modal).toContainText('Objetivo');
-    await expect(modal).toContainText('Calorías diarias');
+    await expect(modal).toContainText('La IA prepara la');
+    await expect(modal).toContainText('Rellena los huecos');
+    await expect(modal.locator('#gen-goal option')).not.toHaveCount(0);
+
+    await modal.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
   });
 
-  test('should navigate between weeks and back to today', async ({ page }) => {
-    await page.getByRole('button', { name: '→' }).click();
-    await expect(page.locator('h1.calendar__title')).toBeVisible();
+  test('los objetivos se guardan sobre la semana que se esta viendo', async ({ page }) => {
+    await page.getByRole('button', { name: /Objetivo/ }).click();
+    const modal = page.locator('.modal-overlay');
+    await expect(modal.locator('.modal__title')).toContainText('Objetivos Nutricionales');
 
-    await page.getByRole('button', { name: '←' }).click();
-    await expect(page.locator('h1.calendar__title')).toBeVisible();
+    await modal.locator('.goal-option', { hasText: 'Variada' }).click();
+    await modal.fill('#goals-calories', '2100');
+    await modal.getByRole('button', { name: 'Guardar' }).click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Hoy' }).click();
-    await expect(page.locator('.meal-slot')).toHaveCount(28);
+    // La pastilla de la cabecera refleja el objetivo guardado...
+    await expect(page.locator('.cal-pill', { hasText: 'Objetivo' })).toContainText(/variada/i); // GOAL_TYPE_LABELS: «Comida variada»
+    // ...y la vista de dia usa las calorias nuevas como denominador
+    await page.locator('#cal-view-day').click();
+    await expect(page.locator('.cal-day__stat-value').first()).toContainText(/2.100/);
+  });
+
+  test('la pestaña Receta elige del recetario en lugar de escribir el plato', async ({ page }) => {
+    await page.locator('.meal-slot').first().click();
+    await page.locator('.meal-form__tabs button', { hasText: 'Receta' }).click();
+    await expect(page.locator('.modal-overlay')).toContainText('Selecciona una receta');
+
+    // Sin receta elegida no se puede guardar
+    await expect(page.locator('app-modal').getByRole('button', { name: 'Añadir', exact: true })).toBeDisabled();
   });
 });

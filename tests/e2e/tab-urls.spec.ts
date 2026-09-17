@@ -84,7 +84,7 @@ test.describe('Pestañas y URL', () => {
     await page.locator('.meal-slot').first().click();
     await expect(page.locator('.modal__title')).toContainText('Agregar Comida');
 
-    await page.locator('.add-meal-form__tabs button', { hasText: 'Receta' }).click();
+    await page.locator('.meal-form__tabs button', { hasText: 'Receta' }).click();
     await expect(page.locator('.modal-overlay')).toContainText('Selecciona una receta');
     await expect(page).toHaveURL(/[?&]mealTab=recipe/);
 
