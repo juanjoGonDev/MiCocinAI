@@ -204,7 +204,9 @@ test.describe('Calendario', () => {
     await expect(page.locator('.cal-pill', { hasText: 'Objetivo' })).toContainText(/variada/i); // GOAL_TYPE_LABELS: «Comida variada»
     // ...y la vista de dia usa las calorias nuevas como denominador
     await page.locator('#cal-view-day').click();
-    await expect(page.locator('.cal-day__stat-value').first()).toContainText(/2.100/);
+    // El separador de miles lo decide el ICU del navegador: en un Chromium con
+    // datos completos es «2.100» y con los recortados, «2100». Se admite cualquiera.
+    await expect(page.locator('.cal-day__stat-value').first()).toContainText(/2\\D?100/);
   });
 
   test('la pestaña Receta elige del recetario en lugar de escribir el plato', async ({ page }) => {
