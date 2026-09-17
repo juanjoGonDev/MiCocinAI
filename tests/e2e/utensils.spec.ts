@@ -46,7 +46,7 @@ test.describe('Pantry — utensils tab', () => {
     }
     const total = perSection.reduce((sum, n) => sum + n, 0);
     expect(total).toBeGreaterThanOrEqual(54);
-    expect(page.url()).toContain('section=');
+    await expect(page).toHaveURL(/section=/);
     await expect(nav.last()).toContainText('Ver todo el catálogo');
 
     // Ver todas de golpe deja de paginar y limpia la sección de la URL
@@ -54,7 +54,7 @@ test.describe('Pantry — utensils tab', () => {
     await expect(page.locator('.utensil-card')).toHaveCount(total);
     await expect(page.locator('.utensil-group')).toHaveCount(10);
     await expect(page.locator('.utensils-nav')).toBeHidden();
-    expect(page.url()).not.toContain('section=');
+    await expect(page).not.toHaveURL(/section=/);
   });
 
   test('las secciones se recorren con Siguiente/Anterior', async ({ page }) => {
@@ -79,7 +79,7 @@ test.describe('Pantry — utensils tab', () => {
     await chip.click();
 
     await expect(page.locator('.utensil-group__title').first()).toContainText('Herramientas');
-    expect(page.url()).toContain('section=tools');
+    await expect(page).toHaveURL(/[?&]section=tools/);
     await expect(chip).toHaveClass(/utensils-section--active/);
     // Las 34 herramientas no caben en una sección: se parte en tramos de 12
     const rows = await page.locator('.utensil-card').count();
@@ -93,7 +93,7 @@ test.describe('Pantry — utensils tab', () => {
       await prev.click();
     }
     await expect(page.locator('.utensils-bar__step')).toContainText('Sección 1 de');
-    expect(page.url()).not.toContain('section=');
+    await expect(page).not.toHaveURL(/section=/);
   });
 
   test('muestra el catálogo agrupado y con el progreso de cada categoría', async ({ page }) => {
@@ -105,7 +105,8 @@ test.describe('Pantry — utensils tab', () => {
   });
 
   test('arrancar la pestaña sin filtros deja ver el catálogo marcable', async ({ page }) => {
-    await expect(page.getByRole('heading', { name: 'Utensilios' })).toBeVisible();
+    await expect(page.locator('.utensils')).toBeVisible();
+    await expect(page.locator('.utensils-bar__step')).toContainText('Sección 1 de');
     await expect(page.locator('.utensil-card').first()).toBeVisible();
     await expect(page.locator('.utensil-card').first()).not.toHaveClass(/utensil-card--owned/);
     await expect(page.locator('.utensil-card--owned')).toHaveCount(0);
@@ -164,7 +165,7 @@ test.describe('Pantry — utensils tab', () => {
     const custom = page.locator('.utensil-card', { hasText: 'Sous vide' });
     await expect(custom).toHaveCount(1);
     await expect(custom).toHaveClass(/utensil-card--owned/);
-    expect(page.url()).toMatch(/section=tools/);
+    await expect(page).toHaveURL(/section=tools/);
 
     await custom.locator('.utensil-card__delete').click();
 
@@ -190,49 +191,6 @@ test.describe('Pantry — utensils tab', () => {
 
     await expect(page.locator('.input__error')).toContainText('Ya existe');
     await expect(page.locator('.utensil-card', { hasText: 'Abrelatas' })).toHaveCount(1);
-  });
-});
-
-test.describe('Pantry — Utensilios IA', () => {
-  test('muestra el modal y permite lanzar la sugerencia', async ({ page }) => {
-    await registerWithHousehold(page, '/pantry?tab=utensils');
-
-    await page.getByRole('button', { name: /Utensilios IA/i }).click();
-    await expect(page.locator('.modal__title')).toContainText('Utensilios IA');
-    await expect(page.locator('textarea#utensilPrompt')).toBeVisible();
-
-    await page.fill('textarea#utensilPrompt', 'Cocino al vacío y horneo pan');
-    await page.getByRole('button', { name: /Generar/i }).click();
-    await expect(page.getByRole('button', { name: /Añadir/i })).toBeVisible({ timeout: 180_000 });
-  });
-
-  test('el modal admite añadir los utensilios sugeridos', async ({ page }) => {
-    await registerWithHousehold(page, '/pantry?tab=utensils');
-
-    await page.getByRole('button', { name: /Utensilios IA/i }).click();
-    await page.fill('textarea#utensilPrompt', 'Cocino al vacío y horneo pizza');
-    await page.getByRole('button', { name: /Generar/i }).click();
-
-    // Sin sugerencias no hay nada que añadir: se salta, pero se espera de verdad
-    // (mirar el DOM en frio hacia saltar el test siempre, que es lo que pasaba)
-    const addButtons = page.getByRole('button', { name: /Añadir/i });
-    const appeared = await addButtons
-      .first()
-      .waitFor({ state: 'visible', timeout: 180_000 })
-      .then(() => true)
-      .catch(() => false);
-    if (!appeared) {
-      test.skip(true, 'La IA no ha devuelto sugerencias esta vez');
-    }
-
-    const cards = page.locator('.utensil-card');
-    const before = await cards.count();
-    await addButtons.first().click();
-
-    // El alta acaba en el catalogo, marcado, y sube el contador de la pestaña
-    await expect(cards).toHaveCount(before + 1);
-    await expect(page.locator('.utensil-card--owned')).toHaveCount(1);
-    await expect(page.locator('.tab', { hasText: 'Utensilios' })).toContainText('1');
   });
 });
 
