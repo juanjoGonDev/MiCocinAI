@@ -210,16 +210,29 @@ test.describe('Pantry — Utensilios IA', () => {
     await registerWithHousehold(page, '/pantry?tab=utensils');
 
     await page.getByRole('button', { name: /Utensilios IA/i }).click();
+    await page.fill('textarea#utensilPrompt', 'Cocino al vacío y horneo pizza');
+    await page.getByRole('button', { name: /Generar/i }).click();
+
+    // Sin sugerencias no hay nada que añadir: se salta, pero se espera de verdad
+    // (mirar el DOM en frio hacia saltar el test siempre, que es lo que pasaba)
     const addButtons = page.getByRole('button', { name: /Añadir/i });
-    if ((await addButtons.count()) === 0) {
-      test.skip(true, 'La IA ha devuelto cero sugerencias esta vez');
+    const appeared = await addButtons
+      .first()
+      .waitFor({ state: 'visible', timeout: 180_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!appeared) {
+      test.skip(true, 'La IA no ha devuelto sugerencias esta vez');
     }
 
     const cards = page.locator('.utensil-card');
     const before = await cards.count();
     await addButtons.first().click();
+
+    // El alta acaba en el catalogo, marcado, y sube el contador de la pestaña
     await expect(cards).toHaveCount(before + 1);
-    await expect(cards.first()).toHaveClass(/utensil-card--owned/);
+    await expect(page.locator('.utensil-card--owned')).toHaveCount(1);
+    await expect(page.locator('.tab', { hasText: 'Utensilios' })).toContainText('1');
   });
 });
 

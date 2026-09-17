@@ -24,13 +24,19 @@ function waitAfterRegister(page: Page, timeout: number): Promise<boolean> {
  */
 async function submitRegister(page: Page, name: string, email: string): Promise<boolean> {
   await page.goto('/auth/register');
-  if (
-    await page
-      .locator('input#name')
-      .isVisible()
-      .catch(() => false)
-  ) {
-    await page.fill('input#name', name);
+
+  // El formulario hay que ESPERARLO: en el runner de CI el SPA aun se esta
+  // pintando cuando termina el 'load', y mirar una sola vez (isVisible) perdia
+  // el envio entero: la prueba no registraba a nadie y se comia sus 45s de
+  // espera, uno detras de otro, hasta convertir 5 fallos reales en 69.
+  const form = page.locator('input#name');
+  const hasForm = await form
+    .waitFor({ state: 'visible', timeout: 15000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (hasForm) {
+    await form.fill(name);
     await page.fill('input#email', email);
     await page.fill('input#password', TEST_PASSWORD);
     await page.click('button[type="submit"]');
