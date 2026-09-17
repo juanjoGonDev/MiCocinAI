@@ -3,11 +3,13 @@ import { nanoid } from 'nanoid';
 import { getDatabase } from '../config/database.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import {
+  calendarFilterSchema,
   createCalendarSchema,
   addMealSchema,
   updateMealSchema,
   updateGoalsSchema
 } from '../schemas/calendar.schema.js';
+import { ensureWeekCalendar } from '../utils/week-calendar.js';
 import type { AppEnv } from '../types/hono-env.js';
 
 const calendarRoutes = new Hono<AppEnv>();
@@ -54,6 +56,66 @@ calendarRoutes.get('/', async (c) => {
   });
 });
 
+// GET /api/calendar/range?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+//
+// Lo que necesita la rejilla (mes / semana / dia): TODAS las comidas del rango
+// visible. `GET /api/calendar` solo devuelve el ultimo calendario —una semana—,
+// asi que en vista de mes todo lo demas salia vacio pase lo que pase.
+calendarRoutes.get('/range', async (c) => {
+  const userId = c.get('userId');
+  const today = new Date().toISOString().slice(0, 10);
+  const parsed = calendarFilterSchema.safeParse({
+    startDate: c.req.query('startDate') ?? undefined,
+    endDate: c.req.query('endDate') ?? undefined
+  });
+  if (!parsed.success) {
+    return c.json({ success: false, message: 'startDate y endDate deben tener formato YYYY-MM-DD' }, 400);
+  }
+
+  // Sin rango, la semana actual: la ruta sigue siendo util a mano.
+  const startDate = parsed.data.startDate ?? today;
+  const endDate = parsed.data.endDate ?? today;
+  if (startDate > endDate) {
+    return c.json({ success: false, message: 'startDate debe ser anterior a endDate' }, 400);
+  }
+
+  const db = getDatabase();
+  const meals = db.prepare(`
+    SELECT m.*, r.name AS recipe_name, r.calories AS recipe_calories
+    FROM meals m
+    LEFT JOIN recipes r ON r.id = m.recipe_id
+    WHERE m.date BETWEEN ? AND ?
+      AND m.calendar_id IN (SELECT id FROM weekly_calendars WHERE user_id = ?)
+    ORDER BY m.date,
+      CASE m.meal_type
+        WHEN 'breakfast' THEN 1
+        WHEN 'lunch' THEN 2
+        WHEN 'dinner' THEN 3
+        WHEN 'snack' THEN 4
+      END,
+      m.time
+  `).all(startDate, endDate, userId);
+
+  // Objetivos de la semana que se esta mirando (si no existe, los ultimos).
+  const goalsRow =
+    (db.prepare(`
+      SELECT goals FROM weekly_calendars
+      WHERE user_id = ? AND week_start <= ? AND week_end >= ?
+      ORDER BY week_start DESC LIMIT 1
+    `).get(userId, startDate, endDate) as any) ||
+    (db.prepare('SELECT goals FROM weekly_calendars WHERE user_id = ? ORDER BY week_start DESC LIMIT 1')
+      .get(userId) as any);
+
+  let goals: Record<string, unknown> = {};
+  try {
+    goals = JSON.parse(goalsRow?.goals || '{}');
+  } catch {
+    goals = {};
+  }
+
+  return c.json({ success: true, data: { startDate, endDate, goals, meals } });
+});
+
 // POST /api/calendar
 calendarRoutes.post('/', async (c) => {
   const userId = c.get('userId');
@@ -61,28 +123,18 @@ calendarRoutes.post('/', async (c) => {
   const input = createCalendarSchema.parse(body);
 
   const db = getDatabase();
-  const id = nanoid();
 
-  const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as any;
+  // Una fila por semana y usuario: si la semana ya tiene calendario, se reutiliza
+  // (antes cada POST creaba un duplicado y `GET /api/calendar` enseñaba otro).
+  const calendar = ensureWeekCalendar(db, userId, input.weekStart, input.goals);
+  if (!calendar) {
+    return c.json({ success: false, message: 'weekStart debe ser una fecha real YYYY-MM-DD' }, 400);
+  }
 
-  // Calculate week end (6 days after start)
-  const startDate = new Date(input.weekStart);
-  const endDate = new Date(startDate);
-  endDate.setDate(endDate.getDate() + 6);
-
-  db.prepare(`
-    INSERT INTO weekly_calendars (id, household_id, user_id, week_start, week_end, goals)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(
-    id,
-    user?.household_id || id,
-    userId,
-    input.weekStart,
-    endDate.toISOString().split('T')[0],
-    JSON.stringify(input.goals || {})
-  );
-
-  const calendar = db.prepare('SELECT * FROM weekly_calendars WHERE id = ?').get(id);
+  if (input.goals) {
+    db.prepare('UPDATE weekly_calendars SET goals = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(JSON.stringify(input.goals), calendar.id);
+  }
 
   return c.json({ success: true, data: calendar }, 201);
 });
@@ -96,27 +148,13 @@ calendarRoutes.post('/meals', async (c) => {
   const db = getDatabase();
   const id = nanoid();
 
-  // Get or create calendar for the week
-  const mealDate = new Date(input.date);
-  const weekStart = new Date(mealDate);
-  weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
-
-  let calendar = db.prepare(`
-    SELECT * FROM weekly_calendars 
-    WHERE user_id = ? AND week_start = ?
-  `).get(userId, weekStart.toISOString().split('T')[0]) as any;
-
+  // La comida vive en el calendario de SU semana, creándolo si es la primera que
+  // se guarda. El lunes se calcula sobre la cadena YYYY-MM-DD: con `new Date(iso)`
+  // la medianoche UTC cae en el día anterior según la zona horaria y abría la
+  // semana equivocada.
+  const calendar = ensureWeekCalendar(db, userId, input.date);
   if (!calendar) {
-    const calendarId = nanoid();
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekEnd.getDate() + 6);
-
-    db.prepare(`
-      INSERT INTO weekly_calendars (id, household_id, user_id, week_start, week_end)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(calendarId, '', userId, weekStart.toISOString().split('T')[0], weekEnd.toISOString().split('T')[0]);
-
-    calendar = db.prepare('SELECT * FROM weekly_calendars WHERE id = ?').get(calendarId);
+    return c.json({ success: false, message: 'date debe ser una fecha real YYYY-MM-DD' }, 400);
   }
 
   db.prepare(`
@@ -182,18 +220,23 @@ calendarRoutes.patch('/goals', async (c) => {
 
   const db = getDatabase();
 
-  const calendar = db.prepare(`
-    SELECT * FROM weekly_calendars WHERE user_id = ? ORDER BY week_start DESC LIMIT 1
-  `).get(userId) as any;
-
+  // `weekStart` es opcional: el calendario que se está mirando, no «el último».
+  // Antes, si la semana no tenía fila, respondía 404 y la interfaz lo enseñaba
+  // como un guardado correcto igualmente.
+  const { weekStart } = body as { weekStart?: string };
+  const calendar = ensureWeekCalendar(
+    db,
+    userId,
+    weekStart ?? new Date().toISOString().slice(0, 10)
+  );
   if (!calendar) {
-    return c.json({ success: false, message: 'No calendar found' }, 404);
+    return c.json({ success: false, message: 'weekStart debe ser una fecha real YYYY-MM-DD' }, 400);
   }
 
   db.prepare('UPDATE weekly_calendars SET goals = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .run(JSON.stringify(input), calendar.id);
 
-  return c.json({ success: true, message: 'Goals updated' });
+  return c.json({ success: true, message: 'Goals updated', data: { weekStart: calendar.week_start } });
 });
 
 export { calendarRoutes };

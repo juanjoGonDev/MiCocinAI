@@ -63,7 +63,11 @@ export const generateWeeklyPlanSchema = z.object({
     type: z.string(),
     caloriesTarget: z.number().positive().optional(),
     proteinTarget: z.number().positive().optional(),
-    restrictions: z.array(z.string()).optional().default([])
+    restrictions: z.array(z.string()).optional().default([]),
+    // El objetivo 'custom' del onboarding/planificador se escribe aquí. Zod
+    // recorta las claves desconocidas: sin declararlo, la descripción del
+    // usuario llegaba al front pero nunca al prompt.
+    customInstructions: z.string().max(2000).optional()
   }),
   availableIngredients: z.array(z.string()).optional().default([]),
   householdPreferences: z.object({

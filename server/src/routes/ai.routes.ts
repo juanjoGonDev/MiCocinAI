@@ -13,6 +13,7 @@ import {
 import type { AppEnv } from '../types/hono-env.js';
 
 import { hasTasteProfile, readTasteProfile, tastePromptLines } from '../utils/taste-profile.js';
+import { persistWeeklyPlan } from '../utils/weekly-plan.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
 
@@ -382,7 +383,7 @@ aiRoutes.post('/plan-week', async (c) => {
 
 Del ${input.startDate} al ${input.endDate}
 Objetivo: ${input.goals.type}
-${input.goals.caloriesTarget ? `Calorías diarias objetivo: ${input.goals.caloriesTarget}` : ''}
+${input.goals.caloriesTarget ? `Calorías diarias objetivo: ${input.goals.caloriesTarget}` : ''}${input.goals.customInstructions ? `\nIndicaciones del usuario (prioritarias): ${input.goals.customInstructions}` : ''}
 ${input.availableIngredients.length > 0 ? `Ingredientes disponibles: ${input.availableIngredients.join(', ')}` : ''}
 ${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}` : ''}${tasteBlock}
 
@@ -414,7 +415,18 @@ Responde SOLO con un JSON válido con esta estructura:
     }
 
     const plan = JSON.parse(jsonMatch[0]);
-    return c.json({ success: true, data: plan });
+
+    // El plan se guarda en la semana pedida: si no, «Planificar con IA» se
+    // quedaba en un toast de éxito sobre un calendario vacío.
+    const saved = persistWeeklyPlan(db, {
+      userId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      goals: input.goals,
+      plan
+    });
+
+    return c.json({ success: true, data: { ...plan, saved } });
   } catch (error: any) {
     return c.json({ success: false, message: error.message }, 500);
   }

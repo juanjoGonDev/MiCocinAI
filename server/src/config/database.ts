@@ -180,7 +180,10 @@ async function runMigrations(db: Database.Database): Promise<void> {
     -- Weekly calendar table
     CREATE TABLE IF NOT EXISTS weekly_calendars (
       id TEXT PRIMARY KEY,
-      household_id TEXT NOT NULL,
+      /* El calendario es de la persona; el hogar se apunta cuando lo hay. No
+         puede ser NOT NULL con FK a households: quien se registra sin crear un
+         hogar no podría tener ni una sola comida guardada. */
+      household_id TEXT,
       user_id TEXT NOT NULL,
       week_start DATE NOT NULL,
       week_end DATE NOT NULL,
@@ -258,6 +261,50 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
   addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
   addColumnIfMissing('household_members', 'permissions', 'TEXT DEFAULT \'{}\'');
+
+  // weekly_calendars.household_id nacio NOT NULL con FK a households, y las rutas
+  // metían '' para las cuentas sin hogar: la FK lo rechaza (foreign_keys = ON),
+  // así que la primera comida de la semana devolvía 500. Se reconstruye la tabla
+  // para admitir NULL, que es lo que significa «calendario personal».
+  const householdColumn = (
+    db.prepare('PRAGMA table_info(weekly_calendars)').all() as { name: string; notnull: number }[]
+  ).find((column) => column.name === 'household_id');
+  if (householdColumn?.notnull) {
+    // PRAGMA foreign_keys no se puede tocar dentro de una transaccion.
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE weekly_calendars_personal (
+            id TEXT PRIMARY KEY,
+            household_id TEXT,
+            user_id TEXT NOT NULL,
+            week_start DATE NOT NULL,
+            week_end DATE NOT NULL,
+            goals TEXT DEFAULT '{}',
+            generated_by TEXT DEFAULT 'user',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (household_id) REFERENCES households(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+          );
+
+          INSERT INTO weekly_calendars_personal
+            SELECT id, NULLIF(household_id, ''), user_id, week_start, week_end, goals,
+                   generated_by, created_at, updated_at
+            FROM weekly_calendars;
+
+          DROP TABLE weekly_calendars;
+          ALTER TABLE weekly_calendars_personal RENAME TO weekly_calendars;
+        `);
+      })();
+      console.log('[DB] weekly_calendars.household_id admite NULL (calendarios personales)');
+    } catch (error) {
+      console.error('[DB] No se pudo relajar weekly_calendars.household_id:', error);
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+  }
 
   // Backfill: los hogares creados antes del catalogo no tienen ni
   // ingredientes sugeridos ni utensilios que marcar.
