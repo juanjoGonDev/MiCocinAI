@@ -206,7 +206,7 @@ test.describe('Calendario', () => {
     await page.locator('#cal-view-day').click();
     // El separador de miles lo decide el ICU del navegador: en un Chromium con
     // datos completos es «2.100» y con los recortados, «2100». Se admite cualquiera.
-    await expect(page.locator('.cal-day__stat-value').first()).toContainText(/2\\D?100/);
+    await expect(page.locator('.cal-day__stat-value').first()).toContainText(/2\D?100/);
   });
 
   test('la pestaña Receta elige del recetario en lugar de escribir el plato', async ({ page }) => {
