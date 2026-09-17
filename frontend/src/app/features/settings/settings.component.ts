@@ -1,6 +1,5 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
 import { ThemeService, Theme } from '../../core/services/theme.service';
 import { I18nService, Language } from '../../core/services/i18n.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
@@ -13,7 +12,7 @@ interface Option<T extends string> {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, TranslatePipe, RouterLink],
+  imports: [CommonModule, TranslatePipe],
   template: `
     <div class="settings-page">
       <h1 class="settings-title">{{ 'settings.title' | t }}</h1>
@@ -49,22 +48,6 @@ interface Option<T extends string> {
             {{ opt.labelKey | t }}
           </button>
         </div>
-      </section>
-
-      <!--
-        Gustos, alergias y objetivo ya no viven aqui: la configuracion habla de
-        la app (tema, idioma) y lo del comensal tiene su seccion, con sus
-        pestañas. El enlace existe solo para que se sepa donde esta.
-      -->
-      <section class="settings-group">
-        <div class="settings-group__head">
-          <h2 class="settings-group__title">🥗 Preferencias</h2>
-          <a class="settings-group__link" routerLink="/preferences">Ver preferencias</a>
-        </div>
-        <p class="settings-hint">
-          Alergias, gustos y objetivo: lo que tiene en cuenta la IA al cocinar. Se pregunta al
-          registrarse y se edita en su propia sección.
-        </p>
       </section>
 
     </div>
@@ -142,16 +125,6 @@ interface Option<T extends string> {
       margin: 0;
     }
 
-    .settings-group__head {
-      display: flex; align-items: baseline; justify-content: space-between;
-      gap: var(--space-3); flex-wrap: wrap;
-    }
-    .settings-group__link {
-      font-size: var(--text-xs);
-      color: var(--primary);
-      text-decoration: none;
-      &:hover { text-decoration: underline; }
-    }
   `]
 })
 export class SettingsComponent {

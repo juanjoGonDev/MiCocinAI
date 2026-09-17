@@ -10,15 +10,23 @@ test.describe('Preferencias', () => {
   test('vive fuera de la configuración de la app', async ({ page }) => {
     await registerUser(page, 'Pref Tester');
 
-    // Ajustes ya no mezcla: solo habla de la app y enlaza a lo del comensal
+    // Configuracion: solo lo de la app (tema e idioma), sin ni un control del
+    // comensal ni una tarjeta que lo recuerde
     await page.goto('/settings');
     await expect(page.locator('.settings-title')).toBeVisible();
+    await expect(page.locator('.settings-group')).toHaveCount(2);
+    // sobre el contenedor, no sobre '.settings-group': con dos elementos la
+    // aserción negada violaría el modo estricto de Playwright
+    await expect(page.locator('.settings-page')).not.toContainText('Preferencias');
     await expect(page.locator('app-chip-select')).toHaveCount(0);
     await expect(page.locator('.preferences__goal')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Ver preferencias' })).toBeVisible();
 
-    await page.getByRole('link', { name: 'Ver preferencias' }).click();
-    await expect(page).toHaveURL(/\/preferences/);
+    // Se entra por la navegacion de siempre, no por un apaño en Ajustes
+    const entry = page.locator('.sidebar__item', { hasText: 'Preferencias' });
+    await expect(entry).toHaveCount(1);
+    await expect(entry).toHaveAttribute('href', /\/preferences/);
+
+    await page.goto('/preferences');
     await expect(page.locator('.preferences__title')).toContainText('Preferencias');
   });
 
