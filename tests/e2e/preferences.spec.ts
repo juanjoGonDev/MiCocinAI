@@ -15,16 +15,17 @@ test.describe('Preferencias', () => {
     await page.goto('/settings');
     await expect(page.locator('.settings-title')).toBeVisible();
     await expect(page.locator('.settings-group')).toHaveCount(2);
-    // sobre el contenedor, no sobre '.settings-group': con dos elementos la
-    // aserción negada violaría el modo estricto de Playwright
-    await expect(page.locator('.settings-page')).not.toContainText('Preferencias');
+    // La tarjeta de acceso rapido se fue: no queda ni su enlace
+    await expect(page.locator('.settings-group__link')).toHaveCount(0);
     await expect(page.locator('app-chip-select')).toHaveCount(0);
     await expect(page.locator('.preferences__goal')).toHaveCount(0);
 
-    // Se entra por la navegacion de siempre, no por un apaño en Ajustes
-    const entry = page.locator('.sidebar__item', { hasText: 'Preferencias' });
-    await expect(entry).toHaveCount(1);
-    await expect(entry).toHaveAttribute('href', /\/preferences/);
+    // Se entra por la navegacion de siempre. Por href y no por texto: el label
+    // pasa por el pipe de i18n (es/en) y en CI el idioma resuelto no siempre es
+    // el castellano en el primer render.
+    const entry = page.locator('.sidebar__item[href="/preferences"]');
+    await expect(entry).toHaveCount(1, { timeout: 20000 });
+    await expect(entry).toContainText(/Preferen/i);
 
     await page.goto('/preferences');
     await expect(page.locator('.preferences__title')).toContainText('Preferencias');
