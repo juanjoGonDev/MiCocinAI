@@ -146,8 +146,6 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await expect(page.locator('h1.calendar__title')).toBeVisible();
     await page.getByRole('button', { name: /Planificar IA/ }).click();
 
-    await expect(page.locator('.modal-overlay select.form-select').first()).toHaveValue(
-      'muscle-gain'
-    );
+    await expect(page.locator('#gen-goal')).toHaveValue('muscle-gain');
   });
 });

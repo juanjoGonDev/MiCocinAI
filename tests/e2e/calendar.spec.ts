@@ -196,7 +196,7 @@ test.describe('Calendario', () => {
     await expect(modal.locator('.modal__title')).toContainText('Objetivos Nutricionales');
 
     await modal.locator('.goal-option', { hasText: 'Variada' }).click();
-    await modal.fill('#goals-calories', '2100');
+    await modal.locator('#goals-calories').fill('2100');
     await modal.getByRole('button', { name: 'Guardar' }).click();
     await expect(page.locator('.modal-overlay')).toHaveCount(0);
 

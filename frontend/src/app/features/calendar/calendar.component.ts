@@ -1586,7 +1586,9 @@ export class CalendarComponent implements OnInit {
             'Plan guardado',
             saved.created
               ? `${saved.created} ${saved.created === 1 ? 'comida añadida' : 'comidas añadidas'}${
-                  saved.skipped ? ` · ${saved.skipped} huecos ya ocupados, intactos` : ''
+                  saved.skipped
+                    ? ` · ${saved.skipped === 1 ? '1 hueco ya ocupado, intacto' : `${saved.skipped} huecos ya ocupados, intactos`}`
+                    : ''
                 }`
               : 'La semana ya estaba cubierta: no había huecos que rellenar'
           );
