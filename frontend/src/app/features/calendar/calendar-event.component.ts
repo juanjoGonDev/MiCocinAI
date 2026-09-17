@@ -9,6 +9,10 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
  * encima. `row` (mes): una línea con punto de color —en Google Calendar el mes
  * no da para más— y sin acciones, que irían dentro del propio botón.
  *
+ * Los clicks se cortan aqui (`stopPropagation`): en la vista de mes la celda
+ * entera es boton de «añadir», y sin eso pulsar una comida abria a la vez el
+ * dialogo de edicion y el de añadir.
+ *
  * El color va por tipo de comida (desayuno/almuerzo/cena/merienda) igual que los
  * calendarios de colores de Google: es la única seña que hace escaneable una
  * rejilla de 40 celdas sin ponerle texto extra.
@@ -28,7 +32,7 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
       type="button"
       class="cal-event__open"
       [title]="tooltip()"
-      (click)="open.emit()"
+      (click)="$event.stopPropagation(); open.emit()"
     >
       <span class="cal-event__marker" aria-hidden="true"></span>
       <span class="cal-event__time" *ngIf="meal?.time">{{ meal!.time }}</span>
@@ -42,7 +46,7 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
         class="cal-event__action"
         [attr.aria-label]="meal?.completed ? 'Quitar de hechas' : 'Marcar como hecha'"
         [title]="meal?.completed ? 'Quitar de hechas' : 'Marcar como hecha'"
-        (click)="toggle.emit()"
+        (click)="$event.stopPropagation(); toggle.emit()"
       >
         ✓
       </button>
@@ -51,7 +55,7 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
         class="cal-event__action cal-event__action--danger"
         aria-label="Quitar comida"
         title="Quitar comida"
-        (click)="remove.emit()"
+        (click)="$event.stopPropagation(); remove.emit()"
       >
         ×
       </button>
