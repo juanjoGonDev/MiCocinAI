@@ -117,8 +117,13 @@ test.describe('Calendario', () => {
     await event.hover();
     await event.getByRole('button', { name: 'Quitar comida' }).click();
 
+    // El titulo lo luce el modal que envuelve el dialogo; el mensaje, el propio
+    // componente: se comprueba el mensaje, que es lo que habla de la comida concreta.
     const dialog = page.locator('.confirm');
-    await expect(dialog).toContainText('Eliminar comida');
+    await expect(page.locator('.modal__title')).toContainText('Eliminar comida');
+    await expect(dialog.locator('.confirm__message')).toContainText(
+      'Quitar «Ensalada completa» de la planificación'
+    );
     await dialog.getByRole('button', { name: 'Eliminar' }).click();
 
     await expect(page.locator('.cal-event')).toHaveCount(0);
