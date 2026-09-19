@@ -45,8 +45,11 @@ test.describe('Pestañas y URL', () => {
   test('las pestañas de Preferencias también viajan en la URL', async ({ page }) => {
     await registerAndGoto(page, '/preferences', 'urls-prefs');
 
-    await expect(page.locator('.tab--active')).toContainText('Alergias');
+    await expect(page.locator('.tab--active')).toContainText('Perfil');
     await expect(page).not.toHaveURL(/tab=/);
+
+    await page.locator('.tab', { hasText: 'Alergias' }).click();
+    await expect(page).toHaveURL(/tab=allergies/);
 
     await page.locator('.tab', { hasText: 'Objetivo' }).click();
     await expect(page).toHaveURL(/[?&]tab=goal/);

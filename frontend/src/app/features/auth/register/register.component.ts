@@ -50,20 +50,10 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
         helper="Mínimo 6 caracteres, una mayúscula y un número"
       ></app-input>
 
-      <div class="register-form__field">
-        <label class="register-form__label">Nivel de cocina</label>
-        <div class="register-form__options">
-          <button
-            *ngFor="let level of cookingLevels"
-            type="button"
-            [class]="'register-form__option' + (selectedLevel === level.value ? ' register-form__option--selected' : '')"
-            (click)="selectedLevel = level.value"
-          >
-            <span class="register-form__option-icon">{{ level.icon }}</span>
-            <span class="register-form__option-label">{{ level.label }}</span>
-          </button>
-        </div>
-      </div>
+      <p class="register-form__note">
+        Al entrar te preguntamos cinco cosas cortas: cuánto cocinas, qué quieres llevar desde la app
+        y qué no puedes comer. Se pueden saltar y cambiar luego en Preferencias.
+      </p>
 
       <app-button
         type="submit"
@@ -84,6 +74,12 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
     </form>
   `,
   styles: [`
+    .register-form__note {
+      margin: 0;
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+      line-height: 1.45;
+    }
     .register-form {
       display: flex;
       flex-direction: column;
@@ -108,44 +104,6 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
       font-size: var(--text-sm);
       font-weight: var(--font-medium);
       color: var(--text-primary);
-    }
-
-    .register-form__options {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: var(--space-2);
-    }
-
-    .register-form__option {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: var(--space-1);
-      padding: var(--space-3);
-      background: var(--bg-tertiary);
-      border: 2px solid transparent;
-      border-radius: var(--radius-lg);
-      cursor: pointer;
-      transition: var(--transition-fast);
-
-      &:hover {
-        border-color: var(--border-strong);
-      }
-
-      &--selected {
-        border-color: var(--primary);
-        background: var(--primary-subtle);
-      }
-    }
-
-    .register-form__option-icon {
-      font-size: var(--text-2xl);
-    }
-
-    .register-form__option-label {
-      font-size: var(--text-xs);
-      font-weight: var(--font-medium);
-      color: var(--text-secondary);
     }
 
     .register-form__footer {
@@ -178,7 +136,6 @@ export class RegisterComponent {
   name = '';
   email = '';
   password = '';
-  selectedLevel = 'beginner';
   isLoading = signal(false);
   nameError = signal('');
   emailError = signal('');
@@ -200,12 +157,6 @@ export class RegisterComponent {
       this.router.navigate(['/onboarding']);
     }
   }
-
-  cookingLevels = [
-    { value: 'beginner', label: 'Principiante', icon: '🌱' },
-    { value: 'intermediate', label: 'Intermedio', icon: '👨‍🍳' },
-    { value: 'expert', label: 'Experto', icon: '🏆' }
-  ];
 
   onSubmit(): void {
     this.nameError.set('');
@@ -229,11 +180,12 @@ export class RegisterComponent {
 
     this.isLoading.set(true);
 
+    // El nivel de cocina ya no se pregunta aqui: es parte del perfil y se
+    // responde en el tour (y se edita en Preferencias › Perfil).
     this.authService.register({
       name: this.name,
       email: this.email,
-      password: this.password,
-      cookingLevel: this.selectedLevel as any
+      password: this.password
     }).subscribe({
       next: () => {
         this.toastService.success('¡Cuenta creada!', 'Tu cuenta ha sido creada correctamente');

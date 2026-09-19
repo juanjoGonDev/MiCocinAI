@@ -2,17 +2,29 @@ import { test, expect } from './fixtures';
 import { registerToOnboarding, registerUser } from './helpers/auth';
 
 /**
- * Configuración inicial, nada más registrarse: alergias, gustos, objetivo y
- * utensilios. Es saltable, se guarda en la cuenta (no en el hogar) y se puede
- * editar a mano en Ajustes.
+ * Configuración inicial, nada más registrarse: perfil (nivel y qué se quiere
+ * llevar desde la app), alergias, gustos, objetivo y utensilios. Es saltable,
+ * se guarda en la cuenta (no en el hogar) y se puede editar a mano en
+ * Preferencias.
+ *
+ * Los controles se buscan por sus atributos de datos (data-level, data-module),
+ * no por su texto: las etiquetas viven en el idioma resuelto y en CI puede ser
+ * distinto del castellano en el primer render.
  */
 test.describe('Onboarding — gustos, alergias y objetivo', () => {
   test('el registro lleva a la configuración inicial y se puede saltar', async ({ page }) => {
     await registerToOnboarding(page, 'Salta Tester');
 
-    await expect(page.locator('.onboarding__title')).toHaveText('Configura tu cocina');
-    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 1 de 4 · Alergias');
-    // Alérgenos proposés desde el primer paso, sin tener que escribirlos
+    await expect(page.locator('.onboarding__title')).toHaveText('Configura tu HogarIA');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 1 de 5 · Perfil');
+
+    // Cuatro niveles, incluido «apenas cocino», y las cinco secciones de la casa
+    await expect(page.locator('[data-level]')).toHaveCount(4);
+    await expect(page.locator('[data-module]')).toHaveCount(5);
+
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 2 de 5 · Alergias');
+    // Alérgenos proposés en su paso, sin tener que escribirlos
     await expect(page.locator('.chip-select__chip').first()).toContainText('Gluten');
 
     await page.getByRole('button', { name: /Saltar por ahora/i }).click();
@@ -31,7 +43,15 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
   }) => {
     await registerToOnboarding(page, 'Perfil Tester');
 
-    // ── Paso 1 · alergias: un chip del catálogo + uno propio
+    // ── Paso 1 · perfil: cuánto se cocina y qué se quiere llevar
+    await page.locator('[data-level="none"]').click();
+    await expect(page.locator('[data-level="none"]')).toHaveClass(/profile-picker__level--on/);
+    await page.locator('.profile-picker__module', { hasText: 'Lista de la compra' }).click();
+    await page.locator('.profile-picker__module', { hasText: 'Comidas y recetas' }).click();
+
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+
+    // ── Paso 2 · alergias: un chip del catálogo + uno propio
     await page.locator('.chip-select__chip', { hasText: 'Lactosa' }).click();
     await page.locator('input[name="chip-select-custom"]').fill('Kiwi');
     await page.getByRole('button', { name: 'Añadir' }).click();
@@ -43,7 +63,7 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.getByRole('button', { name: 'Siguiente →' }).click();
 
     // ── Paso 2 · gustos y texto libre
-    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 2 de 4 · Gustos');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 3 de 5 · Gustos');
     await page
       .getByRole('group', { name: 'Lo que más te gusta' })
       .locator('.chip-select__chip', { hasText: 'Legumbres' })
@@ -57,7 +77,7 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.getByRole('button', { name: 'Siguiente →' }).click();
 
     // ── Paso 3 · objetivo
-    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 3 de 4 · Objetivo');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 4 de 5 · Objetivo');
     await page.locator('.onboarding__goal', { hasText: 'Perder peso' }).click();
     await expect(page.locator('.onboarding__goal--on')).toContainText('Perder peso');
     await page.fill('textarea#goalNotes', 'Poco frito y nada de bollería.');
@@ -65,7 +85,7 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.getByRole('button', { name: 'Siguiente →' }).click();
 
     // ── Paso 4 · con qué cuentas: se marca en la propia despensa
-    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 4 de 4 · Cocina');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 5 de 5 · Cocina');
     const airfryer = page.locator('.utensil-card', { hasText: 'Airfryer' });
     await expect(airfryer.first()).toBeVisible({ timeout: 20000 });
     await airfryer.first().locator('input.utensil-card__check').check();
@@ -77,6 +97,12 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
 
     // ── Persistido: Preferencias muestra exactamente lo contestado, en su pestaña
     await page.goto('/preferences');
+    await expect(page.locator('.tab--active')).toContainText('Perfil');
+    await expect(page.locator('[data-level="none"]')).toHaveClass(/profile-picker__level--on/);
+    await expect(page.locator('[data-module="shopping"]')).toBeChecked();
+    await expect(page.locator('[data-module="meals"]')).toBeChecked();
+    await expect(page.locator('[data-module="pantry"]')).not.toBeChecked();
+    await page.locator('.tab', { hasText: 'Alergias' }).click();
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Lactosa' })).toHaveCount(1);
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Kiwi' })).toHaveCount(1);
     await expect(page.locator('.tab', { hasText: 'Alergias' })).toContainText('2');
@@ -103,6 +129,7 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
 
     // Y el onboarding vuelve con las respuestas puestas si se rehace
     await page.goto('/onboarding');
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Lactosa' })).toHaveCount(1);
 
     // El enlace de rehacer sale de Preferencias, no de la configuración de la app
@@ -114,6 +141,9 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     page
   }) => {
     await registerToOnboarding(page, 'Chip Tester');
+
+    // Se entra en el paso de alergias (el 1 es el perfil)
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
 
     // 'Mango' no está en ninguna lista: la IA lo recibe tal cual se escribió
     await page.locator('input[name="chip-select-custom"]').fill('Mango');

@@ -30,6 +30,8 @@ export interface OnboardingState {
 export interface TasteResponse {
   taste: TasteProfile;
   onboarding: OnboardingState;
+  /** Nivel de cocina y secciones de casa (ver home-profile.ts). */
+  profile?: import('./home-profile').HomeProfile;
 }
 
 /** Opción de un selector de chips: lo que se guarda es el propio texto. */

@@ -10,6 +10,12 @@ import {
   TasteProfile,
   TasteResponse
 } from '../../shared/models/taste-profile';
+import {
+  DEFAULT_HOME_PROFILE,
+  HomeModule,
+  HomeProfile,
+  toHomeProfile
+} from '../../shared/models/home-profile';
 
 /**
  * Gustos, alergias y objetivo del comensal.
@@ -25,6 +31,8 @@ export class TasteProfileService {
   private readonly apiUrl = `${environment.apiUrl}/auth/taste`;
 
   readonly taste = signal<TasteProfile>(emptyTasteProfile());
+  /** Nivel de cocina y secciones de la casa que quiere llevar. */
+  readonly profile = signal<HomeProfile>(DEFAULT_HOME_PROFILE);
   readonly onboarding = signal<OnboardingState>({ status: 'pending', completedAt: null });
   readonly isLoading = signal(false);
   readonly isLoaded = signal(false);
@@ -49,12 +57,18 @@ export class TasteProfileService {
 
   save(
     taste: Partial<TasteProfile>,
-    onboardingStatus?: OnboardingStatus
+    onboardingStatus?: OnboardingStatus,
+    profile?: Partial<HomeProfile>
   ): Observable<TasteResponse> {
     this.isLoading.set(true);
 
     return this.http
-      .patch<any>(this.apiUrl, { taste, ...(onboardingStatus ? { onboardingStatus } : {}) })
+      .patch<any>(this.apiUrl, {
+        taste,
+        ...(onboardingStatus ? { onboardingStatus } : {}),
+        ...(profile?.cookingLevel ? { cookingLevel: profile.cookingLevel } : {}),
+        ...(profile?.modules ? { modules: profile.modules } : {})
+      })
       .pipe(
         map((response) => response.data as TasteResponse),
         tap((data) => this.apply(data)),
@@ -67,6 +81,7 @@ export class TasteProfileService {
 
     this.taste.set({ ...emptyTasteProfile(), ...data.taste });
     this.onboarding.set(data.onboarding ?? { status: 'pending', completedAt: null });
+    this.profile.set(toHomeProfile(data.profile));
     this.isLoaded.set(true);
   }
 }

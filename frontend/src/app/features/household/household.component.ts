@@ -1,3 +1,4 @@
+import { COOKING_LEVEL_LABELS, CookingLevel } from '../../shared/models';
 import { Component, inject, OnInit, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -647,11 +648,6 @@ export class HouseholdComponent implements OnInit {
   }
 
   getLevelLabel(level: string): string {
-    const labels: Record<string, string> = {
-      beginner: 'Principiante',
-      intermediate: 'Intermedio',
-      expert: 'Experto'
-    };
-    return labels[level] || level;
+    return COOKING_LEVEL_LABELS[level as CookingLevel] ?? level;
   }
 }

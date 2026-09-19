@@ -1,3 +1,5 @@
+import type { CookingLevel } from './home-profile';
+
 export interface User {
   id: string;
   email: string;
@@ -10,7 +12,7 @@ export interface User {
   updatedAt: Date;
 }
 
-export type CookingLevel = 'beginner' | 'intermediate' | 'expert';
+export type { CookingLevel } from './home-profile';
 
 export interface UserPreferences {
   theme: Theme;
@@ -62,11 +64,7 @@ export interface TokenPayload {
   exp: number;
 }
 
-export const COOKING_LEVEL_LABELS: Record<CookingLevel, string> = {
-  beginner: 'Principiante',
-  intermediate: 'Intermedio',
-  expert: 'Experto'
-};
+
 
 export const THEME_LABELS: Record<Theme, string> = {
   light: 'Claro',

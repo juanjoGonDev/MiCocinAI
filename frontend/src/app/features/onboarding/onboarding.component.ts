@@ -7,6 +7,8 @@ import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { ChipSelectComponent } from '../../shared/components/ui/chip-select/chip-select.component';
+import { HomeProfilePickerComponent } from '../../shared/components/ui/home-profile-picker/home-profile-picker.component';
+import { DEFAULT_HOME_PROFILE, HomeProfile, toHomeProfile } from '../../shared/models/home-profile';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import {
   COMMON_ALLERGENS,
@@ -20,7 +22,7 @@ import {
 } from '../../shared/models/taste-profile';
 import { Utensil } from '../../shared/models/pantry.model';
 
-type OnboardingStep = 'allergies' | 'tastes' | 'goal' | 'kitchen';
+type OnboardingStep = 'profile' | 'allergies' | 'tastes' | 'goal' | 'kitchen';
 
 /**
  * Configuración inicial, nada más registrarse: alergias, gustos, objetivo y
@@ -37,17 +39,19 @@ type OnboardingStep = 'allergies' | 'tastes' | 'goal' | 'kitchen';
     RouterLink,
     ButtonComponent,
     ChipSelectComponent,
+    HomeProfilePickerComponent,
     LoadingComponent
   ],
   template: `
     <div class="onboarding">
       <div class="onboarding__card">
         <header class="onboarding__header">
-          <span class="onboarding__logo">🍳</span>
-          <h1 class="onboarding__title">Configura tu cocina</h1>
+          <span class="onboarding__logo">🏠</span>
+          <h1 class="onboarding__title">Configura tu HogarIA</h1>
           <p class="onboarding__subtitle">
-            Cuatro preguntas cortas. Con esto la IA te propone recetas que de verdad puedes comer;
-            podrás cambiarlo cuando quieras en Preferencias.
+            {{ steps.length }} preguntas cortas. Con esto la IA te propone recetas que de verdad
+            puedes comer y la app sabe qué quieres llevar desde aquí; podrás cambiarlo cuando
+            quieras en Preferencias.
           </p>
         </header>
 
@@ -63,6 +67,17 @@ type OnboardingStep = 'allergies' | 'tastes' | 'goal' | 'kitchen';
 
         <section class="onboarding__step" [ngSwitch]="steps[stepIndex()]">
           <!-- 1 · Alergias e intolerancias -->
+          <ng-container *ngSwitchCase="'profile'">
+            <h2 class="onboarding__step-title">Tu perfil</h2>
+            <p class="onboarding__step-hint">
+              HogarIA es cocina y casa: dinos cómo andas de cocina y qué quieres llevar desde la app.
+            </p>
+            <app-home-profile-picker
+              [(profile)]="profile"
+              (profileChange)="persistProgress()"
+            ></app-home-profile-picker>
+          </ng-container>
+
           <ng-container *ngSwitchCase="'allergies'">
             <h2 class="onboarding__step-title">¿Alergias o intolerancias?</h2>
             <p class="onboarding__step-hint">
@@ -483,13 +498,16 @@ export class OnboardingComponent implements OnInit {
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
 
-  readonly steps: OnboardingStep[] = ['allergies', 'tastes', 'goal', 'kitchen'];
+  readonly steps: OnboardingStep[] = ['profile', 'allergies', 'tastes', 'goal', 'kitchen'];
   readonly stepIndex = signal(0);
   readonly isSaving = signal(false);
   readonly isLoadingUtensils = signal(false);
+  /** Evita persistir por defecto antes de que la carga inicial haya terminado. */
+  private loaded = false;
 
   /** Copia local: nada se guarda hasta «Guardar y empezar» o «Saltar». */
   taste: TasteProfile = emptyTasteProfile();
+  profile: HomeProfile = DEFAULT_HOME_PROFILE;
 
   readonly allergenOptions = COMMON_ALLERGENS;
   readonly likeOptions = COMMON_LIKES;
@@ -498,6 +516,8 @@ export class OnboardingComponent implements OnInit {
 
   readonly stepTitle = computed(() => {
     switch (this.steps[this.stepIndex()]) {
+      case 'profile':
+        return 'Perfil';
       case 'allergies':
         return 'Alergias';
       case 'tastes':
@@ -524,9 +544,13 @@ export class OnboardingComponent implements OnInit {
     this.tasteService.load().subscribe({
       next: (data) => {
         this.taste = { ...emptyTasteProfile(), ...data.taste };
+        this.profile = toHomeProfile(data.profile);
+        this.loaded = true;
       },
       error: () => {
         this.taste = emptyTasteProfile();
+        this.profile = DEFAULT_HOME_PROFILE;
+        this.loaded = true;
       }
     });
 
@@ -567,7 +591,8 @@ export class OnboardingComponent implements OnInit {
    * despensa a mitad, no pierde lo que ya ha marcado.
    */
   persistProgress(): void {
-    this.tasteService.save(this.taste).subscribe({ error: () => undefined });
+    if (!this.loaded) return;
+    this.tasteService.save(this.taste, undefined, this.profile).subscribe({ error: () => undefined });
   }
 
   next(): void {
@@ -582,7 +607,7 @@ export class OnboardingComponent implements OnInit {
   }
 
   finish(): void {
-    this.save('done', 'Listo', 'Tu cocina ya está configurada: la IA lo tendrá en cuenta.');
+    this.save('done', 'Listo', 'Tu perfil y tus preferencias ya están: la IA lo tendrá en cuenta.');
   }
 
   /** Se salta, pero lo que haya escrito se guarda igualmente. */
@@ -593,7 +618,7 @@ export class OnboardingComponent implements OnInit {
   private save(status: 'done' | 'skipped', title: string, body: string): void {
     this.isSaving.set(true);
 
-    this.tasteService.save(this.taste, status).subscribe({
+    this.tasteService.save(this.taste, status, this.profile).subscribe({
       next: () => {
         this.isSaving.set(false);
         this.toastService.success(title, body);

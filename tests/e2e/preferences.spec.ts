@@ -2,9 +2,9 @@ import { test, expect } from './fixtures';
 import { registerAndGoto, registerUser } from './helpers/auth';
 
 /**
- * Preferencias del comensal: alergias, gustos y objetivo. Seccion propia con
- * una pestaña por asunto —la configuración de la app (tema, idioma) no tiene
- * nada que ver aquí— y la pestaña activa viaja en la URL.
+ * Preferencias del comensal: perfil, alergias, gustos y objetivo. Seccion propia
+ * con una pestaña por asunto —la configuración de la app (tema, idioma) no
+ * tiene nada que ver aquí— y la pestaña activa viaja en la URL.
  */
 test.describe('Preferencias', () => {
   test('vive fuera de la configuración de la app', async ({ page }) => {
@@ -34,9 +34,12 @@ test.describe('Preferencias', () => {
   test('una pestaña por asunto, reflejada en la URL', async ({ page }) => {
     await registerAndGoto(page, '/preferences', 'prefs-tabs');
 
-    // La primera pestaña es la por defecto: URL limpia
-    await expect(page.locator('.tab--active')).toContainText('Alergias');
+    // La primera pestana es la por defecto: URL limpia
+    await expect(page.locator('.tab--active')).toContainText('Perfil');
     await expect(page).not.toHaveURL(/tab=/);
+
+    await page.locator('.tab', { hasText: 'Alergias' }).click();
+    await expect(page).toHaveURL(/[?&]tab=allergies/);
 
     await page.locator('.tab', { hasText: 'Gustos' }).click();
     await expect(page).toHaveURL(/[?&]tab=tastes/);
@@ -54,6 +57,37 @@ test.describe('Preferencias', () => {
     await page.goto('/preferences?tab=allergies');
     await expect(page.locator('.tab--active')).toContainText('Alergias');
     await expect(page.locator('app-chip-select')).toHaveCount(1);
+  });
+
+  test('el perfil del hogar se cambia aquí, se guarda y se conserva', async ({ page }) => {
+    await registerAndGoto(page, '/preferences', 'prefs-profile');
+
+    // Cuatro niveles y cinco secciones: las mismas que en el tour
+    await expect(page.locator('[data-level]')).toHaveCount(4);
+    await expect(page.locator('[data-module]')).toHaveCount(5);
+    // Se entra con el nivel por defecto del registro
+    await expect(page.locator('[data-level="beginner"]')).toHaveClass(/--on/);
+
+    await page.locator('.profile-picker__level', { hasText: 'Experto' }).click();
+    await page.locator('.profile-picker__module', { hasText: 'Despensa' }).click();
+    await expect(page.locator('.preferences__state')).toContainText('Hay cambios sin guardar');
+
+    await page.getByRole('button', { name: 'Guardar preferencias' }).click();
+    await expect(page.locator('.toast--success').filter({ hasText: 'Guardado' })).toBeVisible();
+
+    // La pestana muestra el nivel con su nombre, no con el valor interno
+    await expect(page.locator('.tab', { hasText: 'Perfil' })).toContainText('Experto');
+
+    await page.reload();
+    await expect(page.locator('[data-level="expert"]')).toHaveClass(/--on/);
+    await expect(page.locator('[data-module="pantry"]')).toBeChecked();
+
+    // Descartar tambien revierte el perfil, sin recargar
+    await page.locator('.profile-picker__module', { hasText: 'Tickets' }).click();
+    await expect(page.locator('[data-module="receipts"]')).toBeChecked();
+    await page.getByRole('button', { name: /Descartar/ }).click();
+    await expect(page.locator('[data-module="receipts"]')).not.toBeChecked();
+    await expect(page.locator('[data-module="pantry"]')).toBeChecked();
   });
 
   test('lo marcado en una pestaña no se pierde al cambiar y se guarda junto', async ({ page }) => {

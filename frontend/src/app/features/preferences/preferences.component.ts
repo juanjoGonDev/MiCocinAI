@@ -6,6 +6,13 @@ import { TasteProfileService } from '../../core/services/taste-profile.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { ChipSelectComponent } from '../../shared/components/ui/chip-select/chip-select.component';
+import { HomeProfilePickerComponent } from '../../shared/components/ui/home-profile-picker/home-profile-picker.component';
+import {
+  COOKING_LEVEL_LABELS,
+  DEFAULT_HOME_PROFILE,
+  HomeProfile,
+  toHomeProfile
+} from '../../shared/models/home-profile';
 import {
   COMMON_ALLERGENS,
   COMMON_DISLIKES,
@@ -24,28 +31,45 @@ import { syncTabWithUrl } from '../../core/utils/tab-url';
  * los gustos y el objetivo en una sola página no se acaba nunca. La pestaña
  * viaja en la URL (/preferences?tab=goal) como en el resto de la app.
  */
-type PreferencesTab = 'allergies' | 'tastes' | 'goal';
+type PreferencesTab = 'profile' | 'allergies' | 'tastes' | 'goal';
 
-const PREFERENCES_TABS = ['allergies', 'tastes', 'goal'] as const;
+const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'goal'] as const;
 
 @Component({
   selector: 'app-preferences',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ButtonComponent, ChipSelectComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    ButtonComponent,
+    ChipSelectComponent,
+    HomeProfilePickerComponent
+  ],
   template: `
     <div class="preferences-page">
       <header class="preferences__head">
         <div>
           <h1 class="preferences__title">🥗 Preferencias</h1>
           <p class="preferences__subtitle">
-            Alergias, gustos y objetivo: lo que respondiste al registrarte y lo que lee la IA antes
-            de proponerte un plato.
+            Tu perfil, alergias, gustos y objetivo: lo que respondiste al registrarte y lo que lee la
+            IA antes de proponerte un plato.
           </p>
         </div>
         <a class="preferences__redo" routerLink="/onboarding">Rehacer la configuración inicial</a>
       </header>
 
       <div class="preferences__tabs" role="tablist">
+        <button
+          type="button"
+          class="tab"
+          role="tab"
+          [attr.aria-selected]="activeTab() === 'profile'"
+          [class.tab--active]="activeTab() === 'profile'"
+          (click)="switchTab('profile')"
+        >
+          👤 Perfil <span class="tab__count">{{ profileLabel() }}</span>
+        </button>
         <button
           type="button"
           class="tab"
@@ -79,11 +103,24 @@ const PREFERENCES_TABS = ['allergies', 'tastes', 'goal'] as const;
         </button>
       </div>
 
-      <p class="preferences__notice" *ngIf="!tasteService.hasProfile()">
+      <p class="preferences__notice" *ngIf="!tasteService.hasProfile() && !profile.modules.length">
         Todavía no has marcado nada: la IA propone sin saber qué puedes comer.
       </p>
 
       <section class="preferences__panel" [ngSwitch]="activeTab()">
+        <!-- ── Perfil del hogar: nivel y qué se quiere usar ── -->
+        <ng-container *ngSwitchCase="'profile'">
+          <h2 class="preferences__panel-title">Tu perfil</h2>
+          <p class="preferences__panel-hint">
+            Lo que contestaste al registrarte. El nivel no es una etiqueta: decide cuánto te explica
+            la IA y qué recetas te propone; las secciones marcan lo que HogarIA te recuerda.
+          </p>
+          <app-home-profile-picker [(profile)]="profile"></app-home-profile-picker>
+          <p class="preferences__panel-hint" *ngIf="modulesSummary()">
+            {{ modulesSummary() }}
+          </p>
+        </ng-container>
+
         <!-- ── Alergias e intolerancias ── -->
         <ng-container *ngSwitchCase="'allergies'">
           <h2 class="preferences__panel-title">¿Alergias o intolerancias?</h2>
@@ -403,7 +440,7 @@ export class PreferencesComponent implements OnInit {
   private readonly toastService = inject(ToastService);
 
   readonly tabs = PREFERENCES_TABS;
-  readonly activeTab = signal<PreferencesTab>('allergies');
+  readonly activeTab = signal<PreferencesTab>('profile');
 
   allergenOptions = COMMON_ALLERGENS;
   likeOptions = COMMON_LIKES;
@@ -412,16 +449,17 @@ export class PreferencesComponent implements OnInit {
 
   /** Copia editable: nada viaja al backend hasta pulsar «Guardar preferencias». */
   taste: TasteProfile = emptyTasteProfile();
+  profile: HomeProfile = DEFAULT_HOME_PROFILE;
 
   readonly saved = signal(false);
-  private savedSnapshot = JSON.stringify(this.taste);
+  private savedSnapshot = this.snapshot();
 
   constructor() {
     // Convencion de la app: la pestaña activa se refleja en la URL.
     syncTabWithUrl<PreferencesTab>({
       param: 'tab',
       values: PREFERENCES_TABS,
-      fallback: 'allergies',
+      fallback: 'profile',
       current: () => this.activeTab(),
       onChange: (tab) => this.activeTab.set(tab)
     });
@@ -433,6 +471,7 @@ export class PreferencesComponent implements OnInit {
     this.tasteService.load().subscribe({
       next: (data) => {
         this.taste = { ...emptyTasteProfile(), ...data.taste };
+        this.profile = toHomeProfile(data.profile);
         this.markSaved();
       },
       error: () => this.toastService.error('Error', 'No se pudieron cargar tus preferencias')
@@ -449,11 +488,22 @@ export class PreferencesComponent implements OnInit {
   }
 
   hasUnsavedChanges(): boolean {
-    return JSON.stringify(this.taste) !== this.savedSnapshot;
+    return this.snapshot() !== this.savedSnapshot;
+  }
+
+  /** En la pestaña no se muestra el valor interno ('none'), sino su nombre. */
+  profileLabel(): string {
+    return COOKING_LEVEL_LABELS[this.profile.cookingLevel] ?? '—';
+  }
+
+  modulesSummary(): string {
+    const n = this.profile.modules.length;
+    if (n === 0) return 'Sin secciones marcadas: HogarIA no te recordará nada de la casa.';
+    return `Llevarás ${n} ${n === 1 ? 'sección' : 'secciones'} de la casa desde la app.`;
   }
 
   save(): void {
-    this.tasteService.save(this.taste).subscribe({
+    this.tasteService.save(this.taste, undefined, this.profile).subscribe({
       next: () => {
         this.markSaved();
         this.saved.set(true);
@@ -465,11 +515,17 @@ export class PreferencesComponent implements OnInit {
 
   /** Vuelve a lo guardado sin recargar la página. */
   discard(): void {
-    this.taste = JSON.parse(this.savedSnapshot) as TasteProfile;
+    const snapshot = JSON.parse(this.savedSnapshot) as { taste: TasteProfile; profile: HomeProfile };
+    this.taste = snapshot.taste;
+    this.profile = snapshot.profile;
     this.saved.set(false);
   }
 
+  private snapshot(): string {
+    return JSON.stringify({ taste: this.taste, profile: this.profile });
+  }
+
   private markSaved(): void {
-    this.savedSnapshot = JSON.stringify(this.taste);
+    this.savedSnapshot = this.snapshot();
   }
 }
