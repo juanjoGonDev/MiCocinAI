@@ -469,6 +469,17 @@ window is **6 s**; the endpoint behind it is `POST …/items/:itemId/restore` �
 `deleted_at`, which is why this is cheap. Deleting a *list* is not undoable (its rows are gone) so it
 asks first, through `ConfirmService`, never a native dialog.
 
+**A gesture is not a tap.** Chrome fires a `click` on whatever is under the finger when a drag ends,
+so the row that was just swiped would also be toggled, opened or marked. The directive answers with
+two mechanisms that are not interchangeable: a `swipeRemove` that *committed* makes the row deaf to the
+pointer for 250 ms (`pointer-events: none`, removed by a timer), and a swipe that only *revealed* the
+rail raises a one-use flag the component's own tap handler consumes. Timers are never the discriminator
+— 200 ms and 250 ms windows both lost in CI, because the click can arrive later than the gesture by an
+amount that depends on how fast the runner is. A swipe may also start **on** a row button (the far right
+is where a thumb grabs): only the checkbox and text inputs carry `data-gesture-stop`, because there the
+tap is the whole interaction; a button that opens a sheet keeps its click and gets the guard that the
+sheet refuses a row that no longer exists.
+
 **Autosave.** Every field commits **400 ms** after the last keystroke, per row key, and the header
 says `Guardando…` / `Guardado`. Writes go through a keyed queue: tapping one checkbox four times is
 one intention, not four requests, and `PATCH /lists/:id/items/:id` for the same row replaces the
@@ -493,6 +504,10 @@ number that ever adds across lines.
       that restores every row), `Seleccionar todo`, `Vaciar carro` (undoable).
 - [x] Autosave at 400 ms, keyed write queue with retry on `online`, 409 handled by re-reading.
 - [x] Toasts gained `action`, `position` and `countdown` (additive; every existing call site untouched).
+- [x] `checked` crosses the wire as a boolean and is accepted as `0`/`1` too — the API paints that
+      column as an integer, and a client that echoes back what it read must be able to mark a row.
+- [x] The undo bar is unconditional on a removal: if the request never made it the bar is still there,
+      the restore 404s and the service says so, instead of the person losing a line with no recourse.
 - [ ] Drag to reorder (`PUT …/order` exists and is covered by route tests; the UI still orders by
       section + `position`).
 - [ ] "What the pantry already covers" reduction and the store switcher inside the cost preview.
@@ -588,6 +603,14 @@ it checks the three things that actually hurt:
   the workflow-level `env:` (they are only available inside a job, e.g. in a step's `with:`), and
   `strategy.*` in a job `name:` (use `matrix.<key>`; the shard total lives in the matrix, so it is
   written where it is decided).
+
+**A failure has to be readable to count as a failure.** On `failure()` the e2e job uploads
+`test-results/` (trace plus `error-context.md`), but the artifact store is not reachable from every
+environment — `gh run download` against the blob endpoint dies with an EOF that no retry fixes. The
+channel that always arrives is the annotation the reporter publishes, so a gesture test puts its
+evidence *inside the assertion message*: the row's text, the visible toasts, the last handful of
+`/api/shopping` responses and any `pageerror` Angular threw. That is what turned three
+«element(s) not found» into one sentence: a `PATCH` where a `DELETE` belonged.
 
 One more inherited trap, same family: with `"packageManager": "pnpm@10.15.0"` in `package.json`,
 passing `version:` to `pnpm/action-setup@v4` is an input error — the version is written once, in the
@@ -828,6 +851,17 @@ state). The suite runs on `chromium` in CI for wall-time reasons; all three proj
 - [x] CI: the workflow file was invalid since the cache/shard round (expressions in the workflow-level
       `env`), which is why no check appeared on the PR. Fixed, and `make ci:yaml` now refuses that class
       of mistake instead of trusting a red job to show up. See §11d.
+- [x] Three rounds of CI to make the gestures honest, all of them real bugs the tests found: the residual
+      `click` after a swipe (200 ms windows lost to a slow runner → one-use flag + 250 ms deaf row), the
+      ⋯ vetoing a swipe that started on it (which is where a thumb starts), and `remove()` deciding
+      whether the undo bar appeared from a response that had not arrived yet.
+- [x] `booleanish` now accepts the `0`/`1` the API itself prints. Marking a checkbox was silently
+      un-persisting itself since the feature was born: `checked: 1` fell outside the union, zod answered
+      400, the optimistic tick flipped back on the next read, and `Vaciar carro` found nothing to
+      remove. Route test covers both spellings and refuses `2`.
+- [x] Budget holds: install 58s · server 14s · typecheck 28s · build 35s · e2e shards 1m29s / 1m44s /
+      1m11s / 2m0s — 381 Playwright tests (14 of them shopping) in four parallel jobs, every one under
+      five minutes.
 
 
 ## 13. Coming soon (deliberately not in this program)
