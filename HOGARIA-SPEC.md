@@ -437,6 +437,68 @@ each side). Deliverables: `icon-512.png` as the source of truth; `convert`-gener
 `favicon-192.png`; a `maskable` variant with the safe padding; and `icon.svg` for the in-app mark. All
 sizes produced in the repo, never at runtime.
 
+## 8e. Shopping list & prices: the mobile interaction contract
+
+The API existed and the module switch did nothing, which is the worst possible state for a feature
+flag: it promises a screen that is not there. This section is the contract the UI implements — the
+numbers below are not taste, they are the ones the tests assert.
+
+**Routes and shape.** `/shopping` is the tray (create, open, finish, delete; `?tab=hechas` for the
+history) and `/shopping/:id` is the list itself. The module registry owns `/shopping`, so switching
+the module off removes the link and keeps the route alive (same rule as every other section). Nothing
+else lives in the list: no filters stacked on filters, no cards inside a card — the sections of the
+supermarket are the only grouping, and `Otros` always lands last.
+
+**Gestures (and their visible twins).**
+
+| Gesture | Effect | Twin for anyone who does not swipe |
+| --- | --- | --- |
+| swipe left, up to 56 px | the rail peeks out: `Editar · Quitar` | the ⋯ button on every row |
+| swipe left past **60 %** of the row | runs `Quitar` on release | `Quitar` inside the sheet |
+| swipe right ≥ max(56 px, 35 %) | `+1` unit | the quantity stepper in the sheet |
+| long press **350 ms** | multi-select mode with a contextual toolbar | `Seleccionar todo` + tapping rows |
+| tap the row | toggles the check | the checkbox itself, 30 px |
+
+Vertical movement wins over horizontal: if the finger goes down the page, that is a scroll and the
+row must not move. A tap that followed a long press is swallowed (250 ms window), or every "select"
+would also toggle a check.
+
+**Undo.** Anything that removes rows answers with a bottom bar carrying `Deshacer` and a countdown
+that drains over exactly `duration` ms (the same number the timer uses, so the bar cannot lie). The
+window is **6 s**; the endpoint behind it is `POST …/items/:itemId/restore` — items die with
+`deleted_at`, which is why this is cheap. Deleting a *list* is not undoable (its rows are gone) so it
+asks first, through `ConfirmService`, never a native dialog.
+
+**Autosave.** Every field commits **400 ms** after the last keystroke, per row key, and the header
+says `Guardando…` / `Guardado`. Writes go through a keyed queue: tapping one checkbox four times is
+one intention, not four requests, and `PATCH /lists/:id/items/:id` for the same row replaces the
+pending patch instead of stacking. When the network is gone the queue keeps the operation and retries
+on `online`; local state stays the visible truth meanwhile. A `409` (`LIST_VERSION_CONFLICT`) never
+wins by brute force — the list is re-read and the person is told another device changed it.
+
+**Money.** Cents in the wire, comma-decimal in the keyboard: `1,20` is 1.20 €, `1.290` is 1290 € and
+`1.290,50` is 1290.50 €. An empty price is `null` and paints as `—`; `0` is a real, free line. A unit
+price above 100 000 € is a slipped finger and gets rejected as invalid input, not stored. A line
+stores the price **per unit**, the estimate multiplies by `quantity`, and the footer total is the only
+number that ever adds across lines.
+
+### Checklist for this feature
+
+- [x] Tray: create, open, finish (undoable, reopens through the same PATCH), delete (confirmed),
+      progress bar and money summary per row, tabs in the URL.
+- [x] Detail: add line (`2 Leche`, `1kg Tomates`), paste-a-whole-list sheet (`items/bulk`), pending /
+      in-the-cart tabs, category grouping, per-line price chip, estimate with per-line source
+      (`manual` / `observed` / `unpriced`) and the count of lines without a price.
+- [x] Gestures with the thresholds above, plus multi-select toolbar (marcar, quitar with one undo bar
+      that restores every row), `Seleccionar todo`, `Vaciar carro` (undoable).
+- [x] Autosave at 400 ms, keyed write queue with retry on `online`, 409 handled by re-reading.
+- [x] Toasts gained `action`, `position` and `countdown` (additive; every existing call site untouched).
+- [ ] Drag to reorder (`PUT …/order` exists and is covered by route tests; the UI still orders by
+      section + `position`).
+- [ ] "What the pantry already covers" reduction and the store switcher inside the cost preview.
+- [ ] A price catalogue screen (history per product and store); today prices are read and written only
+      through the list and `/complete`.
+
 ## 9. Data model additions
 
 New tables (SQLite, `PRAGMA foreign_keys = ON`, WAL, busy timeout, indexes on every FK and date):
@@ -561,17 +623,20 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
       attribution, nothing persisted until confirmed.
 
 ### P3 · Shopping lists
-- [ ] `shopping_lists` / `shopping_list_items` with `version`, `completed`, `completed_at`,
-      `quantity` fraction, `unit`, `exact|substitutable`, link to a variant.
-- [ ] List management view (all lists, create/rename/delete, useful summary) separate from the list
-      detail (pending first, completed secondary, grouped by category when confirmed).
-- [ ] Add/edit sheet with progressive disclosure; quantity steppers with validated bounds;
-      transactional full-order writes guarded by the list version.
-- [ ] Swipe gestures + Undo, with button equivalents and confirmation on button-delete.
-- [ ] Realtime invalidations, deep-link restoration (`/shopping?tab=…&page=…&q=…&sort=…`), stale-edit
-      409 with local-vs-remote comparison.
-- [ ] Cost preview per list: totals, per-line prices, unpriced reasons, store switcher, "what the
-      pantry already covers" reduction with an explicit "still add it" escape.
+- [x] `shopping_lists` / `shopping_list_items` with `version`, `completed`, `completed_at`,
+      `quantity` fraction, `unit` — plus `product_key` for merging lines and a soft `deleted_at` that
+      is what makes "Undo" a call and not a resurrection. (`exact|substitutable` and the variant link
+      wait for the catalogue in P2.)
+- [x] List management view (all lists, create/rename/delete, useful summary) separate from the list
+      detail (pending first, completed secondary, grouped by supermarket section) — see §8e.
+- [x] Add/edit sheet with progressive disclosure; the sheet saves as you type (400 ms) and the row
+      never shows a "Guardar" button. Transactional full-order writes exist on the server
+      (`PUT …/order` + `version`); the drag that drives them is still open.
+- [x] Swipe gestures + Undo, with button equivalents and confirmation on button-delete (§8e).
+- [x] Autosave, keyed write queue with retry on `online`, stale-edit 409 that re-reads instead of
+      winning. Realtime invalidation (SSE) is not wired: a second device converges on the next load.
+- [ ] Cost preview per list: totals, per-line prices and unpriced reasons are shipped; the store
+      switcher and the "what the pantry already covers" reduction are not.
 
 ### P4 · Receipts, OCR and the queue
 - [ ] `ai_jobs` + durable runner (lease, attempts, startup sweep) + REST + SSE progress.
@@ -703,6 +768,33 @@ state). The suite runs on `chromium` in CI for wall-time reasons; all three proj
       assertions (each answer readable in its section). New `tests/e2e/pwa-assets.spec.ts` also asserts that
       every declared manifest icon is served **and** that its PNG measures what `sizes` claims.
 - [x] PR body and `PROGRESS.md` updated; nothing merged.
+
+## 12c. Checklist for round 5 — the list, on a phone
+
+- [x] `shopping.model.ts`: the two money conversions as pure functions (`parseMoneyToMinor` handles
+      `1,20` / `1.290` / `1.290,50` / `3,999` → 4,00 and returns `null` instead of guessing), category
+      grouping with `Otros` last, `formatQuantity` that stays silent on a single unit. Verified with a
+      20-case table before anything touched the DOM.
+- [x] `ShoppingService`: signals per screen, optimistic toggle/+1/patch, keyed retry queue flushed on
+      `online`, 409 → re-read the list and say so, and one endpoint shape copied from the server rather
+      than invented (`items/bulk` takes `lines`, `order` takes `itemIds` + `version`, PATCH a list takes
+      `version`, `GET /lists/:id` returns the list **with** its items inline).
+- [x] `SwipeRowDirective` + `LongPressDirective` with the thresholds exported as constants and the
+      geometry as pure functions (`swipeState`, `isQuickPlus`) so the 56 px / 60 % / 350 ms contract is
+      testable without a finger.
+- [x] Tray and detail screens (§8e checklists), including the paste-a-list sheet and the estimate
+      breakdown with the source of every price.
+- [x] Toasts grew `action` + `countdown` + `position`; the countdown bar animates over the same
+      `duration` the dismissal timer uses, and the bottom stack is where an `Deshacer` lives.
+- [x] Module flipped to available with its real path, navigation entry (sidebar and bottom bar), i18n
+      keys for both languages, and the e2e that used `shopping` as the *pronto* example moved to
+      `receipts` so the "activating what does not exist" rule keeps being tested.
+- [x] `tests/e2e/shopping-lists.spec.ts`: 14 cases × 3 projects driving real pointer drags (reveal,
+      commit-at-60 %, +1 to the right, long press into multi-select) and the undo bar.
+- [x] Coverage ramp: the three shopping server files moved into `COVERED` (they were already above the
+      floor); the frontend got its pure logic under `frontend/src/app/shared/**` specs.
+- [ ] Not in this round: SSE invalidation, drag-to-reorder UI, price catalogue, receipts/OCR.
+
 
 ## 13. Coming soon (deliberately not in this program)
 
