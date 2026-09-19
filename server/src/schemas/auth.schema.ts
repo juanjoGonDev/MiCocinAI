@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cookingLevelEnum } from '../utils/taste-profile.js';
 
 export const loginSchema = z.object({
   email: z.string().email('Invalid email format'),
@@ -11,7 +12,7 @@ export const registerSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
-  cookingLevel: z.enum(['beginner', 'intermediate', 'expert']).optional().default('beginner')
+  cookingLevel: cookingLevelEnum.optional().default('beginner')
 });
 
 export const refreshTokenSchema = z.object({
@@ -39,7 +40,7 @@ export const changePasswordSchema = z.object({
 export const updateProfileSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   avatar: z.string().url().optional().nullable(),
-  cookingLevel: z.enum(['beginner', 'intermediate', 'expert']).optional(),
+  cookingLevel: cookingLevelEnum.optional(),
   preferences: z.object({
     theme: z.enum(['light', 'dark', 'system']).optional(),
     language: z.enum(['es', 'en']).optional(),

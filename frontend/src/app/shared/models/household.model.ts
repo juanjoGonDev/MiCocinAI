@@ -1,3 +1,5 @@
+import type { CookingLevel } from './home-profile';
+
 export interface Household {
   id: string;
   name: string;
@@ -41,7 +43,7 @@ export interface InvitePreview {
 
 export type MemberRole = 'admin' | 'member' | 'child';
 
-export type CookingLevel = 'beginner' | 'intermediate' | 'expert';
+export type { CookingLevel } from './home-profile';
 
 export interface FoodPreferences {
   dietType: DietType;
@@ -77,11 +79,7 @@ export const MEMBER_ROLE_LABELS: Record<MemberRole, string> = {
   child: 'Niño'
 };
 
-export const COOKING_LEVEL_LABELS: Record<CookingLevel, string> = {
-  beginner: 'Principiante',
-  intermediate: 'Intermedio',
-  expert: 'Experto'
-};
+export { COOKING_LEVEL_LABELS } from './home-profile';
 
 export const DIET_TYPE_LABELS: Record<DietType, string> = {
   omnivore: 'Omnívoro',

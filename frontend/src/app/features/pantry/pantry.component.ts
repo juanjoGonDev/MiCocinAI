@@ -1,8 +1,11 @@
-import { Component, inject, OnInit, computed, signal } from '@angular/core';
+import { Component, ElementRef, effect, inject, OnInit, computed, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
+import { clearTabParam, syncTabWithUrl, writeTabParam } from '../../core/utils/tab-url';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { CardComponent } from '../../shared/components/ui/card/card.component';
@@ -24,6 +27,27 @@ import {
 
 type PantryTab = 'ingredients' | 'utensils';
 
+/** Pestañas de la despensa: cada una se refleja en la URL (?tab=...). */
+const PANTRY_TABS = ['ingredients', 'utensils'] as const;
+
+/**
+ * El catálogo de utensilios son ~54 filas: como lista única no se acaba nunca.
+ * Se agrupa por categoría y se corta en secciones de este tamaño, así que una
+ * sección pueden ser varias categorías pequeñas juntas o un trozo de una grande
+ * (Herramientas tiene 34). La sección activa viaja en la URL:
+ *   /pantry?tab=utensils&section=tools-2
+ * usando la categoría que la abre (y el número de vez, si se repite).
+ */
+const UTENSIL_SECTION_SIZE = 12;
+const UTENSIL_SECTION_PARAM = 'section';
+
+/**
+ * La despensa se pinta entera en pantalla (sin paginacion), asi que se pide
+ * una unica pagina amplia: con el tamano por defecto (20) solo se veian 20
+ * de los 68 ingredientes sembrados al crear el hogar.
+ */
+const PAGE_SIZE = 100;
+
 @Component({
   selector: 'app-pantry',
   standalone: true,
@@ -40,7 +64,7 @@ type PantryTab = 'ingredients' | 'utensils';
           <h1 class="pantry__title">📦 Despensa</h1>
         </div>
         <app-button variant="primary" (onClick)="openAddModal()">
-          + Agregar
+          {{ addButtonLabel() }}
         </app-button>
       </div>
 
@@ -178,17 +202,78 @@ type PantryTab = 'ingredients' | 'utensils';
       <!-- ═══════════════ UTENSILS TAB ═══════════════ -->
       <ng-container *ngIf="activeTab() === 'utensils'">
         <div class="utensils-intro">
-          <p>Marca los utensilios y electrodomésticos que tienes en casa. La IA los tendrá en cuenta al sugerirte recetas.</p>
+          <p>Marca los utensilios y electrodomésticos que tienes en casa, sección a sección. La IA los tendrá en cuenta al sugerirte recetas.</p>
         </div>
 
         <app-loading *ngIf="utensilsLoading()" message="Cargando utensilios..."></app-loading>
 
-        <div *ngIf="!utensilsLoading()" class="utensils">
-          <div *ngFor="let group of utensilGroups()" class="utensil-group">
-            <h3 class="utensil-group__title">{{ group.icon }} {{ group.label }}</h3>
+        <div *ngIf="!utensilsLoading()" class="utensils" #utensilsTop>
+          <!--
+            El catálogo se recorre por secciones (UTENSIL_SECTION_SIZE filas
+            cada una, agrupadas por categoría): como lista única de ~54 filas no
+            lo acaba nadie. La sección activa viaja en la URL (?section=), así
+            que se puede enlazar, sobrevive a la recarga y al «atrás».
+          -->
+          <div class="utensils-bar" *ngIf="utensilTotal() > 0">
+            <span
+              class="utensils-bar__step"
+              *ngIf="!showAllUtensilGroups() && utensilSections().length > 1"
+            >
+              Sección {{ activeUtensilSectionIndex() + 1 }} de {{ utensilSections().length }}
+              · {{ activeUtensilSectionLabel() }}
+            </span>
+            <span class="utensils-bar__track" aria-hidden="true">
+              <span class="utensils-bar__fill" [style.width.%]="utensilProgress()"></span>
+            </span>
+            <span class="utensils-bar__label">
+              {{ ownedUtensilsCount() }} de {{ utensilTotal() }} marcados
+            </span>
+            <button type="button" class="utensils-bar__mode" (click)="toggleUtensilSections()">
+              {{ showAllUtensilGroups() ? 'Ver por secciones' : 'Ver todo de golpe' }}
+            </button>
+          </div>
+
+          <!-- Atajo a cada categoría: salta a la sección donde cae -->
+          <div
+            class="utensils-sections"
+            *ngIf="!showAllUtensilGroups() && utensilGroups().length > 1"
+          >
+            <button
+              *ngFor="let category of utensilGroups()"
+              type="button"
+              class="utensils-section"
+              [class.utensils-section--active]="isUtensilGroupActive(category.value)"
+              (click)="showUtensilCategory(category.value)"
+            >
+              {{ category.icon }} {{ category.label }}
+              <span class="utensils-section__count">
+                {{ markedUtensilsIn(category) }}/{{ category.items.length }}
+              </span>
+            </button>
+          </div>
+
+          <div *ngIf="utensilTotal() === 0" class="empty-state">
+            <span class="empty-state__icon">🍳</span>
+            <h3 class="empty-state__title">Todavía no hay utensilios que marcar</h3>
+            <p class="empty-state__text">
+              Añade los que uses en casa: con ellos la IA descarta recetas que no puedes preparar.
+            </p>
+            <app-button variant="primary" (onClick)="openUtensilModal()">Añadir utensilio</app-button>
+          </div>
+
+          <div
+            *ngFor="let group of visibleUtensilGroups(); trackBy: trackByCategory"
+            class="utensil-group"
+          >
+            <div class="utensil-group__head">
+              <h3 class="utensil-group__title">{{ group.icon }} {{ group.label }}</h3>
+              <span class="utensil-group__meta">
+                {{ markedUtensilsIn(group) }}/{{ group.items.length }} marcados
+              </span>
+            </div>
             <div class="utensil-grid">
               <label
-                *ngFor="let u of group.items"
+                *ngFor="let u of group.items; trackBy: trackById"
                 class="utensil-card"
                 [class.utensil-card--owned]="u.available"
               >
@@ -210,24 +295,37 @@ type PantryTab = 'ingredients' | 'utensils';
             </div>
           </div>
 
+          <div class="utensils-nav" *ngIf="!showAllUtensilGroups() && utensilSections().length > 1">
+            <app-button
+              variant="ghost"
+              size="sm"
+              [disabled]="activeUtensilSectionIndex() === 0"
+              (onClick)="prevUtensilSection()"
+            >
+              ← {{ previousSectionName() || 'Anterior' }}
+            </app-button>
+            <app-button
+              [variant]="isLastUtensilSection() ? 'secondary' : 'primary'"
+              size="sm"
+              (onClick)="nextUtensilSection()"
+            >
+              {{
+                isLastUtensilSection()
+                  ? 'Ver todo el catálogo'
+                  : 'Siguiente: ' + nextSectionName() + ' →'
+              }}
+            </app-button>
+          </div>
+
           <div class="utensils-add">
-            <h3 class="utensils-add__title">➕ Añadir utensilio personalizado</h3>
-            <form (ngSubmit)="addCustomUtensil()" class="utensils-add__form">
-              <input
-                type="text"
-                [(ngModel)]="newUtensil.name"
-                name="utensilName"
-                placeholder="Ej: Sous vide, Panificadora..."
-                class="form-input"
-                required
-              />
-              <select [(ngModel)]="newUtensil.category" name="utensilCat" class="form-select">
-                <option *ngFor="let cat of utensilCategoryOptions" [value]="cat.value">
-                  {{ cat.icon }} {{ cat.label }}
-                </option>
-              </select>
-              <app-button variant="primary" type="submit" size="sm">Añadir</app-button>
-            </form>
+            <h3 class="utensils-add__title">➕ ¿No encuentras un utensilio?</h3>
+            <p class="utensils-add__hint">
+              Añade los que no estén en el catálogo (sous vide, panificadora, gofrera...)
+              y la IA los tendrá en cuenta.
+            </p>
+            <app-button variant="secondary" size="sm" (onClick)="openUtensilModal()">
+              Añadir utensilio personalizado
+            </app-button>
           </div>
         </div>
       </ng-container>
@@ -313,11 +411,60 @@ type PantryTab = 'ingredients' | 'utensils';
             [(ngModel)]="formData.notes"
           ></app-input>
 
+      <div class="form-actions">
+        <app-button variant="ghost" type="button" (onClick)="closeIngredientModal()">Cancelar</app-button>
+        <app-button variant="primary" type="submit" [loading]="isSaving()">
+          {{ editingIngredient() ? 'Guardar' : 'Agregar' }}
+        </app-button>
+      </div>
+    </form>
+  </app-modal>
+
+      <!-- Add Custom Utensil Modal -->
+      <app-modal
+        [isOpen]="isUtensilModalOpen()"
+        title="Agregar Utensilio"
+        size="md"
+        (onClose)="closeUtensilModal()"
+      >
+        <form (ngSubmit)="saveUtensil()" class="utensil-form">
+          <app-input
+            id="utensilName"
+            name="utensilName"
+            label="Nombre"
+            placeholder="Ej: Sous vide, Panificadora..."
+            [(ngModel)]="utensilForm.name"
+            [required]="true"
+            [error]="utensilFormError()"
+          ></app-input>
+
+          <div class="form-field">
+            <label class="form-label" for="utensilCategory">Categoría</label>
+            <select
+              id="utensilCategory"
+              name="utensilCategory"
+              class="form-select"
+              [(ngModel)]="utensilForm.category"
+            >
+              <option *ngFor="let cat of utensilCategoryOptions" [value]="cat.value">
+                {{ cat.icon }} {{ cat.label }}
+              </option>
+            </select>
+          </div>
+
+          <label class="utensil-form__check">
+            <input
+              type="checkbox"
+              id="utensilAvailable"
+              name="utensilAvailable"
+              [(ngModel)]="utensilForm.available"
+            />
+            <span>Lo tengo en casa (se marcará en el catálogo)</span>
+          </label>
+
           <div class="form-actions">
-            <app-button variant="ghost" type="button" (onClick)="closeIngredientModal()">Cancelar</app-button>
-            <app-button variant="primary" type="submit" [loading]="isSaving()">
-              {{ editingIngredient() ? 'Guardar' : 'Agregar' }}
-            </app-button>
+            <app-button variant="ghost" type="button" (onClick)="closeUtensilModal()">Cancelar</app-button>
+            <app-button variant="primary" type="submit" [loading]="isSavingUtensil()">Agregar</app-button>
           </div>
         </form>
       </app-modal>
@@ -507,6 +654,79 @@ type PantryTab = 'ingredients' | 'utensils';
       opacity: 0; font-size: 12px; padding: 2px;
       .utensil-card:hover & { opacity: 1; }
     }
+    /* Barra de progreso del repaso + cambio de modo */
+    .utensils-bar {
+      display: flex; align-items: center; gap: var(--space-3);
+      flex-wrap: wrap;
+    }
+    .utensils-bar__track {
+      flex: 1 1 120px; height: 6px; min-width: 80px;
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-full);
+      overflow: hidden;
+    }
+    .utensils-bar__fill {
+      display: block; height: 100%;
+      background: var(--success);
+      border-radius: var(--radius-full);
+      transition: width var(--duration-200) var(--ease-out);
+    }
+    .utensils-bar__label, .utensils-bar__step {
+      font-size: var(--text-xs); color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    .utensils-bar__step {
+      font-weight: var(--font-medium); color: var(--text-primary);
+    }
+    .utensils-bar__mode {
+      background: none; border: 1px solid var(--border-default);
+      border-radius: var(--radius-full);
+      padding: 2px 10px; font-family: var(--font-sans);
+      font-size: var(--text-xs); color: var(--text-secondary);
+      cursor: pointer; transition: var(--transition-fast);
+      &:hover { border-color: var(--primary); color: var(--primary); }
+    }
+
+    /* Navegador de secciones (una cada vez) */
+    .utensils-sections {
+      display: flex; flex-wrap: wrap; gap: var(--space-2);
+    }
+    .utensils-section {
+      display: inline-flex; align-items: center; gap: var(--space-2);
+      padding: var(--space-1) var(--space-3);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-full);
+      font-family: var(--font-sans); font-size: var(--text-xs);
+      color: var(--text-secondary); cursor: pointer;
+      transition: var(--transition-fast);
+      &:hover { border-color: var(--border-strong); color: var(--text-primary); }
+      &--active {
+        background: var(--primary-subtle);
+        border-color: var(--primary);
+        color: var(--primary-dark);
+      }
+    }
+    .utensils-section__count {
+      font-size: 11px; font-variant-numeric: tabular-nums;
+      background: var(--bg-tertiary);
+      border-radius: var(--radius-full); padding: 0 6px;
+      color: var(--text-tertiary);
+      .utensils-section--active & { background: var(--bg-primary); color: var(--primary-dark); }
+    }
+
+    .utensil-group__head {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-2);
+    }
+    .utensil-group__head .utensil-group__title { margin: 0; }
+    .utensil-group__meta { font-size: var(--text-xs); color: var(--text-tertiary); }
+
+    .utensils-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: var(--space-3);
+    }
+
     .utensils-add {
       background: var(--bg-secondary);
       border: 1px solid var(--border-default);
@@ -517,13 +737,25 @@ type PantryTab = 'ingredients' | 'utensils';
       font-family: var(--font-display);
       font-size: var(--text-base);
       font-weight: var(--font-semibold);
+      margin: 0 0 var(--space-2);
+    }
+    .utensils-add__hint {
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
       margin: 0 0 var(--space-3);
     }
-    .utensils-add__form {
-      display: grid;
-      grid-template-columns: 1fr 160px auto;
+    .utensil-form {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+    .utensil-form__check {
+      display: flex;
+      align-items: center;
       gap: var(--space-2);
-      @media (max-width: 640px) { grid-template-columns: 1fr; }
+      font-size: var(--text-sm);
+      color: var(--text-primary);
+      cursor: pointer;
     }
 
     /* Form */
@@ -558,9 +790,15 @@ type PantryTab = 'ingredients' | 'utensils';
 export class PantryComponent implements OnInit {
   pantryService = inject(PantryService);
   private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmService);
 
   // Tabs
   activeTab = signal<PantryTab>('ingredients');
+
+  /** El boton "+ Agregar" abre el modal de la pestaña activa. */
+  addButtonLabel = computed(() =>
+    this.activeTab() === 'utensils' ? '+ Agregar utensilio' : '+ Agregar'
+  );
 
   // Ingredients
   searchTerm = '';
@@ -570,6 +808,16 @@ export class PantryComponent implements OnInit {
   isSaving = signal(false);
   utensilsLoading = signal(true);
   formErrors = { name: signal(''), quantity: signal('') };
+
+  // Utensilios: modal de alta (el boton "+ Agregar" lo abre en esta pestaña)
+  isUtensilModalOpen = signal(false);
+  isSavingUtensil = signal(false);
+  utensilFormError = signal('');
+  utensilForm = {
+    name: '',
+    category: 'tools' as UtensilCategory,
+    available: true
+  };
 
   inPantry = computed(() =>
     this.pantryService.ingredients().filter(i => (i.quantity ?? 0) > 0)
@@ -589,7 +837,239 @@ export class PantryComponent implements OnInit {
     })).filter(g => g.items.length > 0);
   });
 
-  newUtensil = { name: '', category: 'tools' as UtensilCategory };
+  /**
+   * Secciones del catálogo de utensilios (ver UTENSIL_SECTION_SIZE). El cursor
+   * es un índice: la misma categoría puede abrir varias secciones (Herramientas
+   * va por tramos), así que no sirve guardarlo como categoría.
+   */
+  private readonly utensilSectionSize = UTENSIL_SECTION_SIZE;
+  private utensilSectionCursor = signal(0);
+  showAllUtensilGroups = signal(false);
+  private utensilsTop = viewChild<ElementRef<HTMLElement>>('utensilsTop');
+
+  /** Sección pedida por URL antes de tener el catálogo cargado. */
+  private pendingUtensilSection: string | null = null;
+
+  utensilTotal = computed(() => this.pantryService.utensils().length);
+
+  utensilProgress = computed(() =>
+    this.utensilTotal() === 0
+      ? 0
+      : Math.round((this.ownedUtensilsCount() / this.utensilTotal()) * 100)
+  );
+
+  /** Grupos (categoría + sus utensilios) empaquetados en secciones. */
+  utensilSections = computed(() => {
+    const size = this.utensilSectionSize;
+    type Slice = { value: UtensilCategory; label: string; icon: string; items: Utensil[] };
+
+    // 1) las categorías que no caben en una sección se parten en tramos
+    const slices: Slice[] = [];
+    for (const group of this.utensilGroups()) {
+      if (group.items.length <= size) {
+        slices.push(group);
+        continue;
+      }
+      for (let i = 0; i < group.items.length; i += size) {
+        slices.push({ ...group, items: group.items.slice(i, i + size) });
+      }
+    }
+
+    // 2) las categorías pequeñas rellenan la sección que esté abierta
+    const sections: { label: string; groups: Slice[]; size: number }[] = [];
+    for (const slice of slices) {
+      const current = sections[sections.length - 1];
+      if (current && current.size + slice.items.length <= size) {
+        current.groups.push(slice);
+        current.size += slice.items.length;
+      } else {
+        sections.push({ label: slice.label, groups: [slice], size: slice.items.length });
+      }
+    }
+    return sections;
+  });
+
+  /** Índice dentro de rango: al borrar el último de una sección no nos salimos. */
+  activeUtensilSectionIndex = computed(() => {
+    const last = Math.max(this.utensilSections().length - 1, 0);
+    return Math.min(Math.max(this.utensilSectionCursor(), 0), last);
+  });
+
+  activeUtensilSection = computed(() => this.utensilSections()[this.activeUtensilSectionIndex()]);
+
+  /** 'Horno +1' para una sección que arrastra varias categorías pequeñas. */
+  private utensilSectionLabel(index: number): string {
+    const section = this.utensilSections()[index];
+    const first = section?.groups[0];
+    if (!first) return '';
+    const extra = section.groups.length - 1;
+    return extra > 0 ? `${first.label} +${extra}` : first.label;
+  }
+
+  activeUtensilSectionLabel = computed(() =>
+    this.utensilSectionLabel(this.activeUtensilSectionIndex())
+  );
+
+  isLastUtensilSection = computed(
+    () => this.activeUtensilSectionIndex() >= this.utensilSections().length - 1
+  );
+
+  /** En modo secciones solo se pinta la activa; en 'todas', el catálogo entero. */
+  visibleUtensilGroups = computed(() => {
+    if (this.showAllUtensilGroups()) return this.utensilGroups();
+    return this.activeUtensilSection()?.groups ?? [];
+  });
+
+  markedUtensilsIn(group: { items: Utensil[] }): number {
+    return group.items.filter(u => u.available).length;
+  }
+
+  /** Identificador de la sección para la URL: 'oven', 'tools', 'tools-2'... */
+  private utensilSectionKey(index: number): string {
+    const section = this.utensilSections()[index];
+    if (!section) return '';
+    const first = section.groups[0]?.value ?? '';
+    const repeated = this.utensilSections()
+      .slice(0, index)
+      .filter(other => other.groups[0]?.value === first).length;
+    return repeated === 0 ? first : `${first}-${repeated + 1}`;
+  }
+
+  private utensilSectionIndexOfKey(key: string): number {
+    return this.utensilSections().findIndex((_, index) => this.utensilSectionKey(index) === key);
+  }
+
+  /** Salta a la sección donde cae esa categoría (atajo de los chips). */
+  showUtensilCategory(category: UtensilCategory): void {
+    const index = this.utensilSections().findIndex(section =>
+      section.groups.some(group => group.value === category)
+    );
+    if (index >= 0) {
+      this.showAllUtensilGroups.set(false);
+      this.utensilSectionCursor.set(index);
+      this.scrollToUtensils();
+    }
+  }
+
+  isUtensilGroupActive(category: UtensilCategory): boolean {
+    if (this.showAllUtensilGroups()) return false;
+    return (this.activeUtensilSection()?.groups ?? []).some(group => group.value === category);
+  }
+
+  stepUtensilSection(delta: -1 | 1): void {
+    const target = this.activeUtensilSectionIndex() + delta;
+    if (target < 0 || target > this.utensilSections().length - 1) return;
+    this.utensilSectionCursor.set(target);
+    this.scrollToUtensils();
+  }
+
+  prevUtensilSection(): void {
+    this.stepUtensilSection(-1);
+  }
+
+  /** En la última sección el botón pasa a "ver todo" (ya no hay siguiente). */
+  nextUtensilSection(): void {
+    if (this.isLastUtensilSection()) {
+      this.showAllUtensilGroups.set(true);
+      this.scrollToUtensils();
+      return;
+    }
+    this.stepUtensilSection(1);
+  }
+
+  toggleUtensilSections(): void {
+    this.showAllUtensilGroups.update(all => !all);
+    this.scrollToUtensils();
+  }
+
+  previousSectionName(): string {
+    return this.utensilSections()[this.activeUtensilSectionIndex() - 1]?.groups[0]?.label ?? '';
+  }
+
+  nextSectionName(): string {
+    return this.utensilSections()[this.activeUtensilSectionIndex() + 1]?.groups[0]?.label ?? '';
+  }
+
+  /**
+   * Deja visible la sección que contiene un utensilio concreto (tras darlo de
+   * alta, si no, parece que no ha pasado nada: está en otra sección).
+   */
+  private revealUtensil(utensilId: string): void {
+    const index = this.utensilSections().findIndex(section =>
+      section.groups.some(group => group.items.some(u => u.id === utensilId))
+    );
+    if (index >= 0) {
+      this.showAllUtensilGroups.set(false);
+      this.utensilSectionCursor.set(index);
+    }
+  }
+
+  /** Aplica la sección pedida en la URL (tras cargar el catálogo). */
+  private applyUtensilSectionFromUrl(): void {
+    const key = this.pendingUtensilSection ?? this.route.snapshot.queryParamMap.get(UTENSIL_SECTION_PARAM);
+    this.pendingUtensilSection = null;
+
+    const index = key ? this.utensilSectionIndexOfKey(key) : -1;
+    if (index >= 0) this.utensilSectionCursor.set(index);
+    this.syncUtensilSectionParam();
+  }
+
+  /** La sección activa se refleja en la URL (sección 0 = URL limpia). */
+  private syncUtensilSectionParam(): void {
+    const sectionInUrl =
+      this.activeTab() === 'utensils' &&
+      !this.showAllUtensilGroups() &&
+      this.utensilSections().length > 1;
+
+    if (!sectionInUrl) {
+      clearTabParam(this.router, this.route, UTENSIL_SECTION_PARAM);
+      return;
+    }
+
+    writeTabParam(
+      this.router,
+      this.route,
+      UTENSIL_SECTION_PARAM,
+      this.utensilSectionKey(this.activeUtensilSectionIndex()),
+      this.utensilSectionKey(0)
+    );
+  }
+
+  private scrollToUtensils(): void {
+    this.utensilsTop()?.nativeElement.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+
+  private router = inject(Router);
+  private route = inject(ActivatedRoute);
+
+  /**
+   * La pestaña activa viaja en la URL (?tab=utensils), igual que en el resto de
+   * vistas con pestañas de la aplicación. La sección del catálogo de utensilios
+   * también (?section=tools-2) para que sea enlazable y sobreviva a la recarga.
+   */
+  constructor() {
+    syncTabWithUrl<PantryTab>({
+      param: 'tab',
+      values: PANTRY_TABS,
+      fallback: 'ingredients',
+      current: () => this.activeTab(),
+      onChange: tab => this.activeTab.set(tab)
+    });
+
+    // El catálogo aún no está cargado: la sección se guarda y se aplica al
+    // terminar la carga (si no, el efecto de abajo la limpiaría de la URL).
+    this.pendingUtensilSection = this.route.snapshot.queryParamMap.get(UTENSIL_SECTION_PARAM);
+
+    effect(() => {
+      // Se suscribe a lo que cambia la sección visible...
+      if (this.utensilsLoading()) return;
+      this.activeTab();
+      this.showAllUtensilGroups();
+      this.activeUtensilSectionIndex();
+      // ...y lo escribe en la URL
+      this.syncUtensilSectionParam();
+    });
+  }
 
   // Track which utensils are custom (no household seed match by name)
   // Simple heuristic: custom ones are those whose name doesn't exist in a fresh seed list.
@@ -625,7 +1105,8 @@ export class PantryComponent implements OnInit {
     ...this.ingredientCategoriesNoAll
   ];
 
-  utensilCategoryOptions = [
+  /** Opciones del catálogo de utensilios (orden de secciones incluido). */
+  utensilCategoryOptions: { value: UtensilCategory; label: string; icon: string }[] = [
     { value: 'oven', label: 'Horno', icon: '🔥' },
     { value: 'microwave', label: 'Microondas', icon: '📡' },
     { value: 'airfryer', label: 'Freidora de aire', icon: '🌪️' },
@@ -639,12 +1120,20 @@ export class PantryComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    this.pantryService.loadIngredients();
+    this.pantryService.loadIngredients({ pageSize: PAGE_SIZE });
     this.pantryService.loadStats();
+    this.loadUtensils();
+  }
+
+  private loadUtensils(): void {
     this.utensilsLoading.set(true);
-    this.pantryService.loadUtensils();
-    // Mark utensils loaded once first response arrives
-    setTimeout(() => this.utensilsLoading.set(false), 600);
+    this.pantryService.loadUtensils().subscribe({
+      next: () => {
+        this.utensilsLoading.set(false);
+        this.applyUtensilSectionFromUrl();
+      },
+      error: () => this.utensilsLoading.set(false)
+    });
   }
 
   switchTab(tab: PantryTab): void {
@@ -654,7 +1143,8 @@ export class PantryComponent implements OnInit {
   onSearch(): void {
     this.pantryService.loadIngredients({
       search: this.searchTerm,
-      category: this.selectedIngCategory() || undefined
+      category: this.selectedIngCategory() || undefined,
+      pageSize: PAGE_SIZE
     });
   }
 
@@ -662,11 +1152,18 @@ export class PantryComponent implements OnInit {
     this.selectedIngCategory.set(category as IngredientCategory | '');
     this.pantryService.loadIngredients({
       search: this.searchTerm,
-      category: (category as IngredientCategory) || undefined
+      category: (category as IngredientCategory) || undefined,
+      pageSize: PAGE_SIZE
     });
   }
 
+  /** El boton del header abre el modal de lo que se esta viendo. */
   openAddModal(prefill?: Partial<typeof this.formData>): void {
+    if (this.activeTab() === 'utensils') {
+      this.openUtensilModal();
+      return;
+    }
+
     this.editingIngredient.set(null);
     this.resetForm();
     if (prefill) Object.assign(this.formData, prefill);
@@ -703,6 +1200,16 @@ export class PantryComponent implements OnInit {
     });
   }
 
+  /** Recarga la lista respetando la busqueda y la categoria activas. */
+  private reloadIngredients(): void {
+    this.pantryService.loadIngredients({
+      search: this.searchTerm,
+      category: this.selectedIngCategory() || undefined,
+      pageSize: PAGE_SIZE
+    });
+    this.pantryService.loadStats();
+  }
+
   saveIngredient(): void {
     this.formErrors.name.set('');
     this.formErrors.quantity.set('');
@@ -723,7 +1230,7 @@ export class PantryComponent implements OnInit {
         );
         this.closeIngredientModal();
         this.isSaving.set(false);
-        this.pantryService.loadStats();
+        this.reloadIngredients();
       },
       error: () => {
         this.toastService.error('Error', 'No se pudo guardar el ingrediente');
@@ -732,16 +1239,21 @@ export class PantryComponent implements OnInit {
     });
   }
 
-  deleteIngredient(ingredient: Ingredient): void {
-    if (confirm(`¿Eliminar ${ingredient.name}?`)) {
-      this.pantryService.deleteIngredient(ingredient.id).subscribe({
-        next: () => {
-          this.toastService.success('Eliminado', `${ingredient.name} eliminado`);
-          this.pantryService.loadStats();
-        },
-        error: () => this.toastService.error('Error', 'No se pudo eliminar')
-      });
-    }
+  async deleteIngredient(ingredient: Ingredient): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Eliminar ingrediente',
+      message: `¿Eliminar ${ingredient.name} de la despensa?`,
+      confirmText: 'Eliminar'
+    });
+    if (!accepted) return;
+
+    this.pantryService.deleteIngredient(ingredient.id).subscribe({
+      next: () => {
+        this.toastService.success('Eliminado', `${ingredient.name} eliminado`);
+        this.reloadIngredients();
+      },
+      error: () => this.toastService.error('Error', 'No se pudo eliminar')
+    });
   }
 
   // Utensils
@@ -755,27 +1267,68 @@ export class PantryComponent implements OnInit {
     });
   }
 
-  deleteUtensil(u: Utensil): void {
-    if (confirm(`¿Eliminar ${u.name}?`)) {
-      this.pantryService.deleteUtensil(u.id).subscribe({
-        next: () => this.toastService.success('Eliminado', `${u.name} eliminado`),
-        error: () => this.toastService.error('Error', 'No se pudo eliminar')
-      });
-    }
+  async deleteUtensil(u: Utensil): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Eliminar utensilio',
+      message: `¿Quitar ${u.name} del catálogo de tu cocina?`,
+      confirmText: 'Eliminar'
+    });
+    if (!accepted) return;
+
+    this.pantryService.deleteUtensil(u.id).subscribe({
+      next: () => this.toastService.success('Eliminado', `${u.name} eliminado`),
+      error: () => this.toastService.error('Error', 'No se pudo eliminar')
+    });
   }
 
-  addCustomUtensil(): void {
-    if (!this.newUtensil.name.trim()) return;
+  // Add custom utensil (modal)
+
+  openUtensilModal(): void {
+    this.utensilForm = { name: '', category: 'tools', available: true };
+    this.utensilFormError.set('');
+    this.isUtensilModalOpen.set(true);
+  }
+
+  closeUtensilModal(): void {
+    this.isUtensilModalOpen.set(false);
+    this.utensilForm = { name: '', category: 'tools', available: true };
+    this.utensilFormError.set('');
+  }
+
+  saveUtensil(): void {
+    const name = this.utensilForm.name.trim();
+    if (!name) {
+      this.utensilFormError.set('El nombre es requerido');
+      return;
+    }
+
+    const duplicated = this.pantryService
+      .utensils()
+      .some(u => u.name.trim().toLowerCase() === name.toLowerCase());
+    if (duplicated) {
+      this.utensilFormError.set('Ya existe un utensilio con ese nombre');
+      return;
+    }
+
+    this.utensilFormError.set('');
+    this.isSavingUtensil.set(true);
     this.pantryService.createUtensil({
-      name: this.newUtensil.name.trim(),
-      category: this.newUtensil.category,
-      available: true
+      name,
+      category: this.utensilForm.category,
+      available: this.utensilForm.available
     }).subscribe({
-      next: () => {
-        this.toastService.success('Añadido', `${this.newUtensil.name} añadido`);
-        this.newUtensil.name = '';
+      next: created => {
+        this.toastService.success('Añadido', `${name} añadido a tu cocina`);
+        this.closeUtensilModal();
+        this.isSavingUtensil.set(false);
+        // Se abre la sección donde ha caído: si no, parece que no se ha
+        // añadido nada (el catálogo va por secciones).
+        this.revealUtensil(created.id);
       },
-      error: () => this.toastService.error('Error', 'No se pudo añadir el utensilio')
+      error: () => {
+        this.toastService.error('Error', 'No se pudo añadir el utensilio');
+        this.isSavingUtensil.set(false);
+      }
     });
   }
 
@@ -803,6 +1356,13 @@ export class PantryComponent implements OnInit {
     return null;
   }
   trackById(_i: number, item: Ingredient | Utensil): string { return item.id; }
+
+  /**
+   * Sin trackBy, al marcar un utensilio Angular destruia y volvia a crear
+   * los 10 grupos (las filas del computed son objetos nuevos en cada
+   * recalculo): el checkbox perdia el foco y la pagina saltaba arriba.
+   */
+  trackByCategory(_i: number, group: { value: string }): string { return group.value; }
 
   private resetForm(): void {
     this.formData = {

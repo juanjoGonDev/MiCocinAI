@@ -1,3 +1,5 @@
+import type { CookingLevel } from './home-profile';
+
 export interface User {
   id: string;
   email: string;
@@ -10,13 +12,19 @@ export interface User {
   updatedAt: Date;
 }
 
-export type CookingLevel = 'beginner' | 'intermediate' | 'expert';
+export type { CookingLevel } from './home-profile';
 
 export interface UserPreferences {
   theme: Theme;
   language: Language;
   detailLevel: DetailLevel;
   notifications: NotificationPreferences;
+  /**
+   * Gustos, alergias y objetivo (ver TasteProfile). Lo rellena el onboarding y
+   * se edita en Preferencias; la API lo expone en /api/auth/taste.
+   */
+  taste?: import('./taste-profile').TasteProfile;
+  onboarding?: import('./taste-profile').OnboardingState;
 }
 
 export type Theme = 'light' | 'dark' | 'system';
@@ -56,11 +64,7 @@ export interface TokenPayload {
   exp: number;
 }
 
-export const COOKING_LEVEL_LABELS: Record<CookingLevel, string> = {
-  beginner: 'Principiante',
-  intermediate: 'Intermedio',
-  expert: 'Experto'
-};
+
 
 export const THEME_LABELS: Record<Theme, string> = {
   light: 'Claro',

@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: recipeapp
+    container_name: hogaria
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -13,7 +13,7 @@ services:
       - ./data:/app/data
     environment:
       - NODE_ENV=production
-      - DATABASE_PATH=/app/data/recipeapp.db
+      - DATABASE_PATH=/app/data/hogaria.sqlite
       - JWT_SECRET=${JWT_SECRET:-change-this-to-a-secure-secret-key}
       - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost}
     healthcheck:
@@ -33,7 +33,7 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: recipeapp-nginx
+    container_name: hogaria-nginx
     restart: unless-stopped
     ports:
       - "80:80"

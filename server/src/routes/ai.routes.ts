@@ -12,6 +12,14 @@ import {
 } from '../schemas/ai.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 
+import {
+  detailLevelForCookingLevel,
+  hasTasteProfile,
+  readCookingLevel,
+  readTasteProfile,
+  tastePromptLines
+} from '../utils/taste-profile.js';
+import { persistWeeklyPlan } from '../utils/weekly-plan.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
 
@@ -216,12 +224,25 @@ async function callAI(userId: string, messages: any[], db: any): Promise<any> {
 aiRoutes.post('/generate-recipe', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.json();
-  const input = generateRecipeSchema.parse(body);
+  // El nivel de cocina del comensal fija cuánto hay que explicar, salvo que la
+  // petición traiga un detalle explícito (lo que elija el formulario manda).
+  const input = generateRecipeSchema.parse({
+    ...body,
+    detailLevel:
+      typeof body?.detailLevel === 'string'
+        ? body.detailLevel
+        : detailLevelForCookingLevel(readCookingLevel(getDatabase(), userId))
+  });
 
   const db = getDatabase();
 
   const ingredientList = input.ingredients.map(i => `${i.quantity} ${i.unit} de ${i.name}`).join(', ');
   const utensilList = input.utensils.filter(u => u.available).map(u => u.name).join(', ');
+
+  // El perfil del comensal (alergias, gustos, objetivo) se añade siempre: lo
+  // respondió en el onboarding y es lo que hace que la receta sea suya.
+  const taste = readTasteProfile(db, userId);
+  const tasteBlock = hasTasteProfile(taste) ? tastePromptLines(taste) : '';
 
   const detailInstructions: Record<string, string> = {
     basic: 'Instrucciones breves y claras.',
@@ -239,6 +260,7 @@ Nivel de detalle: ${input.detailLevel} - ${detailInstructions[input.detailLevel]
 ${input.dietaryRestrictions.length > 0 ? `Restricciones dietéticas: ${input.dietaryRestrictions.join(', ')}` : ''}
 ${input.allergies.length > 0 ? `Alergias: ${input.allergies.join(', ')}` : ''}
 ${input.preferences.length > 0 ? `Preferencias: ${input.preferences.join(', ')}` : ''}
+${tasteBlock}
 ${input.cookingTime ? `Tiempo de cocción: entre ${input.cookingTime.min} y ${input.cookingTime.max} minutos` : ''}
 
 Responde SOLO con un JSON válido con esta estructura:
@@ -297,8 +319,16 @@ Responde SOLO con un JSON válido con esta estructura:
 
 // POST /api/ai/generate-multiple-recipes
 aiRoutes.post('/generate-multiple-recipes', async (c) => {
+  const userId = c.get('userId');
   const body = await c.req.json();
-  const input = generateRecipeSchema.parse({ ...body, generateMultiple: true });
+  const input = generateRecipeSchema.parse({
+    ...body,
+    generateMultiple: true,
+    detailLevel:
+      typeof body?.detailLevel === 'string'
+        ? body.detailLevel
+        : detailLevelForCookingLevel(readCookingLevel(getDatabase(), userId))
+  });
 
   const recipes = [];
 
@@ -368,13 +398,16 @@ aiRoutes.post('/plan-week', async (c) => {
 
   const db = getDatabase();
 
+  const taste = readTasteProfile(db, userId);
+  const tasteBlock = hasTasteProfile(taste) ? `\n${tastePromptLines(taste)}\n` : '';
+
   const prompt = `Genera un plan de comidas semanal:
 
 Del ${input.startDate} al ${input.endDate}
 Objetivo: ${input.goals.type}
-${input.goals.caloriesTarget ? `Calorías diarias objetivo: ${input.goals.caloriesTarget}` : ''}
+${input.goals.caloriesTarget ? `Calorías diarias objetivo: ${input.goals.caloriesTarget}` : ''}${input.goals.customInstructions ? `\nIndicaciones del usuario (prioritarias): ${input.goals.customInstructions}` : ''}
 ${input.availableIngredients.length > 0 ? `Ingredientes disponibles: ${input.availableIngredients.join(', ')}` : ''}
-${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}` : ''}
+${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}` : ''}${tasteBlock}
 
 Responde SOLO con un JSON válido con esta estructura:
 {
@@ -404,7 +437,18 @@ Responde SOLO con un JSON válido con esta estructura:
     }
 
     const plan = JSON.parse(jsonMatch[0]);
-    return c.json({ success: true, data: plan });
+
+    // El plan se guarda en la semana pedida: si no, «Planificar con IA» se
+    // quedaba en un toast de éxito sobre un calendario vacío.
+    const saved = persistWeeklyPlan(db, {
+      userId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      goals: input.goals,
+      plan
+    });
+
+    return c.json({ success: true, data: { ...plan, saved } });
   } catch (error: any) {
     return c.json({ success: false, message: error.message }, 500);
   }

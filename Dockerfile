@@ -34,7 +34,7 @@ RUN mkdir -p /app/data
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV DATABASE_PATH=/app/data/recipeapp.db
+ENV DATABASE_PATH=/app/data/hogaria.sqlite
 ENV PORT=3000
 ENV NODE_OPTIONS=--max-old-space-size=256
 ENV UV_THREADPOOL_SIZE=2

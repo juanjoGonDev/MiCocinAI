@@ -60,6 +60,8 @@ export interface PantryFilter {
   location?: StorageLocation;
   expiringSoon?: boolean;
   expired?: boolean;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface PantryStats {

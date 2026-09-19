@@ -2,19 +2,20 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { ToastComponent } from '../../shared/components/ui/toast/toast.component';
+import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-auth-layout',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, ToastComponent],
+  imports: [CommonModule, RouterOutlet, ToastComponent, ConfirmDialogComponent],
   template: `
     <div class="auth-layout">
       <div class="auth-layout__background"></div>
       
       <div class="auth-layout__container">
         <div class="auth-layout__header">
-          <span class="auth-layout__logo">🍳</span>
-          <h1 class="auth-layout__title">RecipeApp</h1>
+          <span class="auth-layout__logo">🏠</span>
+          <h1 class="auth-layout__title">HogarIA</h1>
           <p class="auth-layout__subtitle">Tu asistente de cocina inteligente</p>
         </div>
         
@@ -25,6 +26,7 @@ import { ToastComponent } from '../../shared/components/ui/toast/toast.component
     </div>
 
     <app-toast></app-toast>
+    <app-confirm-dialog></app-confirm-dialog>
   `,
   styles: [`
     .auth-layout {

@@ -10,6 +10,7 @@ import { initializeDatabase } from './config/database.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { pantryRoutes } from './routes/pantry.routes.js';
+import { shoppingRoutes } from './routes/shopping.routes.js';
 import { recipeRoutes } from './routes/recipes.routes.js';
 import { householdRoutes } from './routes/household.routes.js';
 import { calendarRoutes } from './routes/calendar.routes.js';
@@ -68,38 +69,44 @@ app.use('*', cors({
 // More generous limits: development use, single user, and we want to avoid
 // accidental lockouts from refresh storms (which should not happen, but still).
 // Logs and health endpoints are exempt from rate limiting.
+//
+// DISABLE_RATE_LIMIT=1 los apaga. La suite e2e al completo comparte la IP del
+// runner, asi que un pico de peticiones dejaba un registro sin redirigir y la
+// prueba esperaba 45s su navegacion: parecian fallos de la app y no lo eran.
 app.use('/api/health', (_c, next) => next());
 app.use('/api/logs', (_c, next) => next());
-app.use('/api/auth/refresh', rateLimiter({
-  windowMs: 60 * 1000, // 1 minute
-  limit: 30,          // 30 refreshes per minute is already a lot
-  standardHeaders: 'draft-6',
-  keyGenerator: (c) => {
-    return c.req.header('x-forwarded-for') ||
-           c.req.header('x-real-ip') ||
-           'unknown';
-  }
-}));
-app.use('/api/auth/login', rateLimiter({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,          // 20 login attempts per 15 minutes
-  standardHeaders: 'draft-6',
-  keyGenerator: (c) => {
-    return c.req.header('x-forwarded-for') ||
-           c.req.header('x-real-ip') ||
-           'unknown';
-  }
-}));
-app.use('/api/*', rateLimiter({
-  windowMs: 60 * 1000, // 1 minute
-  limit: 300,          // 300 req/min is plenty for a single-user app
-  standardHeaders: 'draft-6',
-  keyGenerator: (c) => {
-    return c.req.header('x-forwarded-for') ||
-           c.req.header('x-real-ip') ||
-           'unknown';
-  }
-}));
+if (process.env.DISABLE_RATE_LIMIT !== '1') {
+  app.use('/api/auth/refresh', rateLimiter({
+    windowMs: 60 * 1000, // 1 minute
+    limit: 30,          // 30 refreshes per minute is already a lot
+    standardHeaders: 'draft-6',
+    keyGenerator: (c) => {
+      return c.req.header('x-forwarded-for') ||
+             c.req.header('x-real-ip') ||
+             'unknown';
+    }
+  }));
+  app.use('/api/auth/login', rateLimiter({
+    windowMs: 15 * 60 * 1000,
+    limit: 20,          // 20 login attempts per 15 minutes
+    standardHeaders: 'draft-6',
+    keyGenerator: (c) => {
+      return c.req.header('x-forwarded-for') ||
+             c.req.header('x-real-ip') ||
+             'unknown';
+    }
+  }));
+  app.use('/api/*', rateLimiter({
+    windowMs: 60 * 1000, // 1 minute
+    limit: 300,          // 300 req/min is plenty for a single-user app
+    standardHeaders: 'draft-6',
+    keyGenerator: (c) => {
+      return c.req.header('x-forwarded-for') ||
+             c.req.header('x-real-ip') ||
+             'unknown';
+    }
+  }));
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // Routes
@@ -112,6 +119,7 @@ app.route('/api/health', healthRoutes);
 // API routes
 app.route('/api/auth', authRoutes);
 app.route('/api/pantry', pantryRoutes);
+app.route('/api/shopping', shoppingRoutes);
 app.route('/api/recipes', recipeRoutes);
 app.route('/api/household', householdRoutes);
 app.route('/api/calendar', calendarRoutes);
@@ -153,7 +161,7 @@ async function startServer() {
     }, (info) => {
       console.log(`
 [SERVER] ══════════════════════════════════════════════════════════
-[SERVER]   MiCocinAI Server
+[SERVER]   HogarIA Server
 [SERVER]   Status:  Running
 [SERVER]   Port:    ${info.port}
 [SERVER]   Env:     ${config.server.env}
