@@ -514,6 +514,142 @@ number that ever adds across lines.
 - [ ] A price catalogue screen (history per product and store); today prices are read and written only
       through the list and `/complete`.
 
+## 8f. Round 6: the list becomes a tool, and the calendar becomes the house's
+
+Five things asked for, all of them the same complaint seen from different sides: the shopping list
+works, but it is not yet *efficient* on a phone with one hand and it does not exploit the width a
+desktop offers. And the calendar is still "the meal plan" when the house has a lot more to put in it.
+
+### Icon button rule (small beats wordy)
+
+`Pendientes (3)` and `Seleccionar todo` as text buttons is what eats a phone: they wrap, they push the
+row content, and half the row is left unusable. The rule now:
+
+> **If a control's meaning is a gesture everyone knows, it is an icon, not a word.** 18 px glyph,
+> 40 px hit area, `aria-label` + `title` mandatory. If the meaning is *not* universal (quitar,
+> terminar, vaciar carro) the icon travels **with** its word, or the row reveals it in the rail.
+
+Emoji are out for controls: `⋯` and `✎` are typographic, drawn by whatever font the device has, and they
+render at three different sizes across Android/iOS/desktop. They are replaced by `app-ui-icon`, a
+standalone component with a hand-authored registry of 24×24 `path`s in Material geometry (check,
+indeterminate-check, cart, list, pencil, trash, plus, camera, filter, chevron-left/right, close, people,
+clock, tag, percent, order). No icon dependency is added — a registry in one file is auditable, offline
+and themeable with `currentColor`, and it does not need a network install.
+
+### Renaming a title must not get stuck
+
+The inline rename opened a bare `<input>` with autosave and no way out: Escape did nothing, and a tap
+anywhere else left the field on screen mid-row. Inline editing now owns its whole lifecycle:
+
+- ✓ commits, ✕ reverts, `Enter` commits, `Escape` reverts, and blur **commits only if the value is
+  dirty** (otherwise it just closes: leaving a field must never invent a write).
+- while it is open, the row's gestures are off (`[appSwipeRow]="false"` / the sheet blocks them) — a
+  swipe starting inside a text field is selection, not deletion;
+- a failed rename rolls the visible name back and says so (the 409 path already re-reads the list).
+- the same ✕ is added to the tray's create form, which had "Cancelar" only while the form was open
+  by accident after a validation error.
+
+### The tray is a table, with filters and pagination
+
+Desktop `/shopping` shows: name + store, a progress bar with `x/y`, line count, money, last touched,
+and who touched it. Sorting is on the header (name / importe / tocada), direction toggles, `?sort=&dir=`.
+Filters, all of them **server-side** (`GET /lists?q=&store=&minTotal=&from=&to=&status=&sort=&dir=&limit=&offset=`
+answering `{ data, page: { total, limit, offset } }`):
+
+| Filtro | Control | URL |
+| --- | --- | --- |
+| Texto en nombre o línea | input con ✕ para limpiar | `q` |
+| Supermercado (local) | `app-ui-dropdown` de los que existen en datos | `store` |
+| Importe mínimo | input de €. Mismo parser de dinero que una línea | `min` |
+| Toca/hasta | dos `input type=date` | `from`, `to` |
+| Estado | tabs Activas / Terminadas (ya existía) | `tab` |
+| Página y tamaño | ‹ › + 10/20/50, el tamaño se recuerda en `localStorage` | `page`, `size` |
+
+On a phone the filter row collapses to one `Filtros` icon button with a count badge, opening a sheet
+with the same controls and `Aplicar` / `Borrar todo`. Nothing lives twice: the URL is the state, the
+sheet writes to it, the server reads from it. Filtering server-side is not a purity thing — a house with
+90 archived lists must not download 90 lists to hide 89.
+
+### Units are picked, not typed
+
+`kg`, `u`, `ud`, `1`, `pac` typed free is how a list ends up grouping the same thing three ways.
+`app-unit-picker` is a themed combobox (not a native `select`, which cannot carry the theme): grouped
+catalogue (**peso** g/kg, **volumen** ml/l, **unidad** u/paquete/caja/lata/botella/docena/medias…), search
+as you type, `↑↓ Enter Esc`, `role="combobox"` + `aria-expanded` + `aria-activedescendant`, an
+`Otra…` escape hatch that keeps the free text (the catalogue is a convenience, never a cage) and the 6
+last used units pinned on top from `localStorage`. The catalogue lives in one file
+(`shared/models/units.ts`) and is used by the add-line parser, the edit sheet, the paste sheet and the
+photo review sheet, so a unit is spelled the same place everywhere.
+
+### Discounts and offers, Basketra-style
+
+One `Descuentos` section per list, collapsed by default, with a header chip stating what is applied
+(`-5 %` / `-2,00 €` / `3×2 en 2 líneas`). Two kinds, because they are two different real things:
+
+- **Offer on a line** — `buy`/`take` (3×2, 2×1, or custom). Paid units are
+  `payable = floor(qty / buy) * take + min(qty % buy, take)`. Five units of a 3×2 pay four: one full
+  pack of three costs two, and the two leftovers are still two. The row's chip shows the offer next to the price (`6,50 €/ud · 3×2`).
+- **Discount on the list** — `amount` (cents) or `percent` (basis points, so 12,5 % is 1250, never a
+  float), and `appliesTo`: `all`, or `upToQuantity` with a unit cap ("2 € de descuento en las primeras
+  3 unidades"). The cap consumes paid units in `position` order, which is what a cashier does.
+
+`/estimate` grows a `discount` block: `subtotalMinor` (as today), `offerSavingsMinor`, `discountMinor`,
+`totalMinor`. Rounding is half-up on cents at the **total**, never per line (per line it would leak a
+cent and make the sum disagree with the visible numbers). A total can never go below 0 and a discount
+above the subtotal is clamped and *says so* in the UI instead of silently eating the difference. Money
+rules from §8e hold: cents on the wire, comma decimal on the keyboard.
+
+### Adding by photo, with the AI as the clerk
+
+Two calls, on purpose — a model that misreads must not silently rewrite the list:
+
+1. `POST /lists/:id/photo/analyze` with `{ image: <dataURL>, mode: 'auto'|'ticket'|'shelf', note? }`.
+   The server builds the prompt with (a) the **category catalogue as JSON** — `[{ "name", "color" }]`
+   from the household's own categories, colours included so the model can echo one it recognised — and
+   (b) the **expected response shape**, spelled out literally, plus the money and unit rules. It calls
+   the active `ai_configs` row (the same `base_url`/`api_key`/`model`/`timeout` the recipe generator
+   uses, now extracted to `utils/ai-client.ts` so there is exactly one place that talks to a provider)
+   and **validates the answer with zod** (`photoLinesSchema`). It writes nothing and returns the lines
+   with a `confidence` each.
+2. `POST /lists/:id/items/apply` — what the person confirmed, line by line (edit, drop, keep),
+   `category` included; `createCategory: true` is what adds a category with the colour the model
+   proposed. Reuses the merge-by-`product_key` behaviour of `POST /items`, so a photo of a shelf does not
+   duplicate the milk that is already pending.
+
+Errors are specific because the user has to act on them: no active AI config → `409` with
+`data.redirect = '/settings/ai'`; a reply that is not JSON → `422` with the model's first 200 characters
+(for the log section, not for the toast); image too big → `413`; a line the model invented a price for
+with no digits → it arrives with `priceMinor: null` and lands in "sin precio", which is honest.
+
+### Live for the household, and who touched what
+
+- `shopping_list_items.added_by` / `.updated_by`, `shopping_lists.updated_by`, and
+  `shopping_list_events (list_id, user_id, user_name, action, item_name, created_at)` written on every
+  mutation — the audit trail is a table, not a log line: "quién ha añadido qué" has to be queryable per
+  list and readable a month later.
+- `GET /lists/:id/events?limit=` feeds a "Quién ha tocado qué" sheet.
+- **SSE** `GET /api/shopping/stream/:listId` broadcasts `{ type: 'items' | 'list', by, at }` to the rest
+  of the household; the client **refetches** on a message instead of trusting the payload, so a missed
+  event costs a stale row until the next write, never a wrong list. `EventSource` cannot set headers, so
+  the stream accepts `?access_token=`, the auth middleware allows it **only** on that GET, and the
+  request logger masks it — a token in a URL is a token in a log file otherwise.
+
+### The calendar is the house's
+
+`calendar_events (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color,
+notes, source, source_id, created_at, updated_at)` with `kind ∈ meal | shopping | home | appointment |
+personal | other`, CRUD on `/api/calendar/events`, and meals projected as `kind: 'meal'` (source
+`meal`, `source_id`) so the plan that already exists shows up without duplicating a row per meal.
+
+The existing month/week/day views keep their structure and gain: a **kind filter row** (chips with the
+event colour, `?kinds=meal,home`, empty = everything), a `Hoy` button, `‹ ›` around the range title, and
+in month cells the pills overflow into `+2 más` with the hidden ones listed on click. Events are
+household-visible by default (that is the point of a house calendar) and per-member ownership is kept on
+the row, painted as the author's initial in week/day views.
+
+Recurrence, availability, ICS sync and "who cooks" stay in §13 — this round makes the calendar *general*,
+not a scheduler.
+
 ## 9. Data model additions
 
 New tables (SQLite, `PRAGMA foreign_keys = ON`, WAL, busy timeout, indexes on every FK and date):
@@ -863,11 +999,46 @@ state). The suite runs on `chromium` in CI for wall-time reasons; all three proj
       1m11s / 2m0s — 381 Playwright tests (14 of them shopping) in four parallel jobs, every one under
       five minutes.
 
+## 12d. Round 6 checklist — the list becomes a tool
+
+Same rule as every other box: `[x]` only when its tests are green in CI, and the first commit of the
+round is this checklist.
+
+- [ ] `app-ui-icon`: registry of 24×24 paths, no new dependency, `currentColor`, 40 px hit area; the
+      detail tabs, `Seleccionar todo`, `⋯`, `✎` and the tray actions stop being text or emoji.
+- [ ] Inline rename owns its lifecycle: ✓/✕, Enter/Escape, blur commits only when dirty, gestures off
+      while it is open, rollback on failure. Detail header and tray.
+- [ ] `app-unit-picker`: grouped catalogue in `shared/models/units.ts`, search, `Otra…`, recents in
+      `localStorage`, combobox a11y; used by add line, edit sheet, paste sheet and photo review.
+- [ ] Tray as a table: columns, header sorting, filters (texto, supermercado, importe ≥, desde/hasta,
+      estado) and pagination 10/20/50 **all in the URL**, filtering done in SQL with a `COUNT` for the
+      total; on a phone the filters collapse into one `Filtros` sheet with an active-count badge.
+- [ ] Money: offers `buy`/`take` per line and list discounts (€ / %, `all` o `upToQuantity`), the
+      payable-unit maths in one pure function, `discount` block in `/estimate`, half-up rounding on the
+      total, clamp at 0 with the clamp *said out loud*.
+- [ ] Photo ingestion: `analyze` (prompt carries the category catalogue as JSON and the expected shape;
+      zod validates the reply; nothing is written) → review sheet → `apply` (creates categories when the
+      model asks). Errors distinguish "no hay IA configurada" (with a link) from "no ha contestado JSON".
+- [ ] Categories as data: `shopping_categories` (name + colour) seeded from what the UI had hard-coded,
+      `GET/POST /categories`, colour painted on group headers, chips and the photo review.
+- [ ] Live + authorship: `added_by`/`updated_by`, `shopping_list_events`, `GET /lists/:id/events`, SSE
+      `GET /api/shopping/stream/:listId` with `?access_token=` allowed only on that route and masked in
+      the log; client refetches on invalidation, row shows `Ana · hace 2 min`, and a "Quién ha tocado
+      qué" sheet.
+- [ ] General calendar: `calendar_events` + CRUD, meals projected as `kind: 'meal'`, kind filter chips in
+      the URL, `Hoy`, ‹ › with the range title, `+n más` overflow in month cells.
+- [ ] `PUT …/order` finally has its UI: drag to reorder inside a section.
+- [ ] e2e for every surface above, the four shards still under five minutes, and the CI guard
+      (`make ci:yaml`) still clean.
+- [ ] §13 updated: "shared calendar beyond meals" is now partly delivered (events + filters), and what
+      is left there (recurrence, availability, ICS, who cooks) says so.
+
 
 ## 13. Coming soon (deliberately not in this program)
 
 - **Household tasks**: assignments, rotations, due windows, points for kids, per-member load chart.
-- **Shared calendar** beyond meals: events per member, recurrence, availability, "who cooks".
+- **Shared calendar**, what is left of it: recurrence, availability, "who cooks". General events with
+  kind filters and colours (§8f) are in; a recurring event is a different problem and it is not here.
 - **External calendars**: subscribe (ICS/webcal) and two-way sync with Google Calendar, plus a
   generic CalDAV adapter; conflict policy per calendar; OAuth from the UI, tokens in the settings
   store.
