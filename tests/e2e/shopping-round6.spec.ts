@@ -129,7 +129,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     await page.locator('[data-test="item-row"]').first().getByRole('button', { name: 'Acciones de la linea' }).click();
     await page.locator('[data-test="offer-preset"]', { hasText: '3x2' }).click();
     await expect(page.locator('[data-test="offer-chip"]')).toHaveText('3x2');
-    await page.locator('[data-test="edit-sheet"] [data-test="primary-close"], .detail__primary').last().click();
+    await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
 
     // La fila recuerda la oferta al recargar, y el chip la quita sin abrir la hoja.
     await page.reload();
@@ -147,7 +147,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     await page.locator('[data-test="add-submit"]').click();
     await page.locator('[data-test="item-row"]').first().getByRole('button', { name: 'Acciones de la linea' }).click();
     await page.locator('[data-test="price-input"]').fill('10');
-    await page.locator('.detail__primary', { hasText: 'Hecho' }).click();
+    await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
 
     await page.locator('[data-test="discount-open"]').click();
     await page.locator('[data-test="discount-kind"]', { hasText: 'Porcentaje' }).click();
@@ -190,7 +190,10 @@ test.describe('Calendario de la casa', () => {
 
     await page.locator('[data-test="agenda-add"]').click();
     await page.locator('[data-test="event-title"]').fill('Carpinteria: medir el pasillo');
-    await page.locator('select[name="eventKind"]').selectOption('home');
+    // El tipo se elige en el selector de la casa (mismo control que unidades y secciones),
+    // no en un `select` nativo: el nativo no lleva el color del tipo.
+    await page.locator('[data-test="event-kind"] button').first().click();
+    await page.getByRole('option', { name: 'Casa', exact: true }).click();
     await page.locator('[data-test="event-save"]').click();
     await expect(page.locator('[data-test="household-event"]')).toContainText('Carpinteria');
 
@@ -203,5 +206,60 @@ test.describe('Calendario de la casa', () => {
     await expect(page.locator('[data-test="household-event"]')).toHaveCount(1);
     await page.locator('[data-test="layer-meals"]').click();
     expect(echo()).toBe('sin errores de pagina');
+  });
+
+  test('el calendario no dispara peticiones en bucle al cambiar de mes', async ({ page }) => {
+    // El bug real: la ventana de sucesos alimentaba el rango visible, el rango volvia a
+    // pedir los sucesos y la pantalla hacia decenas de peticiones seguidas hasta el 429.
+    await registerAndGoto(page, '/calendar', 'r6-no-storm');
+    const requests: string[] = [];
+    page.on('request', (request) => {
+      if (/\/api\/calendar\/events\?/.test(request.url())) requests.push(request.url());
+    });
+
+    await page.getByRole('button', { name: 'Periodo siguiente' }).click();
+    await page.getByRole('button', { name: 'Periodo anterior' }).click();
+    await page.waitForTimeout(500);
+    // Uno por ventana cargada (la inicial y los dos saltos). El bucle de antes multiplicaba
+    // esto por decenas y el server contestaba 429.
+    expect(requests.length, requests.join(' ')).toBeLessThanOrEqual(6);
+  });
+});
+
+test.describe('Descuento por producto (la etiqueta del supermercado)', () => {
+  test('un descuento prometido en un producto solo baja ese producto', async ({ page }) => {
+    await registerAndGoto(page, '/shopping', 'r6-discount-product');
+    await page.locator('[data-test="new-list"]').click();
+    await page.locator('[data-test="list-name"]').fill('Jamon y leche');
+    await page.locator('[data-test="create-submit"]').click();
+
+    for (const line of ['1 Jamon Serrano', '2 Leche']) {
+      await page.locator('[data-test="add-input"]').fill(line);
+      await page.locator('[data-test="add-submit"]').click();
+    }
+    // Precios: 4,00 € el jamon y 1,00 € la leche.
+    await page.locator('[data-test="item-row"]').first().getByRole('button', { name: 'Acciones de la linea' }).click();
+    await page.locator('[data-test="price-input"]').fill('4');
+    await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
+
+    await page.locator('[data-test="discount-open"]').click();
+    await page.locator('[data-test="discount-scope"]', { hasText: 'Un producto' }).click();
+    // Sin diana no se guarda: «-2 €» a secas mentiria el total de la cesta.
+    await page.locator('[data-test="discount-amount"] input').fill('2');
+    await page.locator('[data-test="discount-save"]').click();
+    await expect(page.locator('[data-test="discount-sheet"]')).toBeVisible();
+
+    await page.locator('[data-test="discount-target"] button').first().click();
+    await page.getByRole('option', { name: /Jamon Serrano/ }).click();
+    await page.locator('[data-test="discount-save"]').click();
+
+    await expect(page.locator('[data-test="total"]')).toHaveText('3,00 €');
+    await expect(page.locator('[data-test="discount-row"]')).toContainText('Jamon Serrano');
+
+    // Y la X de la hoja cierra sin tocar nada: la prueba de que hay forma de cancelar.
+    await page.locator('[data-test="discount-open"]').click();
+    await page.locator('[data-test="discount-close"]').click();
+    await expect(page.locator('[data-test="discount-sheet"]')).toHaveCount(0);
+    await expect(page.locator('[data-test="total"]')).toHaveText('3,00 €');
   });
 });
