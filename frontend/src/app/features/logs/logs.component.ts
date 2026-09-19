@@ -104,7 +104,7 @@ interface FilterOption<T extends string> {
             {{
               hasSelection()
                 ? selectedCount() + ' línea(s) seleccionadas · Ctrl/Cmd o Mayús + clic para ajustar'
-                : 'MiCocinAI — terminal'
+                : 'HogarIA — terminal'
             }}
           </div>
           <div class="terminal__spacer"></div>

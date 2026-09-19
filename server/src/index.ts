@@ -159,7 +159,7 @@ async function startServer() {
     }, (info) => {
       console.log(`
 [SERVER] ══════════════════════════════════════════════════════════
-[SERVER]   MiCocinAI Server
+[SERVER]   HogarIA Server
 [SERVER]   Status:  Running
 [SERVER]   Port:    ${info.port}
 [SERVER]   Env:     ${config.server.env}

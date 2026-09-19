@@ -18,7 +18,7 @@ const es: Dict = {
   'nav.settings': 'Configuración',
   'nav.preferences': 'Preferencias',
   'nav.logout': 'Cerrar sesión',
-  'app.name': 'MiCocinAI',
+  'app.name': 'HogarIA',
 
   // Auth
   'auth.login': 'Iniciar sesión',
@@ -129,7 +129,7 @@ const en: Dict = {
   'nav.settings': 'Settings',
   'nav.preferences': 'Preferences',
   'nav.logout': 'Log out',
-  'app.name': 'MiCocinAI',
+  'app.name': 'HogarIA',
 
   'auth.login': 'Log in',
   'auth.register': 'Sign up',

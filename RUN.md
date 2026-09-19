@@ -1,10 +1,10 @@
-# 🚀 Cómo Ejecutar MiCocinAI
+# 🚀 Cómo Ejecutar HogarIA
 
 ## Instalación Rápida
 
 ```bash
 # 1. Entrar al directorio
-cd recipeapp
+cd MiCocinAI            # el repo; el producto se llama HogarIA
 
 # 2. Ejecutar setup (instala dependencias, configura entorno)
 ./setup.sh

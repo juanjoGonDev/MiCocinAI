@@ -1,5 +1,5 @@
 #!/bin/bash
-# RecipeApp Start Script for Raspberry Pi (without Docker)
+# HogarIA Start Script for Raspberry Pi (without Docker)
 # This script runs the app directly to save memory
 
 set -e
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(dirname "$SCRIPT_DIR")"
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
-echo "║                    RecipeApp Starter                          ║"
+echo "║                        HogarIA Starter                        ║"
 echo "╚═══════════════════════════════════════════════════════════════╝"
 
 # Check Node.js
@@ -57,7 +57,7 @@ node dist/migrate.js 2>/dev/null || true
 
 # Start server with nice priority
 echo ""
-echo "🚀 Starting RecipeApp..."
+echo "🚀 Starting HogarIA..."
 echo "   Port: $PORT"
 echo "   Database: $DATABASE_PATH"
 echo "   Memory limit: 256MB heap"

@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: recipeapp
+    container_name: hogaria
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -33,7 +33,7 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: recipeapp-nginx
+    container_name: hogaria-nginx
     restart: unless-stopped
     ports:
       - "80:80"

@@ -26,7 +26,7 @@ interface NavItem {
         <button type="button" class="header__menu" (click)="toggleSidebar()">
           ☰
         </button>
-        <span class="header__title">🍳 {{ 'app.name' | t }}</span>
+        <span class="header__title">🏠 {{ 'app.name' | t }}</span>
         <button type="button" class="header__profile" (click)="navigateToProfile()">
           <app-avatar 
             [name]="authService.userName()" 
@@ -38,7 +38,7 @@ interface NavItem {
       <!-- Sidebar (Desktop) -->
       <aside class="sidebar" [class.sidebar--open]="isSidebarOpen()">
         <div class="sidebar__header">
-          <span class="sidebar__logo">🍳 {{ 'app.name' | t }}</span>
+          <span class="sidebar__logo">🏠 {{ 'app.name' | t }}</span>
           <button type="button" class="sidebar__close" (click)="closeSidebar()">✕</button>
         </div>
         
