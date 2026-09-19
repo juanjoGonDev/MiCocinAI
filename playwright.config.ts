@@ -2,6 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // Fija la semilla del run antes que nada: la ven workers, reporter y backend.
+  globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   // En CI hace falta margen: ng serve compila el chunk de cada ruta perezosa
@@ -12,11 +14,14 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: [
-    ['html'],
-    // 'list' vuelca cada resultado al log: así se ve por dónde se atasca un run
-    // de CI sin esperar al informe final.
-    ['list'],
-    ['json', { outputFile: 'test-results/results.json' }]
+    // Salida tipo vitest/jest: arbol por `it` con duracion y semilla de datos,
+    // fallos concentrados antes del summary y summary con los mas lentos.
+    ['./tools/reporters/hogaria-e2e-reporter.js'],
+    // El informe HTML sigue siendo el sitio donde ver el trace de un fallo.
+    ['html', { open: 'never' }],
+    ['json', { outputFile: 'test-results/results.json' }],
+    // XML para quien lo quiera consumir (CI, IDEs, quality gates).
+    ['junit', { outputFile: 'test-results/junit.xml' }]
   ],
   use: {
     baseURL: 'http://localhost:4200',
@@ -50,6 +55,10 @@ export default defineConfig({
     // Toda la suite comparte la IP del backend: sin apagar el rate limit, un
     // pico de peticiones deja algun registro sin redirigir y el test espera su
     // navegacion hasta el timeout. Las limitaciones no son lo que se prueba aqui.
-    env: { DISABLE_RATE_LIMIT: '1' },
+    env: {
+      DISABLE_RATE_LIMIT: '1',
+      // Para poder cruzar los logs del backend con la semilla del run.
+      E2E_SEED: process.env.E2E_SEED ?? ''
+    },
   },
 });

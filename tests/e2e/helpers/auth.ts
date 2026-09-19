@@ -1,10 +1,20 @@
 import { Page, expect } from '@playwright/test';
 
+import { test as base } from '@playwright/test';
+import { dataSeed, seededEmail } from './seed';
+
 const TEST_PASSWORD = 'Test1234';
 
-/** Cada prueba registra su propio usuario para no pisarse entre si. */
+/**
+ * Cada prueba registra su propio usuario para no pisarse entre si. El correo
+ * lleva la semilla del run: las filas de la base de datos se pueden atribuir a
+ * una ejecucion concreta, y el reporter lo muestra en la linea del test.
+ */
 function generatedEmail(): string {
-  return `e2e-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+  const email = seededEmail();
+  const info = base.info();
+  if (info) info.annotations.push({ type: 'seed', description: dataSeed(email) });
+  return email;
 }
 
 /** El registro termina en el onboarding (o en el dashboard si ya se configuro). */
