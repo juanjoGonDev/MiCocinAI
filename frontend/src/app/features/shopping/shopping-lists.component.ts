@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -20,7 +20,7 @@ type ListsTab = 'activas' | 'hechas';
 @Component({
   selector: 'app-shopping-lists',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, SwipeRowDirective],
+  imports: [CommonModule, FormsModule, SwipeRowDirective],
   template: `
     <div class="shopping">
       <header class="shopping__head">
@@ -117,6 +117,7 @@ type ListsTab = 'activas' | 'hechas';
               class="shopping__row"
               [appSwipeRow]="false"
               (swipeRemove)="archive(list)"
+              (gestureEnded)="noteGesture()"
               data-test="list-row"
             >
               <div class="shopping__rail" aria-hidden="true">
@@ -131,7 +132,8 @@ type ListsTab = 'activas' | 'hechas';
               </div>
               <a
                 class="shopping__face"
-                [routerLink]="['/shopping', list.id]"
+                [href]="hrefOf(list)"
+                (click)="open(list, $event)"
                 [class.shopping__face--muted]="list.status !== 'active'"
               >
                 <div class="shopping__row-top">
@@ -302,6 +304,8 @@ export class ShoppingListsComponent {
   readonly loading = computed(() => this.shopping.loadingLists());
   readonly saving = computed(() => this.shopping.saving());
   readonly money = formatMoney;
+  private swallowNextTap = false;
+  private gestureAt = 0;
 
   constructor() {
     this.readTabFromUrl();
@@ -322,6 +326,30 @@ export class ShoppingListsComponent {
   private readTabFromUrl(): void {
     const tab = new URLSearchParams(window.location.search).get('tab');
     if (tab === 'hechas' || tab === 'done') this.tab.set('hechas');
+  }
+
+  noteGesture(): void {
+    this.swallowNextTap = true;
+    this.gestureAt = Date.now();
+  }
+
+  hrefOf(list: ShoppingList): string {
+    return `/shopping/${list.id}`;
+  }
+
+  /**
+   * Navegacion propia, no `routerLink`: el navegador dispara `click` tambien cuando
+   * lo que se ha hecho es un arrastre para descubrir el riel, y ahi nadie quiere
+   * entrar en la lista. Se conserva el `href` para que el boton central del raton
+   * y el «abrir en pestana nueva» sigan siendo un enlace normal.
+   */
+  open(list: ShoppingList, event: Event): void {
+    event.preventDefault();
+    if (this.swallowNextTap) {
+      this.swallowNextTap = false;
+      if (Date.now() - this.gestureAt < 600) return;
+    }
+    void this.router.navigate(['/shopping', list.id]);
   }
 
   async create(): Promise<void> {

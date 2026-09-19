@@ -116,6 +116,7 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
         <button
           type="button"
           class="detail__tab"
+          data-test="tab-cart"
           [class.detail__tab--active]="tab() === 'checked'"
           (click)="selectTab('checked')"
         >
@@ -150,6 +151,7 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                     [appSwipeRow]="selection().length > 0"
                     (swipeRemove)="remove(item)"
                     (swipePlus)="plus(item)"
+                    (gestureEnded)="noteGesture()"
                     data-test="item-row"
                   >
                     <div class="detail__rail" aria-hidden="true">
@@ -806,7 +808,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
   private readonly router = inject(Router);
 
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
-  private lastLongPress = 0;
+  /** Banderin de un solo uso: el proximo `click` es residual de un gesto. */
+  private swallowNextTap = false;
+  private gestureAt = 0;
 
   readonly tab = signal<'todo' | 'checked'>('todo');
   readonly selection = signal<string[]>([]);
@@ -925,8 +929,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   onTap(item: ShoppingListItem): void {
-    // Un long press acaba de entrar en seleccion: el click posterior no debe marcar.
-    if (Date.now() - this.lastLongPress < 250) return;
+    if (this.swallowNextTap) {
+      this.swallowNextTap = false;
+      if (Date.now() - this.gestureAt < 600) return;
+    }
     if (this.selection().length > 0) {
       this.pick(item.id);
       return;
@@ -934,8 +940,20 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.toggle(item);
   }
 
+  /**
+   * Soltar un arrastre dispara `click` para el navegador, igual que un toque. Se
+   * resuelve con un banderin de un solo uso y no con una ventana de tiempo: en una
+   * maquina lenta el click puede llegar 300 ms despues del gesto, y ahi un reloj
+   * corto se come el toque siguiente mientras que el banderin, no. El plazo de 600
+   * ms solo existe para que un gesto terminado fuera de la fila no deje la fila muda.
+   */
+  noteGesture(): void {
+    this.swallowNextTap = true;
+    this.gestureAt = Date.now();
+  }
+
   onLongPress(item: ShoppingListItem): void {
-    this.lastLongPress = Date.now();
+    this.noteGesture();
     if (this.selection().length === 0) this.selection.set([item.id]);
     else this.pick(item.id);
   }

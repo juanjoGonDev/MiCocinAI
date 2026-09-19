@@ -87,7 +87,10 @@ test.describe('Configuración — módulos', () => {
   test('la última sección visible no se apaga, y se puede restablecer', async ({ page }) => {
     await registerAndGoto(page, '/settings', 'mods-last');
 
+    // Hay que apagar las DOS secciones de mas: con tres secciones vivas en este
+    // build, quitar solo una deja dos visibles y ninguna esta en el limite.
     await page.locator('[data-module-switch="pantry"]').click();
+    await page.locator('[data-module-switch="shopping"]').click();
 
     // Queda una sola: apagarla habria vuelto a encender todas (seleccion vacia)
     await expect(page.locator('[data-module-switch="meals"]')).toBeDisabled();

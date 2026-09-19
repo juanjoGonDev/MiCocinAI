@@ -65,6 +65,17 @@ export class SwipeRowDirective implements OnDestroy {
   @Output() swipePlus = new EventEmitter<void>();
   /** El riel se ha quedado descubierto (para poder cerrarlo con un toque fuera). */
   @Output() railToggled = new EventEmitter<boolean>();
+  /**
+   * Termin un arrastre horizontal. El navegador dispara `click` despues de soltar
+   * aunque el dedo haya cruzado la fila entera, y eso convierte un gesto de "mirar
+   * el riel" en un marcado de casilla (o en una navegacion). Quien escucha esto
+   * ignora ese click: `suppressTap` es la ventana corta que lo aplica sin fiarse
+   * del orden de los listeners.
+   */
+  @Output() gestureEnded = new EventEmitter<void>();
+
+  /** Ventana en ms durante la cual un click es residual del arrastre. */
+  static readonly TAP_SUPPRESSION_MS = 200;
 
   dragging = false;
 
@@ -117,8 +128,10 @@ export class SwipeRowDirective implements OnDestroy {
     if (this.pointerId !== event.pointerId) return;
     const deltaX = event.clientX - this.startX;
     const width = this.element.nativeElement.offsetWidth;
+    const moved = this.axis === 'x';
     this.pointerId = null;
     this.dragging = false;
+    if (moved) this.gestureEnded.emit();
 
     if (this.axis === 'x' && width > 0) {
       if (this.state.armed) {

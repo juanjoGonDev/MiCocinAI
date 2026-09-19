@@ -299,6 +299,18 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+      # El trace y el `error-context.md` (snapshot del DOM en el momento del fallo)
+      # son la unica forma de saber QUE se veia cuando un gesto no cuajo: sin esto,
+      # diagnosticar un test de arrastre desde CI es adivinar.
+      - name: Upload test results (trace + DOM snapshot)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore
+
       - name: Upload the run data (seed, durations, failures)
         if: always()
         uses: actions/upload-artifact@v4

@@ -109,12 +109,20 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await expect(row).toHaveCount(1);
 
     await row.locator('[data-test="check"]').click();
-    await expect(row).toHaveClass(/detail__row--checked/);
+
+    // Marcar NO es dejar la linea donde estaba: se va del tab de pendientes, que es
+    // lo que hace la lista corta cuando compras. Por eso se comprueba en el carro.
     await expect(page.locator('[data-test="tab-todo"]')).toContainText('Pendientes (0)');
+    await expect(page.locator('[data-test="item-row"]')).toHaveCount(0);
+
+    await page.locator('[data-test="tab-cart"]').click();
+    await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
+    await expect(page.locator('[data-test="item-row"]')).toHaveClass(/detail__row--checked/);
 
     await page.reload();
-    await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
     await expect(page.locator('[data-test="tab-todo"]')).toContainText('Pendientes (0)');
+    await page.locator('[data-test="tab-cart"]').click();
+    await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
   });
 
   test('un arrastre corto descubre el riel y un arrastre del todo quita la línea', async ({ page }) => {
@@ -200,7 +208,11 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await expect(page.locator('.toast-container--bottom .toast')).toContainText('2 lineas quitadas');
 
     await page.locator('[data-test="toast-action"]').click();
-    await expect(page.locator('[data-test="item-row"]')).toHaveCount(2);
+    // Vuelve marcada (restaurar es quitar el borrado, no re-editar la linea): por
+    // eso vive en el carro y no en pendientes.
+    await expect(page.locator('[data-test="tab-todo"]')).toContainText('Pendientes (1)');
+    await page.locator('[data-test="tab-cart"]').click();
+    await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
   });
 
   test('un precio con coma entra en el total estimado', async ({ page }) => {
@@ -240,11 +252,14 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await addItem(page, 'Cafe');
     const row = row_(page, 'Cafe');
     await expect(row).toHaveCount(1);
-    await row.locator('[data-test="check"]').click();
+
+    // Primero el precio: en cuanto la marcas se va del tab de pendientes y ahi
+    // ya no hay ⋯ que pulsar.
     await row.locator('.detail__more').click();
     await page.locator('[data-test="price-input"]').fill('3,20');
     await page.locator('[data-test="price-input"]').blur();
     await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
+    await row.locator('[data-test="check"]').click();
 
     await page.locator('[data-test="complete"]').click();
     await expect(page).toHaveURL(/\/shopping\?tab=hechas/);
