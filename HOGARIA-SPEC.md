@@ -335,12 +335,22 @@ cooking-only question no longer describes the user. The concept moves, it does n
 - Skipping the tour keeps defaults (`beginner`, no modules) and never blocks the dashboard.
 
 ### Checklist for this feature
-- [ ] Server: `none` in every enum, `profile.modules` validated in `taste-profile.ts`, `profile` in the
-      response, `detailLevelForCookingLevel` + its use in the two AI routes, unit tests.
-- [ ] Client: `CookingLevel`/labels, `home-profile.ts` model with the module options, service patch.
-- [ ] Signup without the level block; tour step *Perfil* (level + modules) and 5-step copy.
-- [ ] Preferencias › Perfil tab (first), dirty tracking including the profile, save/discard.
-- [ ] e2e re-linked (onboarding 5 steps, preferences default tab) + the profile surviving a reload.
+- [x] Server: `none` in every enum (one definition in `utils/taste-profile`, imported by the auth and
+      household schemas), `profile.modules` validated, `profile` in the response,
+      `detailLevelForCookingLevel` used by the two AI routes, six unit tests.
+- [x] Client: single `home-profile.ts` model (`user.model` and `household.model` re-export the level so
+      the three copies cannot drift), shared `app-home-profile-picker`, service patch.
+- [x] Signup without the level block (note about what comes next); tour step *Perfil* first, 5 steps,
+      copy and logo about the house, progressive save guarded by the initial load.
+- [x] Preferencias › Perfil as the default tab, dirty tracking/save/discard covering the profile.
+- [x] e2e re-linked (5 steps, default tab, two tests now explicit about `?tab=allergies`) + the
+      profile surviving a reload. Green in CI at `ad0eee4` (Type Check · Server Tests · Build · E2E).
+
+Note for the icon pass (P0): the new picker uses an inline SVG check and no emoji, while the existing
+Preferencias tab strip keeps its emoji labels — they are replaced together with the nav in the sprite
+commit, so the tab row stays visually consistent until then. Test hooks are attributes
+(`[data-level]`, `label[data-module]`, `input[data-module-input]`), never label copy: hints repeat
+words across options and `hasText` already resolved to two elements.
 
 ## 9. Data model additions
 
