@@ -225,5 +225,13 @@ describe('ModulesService', () => {
     expect(new Set(paths).size).toBe(paths.length);
     expect(MODULE_REGISTRY.every((definition) => definition.hint.length > 0)).toBeTrue();
     expect(MODULE_REGISTRY.filter((definition) => definition.available).length).toBe(3);
+    // El registro de rutas y las opciones del perfil tienen que decir lo mismo de
+    // cada modulo: el picker usa las segundas y la navegacion el primero. Cuando
+    // divergen, la app enlaza una pantalla que se marca como «pronto» (o al reves).
+    for (const definition of MODULE_REGISTRY) {
+      const option = HOME_MODULE_OPTIONS.find((candidate) => candidate.value === definition.id);
+      expect(option).withContext(`opcion de perfil para ${definition.id}`).toBeDefined();
+      expect(option?.available).withContext(`available de ${definition.id}`).toBe(definition.available);
+    }
   });
 });

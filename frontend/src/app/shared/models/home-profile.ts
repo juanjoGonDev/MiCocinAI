@@ -72,7 +72,7 @@ export const HOME_MODULE_OPTIONS: HomeModuleOption[] = [
     value: 'shopping',
     label: 'Lista de la compra y precios',
     hint: 'Cesta por tienda y cuánto costará',
-    available: false
+    available: true
   },
   {
     value: 'receipts',

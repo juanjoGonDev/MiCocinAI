@@ -142,6 +142,11 @@ export class ShoppingService {
   }
 
   addItem(listId: string, input: CreateItemInput): Promise<ShoppingListItem | null> {
+    return this.addItemWithFlag(listId, input).then(result => result?.item ?? null);
+  }
+
+  /** Version cruda: `merged` le interesa a quien pegue una lista, no a la fila. */
+  addItemWithFlag(listId: string, input: CreateItemInput): Promise<{ item: ShoppingListItem; merged: boolean } | null> {
     const body = {
       name: input.name,
       quantity: input.quantity ?? 1,
@@ -150,10 +155,18 @@ export class ShoppingService {
       priceMinor: input.priceMinor ?? null,
       note: input.note ?? null
     };
-    return this.request<ShoppingListItem>(() =>
+    return this.request<{ item: ShoppingListItem; merged: boolean }>(() =>
       this.http
-        .post<{ data: { item: ShoppingListItem; merged: boolean } }>(`${this.apiUrl}/lists/${listId}/items`, body)
-        .pipe(map(response => response.data.item), tap(item => this.pushItem(item)))
+        .post<{ data: ShoppingListItem & { merged: boolean } }>(`${this.apiUrl}/lists/${listId}/items`, body)
+        .pipe(
+          // `merged` es información del server sobre LO QUE PASO, no un campo de la
+          // fila: se separa aqui para que el item que entra en la signal sea la fila.
+          map(response => {
+            const { merged, ...item } = response.data;
+            return { item, merged };
+          }),
+          tap(({ item }) => this.pushItem(item))
+        )
     );
   }
 

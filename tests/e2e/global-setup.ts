@@ -12,7 +12,7 @@
 import { E2E_SEED } from './helpers/seed';
 
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:4200';
-const WARM_PATHS = ['/', '/main.js', '/polyfills.js', '/styles.css'];
+const WARM_PATHS = ['/', '/main.js', '/polyfills.js', '/styles.css', '/shopping'];
 const BUDGET_MS = 180_000;
 
 async function warmUp(): Promise<string> {

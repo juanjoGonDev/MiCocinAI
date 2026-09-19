@@ -125,7 +125,14 @@ test.describe('PWA — assets declarados y servidos', () => {
 
     const registration = await page.evaluate(async () => {
       if (!('serviceWorker' in navigator)) return 'unsupported';
-      await navigator.serviceWorker.ready.catch(() => undefined);
+      // `ready` no llega nunca cuando nadie registra un worker (es el caso de
+      // `ng serve`): esperar a que "se resuelva solo" es un timeout con forma de
+      // assert. Se le pone plazo y se documenta el estado real.
+      const outcome = await Promise.race([
+        navigator.serviceWorker.ready.then(() => 'registered'),
+        new Promise<string>((resolve) => setTimeout(() => resolve('none'), 4000))
+      ]);
+      if (outcome !== 'registered') return outcome;
       const reg = await navigator.serviceWorker.getRegistration();
       return reg ? 'registered' : 'none';
     });

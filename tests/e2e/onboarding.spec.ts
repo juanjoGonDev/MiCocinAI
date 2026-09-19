@@ -99,9 +99,14 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.goto('/preferences');
     await expect(page.locator('.tab--active')).toContainText('Perfil');
     await expect(page.locator('[data-level="none"]')).toHaveClass(/profile-picker__level--on/);
-    await expect(page.locator('input[data-module-input="shopping"]')).toBeChecked();
-    await expect(page.locator('input[data-module-input="meals"]')).toBeChecked();
-    await expect(page.locator('input[data-module-input="pantry"]')).not.toBeChecked();
+    // Los módulos se contestan en el tour, pero su sitio de edicion es Configuracion:
+    // Preferencias ya no los pinta (son de la app, no del comensal).
+    await page.goto('/settings');
+    await expect(page.locator('[data-module-switch="shopping"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('[data-module-switch="pantry"]')).toHaveAttribute('aria-checked', 'false');
+
+    await page.goto('/preferences');
     await page.locator('.tab', { hasText: 'Alergias' }).click();
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Lactosa' })).toHaveCount(1);
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Kiwi' })).toHaveCount(1);
