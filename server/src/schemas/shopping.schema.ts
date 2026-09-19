@@ -56,7 +56,10 @@ const isoDate = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Se espera una fecha AAAA-MM-DD');
 
 export const listFilterSchema = z.object({
-  status: z.enum(LIST_STATUSES).optional(),
+  // `all` es del filtro de la bandeja («ver todas»). No es un estado: si se tratara
+  // como uno, la consulta pediria `status = 'all'` y la pantalla saldria vacia —que es
+  // exactamente como se manifesto el bug.
+  status: z.enum([...LIST_STATUSES, 'all'] as const).optional(),
   q: z.string().trim().max(120).optional(),
   store: z.string().trim().max(80).optional(),
   minTotalMinor: z.coerce.number().int().min(0).max(100_000_000).optional(),
@@ -110,14 +113,20 @@ export const discountSchema = z
     kind: z.enum(['amount', 'percent']),
     valueMinor: z.coerce.number().int().min(0).max(100_000_000).nullable().optional(),
     percentBps: z.coerce.number().int().min(0).max(10_000).nullable().optional(),
-    scope: z.enum(['all', 'firstUnits']).default('all'),
+    scope: z.enum(['all', 'firstUnits', 'product', 'category']).default('all'),
     firstUnits: z.coerce.number().positive().max(100_000).nullable().optional(),
+    // A que producto o seccion se aplica. Se guarda tal cual (nombre legible) y se compara
+    // normalizado: ver «Jamón Serrano» en la pantalla es mas util que ver una clave.
+    target: z.string().trim().max(80).nullable().optional(),
     label: z.string().trim().max(60).nullable().optional()
   })
   .refine((value) => (value.kind === 'amount' ? (value.valueMinor ?? 0) > 0 : (value.percentBps ?? 0) > 0), {
     message: 'DiscountValueRequired'
   })
-  .refine((value) => value.scope === 'all' || (value.firstUnits ?? 0) > 0, { message: 'FirstUnitsRequired' });
+  .refine((value) => value.scope !== 'firstUnits' || (value.firstUnits ?? 0) > 0, { message: 'FirstUnitsRequired' })
+  .refine((value) => (value.scope === 'product' || value.scope === 'category' ? !!value.target?.trim() : true), {
+    message: 'DiscountTargetRequired'
+  });
 
 export const createListSchema = z.object({
   name: trimmed(80),

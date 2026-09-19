@@ -436,8 +436,10 @@ async function runMigrations(db: Database.Database): Promise<void> {
       kind TEXT NOT NULL CHECK (kind IN ('amount', 'percent')),
       value_minor INTEGER CHECK (value_minor IS NULL OR value_minor >= 0),
       percent_bps INTEGER CHECK (percent_bps IS NULL OR (percent_bps >= 0 AND percent_bps <= 10000)),
-      scope TEXT NOT NULL DEFAULT 'all' CHECK (scope IN ('all', 'firstUnits')),
+      scope TEXT NOT NULL DEFAULT 'all' CHECK (scope IN ('all', 'firstUnits', 'product', 'category')),
       first_units REAL CHECK (first_units IS NULL OR first_units > 0),
+      -- Que linea entra con scope 'product' (clave de producto) o 'category' (seccion).
+      target TEXT,
       label TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -453,6 +455,36 @@ async function runMigrations(db: Database.Database): Promise<void> {
       console.log(`[DB] Added ${table}.${column}`);
     }
   };
+  // El CHECK de `scope` vive dentro de la tabla: una base creada antes de los descuentos
+  // por producto rechazaria 'product' con un error de constraint, y ese fallo no se ve
+  // hasta que alguien intenta guardarlo. Se reconstruye la tabla si el CHECK es viejo.
+  const discountTable = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'shopping_list_discounts'`)
+    .get() as { sql: string | null } | undefined;
+  if (discountTable?.sql && !discountTable.sql.includes("'product'")) {
+    db.exec(`
+      CREATE TABLE shopping_list_discounts_new (
+        list_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('amount', 'percent')),
+        value_minor INTEGER CHECK (value_minor IS NULL OR value_minor >= 0),
+        percent_bps INTEGER CHECK (percent_bps IS NULL OR (percent_bps >= 0 AND percent_bps <= 10000)),
+        scope TEXT NOT NULL DEFAULT 'all' CHECK (scope IN ('all', 'firstUnits', 'product', 'category')),
+        first_units REAL CHECK (first_units IS NULL OR first_units > 0),
+        target TEXT,
+        label TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+      );
+      INSERT INTO shopping_list_discounts_new
+        (list_id, kind, value_minor, percent_bps, scope, first_units, label, created_at, updated_at)
+      SELECT list_id, kind, value_minor, percent_bps, scope, first_units, label, created_at, updated_at
+      FROM shopping_list_discounts;
+      DROP TABLE shopping_list_discounts;
+      ALTER TABLE shopping_list_discounts_new RENAME TO shopping_list_discounts;
+    `);
+  }
+
   addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
   addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
   addColumnIfMissing('household_members', 'permissions', 'TEXT DEFAULT \'{}\'');

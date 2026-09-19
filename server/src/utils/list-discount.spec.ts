@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Offer } from './list-discount.js';
-import { basketMoney, describeDiscount, normalizeOffer, paidUnits, shareDiscount } from './list-discount.js';
+import {basketMoney, describeDiscount, normalizeOffer, paidUnits, shareDiscount,
+  isEligibleForDiscount,
+  type MoneyLine
+} from './list-discount.js';
 
 /**
  * El unico modulo del proyecto donde se puede perder un centavo. Las tablas de aqui
@@ -110,6 +113,24 @@ describe('basketMoney', () => {
     expect(over.discount?.reason).toBe('clampedToZero');
   });
 
+  it('un descuento sin valor no es un descuento, es ruido en la pantalla', () => {
+    // La API no deja guardar un 0, pero la funcion es publica y alguien la llamara con
+    // datos viejos o con una hoja de calculo: mejor decir «noValue» que pintar «-0,00 €».
+    const emptyPercent = basketMoney({
+      lines: [line('a', 2, 100)],
+      discount: { kind: 'percent', percentBps: 0, valueMinor: null, scope: 'all', firstUnits: null }
+    });
+    expect(emptyPercent.discountMinor).toBe(0);
+    expect(emptyPercent.discount?.reason).toBe('noValue');
+
+    const emptyAmount = basketMoney({
+      lines: [line('a', 2, 100)],
+      discount: { kind: 'amount', valueMinor: 0, percentBps: null, scope: 'all', firstUnits: null }
+    });
+    expect(emptyAmount.discountMinor).toBe(0);
+    expect(emptyAmount.discount?.reason).toBe('noValue');
+  });
+
   it('«descuento en las primeras N unidades» solo recorta el porcentaje de esas N', () => {
     const money = basketMoney({
       lines: [line('a', 5, 100)],
@@ -206,5 +227,79 @@ describe('describeDiscount', () => {
 
   it('sin descuento, nada que decir', () => {
     expect(describeDiscount(null)).toBeNull();
+  });
+});
+
+describe('descuentos por producto y por seccion', () => {
+  const line = (over: Partial<MoneyLine> = {}): MoneyLine => ({
+    itemId: 'a',
+    quantity: 2,
+    unitMinor: 500,
+    offer: null,
+    productKey: 'jamon serrano',
+    category: 'Carne y pescado',
+    ...over
+  });
+
+  it('el importe se calcula solo sobre la linea que encaja', () => {
+    const money = basketMoney({
+      lines: [line(), line({ itemId: 'b', productKey: 'leche semidesnatada', category: 'Lacteos' })],
+      discount: { kind: 'amount', valueMinor: 200, percentBps: null, scope: 'product', firstUnits: null, target: 'Jamón Serrano' }
+    });
+    expect(money.discountMinor).toBe(200);
+    expect(money.discount?.applicableMinor).toBe(1000);
+    // El reparto tampoco salpica a la leche: si salpicara, «descuento en X» baratearia Y.
+    const jamon = money.lines.find(l => l.itemId === 'a')!;
+    const leche = money.lines.find(l => l.itemId === 'b')!;
+    expect(jamon.netMinor).toBe(800);
+    expect(leche.netMinor).toBe(1000);
+  });
+
+  it('compara por clave normalizada, no por el texto exacto', () => {
+    const money = basketMoney({
+      lines: [line({ productKey: 'jamon  serrano' })],
+      discount: { kind: 'percent', valueMinor: null, percentBps: 1000, scope: 'product', firstUnits: null, target: 'JAMÓN  Serrano!' }
+    });
+    expect(money.discount?.applied).toBe(true);
+    expect(money.discountMinor).toBe(100);
+  });
+
+  it('por seccion entra todo el pasillo y nada mas', () => {
+    const money = basketMoney({
+      lines: [line(), line({ itemId: 'b', category: 'Lacteos', productKey: 'leche' })],
+      discount: { kind: 'percent', valueMinor: null, percentBps: 1000, scope: 'category', firstUnits: null, target: 'carne y pescado' }
+    });
+    expect(money.discount?.applicableMinor).toBe(1000);
+    expect(money.lines.find(l => l.itemId === 'b')!.netMinor).toBe(1000);
+  });
+
+  it('sin ninguna linea que encaja, lo dice: no es un descuento de cero', () => {
+    const money = basketMoney({
+      lines: [line({ productKey: 'leche', category: 'Lacteos' })],
+      discount: { kind: 'amount', valueMinor: 200, percentBps: null, scope: 'product', firstUnits: null, target: 'jamon' }
+    });
+    expect(money.discountMinor).toBe(0);
+    expect(money.discount?.reason).toBe('noMatchingLine');
+  });
+
+  it('el importe no puede superar lo que cubre, y se sigue diciendo', () => {
+    const money = basketMoney({
+      lines: [line(), line({ itemId: 'b', productKey: 'otro', category: 'Lacteos' })],
+      discount: { kind: 'amount', valueMinor: 5000, percentBps: null, scope: 'product', firstUnits: null, target: 'jamon serrano' }
+    });
+    expect(money.discountMinor).toBe(1000);
+    expect(money.discount?.reason).toBe('clampedToZero');
+  });
+
+  it('la frase del descuento nombra el producto', () => {
+    expect(describeDiscount({ kind: 'amount', valueMinor: 200, percentBps: null, scope: 'product', firstUnits: null, target: 'Jamón Serrano' })).toContain('en Jamón Serrano');
+    expect(describeDiscount({ kind: 'percent', valueMinor: null, percentBps: 1500, scope: 'category', firstUnits: null, target: 'Frutas y verduras' })).toContain('en Frutas y verduras');
+  });
+
+  it('isEligibleForDiscount: los alcances sin objetivo sirven para todas las lineas', () => {
+    for (const scope of ['all', 'firstUnits'] as const) {
+      expect(isEligibleForDiscount(line(), { kind: 'amount', valueMinor: 100, percentBps: null, scope, firstUnits: 1, target: null })).toBe(true);
+    }
+    expect(isEligibleForDiscount(line(), { kind: 'amount', valueMinor: 100, percentBps: null, scope: 'product', firstUnits: null, target: null })).toBe(false);
   });
 });

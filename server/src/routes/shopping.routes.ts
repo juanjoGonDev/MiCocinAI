@@ -156,6 +156,7 @@ function readDiscount(db: ReturnType<typeof getDatabase>, listId: string): Disco
     percentBps: row.percent_bps ?? null,
     scope: row.scope,
     firstUnits: row.first_units ?? null,
+    target: row.target ?? null,
     label: row.label ?? null
   };
 }
@@ -224,14 +225,16 @@ shoppingRoutes.get('/lists', async (c) => {
   const conditions = [scoped];
   const params = [...scope.params];
 
-  if (filter.status) {
-    conditions.push('l.status = ?');
-    params.push(filter.status);
-  } else {
+  if (!filter.status) {
     // Por defecto no se ven las terminadas: la pantalla es para lo que queda
     // por comprar, el historial vive en su propia pestana.
     conditions.push(`l.status IN ('active', 'archived')`);
+  } else if (filter.status !== 'all') {
+    conditions.push('l.status = ?');
+    params.push(filter.status);
   }
+  // `all` no anade condicion: es el estado «sin filtro», y tratarlo como un valor de
+  // la columna dejaba la pesta «Ver todas» vacia (el bug que trajo esta linea).
   // El texto busca en el nombre de la lista Y en lo que hay dentro: quien recuerda
   // «puse lo del jamon en alguna parte» no recuerda en cual.
   if (filter.q) {
@@ -753,14 +756,18 @@ shoppingRoutes.put('/lists/:id/discount', async (c) => {
   const body = discountSchema.parse(await c.req.json());
   db.prepare(
     `INSERT INTO shopping_list_discounts
-       (list_id, kind, value_minor, percent_bps, scope, first_units, label)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
+       (list_id, kind, value_minor, percent_bps, scope, first_units, target, label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(list_id) DO UPDATE SET
        kind = excluded.kind,
        value_minor = excluded.value_minor,
        percent_bps = excluded.percent_bps,
        scope = excluded.scope,
        first_units = excluded.first_units,
+       -- El target se PONE o se QUITA segun el alcance: dejar el antiguo al pasar de
+       -- «en jamon» a «toda la cesta» haria que el descuento siguiera persiguiendo al
+       -- jamon mientras la pantalla dice «toda la cesta».
+       target = excluded.target,
        label = excluded.label,
        updated_at = CURRENT_TIMESTAMP`
   ).run(
@@ -770,6 +777,7 @@ shoppingRoutes.put('/lists/:id/discount', async (c) => {
     body.kind === 'percent' ? body.percentBps ?? 0 : null,
     body.scope,
     body.scope === 'firstUnits' ? body.firstUnits ?? null : null,
+    body.scope === 'product' || body.scope === 'category' ? body.target?.trim() ?? null : null,
     body.label ?? null
   );
 
@@ -904,7 +912,9 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
       itemId: entry.item.id,
       quantity: entry.item.quantity ?? 1,
       unitMinor: entry.unitMinor,
-      offer: offerOf(entry.item)
+      offer: offerOf(entry.item),
+      productKey: entry.item.product_key ?? null,
+      category: entry.item.category ?? null
     })),
     discount
   });

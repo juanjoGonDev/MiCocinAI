@@ -48,7 +48,7 @@ export function offerOf(row: { promo_buy?: number | null; promo_take?: number | 
 }
 
 export type DiscountKind = 'amount' | 'percent';
-export type DiscountScope = 'all' | 'firstUnits';
+export type DiscountScope = 'all' | 'firstUnits' | 'product' | 'category';
 
 export type Discount = {
   kind: DiscountKind;
@@ -59,14 +59,52 @@ export type Discount = {
   scope: DiscountScope;
   /** Unidades pagadas a las que se le aplica (solo con `scope: 'firstUnits'`). */
   firstUnits: number | null;
+  /**
+   * Que linea entra en el descuento con `scope: 'product'` (clave de producto) o
+   * `'category'` (nombre de la seccion). Con los demas alcances es `null`.
+   *
+   * Existe porque en la nevera real el cartel no dice «-2 € en la cesta»: dice «2 € de
+   * descuento en jamon», y sin esta columna la unica forma de anotarlo era mentir con el
+   * importe de todo el carro. Opcional porque los alcances viejos nunca lo tuvieron.
+   */
+  target?: string | null;
   label?: string | null;
 };
+
+/** Clave de comparacion de producto: la misma normalizacion que guarda las lineas. */
+function keyOf(value: string | null | undefined): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/**
+ * Si la linea entra en el descuento. Con `product` se compara por CLAVE, no por texto:
+ * «Jamón Serrano» y «jamon serrano » son el mismo producto, y un descuento que depende
+ * de un acento no es un descuento, es una sorpresa.
+ */
+export function isEligibleForDiscount(
+  line: { productKey?: string | null; category?: string | null; name?: string | null },
+  discount: Discount | null | undefined
+): boolean {
+  if (!discount || discount.scope === 'all' || discount.scope === 'firstUnits') return true;
+  const wanted = keyOf(discount.target);
+  if (!wanted) return false;
+  if (discount.scope === 'category') return keyOf(line.category) === wanted;
+  return keyOf(line.productKey ?? line.name) === wanted;
+}
 
 export type MoneyLine = {
   itemId: string;
   quantity: number;
   unitMinor: number | null;
   offer: Offer | null;
+  /** Para los descuentos por producto o seccion (`scope: 'product' | 'category'`). */
+  productKey?: string | null;
+  category?: string | null;
 };
 
 export type LineMoney = {
@@ -78,6 +116,8 @@ export type LineMoney = {
   offerSavingsMinor: number;
   /** Solo para el desglose: a cuanto asciende la parte no pagada. */
   unitMinor: number | null;
+  /** Si a esta linea le toca el descuento de la lista. */
+  discounted: boolean;
 };
 
 export type BasketMoney = {
@@ -89,7 +129,13 @@ export type BasketMoney = {
   /** Que paso con el descuento, para poder decirlo en la pantalla en vez de callarlo. */
   discount: {
     applied: boolean;
-    reason: 'applied' | 'thresholdNotReached' | 'noValue' | 'emptyBasket' | 'clampedToZero';
+    reason:
+      | 'applied'
+      | 'thresholdNotReached'
+      | 'noValue'
+      | 'emptyBasket'
+      | 'clampedToZero'
+      | 'noMatchingLine';
     /** Importe sobre el que se calculo (las primeras N unidades, si aplica). */
     applicableMinor: number;
     applicableUnits: number;
@@ -132,6 +178,7 @@ function sliceValue(lines: LineMoney[], upTo: number | null): { minor: number; u
  * no aporta importe — es «sin dato», no «gratis».
  */
 export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | null }): BasketMoney {
+  const earlyDiscount = input.discount ?? null;
   const lines: LineMoney[] = input.lines.map((line) => {
     const units = Number.isFinite(line.quantity) && line.quantity > 0 ? line.quantity : 0;
     const payable = paidUnits(units, line.offer);
@@ -146,14 +193,19 @@ export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | n
       unitMinor: unit,
       grossMinor,
       netMinor: grossMinor,
-      offerSavingsMinor: Math.max(0, fullMinor - grossMinor)
+      offerSavingsMinor: Math.max(0, fullMinor - grossMinor),
+      discounted: isEligibleForDiscount(line, earlyDiscount)
     };
   });
 
   const subtotalMinor = lines.reduce((sum, line) => sum + line.netMinor, 0);
   const offerSavingsMinor = lines.reduce((sum, line) => sum + line.offerSavingsMinor, 0);
 
-  const discount = input.discount ?? null;
+  const discount = earlyDiscount;
+  // Las lineas a las que si les toca. Se decide aqui, antes de cualquier suma, porque el
+  // descuento por producto cambia a la vez la BASE de calculo y a quien se le reparte:
+  // una de las dos por separado es un resultado que no cuadra con la pantalla.
+  const baseLines = discount ? lines.filter((line) => line.discounted) : lines;
   if (!discount) {
     return {
       lines,
@@ -163,6 +215,20 @@ export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | n
       totalMinor: subtotalMinor,
       discount: null
     };
+  }
+
+  if (discount.scope === 'product' || discount.scope === 'category') {
+    if (!baseLines.length || baseLines.every((line) => line.netMinor === 0)) {
+      // «-2 € en jamon» y en la cesta no hay jamon: no es un descuento de 0, es un aviso.
+      return {
+        lines,
+        subtotalMinor,
+        offerSavingsMinor,
+        discountMinor: 0,
+        totalMinor: subtotalMinor,
+        discount: { applied: false, reason: 'noMatchingLine', applicableMinor: 0, applicableUnits: 0 }
+      };
+    }
   }
 
   if (subtotalMinor === 0) {
@@ -177,7 +243,7 @@ export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | n
   }
 
   const capped = discount.scope === 'firstUnits' ? discount.firstUnits ?? null : null;
-  const slice = sliceValue(lines, capped);
+  const slice = sliceValue(baseLines, capped);
 
   let discountMinor = 0;
   let reason: NonNullable<BasketMoney['discount']>['reason'] = 'applied';
@@ -217,7 +283,7 @@ export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | n
     reason = 'clampedToZero';
   }
 
-  const shares = shareDiscount(lines, discountMinor);
+  const shares = shareDiscount(baseLines, discountMinor);
   const totalMinor = Math.max(0, subtotalMinor - discountMinor);
 
   return {
@@ -285,6 +351,10 @@ export function describeDiscount(discount: Discount | null | undefined): string 
   const cap =
     discount.scope === 'firstUnits' && discount.firstUnits
       ? ` en ${discount.firstUnits.toLocaleString('es-ES', { maximumFractionDigits: 2 })} unidades`
-      : '';
+      : discount.scope === 'product' && discount.target
+        ? ` en ${discount.target}`
+        : discount.scope === 'category' && discount.target
+          ? ` en ${discount.target}`
+          : '';
   return discount.label?.trim() ? `${discount.label.trim()} · ${core}${cap}` : `${core}${cap}`;
 }

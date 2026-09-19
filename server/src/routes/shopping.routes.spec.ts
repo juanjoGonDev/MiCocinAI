@@ -862,6 +862,84 @@ describe('entrada por foto (§8f)', () => {
     expect(events[0].description).toContain('foto');
   });
 
+  it('un descuento por producto solo baja ese producto', async () => {
+    const list = await createList(alice);
+    const jamon = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Jamon Serrano', quantity: 1, unit: 'kg', priceMinor: 4000 }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 2, unit: 'L', priceMinor: 100, category: 'Lacteos' });
+
+    const saved = await data(await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'product', target: 'Jamon Serrano' }));
+    expect(saved.target).toBe('Jamon Serrano');
+    expect(saved.description).toContain('en Jamon Serrano');
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.subtotalMinor).toBe(4200);
+    expect(estimate.discountMinor).toBe(500);
+    expect(estimate.totalMinor).toBe(3700);
+    const byId = Object.fromEntries(estimate.lines.map((l: any) => [l.name, l]));
+    // `lineTotalMinor` es lo que dice el ticket (despues de la oferta, antes del descuento
+    // de la lista); `netMinor` es lo que se paga de esa linea, y ahi si esta el reparto.
+    expect(byId['Jamon Serrano'].lineTotalMinor).toBe(4000);
+    expect(byId['Jamon Serrano'].netMinor).toBe(3500);
+    expect(byId['Leche'].netMinor).toBe(200);
+    expect(jamon.name).toBe('Jamon Serrano');
+  });
+
+  it('un descuento por seccion entra en todo el pasillo', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Manzanas', quantity: 1, priceMinor: 300, category: 'Frutas y verduras' });
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Puerros', quantity: 1, priceMinor: 200, category: 'Frutas y verduras' });
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1, priceMinor: 1000, category: 'Lacteos' });
+
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'percent', percentBps: 1000, scope: 'category', target: 'frutas y verduras' });
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    // 10 % de 500 ct = 50 ct, y el reparto solo salpica a las dos lineas de fruta.
+    expect(estimate.discountMinor).toBe(50);
+    expect(estimate.totalMinor).toBe(1450);
+  });
+
+  it('prometer un descuento sin decir a que es un 400, no un 0 magico', async () => {
+    const list = await createList(alice);
+    const response = await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'product' });
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await response.json())).toContain('DiscountTargetRequired');
+  });
+
+  it('cambiar de «en jamon» a «toda la cesta» olvida el jamon', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Jamon Serrano', quantity: 1, priceMinor: 4000 });
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'product', target: 'Jamon Serrano' });
+    const after = await data(await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'all' }));
+    expect(after.target).toBeNull();
+    expect(after.scope).toBe('all');
+  });
+
+  it('sin linea que encaje, el estimate lo dice en vez de fingir un descuento', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1, priceMinor: 1000 });
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'product', target: 'Jamon' });
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.discountMinor).toBe(0);
+    expect(estimate.discount.reason).toBe('noMatchingLine');
+  });
+
+  it('la pestaña «todas» mezcla activas y terminadas (y vacía ninguna)', async () => {
+    const alice = await makeUser('all-tab@hogaria.test');
+    const first = await data(await call(alice, 'POST', '/lists', { name: 'Activa aqui' }));
+    const second = await data(await call(alice, 'POST', '/lists', { name: 'Terminada alla' }));
+    await call(alice, 'POST', `/lists/${second.id}/complete`, { version: second.version });
+
+    const activeOnly = await json(await call(alice, 'GET', '/lists?status=active'));
+    expect(activeOnly.data.map((l: any) => l.name)).toEqual(['Activa aqui']);
+    expect(activeOnly.meta.total).toBe(1);
+
+    const everything = await json(await call(alice, 'GET', '/lists?status=all'));
+    expect(everything.data.map((l: any) => l.name).sort()).toEqual(['Activa aqui', 'Terminada alla']);
+    // El total del meta usa los MISMOS filtros: si contara sin filtrar, la paginacion
+    // ensenaria «1-2 de 57» en una pantalla con dos filas.
+    expect(everything.meta.total).toBe(2);
+    expect(first.status).toBe('active');
+  });
+
   it('sin IA configurada dice donde se configura, en vez de un 500', async () => {
     const list = await createList(alice);
     const response = await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE });
