@@ -288,6 +288,60 @@ Done in steps so nothing breaks under review:
 The GitHub repo keeps `MiCocinAI` until P3; nothing in code hardcodes the owner/repo except the
 `supportRepoUrl` default.
 
+## 8b. From a cooking level to a household profile
+
+The signup form asked for a **cooking level** (beginner / intermediate / expert) and nothing
+consumed it: the AI prompt was driven by a separate `detailLevel`, and the household view only
+printed a label. With shopping lists, prices, tickets, the pantry and (soon) household tasks, one
+cooking-only question no longer describes the user. The concept moves, it does not disappear.
+
+**Contract**
+
+- `users.cooking_level` gains a fourth value, `none` ("apenas cocino"), as a plain TEXT value with no
+  CHECK constraint — so no migration, and old rows keep working. Enums updated in
+  `schemas/auth.schema.ts`, `schemas/household.schema.ts` and `utils/taste-profile.ts`, plus the
+  `CookingLevel` union and `COOKING_LEVEL_LABELS` on the client.
+- `users.preferences` JSON gains `profile.modules: HomeModule[]` with the closed set
+  `meals | pantry | shopping | receipts | home`, validated and de-duplicated server-side (unknown
+  values dropped, max 8). No new column, same merge rule as `taste`/`onboarding`.
+- `GET|PATCH /api/auth/taste` now exchanges `profile: { cookingLevel, modules }` as well: one
+  round-trip for the tour and for Preferences, `cooking_level` staying the only source for the level
+  (Preferences never replaces the whole preferences blob, so it cannot wipe theme/language).
+- **The level has to do something.** `detailLevelForCookingLevel(level)` maps `none|beginner → basic`,
+  `intermediate → intermediate`, `expert → expert`, and `POST /api/ai/generate-recipe`
+  (`/multiple` too) uses it **only when the request omits `detailLevel`**: an explicit choice from the
+  recipe UI still wins. That is the whole point of asking.
+- Modules drive what HogarIA highlights (dashboard cards, which sections the tour mentions); the three
+  not shipped yet are listed with a *pronto/soon* mark so the picker is honest about the roadmap.
+
+**Where it lives**
+
+- Signup stops configuring the product: the register form is name, email, password only. It lands in
+  the tour, which keeps the level as its **first** step ("Perfil") next to the module picker — five
+  short questions, skippable, editable later.
+- **Preferencias › Perfil** is the section to change it later (first tab, `?tab=profile`), with the
+  same controls, the derived AI detail level shown as text, and the standard dirty/discard/save
+  behaviour of that page. `detailLevel` itself remains in Settings: the profile only *suggests* it.
+
+**Acceptance**
+
+- Register → tour step 1 of 5 = Perfil; choosing a level and two modules and finishing persists both
+  (`GET /api/auth/taste` returns them) and survives a reload of Preferencias › Perfil.
+- `cooking_level = 'none'` is accepted by `/api/auth/profile` and renders as "Apenas cocino" in the
+  household member list.
+- With `cooking_level = 'beginner'` and no `detailLevel` in the request, the generated prompt contains
+  `Nivel de detalle: basic`; with `expert`, `Nivel de detalle: expert`; with an explicit
+  `detailLevel: 'expert'` and level `beginner`, the explicit value wins.
+- Skipping the tour keeps defaults (`beginner`, no modules) and never blocks the dashboard.
+
+### Checklist for this feature
+- [ ] Server: `none` in every enum, `profile.modules` validated in `taste-profile.ts`, `profile` in the
+      response, `detailLevelForCookingLevel` + its use in the two AI routes, unit tests.
+- [ ] Client: `CookingLevel`/labels, `home-profile.ts` model with the module options, service patch.
+- [ ] Signup without the level block; tour step *Perfil* (level + modules) and 5-step copy.
+- [ ] Preferencias › Perfil tab (first), dirty tracking including the profile, save/discard.
+- [ ] e2e re-linked (onboarding 5 steps, preferences default tab) + the profile surviving a reload.
+
 ## 9. Data model additions
 
 New tables (SQLite, `PRAGMA foreign_keys = ON`, WAL, busy timeout, indexes on every FK and date):
