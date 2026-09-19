@@ -13,3 +13,7 @@ export * from './tooltip/tooltip.component';
 export * from './progress/progress.component';
 export * from './rating/rating.component';
 export * from './chip-select/chip-select.component';
+export * from './picker/picker.component';
+export * from './icon/icon-paths';
+export * from './icon/icon.component';
+export * from './icon-button/icon-button.component';

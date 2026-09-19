@@ -188,3 +188,130 @@ export function formatQuantity(quantity: number, unit: string | null | undefined
   if (!unit) return quantity === 1 ? '' : `${amount}×`;
   return `${amount} ${unit}`;
 }
+
+// ---------------------------------------------------------------------------
+// Lo que anadio la ronda 8f (secciones, auditoria, descuentos, foto, bandeja)
+// ---------------------------------------------------------------------------
+
+export interface ShoppingCategory {
+  id: string;
+  name: string;
+  /** El color es DATO y no CSS: la IA lo elige al proponer una seccion nueva. */
+  color: string;
+  position: number;
+  key: string;
+}
+
+export type ListEventAction =
+  | 'list.create' | 'list.rename' | 'list.store' | 'list.status' | 'list.delete' | 'list.clear_checked'
+  | 'items.add' | 'items.merge' | 'items.update' | 'items.check' | 'items.uncheck' | 'items.remove'
+  | 'items.bulk_check' | 'items.bulk_remove' | 'items.reorder' | 'items.restore' | 'items.discount' | 'items.apply';
+
+/** Lo que escribio la propia auditoria del server: `description` ya es la frase en castellano. */
+export interface ListEvent {
+  id: string;
+  list_id: string;
+  user_id: string;
+  user_name: string | null;
+  action: ListEventAction;
+  item_name: string | null;
+  created_at: string;
+  description: string;
+}
+
+export type DiscountKind = 'amount' | 'percent';
+export type DiscountScope = 'all' | 'firstUnits';
+
+export interface ListDiscount {
+  id: string;
+  list_id: string;
+  kind: DiscountKind;
+  value_minor: number | null;
+  percent_bps: number | null;
+  scope: DiscountScope;
+  first_units: number | null;
+  label: string | null;
+  /** La frase que pinta la fila de totales: el server la escribe, la app no la reconstruye. */
+  description?: string | null;
+}
+
+export interface DiscountInput {
+  kind: DiscountKind;
+  valueMinor?: number | null;
+  percentBps?: number | null;
+  scope?: DiscountScope;
+  firstUnits?: number | null;
+  label?: string | null;
+}
+
+/** Oferta de linea (3x2, 2x1): se pagan `buy - take` unidades de cada `buy`. */
+export interface LineOffer {
+  buy: number;
+  take: number;
+}
+
+export const OFFER_PRESETS: { label: string; buy: number; take: number; hint: string }[] = [
+  { label: '3x2', buy: 3, take: 2, hint: 'Pagas dos, llevas tres' },
+  { label: '2x1', buy: 2, take: 1, hint: 'Uno gratis' },
+  { label: '4x3', buy: 4, take: 3, hint: 'Pagas tres, llevas cuatro' },
+  { label: '5x4', buy: 5, take: 4, hint: 'Pagas cuatro, llevas cinco' }
+];
+
+export function describeOffer(offer: LineOffer | null | undefined): string | null {
+  if (!offer || !offer.buy || !offer.take) return null;
+  if (offer.take >= offer.buy) return null;
+  return `${offer.buy}x${offer.buy - offer.take}`;
+}
+
+export interface PhotoLine {
+  name: string;
+  quantity: number;
+  unit?: string | null;
+  category?: string | null;
+  /** Pedir seccion nueva es normal: la IA ve un pasillo que el catalogo no tiene. */
+  createCategory?: boolean;
+  priceMinor?: number | null;
+  offer?: LineOffer | null;
+  confidence?: number;
+  note?: string | null;
+}
+
+export interface PhotoAnalysis {
+  listId: string;
+  mode: 'auto' | 'ticket' | 'shelf';
+  currency: string;
+  warnings: string[];
+  lines: PhotoLine[];
+  categories: { name: string; color: string }[];
+}
+
+export type PhotoOutcome =
+  | { ok: true; data: PhotoAnalysis }
+  | { ok: false; status: number; message: string; data: Record<string, unknown> };
+
+export type ListsSort = 'updated' | 'name' | 'total' | 'lines';
+
+export interface ListsQuery {
+  /** `all` es solo del filtro de la bandeja; el server lo entiende como "sin estado". */
+  status?: ShoppingListStatus | 'all';
+  q?: string;
+  store?: string | null;
+  minTotalMinor?: number | null;
+  from?: string | null;
+  to?: string | null;
+  sort?: ListsSort;
+  dir?: 'asc' | 'desc';
+  limit?: number;
+  offset?: number;
+}
+
+export interface ListsMeta {
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface StoreCount {
+  store: string;
+  lists: number;
+}

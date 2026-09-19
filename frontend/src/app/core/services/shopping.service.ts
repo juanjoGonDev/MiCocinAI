@@ -2,15 +2,27 @@ import { Injectable, DestroyRef, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
 import { Observable, fromEvent } from 'rxjs';
 import { catchError, finalize, map, tap } from 'rxjs/operators';
+import { of } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ToastService } from './toast.service';
+import { AuthService } from './auth.service';
 import {
   CreateItemInput,
+  ListDiscount,
+  ListEvent,
+  ListsMeta,
+  ListsQuery,
+  DiscountInput,
   ListEstimate,
+  PhotoAnalysis,
+  PhotoLine,
+  PhotoOutcome,
   PriceObservation,
+  ShoppingCategory,
   ShoppingList,
   ShoppingListItem,
-  ShoppingListStatus
+  ShoppingListStatus,
+  StoreCount
 } from '../../shared/models/shopping.model';
 
 /** Operacion de escritura en espera: la misma observable, reintentable tal cual. */
@@ -37,6 +49,7 @@ export class ShoppingService {
   private readonly http = inject(HttpClient);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly auth = inject(AuthService);
   private readonly apiUrl = '/api/shopping';
 
   private readonly queue: QueuedWrite[] = [];
@@ -49,6 +62,12 @@ export class ShoppingService {
   readonly loadingLists = signal(false);
   readonly loadingList = signal(false);
   readonly saving = signal(false);
+  readonly listsMeta = signal<ListsMeta>({ total: 0, limit: 25, offset: 0 });
+  readonly stores = signal<StoreCount[]>([]);
+  readonly categories = signal<ShoppingCategory[]>([]);
+  readonly events = signal<ListEvent[]>([]);
+  private listsQuery: ListsQuery = {};
+  private categoriesLoaded = false;
   readonly pendingWrites = signal(0);
 
   constructor() {
@@ -61,19 +80,166 @@ export class ShoppingService {
 
   // ---------------------------------------------------------------- listas
 
-  loadLists(status: ShoppingListStatus = 'active'): void {
+  /**
+   * Filtros, orden y paginacion van en la URL y los resuelve el server (`/lists?`).
+   * No se filtra en memoria: con el historial de un ano, "las de este mes" tendria que
+   * leer 400 listas para ensenar 25, y la bandeja se abre justo cuando hay prisa.
+   */
+  loadLists(query: ListsQuery | ShoppingListStatus = {}): void {
+    const normalized: ListsQuery = typeof query === 'string' ? { status: query } : query;
+    this.listsQuery = normalized;
     this.loadingLists.set(true);
-    const params = new HttpParams().set('status', status);
+    let params = new HttpParams().set('status', normalized.status ?? 'active');
+    if (normalized.q) params = params.set('q', normalized.q);
+    if (normalized.store) params = params.set('store', normalized.store);
+    if (normalized.minTotalMinor && normalized.minTotalMinor > 0) params = params.set('minTotalMinor', String(normalized.minTotalMinor));
+    if (normalized.from) params = params.set('from', normalized.from);
+    if (normalized.to) params = params.set('to', normalized.to);
+    if (normalized.sort) params = params.set('sort', normalized.sort);
+    if (normalized.dir) params = params.set('dir', normalized.dir);
+    params = params.set('limit', String(normalized.limit ?? 25)).set('offset', String(normalized.offset ?? 0));
     this.http
-      .get<{ data: ShoppingList[] }>(`${this.apiUrl}/lists`, { params })
+      .get<{ data: ShoppingList[]; meta?: ListsMeta }>(`${this.apiUrl}/lists`, { params })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: response => {
           this.lists.set(response.data);
+          if (response.meta) this.listsMeta.set(response.meta);
           this.loadingLists.set(false);
         },
         error: () => this.loadingLists.set(false)
       });
+  }
+
+  /** Repetir la ultima lectura: lo que llama el SSE cuando avisa de un cambio ajeno. */
+  reloadLists(): void {
+    this.loadLists(this.listsQuery);
+  }
+
+  loadStores(): void {
+    this.http
+      .get<{ data: StoreCount[] }>(`${this.apiUrl}/stores`)
+      .pipe(
+        map(response => response.data),
+        catchError(() => of([] as StoreCount[])),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(data => this.stores.set(data));
+  }
+
+  // ------------------------------------------------------- secciones / catalogo
+
+  /** El catalogo es dato (HOGARIA-SPEC 8f): el prompt de la foto y la pantalla lo comparten. */
+  loadCategories(force = false): void {
+    if (this.categoriesLoaded && !force) return;
+    this.http
+      .get<{ data: ShoppingCategory[] }>(`${this.apiUrl}/categories`)
+      .pipe(
+        map(response => response.data),
+        catchError(() => of([] as ShoppingCategory[])),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: categories => {
+          this.categoriesLoaded = true;
+          // Catalogo vacio (sin red o seed pendiente): la pantalla conserva
+          // LIST_CATEGORIES como fallback y no se queda sin agrupar.
+          this.categories.set(categories);
+        }
+      });
+  }
+
+  createCategory(name: string, color?: string | null): Promise<ShoppingCategory | null> {
+    return this.request<ShoppingCategory>(() =>
+      this.http
+        .post<{ data: ShoppingCategory }>(`${this.apiUrl}/categories`, { name, color: color ?? null })
+        .pipe(map(response => response.data), tap(() => this.loadCategories(true)))
+    );
+  }
+
+  // ------------------------------------------------------------ descuentos
+
+  setDiscount(listId: string, input: DiscountInput | null): Promise<ListDiscount | null> {
+    if (input === null) {
+      return this.request<ListDiscount | null>(() =>
+        this.http
+          .delete<{ data: ListDiscount | null }>(`${this.apiUrl}/lists/${listId}/discount`)
+          .pipe(map(response => response.data), tap(() => this.loadEstimate(listId)))
+      );
+    }
+    return this.request<ListDiscount | null>(() =>
+      this.http
+        .put<{ data: ListDiscount | null }>(`${this.apiUrl}/lists/${listId}/discount`, input)
+        .pipe(map(response => response.data), tap(() => this.loadEstimate(listId)))
+    );
+  }
+
+  // ------------------------------------------------------------- auditoria / en vivo
+
+  loadEvents(listId: string, limit = 60): void {
+    const params = new HttpParams().set('limit', String(limit));
+    this.http
+      .get<{ data: ListEvent[] }>(`${this.apiUrl}/lists/${listId}/events`, { params })
+      .pipe(
+        map(response => response.data),
+        catchError(() => of([] as ListEvent[])),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(events => this.events.set(events));
+  }
+
+  /**
+   * Suscripcion SSE. El token va por query porque `EventSource` no admite cabeceras, y el
+   * server solo lo acepta en `/api/shopping/stream/*` — ver `auth.middleware.ts`.
+   * Devuelve la funcion de cierre: quien suscribe es quien la llama en `ngOnDestroy`.
+   */
+  openStream(path: 'lists' | `lists/${string}`, onEvent: (payload: unknown) => void): () => void {
+    const token = this.auth.getToken();
+    const source = new EventSource(`${this.apiUrl}/stream/${path}?access_token=${encodeURIComponent(token ?? '')}`);
+    source.addEventListener('change', event => {
+      try {
+        onEvent(JSON.parse((event as MessageEvent).data));
+      } catch {
+        onEvent(null);
+      }
+    });
+    return () => source.close();
+  }
+
+  // -------------------------------------------------------------- entrada por foto
+
+  /**
+   * Analizar NO escribe: la persona repasa la hoja y luego manda `applyLines`. Un modelo
+   * que se equivoca con una etiqueta no deberia poder tocar la lista sin que nadie lo vea.
+   */
+  analyzePhoto(listId: string, image: string, mode: 'auto' | 'ticket' | 'shelf' = 'auto', note?: string): Promise<PhotoOutcome> {
+    const failure = (status: number, message: string, data: Record<string, unknown>): PhotoOutcome => ({ ok: false, status, message, data });
+    return firstValue(
+      this.http
+        .post<{ data: PhotoAnalysis }>(`${this.apiUrl}/lists/${listId}/photo/analyze`, { image, mode, note: note || undefined })
+        .pipe(
+          map(response => ({ ok: true, data: response.data }) as PhotoOutcome),
+          catchError((error: unknown) => {
+            const response = error as HttpErrorResponse;
+            const body = (response?.error ?? {}) as { message?: string; data?: Record<string, unknown> };
+            return of(failure(response?.status ?? 0, body.message ?? 'AI_UNAVAILABLE', body.data ?? {}));
+          })
+        )
+    );
+  }
+
+  applyPhotoLines(listId: string, lines: PhotoLine[]): Promise<{ added: number; merged: number[]; createdCategories: string[] } | null> {
+    return this.request<{ added: number; merged: number[]; createdCategories: string[] }>(() =>
+      this.http
+        .post<{ data: { added: number; merged: number[]; createdCategories: string[] } }>(`${this.apiUrl}/lists/${listId}/items/apply`, { lines })
+        .pipe(
+          map(response => response.data),
+          tap(() => {
+            this.loadList(listId);
+            this.loadCategories(true);
+          })
+        )
+    );
   }
 
   createList(name: string, store?: string | null): Promise<ShoppingList | null> {
@@ -391,6 +557,7 @@ export class ShoppingService {
   }
 
   /** Petición corta: se espera, se propaga el fallo al llamador y ya. */
+  /** Respuestas del server, sin reintentos: un 4xx de datos se reenvia tal cual. */
   private async request<T>(factory: () => Observable<T>): Promise<T | null> {
     try {
       return await firstValue(this.track(factory()));
