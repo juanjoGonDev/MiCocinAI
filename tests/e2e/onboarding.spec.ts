@@ -20,7 +20,7 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
 
     // Cuatro niveles, incluido «apenas cocino», y las cinco secciones de la casa
     await expect(page.locator('[data-level]')).toHaveCount(4);
-    await expect(page.locator('[data-module]')).toHaveCount(5);
+    await expect(page.locator('label[data-module]')).toHaveCount(5);
 
     await page.getByRole('button', { name: 'Siguiente →' }).click();
     await expect(page.locator('.onboarding__step-label')).toContainText('Paso 2 de 5 · Alergias');
@@ -46,8 +46,8 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     // ── Paso 1 · perfil: cuánto se cocina y qué se quiere llevar
     await page.locator('[data-level="none"]').click();
     await expect(page.locator('[data-level="none"]')).toHaveClass(/profile-picker__level--on/);
-    await page.locator('.profile-picker__module', { hasText: 'Lista de la compra' }).click();
-    await page.locator('.profile-picker__module', { hasText: 'Comidas y recetas' }).click();
+    await page.locator('label[data-module="shopping"]').click();
+    await page.locator('label[data-module="meals"]').click();
 
     await page.getByRole('button', { name: 'Siguiente →' }).click();
 
@@ -99,9 +99,9 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.goto('/preferences');
     await expect(page.locator('.tab--active')).toContainText('Perfil');
     await expect(page.locator('[data-level="none"]')).toHaveClass(/profile-picker__level--on/);
-    await expect(page.locator('[data-module="shopping"]')).toBeChecked();
-    await expect(page.locator('[data-module="meals"]')).toBeChecked();
-    await expect(page.locator('[data-module="pantry"]')).not.toBeChecked();
+    await expect(page.locator('input[data-module-input="shopping"]')).toBeChecked();
+    await expect(page.locator('input[data-module-input="meals"]')).toBeChecked();
+    await expect(page.locator('input[data-module-input="pantry"]')).not.toBeChecked();
     await page.locator('.tab', { hasText: 'Alergias' }).click();
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Lactosa' })).toHaveCount(1);
     await expect(page.locator('.chip-select__chip--on', { hasText: 'Kiwi' })).toHaveCount(1);

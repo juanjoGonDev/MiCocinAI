@@ -64,12 +64,12 @@ test.describe('Preferencias', () => {
 
     // Cuatro niveles y cinco secciones: las mismas que en el tour
     await expect(page.locator('[data-level]')).toHaveCount(4);
-    await expect(page.locator('[data-module]')).toHaveCount(5);
+    await expect(page.locator('label[data-module]')).toHaveCount(5);
     // Se entra con el nivel por defecto del registro
     await expect(page.locator('[data-level="beginner"]')).toHaveClass(/--on/);
 
-    await page.locator('.profile-picker__level', { hasText: 'Experto' }).click();
-    await page.locator('.profile-picker__module', { hasText: 'Despensa' }).click();
+    await page.locator('[data-level="expert"]').click();
+    await page.locator('label[data-module="pantry"]').click();
     await expect(page.locator('.preferences__state')).toContainText('Hay cambios sin guardar');
 
     await page.getByRole('button', { name: 'Guardar preferencias' }).click();
@@ -80,18 +80,19 @@ test.describe('Preferencias', () => {
 
     await page.reload();
     await expect(page.locator('[data-level="expert"]')).toHaveClass(/--on/);
-    await expect(page.locator('[data-module="pantry"]')).toBeChecked();
+    await expect(page.locator('input[data-module-input="pantry"]')).toBeChecked();
 
     // Descartar tambien revierte el perfil, sin recargar
-    await page.locator('.profile-picker__module', { hasText: 'Tickets' }).click();
-    await expect(page.locator('[data-module="receipts"]')).toBeChecked();
+    await page.locator('label[data-module="receipts"]').click();
+    await expect(page.locator('input[data-module-input="receipts"]')).toBeChecked();
     await page.getByRole('button', { name: /Descartar/ }).click();
-    await expect(page.locator('[data-module="receipts"]')).not.toBeChecked();
-    await expect(page.locator('[data-module="pantry"]')).toBeChecked();
+    await expect(page.locator('input[data-module-input="receipts"]')).not.toBeChecked();
+    await expect(page.locator('input[data-module-input="pantry"]')).toBeChecked();
   });
 
   test('lo marcado en una pestaña no se pierde al cambiar y se guarda junto', async ({ page }) => {
-    await registerAndGoto(page, '/preferences', 'prefs-save');
+    // Se entra por Alergias: la pestana por defecto ahora es Perfil
+    await registerAndGoto(page, '/preferences?tab=allergies', 'prefs-save');
 
     await page.locator('.chip-select__chip', { hasText: 'Lactosa' }).click();
     await page.locator('.tab', { hasText: 'Gustos' }).click();
@@ -121,7 +122,7 @@ test.describe('Preferencias', () => {
   });
 
   test('descartar cambios revierte sin recargar la página', async ({ page }) => {
-    await registerAndGoto(page, '/preferences', 'prefs-discard');
+    await registerAndGoto(page, '/preferences?tab=allergies', 'prefs-discard');
 
     await page.locator('.chip-select__chip', { hasText: 'Gluten' }).click();
     await expect(page.locator('.chip-select__chip--on')).toHaveCount(1);

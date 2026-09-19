@@ -61,3 +61,7 @@ pnpm-debug.log*
 
 # Docker
 docker-compose.override.yml
+
+# Playwright (informes y artefactos locales de la suite e2e)
+playwright-report/
+blob-report/

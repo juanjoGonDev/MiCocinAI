@@ -73,12 +73,13 @@ import {
           *ngFor="let option of modules"
           class="profile-picker__module"
           [class.profile-picker__module--on]="isSelected(option.value)"
+          [attr.data-module]="option.value"
         >
           <input
             type="checkbox"
             class="profile-picker__module-input"
             [checked]="isSelected(option.value)"
-            [attr.data-module]="option.value"
+            [attr.data-module-input]="option.value"
             (change)="toggle(option.value)"
           />
           <span class="profile-picker__module-box" aria-hidden="true">
