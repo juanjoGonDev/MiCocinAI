@@ -6,13 +6,16 @@ export default defineConfig({
   globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
-  // En CI hace falta margen: ng serve compila el chunk de cada ruta perezosa
-  // a la primera, y eso pasa dentro del test (registrarse lleva al onboarding,
-  // que es ruta nueva). 120s por test cubre el arranque frio sin que un fallo
-  // real se convierta en una espera interminable.
-  timeout: process.env.CI ? 120000 : 60000,
+  // En CI queda margen para el chunk perezoso de la ruta nueva que toca a cada
+  // worker (el arranque frio del bundle ya se paga en globalSetup), pero no 120s:
+  // un timeout largo multiplica por el numero de tests cualquier cascada, y eso es
+  // literalmente como se ha colgado este job. 90s cubre el peor caso conocido.
+  timeout: process.env.CI ? 90000 : 60000,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : undefined,
+  // Con un solo worker la suite de 113 tests tardaba mas que el propio runner.
+  // El trabajo pesado (install, compilacion) esta fuera de los tests, asi que se
+  // puede paralelizar: 2 por shard, 4 shards en paralelo = 8 tests a la vez.
+  workers: process.env.CI ? 2 : undefined,
   reporter: [
     // Salida tipo vitest/jest: arbol por `it` con duracion y semilla de datos,
     // fallos concentrados antes del summary y summary con los mas lentos.

@@ -28,11 +28,17 @@ function waitAfterRegister(page: Page, timeout: number): Promise<boolean> {
 /**
  * Rellena y envia el alta, y espera a la redireccion.
  *
- * El backend limita las peticiones por IP (/api/* 300/min) y la suite entera
- * comparte esa ventana: si el alta cae en un 429 no hay redireccion y la prueba
- * se quedaba esperando. Se devuelve un booleano para que quien llama reintente.
+ * El alta contesta en milisegundos cuando va mal (409 de correo repetido, 429 de
+ * rate limit por IP - la suite entera comparte ventana). Esperar entonces a la
+ * redireccion era lo que convertia un problema de datos en dos minutos de nada:
+ * aqui se captura la respuesta y se devuelve su estado para que quien llama
+ * reintente con otra direccion o falle ya, con el codigo en el mensaje.
  */
-async function submitRegister(page: Page, name: string, email: string): Promise<boolean> {
+async function submitRegister(
+  page: Page,
+  name: string,
+  email: string
+): Promise<{ ok: boolean; status?: number }> {
   await page.goto('/auth/register');
 
   // El formulario hay que ESPERARLO: en el runner de CI el SPA aun se esta
@@ -45,13 +51,22 @@ async function submitRegister(page: Page, name: string, email: string): Promise<
     .then(() => true)
     .catch(() => false);
 
-  if (hasForm) {
-    await form.fill(name);
-    await page.fill('input#email', email);
-    await page.fill('input#password', TEST_PASSWORD);
-    await page.click('button[type="submit"]');
-  }
-  return waitAfterRegister(page, 45000);
+  if (!hasForm) return { ok: await waitAfterRegister(page, 15000) };
+
+  const pending = page
+    .waitForResponse((response) => response.url().includes('/api/auth/register'), { timeout: 20000 })
+    .catch(() => null);
+
+  await form.fill(name);
+  await page.fill('input#email', email);
+  await page.fill('input#password', TEST_PASSWORD);
+  await page.click('button[type="submit"]');
+
+  const response = await pending;
+  if (response && !response.ok()) return { ok: false, status: response.status() };
+
+  // 2xx: como mucho la navegacion llega tarde, y eso se espera una vez.
+  return { ok: await waitAfterRegister(page, 45000), status: response?.status() };
 }
 
 /**
@@ -73,17 +88,22 @@ export async function registerToOnboarding(
   name = 'E2E',
   email?: string
 ): Promise<string> {
+  const tried: string[] = [];
   let target = email ?? generatedEmail();
-  let ok = await submitRegister(page, name, target);
+  let outcome = await submitRegister(page, name, target);
 
-  if (!ok) {
-    // Primero por si la navegacion simplemente ha llegado tarde a la prueba.
-    ok = await waitAfterRegister(page, 30000);
-    // Si no, con otra direccion: la anterior puede no haberse registrado nunca.
-    if (!ok && !email) ok = await submitRegister(page, name, (target = generatedEmail()));
+  if (!outcome.ok && !email) {
+    // Con otra direccion: la anterior puede no haberse registrado nunca (o estar
+    // registrada por un reintento anterior del mismo test).
+    tried.push(`${target} -> ${outcome.status ?? 'sin respuesta'}`);
+    target = generatedEmail();
+    outcome = await submitRegister(page, name, target);
   }
-  if (!ok) {
-    throw new Error(`El registro de la prueba no ha llegado al onboarding (${page.url()})`);
+  if (!outcome.ok) {
+    tried.push(`${target} -> ${outcome.status ?? 'sin respuesta'}`);
+    throw new Error(
+      `El registro de la prueba no ha llegado al onboarding (${page.url()}). Intentos: ${tried.join(', ')}`
+    );
   }
 
   await expect(page).toHaveURL(/.*(dashboard|onboarding)/);
