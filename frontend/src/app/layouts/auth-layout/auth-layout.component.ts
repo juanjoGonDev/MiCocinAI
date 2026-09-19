@@ -15,7 +15,7 @@ import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialo
       <div class="auth-layout__container">
         <div class="auth-layout__header">
           <span class="auth-layout__logo">🍳</span>
-          <h1 class="auth-layout__title">RecipeApp</h1>
+          <h1 class="auth-layout__title">HogarIA</h1>
           <p class="auth-layout__subtitle">Tu asistente de cocina inteligente</p>
         </div>
         

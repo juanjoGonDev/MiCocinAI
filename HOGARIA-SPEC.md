@@ -203,15 +203,25 @@ The rule: **the device is a first-class store; the server is the arbiter.**
    can conflict (`409` flow from §3.5).
 4. A background hook flushes the outbox on `online`, on `visibilitychange`, and on a timer from
    Settings; overlapping flushes are impossible (single in-flight per entity).
-5. Cache API: an Angular service worker (`@angular/service-worker`, already a dependency but never
-   configured) with `ngsw.json` asset hashing; `SwUpdate` surfaces "new version available" with
-   **Activate now** (which clears stale caches and reloads) and a Settings toggle for
-   "auto-activate". Because a stale cache can hide a fix, every release also bumps
-   `appVersion` (single source: `frontend/package.json`, exposed as `GET /api/meta`), and the SW
-   cache name embeds it (`hogar-shell-<version>`), with activation deleting any cache whose name
-   differs — Basketra's `__BASKETRA_VERSION__` trick, without a build-time templating step.
-6. `/api/meta` answers `{ version, build, serverTime, ready, cacheName }`; the client derives uptime
-   from one `serverTime` and never polls diagnostics per second.
+5. Cache API: the Angular service worker (`@angular/service-worker`, a dependency that was never
+   wired up) with `ngsw-config.json` — `shell` group prefetches `index.html`/`manifest.json`/all
+   `*.js`+`*.css`, `assets` group is lazy-on-install and prefetched on update, and API reads use
+   `freshness` (`/api/health`, `/api/preferences`) so a stale response is only a fallback. ngsw
+   builds one cache per manifest hash (`cacheName = this.cache.name`, prefix supplied by the worker)
+   and, on activation, deletes every other cache (`caches.delete(...)`, verified in the emitted
+   `ngsw-worker.js`) — a new build therefore forces a clean cache: Basketra's
+   `__BASKETRA_VERSION__` trick without a templating step. `@angular/build` v19
+   takes `"serviceWorker": "ngsw-config.json"` (a **path**, not a boolean) and writes
+   `ngsw-worker.js`, `safety-worker.js`, `worker-basic.min.js` and `ngsw.json` (v1: `index`,
+   `assetGroups`, `dataGroups`, `hashTable`, `navigationUrls`, `navigationRequestStrategy:
+   performance`) into `dist/browser`. `SwUpdate` surfaces "new version available" with **Activate
+   now** (activate + clear + reload); a Settings toggle controls silent auto-activation. Because the
+   cache name only changes when an asset changes, releases must bump `version` in
+   `frontend/package.json`, mirrored in `environments/environment.ts` until a build-time injection
+   lands (P6).
+6. `GET /api/meta` (P1) answers `{ version, build, serverTime, ready, cacheName }`; until it exists
+   the About card reads `GET /api/health` + `environment.version`. The client derives uptime from one
+   `serverTime` and never polls diagnostics per second.
 
 ## 6. Logs: one funnel, one viewer, one report
 
@@ -347,18 +357,29 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
 
 ### P0 · Groundwork, branding, foundations
 - [ ] Spec committed and PR updated (this document).
-- [ ] Branding rename: `appName`, `index.html` (title, theme-color, apple title), `manifest.json`,
-      header/footer copy, README alias note.
-- [ ] `hogar:*` storage keys with read-migrate from `mi-cocinai:*` (no forced logout, tests included).
+- [x] Branding rename: `appName`, `index.html` (title, description, apple/application name),
+      `manifest.json` (name, id, description, shortcuts), auth layout title, global stylesheet header,
+      README heading + alias note, `frontend/package.json` 1.1.0.
+- [x] `hogar:v1:*` storage keys with a one-shot read-migrate from the legacy bare keys
+      (`auth_token`, `refresh_token`, `current_user`, `theme`, `language`) and from `recipeapp_*`;
+      legacy keys are kept so a rollback still works and nobody is logged out.
+- [x] PWA wired: `frontend/ngsw-config.json` (shell prefetch: `index.html`, `manifest.json`,
+      `favicon.ico`, `*.css`, `*.js`; assets lazy/prefetch-on-update; `freshness` for
+      `/api/health` + `/api/preferences`), `"serviceWorker": "ngsw-config.json"` in the production
+      configuration, `index.csr.html` excluded (this build has no SSR). Verified in `dist/browser`:
+      `ngsw-worker.js` + `ngsw.json` with 61 hashed entries, and the `provideServiceWorker` call that
+      already existed now has a worker to register.
 - [ ] `LogService` is the only funnel: levels, stamp, redaction, size cap, localStorage ring,
       `window.onerror`/`unhandledrejection` bridge, batched POST to `/api/logs`.
 - [ ] Log viewer: level + source filters, only-errors, pause, expandable payload, saved view.
 - [ ] New **Support** section (`/report`): generated markdown report, *Open issue*, *Copy to
       clipboard* fallback, redaction assertion in tests, nav entry, tabs in URL.
-- [ ] PWA actually enabled: `ngsw-config.json`, `serviceWorker: true` in the production config,
-      `provideServiceWorker`, `SwUpdate` prompt with *Activate now*, cache name from `appVersion`.
-- [ ] `GET /api/meta` (version, build, serverTime, ready) + About card showing version/uptime,
-      no per-second polling.
+- [ ] `SwUpdate` prompt with *Activate now* + Settings auto-activate toggle (delivered with the
+      Support section, next commit).
+- [ ] `GET /api/meta` (version, build, serverTime, ready, cacheName) + About card showing
+      version/uptime, no per-second polling.
+- [ ] Rename the Angular project key `recipeapp` (and `defaultProject`) together with the workspace
+      package names — one commit, because `ng` invocations in CI and the Makefile depend on it.
 - [ ] App-wide icon sprite + first pass of SVG icons replacing emoji in the nav.
 - [ ] Animation tokens documented and a `from`/`to`-only lint note in DESIGN-SYSTEM.md.
 

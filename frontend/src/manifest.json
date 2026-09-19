@@ -1,7 +1,7 @@
 {
-  "name": "RecipeApp",
-  "short_name": "RecipeApp",
-  "description": "Tu asistente de cocina inteligente con IA",
+  "name": "HogarIA",
+  "short_name": "HogarIA",
+  "description": "Cocina, compra y hogar en un solo sitio: despensa, planificador, lista de la compra con precios e historico, tickets con OCR.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FAFAF9",
@@ -9,7 +9,12 @@
   "orientation": "portrait",
   "scope": "/",
   "lang": "es",
-  "categories": ["food", "lifestyle", "utilities"],
+  "categories": [
+    "food",
+    "lifestyle",
+    "utilities",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "assets/icons/icon-72x72.png",
@@ -76,18 +81,29 @@
   ],
   "shortcuts": [
     {
-      "name": "Generar Receta",
-      "short_name": "Generar",
-      "description": "Generar receta con IA",
-      "url": "/recipes?generate=true",
-      "icons": [{ "src": "assets/icons/generate.png", "sizes": "96x96" }]
+      "name": "Plan semanal",
+      "short_name": "Plan",
+      "description": "Ver el planificador de comidas",
+      "url": "/calendar",
+      "icons": [
+        {
+          "src": "assets/icons/generate.png",
+          "sizes": "96x96"
+        }
+      ]
     },
     {
       "name": "Mi Despensa",
       "short_name": "Despensa",
       "description": "Ver mi despensa",
       "url": "/pantry",
-      "icons": [{ "src": "assets/icons/pantry.png", "sizes": "96x96" }]
+      "icons": [
+        {
+          "src": "assets/icons/pantry.png",
+          "sizes": "96x96"
+        }
+      ]
     }
-  ]
+  ],
+  "id": "/"
 }

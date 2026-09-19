@@ -1,4 +1,5 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
+import { STORAGE_KEYS } from './storage.service';
 
 export type Language = 'es' | 'en' | 'auto';
 export type ResolvedLanguage = 'es' | 'en';
@@ -213,7 +214,7 @@ const DICTS: Record<ResolvedLanguage, Dict> = { es, en };
 
 @Injectable({ providedIn: 'root' })
 export class I18nService {
-  private readonly LANG_KEY = 'language';
+  private readonly LANG_KEY = STORAGE_KEYS.language;
   private langSignal = signal<Language>(this.getStoredLang());
   private resolvedSignal = signal<ResolvedLanguage>(this.resolve(this.getStoredLang()));
 

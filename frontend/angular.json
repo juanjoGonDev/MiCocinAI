@@ -67,6 +67,7 @@
                   "with": "src/environments/environment.prod.ts"
                 }
               ],
+              "serviceWorker": "ngsw-config.json",
               "outputHashing": "all",
               "sourceMap": false,
               "optimization": {

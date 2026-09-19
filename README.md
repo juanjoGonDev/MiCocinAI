@@ -1,6 +1,13 @@
-# 🍳 RecipeApp
+# 🏠 HogarIA
 
-Smart recipe management app with AI integration, optimized for Raspberry Pi 5.
+Cocina, compra y hogar en un solo sitio: despensa, planificador semanal con IA, lista de la compra
+con precios e histórico, tickets leídos con OCR y (pronto) tareas del hogar, calendario compartido e
+integración con Home Assistant. Optimizado para correr en tu propia máquina (Raspberry Pi 5).
+
+> **Nombres anteriores:** el proyecto nació como *RecipeApp* y se llamaba *MiCocinAI*. El repositorio
+> y el paquete npm todavía usan esos nombres; el renombrado completo es la fase P8 de
+> [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md). El plan de absorción de *Basketra* (listas de la compra,
+> catálogo, precios, tickets, configuración desde la UI, offline con sincronización) también está ahí.
 
 ## ✨ Features
 
