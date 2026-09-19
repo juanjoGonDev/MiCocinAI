@@ -23,6 +23,11 @@ export interface ShoppingList {
   totalItems: number;
   checkedItems: number;
   pricedTotalMinor: number;
+  /** El descuento de la lista, y la frase que lo cuenta (el server la escribe). */
+  discount?: ListDiscount | null;
+  discountDescription?: string | null;
+  /** Suministra el server cuando hay casa: la lista puede ser de otra persona. */
+  added_by_name?: string | null;
 }
 
 export interface ShoppingListItem {
@@ -39,6 +44,22 @@ export interface ShoppingListItem {
   position: number;
   checked: 0 | 1;
   deleted_at: string | null;
+  /** Oferta de linea (3x2 = buy 3 / take 2). `null` = precio normal. */
+  promo_buy: number | null;
+  promo_take: number | null;
+  added_by: string | null;
+  updated_by: string | null;
+  /** Los resuelve el server al leer la lista: un id de usuario no es legible. */
+  added_by_name?: string | null;
+  updated_by_name?: string | null;
+}
+
+/** La oferta como dato de UI: solo existe si es valida (take < buy y buy >= 2). */
+export function offerOfItem(item: Pick<ShoppingListItem, 'promo_buy' | 'promo_take'>): LineOffer | null {
+  const buy = Number(item.promo_buy ?? 0);
+  const take = Number(item.promo_take ?? 0);
+  if (!buy || !take || take >= buy || buy < 2) return null;
+  return { buy, take };
 }
 
 export interface EstimateLine {
@@ -78,6 +99,8 @@ export interface CreateItemInput {
   category?: string | null;
   priceMinor?: number | null;
   note?: string | null;
+  /** 3x2 = {buy:3, take:2}; `null` la quita. En la fila son promo_buy/promo_take. */
+  offer?: LineOffer | null;
 }
 
 /** Categorias de la lista, en el orden en que se recorren en la tienda. */

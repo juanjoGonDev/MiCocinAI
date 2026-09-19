@@ -12,9 +12,32 @@ import {
   formatMoney,
   formatQuantity,
   groupItemsByCategory,
-  parseMoneyToMinor
+  parseMoneyToMinor,
+  describeOffer,
+  offerOfItem,
+  LineOffer,
+  OFFER_PRESETS,
+  DiscountInput,
+  PhotoLine,
 } from '../../shared/models/shopping.model';
 import { LongPressDirective, SwipeRowDirective } from '../../shared/directives/swipe-row.directive';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
+import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
+import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
+
+/** Una linea de la foto con lo que la persona toco: `keep` no existe en el contrato. */
+export type KeptPhotoLine = PhotoLine & { keep: boolean };
+
+/** Lo que devuelve `/photo/analyze`, con la marca de que la persona todavia no ha dicho nada. */
+interface PhotoReview {
+  listId: string;
+  mode: 'auto' | 'ticket' | 'shelf';
+  currency: string;
+  warnings: string[];
+  categories: { name: string; color: string }[];
+  lines: KeptPhotoLine[];
+}
 
 /** Autoguardado: 400 ms despues del ultimo tecleo, ni antes ni despues. */
 const AUTOSAVE_MS = 400;
@@ -32,25 +55,45 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
 @Component({
   selector: 'app-shopping-list-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, SwipeRowDirective, LongPressDirective],
+  imports: [
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    SwipeRowDirective,
+    LongPressDirective,
+    IconComponent,
+    IconButtonComponent,
+    PickerComponent,
+    AvatarComponent
+  ],
   template: `
     <div class="detail">
       <header class="detail__head">
-        <a class="detail__back" routerLink="/shopping" aria-label="Volver a las listas">←</a>
+        <a class="detail__back" routerLink="/shopping" aria-label="Volver a las listas">
+          <app-icon name="chevron_left" [size]="22" [label]="null" />
+        </a>
         <div class="detail__heading">
           @if (renaming()) {
-            <input
-              class="detail__rename"
-              name="listName"
-              [(ngModel)]="draftName"
-              (ngModelChange)="renameList()"
-              maxlength="80"
-              autofocus
-            />
+            <div class="detail__rename-row">
+              <input
+                class="detail__rename"
+                name="listName"
+                [(ngModel)]="draftName"
+                (ngModelChange)="renameList()"
+                maxlength="80"
+                (keydown.enter)="commitRename()"
+                (keydown.escape)="cancelRename()"
+                (blur)="onRenameBlur()"
+                data-test="rename-input"
+                autofocus
+              />
+              <app-icon-button icon="check" label="Guardar el nombre" size="sm" variant="primary" (onClick)="commitRename()" />
+              <app-icon-button icon="close" label="Cancelar" size="sm" variant="ghost" (onClick)="cancelRename()" />
+            </div>
           } @else {
-            <h1 class="detail__title" (click)="startRename()">
+            <h1 class="detail__title" (click)="startRename()" [attr.title]="'Renombrar la lista'">
               {{ list()?.name ?? 'Lista' }}
-              <span class="detail__pencil" aria-hidden="true">✎</span>
+              <app-icon class="detail__pencil" name="edit" [size]="14" [label]="null" />
             </h1>
           }
           <p class="detail__meta">
@@ -79,10 +122,35 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
           autocomplete="off"
           enterkeyhint="done"
         />
-        <button type="submit" class="detail__add-btn" data-test="add-submit" [disabled]="!draftItem.trim()">Añadir</button>
-        <button type="button" class="detail__ghost" data-test="paste-open" (click)="pasteOpen.set(!pasteOpen())" data-gesture-stop>
-          Pegar
+        <button type="submit" class="detail__add-btn" data-test="add-submit" [disabled]="!draftItem.trim()">
+          <app-icon name="add" [size]="18" [label]="null" />
+          <span>Añadir</span>
         </button>
+        <app-icon-button
+          icon="content_paste"
+          label="Pegar la lista de otra app"
+          size="md"
+          variant="soft"
+          data-test="paste-open"
+          [attr.aria-expanded]="pasteOpen()"
+          (onClick)="pasteOpen.set(!pasteOpen())"
+        />
+        <app-icon-button
+          icon="add_a_photo"
+          label="Añadir desde una foto"
+          size="md"
+          variant="soft"
+          data-test="photo-open"
+          (onClick)="openPhoto()"
+        />
+        <app-icon-button
+          icon="history"
+          label="Quien ha tocado que"
+          size="md"
+          variant="soft"
+          [attr.aria-expanded]="auditOpen()"
+          (onClick)="toggleAudit()"
+        />
       </form>
 
       @if (pasteOpen()) {
@@ -111,7 +179,9 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
           [class.detail__tab--active]="tab() === 'todo'"
           (click)="selectTab('todo')"
         >
-          Pendientes ({{ pendingCount() }})
+          <app-icon name="radio_button_unchecked" [size]="16" [label]="null" />
+          <span>Pendientes</span>
+          <span class="detail__tab-count">{{ pendingCount() }}</span>
         </button>
         <button
           type="button"
@@ -120,11 +190,19 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
           [class.detail__tab--active]="tab() === 'checked'"
           (click)="selectTab('checked')"
         >
-          En el carro ({{ checkedCount() }})
+          <app-icon name="shopping_cart" [size]="16" [label]="null" />
+          <span>En el carro</span>
+          <span class="detail__tab-count">{{ checkedCount() }}</span>
         </button>
-        <button type="button" class="detail__ghost detail__tab-all" (click)="toggleSelectAll()">
-          {{ selection().length > 0 ? 'Quitar selección' : 'Seleccionar todo' }}
-        </button>
+        <span class="detail__tabs-spacer"></span>
+        <app-icon-button
+          [icon]="selection().length > 0 ? 'close' : 'select_all'"
+          [label]="selection().length > 0 ? 'Quitar la seleccion' : 'Seleccionar todo'"
+          size="sm"
+          variant="soft"
+          data-test="select-all"
+          (onClick)="toggleSelectAll()"
+        />
       </nav>
 
       @if (loading()) {
@@ -155,14 +233,18 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                     data-test="item-row"
                   >
                     <div class="detail__rail" aria-hidden="true">
-                      <button type="button" class="detail__rail-btn" data-test="rail-edit" (click)="openEdit(item)">Editar</button>
+                      <button type="button" class="detail__rail-btn" data-test="rail-edit" (click)="openEdit(item)">
+                        <app-icon name="edit" [size]="18" [label]="null" />
+                        <span>Editar</span>
+                      </button>
                       <button
                         type="button"
                         class="detail__rail-btn detail__rail-btn--danger"
                         data-test="rail-remove"
                         (click)="remove(item)"
                       >
-                        Quitar
+                        <app-icon name="delete" [size]="18" [label]="null" />
+                        <span>Quitar</span>
                       </button>
                     </div>
                     <div
@@ -182,24 +264,42 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                         [attr.aria-label]="'Marcar ' + item.name"
                         (click)="toggle(item); $event.stopPropagation()"
                       >
-                        @if (item.checked === 1) {
-                          <span aria-hidden="true">✓</span>
-                        }
+                        <app-icon
+                          [name]="item.checked === 1 ? 'shopping_cart' : 'radio_button_unchecked'"
+                          [size]="22"
+                          [label]="null"
+                        />
                       </button>
                       <span class="detail__name">{{ item.name }}</span>
                       @if (qtyOf(item)) {
                         <span class="detail__qty">{{ qtyOf(item) }}</span>
                       }
+                      @if (offerOf(item); as offer) {
+                        <button
+                          type="button"
+                          class="detail__offer"
+                          data-test="offer-chip"
+                          [attr.title]="'Oferta ' + describeOffer(offer) + ': toca para quitarla'"
+                          (click)="setOffer(item, null); $event.stopPropagation()"
+                        >
+                          {{ describeOffer(offer) }}
+                        </button>
+                      }
                       <span class="detail__price" [class.detail__price--none]="item.price_minor === null">
                         {{ money(item.price_minor) }}
                       </span>
+                      @if (item.updated_by_name || item.added_by_name) {
+                        <span class="detail__who" [attr.title]="'Ultimo cambio: ' + (item.updated_by_name ?? item.added_by_name)">
+                          {{ initials(item.updated_by_name ?? item.added_by_name) }}
+                        </span>
+                      }
                       <button
                         type="button"
                         class="detail__more"
                         aria-label="Acciones de la linea"
                         (click)="openEdit(item); $event.stopPropagation()"
                       >
-                        ⋯
+                        <app-icon name="more_vert" [size]="20" [label]="null" />
                       </button>
                     </div>
                   </li>
@@ -217,8 +317,31 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
             {{ estimateOpen() ? 'Ocultar desglose' : 'Ver desglose' }}
           </button>
         </div>
+        @if (list()?.discountDescription) {
+          <button type="button" class="detail__discount" data-test="discount-row" (click)="openDiscount()">
+            <app-icon name="percent" [size]="16" [label]="null" />
+            <span>{{ list()?.discountDescription }}</span>
+            <app-icon name="edit" [size]="14" [label]="null" />
+          </button>
+        }
         <div class="detail__bar-actions">
-          <button type="button" class="detail__ghost" (click)="clearChecked()" [disabled]="checkedCount() === 0">
+          <app-icon-button
+            icon="percent"
+            [label]="list()?.discount ? 'Editar el descuento de la lista' : 'Anadir descuento a la lista'"
+            size="md"
+            variant="soft"
+            data-test="discount-open"
+            (onClick)="openDiscount()"
+          />
+          <app-icon-button
+            icon="delete_sweep"
+            label="Vaciar el carro"
+            size="md"
+            variant="soft"
+            [disabled]="checkedCount() === 0"
+            (onClick)="clearChecked()"
+          />
+          <button type="button" class="detail__ghost detail__ghost--text" (click)="clearChecked()" [disabled]="checkedCount() === 0">
             Vaciar carro
           </button>
           <button type="button" class="detail__primary" data-test="complete" (click)="complete()">Terminar compra</button>
@@ -275,27 +398,77 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                 />
               </label>
             </div>
-            <div class="detail__chips" role="group" aria-label="Unidad">
-              @for (unit of units; track unit) {
-                <button
-                  type="button"
-                  class="detail__chip-btn"
-                  [class.detail__chip-btn--active]="draft.unit === unit"
-                  (click)="patch({ unit: draft.unit === unit ? null : unit })"
-                >
-                  {{ unit }}
-                </button>
-              }
+            <div class="detail__sheet-grid">
+              <div class="detail__field">
+                <span class="detail__field-label">Unidad</span>
+                <div class="detail__chips" role="group" aria-label="Unidades rapidas">
+                  @for (unit of quickUnits; track unit) {
+                    <button
+                      type="button"
+                      class="detail__chip-btn"
+                      [class.detail__chip-btn--active]="draft.unit === unit"
+                      (click)="patch({ unit: draft.unit === unit ? null : unit })"
+                    >
+                      {{ unit }}
+                    </button>
+                  }
+                </div>
+                <app-picker
+                  label="Unidad o formato"
+                  [options]="unitOptions"
+                  [value]="draft.unit"
+                  placeholder="Otra unidad (bote de 400 g…)"
+                  searchPlaceholder="Buscar unidad"
+                  emptyText="Nada parecido: usa el texto que has escrito"
+                  [allowCustom]="true"
+                  [filterFrom]="6"
+                  leadingIcon="unfold_more"
+                  (valueChange)="patch({ unit: $event })"
+                  data-test="unit-picker"
+                />
+              </div>
+              <div class="detail__field">
+                <span class="detail__field-label">Seccion de la tienda</span>
+                <app-picker
+                  label="Seccion"
+                  [options]="categoryOptions()"
+                  [value]="draft.category"
+                  placeholder="Sin seccion"
+                  searchPlaceholder="Buscar seccion"
+                  emptyText="No existe: se creara con ese nombre"
+                  [allowCustom]="true"
+                  (valueChange)="setCategory($event)"
+                  data-test="category-picker"
+                />
+              </div>
             </div>
-            <label class="detail__field">
-              <span>Seccion de la tienda</span>
-              <select name="category" [ngModel]="draft.category" (ngModelChange)="patch({ category: $event })">
-                <option [ngValue]="null">Sin seccion</option>
-                @for (category of categories; track category) {
-                  <option [ngValue]="category">{{ category }}</option>
+            <div class="detail__field">
+              <span class="detail__field-label">Oferta de la tienda</span>
+              <div class="detail__chips" role="group" aria-label="Ofertas">
+                @for (preset of offerPresets; track preset.label) {
+                  <button
+                    type="button"
+                    class="detail__chip-btn"
+                    [class.detail__chip-btn--active]="isOffer(preset)"
+                    [attr.title]="preset.hint"
+                    data-test="offer-preset"
+                    (click)="setDraftOffer(preset)"
+                  >
+                    <app-icon name="local_offer" [size]="14" [label]="null" />
+                    {{ preset.label }}
+                  </button>
                 }
-              </select>
-            </label>
+                @if (draftOffer()) {
+                  <button type="button" class="detail__chip-btn detail__chip-btn--muted" (click)="setDraftOffer(null)">
+                    <app-icon name="close" [size]="14" [label]="null" />
+                    Sin oferta
+                  </button>
+                }
+              </div>
+              <p class="detail__hint">
+                {{ draftOffer() ? 'Se pagan ' + (draftOffer()!.buy - draftOffer()!.take) + ' de cada ' + draftOffer()!.buy + ': el desglose ya lo descuenta.' : 'Sin oferta: se paga cada unidad.' }}
+              </p>
+            </div>
             <label class="detail__field">
               <span>Nota</span>
               <input
@@ -314,10 +487,523 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
           </section>
         </div>
       }
+
+      @if (discountOpen()) {
+        <div class="detail__sheet-backdrop" (click)="discountOpen.set(false)">
+          <section class="detail__sheet" data-test="discount-sheet" (click)="$event.stopPropagation()" aria-label="Descuento de la lista">
+            <h2 class="detail__sheet-title">Descuento de la lista</h2>
+            <p class="detail__hint">
+              El descuento se aplica al TOTAL de la cesta. Si solo cubre las primeras unidades
+              («2 primeros cafés a 1 €»), se reparte entre esas lineas en proporcion a lo que
+              pesa cada una.
+            </p>
+            <div class="detail__chips" role="group" aria-label="Tipo de descuento">
+              @for (kind of discountKinds; track kind.value) {
+                <button
+                  type="button"
+                  class="detail__chip-btn"
+                  [class.detail__chip-btn--active]="discountDraft().kind === kind.value"
+                  data-test="discount-kind"
+                  (click)="setDiscountKind(kind.value)"
+                >
+                  <app-icon [name]="kind.icon" [size]="16" [label]="null" />
+                  {{ kind.label }}
+                </button>
+              }
+            </div>
+            <div class="detail__sheet-grid">
+              <label class="detail__field">
+                <span>{{ discountDraft().kind === 'percent' ? 'Porcentaje' : 'Importe (€)' }}</span>
+                @if (discountDraft().kind === 'percent') {
+                  <app-picker
+                    label="Porcentaje"
+                    [options]="percentOptions"
+                    [value]="percentDraft()"
+                    placeholder="Escribe el porcentaje"
+                    [allowCustom]="true"
+                    [filterFrom]="99"
+                    (valueChange)="setPercent($event)"
+                    data-test="discount-percent"
+                  />
+                } @else {
+                  <input
+                    name="discountValue"
+                    inputmode="decimal"
+                    placeholder="3,50"
+                    [ngModel]="amountDraft()"
+                    (ngModelChange)="amountDraft.set($event)"
+                    (blur)="commitAmount()"
+                    data-test="discount-amount"
+                  />
+                }
+              </label>
+              <label class="detail__field">
+                <span>Etiqueta (opcional)</span>
+                <input
+                  name="discountLabel"
+                  placeholder="Fidelidad -5 %"
+                  maxlength="60"
+                  [ngModel]="discountDraft().label"
+                  (ngModelChange)="patchDiscount({ label: $event || null })"
+                />
+              </label>
+            </div>
+            <div class="detail__field">
+              <span class="detail__field-label">A que se aplica</span>
+              <div class="detail__chips" role="group" aria-label="Alcance del descuento">
+                @for (scope of discountScopes; track scope.value) {
+                  <button
+                    type="button"
+                    class="detail__chip-btn"
+                    [class.detail__chip-btn--active]="discountDraft().scope === scope.value"
+                    [attr.title]="scope.hint"
+                    data-test="discount-scope"
+                    (click)="patchDiscount({ scope: scope.value })"
+                  >
+                    {{ scope.label }}
+                  </button>
+                }
+              </div>
+              @if (discountDraft().scope === 'firstUnits') {
+                <div class="detail__first-units">
+                  <span>Primeras unidades</span>
+                  <div class="detail__stepper">
+                    <app-icon-button icon="remove" label="Quitar una unidad" size="sm" variant="soft" (onClick)="bumpFirstUnits(-1)" />
+                    <input
+                      name="firstUnits"
+                      type="number"
+                      min="1"
+                      step="1"
+                      [ngModel]="discountDraft().firstUnits ?? 1"
+                      (ngModelChange)="setFirstUnits($event)"
+                      data-test="discount-first-units"
+                    />
+                    <app-icon-button icon="add" label="Anadir una unidad" size="sm" variant="soft" (onClick)="bumpFirstUnits(1)" />
+                  </div>
+                </div>
+              }
+            </div>
+            <div class="detail__sheet-actions">
+              @if (list()?.discount) {
+                <button type="button" class="detail__ghost detail__ghost--danger" data-test="discount-remove" (click)="removeDiscount()">
+                  <app-icon name="delete" [size]="16" [label]="null" />
+                  Quitar descuento
+                </button>
+              }
+              <button type="button" class="detail__primary" data-test="discount-save" (click)="saveDiscount()">Guardar</button>
+            </div>
+          </section>
+        </div>
+      }
+
+      @if (photoOpen()) {
+        <div class="detail__sheet-backdrop" (click)="closePhoto()">
+          <section class="detail__sheet detail__sheet--wide" data-test="photo-sheet" (click)="$event.stopPropagation()" aria-label="Anadir desde una foto">
+            <h2 class="detail__sheet-title">Desde una foto</h2>
+            <p class="detail__hint">
+              La foto la mira el modelo de IA configurado; aqui se repasa antes de escribir nada.
+              Puedes cancelar cuantas veces quieras: la lista no cambia hasta que digas «Anadir».
+            </p>
+
+            <label class="detail__photo-drop" [class.detail__photo-drop--ready]="photoPreview()"> data-test="photo-drop">
+              <input type="file" accept="image/png,image/jpeg,image/webp" capture="environment" name="photoFile" (change)="onPhotoFile($event)" />
+              @if (photoPreview()) {
+                <img [src]="photoPreview()" alt="Foto que se va a analizar" />
+              } @else {
+                <app-icon name="add_a_photo" [size]="28" [label]="null" />
+                <span>Foto del ticket o de la estanteria</span>
+              }
+            </label>
+
+            <div class="detail__sheet-grid">
+              <div class="detail__field">
+                <span class="detail__field-label">Que es la foto</span>
+                <app-picker label="Modo" [options]="photoModes" [value]="photoMode()" (valueChange)="setPhotoMode($event)" data-test="photo-mode" />
+              </div>
+              <label class="detail__field">
+                <span>Nota para el modelo (opcional)</span>
+                <input
+                  name="photoNote"
+                  placeholder="Es del chino, los precios son por pack"
+                  maxlength="280"
+                  [ngModel]="photoNote()"
+                  (ngModelChange)="photoNote.set($event)"
+                />
+              </label>
+            </div>
+
+            @if (photoError()) {
+              <p class="detail__photo-error" role="alert" data-test="photo-error">
+                <app-icon name="error_outline" [size]="18" [label]="null" />
+                <span>{{ photoError() }}</span>
+                @if (photoRedirect()) {
+                  <a class="detail__link" [routerLink]="photoRedirect()">Configurar la IA</a>
+                }
+              </p>
+            }
+
+            @if (photoBusy()) {
+              <p class="detail__photo-busy" role="status"><app-icon name="refresh" [size]="16" [label]="null" /> Mirando la foto…</p>
+            }
+
+            @if (photoResult(); as result) {
+              <ul class="detail__photo-lines">
+                @for (line of result.lines; track $index) {
+                  <li class="detail__photo-line" [class.detail__photo-line--off]="!line.keep">
+                    <button
+                      type="button"
+                      class="detail__photo-keep"
+                      role="checkbox"
+                      [attr.aria-checked]="line.keep"
+                      [attr.aria-label]="'Anadir ' + line.name"
+                      (click)="line.keep = !line.keep"
+                    >
+                      <app-icon [name]="line.keep ? 'check_circle' : 'radio_button_unchecked'" [size]="20" [label]="null" />
+                    </button>
+                    <input class="detail__photo-name" name="photoName{{ $index }}" [ngModel]="line.name" (ngModelChange)="line.name = $event" maxlength="80" />
+                    <input class="detail__photo-qty" name="photoQty{{ $index }}" type="number" min="0" step="0.1" [ngModel]="line.quantity" (ngModelChange)="setLineQuantity(line, $event)" />
+                    <input
+                      class="detail__photo-price"
+                      name="photoPrice{{ $index }}"
+                      inputmode="decimal"
+                      placeholder="precio"
+                      [ngModel]="minorToInput(line.priceMinor)"
+                      (ngModelChange)="setLinePrice(line, $event)"
+                    />
+                    <span class="detail__photo-cat" [style.color]="colorOf(line.category)">
+                      {{ line.category ?? 'sin seccion' }}
+                      @if (line.createCategory) {
+                        <span class="detail__photo-new">nueva</span>
+                      }
+                    </span>
+                    @if (line.confidence !== undefined && line.confidence < 0.6) {
+                      <span class="detail__photo-doubt" title="La IA no esta segura">baja confianza</span>
+                    }
+                  </li>
+                }
+              </ul>
+              @if (result.warnings.length) {
+                <ul class="detail__photo-warnings">
+                  @for (warning of result.warnings; track $index) {
+                    <li>{{ warning }}</li>
+                  }
+                </ul>
+              }
+              <div class="detail__sheet-actions">
+                <button type="button" class="detail__ghost" (click)="analyzePhoto()">Otro intento</button>
+                <button
+                  type="button"
+                  class="detail__primary"
+                  data-test="photo-apply"
+                  [disabled]="keptPhotoLines().length === 0 || photoApplying()"
+                  (click)="applyPhoto()"
+                >
+                  {{ photoApplying() ? 'Anadiendo…' : 'Anadir ' + keptPhotoLines().length + ' lineas' }}
+                </button>
+              </div>
+            } @else {
+              <div class="detail__sheet-actions">
+                <button type="button" class="detail__primary" data-test="photo-analyze" [disabled]="!photoData() || photoBusy()" (click)="analyzePhoto()">
+                  {{ photoData() ? 'Analizar la foto' : 'Elige una foto' }}
+                </button>
+              </div>
+            }
+          </section>
+        </div>
+      }
+
+      @if (auditOpen()) {
+        <div class="detail__sheet-backdrop" (click)="auditOpen.set(false)">
+          <section class="detail__sheet" data-test="audit-sheet" (click)="$event.stopPropagation()" aria-label="Quien ha tocado que">
+            <h2 class="detail__sheet-title">Quien ha tocado que</h2>
+            @if (events().length === 0) {
+              <p class="detail__hint">Todavia no hay nada anotado en esta lista.</p>
+            } @else {
+              <ul class="detail__audit">
+                @for (event of events(); track event.id) {
+                  <li class="detail__audit-row" data-test="audit-row">
+                    <app-avatar [name]="event.user_name ?? 'Alguien'" size="sm" />
+                    <span class="detail__audit-text">{{ event.description }}</span>
+                    <span class="detail__audit-when">{{ since(event.created_at) }}</span>
+                  </li>
+                }
+              </ul>
+            }
+            <p class="detail__hint">Se actualiza solo mientras la pantalla esta abierta.</p>
+          </section>
+        </div>
+      }
     </div>
   `,
   styles: [
     `
+
+      .detail__rename-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+      .detail__rename-row .detail__rename {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .detail__tabs-spacer {
+        flex: 1 1 auto;
+      }
+      .detail__tab {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+      .detail__tab-count {
+        min-width: 18px;
+        padding: 0 4px;
+        border-radius: var(--radius-full);
+        background: var(--bg-tertiary);
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        color: var(--text-secondary);
+      }
+      .detail__check {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-tertiary);
+      }
+      .detail__row--checked .detail__check {
+        color: var(--primary);
+      }
+      .detail__offer {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        border: none;
+        background: var(--color-warning-50, rgba(201, 154, 46, 0.16));
+        color: var(--warning, #b06e00);
+        border-radius: var(--radius-full);
+        padding: 1px 7px;
+        font-size: 11px;
+        font-weight: var(--font-semibold);
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .detail__who {
+        min-width: 22px;
+        height: 22px;
+        border-radius: var(--radius-full);
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        font-size: 10px;
+        font-weight: var(--font-bold);
+        display: inline-grid;
+        place-items: center;
+      }
+      .detail__field-label {
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+      }
+      .detail__chip-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .detail__chip-btn--muted {
+        color: var(--text-tertiary);
+      }
+      .detail__sheet--wide {
+        max-width: 640px;
+      }
+      .detail__first-units {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+        font-size: var(--text-sm);
+      }
+      .detail__stepper {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+      .detail__stepper input {
+        width: 62px;
+        text-align: center;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        min-height: 36px;
+        font-family: inherit;
+        font-size: var(--text-sm);
+      }
+      .detail__discount {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        border: 1px dashed var(--primary);
+        background: transparent;
+        color: var(--primary);
+        border-radius: var(--radius-full);
+        padding: 3px var(--space-2);
+        font-size: var(--text-xs);
+        font-family: inherit;
+        cursor: pointer;
+      }
+      .detail__ghost--text {
+        display: none;
+      }
+      @media (min-width: 721px) {
+        .detail__ghost--text {
+          display: none;
+        }
+      }
+      .detail__photo-drop {
+        position: relative;
+        display: grid;
+        gap: var(--space-1);
+        justify-items: center;
+        align-items: center;
+        min-height: 132px;
+        padding: var(--space-3);
+        border: 1px dashed var(--border-strong);
+        border-radius: var(--radius-xl);
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        cursor: pointer;
+        overflow: hidden;
+      }
+      .detail__photo-drop input[type='file'] {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+      .detail__photo-drop img {
+        max-height: 200px;
+        max-width: 100%;
+        border-radius: var(--radius-lg);
+        object-fit: contain;
+      }
+      .detail__photo-drop--ready {
+        border-style: solid;
+        border-color: var(--primary);
+      }
+      .detail__photo-error {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin: 0;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        background: var(--color-error-50, rgba(224, 90, 90, 0.12));
+        color: var(--error);
+        font-size: var(--text-sm);
+      }
+      .detail__photo-busy {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+      }
+      .detail__photo-lines {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--space-1);
+      }
+      .detail__photo-line {
+        display: grid;
+        grid-template-columns: auto minmax(90px, 1.6fr) 62px 82px minmax(70px, 1fr);
+        align-items: center;
+        gap: var(--space-1);
+        padding: var(--space-1) 0;
+        border-bottom: 1px solid var(--border-default);
+      }
+      .detail__photo-line--off {
+        opacity: 0.45;
+      }
+      .detail__photo-line input {
+        border: 1px solid transparent;
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: var(--text-sm);
+        padding: 4px 6px;
+        min-width: 0;
+      }
+      .detail__photo-line input:focus {
+        outline: none;
+        border-color: var(--primary);
+        background: var(--bg-primary);
+      }
+      .detail__photo-qty,
+      .detail__photo-price {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .detail__photo-cat {
+        font-size: var(--text-xs);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .detail__photo-new {
+        margin-left: 4px;
+        color: var(--primary);
+        font-size: 10px;
+      }
+      .detail__photo-doubt {
+        font-size: 10px;
+        color: var(--warning, #b06e00);
+      }
+      .detail__photo-keep {
+        border: none;
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+        padding: 2px;
+        display: inline-flex;
+      }
+      .detail__photo-warnings {
+        margin: 0;
+        padding-left: var(--space-4);
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+      }
+      .detail__audit {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--space-1);
+        max-height: 46vh;
+        overflow-y: auto;
+      }
+      .detail__audit-row {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-1) 0;
+        border-bottom: 1px solid var(--border-default);
+        font-size: var(--text-sm);
+      }
+      .detail__audit-text {
+        min-width: 0;
+        color: var(--text-primary);
+      }
+      .detail__audit-when {
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+        white-space: nowrap;
+      }
       .detail {
         padding: var(--space-4) var(--space-4) var(--space-16);
         max-width: 760px;
@@ -837,6 +1523,19 @@ export class ShoppingListDetailComponent implements OnDestroy {
   readonly units = UNITS;
   readonly categories = LIST_CATEGORIES;
   readonly money = formatMoney;
+  readonly offerPresets = OFFER_PRESETS;
+  readonly describeOffer = describeOffer;
+
+  /** El modelo guarda `promo_buy`/`promo_take`; la UI solo habla de `LineOffer`. */
+  offerOf(item: ShoppingListItem): LineOffer | null {
+    return offerOfItem(item);
+  }
+
+  initials(name: string | null | undefined): string {
+    const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+  }
   readonly listId = inject(ActivatedRoute).snapshot.paramMap.get('id') ?? '';
 
   readonly list = computed(() => this.shopping.list());
@@ -862,12 +1561,28 @@ export class ShoppingListDetailComponent implements OnDestroy {
   constructor() {
     // Una sola carga inicial: el resto de la pantalla se actualiza con lo que
     // confirma el servidor, y el autoguardado ya se ocupa del resto.
-    if (this.listId) this.shopping.loadList(this.listId);
+    if (this.listId) {
+      this.shopping.loadList(this.listId);
+      this.shopping.loadCategories();
+    }
+    // En vivo: si otra persona de la casa toca la lista, se vuelve a leer (nunca se pinta
+    // el payload del aviso, que es una pista de refresco, no el estado).
+    this.cancelStream = this.shopping.openStream(`lists/${this.listId}`, payload => {
+      this.shopping.loadList(this.listId);
+      if (this.auditOpen()) this.shopping.loadEvents(this.listId);
+      const event = payload as { byName?: string | null; action?: string } | null;
+      if (event?.byName) this.liveBy.set(event.byName);
+    });
   }
+
+  readonly liveBy = signal<string | null>(null);
+  private cancelingRename = false;
 
   ngOnDestroy(): void {
     this.timers.forEach(timer => clearTimeout(timer));
     this.timers.clear();
+    this.cancelStream?.();
+    this.cancelStream = null;
   }
 
   selectTab(tab: 'todo' | 'checked'): void {
@@ -1158,4 +1873,383 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (source === 'observed') return 'ultimo precio pagado';
     return 'sin precio';
   }
+
+  // -------------------------------------------------- renombrar (con forma de salir)
+
+  commitRename(): void {
+    this.flush('list:name');
+    const list = this.list();
+    const name = this.draftName.trim();
+    this.renaming.set(false);
+    if (!list || !name || name === list.name) return;
+    void this.shopping.renameList(list.id, { name }, list.version);
+  }
+
+  /** Cancelar NO es solo cerrar el input: el texto que se habia autoguardado se deshace. */
+  cancelRename(): void {
+    this.cancelingRename = true;
+    const previous = this.list()?.name ?? '';
+    this.draftName = previous;
+    this.renaming.set(false);
+    setTimeout(() => (this.cancelingRename = false));
+  }
+
+  onRenameBlur(): void {
+    if (this.cancelingRename) return;
+    this.commitRename();
+  }
+
+  // ------------------------------------------------------------------ unidades
+
+  readonly quickUnits = ['ud', 'kg', 'L', 'pack'];
+  readonly unitOptions: PickerOption[] = [
+    { value: 'ud', label: 'unidad', hint: 'ud' },
+    { value: 'kg', label: 'kilo', hint: 'kg' },
+    { value: 'g', label: 'gramo', hint: 'g' },
+    { value: 'L', label: 'litro', hint: 'L' },
+    { value: 'ml', label: 'mililitro', hint: 'ml' },
+    { value: 'pack', label: 'pack', hint: 'pack' },
+    { value: 'bote', label: 'bote', hint: '400 g' },
+    { value: 'lata', label: 'lata', hint: '33 cl' },
+    { value: 'botella', label: 'botella', hint: '1 L' },
+    { value: 'brick', label: 'brick', hint: '1 L' },
+    { value: 'docena', label: 'docena', hint: '12 ud' },
+    { value: 'paquete', label: 'paquete' },
+    { value: 'sobre', label: 'sobre' },
+    { value: 'cabeza', label: 'cabeza' },
+    { value: 'manojo', label: 'manojo' }
+  ];
+
+  readonly categoryOptions = computed<PickerOption[]>(() => {
+    const catalogue = this.shopping.categories();
+    if (!catalogue.length) {
+      return LIST_CATEGORIES.map((name, index) => ({ value: name, label: name, color: null as string | null }));
+    }
+    return catalogue.map((category) => ({ value: category.name, label: category.name, color: category.color }));
+  });
+
+  setCategory(value: string | null): void {
+    this.patch({ category: value || null });
+    const known = this.categoryOptions().some((option) => option.value === value);
+    // Seccion nueva escrita a mano: se da de alta en el catalogo, que es lo que la hace
+    // aparecer manana en la foto del pasillo y en el resto de listas de la casa.
+    if (value && !known) void this.shopping.createCategory(value);
+  }
+
+  colorOf(category: string | null | undefined): string | null {
+    if (!category) return null;
+    return this.shopping.categories().find((entry) => entry.name === category)?.color ?? null;
+  }
+
+  // -------------------------------------------------------------------- ofertas
+
+  readonly draftOffer = signal<LineOffer | null>(null);
+
+  isOffer(preset: LineOffer): boolean {
+    const draft = this.draftOffer();
+    return !!draft && draft.buy === preset.buy && draft.take === preset.take;
+  }
+
+  setDraftOffer(offer: LineOffer | null): void {
+    this.draftOffer.set(offer);
+    const item = this.editing();
+    if (!item) return;
+    this.shopping.updateItem(item.list_id, item, { offer } as Partial<CreateItemInput>);
+  }
+
+  /** La oferta se toca desde la hoja de edicion o con un toque en la fila. */
+  setOffer(item: ShoppingListItem, offer: LineOffer | null): void {
+    this.shopping.updateItem(item.list_id, item, { offer } as Partial<CreateItemInput>);
+  }
+
+  // ------------------------------------------------------------------- descuento
+
+  readonly discountOpen = signal(false);
+  readonly discountKinds: { value: 'amount' | 'percent'; label: string; icon: 'payments' | 'percent' }[] = [
+    { value: 'amount', label: 'Importe', icon: 'payments' },
+    { value: 'percent', label: 'Porcentaje', icon: 'percent' }
+  ];
+  readonly discountScopes: { value: 'all' | 'firstUnits'; label: string; hint: string }[] = [
+    { value: 'all', label: 'A toda la cesta', hint: 'Se aplica al total' },
+    { value: 'firstUnits', label: 'A las primeras unidades', hint: 'Tipo «2 primeros cafés a 1 €»' }
+  ];
+  readonly percentOptions: PickerOption[] = [5, 10, 15, 20, 25, 50].map((value) => ({ value: String(value), label: value + ' %' }));
+  readonly discountDraft = signal<{ kind: 'amount' | 'percent'; scope: 'all' | 'firstUnits'; firstUnits: number | null; label: string | null }>({
+    kind: 'amount',
+    scope: 'all',
+    firstUnits: null,
+    label: null
+  });
+  readonly amountDraft = signal('');
+  readonly percentDraft = signal<string | null>(null);
+
+  private discountHydrated = false;
+
+  /** Al abrir la hoja se parte de lo que hay, no de un formulario en blanco. */
+  hydrateDiscount(): void {
+    const discount = this.list()?.discount;
+    this.discountDraft.set({
+      kind: discount?.kind ?? 'amount',
+      scope: discount?.scope ?? 'all',
+      firstUnits: discount?.first_units ?? null,
+      label: discount?.label ?? null
+    });
+    this.amountDraft.set(discount?.value_minor ? (discount.value_minor / 100).toFixed(2).replace('.', ',') : '');
+    this.percentDraft.set(discount?.percent_bps ? String(discount.percent_bps / 100) : null);
+  }
+
+  setDiscountKind(kind: 'amount' | 'percent'): void {
+    this.discountDraft.update((draft) => ({ ...draft, kind }));
+  }
+
+  patchDiscount(changes: Partial<{ scope: 'all' | 'firstUnits'; firstUnits: number | null; label: string | null }>): void {
+    this.discountDraft.update((draft) => ({ ...draft, ...changes }));
+  }
+
+  setPercent(value: string | null): void {
+    this.percentDraft.set(value);
+  }
+
+  commitAmount(): void {
+    const raw = String(this.amountDraft() ?? '').trim();
+    this.amountDraft.set(parseMoneyToMinor(raw) === null ? '' : raw);
+  }
+
+  bumpFirstUnits(step: number): void {
+    this.discountDraft.update((draft) => ({ ...draft, firstUnits: Math.max(1, (draft.firstUnits ?? 1) + step) }));
+  }
+
+  async saveDiscount(): Promise<void> {
+    const list = this.list();
+    if (!list) return;
+    const draft = this.discountDraft();
+    const input: DiscountInput = { kind: draft.kind, scope: draft.scope };
+    if (draft.kind === 'percent') {
+      const percent = Number(String(this.percentDraft() ?? '').replace(',', '.'));
+      if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
+        this.toast.warning('El porcentaje no cuadra', 'Entre 1 % y 100 %.');
+        return;
+      }
+      input.percentBps = Math.round(percent * 100);
+    } else {
+      const minor = parseMoneyToMinor(this.amountDraft());
+      if (!minor || minor <= 0) {
+        this.toast.warning('Falta el importe', 'Escribe cuanto descuentan, por ejemplo 3,50.');
+        return;
+      }
+      input.valueMinor = minor;
+    }
+    if (draft.scope === 'firstUnits') input.firstUnits = draft.firstUnits ?? 1;
+    if (draft.label) input.label = draft.label;
+
+    const saved = await this.shopping.setDiscount(list.id, input);
+    this.discountOpen.set(false);
+    if (saved) this.toast.success('Descuento aplicado', saved.description ?? undefined);
+  }
+
+  async removeDiscount(): Promise<void> {
+    const list = this.list();
+    if (!list) return;
+    const previous = list.discount;
+    await this.shopping.setDiscount(list.id, null);
+    this.discountOpen.set(false);
+    this.toast.show({
+      type: 'info',
+      title: 'Descuento quitado',
+      duration: 6000,
+      countdown: true,
+      position: 'bottom',
+      action: {
+        label: 'Deshacer',
+        run: () => {
+          if (!previous) return;
+          void this.shopping.setDiscount(list.id, {
+            kind: previous.kind,
+            valueMinor: previous.value_minor,
+            percentBps: previous.percent_bps,
+            scope: previous.scope,
+            firstUnits: previous.first_units,
+            label: previous.label
+          });
+        }
+      }
+    });
+  }
+
+  // ----------------------------------------------------------------------- foto
+
+  readonly photoOpen = signal(false);
+  readonly photoMode = signal<'auto' | 'ticket' | 'shelf'>('auto');
+  readonly photoNote = signal('');
+  readonly photoBusy = signal(false);
+  readonly photoApplying = signal(false);
+  readonly photoError = signal<string | null>(null);
+  readonly photoRedirect = signal<string | null>(null);
+  readonly photoData = signal<string | null>(null);
+  readonly photoPreview = signal<string | null>(null);
+  readonly photoResult = signal<PhotoReview | null>(null);
+  readonly photoModes: PickerOption[] = [
+    { value: 'auto', label: 'No lo se', hint: 'que lo juzgue el modelo' },
+    { value: 'ticket', label: 'Ticket / factura', hint: 'lo pagado' },
+    { value: 'shelf', label: 'Estanteria', hint: 'precio por unidad' }
+  ];
+
+  openDiscount(): void {
+    this.hydrateDiscount();
+    this.discountOpen.set(true);
+  }
+
+  openPhoto(): void {
+    this.photoOpen.set(true);
+    this.photoError.set(null);
+    this.photoRedirect.set(null);
+    // El catalogo se tiene aqui antes de mirar la foto: el prompt lo necesita y la hoja
+    // de repaso pinta los colores con el mismo dato.
+    this.shopping.loadCategories(true);
+  }
+
+  closePhoto(): void {
+    this.photoOpen.set(false);
+    this.photoBusy.set(false);
+  }
+
+  onPhotoFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
+      this.photoError.set('Eso no es una foto (png, jpg o webp).');
+      return;
+    }
+    if (file.size > 6 * 1024 * 1024) {
+      this.photoError.set('La foto pesa demasiado: hazla mas pequena o recortala.');
+      return;
+    }
+    this.photoError.set(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result ?? '');
+      this.photoData.set(dataUrl);
+      this.photoPreview.set(dataUrl);
+      this.photoResult.set(null);
+    };
+    reader.onerror = () => this.photoError.set('No se ha podido leer el archivo.');
+    reader.readAsDataURL(file);
+  }
+
+  async analyzePhoto(): Promise<void> {
+    const data = this.photoData();
+    if (!data || this.photoBusy()) return;
+    this.photoBusy.set(true);
+    this.photoError.set(null);
+    this.photoRedirect.set(null);
+    const outcome = await this.shopping.analyzePhoto(this.listId, data, this.photoMode(), this.photoNote().trim() || undefined);
+    this.photoBusy.set(false);
+    if (outcome.ok) {
+      this.photoResult.set({
+        listId: outcome.data.listId,
+        mode: outcome.data.mode,
+        currency: outcome.data.currency,
+        warnings: outcome.data.warnings ?? [],
+        categories: outcome.data.categories ?? [],
+        // Todo entra marcado: desmarcar lo que sobra es mucho menos tecleo que marcar
+        // lo que interesa, y el repaso existe justamente para eso.
+        lines: (outcome.data.lines ?? []).map((line) => ({ ...line, keep: true }))
+      });
+      return;
+    }
+    this.photoResult.set(null);
+    if (outcome.message === 'AI_NOT_CONFIGURED') {
+      this.photoRedirect.set('/settings/ai');
+      this.photoError.set('Falta configurar la IA para leer fotos.');
+      return;
+    }
+    const labels: Record<string, string> = {
+      IMAGE_TOO_LARGE: 'La foto es demasiado grande para el modelo.',
+      AI_ANSWER_NOT_UNDERSTOOD: 'El modelo no ha contestado en el formato esperado.',
+      AI_TIMEOUT: 'El modelo ha tardado demasiado. Intentalo otra vez.',
+      INVALID_PHOTO: 'La imagen no se ha podido leer.'
+    };
+    this.photoError.set(labels[outcome.message] ?? 'El modelo no esta disponible ahora mismo.');
+    if (outcome.message === 'AI_ANSWER_NOT_UNDERSTOOD') this.logSample(outcome.data);
+  }
+
+  private logSample(data: Record<string, unknown>): void {
+    // La muestra del response crudo va al visor de logs: sin ella, un fallo de formato de
+    // un modelo concreto es indepurgable desde la pantalla.
+    const sample = typeof (data as { sample?: unknown })?.sample === 'string' ? String((data as { sample?: string }).sample) : '';
+    if (sample) void fetch('/api/logs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ level: 'warn', scope: 'shopping:photo', message: 'respuesta de IA no parseable', meta: { sample } }) }).catch(() => undefined);
+  }
+
+  keptPhotoLines(): PhotoLine[] {
+    return (this.photoResult()?.lines ?? [])
+      .filter((line) => line.keep && line.name.trim())
+      .map((line) => {
+        const { keep, ...rest } = line;
+        return rest as PhotoLine;
+      });
+  }
+
+  async applyPhoto(): Promise<void> {
+    const lines = this.keptPhotoLines();
+    if (!lines.length || this.photoApplying()) return;
+    this.photoApplying.set(true);
+    const applied = await this.shopping.applyPhotoLines(this.listId, lines);
+    this.photoApplying.set(false);
+    if (!applied) return;
+    this.photoOpen.set(false);
+    this.photoResult.set(null);
+    this.photoData.set(null);
+    this.photoPreview.set(null);
+    const created = applied.createdCategories.length ? ', secciones nuevas: ' + applied.createdCategories.join(', ') : '';
+    this.toast.success(
+      'Lineas anadidas',
+      `${applied.added} nuevas, ${applied.merged.length} sumadas a lo que ya estaba${created}.`
+    );
+  }
+
+  minorToInput(minor: number | null | undefined): string {
+    return minor === null || minor === undefined ? '' : (minor / 100).toFixed(2).replace('.', ',');
+  }
+
+  // Los numeros y el dinero se convierten en el componente: una plantilla no tiene
+  // `Number` ni funciones del modulo, y copiar la conversion aqui dos veces es como
+  // para que un dia diverjan el precio de la hoja y el de la fila.
+  setLineQuantity(line: KeptPhotoLine, value: unknown): void {
+    line.quantity = Number(value) > 0 ? Number(value) : 1;
+  }
+
+  setLinePrice(line: KeptPhotoLine, value: unknown): void {
+    line.priceMinor = parseMoneyToMinor(typeof value === 'string' ? value : String(value ?? ''));
+  }
+
+  setFirstUnits(value: unknown): void {
+    const units = Number(value);
+    this.patchDiscount({ firstUnits: Number.isFinite(units) && units > 0 ? Math.floor(units) : 1 });
+  }
+
+  setPhotoMode(value: string | null): void {
+    this.photoMode.set(value === 'ticket' || value === 'shelf' ? value : 'auto');
+  }
+
+  // ------------------------------------------------------------------ auditoria
+
+  readonly auditOpen = signal(false);
+  readonly events = computed(() => this.shopping.events());
+  private cancelStream: (() => void) | null = null;
+
+  toggleAudit(): void {
+    this.auditOpen.set(!this.auditOpen());
+    if (this.auditOpen()) this.shopping.loadEvents(this.listId);
+  }
+
+  since(value: string): string {
+    const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
+    if (minutes < 1) return 'ahora';
+    if (minutes < 60) return `hace ${minutes} min`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `hace ${hours} h`;
+    return `hace ${Math.round(hours / 24)} d`;
+  }
 }
+

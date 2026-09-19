@@ -376,7 +376,12 @@ export class ShoppingService {
       ...(patch.unit !== undefined ? { unit: patch.unit } : {}),
       ...(patch.category !== undefined ? { category: patch.category } : {}),
       ...(patch.note !== undefined ? { note: patch.note } : {}),
-      ...(patch.priceMinor !== undefined ? { price_minor: patch.priceMinor } : {})
+      ...(patch.priceMinor !== undefined ? { price_minor: patch.priceMinor } : {}),
+      // La oferta optimisticamente: si no, al tocar 3x2 la fila no cambia hasta que
+      // conteste el servidor, y el usuario toca otra vez.
+      ...(patch.offer !== undefined
+        ? { promo_buy: patch.offer?.buy ?? null, promo_take: patch.offer?.take ?? null }
+        : {})
     };
   }
 

@@ -355,9 +355,15 @@ shoppingRoutes.get('/lists/:id', async (c) => {
   const includeDeleted = c.req.query('includeDeleted') === '1';
   const items = db
     .prepare(
-      `SELECT * FROM shopping_list_items WHERE list_id = ? ${
-        includeDeleted ? '' : 'AND deleted_at IS NULL'
-      } ORDER BY position ASC, created_at ASC`
+      `SELECT i.*,
+              -- Los nombres van en la propia lectura: la fila de la lista dice «Quique lo
+              -- cambio» sin una segunda peticion por linea, y sin eso el dato de autoria
+              -- seria un id que nadie sabe leer.
+              (SELECT u.name FROM users u WHERE u.id = i.added_by)   AS added_by_name,
+              (SELECT u.name FROM users u WHERE u.id = i.updated_by) AS updated_by_name
+       FROM shopping_list_items i
+       WHERE i.list_id = ? ${includeDeleted ? '' : 'AND i.deleted_at IS NULL'}
+       ORDER BY i.position ASC, i.created_at ASC`
     )
     .all(list.id) as any[];
 
