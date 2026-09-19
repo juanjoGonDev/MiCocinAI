@@ -353,6 +353,7 @@ export class MainLayoutComponent implements OnInit {
     { path: '/pantry', labelKey: 'nav.pantry', icon: '📦' },
     { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
     { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
+    { path: '/shopping', labelKey: 'nav.shopping', icon: '🛒' },
     { path: '/household', labelKey: 'nav.household', icon: '👨‍👩‍👧‍👦' },
     { path: '/preferences', labelKey: 'nav.preferences', icon: '👤' },
     { path: '/ai-config', labelKey: 'nav.ai-config', icon: '🤖' },
@@ -364,6 +365,7 @@ export class MainLayoutComponent implements OnInit {
     { path: '/pantry', labelKey: 'nav.pantry', icon: '📦' },
     { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
     { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
+    { path: '/shopping', labelKey: 'nav.shopping', icon: '🛒' },
     { path: '/settings', labelKey: 'nav.settings', icon: '⚙️' }
   ];
 

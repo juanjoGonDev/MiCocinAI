@@ -16,12 +16,17 @@ test.describe('Configuración — módulos', () => {
     await registerAndGoto(page, '/settings', 'mods-list');
 
     await expect(page.locator('.settings-module')).toHaveCount(5);
-    await expect(page.locator('.settings-module__soon')).toHaveCount(3);
+    await expect(page.locator('.settings-module__soon')).toHaveCount(2);
 
     // Sin marcar nada, el significado es «todo lo que trae el build»
     await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute('aria-checked', 'true');
     await expect(page.locator('[data-module-switch="pantry"]')).toHaveAttribute('aria-checked', 'true');
+    // La lista de la compra ya existe: viene encendida con las demas del build.
     await expect(page.locator('[data-module-switch="shopping"]')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    await expect(page.locator('[data-module-switch="receipts"]')).toHaveAttribute(
       'aria-checked',
       'false'
     );
@@ -60,20 +65,23 @@ test.describe('Configuración — módulos', () => {
   test('activar por adelantado lo que aún no existe no crea rutas muertas', async ({ page }) => {
     await registerAndGoto(page, '/settings', 'mods-soon');
 
-    await page.locator('[data-module-switch="shopping"]').click();
-    await expect(page.locator('[data-module-switch="shopping"]')).toHaveAttribute(
+    await page.locator('[data-module-switch="receipts"]').click();
+    await expect(page.locator('[data-module-switch="receipts"]')).toHaveAttribute(
       'aria-checked',
       'true'
     );
     // Marcado, pero enlazarlo seria un 404: este build no trae la pantalla
-    await expect(page.locator('a[href="/shopping"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/receipts"]')).toHaveCount(0);
 
     await page.reload();
-    await expect(page.locator('[data-module-switch="shopping"]')).toHaveAttribute(
+    await expect(page.locator('[data-module-switch="receipts"]')).toHaveAttribute(
       'aria-checked',
       'true'
     );
-    await expect(page.locator('a[href="/shopping"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/receipts"]')).toHaveCount(0);
+
+    // Y la que si existe no se cayo al cambiar el resto: sigue enlazada
+    await expect(page.locator('a[href="/shopping"]')).not.toHaveCount(0);
   });
 
   test('la última sección visible no se apaga, y se puede restablecer', async ({ page }) => {

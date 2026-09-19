@@ -76,7 +76,7 @@ describe('ModulesService', () => {
   it('sin seleccion deja visibles todos los modulos que trae el build', () => {
     configure({ modules: [] });
 
-    expect(service.active()).toEqual(['meals', 'pantry']);
+    expect(service.active()).toEqual(['meals', 'pantry', 'shopping']);
     expect(service.isPathVisible('/calendar')).toBeTrue();
     expect(service.isPathVisible('/recipes')).toBeTrue();
     expect(service.isPathVisible('/pantry')).toBeTrue();
@@ -100,12 +100,12 @@ describe('ModulesService', () => {
   });
 
   it('un modulo marcado que el build no trae no anade ninguna ruta', () => {
-    configure({ modules: ['meals', 'shopping'] });
+    configure({ modules: ['meals', 'receipts'] });
 
-    expect(service.isEnabled('shopping')).toBeTrue();
-    expect(service.isAvailable('shopping')).toBeFalse();
+    expect(service.isEnabled('receipts')).toBeTrue();
+    expect(service.isAvailable('receipts')).toBeFalse();
     // Todavia no existe la pantalla: enlazarla seria mandarle a un 404.
-    expect(service.isPathVisible('/shopping')).toBeFalse();
+    expect(service.isPathVisible('/receipts')).toBeFalse();
     expect(service.isPathVisible('/calendar')).toBeTrue();
   });
 
@@ -182,9 +182,9 @@ describe('ModulesService', () => {
   });
 
   it('lo que el build no trae se puede apagar siempre: no ocupa navegacion', () => {
-    configure({ modules: ['meals', 'pantry', 'shopping'] });
+    configure({ modules: ['meals', 'pantry', 'receipts'] });
 
-    expect(service.canSwitchOff('shopping')).toBeTrue();
+    expect(service.canSwitchOff('receipts')).toBeTrue();
     expect(service.canSwitchOff('meals')).toBeTrue();
   });
 
@@ -224,6 +224,6 @@ describe('ModulesService', () => {
     expect(ids.sort()).toEqual(HOME_MODULE_OPTIONS.map((option) => option.value).sort());
     expect(new Set(paths).size).toBe(paths.length);
     expect(MODULE_REGISTRY.every((definition) => definition.hint.length > 0)).toBeTrue();
-    expect(MODULE_REGISTRY.filter((definition) => definition.available).length).toBe(2);
+    expect(MODULE_REGISTRY.filter((definition) => definition.available).length).toBe(3);
   });
 });

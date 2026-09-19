@@ -10,6 +10,7 @@ const es: Dict = {
   // Layout / nav
   'nav.dashboard': 'Inicio',
   'nav.pantry': 'Despensa',
+  'nav.shopping': 'Compra',
   'nav.recipes': 'Recetas',
   'nav.calendar': 'Calendario',
   'nav.household': 'Hogar',
@@ -121,6 +122,7 @@ const es: Dict = {
 const en: Dict = {
   'nav.dashboard': 'Home',
   'nav.pantry': 'Pantry',
+  'nav.shopping': 'Shopping',
   'nav.recipes': 'Recipes',
   'nav.calendar': 'Calendar',
   'nav.household': 'Household',

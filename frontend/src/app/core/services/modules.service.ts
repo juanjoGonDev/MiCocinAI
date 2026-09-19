@@ -55,7 +55,7 @@ export const MODULE_REGISTRY: readonly ModuleDefinition[] = [
     id: 'shopping',
     label: 'Lista de la compra y precios',
     hint: 'Cesta por tienda, histórico de precios y coste estimado',
-    available: false,
+    available: true,
     paths: ['/shopping']
   },
   {
