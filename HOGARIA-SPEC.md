@@ -352,6 +352,91 @@ commit, so the tab row stays visually consistent until then. Test hooks are attr
 (`[data-level]`, `label[data-module]`, `input[data-module-input]`), never label copy: hints repeat
 words across options and `hasText` already resolved to two elements.
 
+## 8c. Configuración vs Preferencias: qué se configura donde, y en caliente
+
+Two rules the user set, and they are binding for everything that follows:
+
+1. **Parity**: everything the tour asks must be editable outside the tour. No answer may exist only in
+   `/onboarding`.
+2. **Modules are an app concern, not a diner concern**: which sections of HogarIA are switched on lives
+   in **Configuración** (`/settings`), next to theme and language. Kitchen and body — cooking level,
+   allergies, tastes, goal — live in **Preferencias** (`/preferences`).
+
+| Pregunta del tour | Dónde se cambia después | Dueño del dato |
+| --- | --- | --- |
+| Qué secciones quieres llevar (módulos) | **Configuración › Módulos** | `users.preferences.profile.modules` (flag de la app, por cuenta) |
+| Nivel de cocina | **Preferencias › Perfil** | `users.cooking_level` |
+| Alergias e intolerancias | Preferencias › Alergias | `preferences.taste.allergies` |
+| Gustos y aversiones | Preferencias › Gustos | `preferences.taste.likes/dislikes` |
+| Objetivo | Preferencias › Objetivo | `preferences.taste.goal` |
+| Con qué utensilios cuentas | **Despensa › Utensilios** (marcar es editar; el tour solo enlaza) | `utensils.available` |
+
+`app.name` and the header mark are the brand; the preferences section icon stops being a salad bowl
+(🥗) because the section is not about food any more: it is the person's profile (👤). Where a section
+is a household-wide switch (`theme`, `language`, `modules`) it belongs to Configuración; where it
+describes one diner, to Preferencias. If a future question is about the *house*, it gets its own tab
+in Configuración, never a new page.
+
+### Activation without reloading
+
+`ModulesService` (`core/services/modules.service.ts`) is the only consumer of `profile.modules`:
+
+- `enabled: computed<HomeModule[]>` — derived from `TasteProfileService`, so a change in Configuración
+  re-renders the nav and the section entries immediately. **No reload, no re-navigation, no toast
+  required.**
+- `available: Record<HomeModule, boolean>` — what this build actually ships. Enabling a module that is
+  not available is legal and persisted (that is what *pronto* means: switch it on today, it appears by
+  itself when the build that contains it is activated). Nav shows it only while `!available && enabled`
+  as a *pronto* row, never a 404.
+- `visible(path)` — the gate used by the sidebar and the dashboard cards. Rule that keeps the app
+  usable: **an empty selection means "everything available"**. Nobody loses `Recetas` or `Despensa`
+  because they skipped the tour; a non-empty selection filters.
+- Writes go through `TasteProfileService.save` and roll back the optimistic value if the PATCH fails,
+  with an error toast; a module can be enabled and disabled repeatedly with no extra request per click
+  (the toggle is debounced per module).
+- A section that gets switched off while you are inside it stays reachable (the route is not
+  unmounted mid-life); the nav entry disappears on the next render. Losing the user's place under
+  their feet is worse than a stale entry.
+
+`shopping`, `receipts` and `home` (housework) stay `available: false` until their phases (P2, P4,
+Coming soon) land, so what ships today with the picker is the mechanism, not three empty pages.
+
+## 8d. Rename: the code says HogarIA now
+
+The branding round changed what the user sees; this one changes what the developer sees, in one commit
+per surface so a revert is possible:
+
+- npm workspace packages: `frontend` → `@hogaria/web`, `server` → `@hogaria/server`, root
+  `recipeapp` → `hogaria`. **Everything that filters by name moves with it**: root `package.json`
+  scripts, `.github/workflows/ci.yml` (`pnpm --filter …` × 6), `Makefile`, `Dockerfile`,
+  `Dockerfile.dev`, `docker-compose.yml`, `docker-compose.dev.yml`, `playwright.config.ts`,
+  `knip` config, `.github/dependabot.yml` directory entries. A `pnpm --filter frontend` that silently
+  matches nothing is the failure mode to avoid here.
+- Angular workspace: project key `recipeapp` → `hogaria` in `frontend/angular.json` (and `baseHref` /
+  output names if present); `ng` invocations do not pass `--project`, so the rename is safe once the
+  file is consistent.
+- Database: default `DATABASE_PATH` becomes `data/hogaria.sqlite`; on first boot, if the new file is
+  absent and a legacy `mi-cocinai.db` / `recipeapp.db` exists, the server **adopts** it (rename, not
+  copy) and logs it. Never silently start an empty database under the user's feet. Covered by tests
+  (`:memory:`, new file, legacy adoption, missing directory, WAL toggle).
+- Strings that still say the old name: `app.name` in both dictionaries, the `logs.component` copy, the
+  environment comments, README/SETUP/RUN/SECURITY/PROGRESS/COMPLETED/DESIGN-SYSTEM headings,
+  `recipe-app-sdd.md` (kept as history: it gets a banner pointing at `HOGARIA-SPEC.md`, it is not
+  rewritten). `storage.service.ts` keeps the literal `recipeapp_` legacy prefix — that is the migration
+  path, not the brand.
+- Manifest/icon identity: name (done in the branding round), `favicon.ico` **created** (the current
+  `<link rel="icon">` points at a file that does not exist in the repo), `apple-touch-icon.png`, and
+  the eight PWA sizes regenerated from the new mark.
+
+### Iconography of HogarIA
+
+One mark: **a house with a robot brain inside** — flat, two tones (primary `#F97316`, ink
+`#1C1917`), no text, no gradients, readable at 32 px, safe inside a maskable circle (10 % padding on
+each side). Deliverables: `icon-512.png` as the source of truth; `convert`-generated 72/96/128/144/
+152/192/384; `apple-touch-icon-180.png`; `favicon.ico` (16/32/48); `favicon-32.png`,
+`favicon-192.png`; a `maskable` variant with the safe padding; and `icon.svg` for the in-app mark. All
+sizes produced in the repo, never at runtime.
+
 ## 9. Data model additions
 
 New tables (SQLite, `PRAGMA foreign_keys = ON`, WAL, busy timeout, indexes on every FK and date):
@@ -539,6 +624,73 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
       updated in one commit.
 - [ ] `data/hogaria.sqlite` default with adoption of the previous file.
 - [ ] Repo renamed by the human; `supportRepoUrl` verified; CI re-verified green.
+
+## 11b. Test reporting: see everything, like vitest
+
+`playwright.config.ts` uses a project reporter, `tools/reporters/hogaria-reporter.mjs`, that prints
+what jest/vitest print and what `list` leaves out:
+
+- **Run header**: seed, workers, projects, `--grep`, total tests, and the rerun command for failures.
+- **One line per test**, tree-shaped on the `describe` path:
+  `✓ Preferencias › el perfil del hogar se cambia aquí (2.4s)` — status glyph, title path, duration,
+  `[project]` when several run, `(retried ×1)` when it took a retry, and the test's **data seed**
+  (the e2e users are generated: `e2e-<seed>-<slug>@example.com`) so a run can be traced back to its
+  rows. The seed is `E2E_SEED` when set (CI pins it per run) and `Date.now().toString(36)` otherwise;
+  it is also written to `test-results/hogaria-run.json` with the counts.
+- **Failure concentration before the summary** (the part that saves scrolling): for each failed test —
+  title path, `file:line`, the assertion that broke with expected vs received, the first frame of the
+  stack, the page URL and the actions of the last 5 seconds from the trace/attachment, plus the video
+  and screenshot paths. Then the counts.
+- **Summary**: passed / failed / flaky / skipped, total wall time, and the five slowest tests, so a
+  regression in duration is visible without opening the HTML report.
+- Kept: `html` (open: never in CI), `json` for `scripts/ci-e2e-summary.mjs` (annotations), `junit` for
+  anyone who wants the XML. `list` is dropped because this reporter supersedes it.
+- `globalSetup` writes the seed into `process.env` before the web server starts so backend logs of the
+  same run can be grepped by it.
+
+E2E ambition: every user-visible behaviour gets a test in the suite that owns it (the calendar, tab
+URL and confirm-dialog specs are the model: flow + persistence + a11y hooks + the empty/loading/error
+state). The suite runs on `chromium` in CI for wall-time reasons; all three projects run locally and in
+`workflow_dispatch`.
+
+## 11c. Coverage: a floor, not a poster
+
+- Server (vitest + v8): `statements/branches/functions/lines ≥ 70` **per file** and ≥ 80 globally,
+  with the `text`, `html`, `lcov` and `json-summary` reporters, so `server/coverage/index.html` is the
+  visualization and the CI `Server Tests` job runs `test:coverage` and uploads the report as an
+  artifact. The instrumentation ramp is honest: files enter `coverage.include` when they get a spec,
+  and thresholds **never go down**; `database.ts`, `memory-monitor.ts` and `seed-data.ts` get the tests
+  they need to clear the floor instead of being excluded.
+- New pure code (models, mappers, the modules service, the reporter helpers) is expected at **100 %**
+  of its statements and branches — including the edges: unknown module ids, malformed persisted JSON,
+  PATCH failure rollback, double toggle, `:memory:` vs file, legacy database adoption.
+- Frontend unit tests run in a non-blocking CI job (`continue-on-error`) until the suite is trustworthy
+  in CI; UI coverage continues to be enforced where it is real: the Playwright suite. Flipping the FE
+  job to blocking is a P7 item, with its own coverage thresholds in `karma.conf`.
+- `pnpm test:coverage` is the one command for both; `pnpm --filter @hogaria/server run test:coverage`
+  prints the table.
+
+## 12b. Checklist for this round
+
+- [ ] Spec: this text (parity table, sections, live activation, rename, icons, reporter, coverage).
+- [ ] `ModulesService` + `home-profile` model at 100 % coverage, unit tests with the edges above.
+- [ ] Configuración: **Módulos** section (available on/off, *pronto* ones pre-enableable, live nav);
+      Preferencias › Perfil keeps only the cooking level; preferences icon → 👤; `.settings-group`
+      count and the section i18n updated.
+- [ ] `tools/reporters/hogaria-reporter.mjs` + `E2E_SEED` plumbing + reporter list in the config; run
+      header, per-test lines, failure concentration, summary, `test-results/hogaria-run.json`.
+- [ ] Coverage: thresholds (70 per file / 80 global), reporters incl. html+lcov, CI runs
+      `test:coverage` and uploads the artifact; tests that lift `database.ts`, `memory-monitor.ts` and
+      `seed-data.ts` over the floor.
+- [ ] Rename: workspace packages + every `--filter`, Angular project key, `DATABASE_PATH` default with
+      legacy adoption (tested), i18n brand strings, docs headings, dependabot dirs, Dockerfiles,
+      Makefile, compose files.
+- [ ] Icons: generated mark, all PWA sizes, `favicon.ico` (currently a 404), `apple-touch-icon`,
+      maskable variant, `icon.svg`, manifest `icons` refreshed (incl. `purpose: maskable`).
+- [ ] e2e: modules toggle visible in the nav without reload; pre-enabling a *pronto* module persists
+      and does not create a route; the Configuración tabs travel in the URL; the tour's parity
+      assertions (each answer readable in its section).
+- [ ] PR body and `PROGRESS.md` updated; nothing merged.
 
 ## 13. Coming soon (deliberately not in this program)
 
