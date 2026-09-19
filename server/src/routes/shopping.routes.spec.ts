@@ -866,7 +866,7 @@ describe('entrada por foto (§8f)', () => {
     const list = await createList(alice);
     const response = await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE });
     expect(response.status).toBe(409);
-    const body = await response.json();
+    const body = (await response.json()) as any;
     expect(body.message).toBe('AI_NOT_CONFIGURED');
     // Con destino, que es lo que convierte un error en un boton.
     expect(body.data.redirect).toBe('/settings/ai');
@@ -879,7 +879,7 @@ describe('entrada por foto (§8f)', () => {
 
     const response = await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE });
     expect(response.status).toBe(422);
-    const body = await response.json();
+    const body = (await response.json()) as any;
     expect(body.message).toBe('AI_ANSWER_NOT_UNDERSTOOD');
     expect(body.data.sample).toContain('No veo ningun producto');
   });

@@ -359,6 +359,35 @@ async function runMigrations(db: Database.Database): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_price_obs_key ON price_observations(product_key, observed_at);
     CREATE INDEX IF NOT EXISTS idx_price_obs_user ON price_observations(user_id);
     CREATE INDEX IF NOT EXISTS idx_price_obs_household ON price_observations(household_id);
+    -- El calendario de la casa, no solo el de las comidas (HOGARIA-SPEC 8f). Las
+    -- comidas NO se copian aqui: se proyectan desde la tabla meals al leer, para que el
+    -- plan generado siga siendo el dueno de lo que se come y no existan dos verdades.
+    -- OJO: sin backticks en este literal (comentan el SQL, y un backtick lo cierra).
+    CREATE TABLE IF NOT EXISTS calendar_events (
+      id TEXT PRIMARY KEY,
+      household_id TEXT,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'other'
+        CHECK (kind IN ('meal', 'shopping', 'home', 'appointment', 'personal', 'other')),
+      date DATE NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      all_day INTEGER NOT NULL DEFAULT 0,
+      color TEXT,
+      notes TEXT,
+      location TEXT,
+      source TEXT NOT NULL DEFAULT 'user',
+      source_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_date ON calendar_events(date, kind);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_household ON calendar_events(household_id, date);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_user ON calendar_events(user_id, date);
+
 
     -- Secciones de la lista. Son dato y no constante del frontend porque el que tiene
     -- que clasificar una foto es el modelo, y el modelo no puede leer una pantalla

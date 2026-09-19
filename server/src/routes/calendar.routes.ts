@@ -7,7 +7,10 @@ import {
   createCalendarSchema,
   addMealSchema,
   updateMealSchema,
-  updateGoalsSchema
+  updateGoalsSchema,
+  calendarEventFilterSchema,
+  createCalendarEventSchema,
+  updateCalendarEventSchema
 } from '../schemas/calendar.schema.js';
 import { ensureWeekCalendar } from '../utils/week-calendar.js';
 import type { AppEnv } from '../types/hono-env.js';
@@ -237,6 +240,253 @@ calendarRoutes.patch('/goals', async (c) => {
     .run(JSON.stringify(input), calendar.id);
 
   return c.json({ success: true, message: 'Goals updated', data: { weekStart: calendar.week_start } });
+});
+
+// ---------------------------------------------------------------------------
+// Sueltas de la casa (HOGARIA-SPEC 8f)
+// ---------------------------------------------------------------------------
+//
+// Dos decisiones que valen la pena decir en voz alta:
+//
+// 1. Las COMIDAS no se copian aqui. Se leen desde `meals` en la proyeccion, y punto:
+//    en cuanto una cena duplicada en dos tablas puede existir, una de las dos va a
+//    estar equivocada. Por eso el POST con kind 'meal' se rechaza en vez de "funcionar".
+// 2. Se ve en toda la casa, se toca solo por quien lo escribio. El carpintero del
+//    martes interesa a los dos; borrar la cita medica de otra persona, no.
+
+type CalendarEventRow = {
+  id: string;
+  household_id: string | null;
+  user_id: string;
+  title: string;
+  kind: string;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  all_day: number;
+  color: string | null;
+  notes: string | null;
+  location: string | null;
+  source: string;
+};
+
+const EVENT_COLUMNS =
+  'id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, source';
+
+function toEvent(row: CalendarEventRow, authorName: string | null): Record<string, unknown> {
+  return {
+    id: row.id,
+    title: row.title,
+    kind: row.kind,
+    date: row.date,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    allDay: row.all_day === 1,
+    color: row.color,
+    notes: row.notes,
+    location: row.location,
+    source: row.source,
+    userId: row.user_id,
+    authorName
+  };
+}
+
+/**
+ * Quien puede ver: lo de la casa (si la hay) y lo propio, aunque no haya casa. El
+ * `household_id` NO viene del token: se lee de `users`, igual que en la compra, porque
+ * cambiar de casa a mitad de temporada no puede dejar eventos huerfanos.
+ */
+function eventScope(userId: string) {
+  const db = getDatabase();
+  const user = db.prepare('SELECT household_id AS hid FROM users WHERE id = ?').get(userId) as
+    | { hid: string | null }
+    | undefined;
+  const householdId = user?.hid ?? null;
+  return householdId
+    ? { clause: '(household_id = ? OR user_id = ?)', params: [householdId, userId], userId, householdId }
+    : { clause: 'user_id = ?', params: [userId], userId, householdId: null };
+}
+
+// GET /api/calendar/events?from=&to=&kinds=
+calendarRoutes.get('/events', async (c) => {
+  const db = getDatabase();
+  const parsed = calendarEventFilterSchema.safeParse({
+    from: c.req.query('from'),
+    to: c.req.query('to'),
+    kinds: c.req.query('kinds'),
+    limit: c.req.query('limit') ?? undefined
+  });
+  if (!parsed.success) {
+    return c.json(
+      { success: false, message: 'from y to son obligatorios (AAAA-MM-DD)', issues: parsed.error.issues },
+      400
+    );
+  }
+  const { from, to, kinds, limit } = parsed.data;
+  const scope = eventScope(c.get('userId') as string);
+
+  // Un filtro de tipos que no deja NINGUN tipo valido no es "ensename todo": es una
+  // peticion rara, y contestar la lista entera seria el peor comportamiento posible.
+  const kindsClause = kinds.length ? 'kind IN (' + kinds.map(() => '?').join(', ') + ') AND' : '';
+
+  const filters: string[] = [...kinds, from, to, ...scope.params, String(limit)];
+  const rows = db
+    .prepare(
+      `SELECT ${EVENT_COLUMNS} FROM calendar_events
+       WHERE ${kindsClause} date >= ? AND date <= ? AND ${scope.clause}
+       ORDER BY date ASC, all_day DESC, start_time ASC, id ASC
+       LIMIT ?`
+    )
+    .all(...filters) as unknown as CalendarEventRow[];
+
+  const authors = new Map<string, string>();
+  const names = db.prepare('SELECT id, name FROM users').all() as unknown as { id: string; name: string }[];
+  for (const n of names) authors.set(n.id, n.name);
+
+  return c.json({
+    success: true,
+    data: rows.map((row) => ({
+      ...toEvent(row, authors.get(row.user_id) ?? null),
+      // El frontend no adivina si puede editar: lo dice el servidor, que es quien sabe
+      // quien es quien. Y es `editable`, no `es mio`, porque el dia que haya roles de
+      // admin de casa solo hay que cambiar esta linea.
+      editable: row.user_id === scope.userId
+    }))
+  });
+});
+
+// POST /api/calendar/events
+calendarRoutes.post('/events', async (c) => {
+  const db = getDatabase();
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = createCalendarEventSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      {
+        success: false,
+        message: parsed.error.issues[0]?.message ?? 'Datos invalidos',
+        issues: parsed.error.issues
+      },
+      400
+    );
+  }
+  const input = parsed.data;
+  if (input.kind === 'meal') {
+    return c.json(
+      {
+        success: false,
+        message: 'MEAL_COMES_FROM_THE_PLAN',
+        data: { hint: 'La comida se planifica en el calendario de comidas; aqui van las otras cosas de la casa.' }
+      },
+      400
+    );
+  }
+
+  const userId = c.get('userId') as string;
+  const householdId = eventScope(userId).householdId;
+  const id = nanoid();
+  const allDay = input.allDay === undefined ? (!input.startTime ? 1 : 0) : input.allDay === true || input.allDay === 1 ? 1 : 0;
+
+  db.prepare(
+    `INSERT INTO calendar_events
+     (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'user')`
+  ).run(
+    id,
+    // Sin casa la suelta es solo tuya; con casa, solo se comparte si quien la escribe
+    // lo pide. Una cita medica no es automaticamente de la familia.
+    input.sharedWithHousehold ? householdId : null,
+    userId,
+    input.title,
+    input.kind,
+    input.date,
+    input.startTime ?? null,
+    input.endTime ?? null,
+    allDay,
+    input.color ?? null,
+    input.notes ?? null,
+    input.location ?? null
+  );
+
+  const row = db.prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`).get(id) as unknown as CalendarEventRow;
+  return c.json({ success: true, data: { ...toEvent(row, null), editable: true } }, 201);
+});
+
+// PATCH /api/calendar/events/:id
+calendarRoutes.patch('/events/:id', async (c) => {
+  const db = getDatabase();
+  const id = c.req.param('id');
+  const userId = c.get('userId') as string;
+  const existing = db.prepare('SELECT * FROM calendar_events WHERE id = ?').get(id) as
+    | (CalendarEventRow & { user_id: string; all_day: number; start_time: string | null; end_time: string | null })
+    | undefined;
+  if (!existing) return c.json({ success: false, message: 'Evento no encontrado' }, 404);
+  // Escrita en el sitio: ver el evento de otra persona no es poder reescribirlo.
+  if (existing.user_id !== userId) {
+    return c.json({ success: false, message: 'FORBIDDEN', data: { hint: 'Solo quien lo escribio puede cambiarlo.' } }, 403);
+  }
+
+  const body = await c.req.json().catch(() => ({}));
+  const parsed = updateCalendarEventSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, message: parsed.error.issues[0]?.message ?? 'Datos invalidos' }, 400);
+  }
+  const input = parsed.data as Record<string, unknown>;
+
+  const set: string[] = [];
+  const params: (string | number | null)[] = [];
+  const put = (column: string, value: unknown) => {
+    if (value === undefined) return;
+    set.push(`${column} = ?`);
+    params.push(value === null ? null : (value as string | number));
+  };
+  put('title', input.title);
+  put('kind', input.kind);
+  put('date', input.date);
+  put('start_time', input.startTime);
+  put('end_time', input.endTime);
+  put('color', input.color);
+  put('notes', input.notes);
+  put('location', input.location);
+  if (input.allDay !== undefined) {
+    set.push('all_day = ?');
+    params.push(input.allDay === true || input.allDay === 1 ? 1 : 0);
+  }
+  // Cambiar de hora a todo el dia tiene que BORRAR las horas: si no, la siguiente
+  // edicion ve un evento 'todo el dia' con 19:30 dentro y nadie sabe cual manda.
+  if (input.allDay === true || input.allDay === 1) {
+    set.push('start_time = NULL', 'end_time = NULL');
+  }
+  // Las horas se comprueban SOBRE LA FILA RESULTANTE, no sobre lo que llego: un PATCH
+  // que solo manda endTime puede dejar el final antes del principio, y ese evento no
+  // lo rechaza ningun schema que valide partes.
+  const nextStart = input.startTime ?? existing.start_time ?? null;
+  const nextEnd = input.endTime ?? existing.end_time ?? null;
+  const nextAllDay = input.allDay === true || input.allDay === 1 ? 1 : existing.all_day;
+  if (!nextAllDay && nextStart && nextEnd && nextEnd < nextStart) {
+    return c.json({ success: false, message: 'endTime no puede ser anterior a startTime' }, 400);
+  }
+  if (!set.length) return c.json({ success: false, message: 'Nada que actualizar' }, 400);
+
+  params.push(id);
+  db.prepare(`UPDATE calendar_events SET ${set.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
+
+  const row = db.prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`).get(id) as unknown as CalendarEventRow;
+  return c.json({ success: true, data: { ...toEvent(row, null), editable: true } });
+});
+
+// DELETE /api/calendar/events/:id
+calendarRoutes.delete('/events/:id', async (c) => {
+  const db = getDatabase();
+  const id = c.req.param('id');
+  const userId = c.get('userId') as string;
+  const existing = db.prepare('SELECT user_id FROM calendar_events WHERE id = ?').get(id) as { user_id: string } | undefined;
+  if (!existing) return c.json({ success: false, message: 'Evento no encontrado' }, 404);
+  if (existing.user_id !== userId) {
+    return c.json({ success: false, message: 'FORBIDDEN', data: { hint: 'Solo quien lo escribio puede borrarlo.' } }, 403);
+  }
+  db.prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
+  return c.json({ success: true, message: 'Evento eliminado' });
 });
 
 export { calendarRoutes };
