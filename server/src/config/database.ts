@@ -376,8 +376,29 @@ async function runMigrations(db: Database.Database): Promise<void> {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
     );
+    -- La oferta (3x2, 2x1) es de la LINEA porque cambia cuantas unidades se pagan.
+    -- Un promo_take >= promo_buy no tiene sentido (pagarias todo), y se ignora en
+    -- lugar de guardarse: es un dato de origen, no una decision del usuario.
+    -- OJO: dentro de este template literal no pueden aparecer backticks — rompen el
+    -- string de SQL (lección ya anotada arriba, y vuelta a caer).
     CREATE INDEX IF NOT EXISTS idx_shopping_categories_user ON shopping_categories(user_id, position);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_shopping_categories_key ON shopping_categories(user_id, key);
+
+    -- El descuento es de la LISTA porque cambia cuanto se paga del subtotal, y solo
+    -- puede haber uno por lista: dos cupones apilados es una conversacion con la
+    -- caja, no un dato que la app pueda resolver por su cuenta.
+    CREATE TABLE IF NOT EXISTS shopping_list_discounts (
+      list_id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL CHECK (kind IN ('amount', 'percent')),
+      value_minor INTEGER CHECK (value_minor IS NULL OR value_minor >= 0),
+      percent_bps INTEGER CHECK (percent_bps IS NULL OR (percent_bps >= 0 AND percent_bps <= 10000)),
+      scope TEXT NOT NULL DEFAULT 'all' CHECK (scope IN ('all', 'firstUnits')),
+      first_units REAL CHECK (first_units IS NULL OR first_units > 0),
+      label TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+    );
   `);
 
   // Auto-migrations: add columns that may be missing in older databases
@@ -391,6 +412,11 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
   addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
   addColumnIfMissing('household_members', 'permissions', 'TEXT DEFAULT \'{}\'');
+  addColumnIfMissing('shopping_list_items', 'promo_buy', 'INTEGER');
+  addColumnIfMissing('shopping_list_items', 'promo_take', 'INTEGER');
+  addColumnIfMissing('shopping_list_items', 'added_by', 'TEXT');
+  addColumnIfMissing('shopping_list_items', 'updated_by', 'TEXT');
+  addColumnIfMissing('shopping_lists', 'updated_by', 'TEXT');
 
   // weekly_calendars.household_id nacio NOT NULL con FK a households, y las rutas
   // metían '' para las cuentas sin hogar: la FK lo rechaza (foreign_keys = ON),

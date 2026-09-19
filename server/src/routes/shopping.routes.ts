@@ -6,6 +6,7 @@ import { productKeyOf } from '../utils/product-key.js';
 import {
   bulkItemsSchema,
   createCategorySchema,
+  discountSchema,
   createItemSchema,
   createListSchema,
   createPriceSchema,
@@ -21,6 +22,14 @@ import {
   listCategories,
   upsertCategory
 } from '../utils/shopping-categories.js';
+import {
+  basketMoney,
+  describeDiscount,
+  normalizeOffer,
+  offerOf,
+  paidUnits,
+  type Discount
+} from '../utils/list-discount.js';
 import type { AppEnv } from '../types/hono-env.js';
 
 /**
@@ -72,6 +81,24 @@ function readList(db: ReturnType<typeof getDatabase>, scope: Scope, listId: stri
   return db
     .prepare(`SELECT * FROM shopping_lists WHERE id = ? AND ${scope.clause}`)
     .get(listId, ...scope.params) as any;
+}
+
+/**
+ * La fila de descuento, en la forma que consume `utils/list-discount.ts`. `null`
+ * cuando la lista no tiene ninguno: el `estimate` entonces no pinta bloque de
+ * descuento, en vez de un «-0,00 €» que sugiere que algo se aplico y no.
+ */
+function readDiscount(db: ReturnType<typeof getDatabase>, listId: string): Discount | null {
+  const row = db.prepare('SELECT * FROM shopping_list_discounts WHERE list_id = ?').get(listId) as any;
+  if (!row) return null;
+  return {
+    kind: row.kind,
+    valueMinor: row.value_minor ?? null,
+    percentBps: row.percent_bps ?? null,
+    scope: row.scope,
+    firstUnits: row.first_units ?? null,
+    label: row.label ?? null
+  };
 }
 
 /** Totales de cabecera: se calculan aqui y no en la UI, para que la lista y el
@@ -195,7 +222,11 @@ shoppingRoutes.get('/lists/:id', async (c) => {
     )
     .all(list.id) as any[];
 
-  return c.json({ success: true, data: { ...list, items, ...listTotals(db, list.id) } });
+  const discount = readDiscount(db, list.id);
+  return c.json({
+    success: true,
+    data: { ...list, items, ...listTotals(db, list.id), discount, discountDescription: describeDiscount(discount) }
+  });
 });
 
 shoppingRoutes.patch('/lists/:id', async (c) => {
@@ -266,8 +297,9 @@ function insertItem(db: ReturnType<typeof getDatabase>, listId: string, input: a
   const key = productKeyOf(input.name);
   db.prepare(
     `INSERT INTO shopping_list_items
-       (id, list_id, name, product_key, quantity, unit, category, price_minor, note, position)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       (id, list_id, name, product_key, quantity, unit, category, price_minor, note, position,
+        promo_buy, promo_take)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     listId,
@@ -278,7 +310,9 @@ function insertItem(db: ReturnType<typeof getDatabase>, listId: string, input: a
     input.category ?? null,
     input.priceMinor ?? input.price_minor ?? null,
     input.note ?? null,
-    nextPosition(db, listId)
+    nextPosition(db, listId),
+    normalizeOffer(input.offer)?.buy ?? null,
+    normalizeOffer(input.offer)?.take ?? null
   );
   return id;
 }
@@ -302,10 +336,17 @@ shoppingRoutes.post('/lists/:id/items', async (c) => {
     .get(list.id, key, body.unit ?? null) as any;
 
   if (existing) {
-    db.prepare('UPDATE shopping_list_items SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-      body.quantity ?? 1,
-      existing.id
-    );
+    // Se suma la cantidad y, si la linea nueva traia oferta, se la lleva puesta:
+    // quien escribe «6 Cervexas 3x2» sobre una fila de «3 Cervexas» habla de la misma
+    // estanteria, y perder la oferta a mitad de camino pinta un precio mayor.
+    db.prepare(
+      `UPDATE shopping_list_items
+         SET quantity = quantity + ?,
+             promo_buy = COALESCE(?, promo_buy),
+             promo_take = COALESCE(?, promo_take),
+             updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    ).run(body.quantity ?? 1, normalizeOffer(body.offer)?.buy ?? null, normalizeOffer(body.offer)?.take ?? null, existing.id);
     db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
       list.id
     );
@@ -413,6 +454,13 @@ shoppingRoutes.patch('/lists/:id/items/:itemId', async (c) => {
     sets.push('price_minor = ?');
     params.push(body.priceMinor);
   }
+  // `offer: null` quita la oferta; `undefined` no la toca. Un `COALESCE` aqui no
+  // serviria: haria «quitar» indistinguible de «no decir nada».
+  if (body.offer !== undefined) {
+    sets.push('promo_buy = ?');
+    sets.push('promo_take = ?');
+    params.push(normalizeOffer(body.offer)?.buy ?? null, normalizeOffer(body.offer)?.take ?? null);
+  }
 
   sets.push('updated_at = CURRENT_TIMESTAMP');
   db.prepare(`UPDATE shopping_list_items SET ${sets.join(', ')} WHERE id = ?`).run(...params, item.id);
@@ -459,6 +507,55 @@ shoppingRoutes.post('/lists/:id/items/:itemId/restore', async (c) => {
 
   const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(c.req.param('itemId')) as any;
   return c.json({ success: true, data: item });
+});
+
+/**
+ * El descuento de la lista. Un `PUT`, no un `POST`: como mucho hay uno, y una
+ * pantalla que guarda sola necesita que «guardar» y «guardar por primera vez» sean
+ * la misma operacion. Borrarlo es `DELETE`, no `PUT {kind: null}` — el estado
+ * «sin descuento» tiene que ser la ausencia de fila.
+ */
+shoppingRoutes.put('/lists/:id/discount', async (c) => {
+  const db = getDatabase();
+  const scope = getScope(c.get('userId'));
+  const list = readList(db, scope, c.req.param('id'));
+  if (!list) return notFound(c, 'List');
+
+  const body = discountSchema.parse(await c.req.json());
+  db.prepare(
+    `INSERT INTO shopping_list_discounts
+       (list_id, kind, value_minor, percent_bps, scope, first_units, label)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(list_id) DO UPDATE SET
+       kind = excluded.kind,
+       value_minor = excluded.value_minor,
+       percent_bps = excluded.percent_bps,
+       scope = excluded.scope,
+       first_units = excluded.first_units,
+       label = excluded.label,
+       updated_at = CURRENT_TIMESTAMP`
+  ).run(
+    list.id,
+    body.kind,
+    body.kind === 'amount' ? body.valueMinor ?? 0 : null,
+    body.kind === 'percent' ? body.percentBps ?? 0 : null,
+    body.scope,
+    body.scope === 'firstUnits' ? body.firstUnits ?? null : null,
+    body.label ?? null
+  );
+
+  const discount = readDiscount(db, list.id);
+  return c.json({ success: true, data: { ...discount, description: describeDiscount(discount) } });
+});
+
+shoppingRoutes.delete('/lists/:id/discount', async (c) => {
+  const db = getDatabase();
+  const scope = getScope(c.get('userId'));
+  const list = readList(db, scope, c.req.param('id'));
+  if (!list) return notFound(c, 'List');
+
+  db.prepare('DELETE FROM shopping_list_discounts WHERE list_id = ?').run(list.id);
+  return c.json({ success: true, data: { removed: true } });
 });
 
 /** Lo comprado se va de la lista (y su precio queda anotado, ver `complete`). */
@@ -543,30 +640,66 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
   );
 
   let totalMinor = 0;
-  const lines = items.map((item) => {
-    if (item.price_minor != null) {
-      const lineTotal = roundMinor(item.price_minor * (item.quantity ?? 1));
-      totalMinor += lineTotal;
-      return { itemId: item.id, name: item.name, source: 'manual' as const, unitMinor: item.price_minor, lineTotalMinor: lineTotal };
-    }
+  const priced: { item: any; unitMinor: number | null; source: 'manual' | 'observed' | 'unpriced'; store: string | null; observedAt: string | null }[] = [];
 
+  for (const item of items) {
+    if (item.price_minor != null) {
+      priced.push({ item, unitMinor: item.price_minor, source: 'manual', store: null, observedAt: null });
+      continue;
+    }
     const found = observation.get(productKeyOf(item.name), c.get('userId'), list.household_id) as
       | { price_minor: number; quantity: number; store_name: string | null; observed_at: string }
       | undefined;
-
-    if (!found) return { itemId: item.id, name: item.name, source: 'unpriced' as const, lineTotalMinor: null };
-
-    const unitMinor = roundMinor(found.price_minor / (found.quantity || 1));
-    const lineTotal = roundMinor(unitMinor * (item.quantity ?? 1));
-    totalMinor += lineTotal;
-    return {
-      itemId: item.id,
-      name: item.name,
-      source: 'observed' as const,
-      unitMinor,
-      lineTotalMinor: lineTotal,
+    if (!found) {
+      priced.push({ item, unitMinor: null, source: 'unpriced', store: null, observedAt: null });
+      continue;
+    }
+    // La observacion guarda lo pagado por N unidades; la unidad sale de ahi, no de un
+    // precio que nadie anoto. Se redondea una vez, aqui.
+    priced.push({
+      item,
+      unitMinor: roundMinor(found.price_minor / (found.quantity || 1)),
+      source: 'observed',
       store: found.store_name,
       observedAt: found.observed_at
+    });
+  }
+  void totalMinor;
+
+  const discount = readDiscount(db, list.id);
+  const money = basketMoney({
+    lines: priced.map((entry) => ({
+      itemId: entry.item.id,
+      quantity: entry.item.quantity ?? 1,
+      unitMinor: entry.unitMinor,
+      offer: offerOf(entry.item)
+    })),
+    discount
+  });
+  const byId = new Map(money.lines.map((line) => [line.itemId, line]));
+
+  const lines = priced.map((entry) => {
+    const line = byId.get(entry.item.id);
+    const offer = offerOf(entry.item);
+    const base: any = {
+      itemId: entry.item.id,
+      name: entry.item.name,
+      units: entry.item.quantity ?? 1,
+      paidUnits: line?.paidUnits ?? entry.item.quantity ?? 1,
+      ...(offer ? { offer } : {})
+    };
+    if (entry.source === 'unpriced') return { ...base, source: 'unpriced' as const, lineTotalMinor: null };
+    return {
+      ...base,
+      source: entry.source,
+      unitMinor: entry.unitMinor,
+      // `lineTotalMinor` sigue siendo lo que cuesta la linea (despues de su oferta y
+      // antes del descuento de la lista): es el numero que alguien contrasta con el
+      // ticket. El descuento de la lista se ve aparte, porque no es de esta linea.
+      lineTotalMinor: line?.grossMinor ?? 0,
+      netMinor: line?.netMinor ?? 0,
+      offerSavingsMinor: line?.offerSavingsMinor ?? 0,
+      ...(entry.store ? { store: entry.store, observedAt: entry.observedAt } : {})
     };
   });
 
@@ -575,7 +708,11 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
     data: {
       listId: list.id,
       currency: 'EUR',
-      totalMinor,
+      totalMinor: money.totalMinor,
+      subtotalMinor: money.subtotalMinor,
+      offerSavingsMinor: money.offerSavingsMinor,
+      discountMinor: money.discountMinor,
+      discount: discount ? { ...discount, description: describeDiscount(discount), ...money.discount } : null,
       pricedLines: lines.filter((line) => line.lineTotalMinor !== null).length,
       unpriced: lines.filter((line) => line.source === 'unpriced').map((line) => line.name),
       lines
@@ -607,7 +744,11 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
   let recorded = 0;
   db.transaction(() => {
     for (const item of bought) {
-      // El item guarda precio/unidad; la observacion, lo pagado por esa cantidad.
+      // El item guarda precio/unidad; la observacion, lo pagado por la cantidad que
+      // realmente se pago. Con una oferta 3x2 alguien se llevo 6 y pago 4: anotar
+      // «4 € por 6 unidades» aprenderia un precio por unidad un 33 % mas barato que
+      // el real, y ese error se propaga a todas las estimaciones futuras.
+      const paid = paidUnits(item.quantity ?? 1, offerOf(item)) || item.quantity || 1;
       insertObservation.run(
         nanoid(),
         userId,
@@ -615,8 +756,8 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
         item.product_key,
         item.name,
         list.store,
-        roundMinor(item.price_minor * (item.quantity ?? 1)),
-        item.quantity ?? 1
+        roundMinor(item.price_minor * paid),
+        paid
       );
       recorded += 1;
     }

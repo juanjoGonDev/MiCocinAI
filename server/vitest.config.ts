@@ -23,6 +23,7 @@ const COVERED = [
   'src/schemas/shopping.schema.ts',
   'src/utils/product-key.ts',
   'src/utils/shopping-categories.ts',
+  'src/utils/list-discount.ts',
   'src/utils/ai-client.ts',
   'src/config/database.ts',
   'src/utils/memory-monitor.ts',

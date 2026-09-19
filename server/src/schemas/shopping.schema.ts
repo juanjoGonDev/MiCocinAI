@@ -57,10 +57,46 @@ export const createCategorySchema = z.object({
   color: z
     .string()
     .trim()
-    .regex(/^#[0-9a-fA-F]{6}$/, 'El color ha de ser un hexadecimonal de 6 digitos, p.ej. #4CAF50')
+    .regex(/^#[0-9a-fA-F]{6}$/, 'El color ha de ser un hexadecimal de 6 digitos, p.ej. #4CAF50')
     .nullable()
     .optional()
 });
+
+/**
+ * La oferta de una linea: «cada `buy`, pagas `take`» (3×2, 2×1, 6×5). `take >= buy`
+ * no es una oferta — se pagaria todo —: la normalizacion (eso pasa a `null`) vive en
+ * `utils/list-discount.ts`, no aqui, porque el schema tambien describe la entrada de
+ * quien escribe una fila a mano y un `.transform()` volveria obligatoria la clave.
+ */
+export const offerInput = z
+  .object({
+    buy: z.coerce.number().int().min(2).max(1000),
+    take: z.coerce.number().int().min(1).max(999)
+  })
+  .nullable()
+  .optional();
+
+/**
+ * El descuento de la lista. Dos unidades distintas a proposito: euros (centimos
+ * enteros) o porcentaje en puntos porcentuales (12,5 % son 1250), porque un float
+ * de porcentaje redondea sitios distintos que una resta de centimos. `scope` decide
+ * si se aplica a toda la cesta o solo a las primeras N unidades pagadas — «2 € en
+ * las 3 primeras cervezas» —, y ahi el minimo importa: si no llegan a N, no hay
+ * descuento, que es lo que dice el cartel del pasillo.
+ */
+export const discountSchema = z
+  .object({
+    kind: z.enum(['amount', 'percent']),
+    valueMinor: z.coerce.number().int().min(0).max(100_000_000).nullable().optional(),
+    percentBps: z.coerce.number().int().min(0).max(10_000).nullable().optional(),
+    scope: z.enum(['all', 'firstUnits']).default('all'),
+    firstUnits: z.coerce.number().positive().max(100_000).nullable().optional(),
+    label: z.string().trim().max(60).nullable().optional()
+  })
+  .refine((value) => (value.kind === 'amount' ? (value.valueMinor ?? 0) > 0 : (value.percentBps ?? 0) > 0), {
+    message: 'DiscountValueRequired'
+  })
+  .refine((value) => value.scope === 'all' || (value.firstUnits ?? 0) > 0, { message: 'FirstUnitsRequired' });
 
 export const createListSchema = z.object({
   name: trimmed(80),
@@ -91,7 +127,8 @@ export const createItemSchema = z.object({
   unit: z.string().trim().max(24).nullable().optional(),
   category: z.string().trim().max(48).nullable().optional(),
   priceMinor: priceMinor,
-  note: z.string().trim().max(280).nullable().optional()
+  note: z.string().trim().max(280).nullable().optional(),
+  offer: offerInput
 });
 
 export const updateItemSchema = z
@@ -102,7 +139,8 @@ export const updateItemSchema = z
     category: z.string().trim().max(48).nullable().optional(),
     checked: booleanish.optional(),
     priceMinor: priceMinor,
-    note: z.string().trim().max(280).nullable().optional()
+    note: z.string().trim().max(280).nullable().optional(),
+    offer: offerInput
   })
   .refine(
     (value) =>
@@ -112,7 +150,8 @@ export const updateItemSchema = z
       value.category !== undefined ||
       value.checked !== undefined ||
       value.priceMinor !== undefined ||
-      value.note !== undefined,
+      value.note !== undefined ||
+      value.offer !== undefined,
     { message: 'NothingToUpdate' }
   );
 
