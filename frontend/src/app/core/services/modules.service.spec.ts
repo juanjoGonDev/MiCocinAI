@@ -138,6 +138,7 @@ describe('ModulesService', () => {
 
     pending[0].next(current);
     expect(service.isSaving()).toBeFalse();
+    expect(service.lastError()).toBeNull();
   });
 
   it('si el guardado falla, se vuelve al estado anterior', () => {
@@ -151,6 +152,7 @@ describe('ModulesService', () => {
     expect(storedModules()).toEqual(['pantry']);
     expect(service.isPathVisible('/pantry')).toBeTrue();
     expect(service.isSaving()).toBeFalse();
+    expect(service.lastError()).toBe('MODULE_SAVE_FAILED');
   });
 
   it('el rollback no toca el resto del perfil (el nivel de cocina sigue)', () => {
@@ -164,6 +166,46 @@ describe('ModulesService', () => {
     expect(current.cookingLevel).toBe('expert');
     expect(storedModules()).toEqual(['pantry']);
     expect(service.isEnabled('meals')).toBeFalse();
+  });
+
+  it('no deja apagar la ultima seccion visible (si no, la seleccion vacia la reviviria)', () => {
+    configure({ modules: [] });
+
+    expect(service.visibleNow()).toEqual(['meals', 'pantry']);
+    expect(service.canSwitchOff('pantry')).toBeTrue();
+
+    service.toggle('pantry');
+    pending[0].next(current);
+
+    expect(service.visibleNow()).toEqual(['meals']);
+    expect(service.canSwitchOff('meals')).toBeFalse();
+  });
+
+  it('lo que el build no trae se puede apagar siempre: no ocupa navegacion', () => {
+    configure({ modules: ['meals', 'pantry', 'shopping'] });
+
+    expect(service.canSwitchOff('shopping')).toBeTrue();
+    expect(service.canSwitchOff('meals')).toBeTrue();
+  });
+
+  it('restablecer vuelve a la seleccion vacia, que significa todo lo disponible', () => {
+    configure({ modules: ['pantry'] });
+
+    service.resetSelection();
+    pending[0].next(current);
+
+    expect(service.selected()).toEqual([]);
+    expect(service.isPathVisible('/calendar')).toBeTrue();
+    expect(service.isPathVisible('/pantry')).toBeTrue();
+  });
+
+  it('restablecer cuando ya estaba vacio no dispara ninguna peticion', () => {
+    configure({ modules: [] });
+
+    service.resetSelection();
+
+    expect(saved.length).toBe(0);
+    expect(service.isSaving()).toBeFalse();
   });
 
   it('un id desconocido no rompe nada: ni definicion, ni disponibilidad', () => {

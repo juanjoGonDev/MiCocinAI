@@ -14,7 +14,8 @@ test.describe('Preferencias', () => {
     // comensal ni una tarjeta que lo recuerde
     await page.goto('/settings');
     await expect(page.locator('.settings-title')).toBeVisible();
-    await expect(page.locator('.settings-group')).toHaveCount(2);
+    // Tema, idioma y modulos: los modulos son de la app, no del comensal
+    await expect(page.locator('.settings-group')).toHaveCount(3);
     // La tarjeta de acceso rapido se fue: no queda ni su enlace
     await expect(page.locator('.settings-group__link')).toHaveCount(0);
     await expect(page.locator('app-chip-select')).toHaveCount(0);
@@ -62,14 +63,15 @@ test.describe('Preferencias', () => {
   test('el perfil del hogar se cambia aquí, se guarda y se conserva', async ({ page }) => {
     await registerAndGoto(page, '/preferences', 'prefs-profile');
 
-    // Cuatro niveles y cinco secciones: las mismas que en el tour
+    // Cuatro niveles, los mismos que en el tour...
     await expect(page.locator('[data-level]')).toHaveCount(4);
-    await expect(page.locator('label[data-module]')).toHaveCount(5);
+    // ...y ninguna seccion: los modulos son de la app y se activan en Configuracion
+    await expect(page.locator('label[data-module]')).toHaveCount(0);
+    await expect(page.locator('.preferences__inline-link')).toHaveCount(1);
     // Se entra con el nivel por defecto del registro
     await expect(page.locator('[data-level="beginner"]')).toHaveClass(/--on/);
 
     await page.locator('[data-level="expert"]').click();
-    await page.locator('label[data-module="pantry"]').click();
     await expect(page.locator('.preferences__state')).toContainText('Hay cambios sin guardar');
 
     await page.getByRole('button', { name: 'Guardar preferencias' }).click();
@@ -80,14 +82,16 @@ test.describe('Preferencias', () => {
 
     await page.reload();
     await expect(page.locator('[data-level="expert"]')).toHaveClass(/--on/);
-    await expect(page.locator('input[data-module-input="pantry"]')).toBeChecked();
 
-    // Descartar tambien revierte el perfil, sin recargar
-    await page.locator('label[data-module="receipts"]').click();
-    await expect(page.locator('input[data-module-input="receipts"]')).toBeChecked();
+    // Descartar tambien revierte el nivel, sin recargar
+    await page.locator('[data-level="beginner"]').click();
+    await expect(page.locator('[data-level="beginner"]')).toHaveClass(/--on/);
     await page.getByRole('button', { name: /Descartar/ }).click();
-    await expect(page.locator('input[data-module-input="receipts"]')).not.toBeChecked();
-    await expect(page.locator('input[data-module-input="pantry"]')).toBeChecked();
+    await expect(page.locator('[data-level="expert"]')).toHaveClass(/--on/);
+
+    // Cambiar el nivel aqui no toca los modulos de Configuracion
+    await page.goto('/settings');
+    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute('aria-checked', 'true');
   });
 
   test('lo marcado en una pestaña no se pierde al cambiar y se guarda junto', async ({ page }) => {

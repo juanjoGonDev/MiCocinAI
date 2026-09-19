@@ -90,6 +90,8 @@ export class ModulesService {
 
   readonly registry = MODULE_REGISTRY;
   readonly isSaving = signal(false);
+  /** Código del último guardado fallido: la vista lo traduce, el servicio no. */
+  readonly lastError = signal<string | null>(null);
 
   /** Lo que hay guardado en la cuenta, sin interpretar. */
   readonly selected = computed(() => this.tasteService.profile().modules);
@@ -106,6 +108,29 @@ export class ModulesService {
   constructor() {
     // El perfil puede no haberse pedido nunca (entrada directa a Configuración).
     this.tasteService.ensureLoaded();
+  }
+
+  /** Secciones que de verdad se ven ahora mismo (disponibles y encendidas). */
+  readonly visibleNow = computed(() =>
+    this.active().filter((id) => this.isAvailable(id))
+  );
+
+  /**
+   * La ultima seccion visible no se apaga: con la seleccion vacia la regla es
+   * «todo disponible», asi que apagar la ultima habria vuelto a encender todas
+   * justo al reves de lo que pidio quien usa la app. Se restablece con
+   * `resetSelection()`, que es la accion explicita.
+   */
+  canSwitchOff(id: HomeModule): boolean {
+    if (!this.isEnabled(id)) return true;
+    if (!this.isAvailable(id)) return true;
+    return this.visibleNow().length > 1;
+  }
+
+  /** Vuelve al significado por defecto: todas las que trae este build. */
+  resetSelection(): void {
+    if (this.selected().length === 0) return;
+    this.apply([]);
   }
 
   definition(id: HomeModule | string): ModuleDefinition | undefined {
@@ -146,11 +171,13 @@ export class ModulesService {
     const previous = this.tasteService.profile();
     this.tasteService.profile.set({ ...previous, modules: next });
     this.isSaving.set(true);
+    this.lastError.set(null);
 
     this.tasteService.save({}, undefined, { modules: next }).subscribe({
       error: () => {
         // Rollback: sin esto la navegacion mentiria sobre lo guardado.
         this.tasteService.profile.set(previous);
+        this.lastError.set('MODULE_SAVE_FAILED');
       },
       complete: () => this.isSaving.set(false)
     });

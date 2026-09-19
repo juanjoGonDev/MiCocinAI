@@ -65,7 +65,7 @@ import {
       </p>
     </fieldset>
 
-    <fieldset class="profile-picker">
+    <fieldset class="profile-picker" *ngIf="askForModules">
       <legend class="profile-picker__legend">{{ modulesLabel }}</legend>
       <p class="profile-picker__hint">{{ modulesHint }}</p>
       <div class="profile-picker__modules">
@@ -312,8 +312,10 @@ export class HomeProfilePickerComponent {
   @Input() modulesLabel = '¿Qué quieres llevar desde HogarIA?';
   @Input() modulesHint =
     'Marca lo que vas a usar. Lo que no marques sigue existiendo, solo que no te lo recordamos.';
-  /** El tour pregunta las dos cosas; Preferencias también, pero se puede apagar. */
+  /** El tour pregunta las dos cosas; cada seccion solo la suya. */
   @Input() askForLevel = true;
+  /** Los modulos son un flag de la app: se editan en Configuracion, no aqui. */
+  @Input() askForModules = true;
 
   readonly levels = COOKING_LEVEL_OPTIONS;
   readonly modules = HOME_MODULE_OPTIONS;

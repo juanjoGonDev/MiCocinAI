@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ThemeService, Theme } from '../../core/services/theme.service';
 import { I18nService, Language } from '../../core/services/i18n.service';
+import { ModulesService } from '../../core/services/modules.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 interface Option<T extends string> {
@@ -50,6 +51,53 @@ interface Option<T extends string> {
         </div>
       </section>
 
+      <section class="settings-group">
+        <h2 class="settings-group__title">{{ 'settings.modules' | t }}</h2>
+        <p class="settings-hint">{{ 'settings.modulesHint' | t }}</p>
+
+        <ul class="settings-modules">
+          <li *ngFor="let def of modules.registry" class="settings-module" [attr.data-module]="def.id">
+            <span class="settings-module__text">
+              <span class="settings-module__label">
+                {{ def.label }}
+                <span class="settings-module__soon" *ngIf="!def.available">
+                  {{ 'settings.modulesSoon' | t }}
+                </span>
+              </span>
+              <span class="settings-module__hint">{{ def.hint }}</span>
+            </span>
+            <button
+              type="button"
+              class="settings-module__switch"
+              role="switch"
+              [attr.data-module-switch]="def.id"
+              [attr.aria-checked]="modules.isEnabled(def.id)"
+              [attr.aria-label]="def.label"
+              [disabled]="modules.isSaving() || !modules.canSwitchOff(def.id)"
+              [attr.data-on]="modules.isEnabled(def.id)"
+              (click)="modules.toggle(def.id)"
+            >
+              <span class="settings-module__knob" aria-hidden="true"></span>
+            </button>
+          </li>
+        </ul>
+
+        <p class="settings-hint" *ngIf="modules.selected().length === 0">
+          {{ 'settings.modulesAllOn' | t }}
+        </p>
+        <button
+          type="button"
+          class="settings-modules__reset"
+          *ngIf="modules.selected().length > 0"
+          (click)="modules.resetSelection()"
+          data-modules-reset
+        >
+          {{ 'settings.modulesReset' | t }}
+        </button>
+        <p class="settings-hint settings-hint--error" *ngIf="modules.lastError()">
+          {{ 'settings.modulesFailed' | t }}
+        </p>
+      </section>
     </div>
   `,
   styles: [`
@@ -70,6 +118,125 @@ interface Option<T extends string> {
       font-family: var(--font-display);
       font-size: var(--text-2xl);
       font-weight: var(--font-bold);
+    }
+
+    .settings-modules__reset {
+      margin-top: var(--space-2);
+      background: none;
+      border: 0;
+      padding: 0;
+      font: inherit;
+      font-size: var(--text-xs);
+      color: var(--primary);
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .settings-modules {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .settings-module {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-3);
+      padding: var(--space-3);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      background: var(--bg-secondary);
+    }
+
+    .settings-module__text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .settings-module__label {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: var(--text-sm);
+      font-weight: var(--font-bold);
+    }
+
+    .settings-module__soon {
+      font-size: 10px;
+      font-weight: var(--font-medium);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+    }
+
+    .settings-module__hint {
+      font-size: var(--text-xs);
+      color: var(--text-secondary);
+    }
+
+    .settings-module__switch {
+      flex: none;
+      width: 46px;
+      height: 26px;
+      padding: 2px;
+      border: 1px solid var(--border-default);
+      border-radius: 999px;
+      background: var(--bg-tertiary);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      transition: background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+    }
+
+    .settings-module__switch[aria-checked='true'] {
+      background: var(--primary);
+      border-color: var(--primary);
+      justify-content: flex-end;
+    }
+
+    .settings-module__switch:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
+    .settings-module__switch:disabled {
+      cursor: progress;
+      opacity: 0.6;
+    }
+
+    .settings-module__knob {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--bg-primary);
+      animation: settings-knob-in var(--duration-fast) ease-out;
+    }
+
+    @keyframes settings-knob-in {
+      from {
+        transform: scale(0.85);
+        opacity: 0.6;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .settings-module__knob,
+      .settings-module__switch {
+        animation: none;
+        transition: none;
+      }
     }
 
     .settings-group {
@@ -130,6 +297,8 @@ interface Option<T extends string> {
 export class SettingsComponent {
   themeService = inject(ThemeService);
   i18n = inject(I18nService);
+  /** Secciones de la app: se activan aqui y se aplican sin recargar. */
+  modules = inject(ModulesService);
 
   themeOptions: Option<Theme>[] = [
     { value: 'light', labelKey: 'settings.theme.light' },

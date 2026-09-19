@@ -1,7 +1,8 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, computed, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { ModulesService } from '../../core/services/modules.service';
 import { TasteProfileService } from '../../core/services/taste-profile.service';
 import { ToastComponent } from '../../shared/components/ui/toast/toast.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
@@ -43,7 +44,7 @@ interface NavItem {
         
         <nav class="sidebar__nav">
           <a
-            *ngFor="let item of navItems"
+            *ngFor="let item of visibleNavItems()"
             [routerLink]="item.path"
             routerLinkActive="sidebar__item--active"
             class="sidebar__item"
@@ -81,7 +82,7 @@ interface NavItem {
       <!-- Mobile Bottom Navigation -->
       <nav class="bottom-nav">
         <a
-          *ngFor="let item of mobileNavItems"
+          *ngFor="let item of visibleMobileNavItems()"
           [routerLink]="item.path"
           routerLinkActive="bottom-nav__item--active"
           class="bottom-nav__item"
@@ -337,6 +338,7 @@ export class MainLayoutComponent implements OnInit {
   authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly tasteService = inject(TasteProfileService);
+  private readonly modules = inject(ModulesService);
   isSidebarOpen = signal(false);
 
   ngOnInit(): void {
@@ -352,7 +354,7 @@ export class MainLayoutComponent implements OnInit {
     { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
     { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
     { path: '/household', labelKey: 'nav.household', icon: '👨‍👩‍👧‍👦' },
-    { path: '/preferences', labelKey: 'nav.preferences', icon: '🥗' },
+    { path: '/preferences', labelKey: 'nav.preferences', icon: '👤' },
     { path: '/ai-config', labelKey: 'nav.ai-config', icon: '🤖' },
     { path: '/logs', labelKey: 'nav.logs', icon: '📋' }
   ];
@@ -364,6 +366,15 @@ export class MainLayoutComponent implements OnInit {
     { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
     { path: '/settings', labelKey: 'nav.settings', icon: '⚙️' }
   ];
+
+  /**
+   * La navegacion deriva de los modulos: al activar o apagar uno en
+   * Configuracion se repinta sola, sin recargar la pagina.
+   */
+  readonly visibleNavItems = computed(() => this.navItems.filter((item) => this.modules.isPathVisible(item.path)));
+  readonly visibleMobileNavItems = computed(() =>
+    this.mobileNavItems.filter((item) => this.modules.isPathVisible(item.path))
+  );
 
   toggleSidebar(): void {
     this.isSidebarOpen.update(v => !v);

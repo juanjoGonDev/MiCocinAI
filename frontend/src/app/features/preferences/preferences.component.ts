@@ -50,7 +50,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'goal'] as const;
     <div class="preferences-page">
       <header class="preferences__head">
         <div>
-          <h1 class="preferences__title">🥗 Preferencias</h1>
+          <h1 class="preferences__title">👤 Preferencias</h1>
           <p class="preferences__subtitle">
             Tu perfil, alergias, gustos y objetivo: lo que respondiste al registrarte y lo que lee la
             IA antes de proponerte un plato.
@@ -112,13 +112,17 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'goal'] as const;
         <ng-container *ngSwitchCase="'profile'">
           <h2 class="preferences__panel-title">Tu perfil</h2>
           <p class="preferences__panel-hint">
-            Lo que contestaste al registrarte. El nivel no es una etiqueta: decide cuánto te explica
-            la IA y qué recetas te propone; las secciones marcan lo que HogarIA te recuerda.
+            Lo que contestaste al registrarte. El nivel no es una etiqueta: decide cuánto te explica la
+            IA cada receta y qué tan al grano va el planificador. Las secciones de la app (lista de la
+            compra, tickets, tareas) se activan en
+            <a routerLink="/settings" class="preferences__inline-link">Configuración</a>: son de la
+            app, no del comensal.
           </p>
-          <app-home-profile-picker [(profile)]="profile"></app-home-profile-picker>
-          <p class="preferences__panel-hint" *ngIf="modulesSummary()">
-            {{ modulesSummary() }}
-          </p>
+          <app-home-profile-picker
+            [(profile)]="profile"
+            [askForModules]="false"
+            levelLabel="¿Cómo andas de cocina?"
+          ></app-home-profile-picker>
         </ng-container>
 
         <!-- ── Alergias e intolerancias ── -->
@@ -496,14 +500,11 @@ export class PreferencesComponent implements OnInit {
     return COOKING_LEVEL_LABELS[this.profile.cookingLevel] ?? '—';
   }
 
-  modulesSummary(): string {
-    const n = this.profile.modules.length;
-    if (n === 0) return 'Sin secciones marcadas: HogarIA no te recordará nada de la casa.';
-    return `Llevarás ${n} ${n === 1 ? 'sección' : 'secciones'} de la casa desde la app.`;
-  }
-
   save(): void {
-    this.tasteService.save(this.taste, undefined, this.profile).subscribe({
+    // Solo el nivel: los modulos son de Configuracion y no se pisan desde aqui.
+    this.tasteService
+      .save(this.taste, undefined, { cookingLevel: this.profile.cookingLevel })
+      .subscribe({
       next: () => {
         this.markSaved();
         this.saved.set(true);

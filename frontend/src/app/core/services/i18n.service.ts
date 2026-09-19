@@ -92,6 +92,12 @@ const es: Dict = {
 
   // Settings
   'settings.title': '⚙️ Configuración',
+  'settings.modules': '🧭 Módulos',
+  'settings.modulesHint': 'Qué secciones de HogarIA tienes encendidas. Se aplican al momento, sin recargar.',
+  'settings.modulesSoon': 'pronto',
+  'settings.modulesAllOn': 'Sin marcar: se enseñan todas las secciones que trae esta version.',
+  'settings.modulesFailed': 'No se pudo guardar el cambio; se ha vuelto al estado anterior.',
+  'settings.modulesReset': 'Volver a ver todas las secciones disponibles',
   'settings.theme': 'Tema',
   'settings.theme.light': '☀️ Claro',
   'settings.theme.dark': '🌙 Oscuro',
@@ -191,6 +197,12 @@ const en: Dict = {
   'logs.clearConfirm': 'Clear all logs?',
 
   'settings.title': '⚙️ Settings',
+  'settings.modules': '🧭 Modules',
+  'settings.modulesHint': 'Which HogarIA sections you have switched on. Applied right away, no reload.',
+  'settings.modulesSoon': 'soon',
+  'settings.modulesAllOn': 'Nothing selected: every section this build ships is shown.',
+  'settings.modulesFailed': 'Could not save the change; reverted to the previous state.',
+  'settings.modulesReset': 'Show every available section again',
   'settings.theme': 'Theme',
   'settings.theme.light': '☀️ Light',
   'settings.theme.dark': '🌙 Dark',
