@@ -1,5 +1,5 @@
 # =============================================================================
-# CI Workflow - MiCocinAI
+# CI Workflow - HogarIA
 # =============================================================================
 # Runs on all PRs and pushes to master/main. pnpm is installed via
 # pnpm/action-setup with a version string compatible with packageManager.

@@ -672,25 +672,37 @@ state). The suite runs on `chromium` in CI for wall-time reasons; all three proj
 
 ## 12b. Checklist for this round
 
-- [ ] Spec: this text (parity table, sections, live activation, rename, icons, reporter, coverage).
-- [ ] `ModulesService` + `home-profile` model at 100 % coverage, unit tests with the edges above.
-- [ ] Configuración: **Módulos** section (available on/off, *pronto* ones pre-enableable, live nav);
+- [x] Spec: this text (parity table, sections, live activation, rename, icons, reporter, coverage).
+- [x] `ModulesService` + `home-profile` model at 100 % coverage, unit tests with the edges above
+      (16 tests: optimistic toggle, rollback + `MODULE_SAVE_FAILED`, *pronto* not linked, `canSwitchOff`,
+      `resetSelection`, registry consistency).
+- [x] Configuración: **Módulos** section (available on/off, *pronto* ones pre-enableable, live nav);
       Preferencias › Perfil keeps only the cooking level; preferences icon → 👤; `.settings-group`
-      count and the section i18n updated.
-- [ ] `tools/reporters/hogaria-reporter.mjs` + `E2E_SEED` plumbing + reporter list in the config; run
+      count and the section i18n updated (6 keys × 2 languages).
+- [x] `tools/reporters/hogaria-e2e-reporter.js` + `E2E_SEED` plumbing + reporter list in the config; run
       header, per-test lines, failure concentration, summary, `test-results/hogaria-run.json`.
-- [ ] Coverage: thresholds (70 per file / 80 global), reporters incl. html+lcov, CI runs
-      `test:coverage` and uploads the artifact; tests that lift `database.ts`, `memory-monitor.ts` and
-      `seed-data.ts` over the floor.
-- [ ] Rename: workspace packages + every `--filter`, Angular project key, `DATABASE_PATH` default with
-      legacy adoption (tested), i18n brand strings, docs headings, dependabot dirs, Dockerfiles,
-      Makefile, compose files.
-- [ ] Icons: generated mark, all PWA sizes, `favicon.ico` (currently a 404), `apple-touch-icon`,
-      maskable variant, `icon.svg`, manifest `icons` refreshed (incl. `purpose: maskable`).
-- [ ] e2e: modules toggle visible in the nav without reload; pre-enabling a *pronto* module persists
+      Shipped as **CommonJS**, not `.mjs`: Playwright `require`s reporter files and the repo has no
+      `"type": "module"`; an ESM reporter would need a build step for one file.
+- [x] Coverage: `perFile: true` at 70 % for the four metrics (a per-file floor *implies* the global one,
+      and it is the one that was hiding `database.ts` at 41 % of branches); reporters text+html+lcov+
+      json-summary; CI runs `test:coverage` and uploads `server/coverage/` even when the gate fails; the
+      three files under the floor got tests instead of an exclusion (memory-monitor 100 %, seed-data 100/96,
+      database 73 with the adoption tests). The include list is a ramp and says who is missing and when.
+- [x] Rename: workspace packages (`@hogaria/web`, `@hogaria/server`, root `hogaria`) + every `--filter`
+      (root scripts, CI, Makefile), Angular project key `hogaria`, `DATABASE_PATH` default
+      `data/hogaria.sqlite` with legacy adoption (7 tests on a tmpdir), i18n brand strings, docs headings,
+      container names, Dockerfile/compose/`.npmrc`/dependabot headers, setup and start banners.
+      Left on purpose: the GitHub repo name and the `recipeapp_` localStorage key.
+- [x] Icons: generated mark (`design/hogaria-icon-source.png` + `design/README.md` with the exact
+      derivation), all PWA sizes really at their size, `favicon.ico` (was a declared 404), `apple-touch-icon`,
+      maskable variant at 80 %, `purpose: any|maskable` split, `index.html` links, dead `shortcuts`/
+      `screenshots` references removed. **`icon.svg` is not wired**: without `potrace`/`inkscape` in the
+      project, a hand-made SVG would be a second, almost-but-not-quite logo; that is now a Coming-soon item.
+- [x] e2e: modules toggle visible in the nav without reload; pre-enabling a *pronto* module persists
       and does not create a route; the Configuración tabs travel in the URL; the tour's parity
-      assertions (each answer readable in its section).
-- [ ] PR body and `PROGRESS.md` updated; nothing merged.
+      assertions (each answer readable in its section). New `tests/e2e/pwa-assets.spec.ts` also asserts that
+      every declared manifest icon is served **and** that its PNG measures what `sizes` claims.
+- [x] PR body and `PROGRESS.md` updated; nothing merged.
 
 ## 13. Coming soon (deliberately not in this program)
 
@@ -707,6 +719,12 @@ state). The suite runs on `chromium` in CI for wall-time reasons; all three proj
   dearer since June".
 - **Multi-household**: one instance serving several homes with per-home scoping and joins.
 - **Community prices**: opt-in, aggregated, privacy-reviewed publishing of anonymised observations.
+- **Vector logo** (`icon.svg` / `favicon.svg`): traced from `design/hogaria-icon-source.png` once the
+  project has a real tracer; until then there is one visual source, not two that disagree.
+- **Frontend coverage gate**: same 70 % per file for `frontend/` when the unit suite runs headless in CI
+  today the karma job is not in the workflow; the report is already produced by `test:client:coverage`.
+- **Install screenshots**: the manifest `screenshots` block returns with real captures under
+  `frontend/src/assets/screenshots/` (it pointed at files that never existed).
 - **Native shell**: TWA/Capacitor once the PWA is stable.
 - Languages beyond `es`/`en`, other currencies, other units (lb/oz), tablet layouts.
 
