@@ -1060,6 +1060,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
   patch(changes: Partial<{ quantity: number; unit: string | null; category: string | null; note: string | null }>): void {
     const item = this.editing();
     if (!item) return;
+    // Una cantidad que no es positiva se deja en el campo pero no se envia: el
+    // contrato la rechaza, y serie ruido de error por cada tecla intermedia.
+    if (changes.quantity !== undefined && !(Number(changes.quantity) > 0)) return;
     Object.assign(this.draft, changes);
     this.commit({
       quantity: this.draft.quantity,

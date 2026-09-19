@@ -300,7 +300,9 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await page.getByRole('button', { name: /Vaciar carro/i }).click();
 
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
-    await expect(page.locator('.detail__name')).toHaveText('Sal');
+    // acotado a la fila: con dos lineas en pantalla `.detail__name` seria ambiguo,
+    // y Playwright prefiere fallar por strict mode antes que leer la primera y callar.
+    await expect(page.locator('[data-test="item-row"] .detail__name')).toHaveText('Sal');
 
     await page.locator('[data-test="toast-action"]').click();
     // Restaurar deshace el borrado, no el marcado: la linea vuelve marcada, o sea

@@ -26,11 +26,16 @@ const priceMinor = z.preprocess(
 /**
  * `z.coerce.boolean()` no vale aqui: convierte la cadena 'false' en true (cualquier
  * string no vacia es truthy), y el check de una linea llega por query/body como
- * string segun quien llame. Se listan las formas honestas y se traduce.
+ * string segun quien llame. Se listan las formas honestas y se traduce: booleano,
+ * el 0/1 entero que la propia API devuelve al leer la fila, y las cadenas.
+ *
+ * El 0/1 entra a proposito: una app movil pinta lo que leyo, y si reenvia lo que
+ * leyo debe poder marcar la casilla sin un translator en medio. Un 2, en cambio,
+ * sigue siendo un error de datos, no un «true» generico.
  */
 export const booleanish = z
-  .union([z.boolean(), z.enum(['0', '1', 'true', 'false', 'on', 'off'])])
-  .transform((value) => value === true || value === '1' || value === 'true' || value === 'on');
+  .union([z.boolean(), z.number().int().min(0).max(1), z.enum(['0', '1', 'true', 'false', 'on', 'off'])])
+  .transform((value) => value === true || value === 1 || value === '1' || value === 'true' || value === 'on');
 
 const pageSize = z.coerce.number().int().min(1).max(200).catch(50);
 const offset = z.coerce.number().int().min(0).max(100000).catch(0);

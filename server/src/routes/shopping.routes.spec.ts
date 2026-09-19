@@ -238,16 +238,21 @@ describe('/lists/:id/items', () => {
     const list = await createList(alice);
     const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan' }));
 
-    for (const value of [true, 'true', '1', 'on']) {
+    for (const value of [true, 'true', '1', 'on', 1]) {
       const checked = await data(await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: value }));
       expect(checked.checked).toBe(1);
     }
-    for (const value of [false, 'false', '0', 'off']) {
+    for (const value of [false, 'false', '0', 'off', 0]) {
       const unchecked = await data(
         await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: value })
       );
       expect(unchecked.checked).toBe(0);
     }
+
+    // El 1/0 entero es la forma que la UI reenvia (leyo la columna asi); un 2 no es
+    // un «true» generico, es un dato malo, y tiene que decirlo.
+    const nonsense = await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: 2 });
+    expect(nonsense.status).toBe(400);
   });
 
   it('borrar es logico y se puede deshacer', async () => {

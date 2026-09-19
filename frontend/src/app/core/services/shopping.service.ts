@@ -220,7 +220,10 @@ export class ShoppingService {
     this.replaceItem({ ...item, checked });
     this.enqueue(`item:${item.id}:checked`, () =>
       this.http
-        .patch<{ data: ShoppingListItem }>(`${this.apiUrl}/lists/${listId}/items/${item.id}`, { checked })
+        // `checked` viaja como booleano: la API pinta la columna 0/1 (SQLite) y
+        // reenviar el entero leido es la tentacion obvia — el contrato lo acepta
+        // desde esta ronda, pero el booleano es el que no se puede leer al reves.
+        .patch<{ data: ShoppingListItem }>(`${this.apiUrl}/lists/${listId}/items/${item.id}`, { checked: checked === 1 })
         .pipe(map(response => response.data), tap(next => this.replaceItem(next)))
     );
   }
@@ -320,7 +323,7 @@ export class ShoppingService {
     priceMinor: number;
     quantity?: number;
     unit?: string | null;
-    storeName?: string | null;
+    store?: string | null;
   }): Promise<PriceObservation | null> {
     return this.request<PriceObservation>(() =>
       this.http
