@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "recipeapp": {
+    "hogaria": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -96,10 +96,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "recipeapp:build:production"
+              "buildTarget": "hogaria:build:production"
             },
             "development": {
-              "buildTarget": "recipeapp:build:development"
+              "buildTarget": "hogaria:build:development"
             }
           },
           "defaultConfiguration": "development"

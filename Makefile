@@ -137,10 +137,10 @@ docker-prod-logs: ## View production logs
 # =============================================================================
 
 db-migrate: ## Run database migrations
-	pnpm --filter server run migrate
+	pnpm --filter @hogaria/server run migrate
 
 db-studio: ## Open Drizzle Studio
-	pnpm --filter server exec drizzle-kit studio
+	pnpm --filter @hogaria/server exec drizzle-kit studio
 
 # =============================================================================
 # Cleanup
