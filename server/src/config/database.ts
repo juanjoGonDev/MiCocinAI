@@ -289,6 +289,76 @@ async function runMigrations(db: Database.Database): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_meals_date ON meals(date);
     CREATE INDEX IF NOT EXISTS idx_user_recipes_user_id ON user_recipes(user_id);
     CREATE INDEX IF NOT EXISTS idx_ai_configs_user_id ON ai_configs(user_id);
+
+    -- ═══ Lista de la compra y precios (esqueleto de P2/P3, spec §9) ═══
+    -- Dinero en centimos enteros con CHECK >= 0 y cantidades reales > 0: las dos
+    -- restricciones que evitan las cestas imposibles. product_key es el nombre
+    -- normalizado (ver utils/product-key.ts): cuando llegue el catalogo canónico
+    -- se migra a product_aliases sin tocar ninguna observacion.
+    -- (Ojo: dentro de este template literal no se pueden usar backticks.)
+    CREATE TABLE IF NOT EXISTS shopping_lists (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      name TEXT NOT NULL,
+      store TEXT,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'archived', 'done')),
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS shopping_list_items (
+      id TEXT PRIMARY KEY,
+      list_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      product_key TEXT NOT NULL,
+      quantity REAL NOT NULL DEFAULT 1 CHECK (quantity > 0),
+      unit TEXT,
+      category TEXT,
+      -- precio POR UNIDAD en centimos; null = todavia sin dato
+      price_minor INTEGER CHECK (price_minor IS NULL OR price_minor >= 0),
+      note TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+      checked INTEGER NOT NULL DEFAULT 0 CHECK (checked IN (0, 1)),
+      -- borrado logico: el «Deshacer» del movil necesita que la fila siga ahi
+      deleted_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+    );
+
+    -- Lo pagado por quantity unidades (un ticket dice eso, no el precio unitario)
+    CREATE TABLE IF NOT EXISTS price_observations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      product_key TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      store_name TEXT,
+      price_minor INTEGER NOT NULL CHECK (price_minor >= 0),
+      quantity REAL NOT NULL DEFAULT 1 CHECK (quantity > 0),
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      source TEXT NOT NULL DEFAULT 'manual'
+        CHECK (source IN ('manual', 'receipt', 'estimate')),
+      observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_shopping_lists_user ON shopping_lists(user_id);
+    CREATE INDEX IF NOT EXISTS idx_shopping_lists_household ON shopping_lists(household_id);
+    CREATE INDEX IF NOT EXISTS idx_shopping_lists_status ON shopping_lists(status, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_list_items_list ON shopping_list_items(list_id, position);
+    CREATE INDEX IF NOT EXISTS idx_list_items_key ON shopping_list_items(product_key);
+    CREATE INDEX IF NOT EXISTS idx_price_obs_key ON price_observations(product_key, observed_at);
+    CREATE INDEX IF NOT EXISTS idx_price_obs_user ON price_observations(user_id);
+    CREATE INDEX IF NOT EXISTS idx_price_obs_household ON price_observations(household_id);
   `);
 
   // Auto-migrations: add columns that may be missing in older databases

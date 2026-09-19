@@ -1,0 +1,394 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { Hono } from 'hono';
+import jwt from 'jsonwebtoken';
+
+/**
+ * Lista de la compra y precios, sobre una BD en memoria real (nada de mocks de
+ * SQL): lo que se quiere probar aqui es la interaccion entre el CAS de la lista,
+ * el dedupeo por clave normalizada, el borrado logico que sostiene el «Deshacer»
+ * y las unidades del dinero. Un mock no se entera de ninguna de esas cuatro.
+ */
+
+process.env.DATABASE_PATH = ':memory:';
+process.env.NODE_ENV = 'test';
+
+type Sql = import('better-sqlite3').Database;
+
+let app: Hono;
+let db: Sql;
+let closeDatabase: () => void;
+
+/** Usuario nuevo + token firmado, que es lo que hace `authMiddleware`. */
+async function makeUser(email: string, householdId: string | null = null) {
+  const id = `u-${email.split('@')[0]}`;
+  db.prepare('INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)').run(
+    id,
+    email,
+    'Comprador',
+    'hash',
+    householdId
+  );
+  const config = await import('../config/app.config.js');
+  const token = jwt.sign({ sub: id, email }, config.config.auth.jwtSecret, { expiresIn: '1h' });
+  return { id, token };
+}
+
+type User = { id: string; token: string };
+
+function call(user: User, method: string, path: string, body?: unknown) {
+  return app.request(`/api/shopping${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${user.token}`,
+      'content-type': 'application/json'
+    },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+}
+
+/** `Response.json()` es `unknown` en TS; aqui se ancha a `any` una vez y se
+ *  leen campos de payloads que la propia prueba construye. */
+const json = async (response: Response): Promise<any> => await response.json();
+const data = async (response: Response): Promise<any> => (await json(response)).data;
+
+let alice: User;
+let bob: User;
+
+beforeEach(async () => {
+  db.exec('DELETE FROM shopping_list_items; DELETE FROM price_observations; DELETE FROM shopping_lists;');
+  alice = await makeUser(`alice-${Math.random().toString(36).slice(2)}@test.local`);
+  bob = await makeUser(`bob-${Math.random().toString(36).slice(2)}@test.local`);
+});
+
+beforeAll(async () => {
+  const database = await import('../config/database.js');
+  await database.initializeDatabase();
+  db = database.getDatabase();
+  closeDatabase = database.closeDatabase;
+
+  const { shoppingRoutes } = await import('./shopping.routes.js');
+  const { errorHandler } = await import('../middleware/error.middleware.js');
+  app = new Hono();
+  app.onError(errorHandler as never);
+  app.route('/api/shopping', shoppingRoutes);
+});
+
+afterAll(() => closeDatabase?.());
+
+async function createList(user: User, name = 'Compra semana') {
+  const response = await call(user, 'POST', '/lists', { name });
+  return await data(response);
+}
+
+describe('/lists', () => {
+  it('crea y lee una lista con su version inicial y sus totales a cero', async () => {
+    const list = await createList(alice);
+
+    expect(list.name).toBe('Compra semana');
+    expect(list.version).toBe(1);
+    expect(list.status).toBe('active');
+    expect(list.totalItems).toBe(0);
+
+    const fetched = await data(await call(alice, 'GET', `/lists/${list.id}`));
+    expect(fetched.items).toEqual([]);
+  });
+
+  it('requiere autenticacion', async () => {
+    const response = await app.request('/api/shopping/lists');
+    expect(response.status).toBe(401);
+  });
+
+  it('no muestra a nadie la lista de otro usuario', async () => {
+    const list = await createList(alice);
+
+    expect((await call(bob, 'GET', `/lists/${list.id}`)).status).toBe(404);
+    expect((await call(bob, 'DELETE', `/lists/${list.id}`)).status).toBe(404);
+    const visible = await data(await call(bob, 'GET', '/lists'));
+    expect(visible).toEqual([]);
+  });
+
+  it('filtra por estado y por busqueda, y paginacion acotada', async () => {
+    await createList(alice, 'Fruta');
+    await createList(alice, 'Limpieza');
+    const done = await createList(alice, 'Vacaciones');
+    await call(alice, 'PATCH', `/lists/${done.id}`, { status: 'done', version: done.version });
+
+    // `updated_at` es CURRENT_TIMESTAMP (segundos): dos listas creadas en la misma
+    // segunda empatan, y el empate se rompe por id (nanoid aleatorio), que no
+    // significa nada. Se fija el tiempo a mano para probar la regla real:
+    // actualizadas hace mas poco primero, y las `done` fuera de la vista comun.
+    db.prepare(`UPDATE shopping_lists SET updated_at = '2026-01-01' WHERE name = 'Fruta'`).run();
+    db.prepare(`UPDATE shopping_lists SET updated_at = '2026-01-02' WHERE name = 'Limpieza'`).run();
+
+    const active = await data(await call(alice, 'GET', '/lists'));
+    expect(active.map((l: any) => l.name)).toEqual(['Limpieza', 'Fruta']);
+
+    const buscada = await data(await call(alice, 'GET', '/lists?q=frut'));
+    expect(buscada).toHaveLength(1);
+
+    const terminadas = await data(await call(alice, 'GET', '/lists?status=done'));
+    expect(terminadas.map((l: any) => l.name)).toEqual(['Vacaciones']);
+
+    // `limit` fuera de rango se acota, no se propaga a SQL.
+    const limited = await call(alice, 'GET', '/lists?limit=99999&offset=-4');
+    expect(limited.ok).toBe(true);
+    expect((await json(limited)).meta.limit).toBeLessThanOrEqual(200);
+  });
+
+  it('toca el nombre con CAS y rechaza la version rancia', async () => {
+    const list = await createList(alice);
+
+    const ok = await data(await call(alice, 'PATCH', `/lists/${list.id}`, { name: 'Compra + pan', version: 1 }));
+    expect(ok.version).toBe(2);
+
+    // Un body solo se lee una vez: releerlo daria 'Body has already been read'.
+    const stale = await json(await call(alice, 'PATCH', `/lists/${list.id}`, { name: 'Choque', version: 1 }));
+    expect(stale.message).toBe('LIST_VERSION_CONFLICT');
+    expect(stale.data.currentVersion).toBe(2);
+  });
+
+  it('sin campos que cambiar no escribe nada', async () => {
+    const list = await createList(alice);
+    const response = await call(alice, 'PATCH', `/lists/${list.id}`, { version: 1 });
+    expect(response.status).toBe(400);
+  });
+
+  it('borrar la lista se lleva los items y deja los precios aprendidos', async () => {
+    const list = await createList(alice);
+    const milk = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', priceMinor: 85 }));
+    // Solo lo COMPRADO aprende precio: una linea pendiente no es un dato de mercado.
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${milk.id}`, { checked: true });
+    const completed = await call(alice, 'POST', `/lists/${list.id}/complete`);
+    expect((await json(completed)).data.pricesRecorded).toBe(1);
+
+    expect((await call(alice, 'DELETE', `/lists/${list.id}`)).ok).toBe(true);
+    expect(db.prepare('SELECT COUNT(*) AS c FROM shopping_list_items').get()).toEqual({ c: 0 });
+    // El precio es conocimiento del hogar: sobrevive a la lista que lo vio nacer.
+    expect(db.prepare('SELECT COUNT(*) AS c FROM price_observations').get()).toEqual({ c: 1 });
+  });
+});
+
+describe('/lists/:id/items', () => {
+  it('añade una linea con su clave normalizada y al final del orden', async () => {
+    const list = await createList(alice);
+
+    const first = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Tomate', quantity: 2 }));
+    const second = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche' }));
+
+    expect(first.product_key).toBe('tomate');
+    expect(first.position).toBe(0);
+    expect(second.position).toBe(1);
+    expect(first.merged).toBe(false);
+  });
+
+  it('repetir producto suma la cantidad en vez de duplicar la fila', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1 });
+
+    const again = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'LECHE ', quantity: 2 }));
+    expect(again.merged).toBe(true);
+    expect(again.quantity).toBe(3);
+
+    const items = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items;
+    expect(items).toHaveLength(1);
+  });
+
+  it('la unidad distingue la linea (1L y 500ml no son el mismo precio)', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', unit: '1L' });
+    const other = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', unit: '500ml' }));
+
+    expect(other.merged).toBe(false);
+  });
+
+  it('rechaza cantidades imposibles', async () => {
+    const list = await createList(alice);
+
+    for (const quantity of [0, -1, 'NaN', 99999]) {
+      const response = await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity });
+      expect([400, 500]).toContain(response.status);
+    }
+  });
+
+  it('pega texto con cantidades y dedupea contra lo que ya esta', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1 });
+
+    const result = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items/bulk`, {
+        lines: '- 2 Leche\n1kg Tomates de colgar\n\n  \n3 huevos\n'
+      })
+    );
+
+    expect(result.added.map((i: any) => i.name)).toEqual(['Tomates de colgar', 'huevos']);
+    expect(result.added.map((i: any) => [i.quantity, i.unit])).toEqual([
+      [1, 'kg'],
+      [3, null]
+    ]);
+    expect(result.added).toHaveLength(2);
+    expect(result.merged).toHaveLength(1);
+    expect(result.skipped).toEqual([]);
+
+    const items = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items;
+    const leche = items.find((i: any) => i.product_key === 'leche');
+    expect(leche.quantity).toBe(3);
+  });
+
+  it('marcar y desmarcar acepta las formas que manda la UI', async () => {
+    const list = await createList(alice);
+    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan' }));
+
+    for (const value of [true, 'true', '1', 'on']) {
+      const checked = await data(await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: value }));
+      expect(checked.checked).toBe(1);
+    }
+    for (const value of [false, 'false', '0', 'off']) {
+      const unchecked = await data(
+        await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: value })
+      );
+      expect(unchecked.checked).toBe(0);
+    }
+  });
+
+  it('borrar es logico y se puede deshacer', async () => {
+    const list = await createList(alice);
+    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Aceitunas' }));
+
+    const removed = await call(alice, 'DELETE', `/lists/${list.id}/items/${item.id}`);
+    expect(removed.ok).toBe(true);
+
+    const visible = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items;
+    expect(visible).toEqual([]);
+    expect(db.prepare('SELECT COUNT(*) AS c FROM shopping_list_items').get()).toEqual({ c: 1 });
+
+    const restored = await data(await call(alice, 'POST', `/lists/${list.id}/items/${item.id}/restore`));
+    expect(restored.deleted_at).toBeNull();
+
+    // Borrar dos veces no es un 500 ni un éxito: es que ya no está.
+    await call(alice, 'DELETE', `/lists/${list.id}/items/${item.id}`);
+    expect((await call(alice, 'DELETE', `/lists/${list.id}/items/${item.id}`)).status).toBe(404);
+  });
+
+  it('quitar lo comprado deja lo pendiente', async () => {
+    const list = await createList(alice);
+    const a = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan' }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche' });
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${a.id}`, { checked: true });
+
+    const result = await data(await call(alice, 'POST', `/lists/${list.id}/clear-checked`));
+    expect(result.removed).toBe(1);
+
+    const items = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items;
+    expect(items.map((i: any) => i.name)).toEqual(['Leche']);
+  });
+
+  it('reordena con el orden completo y avisa de lo que no es de la lista', async () => {
+    const list = await createList(alice);
+    const one = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Uno' }));
+    const two = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Dos' }));
+    const fresh = await data(await call(alice, 'GET', `/lists/${list.id}`));
+
+    const reordered = await call(alice, 'PUT', `/lists/${list.id}/order`, {
+      itemIds: [two.id, one.id],
+      version: fresh.version
+    });
+    expect(reordered.ok).toBe(true);
+    const items = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items;
+    expect(items.map((i: any) => i.position)).toEqual([0, 1]);
+    expect(items[0].name).toBe('Dos');
+
+    const stranger = await call(bob, 'PUT', `/lists/${list.id}/order`, { itemIds: [one.id], version: fresh.version });
+    expect(stranger.status).toBe(404);
+
+    const mixed = await call(alice, 'PUT', `/lists/${list.id}/order`, {
+      itemIds: [one.id, 'no-existe'],
+      version: (await data(await call(alice, 'GET', `/lists/${list.id}`))).version
+    });
+    expect(mixed.status).toBe(400);
+    expect((await json(mixed)).data.unknown).toEqual(['no-existe']);
+  });
+});
+
+describe('precios y estimacion', () => {
+  it('estima con el precio manual por unidad por la cantidad', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 2, priceMinor: 85 });
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Aceite', quantity: 1, priceMinor: 650 });
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.totalMinor).toBe(85 * 2 + 650);
+    expect(estimate.pricedLines).toBe(2);
+    expect(estimate.unpriced).toEqual([]);
+  });
+
+  it('usa el ultimo precio observado cuando la linea no lo lleva', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/prices`, { productName: 'Leche semi', priceMinor: 170, quantity: 2 });
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'LECHE SEMI', quantity: 3 });
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.lines[0]).toMatchObject({ source: 'observed', unitMinor: 85, lineTotalMinor: 255 });
+    expect(estimate.totalMinor).toBe(255);
+  });
+
+  it('dice sin precio en vez de inventar un cero', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Producto misterioso' });
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.totalMinor).toBe(0);
+    expect(estimate.unpriced).toEqual(['Producto misterioso']);
+    expect(estimate.lines[0].lineTotalMinor).toBeNull();
+  });
+
+  it('completar la compra aprende los precios (pagado = unidad * cantidad)', async () => {
+    const list = await createList(alice);
+    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Café', quantity: 3, priceMinor: 210 }));
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: true });
+
+    const result = await data(await call(alice, 'POST', `/lists/${list.id}/complete`));
+    expect(result).toMatchObject({ pricesRecorded: 1, items: 1 });
+
+    const observation = db.prepare('SELECT * FROM price_observations').get() as any;
+    expect(observation.price_minor).toBe(630);
+    expect(observation.quantity).toBe(3);
+    expect(observation.product_key).toBe('cafe');
+
+    const closed = await data(await call(alice, 'GET', `/lists/${list.id}`));
+    expect(closed.status).toBe('done');
+    expect(closed.completed_at).toBeTruthy();
+  });
+
+  it('el precio es del hogar: se comparte y se puede borrar solo el propio', async () => {
+    const householdId = 'h-shopping-test';
+    db.prepare('DELETE FROM household_members WHERE household_id = ?').run(householdId);
+    db.prepare('DELETE FROM households WHERE id = ?').run(householdId);
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      householdId,
+      'Hogar shared',
+      `code-${householdId}`
+    );
+    alice = await makeUser(`alice-h-${Math.random().toString(36).slice(2)}@test.local`, householdId);
+    bob = await makeUser(`bob-h-${Math.random().toString(36).slice(2)}@test.local`, householdId);
+
+    const list = await createList(alice, 'Compra compartida');
+    expect((await call(bob, 'GET', `/lists/${list.id}`)).ok).toBe(true);
+
+    await call(alice, 'POST', `/prices`, { productName: 'Galletas', priceMinor: 120 });
+    const bobSeesIt = await data(await call(bob, 'GET', '/prices'));
+    expect(bobSeesIt.map((o: any) => o.product_name)).toContain('Galletas');
+
+    // Bob no puede borrar lo que observo Alice: la propiedad sigue siendo de quien
+    // lo metio aunque el dato se comparta.
+    const id = bobSeesIt[0].id;
+    expect((await call(bob, 'DELETE', `/prices/${id}`)).status).toBe(404);
+    expect((await call(alice, 'DELETE', `/prices/${id}`)).ok).toBe(true);
+  });
+
+  it('un precio imposible no entra', async () => {
+    const response = await call(alice, 'POST', `/prices`, { productName: 'Leche', priceMinor: -5 });
+    expect([400, 500]).toContain(response.status);
+    const empty = await call(alice, 'POST', `/prices`, { productName: '', priceMinor: 100 });
+    expect([400, 500]).toContain(empty.status);
+  });
+});

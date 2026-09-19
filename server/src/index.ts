@@ -10,6 +10,7 @@ import { initializeDatabase } from './config/database.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { pantryRoutes } from './routes/pantry.routes.js';
+import { shoppingRoutes } from './routes/shopping.routes.js';
 import { recipeRoutes } from './routes/recipes.routes.js';
 import { householdRoutes } from './routes/household.routes.js';
 import { calendarRoutes } from './routes/calendar.routes.js';
@@ -118,6 +119,7 @@ app.route('/api/health', healthRoutes);
 // API routes
 app.route('/api/auth', authRoutes);
 app.route('/api/pantry', pantryRoutes);
+app.route('/api/shopping', shoppingRoutes);
 app.route('/api/recipes', recipeRoutes);
 app.route('/api/household', householdRoutes);
 app.route('/api/calendar', calendarRoutes);
