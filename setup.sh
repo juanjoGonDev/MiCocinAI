@@ -73,7 +73,7 @@ if [ ! -f .env ]; then
 JWT_SECRET=change-this-to-a-secure-secret-key
 
 # Database
-DATABASE_PATH=./data/recipeapp.db
+DATABASE_PATH=./data/hogaria.sqlite
 
 # CORS
 CORS_ORIGIN=http://localhost:4200

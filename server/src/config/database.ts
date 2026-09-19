@@ -2,8 +2,8 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { config } from './app.config.js';
 import * as schema from '../models/schema.js';
-import { mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { existsSync, mkdirSync, renameSync } from 'fs';
+import { dirname, join } from 'path';
 import { backfillHouseholdSeeds, backfillUserSeeds } from '../utils/seed-data.js';
 
 let db: Database.Database;
@@ -23,10 +23,51 @@ export function getDrizzle() {
   return drizzleDb;
 }
 
+/**
+ * Los nombres bajo los que esta BD existio en instalaciones desplegadas. Se
+ * prueban en este orden: el primero es el que dejo la ultima version publicada.
+ */
+export const LEGACY_DB_FILENAMES = ['recipeapp.db', 'mi-cocinai.db'];
+
+/**
+ * HogarIA nace del renombre de la app y la BD se llama ahora `hogaria.sqlite`.
+ * Aqui no se documenta «borra tus datos y vuelve a empezar»: se renombra el
+ * fichero antes de abrirlo, asi que una Raspberry con dos anos de hogares
+ * actualiza y sigue funcionando.
+ *
+ * Reglas duras: nunca se pisa un fichero que ya existe (si alguien creo la BD
+ * nueva, se deja la nueva y no se toca nada) y se mueven juntos `-wal`/`-shm`,
+ * porque un WAL huerfano corromperia el arranque. Devuelve la ruta de la que se
+ * vino, o null si no habia nada que adoptar.
+ */
+export function adoptLegacyDatabase(target: string): string | null {
+  // Una BD en RAM o una URI de better-sqlite3 no tienen directorio del que heredar.
+  if (target === ':memory:' || target.startsWith('file:')) return null;
+  if (existsSync(target)) return null;
+
+  const dir = dirname(target);
+  for (const legacy of LEGACY_DB_FILENAMES) {
+    const source = join(dir, legacy);
+    if (source === target || !existsSync(source)) continue;
+
+    renameSync(source, target);
+    for (const suffix of ['-wal', '-shm']) {
+      if (existsSync(source + suffix)) renameSync(source + suffix, target + suffix);
+    }
+    return source;
+  }
+  return null;
+}
+
 export async function initializeDatabase(): Promise<void> {
   // Ensure data directory exists
   const dbDir = dirname(config.database.path);
   mkdirSync(dbDir, { recursive: true });
+
+  const adoptedFrom = adoptLegacyDatabase(config.database.path);
+  if (adoptedFrom) {
+    console.log(`[DB] Base de datos heredada adoptada: ${adoptedFrom} -> ${config.database.path}`);
+  }
 
   // Create SQLite database
   db = new Database(config.database.path, {

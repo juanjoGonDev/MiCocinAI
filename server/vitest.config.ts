@@ -7,15 +7,19 @@ import { defineConfig } from 'vitest/config';
  * 70 % en ninguna metrica. Y la lista es una rampa: un fichero entra cuando tiene
  * spec propia, nunca se le excluye para que el numero salga bonito.
  *
+ * `src/config/database.ts` entro al cambiar el nombre del fichero de la BD: la
+ * adopcion del fichero heredado es logica que puede dejar a alguien sin datos,
+ * asi que se pruebo antes de subirla (73 % de ramas; por debajo del 100 % quedan
+ * las ramas del bootstrap que estos tests no montan, no codigo sin probar).
+ *
  * Hoy quedan fuera, con su prueba atada a la fase que les corresponde:
  *   - src/routes/** y src/index.ts    → se prueban de momento con la suite e2e
- *   - src/config/database.ts           → bootstrap de proceso (PRAGMAs, migracion
- *     del fichero legado); entra con las pruebas de la adopcion de la BD
  *   - src/middleware/**, src/schemas/**, src/utils/log-store.ts,
  *     src/utils/logger.ts              → unidades puras; entran con P1/P2, que es
  *     cuando se escriben sus tests de contrato
  */
 const COVERED = [
+  'src/config/database.ts',
   'src/utils/memory-monitor.ts',
   'src/utils/seed-data.ts',
   'src/utils/taste-profile.ts',

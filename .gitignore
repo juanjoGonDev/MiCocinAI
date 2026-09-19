@@ -11,6 +11,9 @@ server/dist/
 # Database
 server/data/
 !server/data/.gitkeep
+# La BD de HogarIA (data/hogaria.sqlite) y la heredada que adopta
+/data/
+!/data/.gitkeep
 
 # Logs
 logs/

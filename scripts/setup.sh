@@ -53,7 +53,7 @@ NODE_ENV=development
 PORT=3000
 
 # Database
-DATABASE_PATH=./data/recipeapp.db
+DATABASE_PATH=./data/hogaria.sqlite
 
 # Authentication
 JWT_SECRET=${JWT_SECRET}

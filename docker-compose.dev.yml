@@ -52,7 +52,7 @@ services:
       - dev-data:/app/data
     environment:
       - NODE_ENV=development
-      - DATABASE_PATH=/app/data/recipeapp-dev.db
+      - DATABASE_PATH=/app/data/hogaria-dev.sqlite
       - JWT_SECRET=dev-jwt-secret-change-in-production
       - PORT=3000
     healthcheck:
@@ -86,7 +86,7 @@ services:
       - dev-data:/app/data
     environment:
       - NODE_ENV=development
-      - DATABASE_PATH=/app/data/recipeapp-dev.db
+      - DATABASE_PATH=/app/data/hogaria-dev.sqlite
     command: ["pnpm", "--filter", "server", "exec", "drizzle-kit", "studio"]
     depends_on:
       server:

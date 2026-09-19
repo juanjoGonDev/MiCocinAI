@@ -29,7 +29,7 @@ echo "✓ Node.js $(node -v) detected"
 export NODE_ENV=production
 export NODE_OPTIONS="--max-old-space-size=256 --gc-interval=100"
 export UV_THREADPOOL_SIZE=2
-export DATABASE_PATH="$APP_DIR/data/recipeapp.db"
+export DATABASE_PATH="$APP_DIR/data/hogaria.sqlite"
 export PORT=${PORT:-3000}
 export JWT_SECRET=${JWT_SECRET:-$(openssl rand -hex 32)}
 
