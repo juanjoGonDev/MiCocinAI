@@ -1000,8 +1000,11 @@ export class ShoppingListDetailComponent implements OnDestroy {
 
   remove(item: ShoppingListItem): void {
     const listId = item.list_id;
-    void this.shopping.removeItem(listId, item).then(removed => {
-      if (!removed) return;
+    void this.shopping.removeItem(listId, item).then(() => {
+      // La barra sale pase lo que pase con la red: la fila ya no esta en la lista,
+      // y dejar a alguien sin forma de devolverla es el peor resultado posible.
+      // Si el server nunca se entero, Deshacer restaura una fila viva (404) y el
+      // servicio lo cuenta; si se entero, Deshacer hace lo que promete.
       this.toast.show({
         type: 'info',
         title: `${item.name} quitada`,

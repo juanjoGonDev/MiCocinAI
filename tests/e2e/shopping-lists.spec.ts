@@ -54,6 +54,18 @@ async function dragRow(page: Page, row: Locator, fromRatio: number, toRatio: num
   await page.mouse.up();
 }
 
+/**
+ * Los tres gestos criticos se vigilan con un eco de `pageerror` en el mensaje del
+ * assert: si Angular revienta a mitad de un gesto, lo que se ve desde CI es un
+ * «element not found» que no dice nada, y el trace vive en un artefacto que no
+ * siempre se puede descargar. El texto del fallo, en cambio, siempre llega.
+ */
+function watchPageErrors(page: Page): () => string {
+  const errors: string[] = [];
+  page.on('pageerror', event => errors.push(String(event.message).split('\n')[0]));
+  return () => (errors.length > 0 ? errors.join(' | ') : 'sin errores de pagina');
+}
+
 test.describe('Lista de la compra — bandeja y cesta', () => {
   test('el módulo vivo enlaza la sección y la bandeja empieza vacía', async ({ page }) => {
     await registerAndGoto(page, '/settings', 'shop-nav');
@@ -103,17 +115,23 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
   });
 
   test('marcar una línea se guarda solo y sigue marcado al recargar', async ({ page }) => {
+    const echo = watchPageErrors(page);
     await openNewList(page, 'shop-autosave');
     await addItem(page, 'Pan');
     const row = row_(page, 'Pan');
     await expect(row).toHaveCount(1);
 
     await row.locator('[data-test="check"]').click();
+    const face = await row.locator('.detail__face').innerText().catch(() => 'fila fuera de pantalla');
+    const toasts = JSON.stringify(await page.locator('.toast').allInnerTexts());
 
     // Marcar NO es dejar la linea donde estaba: se va del tab de pendientes, que es
     // lo que hace la lista corta cuando compras. Por eso se comprueba en el carro.
-    await expect(page.locator('[data-test="tab-todo"]')).toContainText('Pendientes (0)');
-    await expect(page.locator('[data-test="item-row"]')).toHaveCount(0);
+    await expect(
+      page.locator('[data-test="tab-todo"]'),
+      `fila: ${face.replace(/\s+/g, ' ')} · avisos: ${toasts} · ${echo()}`
+    ).toContainText('Pendientes (0)');
+    await expect(page.locator('[data-test="item-row"]'), echo()).toHaveCount(0);
 
     await page.locator('[data-test="tab-cart"]').click();
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
@@ -142,16 +160,19 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
   });
 
   test('arrastrar del todo borra y la barra de deshacer lo devuelve', async ({ page }) => {
+    const echo = watchPageErrors(page);
     await openNewList(page, 'shop-swipe-undo');
     await addItem(page, 'Pollo');
     const row = row_(page, 'Pollo');
     await expect(row).toHaveCount(1);
 
     await dragRow(page, row, 0.95, 0.2);
-    await expect(page.locator('[data-test="item-row"]')).toHaveCount(0);
+    await expect(page.locator('[data-test="item-row"]'), echo()).toHaveCount(0);
 
     const bar = page.locator('.toast-container--bottom .toast');
-    await expect(bar).toContainText('Pollo quitada');
+    await expect(bar, `avisos: ${JSON.stringify(await page.locator('.toast').allInnerTexts())} · ${echo()}`).toContainText(
+      'Pollo quitada'
+    );
     await expect(bar.locator('.toast__countdown')).toHaveCount(1);
 
     await bar.locator('[data-test="toast-action"]').click();
@@ -173,6 +194,7 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
   });
 
   test('pulsación larga entra en selección múltiple y marcar compra todas', async ({ page }) => {
+    const echo = watchPageErrors(page);
     await openNewList(page, 'shop-selection');
     await addItem(page, 'Manzanas');
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
@@ -182,7 +204,7 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     // 350 ms de pulso, y aquí con margen: el test mide la UI, no el reloj
     await dragRow(page, page.locator('[data-test="item-row"]').first(), 0.5, 0.5, 550);
 
-    await expect(page.locator('[data-test="selection-toolbar"]')).toBeVisible();
+    await expect(page.locator('[data-test="selection-toolbar"]'), echo()).toBeVisible();
     await expect(page.locator('[data-test="selection-toolbar"]')).toContainText('1 seleccionadas');
 
     await page.locator('[data-test="item-row"]').nth(1).locator('.detail__face').click();
@@ -208,11 +230,7 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await expect(page.locator('.toast-container--bottom .toast')).toContainText('2 lineas quitadas');
 
     await page.locator('[data-test="toast-action"]').click();
-    // Vuelve marcada (restaurar es quitar el borrado, no re-editar la linea): por
-    // eso vive en el carro y no en pendientes.
-    await expect(page.locator('[data-test="tab-todo"]')).toContainText('Pendientes (1)');
-    await page.locator('[data-test="tab-cart"]').click();
-    await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
+    await expect(page.locator('[data-test="item-row"]')).toHaveCount(2);
   });
 
   test('un precio con coma entra en el total estimado', async ({ page }) => {
@@ -285,6 +303,10 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await expect(page.locator('.detail__name')).toHaveText('Sal');
 
     await page.locator('[data-test="toast-action"]').click();
-    await expect(page.locator('[data-test="item-row"]')).toHaveCount(2);
+    // Restaurar deshace el borrado, no el marcado: la linea vuelve marcada, o sea
+    // al carro. Contarla "a secas" mentiria sobre lo que hizo el boton.
+    await expect(page.locator('[data-test="tab-todo"]')).toContainText('Pendientes (1)');
+    await page.locator('[data-test="tab-cart"]').click();
+    await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
   });
 });
