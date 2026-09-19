@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
 
@@ -767,5 +767,151 @@ describe('auditoria y en-vivo (§8f)', () => {
     expect((await app.request(`/api/shopping/lists?access_token=${alice.token}`)).status).toBe(401);
     expect((await app.request(`/api/shopping/lists?access_token=no-pega`)).status).toBe(401);
     expect((await app.request(`/api/shopping/lists`, { headers: { authorization: `Bearer ${alice.token}` } })).status).toBe(200);
+  });
+});
+
+describe('entrada por foto (§8f)', () => {
+  const IMAGE = 'data:image/jpeg;base64,' + '/9j/'.repeat(40);
+
+  function giveAi(user: User, id = `ai-${Math.random().toString(36).slice(2)}`) {
+    db.prepare(
+      `INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, is_active, timeout)
+       VALUES (?, ?, 'Local', 'openai', 'http://ai.test/v1', 'clave', 'vision-mini', 1, 4000)`
+    ).run(id, user.id);
+    return id;
+  }
+
+  function answersWith(content: string) {
+    vi.stubGlobal('fetch', async () =>
+      new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    );
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    db.prepare('DELETE FROM ai_configs').run();
+  });
+
+  it('analiza una foto y no escribe nada en la lista', async () => {
+    giveAi(alice);
+    answersWith(
+      JSON.stringify({
+        lines: [
+          { name: 'Leche semidesnatada', quantity: 2, unit: 'botella', category: 'Lacteos', priceMinor: 95, confidence: 0.9 },
+          { name: 'Pan de pueblo', quantity: 1, unit: 'ud', category: 'Panaderia', priceMinor: null, confidence: 0.6 }
+        ],
+        warnings: ['El precio del pan no se ve']
+      })
+    );
+    const list = await createList(alice);
+
+    const result = await data(await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE, mode: 'shelf' }));
+    expect(result.lines).toHaveLength(2);
+    expect(result.warnings).toEqual(['El precio del pan no se ve']);
+    expect(result.lines[0]).toMatchObject({ name: 'Leche semidesnatada', priceMinor: 95, category: 'Lacteos' });
+    // El catalogo va dentro de la respuesta: la hoja de repaso pinta colores sin
+    // volver a pedirlo.
+    expect(result.categories.map((c: any) => c.name)).toContain('Lacteos');
+
+    // Y la lista sigue vacia: analizar no es anadir.
+    expect((await data(await call(alice, 'GET', `/lists/${list.id}`))).items).toEqual([]);
+  });
+
+  it('el prompt lleva el catalogo y la forma esperada', async () => {
+    giveAi(alice);
+    let sent = '';
+    vi.stubGlobal('fetch', async (_url: string, init: any) => {
+      sent = JSON.stringify(init.body);
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"lines":[]}' } }] }), { status: 200 });
+    });
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE, mode: 'ticket', note: 'es del chino' });
+
+    expect(sent).toContain('Frutas y verduras');
+    expect(sent).toContain('priceMinor');
+    expect(sent).toContain('image_url');
+    expect(sent).toContain('es del chino');
+    // El modo cambia la instruccion: un ticket y una estanteria no se leen igual.
+    expect(sent).toContain('TICKET');
+  });
+
+  it('aplica lo confirmado: fusiona lo que estaba y crea la seccion nueva', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', unit: 'l', quantity: 1 });
+
+    const applied = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items/apply`, {
+        lines: [
+          { name: 'Leche', unit: 'l', quantity: 2, priceMinor: 120 },
+          { name: 'Tofu', quantity: 1, unit: 'ud', category: 'Refrigerados', createCategory: true, priceMinor: 210 }
+        ]
+      })
+    );
+
+    expect(applied.merged).toHaveLength(1);
+    expect(applied.merged[0]).toMatchObject({ name: 'Leche', quantity: 3, price_minor: 120 });
+    expect(applied.added).toHaveLength(1);
+    expect(applied.createdCategories).toEqual(['Refrigerados']);
+
+    // Y la auditoria cuenta de donde salio la linea: una foto no es lo mismo que un dedo.
+    const events = await data(await call(alice, 'GET', `/lists/${list.id}/events`));
+    expect(events[0].action).toBe('items.apply');
+    expect(events[0].description).toContain('foto');
+  });
+
+  it('sin IA configurada dice donde se configura, en vez de un 500', async () => {
+    const list = await createList(alice);
+    const response = await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE });
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.message).toBe('AI_NOT_CONFIGURED');
+    // Con destino, que es lo que convierte un error en un boton.
+    expect(body.data.redirect).toBe('/settings/ai');
+  });
+
+  it('una respuesta que no es JSON se reporta como 422 con la muestra', async () => {
+    giveAi(alice);
+    answersWith('No veo ningun producto en la imagen, lo siento.');
+    const list = await createList(alice);
+
+    const response = await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE });
+    expect(response.status).toBe(422);
+    const body = await response.json();
+    expect(body.message).toBe('AI_ANSWER_NOT_UNDERSTOOD');
+    expect(body.data.sample).toContain('No veo ningun producto');
+  });
+
+  it('un JSON valido pero con lineas inventadas tampoco se cuela', async () => {
+    giveAi(alice);
+    answersWith(JSON.stringify({ lines: [{ name: '', quantity: 1 }] }));
+    const list = await createList(alice);
+    expect((await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE })).status).toBe(422);
+  });
+
+  it('una foto que no es imagen no entra, y una enorme tampoco', async () => {
+    giveAi(alice);
+    const list = await createList(alice);
+    const notAnImage = await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: 'data:text/plain;base64,AAA=' });
+    expect(notAnImage.status).toBe(400);
+    expect(((await notAnImage.json()) as any).message).toBe('INVALID_PHOTO');
+
+    const huge = await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, {
+      image: `data:image/jpeg;base64,${'A'.repeat(6_000_001)}`
+    });
+    // 413 y no 400: la foto es valida, lo que pasa de tamaño. La diferencia importa
+    // porque el aviso en la pantalla es «hazla mas pequena», no «eso no es una foto».
+    expect(huge.status).toBe(413);
+    expect(((await huge.json()) as any).message).toBe('IMAGE_TOO_LARGE');
+  });
+
+  it('aplicar sin lineas no crea nada ni sube la version', async () => {
+    const list = await createList(alice);
+    const before = list.version;
+    const response = await call(alice, 'POST', `/lists/${list.id}/items/apply`, { lines: [] });
+    expect(response.status).toBe(400);
+    expect((await data(await call(alice, 'GET', `/lists/${list.id}`))).version).toBe(before);
   });
 });

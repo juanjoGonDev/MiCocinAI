@@ -229,5 +229,69 @@ export function parseItemLine(line: string): z.infer<typeof createItemSchema> | 
   };
 }
 
+/**
+ * Entrada por foto (§8f). Se separa en dos llamadas — analizar y aplicar — porque un
+ * modelo que lee mal una estanteria no puede reescribir la cesta de la casa: lo que
+ * sale del modelo se valida, se ensena, y solo se escribe lo que alguien confirmo.
+ */
+export const photoAnalyzeSchema = z.object({
+  /** Data URL. Se acepta png/jpeg/webp, que es lo que produce una camara de movil. */
+  image: z
+    .string()
+    .min(64, 'La imagen llega vacia')
+    .max(8_000_000, 'La imagen es demasiado grande')
+    .regex(/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/, 'Se espera una imagen en dataURL (png, jpeg o webp)'),
+  mode: z.enum(['auto', 'ticket', 'shelf']).default('auto'),
+  note: z.string().trim().max(280).optional()
+});
+
+/** Lo que se le PIDE al modelo. Se valida su respuesta con esto y con nada mas. */
+export const photoLinesSchema = z.object({
+  lines: z
+    .array(
+      z
+        .object({
+          name: trimmed(120),
+          quantity: z.coerce.number().positive().max(10000).default(1),
+          unit: z.string().trim().max(24).nullable().optional(),
+          category: z.string().trim().max(48).nullable().optional(),
+          /** Se propone una seccion nueva: solo se crea si quien confirma lo pide. */
+          createCategory: z.boolean().optional(),
+          priceMinor: z.coerce.number().int().min(0).max(100_000_000).nullable().optional(),
+          offer: offerInput,
+          confidence: z.coerce.number().min(0).max(1).default(0.5),
+          note: z.string().trim().max(280).nullable().optional()
+        })
+        // Un nombre vacio no es una linea: es el modelo rellenando huecos.
+        .refine((line) => line.name.trim().length > 1, { message: 'NombreVacio' })
+    )
+    .max(200),
+  currency: z.enum(['EUR', 'eur']).optional(),
+  warnings: z.array(z.string().trim().max(280)).max(20).optional()
+});
+
+/** Lo que la persona confirmo, en la forma que escribe la BD. */
+export const applyLinesSchema = z.object({
+  lines: z
+    .array(
+      z.object({
+        name: trimmed(120),
+        quantity: quantity.optional(),
+        unit: z.string().trim().max(24).nullable().optional(),
+        category: z.string().trim().max(48).nullable().optional(),
+        createCategory: z.boolean().optional(),
+        priceMinor: priceMinor,
+        note: z.string().trim().max(280).nullable().optional(),
+        offer: offerInput
+      })
+    )
+    .min(1, 'No hay ninguna linea que anadir')
+    .max(200)
+});
+
+export type PhotoAnalyzeInput = z.infer<typeof photoAnalyzeSchema>;
+export type PhotoLines = z.infer<typeof photoLinesSchema>;
+export type ApplyLinesInput = z.infer<typeof applyLinesSchema>;
+
 export type ListFilter = z.infer<typeof listFilterSchema>;
 export type CreateItemInput = z.infer<typeof createItemSchema>;

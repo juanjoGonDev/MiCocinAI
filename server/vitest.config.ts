@@ -25,6 +25,7 @@ const COVERED = [
   'src/utils/shopping-categories.ts',
   'src/utils/list-discount.ts',
   'src/utils/shopping-events.ts',
+  'src/utils/photo-prompt.ts',
   'src/utils/live-hub.ts',
   'src/utils/ai-client.ts',
   'src/config/database.ts',

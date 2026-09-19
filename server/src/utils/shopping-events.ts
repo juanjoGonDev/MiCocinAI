@@ -26,7 +26,8 @@ export const EVENT_ACTIONS = [
   'item.uncheck',
   'item.remove',
   'item.restore',
-  'items.bulk'
+  'items.bulk',
+  'items.apply'
 ] as const;
 
 export type EventAction = (typeof EVENT_ACTIONS)[number];
@@ -99,6 +100,8 @@ export function describeEvent(event: { action: string; item_name: string | null;
       return `${who} ha recuperado${item}`;
     case 'items.bulk':
       return `${who} ha pegado una lista`;
+    case 'items.apply':
+      return `${who} ha anadido lineas desde una foto`;
     case 'list.clear-checked':
       return `${who} ha vaciado el carro`;
     case 'list.order':

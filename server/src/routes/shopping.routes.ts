@@ -4,9 +4,12 @@ import { getDatabase } from '../config/database.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { productKeyOf } from '../utils/product-key.js';
 import {
+  applyLinesSchema,
   bulkItemsSchema,
   createCategorySchema,
   discountSchema,
+  photoAnalyzeSchema,
+  photoLinesSchema,
   createItemSchema,
   createListSchema,
   createPriceSchema,
@@ -18,10 +21,13 @@ import {
   updateListSchema
 } from '../schemas/shopping.schema.js';
 import {
+  catalogueForPrompt,
   ensureDefaultCategories,
   listCategories,
   upsertCategory
 } from '../utils/shopping-categories.js';
+import { buildPhotoPrompt } from '../utils/photo-prompt.js';
+import { AiCallError, callAI, extractJsonObject } from '../utils/ai-client.js';
 import { describeEvent, readEvents, recordEvent } from '../utils/shopping-events.js';
 import { channelForList, channelsForTray, publish, subscribe, type LiveEvent } from '../utils/live-hub.js';
 import {
@@ -478,7 +484,28 @@ shoppingRoutes.post('/lists/:id/items', async (c) => {
   if (!list) return notFound(c, 'List');
 
   const body = createItemSchema.parse(await c.req.json());
+  const outcome = upsertLine(db, list, body, c.get('userId'));
+  db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+    list.id
+  );
+  announce(db, list, c.get('userId'), outcome.merged ? 'item.merge' : 'item.add', outcome.row.name);
+  // `merged` en el cuerpo, como siempre: la UI tiene que poder distinguir «he creado
+  // una fila» de «he sumado a la que habia» para no pintar dos avisos distintos.
+  return c.json({ success: true, data: { ...outcome.row, merged: outcome.merged } }, outcome.merged ? 200 : 201);
+});
 
+/**
+ * «Anadir una linea» en un unico sitio: la regla de fusion (misma clave de producto y
+ * misma unidad pendientes = la misma fila, se suma) la necesitan el alta normal, el
+ * pegado y la aplicacion de una foto. Escrita tres veces, la proxima correccion se
+ * aplicara a una y las otras dos seguiran duplicando la leche.
+ */
+function upsertLine(
+  db: ReturnType<typeof getDatabase>,
+  list: any,
+  body: any,
+  userId: string | null
+): { row: any; merged: boolean } {
   // Misma linea pendiente (mismo producto y unidad) => se suma la cantidad.
   // Es lo que espera quien escribe «leche» dos veces: una fila, 2 unidades.
   const key = productKeyOf(body.name);
@@ -493,33 +520,37 @@ shoppingRoutes.post('/lists/:id/items', async (c) => {
     // Se suma la cantidad y, si la linea nueva traia oferta, se la lleva puesta:
     // quien escribe «6 Cervexas 3x2» sobre una fila de «3 Cervexas» habla de la misma
     // estanteria, y perder la oferta a mitad de camino pinta un precio mayor.
+    const offer = normalizeOffer(body.offer);
     db.prepare(
       `UPDATE shopping_list_items
          SET quantity = quantity + ?,
              promo_buy = COALESCE(?, promo_buy),
              promo_take = COALESCE(?, promo_take),
-             updated_at = CURRENT_TIMESTAMP
+             -- El precio que traiga la linea nueva SI se aplica: fotografiar una
+             -- estanteria para sacar el precio y que la fila vieja lo ignore es justo
+             -- lo que la gente espera que haga la app. Borrar un precio no es esto, es
+             -- un PATCH con priceMinor null.
+             price_minor = COALESCE(?, price_minor),
+             updated_at = CURRENT_TIMESTAMP,
+             updated_by = ?
        WHERE id = ?`
-    ).run(body.quantity ?? 1, normalizeOffer(body.offer)?.buy ?? null, normalizeOffer(body.offer)?.take ?? null, existing.id);
-    db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-      list.id
+    ).run(
+      body.quantity ?? 1,
+      offer?.buy ?? null,
+      offer?.take ?? null,
+      body.priceMinor ?? body.price_minor ?? null,
+      userId,
+      existing.id
     );
+
     // Se relee la fila: responder con la copia leida ANTES del UPDATE devolvria la
     // cantidad vieja y la UI tendria que adivinar el resultado de su propio toque.
-    const mergedRow = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(existing.id) as any;
-    announce(db, list, c.get('userId'), 'item.merge', mergedRow.name);
-    return c.json({ success: true, data: { ...mergedRow, merged: true } }, 200);
+    return { row: db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(existing.id) as any, merged: true };
   }
 
-  const id = insertItem(db, list.id, body, c.get('userId'));
-  db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-    list.id
-  );
-
-  const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id) as any;
-  announce(db, list, c.get('userId'), 'item.add', item.name);
-  return c.json({ success: true, data: { ...item, merged: false } }, 201);
-});
+  const id = insertItem(db, list.id, body, userId);
+  return { row: db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id) as any, merged: false };
+}
 
 /** Pegado de texto: una linea por producto, dedupeando contra lo que ya esta. */
 shoppingRoutes.post('/lists/:id/items/bulk', async (c) => {
@@ -965,6 +996,175 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
 
   announce(db, list, userId, 'list.complete', `${recorded} precios`);
   return c.json({ success: true, data: { pricesRecorded: recorded, items: bought.length } });
+});
+
+/**
+ * Un codigo de error del cliente de IA no es un 500: son cuatro situaciones
+ * distintas, y quien esta delante de la pantalla tiene que poder hacer algo con cada
+ * una (configurar la IA, reintentar, acortar la foto, o aceptar que el modelo no ha
+ * entendido nada y escribir la linea a mano).
+ */
+function aiError(c: any, error: unknown) {
+  const code = error instanceof AiCallError ? error.code : 'PROVIDER';
+  const detail = error instanceof AiCallError ? (error.detail ?? null) : String(error).slice(0, 200);
+  if (code === 'NO_CONFIG') {
+    return c.json({ success: false, message: 'AI_NOT_CONFIGURED', data: { redirect: '/settings/ai' } }, 409);
+  }
+  if (code === 'BAD_JSON') {
+    return c.json({ success: false, message: 'AI_ANSWER_NOT_UNDERSTOOD', data: { sample: detail } }, 422);
+  }
+  return c.json(
+    { success: false, message: code === 'TIMEOUT' ? 'AI_TIMEOUT' : 'AI_UNAVAILABLE', data: { detail } },
+    502
+  );
+}
+
+/**
+ * Leer una foto y proponer lineas. Escribe CERO: devuelve lo que el modelo ha
+ * entendido, validado con `photoLinesSchema`, para que la persona lo revise. Es la
+ * razon de ser de dos llamadas en vez de una — un modelo que se inventa una marca no
+ * tiene que poder reescribir la cesta de la casa.
+ */
+shoppingRoutes.post('/lists/:id/photo/analyze', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const scope = getScope(userId);
+  const list = readList(db, scope, c.req.param('id'));
+  if (!list) return notFound(c, 'List');
+
+  const parsed = photoAnalyzeSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json(
+      { success: false, message: 'INVALID_PHOTO', data: { issues: parsed.error.issues.slice(0, 4) } },
+      400
+    );
+  }
+  // Seis megas de base64 son unos cuatro de imagen: por encima, la foto tarda, la
+  // conexion del movil se cae y nadie sabe si la app ha hecho algo.
+  if (parsed.data.image.length > 6_000_000) {
+    return c.json({ success: false, message: 'IMAGE_TOO_LARGE' }, 413);
+  }
+
+  ensureDefaultCategories(db, userId, scope.householdId);
+  const categories = listCategories(db, scope.clause, scope.params);
+  const { system, user } = buildPhotoPrompt({
+    categoriesJson: catalogueForPrompt(categories),
+    mode: parsed.data.mode,
+    note: parsed.data.note ?? null
+  });
+
+  let answer: string;
+  try {
+    answer = await callAI(
+      userId,
+      [
+        { role: 'system', content: system },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: user },
+            { type: 'image_url', image_url: { url: parsed.data.image, detail: 'high' } }
+          ]
+        }
+      ],
+      db
+    );
+  } catch (error) {
+    return aiError(c, error);
+  }
+
+  let raw: unknown;
+  try {
+    raw = extractJsonObject(answer);
+  } catch (error) {
+    return aiError(c, error);
+  }
+
+  const validated = photoLinesSchema.safeParse(raw);
+  if (!validated.success) {
+    // 422, no 400: la foto estaba bien; lo que no cuadra es la respuesta del modelo.
+    // El `sample` va para el visor de logs, que es donde esto se diagnostica.
+    return c.json(
+      {
+        success: false,
+        message: 'AI_ANSWER_NOT_UNDERSTOOD',
+        data: { issues: validated.error.issues.slice(0, 5), sample: String(answer).slice(0, 200) }
+      },
+      422
+    );
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      listId: list.id,
+      mode: parsed.data.mode,
+      currency: validated.data.currency ?? 'EUR',
+      warnings: validated.data.warnings ?? [],
+      lines: validated.data.lines.map((line) => ({ ...line, offer: normalizeOffer(line.offer) })),
+      // El catalogo va en la respuesta: la hoja de repaso pinta los colores, y no
+      // tiene por que pedirlo otra vez para saber que «Frutas y verduras» es verde.
+      categories: categories.map(({ name, color }) => ({ name, color }))
+    }
+  });
+});
+
+/**
+ * Lo que la persona confirmo, escrito de verdad. Reutiliza la regla de fusion del
+ * alta normal (misma clave y misma unidad = la misma fila), que es lo que hace que una
+ * foto de la estanteria no duplique la leche que ya estaba pendiente.
+ */
+shoppingRoutes.post('/lists/:id/items/apply', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const scope = getScope(userId);
+  const list = readList(db, scope, c.req.param('id'));
+  if (!list) return notFound(c, 'List');
+
+  const body = applyLinesSchema.parse(await c.req.json());
+  const added: any[] = [];
+  const merged: any[] = [];
+  const createdCategories: string[] = [];
+
+  db.transaction(() => {
+    for (const line of body.lines) {
+      if (line.category && line.createCategory) {
+        const result = upsertCategory(db, {
+          userId,
+          householdId: scope.householdId,
+          name: line.category,
+          color: null,
+          idFactory: () => nanoid()
+        });
+        if (result.created) createdCategories.push(result.category.name);
+      }
+
+      const outcome = upsertLine(db, list, line, userId);
+      (outcome.merged ? merged : added).push(outcome.row);
+    }
+    db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?').run(
+      userId,
+      list.id
+    );
+  })();
+
+  announce(
+    db,
+    list,
+    userId,
+    'items.apply',
+    `${added.length + merged.length} lineas${createdCategories.length ? `, ${createdCategories.length} secciones nuevas` : ''}`
+  );
+
+  return c.json({
+    success: true,
+    data: {
+      added,
+      merged,
+      createdCategories,
+      version: (readList(db, scope, list.id) as any).version
+    }
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════
