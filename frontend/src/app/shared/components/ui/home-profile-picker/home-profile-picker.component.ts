@@ -61,7 +61,7 @@ import {
       </div>
 
       <p class="profile-picker__effect" *ngIf="askForLevel">
-        {{ effectHint }}
+        {{ effectHint() }}
       </p>
     </fieldset>
 
