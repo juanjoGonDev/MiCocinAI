@@ -180,8 +180,7 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
           (click)="selectTab('todo')"
         >
           <app-icon name="radio_button_unchecked" [size]="16" [label]="null" />
-          <span>Pendientes</span>
-          <span class="detail__tab-count">{{ pendingCount() }}</span>
+          <span>Pendientes ({{ pendingCount() }})</span>
         </button>
         <button
           type="button"
@@ -191,8 +190,7 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
           (click)="selectTab('checked')"
         >
           <app-icon name="shopping_cart" [size]="16" [label]="null" />
-          <span>En el carro</span>
-          <span class="detail__tab-count">{{ checkedCount() }}</span>
+          <span>En el carro ({{ checkedCount() }})</span>
         </button>
         <span class="detail__tabs-spacer"></span>
         <app-icon-button
@@ -219,7 +217,10 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
         <ul class="detail__groups">
           @for (group of groups(); track group.category) {
             <li class="detail__group">
-              <h2 class="detail__group-title">{{ group.category }}</h2>
+              <h2 class="detail__group-title">
+                <span class="detail__group-dot" [style.background]="colorOf(group.category)" aria-hidden="true"></span>
+                {{ group.category }}
+              </h2>
               <ul class="detail__rows">
                 @for (item of group.items; track item.id) {
                   <li
@@ -738,6 +739,18 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
   styles: [
     `
 
+      .detail__group-title {
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+      .detail__group-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: var(--radius-full);
+        /* Sin seccion conocida el punto no se pinta: un gris inventado pareceria un dato. */
+        background: var(--bg-tertiary);
+      }
       .detail__rename-row {
         display: flex;
         align-items: center;

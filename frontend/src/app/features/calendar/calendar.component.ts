@@ -1486,6 +1486,7 @@ export class CalendarComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.readLayersFromUrl();
     // El recetario alimenta la pestaña «Receta» del modal (antes estaba vacío).
     this.recipeService.loadRecipes();
     this.tasteService.ensureLoaded();
@@ -1913,6 +1914,33 @@ export class CalendarComponent implements OnInit {
 
   toggleKind(kind: HouseholdEventKind): void {
     this.calendarService.toggleKind(kind);
+    this.writeLayers();
+  }
+
+  /**
+   * Las capas van en la URL (`?layers=home,shopping`): compartir «el calendario sin las
+   * comidas» es mandar un enlace, y volver atras desde una cita no te cambia lo que estabas
+   * mirando. Con todas activas no se escribe nada, para no ensuciar la URL limpia.
+   */
+  writeLayers(): void {
+    const all = HOUSEHOLD_EVENT_KINDS;
+    const visible = this.calendarService.visibleKinds();
+    const params: Record<string, string | null> = {
+      layers: visible.length === all.length && this.showMeals() ? null : (this.showMeals() ? 'meals,' : '') + visible.join(',')
+    };
+    void this.router.navigate([], { queryParams: params, queryParamsHandling: 'merge', replaceUrl: true });
+  }
+
+  readLayersFromUrl(): void {
+    const raw = new URLSearchParams(window.location.search).get('layers');
+    if (!raw) return;
+    const wanted = raw.split(',').map((entry) => entry.trim()).filter(Boolean);
+    this.showMeals.set(wanted.includes('meals'));
+    const kinds = wanted.filter((entry): entry is HouseholdEventKind =>
+      (HOUSEHOLD_EVENT_KINDS as readonly string[]).includes(entry)
+    );
+    // `layers=meals` (sin sueltas) es legitimo: significa "solo la comida".
+    this.calendarService.visibleKinds.set(kinds);
   }
 
   countOf(kind: HouseholdEventKind): number {
