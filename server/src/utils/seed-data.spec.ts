@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
  * El catalogo de partida (utensilios que marcar + ingredientes de sugerencia)
@@ -111,6 +111,70 @@ describe('seedDefaultsForUser (cuentas sin hogar)', () => {
     expect(
       count('SELECT COUNT(*) as c FROM utensils WHERE household_id = ?', household)
     ).toBeGreaterThan(50);
+  });
+});
+
+describe('backfills de arranque (idempotencia sobre datos heredados)', () => {
+  it('siembra a los usuarios sin hogar y lo loguea solo si hay algo que sembrar', () => {
+    const userId = createUser('backfill-user@test.local');
+    expect(count('SELECT COUNT(*) as c FROM utensils WHERE user_id = ?', userId)).toBe(0);
+
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((msg: unknown) => {
+      logs.push(String(msg));
+    });
+
+    seeds.backfillUserSeeds(db);
+    const seeded = count('SELECT COUNT(*) as c FROM utensils WHERE user_id = ?', userId);
+    expect(seeded).toBeGreaterThan(0);
+    expect(logs.join('\n')).toContain('Seed backfill usuarios sin hogar');
+
+    // Segunda pasada: no duplica y ya no hay nada que contar (no loguea).
+    logs.length = 0;
+    seeds.backfillUserSeeds(db);
+    expect(count('SELECT COUNT(*) as c FROM utensils WHERE user_id = ?', userId)).toBe(seeded);
+    expect(logs).toEqual([]);
+
+    spy.mockRestore();
+  });
+
+  it('un hogar sin miembros no se siembra (nadie de quien heredar el catalogo)', () => {
+    const orphanId = 'h-sin-miembros';
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      orphanId,
+      'Hogar huerfano',
+      'code-orphan'
+    );
+
+    expect(() => seeds.backfillHouseholdSeeds(db)).not.toThrow();
+    expect(count('SELECT COUNT(*) as c FROM utensils WHERE household_id = ?', orphanId)).toBe(0);
+  });
+
+  it('siembra al owner de un hogar vacío y no toca a quien ya tiene catalogo', () => {
+    const owner = createUser('backfill-owner@test.local');
+    const householdId = createHousehold('backfill-hogar', owner);
+    const seededUtensils = count(
+      'SELECT COUNT(*) as c FROM utensils WHERE household_id = ?',
+      householdId
+    );
+    expect(seededUtensils).toBe(0);
+
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((msg: unknown) => {
+      logs.push(String(msg));
+    });
+
+    seeds.backfillHouseholdSeeds(db);
+
+    expect(count('SELECT COUNT(*) as c FROM utensils WHERE household_id = ?', householdId)).toBeGreaterThan(0);
+    expect(logs.join('\n')).toContain('Seed backfill hogar');
+
+    // Idempotente: la segunda pasada no anade ni una fila.
+    const before = count('SELECT COUNT(*) as c FROM utensils WHERE household_id = ?', householdId);
+    seeds.backfillHouseholdSeeds(db);
+    expect(count('SELECT COUNT(*) as c FROM utensils WHERE household_id = ?', householdId)).toBe(before);
+
+    spy.mockRestore();
   });
 });
 

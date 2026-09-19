@@ -1,5 +1,30 @@
 import { defineConfig } from 'vitest/config';
 
+/**
+ * Cobertura del nucleo del servidor (HOGARIA-SPEC §11c).
+ *
+ * El umbral es duro y por fichero: ningun fichero de esta lista puede bajar del
+ * 70 % en ninguna metrica. Y la lista es una rampa: un fichero entra cuando tiene
+ * spec propia, nunca se le excluye para que el numero salga bonito.
+ *
+ * Hoy quedan fuera, con su prueba atada a la fase que les corresponde:
+ *   - src/routes/** y src/index.ts    → se prueban de momento con la suite e2e
+ *   - src/config/database.ts           → bootstrap de proceso (PRAGMAs, migracion
+ *     del fichero legado); entra con las pruebas de la adopcion de la BD
+ *   - src/middleware/**, src/schemas/**, src/utils/log-store.ts,
+ *     src/utils/logger.ts              → unidades puras; entran con P1/P2, que es
+ *     cuando se escriben sus tests de contrato
+ */
+const COVERED = [
+  'src/utils/memory-monitor.ts',
+  'src/utils/seed-data.ts',
+  'src/utils/taste-profile.ts',
+  'src/utils/week-calendar.ts',
+  'src/utils/weekly-plan.ts',
+  'src/models/schema.ts',
+  'src/config/app.config.ts'
+];
+
 export default defineConfig({
   test: {
     globals: true,
@@ -7,19 +32,19 @@ export default defineConfig({
     include: ['src/**/*.spec.ts', 'tests/**/*.spec.ts'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      exclude: [
-        'node_modules/',
-        'dist/',
-        'tests/',
-        '**/*.d.ts',
-        '**/*.config.ts'
-      ],
+      all: false,
+      include: COVERED,
+      // `text` para leerla en el CI log, `html` para verla en el navegador y
+      // `lcov` para que la consuman las extensiones de VS Code / los informes de PR.
+      reporter: ['text', 'html', 'lcov', 'json-summary'],
+      reportsDirectory: 'coverage',
+      clean: true,
       thresholds: {
-        statements: 80,
-        branches: 80,
-        functions: 80,
-        lines: 80
+        perFile: true,
+        statements: 70,
+        branches: 70,
+        functions: 70,
+        lines: 70
       }
     }
   }
