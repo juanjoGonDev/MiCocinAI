@@ -175,4 +175,49 @@ export interface CalendarDayView extends CalendarDay {
   slots: Record<MealType, CalendarMeal[]>;
   planned: number;
   done: number;
+  /** Sueltas de la casa del mismo dia (HOGARIA-SPEC §8f), ya filtradas por capas. */
+  events: HouseholdEvent[];
+}
+
+/**
+ * Las otras cosas de la casa (HOGARIA-SPEC §8f). Las comidas NO son un tipo de aqui
+ * abajo: vienen del plan semanal y se proyectan, para que no haya dos verdades sobre lo
+ * que se cena. Por eso `meal` no tiene META propia: es una CAPA visible, no un evento.
+ */
+export const HOUSEHOLD_EVENT_KINDS = ['shopping', 'home', 'appointment', 'personal', 'other'] as const;
+export type HouseholdEventKind = (typeof HOUSEHOLD_EVENT_KINDS)[number];
+
+export interface HouseholdEvent {
+  id: string;
+  title: string;
+  kind: HouseholdEventKind;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  allDay: boolean;
+  color: string | null;
+  notes: string | null;
+  location: string | null;
+  source: string;
+  userId: string;
+  authorName: string | null;
+  editable: boolean;
+}
+
+export const HOUSEHOLD_EVENT_META: Record<
+  HouseholdEventKind,
+  { label: string; color: string; icon: 'shopping_cart' | 'home' | 'event_available' | 'person' | 'flag' }
+> = {
+  shopping: { label: 'Compra', color: '#4FA3D1', icon: 'shopping_cart' },
+  home: { label: 'Casa', color: '#4CAF50', icon: 'home' },
+  appointment: { label: 'Citas', color: '#E05A5A', icon: 'event_available' },
+  personal: { label: 'Personal', color: '#8E5AC8', icon: 'person' },
+  other: { label: 'Otros', color: '#8A8F98', icon: 'flag' }
+};
+
+export const HOUSEHOLD_EVENT_COLORS = ['#4FA3D1', '#4CAF50', '#E05A5A', '#8E5AC8', '#C99A2E', '#2FA79B'];
+
+export function eventTimeLabel(event: HouseholdEvent): string {
+  if (event.allDay || !event.startTime) return '';
+  return event.endTime ? `${event.startTime}–${event.endTime}` : event.startTime;
 }

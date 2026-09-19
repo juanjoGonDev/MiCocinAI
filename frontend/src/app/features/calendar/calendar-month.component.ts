@@ -7,6 +7,8 @@ import {
   MEAL_ORDER
 } from '../../shared/models/calendar.model';
 import { formatNumber, labels } from './calendar.util';
+import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
+import { HouseholdEvent } from '../../shared/models/calendar.model';
 import { CalendarEventComponent } from './calendar-event.component';
 
 /**
@@ -19,7 +21,7 @@ import { CalendarEventComponent } from './calendar-event.component';
 @Component({
   selector: 'app-calendar-month',
   standalone: true,
-  imports: [CommonModule, CalendarEventComponent],
+  imports: [CommonModule, CalendarHouseholdEventsComponent, CalendarEventComponent],
   template: `
     <div class="cal-month">
       <div class="cal-month__head" role="row">
@@ -52,6 +54,8 @@ import { CalendarEventComponent } from './calendar-event.component';
             </div>
 
             <div class="cal-cell__events">
+              <app-calendar-household-events [events]="day.events" [dense]="true" (edit)="editEvent.emit($event)" />
+
               <app-calendar-event
                 *ngFor="let meal of visible(day)"
                 mode="row"
@@ -297,6 +301,8 @@ export class CalendarMonthComponent {
   @Output() addMeal = new EventEmitter<{ date: string; mealType: MealType }>();
   @Output() openMeal = new EventEmitter<CalendarMeal>();
   @Output() openDay = new EventEmitter<string>();
+  /** Tocar una suelta de la celda = editarla (o verla, si es de otra persona). */
+  @Output() editEvent = new EventEmitter<HouseholdEvent>();
 
   private cachedSource: CalendarDayView[] | null = null;
   private cachedRows: CalendarDayView[][] = [];

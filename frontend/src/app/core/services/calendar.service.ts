@@ -3,6 +3,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable, catchError, map, of, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  HouseholdEvent,
+  HouseholdEventKind,
   CalendarMeal,
   Meal,
   MealType,
@@ -234,5 +236,125 @@ export class CalendarService {
       tap((response) => this.calendarSignal.set(response.data)),
       catchError(() => of(null))
     );
+  }
+
+  // ----------------------------------------------------- sueltas de la casa (8f)
+  //
+  // Viven en el MISMO calendario que las comidas pero en otra lectura: el plan se
+  // regenera y las sueltas no. Filtrar por capas es local (`visibleKinds`) para que
+  // encender/apagar «Citas» no sea una peticion cada vez.
+  readonly householdEvents = signal<HouseholdEvent[]>([]);
+  readonly visibleKinds = signal<HouseholdEventKind[]>([
+    'shopping',
+    'home',
+    'appointment',
+    'personal',
+    'other'
+  ]);
+  readonly eventsLoading = signal(false);
+  readonly eventsError = signal<string | null>(null);
+  readonly creatingEvent = signal(false);
+
+  loadHouseholdEvents(from: string, to: string): void {
+    this.eventsLoading.set(true);
+    this.eventsError.set(null);
+    const params = new HttpParams().set('from', from).set('to', to).set('limit', '500');
+    this.http
+      .get<{ data: HouseholdEvent[] }>(`${this.apiUrl}/events`, { params })
+      .pipe(
+        map(response => response.data ?? []),
+        catchError(error => {
+          this.eventsError.set(this.readError(error));
+          return of([] as HouseholdEvent[]);
+        }),
+        tap(() => this.eventsLoading.set(false))
+      )
+      .subscribe(events => this.householdEvents.set(events));
+  }
+
+  /** Se recarga el rango actual: es lo que quiere el usuario despues de crear o borrar. */
+  refreshHouseholdEvents(): void {
+    const range = this.rangeSignal();
+    if (range) this.loadHouseholdEvents(range.start, range.end);
+  }
+
+  toggleKind(kind: HouseholdEventKind): void {
+    this.visibleKinds.update(kinds => (kinds.includes(kind) ? kinds.filter(entry => entry !== kind) : [...kinds, kind]));
+  }
+
+  visibleEventsOn(date: string): HouseholdEvent[] {
+    const kinds = this.visibleKinds();
+    return this.householdEvents()
+      .filter(event => event.date === date && kinds.includes(event.kind))
+      .sort((a, b) => {
+        // Todo el dia arriba, y despues por hora: es el orden en que se lee un dia, y el
+        // que hace que una franja de 8 h no se cuele entre dos citas de la tarde.
+        if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
+        return (a.startTime ?? '').localeCompare(b.startTime ?? '');
+      });
+  }
+
+  saveHouseholdEvent(input: Record<string, unknown>, id?: string): Promise<HouseholdEvent | null> {
+    this.creatingEvent.set(true);
+    const call$ = id
+      ? this.http.patch<{ data: HouseholdEvent }>(`${this.apiUrl}/events/${id}`, input)
+      : this.http.post<{ data: HouseholdEvent }>(`${this.apiUrl}/events`, input);
+    return new Promise<HouseholdEvent | null>(resolve => {
+      call$
+        .pipe(
+          map(response => response.data),
+          catchError(error => {
+            this.eventsError.set(this.readError(error));
+            return of(null);
+          })
+        )
+        .subscribe({
+          next: event => {
+            this.creatingEvent.set(false);
+            if (event) this.upsertLocal(event);
+            resolve(event);
+          },
+          error: () => {
+            this.creatingEvent.set(false);
+            resolve(null);
+          },
+          complete: () => this.creatingEvent.set(false)
+        });
+    });
+  }
+
+  removeHouseholdEvent(id: string): Promise<boolean> {
+    return new Promise<boolean>(resolve => {
+      this.http
+        .delete(`${this.apiUrl}/events/${id}`)
+        .pipe(
+          catchError(error => {
+            this.eventsError.set(this.readError(error));
+            return of(null);
+          })
+        )
+        .subscribe({
+          next: () => {
+            this.householdEvents.update(events => events.filter(event => event.id !== id));
+            resolve(true);
+          },
+          error: () => resolve(false)
+        });
+    });
+  }
+
+  private upsertLocal(event: HouseholdEvent): void {
+    this.householdEvents.update(events =>
+      events.some(entry => entry.id === event.id)
+        ? events.map(entry => (entry.id === event.id ? { ...entry, ...event } : entry))
+        : [...events, event]
+    );
+  }
+
+  private readError(error: unknown): string {
+    const status = (error as { status?: number })?.status;
+    if (status === 403) return 'Solo quien escribio la suelta puede cambiarla.';
+    if (status === 400) return 'Revisa la fecha y las horas.';
+    return 'No se ha podido hablar con el calendario.';
   }
 }

@@ -40,6 +40,17 @@ import {
 import { CalendarMonthComponent } from './calendar-month.component';
 import { CalendarWeekComponent } from './calendar-week.component';
 import { CalendarDayComponent } from './calendar-day.component';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
+import { HouseholdService } from '../../core/services/household.service';
+import {
+  HOUSEHOLD_EVENT_COLORS,
+  HOUSEHOLD_EVENT_KINDS,
+  HOUSEHOLD_EVENT_META,
+  HouseholdEvent,
+  HouseholdEventKind,
+  eventTimeLabel
+} from '../../shared/models/calendar.model';
 
 /** Días por fila de la vista de mes. */
 const WEEK_LENGTH = 7;
@@ -85,6 +96,9 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
   selector: 'app-calendar',
   standalone: true,
   imports: [
+    IconComponent,
+    CalendarHouseholdEventsComponent,
+    
     CommonModule,
     FormsModule,
     ModalComponent,
@@ -162,8 +176,43 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             <button type="button" class="cal-btn cal-btn--primary" (click)="openGenerateModal()">
               Planificar IA
             </button>
+            <button type="button" class="cal-pill cal-pill--add" data-test="event-add" (click)="openEventModal()">
+              <app-icon name="add" [size]="16" [label]="null" />
+              <span>Suelta</span>
+            </button>
           </div>
         </header>
+
+        <!-- ══ Capas: que se pinta hoy en la rejilla ══ -->
+        <div class="cal-layers" role="group" aria-label="Que se muestra en el calendario" data-test="calendar-layers">
+          <button
+            type="button"
+            class="cal-layer"
+            [class.is-on]="showMeals()"
+            [attr.aria-pressed]="showMeals()"
+            data-test="layer-meals"
+            (click)="showMeals.set(!showMeals())"
+          >
+            <span class="cal-layer__dot" style="background: var(--primary)"></span>
+            Comidas
+          </button>
+          @for (kind of eventKinds; track kind) {
+            <button
+              type="button"
+              class="cal-layer"
+              [class.is-on]="isKindVisible(kind)"
+              [attr.aria-pressed]="isKindVisible(kind)"
+              [attr.data-test]="'layer-' + kind"
+              (click)="toggleKind(kind)"
+            >
+              <span class="cal-layer__dot" [style.background]="metaOf(kind).color"></span>
+              {{ metaOf(kind).label }}
+              @if (countOf(kind) > 0) {
+                <span class="cal-layer__count">{{ countOf(kind) }}</span>
+              }
+            </button>
+          }
+        </div>
 
         <!-- ══ Resumen del periodo ══ -->
         <div class="cal-strip">
@@ -222,6 +271,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (addMeal)="openAddModal($event.date, $event.mealType)"
               (openMeal)="openEditModal($event)"
               (openDay)="openDayFor($event)"
+              (editEvent)="openEventModal(undefined, $event)"
             ></app-calendar-month>
 
             <app-calendar-week
@@ -232,6 +282,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (toggleMeal)="toggleMeal($event)"
               (removeMeal)="removeMeal($event)"
               (openDay)="openDayFor($event)"
+              (editEvent)="openEventModal(undefined, $event)"
             ></app-calendar-week>
 
             <app-calendar-day
@@ -243,10 +294,125 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (openMeal)="openEditModal($event)"
               (toggleMeal)="toggleMeal($event)"
               (removeMeal)="removeMeal($event)"
+              (editEvent)="openEventModal(undefined, $event)"
             ></app-calendar-day>
           </ng-container>
         </div>
+
+        <!-- ══ Agenda del dia señalado ══ -->
+        <section class="cal-agenda" [attr.data-test]="'agenda'" aria-label="Agenda del dia">
+          <header class="cal-agenda__head">
+            <h3 class="cal-agenda__title">Agenda · {{ anchorLabel() }}</h3>
+            <button type="button" class="cal-pill" data-test="agenda-add" (click)="openEventFor(agendaDay())">
+              <app-icon name="add" [size]="14" [label]="null" />
+              <span>Suelta</span>
+            </button>
+          </header>
+          @if (agendaDay().events.length) {
+            <app-calendar-household-events [events]="agendaDay().events" (edit)="openEventModal(undefined, $event)" />
+          } @else {
+            <p class="cal-agenda__empty">Nada mas apuntado ese dia.</p>
+          }
+        </section>
       </section>
+
+      <!-- ══ Suelta de la casa ══ -->
+      <app-modal
+        [isOpen]="isEventModalOpen()"
+        [title]="eventDraft.id ? 'Editar suelta' : 'Nueva suelta'"
+        size="md"
+        (onClose)="closeEventModal()"
+      >
+        <div class="meal-form">
+          <div class="meal-form__field">
+            <label for="event-title">Que es</label>
+            <input id="event-title" name="eventTitle" class="cal-input" maxlength="120" [(ngModel)]="eventDraft.title" data-test="event-title" placeholder="Carpinteria: medir el pasillo" />
+          </div>
+
+          <div class="meal-form__row">
+            <div class="meal-form__field meal-form__field--sm">
+              <label for="event-kind">Tipo</label>
+              <select id="event-kind" name="eventKind" class="cal-input" [(ngModel)]="eventDraft.kind">
+                @for (kind of eventKinds; track kind) {
+                  <option [value]="kind">{{ metaOf(kind).label }}</option>
+                }
+              </select>
+            </div>
+            <div class="meal-form__field meal-form__field--sm">
+              <label for="event-date">Dia</label>
+              <input id="event-date" name="eventDate" type="date" class="cal-input" [(ngModel)]="eventDraft.date" />
+            </div>
+          </div>
+
+          <div class="meal-form__row">
+            <label class="cal-check">
+              <input type="checkbox" name="eventAllDay" [(ngModel)]="eventDraft.allDay" />
+              Todo el dia
+            </label>
+            @if (!eventDraft.allDay) {
+              <div class="meal-form__field meal-form__field--sm">
+                <label for="event-start">Desde</label>
+                <input id="event-start" name="eventStart" type="time" class="cal-input" [(ngModel)]="eventDraft.startTime" />
+              </div>
+              <div class="meal-form__field meal-form__field--sm">
+                <label for="event-end">Hasta</label>
+                <input id="event-end" name="eventEnd" type="time" class="cal-input" [(ngModel)]="eventDraft.endTime" />
+              </div>
+            }
+          </div>
+
+          <div class="meal-form__field">
+            <label>Color</label>
+            <div class="cal-swatches" role="group" aria-label="Color de la suelta">
+              @for (color of eventColors; track color) {
+                <button
+                  type="button"
+                  class="cal-swatch"
+                  [class.is-active]="(eventDraft.color ?? metaOf(eventDraft.kind).color) === color"
+                  [style.background]="color"
+                  [attr.aria-label]="'Color ' + color"
+                  (click)="eventDraft.color = color"
+                ></button>
+              }
+            </div>
+          </div>
+
+          <div class="meal-form__field">
+            <label for="event-place">Sitio (opcional)</label>
+            <input id="event-place" name="eventPlace" class="cal-input" maxlength="120" [(ngModel)]="eventDraft.location" placeholder="Tienda de la calle Acera" />
+          </div>
+
+          <div class="meal-form__field">
+            <label for="event-notes">Notas (opcional)</label>
+            <textarea id="event-notes" name="eventNotes" class="cal-input" rows="2" maxlength="500" [(ngModel)]="eventDraft.notes"></textarea>
+          </div>
+
+          @if (hasHousehold()) {
+            <label class="cal-check">
+              <input type="checkbox" name="eventShared" [(ngModel)]="eventDraft.sharedWithHousehold" />
+              Que lo vea mi casa
+            </label>
+          }
+          <p class="cal-note" *ngIf="calendarService.eventsError()" role="alert">{{ calendarService.eventsError() }}</p>
+
+          <div class="meal-form__actions">
+            @if (eventDraft.id) {
+              <button type="button" class="cal-btn cal-btn--ghost cal-btn--danger" (click)="removeEvent()">Borrar</button>
+            }
+            <span class="meal-form__grow"></span>
+            <button type="button" class="cal-btn cal-btn--ghost" (click)="closeEventModal()">Cancelar</button>
+            <button
+              type="button"
+              class="cal-btn cal-btn--primary"
+              data-test="event-save"
+              [disabled]="!eventDraft.title.trim() || calendarService.creatingEvent()"
+              (click)="saveEvent()"
+            >
+              {{ calendarService.creatingEvent() ? 'Guardando…' : 'Guardar' }}
+            </button>
+          </div>
+        </div>
+      </app-modal>
 
       <!-- ══ Añadir / editar comida ══ -->
       <app-modal
@@ -477,6 +643,107 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     </div>
   `,
   styles: [`
+    .cal-pill--add {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .cal-layers {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 0 0;
+    }
+    .cal-layer {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-full);
+      background: transparent;
+      color: var(--text-tertiary);
+      font-family: inherit;
+      font-size: var(--text-xs);
+      padding: 4px 10px;
+      min-height: 30px;
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .cal-layer.is-on {
+      color: var(--text-primary);
+      background: var(--bg-tertiary);
+      border-color: var(--border-strong);
+    }
+    .cal-layer__dot {
+      width: 8px;
+      height: 8px;
+      border-radius: var(--radius-full);
+      opacity: 0.4;
+    }
+    .cal-layer.is-on .cal-layer__dot {
+      opacity: 1;
+    }
+    .cal-layer__count {
+      font-variant-numeric: tabular-nums;
+      color: var(--text-tertiary);
+    }
+    .cal-swatches {
+      display: flex;
+      gap: 6px;
+    }
+    .cal-swatch {
+      width: 22px;
+      height: 22px;
+      border-radius: var(--radius-full);
+      border: 2px solid transparent;
+      cursor: pointer;
+      padding: 0;
+    }
+    .cal-swatch.is-active {
+      border-color: var(--text-primary);
+    }
+    .cal-check {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: var(--text-sm);
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+    .cal-note {
+      margin: 0;
+      font-size: var(--text-xs);
+      color: var(--error);
+    }
+    .cal-evt {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      width: 100%;
+      border: none;
+      border-left: 3px solid var(--event-color, var(--primary));
+      border-radius: 4px;
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 11px;
+      line-height: 1.25;
+      text-align: left;
+      padding: 2px 4px;
+      cursor: pointer;
+      overflow: hidden;
+    }
+    .cal-evt__when {
+      color: var(--text-tertiary);
+      font-variant-numeric: tabular-nums;
+    }
+    .cal-evt__who {
+      margin-left: auto;
+      font-size: 9px;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+    }
     :host {
       --cal-line: var(--border-default);
     }
@@ -1075,6 +1342,7 @@ export class CalendarComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly householdService = inject(HouseholdService);
 
   readonly viewOptions = CALENDAR_VIEWS;
   readonly CALENDAR_VIEW_LABELS = CALENDAR_VIEW_LABELS;
@@ -1116,7 +1384,9 @@ export class CalendarComponent implements OnInit {
 
     return dates.map((date) => {
       const iso = toISODate(date);
-      const meals = byDate.get(iso) ?? [];
+      // Apagar la capa de comidas no es esconder CSS: es no darles nada que pintar, y
+      // asi las tres vistas (mes, semana, dia) se comportan igual sin tocarlas.
+      const meals = this.showMeals() ? byDate.get(iso) ?? [] : [];
       const slots = { breakfast: [], lunch: [], dinner: [], snack: [] } as Record<MealType, CalendarMeal[]>;
       let calories = 0;
       let hasNutrition = false;
@@ -1141,7 +1411,8 @@ export class CalendarComponent implements OnInit {
         calories: Math.round(calories),
         hasNutrition,
         planned: meals.length,
-        done
+        done,
+        events: this.calendarService.visibleEventsOn(iso)
       };
     });
   });
@@ -1189,6 +1460,7 @@ export class CalendarComponent implements OnInit {
     effect(() => {
       const [start, end] = this.visibleRange();
       this.calendarService.loadRange(start, end);
+      this.calendarService.loadHouseholdEvents(start, end);
     });
   }
 
@@ -1289,6 +1561,7 @@ export class CalendarComponent implements OnInit {
   reload(): void {
     const [start, end] = this.visibleRange();
     this.calendarService.loadRange(start, end, true);
+    this.calendarService.loadHouseholdEvents(start, end);
   }
 
   /* ─────────────────────── Navegación de periodos ─────────────────────── */
@@ -1599,6 +1872,159 @@ export class CalendarComponent implements OnInit {
         }
       });
   }
+  // ----------------------------------------------------- sueltas de la casa (§8f)
+
+  readonly showMeals = signal(true);
+  readonly eventKinds = HOUSEHOLD_EVENT_KINDS;
+  readonly eventColors = HOUSEHOLD_EVENT_COLORS;
+  readonly isEventModalOpen = signal(false);
+  eventDraft: {
+    id?: string;
+    title: string;
+    kind: HouseholdEventKind;
+    date: string;
+    allDay: boolean;
+    startTime: string;
+    endTime: string;
+    color: string | null;
+    location: string;
+    notes: string;
+    sharedWithHousehold: boolean;
+  } = {
+    title: '',
+    kind: 'other',
+    date: '',
+    allDay: false,
+    startTime: '',
+    endTime: '',
+    color: null,
+    location: '',
+    notes: '',
+    sharedWithHousehold: true
+  };
+
+  metaOf(kind: HouseholdEventKind) {
+    return HOUSEHOLD_EVENT_META[kind];
+  }
+
+  isKindVisible(kind: HouseholdEventKind): boolean {
+    return this.calendarService.visibleKinds().includes(kind);
+  }
+
+  toggleKind(kind: HouseholdEventKind): void {
+    this.calendarService.toggleKind(kind);
+  }
+
+  countOf(kind: HouseholdEventKind): number {
+    return this.calendarService.householdEvents().filter(event => event.kind === kind).length;
+  }
+
+  /** La casilla «que lo vea mi casa» solo tiene sentido si hay casa. */
+  hasHousehold(): boolean {
+    return !!this.householdService.household();
+  }
+
+  openEventModal(day?: { iso?: string; date?: string }, event?: HouseholdEvent | null): void {
+    const iso = event?.date ?? day?.iso ?? day?.date ?? this.anchorIso();
+    this.eventDraft = {
+      id: event?.id,
+      title: event?.title ?? '',
+      kind: (event?.kind ?? 'other') as HouseholdEventKind,
+      date: iso,
+      allDay: event?.allDay ?? false,
+      startTime: event?.startTime ?? '',
+      endTime: event?.endTime ?? '',
+      color: event?.color ?? null,
+      location: event?.location ?? '',
+      notes: event?.notes ?? '',
+      sharedWithHousehold: event ? true : true
+    };
+    this.calendarService.eventsError.set(null);
+    this.isEventModalOpen.set(true);
+  }
+
+  closeEventModal(): void {
+    this.isEventModalOpen.set(false);
+  }
+
+  /** Se abre desde la celda: el dia ya viene elegido, que es lo que ahorra el tecleo. */
+  agendaDay(): CalendarDayView {
+    const iso = this.anchorIso();
+    return this.days().find(day => day.iso === iso) ?? {
+      date: new Date(),
+      iso,
+      inCurrentMonth: true,
+      isToday: true,
+      meals: [],
+      slots: { breakfast: [], lunch: [], dinner: [], snack: [] } as never,
+      calories: 0,
+      hasNutrition: false,
+      planned: 0,
+      done: 0,
+      events: []
+    };
+  }
+
+  anchorLabel(): string {
+    return labels.longDay(this.anchor());
+  }
+
+  openEventFor(day: CalendarDayView): void {
+    this.openEventModal({ iso: day.iso });
+  }
+
+  async saveEvent(): Promise<void> {
+    const draft = this.eventDraft;
+    const title = draft.title.trim();
+    if (!title || !draft.date) return;
+    const body: {
+      title: string;
+      kind: HouseholdEventKind;
+      date: string;
+      allDay: boolean;
+      sharedWithHousehold: boolean;
+      color: string | null;
+      location: string | null;
+      notes: string | null;
+      startTime?: string;
+      endTime?: string;
+    } = {
+      title,
+      kind: draft.kind,
+      date: draft.date,
+      allDay: draft.allDay,
+      sharedWithHousehold: draft.sharedWithHousehold,
+      color: draft.color ?? this.metaOf(draft.kind).color,
+      location: draft.location.trim() || null,
+      notes: draft.notes.trim() || null
+    };
+    if (!draft.allDay) {
+      if (draft.startTime) body.startTime = draft.startTime;
+      if (draft.endTime) body.endTime = draft.endTime;
+    }
+    const saved = await this.calendarService.saveHouseholdEvent(body, draft.id);
+    if (saved) this.closeEventModal();
+  }
+
+  async removeEvent(): Promise<void> {
+    const id = this.eventDraft.id;
+    if (!id) return;
+    const ok = await this.calendarService.removeHouseholdEvent(id);
+    if (ok) {
+      this.closeEventModal();
+      this.toastService.show({ type: 'info', title: 'Suelta borrada', duration: 4000, countdown: true });
+    }
+  }
+
+  eventTimeLabel(event: HouseholdEvent): string {
+    return eventTimeLabel(event);
+  }
+
+  authorInitials(event: HouseholdEvent): string {
+    const parts = String(event.authorName ?? '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '';
+    return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+  }
 }
 
 function sum(days: CalendarDayView[], key: 'planned' | 'done' | 'calories'): number {
@@ -1612,4 +2038,5 @@ function isSameDayAsToday(date: Date): boolean {
     date.getMonth() === today.getMonth() &&
     date.getFullYear() === today.getFullYear()
   );
+
 }

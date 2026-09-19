@@ -8,6 +8,8 @@ import {
   MEAL_TYPE_META
 } from '../../shared/models/calendar.model';
 import { formatNumber, labels } from './calendar.util';
+import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
+import { HouseholdEvent } from '../../shared/models/calendar.model';
 import { CalendarEventComponent } from './calendar-event.component';
 
 /**
@@ -20,7 +22,7 @@ import { CalendarEventComponent } from './calendar-event.component';
 @Component({
   selector: 'app-calendar-week',
   standalone: true,
-  imports: [CommonModule, CalendarEventComponent],
+  imports: [CommonModule, CalendarHouseholdEventsComponent, CalendarEventComponent],
   template: `
     <div class="cal-week">
       <!-- Cabecera de días -->
@@ -78,6 +80,12 @@ import { CalendarEventComponent } from './calendar-event.component';
                 +
               </button>
             </div>
+
+            <app-calendar-household-events
+              *ngIf="type === 'breakfast' && day.events.length"
+              [events]="day.events"
+              (edit)="editEvent.emit($event)"
+            />
 
             <app-calendar-event
               *ngFor="let meal of day.slots[type]; trackBy: trackByMealId"
@@ -317,6 +325,7 @@ export class CalendarWeekComponent {
   @Output() toggleMeal = new EventEmitter<CalendarMeal>();
   @Output() removeMeal = new EventEmitter<CalendarMeal>();
   @Output() openDay = new EventEmitter<string>();
+  @Output() editEvent = new EventEmitter<HouseholdEvent>();
 
   readonly mealTypes = MEAL_ORDER;
   readonly MEAL_TYPE_META = MEAL_TYPE_META;
