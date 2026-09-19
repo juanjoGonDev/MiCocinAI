@@ -1069,16 +1069,73 @@ spec is the record, including of where reality disagreed with it.
       the URL, search across items, the filter badge and clearing it, pagination and page size, rename with
       Escape, icon marking, select-all, the 3×2 chip surviving a reload and removing itself, the 10 % discount
       moving the total and being removable, the photo sheet refusing to write without an AI config (and
-      pointing at it), and the calendar layers with a created suelta. Not covered: drag reorder, picker recents
+      pointing at it), the calendar layers with a created event, a discount aimed at one product, and a calendar
+      that must not ask for the same window of events twice. Not covered: drag reorder, picker recents
       (neither exists yet) — and note these specs could not be *executed* in this sandbox (no Chrome binary),
-      so CI is the place where they turn green or red.
+      so CI is the place where they turn green or red. Every `data-test` they use is now *checked* by
+      `scripts/check-ui.mjs` rather than trusted.
 - [x] §13 updated: recurrence and availability stay out, plus what this round consciously left behind.
+
+## 12e. Round 7 checklist — the things that were quietly wrong
+
+Round 6 shipped with three bugs that only show up on a phone or on the second click, plus a vocabulary
+mismatch. The rule stays: `[x]` when the test is green, and here also *how* it was verified, because in
+this sandbox the frontend runner does not exist and pretending otherwise is how a box lies.
+
+- [x] "Ver todas" in the tray showed nothing. `status=all` is a *filter* value, not a value of the column,
+      and the query was asking for `l.status = 'all'`. The schema now carries `LIST_STATUSES | 'all'` and the
+      route has the three branches written out: no status → active+archived, a status → that one, `all` → no
+      condition at all. Route test `la pestaña «todas» mezcla activas y terminadas` (server, green).
+- [x] The calendar asked for the house events in a loop — dozens of requests, then 429 — because `visibleRange`
+      was a `computed` derived from `days()`, `days()` reads the events, and the `effect()` that loads the events
+      writes what `days()` reads: a feedback cycle wearing a date picker. Fixed in two places, both of which
+      matter: `visibleRange` is computed from `anchor()`/`view()` with `monthGrid`/`weekDays` (the grid no
+      longer depends on the data painted inside it), and `loadHouseholdEvents(from, to)` remembers the window
+      it already fetched and ignores a repeat. Frontend: type-checked and built, no runner here.
+- [x] An editable control always has a way out: `✕` on the inline rename (round 6) is now also a visible close
+      on the three bottom sheets of the detail (`discount-close`, `photo-close`, `audit-close`) — the backdrop
+      has always closed them, but "swipe away somewhere" is not an affordance you can see.
+- [x] `app-checkbox` (`ui/checkbox/`): `button[role=checkbox]` with `aria-checked`, the Material check inside a
+      box, `disabled`, and a 40 px hit area. It replaces the two bare `<input type=checkbox>` of the event sheet;
+      the bare `<select>` of the event *kind* became an `app-picker`, so the type of an event carries its colour
+      like everything else. Frontend spec written (`checkbox.component.spec.ts`), not executed here.
+- [x] `app-picker` opens **upwards** when it does not fit below: inside a sheet with `overflow-y: auto` the panel
+      was cut at the bottom edge and the last options of the list were physically unreachable. `flipForRoom()`
+      measures on open and again once the search box has focus, because that is when a sheet may have scrolled.
+- [x] Discount per product or per section — the shape of the signs in a real aisle («2 € de descuento en jamón»).
+      `scope: 'all' | 'firstUnits' | 'product' | 'category'` + `target`; `MoneyLine` gains `productKey` and
+      `category`, `isEligibleForDiscount()` compares *normalised* keys (NFD, no accents, lowercase) so "Jamón"
+      and "jamon" are the same product, the base of the maths *and* the split both shrink to the matching lines,
+      and a promised discount with no line that matches says `reason: 'noMatchingLine'` instead of pretending.
+      `describeDiscount` writes "… en Jamon Serrano". The schema requires `target` (`DiscountTargetRequired`) the
+      moment a scope promises a target, and the sheet refuses to save before asking the server.
+- [x] Storage: the `CHECK` of `shopping_list_discounts` only knew two scopes, so the new ones could not be
+      written on an existing database. `database.ts` ships the rebuild of that table (copy, drop, rename) when
+      the stored SQL does not mention `'product'`, plus `target TEXT`; a fresh install gets the new shape
+      directly. Five server route tests cover it (product only, whole aisle, 400 without target, forgetting the
+      target when going back to the basket, and the estimate admitting it matched nothing) — green, `189 tests`.
+- [x] Vocabulary: the sheet said "suelta". The pills and the sheet title say `Evento`, the type is `Tipo`, and
+      the only `suelta` left in the calendar files is the Spanish adjective in "tarjetas sueltas" — which is
+      about loose cards, not about the feature.
+- [x] `scripts/check-ui.mjs`, wired into CI (Type Check job) and `make ci:ui`: no emoji in `frontend/src`, no
+      native `<select>` outside `ui/`, no `ui/` component left unmounted, every `data-test` an e2e spec asks for
+      existing in the app (the invented-selector failure mode that bit this project twice), and no direct call
+      from the browser to an AI provider. It carries a **debt list** — 22 files with emoji and 5 with a native
+      select, all of them pre-existing screens — that may only shrink: when a file stops offending, the guard
+      says so in the log and the entry is deleted in the same commit. Verified by breaking things on purpose.
+- [ ] `tests/e2e/shopping-round6.spec.ts` still cannot be executed in this sandbox (no Chromium), and the two
+      new tests in it (the product discount and the request count) are therefore *read-and-checked*, not run.
+      The first CI run is the one that turns them green.
+
 
 ## 13. Coming soon (deliberately not in this program)
 
 - **Drag to reorder inside a section**: the `PUT /lists/:id/order` endpoint and the `position` column are
   ready; what is missing is a handle that cannot be confused with the swipe. Same for **picker recents**
   (`localStorage`): useful once someone proves it, not before.
+- **The UI debt the guard counts**: 22 files still paint an emoji where a glyph should be, and five screens
+  still open a native `select`. They are named in `scripts/check-ui.mjs`, one PR per screen, and the list can
+  only shrink — the guard prints a line when a file stops offending.
 - **Photo prices as observations**: a photographed price tag sets the line price today; it should also teach
   `price_observations` (with the store and a `source: 'photo'`), which is the difference between a price you
   typed once and a shop that starts knowing what milk costs.
