@@ -1,7 +1,8 @@
 import { z } from 'zod';
+import { COOKING_LEVELS } from '../utils/taste-profile.js';
 
 const memberRoleEnum = z.enum(['admin', 'member', 'child']);
-const cookingLevelEnum = z.enum(['beginner', 'intermediate', 'expert']);
+const cookingLevelEnum = z.enum(COOKING_LEVELS);
 const dietTypeEnum = z.enum(['omnivore', 'vegetarian', 'vegan', 'pescatarian', 'keto', 'paleo']);
 const spiceToleranceEnum = z.enum(['low', 'medium', 'high']);
 const portionSizeEnum = z.enum(['small', 'medium', 'large']);

@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, map, catchError, of, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   Ingredient,
@@ -47,6 +47,8 @@ export class PantryService {
     if (filter?.location) params = params.set('location', filter.location);
     if (filter?.expiringSoon) params = params.set('expiringSoon', 'true');
     if (filter?.expired) params = params.set('expired', 'true');
+    if (filter?.page) params = params.set('page', String(filter.page));
+    if (filter?.pageSize) params = params.set('pageSize', String(filter.pageSize));
 
     this.http.get<any>(`${this.apiUrl}/ingredients`, { params }).pipe(
       tap(response => {
@@ -74,7 +76,9 @@ export class PantryService {
         this.ingredientsSignal.update(list => [response.data, ...list]);
         this.loadStats();
       }),
-      catchError(() => of(null))
+      // Se propaga el error: si se silencia, la UI muestra "Agregado" aunque
+      // el backend haya rechazado el alta con un 400.
+      catchError(error => throwError(() => error))
     );
   }
 
@@ -84,8 +88,9 @@ export class PantryService {
         this.ingredientsSignal.update(list =>
           list.map(i => i.id === id ? response.data : i)
         );
+        this.loadStats();
       }),
-      catchError(() => of(null))
+      catchError(error => throwError(() => error))
     );
   }
 
@@ -103,30 +108,35 @@ export class PantryService {
   // Utensils
   // ═══════════════════════════════════════════════════════════════
 
-  loadUtensils(): void {
-    this.http.get<any>(`${this.apiUrl}/utensils`).pipe(
-      tap(response => this.utensilsSignal.set(response.data)),
-      catchError(() => of(null))
-    ).subscribe();
+  /**
+   * Devuelve el observable (no se suscribe aqui) para que el componente
+   * sepa cuando termina la carga. Los errores NO se silencian: si el
+   * servidor falla, el componente debe poder avisar al usuario.
+   */
+  loadUtensils(): Observable<Utensil[]> {
+    return this.http.get<any>(`${this.apiUrl}/utensils`).pipe(
+      tap(response => this.utensilsSignal.set(response.data ?? [])),
+      map(response => (response.data ?? []) as Utensil[])
+    );
   }
 
-  createUtensil(data: CreateUtensilInput): Observable<Utensil | null> {
+  createUtensil(data: CreateUtensilInput): Observable<Utensil> {
     return this.http.post<any>(`${this.apiUrl}/utensils`, data).pipe(
       tap(response => {
         this.utensilsSignal.update(list => [...list, response.data]);
       }),
-      catchError(() => of(null))
+      map(response => response.data)
     );
   }
 
-  updateUtensil(id: string, data: UpdateUtensilInput): Observable<Utensil | null> {
+  updateUtensil(id: string, data: UpdateUtensilInput): Observable<Utensil> {
     return this.http.patch<any>(`${this.apiUrl}/utensils/${id}`, data).pipe(
       tap(response => {
         this.utensilsSignal.update(list =>
           list.map(u => u.id === id ? response.data : u)
         );
       }),
-      catchError(() => of(null))
+      map(response => response.data)
     );
   }
 
@@ -135,7 +145,7 @@ export class PantryService {
       tap(() => {
         this.utensilsSignal.update(list => list.filter(u => u.id !== id));
       }),
-      catchError(() => of(false))
+      map(() => true)
     );
   }
 
@@ -145,7 +155,13 @@ export class PantryService {
 
   loadStats(): void {
     this.http.get<any>(`${this.apiUrl}/ingredients/stats`).pipe(
-      tap(response => this.statsSignal.set(response.data)),
+      tap(response => {
+        // El backend cuenta los ingredientes reales de la despensa en
+        // `data.total` (solo los que tienen quantity > 0); el modelo lo
+        // expone como `totalItems`, asi que se mapea aqui en lugar de
+        // guardar el payload tal cual.
+        this.statsSignal.set({ ...response.data, totalItems: response.data.total });
+      }),
       catchError(() => of(null))
     ).subscribe();
   }

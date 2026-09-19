@@ -15,21 +15,29 @@ import {
   updateProfileSchema
 } from '../schemas/auth.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
+import { seedDefaultsForUser } from '../utils/seed-data.js';
+import {
+  readTasteResponse,
+  saveTasteProfile,
+  updateTasteSchema
+} from '../utils/taste-profile.js';
 
 const authRoutes = new Hono<AppEnv>();
 
 // Helper to generate tokens
 function generateTokens(userId: string, email: string) {
+  // Cast explícito: los tipos de jsonwebtoken exigen `number | StringValue`,
+  // mientras que la configuración tipa las duraciones como `string`.
   const token = jwt.sign(
     { sub: userId, email },
     config.auth.jwtSecret,
-    { expiresIn: config.auth.jwtExpiresIn }
+    { expiresIn: config.auth.jwtExpiresIn as jwt.SignOptions['expiresIn'] }
   );
 
   const refreshToken = jwt.sign(
     { sub: userId, type: 'refresh' },
     config.auth.jwtSecret,
-    { expiresIn: config.auth.refreshTokenExpiresIn }
+    { expiresIn: config.auth.refreshTokenExpiresIn as jwt.SignOptions['expiresIn'] }
   );
 
   return { token, refreshToken };
@@ -83,6 +91,16 @@ authRoutes.post('/register', async (c) => {
     input.cookingLevel || 'beginner',
     JSON.stringify({ theme: 'system', language: 'es', detailLevel: 'intermediate' })
   );
+
+  // Catálogo de partida (utensilios que marcar + ingredientes de sugerencia).
+  // Al principio solo existía dentro de un hogar, así que una cuenta sin hogar
+  // se encontraba las dos pestañas de la despensa vacías. Si el alta del seed
+  // falla, el usuario se registra igual: no es condición de registro.
+  try {
+    seedDefaultsForUser(db, userId);
+  } catch (err) {
+    console.warn('[DB] No se pudo sembrar el catálogo personal:', err);
+  }
 
   // Get created user
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
@@ -260,6 +278,32 @@ authRoutes.get('/profile', authMiddleware, async (c) => {
     success: true,
     data: sanitizeUser(user)
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// Perfil de gustos / alergias / objetivo (onboarding + Ajustes)
+// ═══════════════════════════════════════════════════════════════════
+
+// GET /api/auth/taste — lo que contestó en el onboarding
+authRoutes.get('/taste', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+  const db = getDatabase();
+
+  return c.json({ success: true, data: readTasteResponse(db, userId) });
+});
+
+// PATCH /api/auth/taste — guarda el perfil (y el estado del onboarding)
+// Se fusiona sobre `users.preferences`, así que Ajustes y onboarding no se
+// pisan entre sí ni borran tema/idioma al guardar.
+authRoutes.patch('/taste', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json();
+  const input = updateTasteSchema.parse(body);
+
+  const db = getDatabase();
+  const saved = saveTasteProfile(db, userId, input);
+
+  return c.json({ success: true, data: saved });
 });
 
 // PATCH /api/auth/profile (protected)

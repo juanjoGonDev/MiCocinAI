@@ -11,9 +11,15 @@ server/dist/
 # Database
 server/data/
 !server/data/.gitkeep
+# La BD de HogarIA (data/hogaria.sqlite) y la heredada que adopta
+/data/
+!/data/.gitkeep
 
 # Logs
 logs/
+# ...pero la pantalla de logs de la app SI se versiona (la regla "logs/" la
+# excluia entera por llamarse igual).
+!frontend/src/app/features/logs/
 *.log
 npm-debug.log*
 
@@ -58,3 +64,7 @@ pnpm-debug.log*
 
 # Docker
 docker-compose.override.yml
+
+# Playwright (informes y artefactos locales de la suite e2e)
+playwright-report/
+blob-report/

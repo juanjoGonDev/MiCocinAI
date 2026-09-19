@@ -7,7 +7,7 @@ const configSchema = z.object({
     host: z.string().default('0.0.0.0')
   }),
   database: z.object({
-    path: z.string().default('./data/recipeapp.db'),
+    path: z.string().default('./data/hogaria.sqlite'),
     walMode: z.boolean().default(true),
     cacheSize: z.number().default(-2000) // 2MB in KB (negative)
   }),
@@ -47,7 +47,7 @@ function loadConfig(): Config {
       host: process.env.HOST || '0.0.0.0'
     },
     database: {
-      path: process.env.DATABASE_PATH || './data/recipeapp.db',
+      path: process.env.DATABASE_PATH || './data/hogaria.sqlite',
       walMode: process.env.DB_WAL_MODE !== 'false',
       cacheSize: parseInt(process.env.DB_CACHE_SIZE || '-2000', 10)
     },

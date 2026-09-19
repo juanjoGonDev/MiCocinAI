@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, tap, catchError, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Household, InvitePreview } from '../../shared/models/household.model';
+import { STORAGE_KEYS } from './storage.service';
 
 @Injectable({
   providedIn: 'root'
@@ -145,7 +146,7 @@ export class HouseholdService {
   private currentUserId(): string | null {
     try {
       // Read from localStorage without importing AuthService to avoid circular imports.
-      const user = localStorage.getItem('current_user');
+      const user = localStorage.getItem(STORAGE_KEYS.currentUser);
       return user ? JSON.parse(user).id : null;
     } catch { return null; }
   }

@@ -2,17 +2,33 @@ import { Context, Next } from 'hono';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/app.config.js';
 
-export async function authMiddleware(c: Context, next: Next): Promise<Response | void> {
+/**
+ * `EventSource` no puede mandar cabeceras, y el listado en vivo (HOGARIA-SPEC §8f)
+ * se hace con el. Se acepta `?access_token=` SOLO en `GET /api/shopping/stream/*`:
+ * ni en POST (un token en la URL de una escritura acabaria en el historial de
+ * navegacion de una red del hogar), ni en el resto de rutas. Y el logger de `index.ts`
+ * lo enmascara, porque un token en la URL es un token en los logs si nadie lo evita.
+ */
+function bearerToken(c: Context): string | null {
   const authHeader = c.req.header('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) return authHeader.substring(7);
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  if (c.req.method === 'GET' && c.req.path.startsWith('/api/shopping/stream/')) {
+    const query = c.req.query('access_token');
+    if (query && query.trim()) return query.trim();
+  }
+  return null;
+}
+
+export async function authMiddleware(c: Context, next: Next): Promise<Response | void> {
+  const token = bearerToken(c);
+
+  if (!token) {
     return c.json({
       success: false,
       message: 'Authorization header required'
     }, 401);
   }
-
-  const token = authHeader.substring(7);
 
   try {
     const payload = jwt.verify(token, config.auth.jwtSecret) as any;
@@ -35,10 +51,9 @@ export async function authMiddleware(c: Context, next: Next): Promise<Response |
 }
 
 export async function optionalAuthMiddleware(c: Context, next: Next) {
-  const authHeader = c.req.header('Authorization');
+  const token = bearerToken(c);
 
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
+  if (token) {
 
     try {
       const payload = jwt.verify(token, config.auth.jwtSecret) as any;

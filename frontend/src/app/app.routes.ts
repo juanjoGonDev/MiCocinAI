@@ -15,6 +15,15 @@ export const routes: Routes = [
   // Public invite page (works before & after login)
   { path: 'invite/:code', component: InviteComponent },
 
+  // Configuración inicial (a pantalla completa, justo después de registrarse).
+  // Fuera del layout principal a propósito: no es una vista a la que volver a
+  // diario, es el questionario de bienvenida. Luego se edita en /preferences.
+  {
+    path: 'onboarding',
+    canActivate: [authGuard],
+    loadChildren: () => import('./features/onboarding/onboarding.routes').then(m => m.ONBOARDING_ROUTES)
+  },
+
   // Protected routes with main layout
   {
     path: '',
@@ -39,6 +48,10 @@ export const routes: Routes = [
         loadChildren: () => import('./features/recipes/recipes.routes').then(m => m.RECIPES_ROUTES)
       },
       {
+        path: 'shopping',
+        loadChildren: () => import('./features/shopping/shopping.routes').then(m => m.SHOPPING_ROUTES)
+      },
+      {
         path: 'calendar',
         loadChildren: () => import('./features/calendar/calendar.routes').then(m => m.CALENDAR_ROUTES)
       },
@@ -53,6 +66,10 @@ export const routes: Routes = [
       {
         path: 'logs',
         loadChildren: () => import('./features/logs/logs.routes').then(m => m.LOGS_ROUTES)
+      },
+      {
+        path: 'preferences',
+        loadChildren: () => import('./features/preferences/preferences.routes').then(m => m.PREFERENCES_ROUTES)
       },
       {
         path: 'settings',

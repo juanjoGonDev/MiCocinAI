@@ -1,5 +1,5 @@
 # =============================================================================
-# Makefile - MiCocinAI Development Commands
+# Makefile - HogarIA Development Commands
 # =============================================================================
 # Usage: make <command>
 
@@ -7,7 +7,7 @@
 
 # Default target
 help: ## Show this help message
-	@echo "MiCocinAI - Development Commands"
+	@echo "HogarIA - Development Commands"
 	@echo "================================"
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -71,6 +71,9 @@ test-coverage: ## Run tests with coverage
 # =============================================================================
 # Linting & Formatting
 # =============================================================================
+
+ci:yaml: ## Revisa los YAML de Actions: comillas, tabs y contextos que GitHub no tiene
+	@node scripts/check-workflows.mjs
 
 lint: ## Run all linters
 	pnpm run lint
@@ -137,10 +140,10 @@ docker-prod-logs: ## View production logs
 # =============================================================================
 
 db-migrate: ## Run database migrations
-	pnpm --filter server run migrate
+	pnpm --filter @hogaria/server run migrate
 
 db-studio: ## Open Drizzle Studio
-	pnpm --filter server exec drizzle-kit studio
+	pnpm --filter @hogaria/server exec drizzle-kit studio
 
 # =============================================================================
 # Cleanup
@@ -187,14 +190,14 @@ restart: clean install build ## Full restart (clean, install, build)
 env-setup: ## Setup environment files
 	@if [ ! -f .env ]; then \
 		echo "Creating .env file..."; \
-		echo "# MiCocinAI Environment" > .env; \
+		echo "# HogarIA Environment" > .env; \
 		echo "# Copy this file and update values" >> .env; \
 		echo "" >> .env; \
 		echo "# JWT Secret (change in production!)" >> .env; \
 		echo "JWT_SECRET=change-this-to-a-secure-secret-key" >> .env; \
 		echo "" >> .env; \
 		echo "# Database" >> .env; \
-		echo "DATABASE_PATH=./data/recipeapp.db" >> .env; \
+		echo "DATABASE_PATH=./data/hogaria.sqlite" >> .env; \
 		echo "" >> .env; \
 		echo "# CORS" >> .env; \
 		echo "CORS_ORIGIN=http://localhost:4200" >> .env; \
@@ -209,7 +212,7 @@ env-setup: ## Setup environment files
 # =============================================================================
 
 version: ## Show current version
-	@echo "MiCocinAI v$(shell node -p "require('./package.json').version")"
+	@echo "HogarIA v$(shell node -p "require('./package.json').version")"
 
 version-patch: ## Bump patch version
 	npm version patch --no-git-tag-version

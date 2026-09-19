@@ -100,3 +100,124 @@ export const DAY_ORDER: DayOfWeek[] = [
 ];
 
 export const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Modelo de vistas del calendario (mes / semana / día)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/** Vista activa del calendario. `week` es la por defecto y la que no sale en la URL. */
+export type CalendarView = 'day' | 'week' | 'month';
+
+export const CALENDAR_VIEWS = ['day', 'week', 'month'] as const;
+export const CALENDAR_VIEW_LABELS: Record<CalendarView, string> = {
+  day: 'Día',
+  week: 'Semana',
+  month: 'Mes'
+};
+
+/** Query params que definen lo que se está viendo. */
+export const CALENDAR_VIEW_PARAM = 'view';
+export const CALENDAR_DATE_PARAM = 'date';
+
+/**
+ * Comida ya normalizada desde la fila cruda de la API (`snake_case`).
+ * `title` resuelve la receta o lo que el usuario escribió a mano: las vistas
+ * no deberían volver a preguntar por ninguna de las dos columnas.
+ */
+export interface CalendarMeal {
+  id: string;
+  date: string;
+  mealType: MealType;
+  title: string;
+  recipeId?: string | null;
+  customMeal?: string | null;
+  time?: string | null;
+  servings: number;
+  notes?: string | null;
+  completed: boolean;
+  /** Calorías de la receta (por ración), si el plato viene del recetario. */
+  calories?: number | null;
+}
+
+/** Un día tal y como lo consume una vista: fecha + sus comidas + resumen. */
+export interface CalendarDay {
+  date: Date;
+  iso: string;
+  /** false en las celdas de mes que pertenecen al mes anterior/siguiente. */
+  inCurrentMonth: boolean;
+  isToday: boolean;
+  meals: CalendarMeal[];
+  calories: number;
+  /** true si alguna comida del día trae datos nutricionales. */
+  hasNutrition: boolean;
+}
+
+/** Cómo se pinta cada tipo de comida: color por tipo, como en Google Calendar. */
+export interface MealTypeMeta {
+  label: string;
+  /** Texto del hueco vacío, para no escribir «Agregar» cuatro veces. */
+  addAction: string;
+}
+
+export const MEAL_TYPE_META: Record<MealType, MealTypeMeta> = {
+  breakfast: { label: 'Desayuno', addAction: 'Desayuno' },
+  lunch: { label: 'Almuerzo', addAction: 'Almuerzo' },
+  dinner: { label: 'Cena', addAction: 'Cena' },
+  snack: { label: 'Merienda', addAction: 'Merienda' }
+};
+
+/**
+ * Día ya preparado para pintar: las comidas repartidas por franja, para que las
+ * vistas no llamen a funciones en el template (una por celda y por detección de
+ * cambios) y el `trackBy` sea estable.
+ */
+export interface CalendarDayView extends CalendarDay {
+  slots: Record<MealType, CalendarMeal[]>;
+  planned: number;
+  done: number;
+  /** Sueltas de la casa del mismo dia (HOGARIA-SPEC §8f), ya filtradas por capas. */
+  events: HouseholdEvent[];
+}
+
+/**
+ * Las otras cosas de la casa (HOGARIA-SPEC §8f). Las comidas NO son un tipo de aqui
+ * abajo: vienen del plan semanal y se proyectan, para que no haya dos verdades sobre lo
+ * que se cena. Por eso `meal` no tiene META propia: es una CAPA visible, no un evento.
+ */
+export const HOUSEHOLD_EVENT_KINDS = ['shopping', 'home', 'appointment', 'personal', 'other'] as const;
+export type HouseholdEventKind = (typeof HOUSEHOLD_EVENT_KINDS)[number];
+
+export interface HouseholdEvent {
+  id: string;
+  title: string;
+  kind: HouseholdEventKind;
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  allDay: boolean;
+  color: string | null;
+  notes: string | null;
+  location: string | null;
+  source: string;
+  userId: string;
+  authorName: string | null;
+  editable: boolean;
+}
+
+export const HOUSEHOLD_EVENT_META: Record<
+  HouseholdEventKind,
+  { label: string; color: string; icon: 'shopping_cart' | 'home' | 'event_available' | 'person' | 'flag' }
+> = {
+  shopping: { label: 'Compra', color: '#4FA3D1', icon: 'shopping_cart' },
+  home: { label: 'Casa', color: '#4CAF50', icon: 'home' },
+  appointment: { label: 'Citas', color: '#E05A5A', icon: 'event_available' },
+  personal: { label: 'Personal', color: '#8E5AC8', icon: 'person' },
+  other: { label: 'Otros', color: '#8A8F98', icon: 'flag' }
+};
+
+export const HOUSEHOLD_EVENT_COLORS = ['#4FA3D1', '#4CAF50', '#E05A5A', '#8E5AC8', '#C99A2E', '#2FA79B'];
+
+export function eventTimeLabel(event: HouseholdEvent): string {
+  if (event.allDay || !event.startTime) return '';
+  return event.endTime ? `${event.startTime}–${event.endTime}` : event.startTime;
+}

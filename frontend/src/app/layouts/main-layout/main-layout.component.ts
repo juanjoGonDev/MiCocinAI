@@ -1,10 +1,13 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { ModulesService } from '../../core/services/modules.service';
+import { TasteProfileService } from '../../core/services/taste-profile.service';
 import { ToastComponent } from '../../shared/components/ui/toast/toast.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
 
 interface NavItem {
   path: string;
@@ -15,7 +18,7 @@ interface NavItem {
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, TranslatePipe],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, TranslatePipe, ConfirmDialogComponent],
   template: `
     <div class="layout">
       <!-- Mobile Header -->
@@ -23,7 +26,7 @@ interface NavItem {
         <button type="button" class="header__menu" (click)="toggleSidebar()">
           ☰
         </button>
-        <span class="header__title">🍳 {{ 'app.name' | t }}</span>
+        <span class="header__title">🏠 {{ 'app.name' | t }}</span>
         <button type="button" class="header__profile" (click)="navigateToProfile()">
           <app-avatar 
             [name]="authService.userName()" 
@@ -35,13 +38,13 @@ interface NavItem {
       <!-- Sidebar (Desktop) -->
       <aside class="sidebar" [class.sidebar--open]="isSidebarOpen()">
         <div class="sidebar__header">
-          <span class="sidebar__logo">🍳 {{ 'app.name' | t }}</span>
+          <span class="sidebar__logo">🏠 {{ 'app.name' | t }}</span>
           <button type="button" class="sidebar__close" (click)="closeSidebar()">✕</button>
         </div>
         
         <nav class="sidebar__nav">
           <a
-            *ngFor="let item of navItems"
+            *ngFor="let item of visibleNavItems()"
             [routerLink]="item.path"
             routerLinkActive="sidebar__item--active"
             class="sidebar__item"
@@ -79,7 +82,7 @@ interface NavItem {
       <!-- Mobile Bottom Navigation -->
       <nav class="bottom-nav">
         <a
-          *ngFor="let item of mobileNavItems"
+          *ngFor="let item of visibleMobileNavItems()"
           [routerLink]="item.path"
           routerLinkActive="bottom-nav__item--active"
           class="bottom-nav__item"
@@ -91,6 +94,7 @@ interface NavItem {
     </div>
 
     <app-toast></app-toast>
+    <app-confirm-dialog></app-confirm-dialog>
   `,
   styles: [`
     .layout {
@@ -330,16 +334,28 @@ interface NavItem {
     }
   `]
 })
-export class MainLayoutComponent {
+export class MainLayoutComponent implements OnInit {
   authService = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly tasteService = inject(TasteProfileService);
+  private readonly modules = inject(ModulesService);
   isSidebarOpen = signal(false);
+
+  ngOnInit(): void {
+    // Gustos/alergias/objetivo se leen en varias vistas (planificador semanal,
+    // Preferencias): se cargan al montar el layout para que estén listos al abrir
+    // cualquiera de ellas, sin esperas ni dobles peticiones.
+    this.tasteService.ensureLoaded();
+  }
 
   navItems: NavItem[] = [
     { path: '/dashboard', labelKey: 'nav.dashboard', icon: '🏠' },
     { path: '/pantry', labelKey: 'nav.pantry', icon: '📦' },
     { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
     { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
+    { path: '/shopping', labelKey: 'nav.shopping', icon: '🛒' },
     { path: '/household', labelKey: 'nav.household', icon: '👨‍👩‍👧‍👦' },
+    { path: '/preferences', labelKey: 'nav.preferences', icon: '👤' },
     { path: '/ai-config', labelKey: 'nav.ai-config', icon: '🤖' },
     { path: '/logs', labelKey: 'nav.logs', icon: '📋' }
   ];
@@ -349,8 +365,18 @@ export class MainLayoutComponent {
     { path: '/pantry', labelKey: 'nav.pantry', icon: '📦' },
     { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
     { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
+    { path: '/shopping', labelKey: 'nav.shopping', icon: '🛒' },
     { path: '/settings', labelKey: 'nav.settings', icon: '⚙️' }
   ];
+
+  /**
+   * La navegacion deriva de los modulos: al activar o apagar uno en
+   * Configuracion se repinta sola, sin recargar la pagina.
+   */
+  readonly visibleNavItems = computed(() => this.navItems.filter((item) => this.modules.isPathVisible(item.path)));
+  readonly visibleMobileNavItems = computed(() =>
+    this.mobileNavItems.filter((item) => this.modules.isPathVisible(item.path))
+  );
 
   toggleSidebar(): void {
     this.isSidebarOpen.update(v => !v);
@@ -361,7 +387,9 @@ export class MainLayoutComponent {
   }
 
   navigateToProfile(): void {
-    // Navigate to profile
+    // El avatar habla de la persona, no de la app: lleva a Preferencias
+    // (gustos, alergias y objetivo). Configuracion queda para tema e idioma.
+    this.router.navigate(['/preferences']);
   }
 
   logout(): void {

@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { Observable, tap, catchError, of } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { STORAGE_KEYS } from './storage.service';
 import {
   User,
   AuthCredentials,
@@ -17,9 +18,9 @@ import {
 })
 export class AuthService {
   private readonly apiUrl = `${environment.apiUrl}/auth`;
-  private readonly TOKEN_KEY = 'auth_token';
-  private readonly REFRESH_TOKEN_KEY = 'refresh_token';
-  private readonly USER_KEY = 'current_user';
+  private readonly TOKEN_KEY = STORAGE_KEYS.authToken;
+  private readonly REFRESH_TOKEN_KEY = STORAGE_KEYS.refreshToken;
+  private readonly USER_KEY = STORAGE_KEYS.currentUser;
 
   // Signals for reactive state
   private currentUserSignal = signal<User | null>(null);

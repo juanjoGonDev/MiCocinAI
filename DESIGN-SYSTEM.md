@@ -1,4 +1,4 @@
-# 🎨 Sistema de Diseño - RecipeApp
+# 🎨 Sistema de Diseño - HogarIA
 
 ## Filosofía de Diseño
 

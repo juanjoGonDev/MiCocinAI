@@ -3,7 +3,7 @@
   "version": 1,
   "newProjectRoot": "projects",
   "projects": {
-    "recipeapp": {
+    "hogaria": {
       "projectType": "application",
       "schematics": {
         "@schematics/angular:component": {
@@ -67,9 +67,19 @@
                   "with": "src/environments/environment.prod.ts"
                 }
               ],
+              "serviceWorker": "ngsw-config.json",
               "outputHashing": "all",
               "sourceMap": false,
-              "optimization": true,
+              "optimization": {
+                "scripts": true,
+                "fonts": {
+                  "inline": false
+                },
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": true
+                }
+              },
               "namedChunks": false,
               "extractLicenses": true,
               "aot": true
@@ -86,10 +96,10 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": {
-              "buildTarget": "recipeapp:build:production"
+              "buildTarget": "hogaria:build:production"
             },
             "development": {
-              "buildTarget": "recipeapp:build:development"
+              "buildTarget": "hogaria:build:development"
             }
           },
           "defaultConfiguration": "development"
