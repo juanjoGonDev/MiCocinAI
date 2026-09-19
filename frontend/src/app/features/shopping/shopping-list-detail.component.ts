@@ -196,7 +196,6 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                       <button
                         type="button"
                         class="detail__more"
-                        data-gesture-stop
                         aria-label="Acciones de la linea"
                         (click)="openEdit(item); $event.stopPropagation()"
                       >
@@ -532,6 +531,11 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
       }
       .detail__row {
         position: relative;
+      }
+      /* El gesto ya ejecuto su accion: 250 ms de silencio para que el click
+         residual del arrastre no abra la hoja de una linea recien borrada. */
+      .detail__row.swipe-row--busy {
+        pointer-events: none;
         border-radius: var(--radius-lg);
         overflow: hidden;
         background: var(--bg-tertiary);
@@ -1042,6 +1046,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
   // ------------------------------------------------------- hoja de edicion
 
   openEdit(item: ShoppingListItem): void {
+    // Un ⋯ que llega tarde (el arrastre que lo precedio ya borro la linea) no abre
+    // una hoja sobre una fila que ya no existe.
+    if (!this.items().some(candidate => candidate.id === item.id)) return;
     this.editing.set(item);
     this.draft = {
       quantity: item.quantity,

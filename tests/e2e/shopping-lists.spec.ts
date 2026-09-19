@@ -169,12 +169,12 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await expect(row).toHaveCount(1);
 
     // Medio dedo: el riel se descubre, la acción NO se ejecuta (25 % < 60 %)
-    await dragRow(page, row, 0.9, 0.65);
+    await dragRow(page, row, 0.86, 0.62);
     await expect(row.locator('[data-test="rail-remove"]')).toBeVisible();
     await expect(row).toHaveCount(1);
 
     // Cerrando de nuevo con otro arrastre a la izquierda, sin cruzar el umbral
-    await dragRow(page, row, 0.5, 0.9);
+    await dragRow(page, row, 0.5, 0.88);
     await expect(row).toHaveCount(1);
   });
 
@@ -186,7 +186,9 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     const row = row_(page, 'Pollo');
     await expect(row).toHaveCount(1);
 
-    await dragRow(page, row, 0.95, 0.2);
+    // El arrastre nace en 0.86 y no en el borde derecho: ahi vive el ⋯, y empezar
+    // sobre un boton es otra intencion (abrir la hoja), no este gesto.
+    await dragRow(page, row, 0.86, 0.08);
     await expect(page.locator('[data-test="item-row"]'), `${echo()} · llamadas: ${api()}`).toHaveCount(0);
 
     const bar = page.locator('.toast-container--bottom .toast');
@@ -211,7 +213,7 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     const row = row_(page, 'Yogur');
     await expect(row).toHaveCount(1);
 
-    await dragRow(page, row, 0.15, 0.6);
+    await dragRow(page, row, 0.2, 0.62);
 
     await expect(row.locator('.detail__qty')).toHaveText('2×');
   });

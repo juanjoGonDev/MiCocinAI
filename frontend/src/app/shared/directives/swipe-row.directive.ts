@@ -137,6 +137,10 @@ export class SwipeRowDirective implements OnDestroy {
       if (this.state.armed) {
         this.apply(0, false);
         this.swipeRemove.emit();
+        // El navegador dispara `click` sobre lo que habia debajo del dedo al soltar
+        // (la papelera del riel, el ⋯, la propia fila). La accion ya se ejecuto: los
+        // 250 ms siguientes la fila esta sorda al raton.
+        this.busyUntil();
         return;
       }
       if (isQuickPlus(deltaX, width)) {
@@ -152,6 +156,19 @@ export class SwipeRowDirective implements OnDestroy {
     this.apply(0, false);
   }
 
+  private busyTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Breve sordera a los clics residuales de un gesto que ya ejecuto algo. */
+  private busyUntil(): void {
+    const element = this.element.nativeElement;
+    element.classList.add('swipe-row--busy');
+    if (this.busyTimer) clearTimeout(this.busyTimer);
+    this.busyTimer = setTimeout(() => {
+      element.classList.remove('swipe-row--busy');
+      this.busyTimer = null;
+    }, 250);
+  }
+
   /** Llamado desde el componente para cerrar el riel con un toque fuera. */
   closeRail(): void {
     this.railOpen = false;
@@ -159,6 +176,7 @@ export class SwipeRowDirective implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    if (this.busyTimer) clearTimeout(this.busyTimer);
     this.element.nativeElement.style.removeProperty('--swipe-x');
   }
 
