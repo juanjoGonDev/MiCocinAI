@@ -73,7 +73,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Run server tests (coverage gate: 70 % per file, spec §11c)
+      - name: 'Run server tests (coverage gate 70 % per file, spec 11c)'
         run: pnpm --filter @hogaria/server run test:coverage
 
       # El informe subido es el HTML de istanbul: se descarga y se abre en el
