@@ -26,6 +26,7 @@
     "lint:client:fix": "pnpm --filter @hogaria/web run lint:fix",
     "lint:server:fix": "pnpm --filter @hogaria/server run lint:fix",
     "format": "prettier --write \"**/*.{ts,json,md}\"",
+    "check:ui": "node scripts/check-ui.mjs",
     "knip": "knip",
     "knip:fix": "knip --fix",
     "clean": "rm -rf node_modules frontend/node_modules server/node_modules frontend/dist server/dist",

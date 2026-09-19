@@ -75,6 +75,9 @@ test-coverage: ## Run tests with coverage
 ci:yaml: ## Revisa los YAML de Actions: comillas, tabs y contextos que GitHub no tiene
 	@node scripts/check-workflows.mjs
 
+ci:ui: ## Guarda de UI: sin emoji, sin select nativo, sin data-test inventados
+	@node scripts/check-ui.mjs
+
 lint: ## Run all linters
 	pnpm run lint
 

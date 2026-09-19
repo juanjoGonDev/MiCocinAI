@@ -117,6 +117,9 @@ jobs:
         if: steps.nm.outputs.cache-hit != 'true'
         run: pnpm install --frozen-lockfile
 
+      - name: UI rules (no emoji, no native select, real data-test)
+        run: node scripts/check-ui.mjs
+
       - name: Server type check (tsc --noEmit)
         run: pnpm --filter @hogaria/server exec tsc --noEmit
 
