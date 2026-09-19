@@ -7,6 +7,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import {
   CreateItemInput,
+  DiscountScope,
   LIST_CATEGORIES,
   ShoppingListItem,
   formatMoney,
@@ -69,7 +70,7 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
   template: `
     <div class="detail">
       <header class="detail__head">
-        <a class="detail__back" routerLink="/shopping" aria-label="Volver a las listas">
+        <a class="detail__back" routerLink="/shopping" aria-label="Volver a las listas" data-test="back">
           <app-icon name="chevron_left" [size]="22" [label]="null" />
         </a>
         <div class="detail__heading">
@@ -493,6 +494,7 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
         <div class="detail__sheet-backdrop" (click)="discountOpen.set(false)">
           <section class="detail__sheet" data-test="discount-sheet" (click)="$event.stopPropagation()" aria-label="Descuento de la lista">
             <h2 class="detail__sheet-title">Descuento de la lista</h2>
+<app-icon-button class="detail__sheet-x" icon="close" label="Cerrar sin cambiar el descuento" size="sm" variant="ghost" data-test="discount-close" (onClick)="discountOpen.set(false)" />
             <p class="detail__hint">
               El descuento se aplica al TOTAL de la cesta. Si solo cubre las primeras unidades
               («2 primeros cafés a 1 €»), se reparte entre esas lineas en proporcion a lo que
@@ -565,6 +567,22 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                   </button>
                 }
               </div>
+              @if (discountDraft().scope === 'product' || discountDraft().scope === 'category') {
+                <div class="detail__target">
+                  <app-picker
+                    [label]="discountDraft().scope === 'category' ? 'Sección afectada' : 'Producto afectado'"
+                    [options]="discountTargetOptions()"
+                    [value]="discountDraft().target"
+                    [placeholder]="discountDraft().scope === 'category' ? 'Escribe la sección' : 'Escribe el producto'"
+                    searchPlaceholder="Buscar en la lista"
+                    emptyText="No está en la lista: se aplicara igualmente si el nombre coincide"
+                    leadingIcon="local_offer"
+                    [allowCustom]="true"
+                    (valueChange)="patchDiscount({ target: $event })"
+                    data-test="discount-target"
+                  />
+                </div>
+              }
               @if (discountDraft().scope === 'firstUnits') {
                 <div class="detail__first-units">
                   <span>Primeras unidades</span>
@@ -601,6 +619,7 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
         <div class="detail__sheet-backdrop" (click)="closePhoto()">
           <section class="detail__sheet detail__sheet--wide" data-test="photo-sheet" (click)="$event.stopPropagation()" aria-label="Anadir desde una foto">
             <h2 class="detail__sheet-title">Desde una foto</h2>
+<app-icon-button class="detail__sheet-x" icon="close" label="Cerrar la foto" size="sm" variant="ghost" data-test="photo-close" (onClick)="closePhoto()" />
             <p class="detail__hint">
               La foto la mira el modelo de IA configurado; aqui se repasa antes de escribir nada.
               Puedes cancelar cuantas veces quieras: la lista no cambia hasta que digas «Anadir».
@@ -717,6 +736,7 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
         <div class="detail__sheet-backdrop" (click)="auditOpen.set(false)">
           <section class="detail__sheet" data-test="audit-sheet" (click)="$event.stopPropagation()" aria-label="Quien ha tocado que">
             <h2 class="detail__sheet-title">Quien ha tocado que</h2>
+<app-icon-button class="detail__sheet-x" icon="close" label="Cerrar el historial" size="sm" variant="ghost" data-test="audit-close" (onClick)="auditOpen.set(false)" />
             @if (events().length === 0) {
               <p class="detail__hint">Todavia no hay nada anotado en esta lista.</p>
             } @else {
@@ -827,6 +847,11 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
       }
       .detail__sheet--wide {
         max-width: 640px;
+      }
+      /* El picker del descuento se abre dentro de la hoja, que tiene su propio scroll;
+         sin margen el panel tapa la linea de acciones. */
+      .detail__target {
+        margin-top: var(--space-2);
       }
       .detail__first-units {
         display: flex;
@@ -1430,7 +1455,16 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
         display: flex;
         align-items: flex-end;
       }
+      /* La X arriba a la derecha, no un boton «Cancelar» mas abajo: en una hoja movida
+         lo que se busca con el pulgar es el angulo, y el texto largo de un Cancelar
+         estrencha el titulo. El backdrop tambien cierra; esto es lo que se ve. */
+      .detail__sheet-x {
+        position: absolute;
+        top: var(--space-2);
+        right: var(--space-2);
+      }
       .detail__sheet {
+        position: relative;
         width: 100%;
         max-width: 560px;
         margin: 0 auto;
@@ -1982,17 +2016,22 @@ export class ShoppingListDetailComponent implements OnDestroy {
     { value: 'amount', label: 'Importe', icon: 'payments' },
     { value: 'percent', label: 'Porcentaje', icon: 'percent' }
   ];
-  readonly discountScopes: { value: 'all' | 'firstUnits'; label: string; hint: string }[] = [
-    { value: 'all', label: 'A toda la cesta', hint: 'Se aplica al total' },
-    { value: 'firstUnits', label: 'A las primeras unidades', hint: 'Tipo «2 primeros cafés a 1 €»' }
+  // Los cuatro alcances que se ven en el pasillo de verdad: la oferta de la cesta, la de
+  // «los dos primeros», la del producto concretado en la etiqueta y la del pasillo entero.
+  readonly discountScopes: { value: DiscountScope; label: string; hint: string }[] = [
+    { value: 'all', label: 'Toda la cesta', hint: 'Se aplica al total' },
+    { value: 'firstUnits', label: 'Primeras unidades', hint: 'Tipo «2 primeros cafés a 1 €»' },
+    { value: 'product', label: 'Un producto', hint: '«2 € en el jamón»: solo esa línea baja' },
+    { value: 'category', label: 'Una sección', hint: 'Todo el pasillo, p. ej. lácteos' }
   ];
   readonly percentOptions: PickerOption[] = [5, 10, 15, 20, 25, 50].map((value) => ({ value: String(value), label: value + ' %' }));
-  readonly discountDraft = signal<{ kind: 'amount' | 'percent'; scope: 'all' | 'firstUnits'; firstUnits: number | null; label: string | null }>({
-    kind: 'amount',
-    scope: 'all',
-    firstUnits: null,
-    label: null
-  });
+  readonly discountDraft = signal<{
+    kind: 'amount' | 'percent';
+    scope: DiscountScope;
+    firstUnits: number | null;
+    target: string | null;
+    label: string | null;
+  }>({ kind: 'amount', scope: 'all', firstUnits: null, target: null, label: null });
   readonly amountDraft = signal('');
   readonly percentDraft = signal<string | null>(null);
 
@@ -2005,6 +2044,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
       kind: discount?.kind ?? 'amount',
       scope: discount?.scope ?? 'all',
       firstUnits: discount?.first_units ?? null,
+      // Con 'all' el target puede venir de cuando era «en el jamón»: se limpia aqui para
+      // que la hoja no muestre una diana que ya no esta aplicando nada.
+      target: discount?.scope === 'product' || discount?.scope === 'category' ? discount?.target ?? null : null,
       label: discount?.label ?? null
     });
     this.amountDraft.set(discount?.value_minor ? (discount.value_minor / 100).toFixed(2).replace('.', ',') : '');
@@ -2015,9 +2057,47 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.discountDraft.update((draft) => ({ ...draft, kind }));
   }
 
-  patchDiscount(changes: Partial<{ scope: 'all' | 'firstUnits'; firstUnits: number | null; label: string | null }>): void {
+  patchDiscount(changes: Partial<{ scope: DiscountScope; firstUnits: number | null; target: string | null; label: string | null }>): void {
     this.discountDraft.update((draft) => ({ ...draft, ...changes }));
+    // Cambiar de alcance deja de tener sentido la diana anterior (una seccion no es un
+    // producto), y arrastrarla daria un descuento guardado con una nota que no se corresponde.
+    if (changes.scope && changes.scope !== 'product' && changes.scope !== 'category') {
+      this.discountDraft.update((draft) => ({ ...draft, target: null }));
+    }
   }
+
+  /**
+   * Dianas posibles del descuento, sacadas de LO QUE HAY EN LA LISTA: prometer un
+   * descuento «en el pan de molde» cuando no está es el 0 € que nadie entiende. Con
+   * `allowCustom` igualmente se puede escribir una marca que aun no has añadido.
+   */
+  readonly discountTargetOptions = computed<PickerOption[]>(() => {
+    const scope = this.discountDraft().scope;
+    const lines = this.items();
+    if (scope === 'category') {
+      const seen = new Set<string>();
+      return lines
+        .map((item) => String(item.category ?? '').trim())
+        .filter((name) => name && !seen.has(name.toLocaleLowerCase('es')) && seen.add(name.toLocaleLowerCase('es')))
+        .map((name) => ({
+          value: name,
+          label: name,
+          hint: String(lines.filter((item) => item.category === name).length) + (name ? ' art.' : '')
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'es'));
+    }
+    return lines
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+      .map((item) => ({
+        // La clave del producto, si la tiene: es lo que compara el server, y dos listas
+        // distintas con «Jamón» y «jamon » solo se entienden comparando la clave.
+        value: item.product_key || item.name,
+        label: item.name,
+        color: this.colorOf(item.category),
+        hint: String(item.quantity ?? 1) + (item.unit ? ' ' + item.unit : '')
+      }));
+  });
 
   setPercent(value: string | null): void {
     this.percentDraft.set(value);
@@ -2053,6 +2133,16 @@ export class ShoppingListDetailComponent implements OnDestroy {
       input.valueMinor = minor;
     }
     if (draft.scope === 'firstUnits') input.firstUnits = draft.firstUnits ?? 1;
+    if (draft.scope === 'product' || draft.scope === 'category') {
+      const target = String(draft.target ?? '').trim();
+      if (!target) {
+        // Sin diana el server responderia 400, y un 400 despues de pulsar «Guardar» sabe a
+        // castigo: se lo decimos antes, con el campo marcado.
+        this.toast.warning('Dime donde', 'Elige el producto o la sección a la que se aplica.');
+        return;
+      }
+      input.target = target;
+    }
     if (draft.label) input.label = draft.label;
 
     const saved = await this.shopping.setDiscount(list.id, input);

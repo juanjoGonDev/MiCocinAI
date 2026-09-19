@@ -243,7 +243,7 @@ export interface ListEvent {
 }
 
 export type DiscountKind = 'amount' | 'percent';
-export type DiscountScope = 'all' | 'firstUnits';
+export type DiscountScope = 'all' | 'firstUnits' | 'product' | 'category';
 
 export interface ListDiscount {
   id: string;
@@ -253,6 +253,8 @@ export interface ListDiscount {
   percent_bps: number | null;
   scope: DiscountScope;
   first_units: number | null;
+  /** Que producto o seccion entra con `scope: 'product' | 'category'`. */
+  target?: string | null;
   label: string | null;
   /** La frase que pinta la fila de totales: el server la escribe, la app no la reconstruye. */
   description?: string | null;
@@ -264,6 +266,8 @@ export interface DiscountInput {
   percentBps?: number | null;
   scope?: DiscountScope;
   firstUnits?: number | null;
+  /** Obligatorio cuando `scope` promete un producto o una seccion: sin diana no hay descuento. */
+  target?: string | null;
   label?: string | null;
 }
 
