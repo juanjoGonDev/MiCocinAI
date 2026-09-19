@@ -17,3 +17,4 @@ export * from './picker/picker.component';
 export * from './icon/icon-paths';
 export * from './icon/icon.component';
 export * from './icon-button/icon-button.component';
+export * from './checkbox/checkbox.component';

@@ -1,5 +1,6 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model';
 
 /**
@@ -20,7 +21,7 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
 @Component({
   selector: 'app-calendar-event',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, IconComponent],
   host: {
     class: 'cal-event',
     '[attr.data-meal]': 'meal?.mealType',
@@ -48,7 +49,7 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
         [title]="meal?.completed ? 'Quitar de hechas' : 'Marcar como hecha'"
         (click)="$event.stopPropagation(); toggle.emit()"
       >
-        ✓
+        <app-icon [name]="meal?.completed ? 'check_circle' : 'check'" [size]="16" [label]="null" />
       </button>
       <button
         type="button"
@@ -57,7 +58,7 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
         title="Quitar comida"
         (click)="$event.stopPropagation(); remove.emit()"
       >
-        ×
+        <app-icon name="close" [size]="16" [label]="null" />
       </button>
     </span>
   `,

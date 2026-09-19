@@ -8,7 +8,7 @@ import {
 } from '../../shared/models/calendar.model';
 
 /**
- * Las sueltas de la casa dentro de una celda (HOGARIA-SPEC §8f).
+ * Los eventos de la casa dentro de una celda (HOGARIA-SPEC §8f).
  *
  * Componente aparte en vez de marcar el HTML en cada vista por el mismo motivo que
  * `app-calendar-event`: en mes son una linea de 11 px, en semana un bloque corto y en el

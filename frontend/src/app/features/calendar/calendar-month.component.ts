@@ -301,7 +301,7 @@ export class CalendarMonthComponent {
   @Output() addMeal = new EventEmitter<{ date: string; mealType: MealType }>();
   @Output() openMeal = new EventEmitter<CalendarMeal>();
   @Output() openDay = new EventEmitter<string>();
-  /** Tocar una suelta de la celda = editarla (o verla, si es de otra persona). */
+  /** Tocar un evento de la celda = editarlo (o verlo, si es de otra persona). */
   @Output() editEvent = new EventEmitter<HouseholdEvent>();
 
   private cachedSource: CalendarDayView[] | null = null;

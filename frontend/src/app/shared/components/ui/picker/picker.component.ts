@@ -25,7 +25,7 @@ export type PickerOption = { value: string; label: string; hint?: string; color?
   standalone: true,
   imports: [CommonModule, FormsModule, IconComponent],
   template: `
-    <div class="picker" #root>
+    <div class="picker" #root [class.picker--up]="flipped()">
       <button
         type="button"
         class="picker__trigger"
@@ -174,6 +174,13 @@ export type PickerOption = { value: string; label: string; hint?: string; color?
         padding: var(--space-1);
         animation: picker-in 0.14s ease-out;
       }
+      /* Y si no cabe debajo del dedo, se abre HACIA ARRIBA: dentro de una hoja con
+         overflow-y auto, un panel que asoma por abajo queda recortado y la opcion mas
+         baja de la lista es literalmente inalcanzable. */
+      .picker--up .picker__panel {
+        top: auto;
+        bottom: calc(100% + 4px);
+      }
       /* No hay scale/opacity de medio segundo: un menu que se abre tiene que estar
          debajo del dedo antes de que se levante. */
       @keyframes picker-in {
@@ -284,6 +291,8 @@ export class PickerComponent implements OnInit, OnDestroy {
   @ViewChild('search') searchRef?: ElementRef<HTMLInputElement>;
 
   readonly open = signal(false);
+  /** Hacia donde abre el panel; ver `flipForRoom`. */
+  readonly flipped = signal(false);
   readonly active = signal(0);
   query = '';
   readonly listId = computed(() => `${this.id}-list`);
@@ -330,9 +339,26 @@ export class PickerComponent implements OnInit, OnDestroy {
       const index = this.options.findIndex((option) => option.value === this.value);
       this.active.set(index >= 0 ? index : 0);
       this.query = '';
-      setTimeout(() => this.searchRef?.nativeElement.focus());
+      this.flipForRoom();
+      setTimeout(() => {
+        this.searchRef?.nativeElement.focus();
+        this.flipForRoom();
+      });
     }
     this.openChange.emit(this.open());
+  }
+
+  /**
+   * Cabe el panel debajo? Se mide en dos momentos (al abrir y cuando el foco ya esta
+   * puesto, que es cuando la hoja ha podido hacer scroll) porque la respuesta cambia si
+   * el disparador esta pegado al borde inferior de una hoja con `overflow-y: auto`.
+   */
+  private flipForRoom(): void {
+    const root = this.rootRef?.nativeElement;
+    if (!root) return;
+    const box = root.getBoundingClientRect();
+    const roomBelow = window.innerHeight - box.bottom;
+    this.flipped.set(roomBelow < 200 && box.top > roomBelow);
   }
 
   close(): void {

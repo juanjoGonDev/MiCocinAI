@@ -238,10 +238,10 @@ export class CalendarService {
     );
   }
 
-  // ----------------------------------------------------- sueltas de la casa (8f)
+  // ----------------------------------------------- eventos de la casa (8f)
   //
   // Viven en el MISMO calendario que las comidas pero en otra lectura: el plan se
-  // regenera y las sueltas no. Filtrar por capas es local (`visibleKinds`) para que
+  // regenera y los eventos de casa no. Filtrar por capas es local (`visibleKinds`) para que
   // encender/apagar «Citas» no sea una peticion cada vez.
   readonly householdEvents = signal<HouseholdEvent[]>([]);
   readonly visibleKinds = signal<HouseholdEventKind[]>([
@@ -254,8 +254,20 @@ export class CalendarService {
   readonly eventsLoading = signal(false);
   readonly eventsError = signal<string | null>(null);
   readonly creatingEvent = signal(false);
+  private eventsWindow: string | null = null;
 
-  loadHouseholdEvents(from: string, to: string): void {
+  /**
+   * Una peticion por ventana, no una por re-computacion.
+   *
+   * El `force` existe para `reload()` (que es literalmente "vuelve a pedir lo mismo"). Sin el
+   * guardado por ventana, cualquier senal que se escriba al cargar y se lea al pintar vuelve a
+   * disparar el efecto de carga, y eso es un bucle de peticiones que termina en un 429 del
+   * limitador —no en un calendario al dia.
+   */
+  loadHouseholdEvents(from: string, to: string, force = false): void {
+    const window = `${from}|${to}`;
+    if (!force && this.eventsWindow === window) return;
+    this.eventsWindow = window;
     this.eventsLoading.set(true);
     this.eventsError.set(null);
     const params = new HttpParams().set('from', from).set('to', to).set('limit', '500');
@@ -265,6 +277,9 @@ export class CalendarService {
         map(response => response.data ?? []),
         catchError(error => {
           this.eventsError.set(this.readError(error));
+          // Una ventana que fallo se olvida: si no, reintentar sin cambiar de rango
+          // nunca volveria a pedir nada.
+          this.eventsWindow = null;
           return of([] as HouseholdEvent[]);
         }),
         tap(() => this.eventsLoading.set(false))
@@ -275,7 +290,7 @@ export class CalendarService {
   /** Se recarga el rango actual: es lo que quiere el usuario despues de crear o borrar. */
   refreshHouseholdEvents(): void {
     const range = this.rangeSignal();
-    if (range) this.loadHouseholdEvents(range.start, range.end);
+    if (range) this.loadHouseholdEvents(range.start, range.end, true);
   }
 
   toggleKind(kind: HouseholdEventKind): void {
@@ -353,7 +368,7 @@ export class CalendarService {
 
   private readError(error: unknown): string {
     const status = (error as { status?: number })?.status;
-    if (status === 403) return 'Solo quien escribio la suelta puede cambiarla.';
+    if (status === 403) return 'Solo quien escribio el evento puede cambiarlo.';
     if (status === 400) return 'Revisa la fecha y las horas.';
     return 'No se ha podido hablar con el calendario.';
   }

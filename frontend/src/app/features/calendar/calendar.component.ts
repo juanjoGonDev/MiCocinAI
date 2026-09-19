@@ -41,6 +41,8 @@ import { CalendarMonthComponent } from './calendar-month.component';
 import { CalendarWeekComponent } from './calendar-week.component';
 import { CalendarDayComponent } from './calendar-day.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
+import { CheckboxComponent } from '../../shared/components/ui/checkbox/checkbox.component';
 import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
 import { HouseholdService } from '../../core/services/household.service';
 import {
@@ -97,6 +99,8 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
   standalone: true,
   imports: [
     IconComponent,
+    PickerComponent,
+    CheckboxComponent,
     CalendarHouseholdEventsComponent,
     
     CommonModule,
@@ -178,7 +182,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             </button>
             <button type="button" class="cal-pill cal-pill--add" data-test="event-add" (click)="openEventModal()">
               <app-icon name="add" [size]="16" [label]="null" />
-              <span>Suelta</span>
+              <span>Evento</span>
             </button>
           </div>
         </header>
@@ -305,7 +309,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             <h3 class="cal-agenda__title">Agenda · {{ anchorLabel() }}</h3>
             <button type="button" class="cal-pill" data-test="agenda-add" (click)="openEventFor(agendaDay())">
               <app-icon name="add" [size]="14" [label]="null" />
-              <span>Suelta</span>
+              <span>Apuntar</span>
             </button>
           </header>
           @if (agendaDay().events.length) {
@@ -319,7 +323,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       <!-- ══ Suelta de la casa ══ -->
       <app-modal
         [isOpen]="isEventModalOpen()"
-        [title]="eventDraft.id ? 'Editar suelta' : 'Nueva suelta'"
+        [title]="eventDraft.id ? 'Editar evento' : 'Apuntar un evento'"
         size="md"
         (onClose)="closeEventModal()"
       >
@@ -331,12 +335,15 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
           <div class="meal-form__row">
             <div class="meal-form__field meal-form__field--sm">
-              <label for="event-kind">Tipo</label>
-              <select id="event-kind" name="eventKind" class="cal-input" [(ngModel)]="eventDraft.kind">
-                @for (kind of eventKinds; track kind) {
-                  <option [value]="kind">{{ metaOf(kind).label }}</option>
-                }
-              </select>
+              <span class="cal-field-label">Tipo</span>
+              <app-picker
+                label="Tipo de evento"
+                [options]="kindOptions()"
+                [value]="eventDraft.kind"
+                [filterFrom]="99"
+                data-test="event-kind"
+                (valueChange)="setEventKind($event)"
+              />
             </div>
             <div class="meal-form__field meal-form__field--sm">
               <label for="event-date">Dia</label>
@@ -345,10 +352,12 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           </div>
 
           <div class="meal-form__row">
-            <label class="cal-check">
-              <input type="checkbox" name="eventAllDay" [(ngModel)]="eventDraft.allDay" />
-              Todo el dia
-            </label>
+            <app-checkbox
+              label="Todo el dia"
+              name="eventAllDay"
+              [checked]="eventDraft.allDay"
+              (checkedChange)="setAllDay($event)"
+            />
             @if (!eventDraft.allDay) {
               <div class="meal-form__field meal-form__field--sm">
                 <label for="event-start">Desde</label>
@@ -363,7 +372,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
           <div class="meal-form__field">
             <label>Color</label>
-            <div class="cal-swatches" role="group" aria-label="Color de la suelta">
+            <div class="cal-swatches" role="group" aria-label="Color del evento">
               @for (color of eventColors; track color) {
                 <button
                   type="button"
@@ -371,7 +380,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
                   [class.is-active]="(eventDraft.color ?? metaOf(eventDraft.kind).color) === color"
                   [style.background]="color"
                   [attr.aria-label]="'Color ' + color"
-                  (click)="eventDraft.color = color"
+                  (click)="eventDraft.color = color; eventDraft.colorTouched = true"
                 ></button>
               }
             </div>
@@ -388,10 +397,12 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           </div>
 
           @if (hasHousehold()) {
-            <label class="cal-check">
-              <input type="checkbox" name="eventShared" [(ngModel)]="eventDraft.sharedWithHousehold" />
-              Que lo vea mi casa
-            </label>
+            <app-checkbox
+              label="Que lo vea mi casa"
+              name="eventShared"
+              [checked]="eventDraft.sharedWithHousehold"
+              (checkedChange)="eventDraft.sharedWithHousehold = $event"
+            />
           }
           <p class="cal-note" *ngIf="calendarService.eventsError()" role="alert">{{ calendarService.eventsError() }}</p>
 
@@ -1420,9 +1431,28 @@ export class CalendarComponent implements OnInit {
   readonly singleDay = computed<CalendarDayView | null>(() => this.days()[0] ?? null);
 
   /** Rango que hay que pedir: cubre la rejilla entera, no solo el mes. */
+  /**
+   * El rango visible se calcula sobre el ancla y la vista, NUNCA sobre `days()`.
+   *
+   * No es una preferencia estetica: `days()` incluye los eventos de casa leidos, y un
+   * `effect` que pide el rango y escribe los eventos se re-ejecutaba a si mismo —cada
+   * respuesta dejaba el rango "nuevo" (otra tupla) y el navegador disparaba otra peticion
+   * hasta que el limitador del server cortaba la corriente (429, «demasiadas peticiones»).
+   * El rango depende de lo que se mira, no de lo que se ha cargado.
+   */
   readonly visibleRange = computed<[string, string]>(() => {
-    const days = this.days();
-    return [days[0]?.iso ?? toISODate(this.anchor()), days[days.length - 1]?.iso ?? toISODate(this.anchor())];
+    const anchor = this.anchor();
+    const view = this.view();
+    if (view === 'month') {
+      const grid = monthGrid(anchor);
+      return [toISODate(grid[0]), toISODate(grid[grid.length - 1])];
+    }
+    if (view === 'week') {
+      const days = weekDays(anchor);
+      return [toISODate(days[0]), toISODate(days[days.length - 1])];
+    }
+    const iso = toISODate(startOfDay(anchor));
+    return [iso, iso];
   });
 
   /**
@@ -1461,6 +1491,8 @@ export class CalendarComponent implements OnInit {
       const [start, end] = this.visibleRange();
       this.calendarService.loadRange(start, end);
       this.calendarService.loadHouseholdEvents(start, end);
+      // Fin del bucle: si el efecto volviera a encadenarse, el guardado por ventana en el
+      // servicio corta el gasto —una sola peticion por rango visible, siempre.
     });
   }
 
@@ -1562,7 +1594,8 @@ export class CalendarComponent implements OnInit {
   reload(): void {
     const [start, end] = this.visibleRange();
     this.calendarService.loadRange(start, end, true);
-    this.calendarService.loadHouseholdEvents(start, end);
+    // Forzada: `reload` es literalmente "vuelve a pedir lo mismo".
+    this.calendarService.loadHouseholdEvents(start, end, true);
   }
 
   /* ─────────────────────── Navegación de periodos ─────────────────────── */
@@ -1873,7 +1906,7 @@ export class CalendarComponent implements OnInit {
         }
       });
   }
-  // ----------------------------------------------------- sueltas de la casa (§8f)
+  // ----------------------------------------------- eventos de la casa (§8f)
 
   readonly showMeals = signal(true);
   readonly eventKinds = HOUSEHOLD_EVENT_KINDS;
@@ -1891,6 +1924,7 @@ export class CalendarComponent implements OnInit {
     location: string;
     notes: string;
     sharedWithHousehold: boolean;
+    colorTouched?: boolean;
   } = {
     title: '',
     kind: 'other',
@@ -1910,6 +1944,33 @@ export class CalendarComponent implements OnInit {
 
   isKindVisible(kind: HouseholdEventKind): boolean {
     return this.calendarService.visibleKinds().includes(kind);
+  }
+
+  /** Opciones del selector de tipo: reutiliza el META, que es de donde sale el color. */
+  readonly kindOptions = computed<PickerOption[]>(() =>
+    HOUSEHOLD_EVENT_KINDS.map((kind) => ({
+      value: kind,
+      label: HOUSEHOLD_EVENT_META[kind].label,
+      color: HOUSEHOLD_EVENT_META[kind].color
+    }))
+  );
+
+  setEventKind(value: string | null): void {
+    const kind = (HOUSEHOLD_EVENT_KINDS as readonly string[]).includes(String(value))
+      ? (value as HouseholdEventKind)
+      : 'other';
+    this.eventDraft.kind = kind;
+    // El color sigue al tipo salvo que la persona haya elegido uno a mano: asi «Citas»
+    // sale en rojo sin tener que explicarlo, y lo que se toco a mano se respeta.
+    if (!this.eventDraft.colorTouched) this.eventDraft.color = null;
+  }
+
+  setAllDay(value: boolean): void {
+    this.eventDraft.allDay = value;
+    if (value) {
+      this.eventDraft.startTime = '';
+      this.eventDraft.endTime = '';
+    }
   }
 
   toggleKind(kind: HouseholdEventKind): void {
@@ -1939,7 +2000,7 @@ export class CalendarComponent implements OnInit {
     const kinds = wanted.filter((entry): entry is HouseholdEventKind =>
       (HOUSEHOLD_EVENT_KINDS as readonly string[]).includes(entry)
     );
-    // `layers=meals` (sin sueltas) es legitimo: significa "solo la comida".
+    // `layers=meals` (sin eventos de casa) es legitimo: significa "solo la comida".
     this.calendarService.visibleKinds.set(kinds);
   }
 
@@ -2040,7 +2101,7 @@ export class CalendarComponent implements OnInit {
     const ok = await this.calendarService.removeHouseholdEvent(id);
     if (ok) {
       this.closeEventModal();
-      this.toastService.show({ type: 'info', title: 'Suelta borrada', duration: 4000, countdown: true });
+      this.toastService.show({ type: 'info', title: 'Evento borrado', duration: 4000, countdown: true });
     }
   }
 
