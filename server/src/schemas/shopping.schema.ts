@@ -40,9 +40,30 @@ export const booleanish = z
 const pageSize = z.coerce.number().int().min(1).max(200).catch(50);
 const offset = z.coerce.number().int().min(0).max(100000).catch(0);
 
+/**
+ * Filtro de la bandeja. Se filtra AQUI y no en la pantalla porque una casa con
+ * noventa listas archivadas no debe descargarse noventa listas para ocultar
+ * ochenta y nueve, y porque la URL es el estado: compartir «las de Mercadona de
+ * marzo con mas de 30 €» es compartir un enlace que funciona.
+ *
+ * Las fechas son `YYYY-MM-DD` y comparan contra `updated_at` (lo que se toco, no lo
+ * que se fundo). `minTotalMinor` esta en centimos, como todo el dinero del contrato:
+ * el euro con coma lo entiende el teclado, no la BD.
+ */
+const isoDate = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Se espera una fecha AAAA-MM-DD');
+
 export const listFilterSchema = z.object({
   status: z.enum(LIST_STATUSES).optional(),
   q: z.string().trim().max(120).optional(),
+  store: z.string().trim().max(80).optional(),
+  minTotalMinor: z.coerce.number().int().min(0).max(100_000_000).optional(),
+  from: isoDate.optional(),
+  to: isoDate.optional(),
+  sort: z.enum(['updated', 'name', 'total', 'lines']).default('updated'),
+  dir: z.enum(['asc', 'desc']).default('desc'),
   limit: pageSize,
   offset
 });

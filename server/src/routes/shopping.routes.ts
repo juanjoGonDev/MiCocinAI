@@ -159,37 +159,116 @@ shoppingRoutes.get('/lists', async (c) => {
   const scope = getScope(c.get('userId'));
   const filter = listFilterSchema.parse(c.req.query());
 
-  const conditions = [scope.clause];
+  // Con el JOIN del agregado, `user_id` a secas seria ambiguo: el ambito se escribe
+  // siempre prefijado a la tabla de las listas.
+  const scoped = scope.clause.replace(/user_id/g, 'l.user_id').replace(/household_id/g, 'l.household_id');
+  const conditions = [scoped];
   const params = [...scope.params];
 
   if (filter.status) {
-    conditions.push('status = ?');
+    conditions.push('l.status = ?');
     params.push(filter.status);
   } else {
     // Por defecto no se ven las terminadas: la pantalla es para lo que queda
     // por comprar, el historial vive en su propia pestana.
-    conditions.push(`status IN ('active', 'archived')`);
+    conditions.push(`l.status IN ('active', 'archived')`);
   }
+  // El texto busca en el nombre de la lista Y en lo que hay dentro: quien recuerda
+  // «puse lo del jamon en alguna parte» no recuerda en cual.
   if (filter.q) {
-    conditions.push('name LIKE ?');
-    params.push(`%${filter.q}%`);
+    conditions.push(`(l.name LIKE ? OR EXISTS (
+      SELECT 1 FROM shopping_list_items si
+      WHERE si.list_id = l.id AND si.deleted_at IS NULL AND si.name LIKE ?
+    ))`);
+    params.push(`%${filter.q}%`, `%${filter.q}%`);
+  }
+  if (filter.store) {
+    conditions.push('l.store = ?');
+    params.push(filter.store);
+  }
+  if (filter.from) {
+    conditions.push('date(l.updated_at) >= ?');
+    params.push(filter.from);
+  }
+  if (filter.to) {
+    conditions.push('date(l.updated_at) <= ?');
+    params.push(filter.to);
   }
 
-  const where = `WHERE ${conditions.join(' AND ')}`;
+  // Los totales salen de un unico agregado, no de una consulta por lista: la bandeja
+  // podia tener cien filas y cien consultas, y ordenar por importe lo necesitaba en
+  // el SQL de todas formas.
+  const totalsJoin = `
+    LEFT JOIN (
+      SELECT list_id,
+             COUNT(*) AS total,
+             COALESCE(SUM(checked), 0) AS checked,
+             COALESCE(SUM(CASE WHEN price_minor IS NOT NULL
+                               THEN CAST(ROUND(price_minor * quantity) AS INTEGER)
+                               ELSE 0 END), 0) AS priced
+      FROM shopping_list_items
+      WHERE deleted_at IS NULL
+      GROUP BY list_id
+    ) t ON t.list_id = l.id`;
+
+  const having: string[] = [];
+  const havingParams: unknown[] = [];
+  if (filter.minTotalMinor != null) {
+    having.push('COALESCE(t.priced, 0) >= ?');
+    havingParams.push(filter.minTotalMinor);
+  }
+
+  // `status = 'active' DESC` solo cuando nadie pidio un orden: con `?sort=name` quien
+  // abre la bandeja quiere un directorio, no que lo vivo se cuele por delante.
+  const direction = filter.dir === 'asc' ? 'ASC' : 'DESC';
+  const order =
+    filter.sort === 'name'
+      ? 'l.name COLLATE NOCASE ' + direction
+      : filter.sort === 'total'
+        ? 'COALESCE(t.priced, 0) ' + direction
+        : filter.sort === 'lines'
+          ? 'COALESCE(t.total, 0) ' + direction
+          : `l.status = 'active' DESC, l.updated_at ${direction}, l.created_at DESC`;
+
+  const where = `WHERE ${conditions.join(' AND ')}${having.length ? ' AND ' + having.join(' AND ') : ''}`;
+
   const lists = db
     .prepare(
-      `SELECT l.* FROM shopping_lists l ${where}
-       ORDER BY (l.status = 'active') DESC, l.updated_at DESC, l.created_at DESC, l.id DESC
+      `SELECT l.*,
+              COALESCE(t.total, 0) AS totalItems,
+              COALESCE(t.checked, 0) AS checkedItems,
+              COALESCE(t.priced, 0) AS pricedTotalMinor
+       FROM shopping_lists l ${totalsJoin} ${where}
+       ORDER BY ${order}, l.id DESC
        LIMIT ? OFFSET ?`
     )
-    .all(...params, filter.limit, filter.offset) as any[];
+    .all(...params, ...havingParams, filter.limit, filter.offset) as any[];
 
-  const data = lists.map((list) => ({ ...list, ...listTotals(db, list.id) }));
-  const { count } = db.prepare(`SELECT COUNT(*) AS count FROM shopping_lists l ${where}`).get(...params) as {
-    count: number;
-  };
+  const { count } = db
+    .prepare(`SELECT COUNT(*) AS count FROM shopping_lists l ${totalsJoin} ${where}`)
+    .get(...params, ...havingParams) as { count: number };
 
-  return c.json({ success: true, data, meta: { total: count, limit: filter.limit, offset: filter.offset } });
+  return c.json({
+    success: true,
+    // `meta.total` es el total FILTRADO: la paginacion necesita saber cuantas paginas
+    // hay, y decir «4» cuando se ven 4 de 30 es mentir en el contador.
+    data: lists,
+    meta: { total: count, limit: filter.limit, offset: filter.offset }
+  });
+});
+
+/** Los supermercados que hay en los datos, para el filtro. Sin catalogo aparte. */
+shoppingRoutes.get('/stores', async (c) => {
+  const db = getDatabase();
+  const scope = getScope(c.get('userId'));
+  const rows = db
+    .prepare(
+      `SELECT store, COUNT(*) AS lists FROM shopping_lists
+       WHERE ${scope.clause} AND store IS NOT NULL AND TRIM(store) <> ''
+       GROUP BY store ORDER BY lists DESC, store ASC`
+    )
+    .all(...scope.params) as { store: string; lists: number }[];
+  return c.json({ success: true, data: rows });
 });
 
 shoppingRoutes.post('/lists', async (c) => {

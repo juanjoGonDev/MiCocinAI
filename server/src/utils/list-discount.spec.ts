@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Offer } from './list-discount.js';
 import { basketMoney, describeDiscount, normalizeOffer, paidUnits, shareDiscount } from './list-discount.js';
 
 /**
@@ -58,7 +59,7 @@ describe('normalizeOffer', () => {
 });
 
 describe('basketMoney', () => {
-  const line = (itemId: string, quantity: number, unitMinor: number | null, offer = null) => ({
+  const line = (itemId: string, quantity: number, unitMinor: number | null, offer: Offer | null = null) => ({
     itemId,
     quantity,
     unitMinor,

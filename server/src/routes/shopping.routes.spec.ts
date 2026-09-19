@@ -544,3 +544,116 @@ describe('descuentos y ofertas (§8f)', () => {
     expect(prices[0]).toMatchObject({ price_minor: 600, quantity: 4 });
   });
 });
+
+describe('bandeja: filtros, orden y paginacion (§8f)', () => {
+  async function listWithItem(name: string, opts: { store?: string; price?: number; quantity?: number } = {}) {
+    const list = await data(
+      await call(alice, 'POST', '/lists', { name, store: opts.store ?? null })
+    );
+    if (opts.price != null) {
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: `Linea de ${name}`,
+        quantity: opts.quantity ?? 1,
+        priceMinor: opts.price
+      });
+    }
+    return list;
+  }
+
+  it('filtra por supermercado y por importe minimo', async () => {
+    await listWithItem('Mercadona cara', { store: 'Mercadona', price: 4000 });
+    await listWithItem('Mercadona barata', { store: 'Mercadona', price: 500 });
+    await listWithItem('Lidl', { store: 'Lidl', price: 9000 });
+
+    const lasDeMercadona = await data(await call(alice, 'GET', '/lists?store=Mercadona'));
+    expect(lasDeMercadona.map((l: any) => l.name).sort()).toEqual(['Mercadona barata', 'Mercadona cara']);
+
+    // El importe no pregunta por la tienda: Lidl (90 €) tambien pasa de 30 €.
+    const caras = await data(await call(alice, 'GET', '/lists?minTotalMinor=3000'));
+    expect(caras.map((l: any) => l.name).sort()).toEqual(['Lidl', 'Mercadona cara']);
+
+    const combo = await data(await call(alice, 'GET', '/lists?store=Mercadona&minTotalMinor=600'));
+    expect(combo.map((l: any) => l.name)).toEqual(['Mercadona cara']);
+  });
+
+  it('el texto encuentra la lista por lo que hay dentro, no solo por su nombre', async () => {
+    await listWithItem('Compra del martes', { price: 100 });
+    await listWithItem('Otra lista', { price: 100 });
+
+    const found = await data(await call(alice, 'GET', '/lists?q=Compra del'));
+    expect(found).toHaveLength(1);
+
+    const byItem = await data(await call(alice, 'GET', '/lists?q=Otra'));
+    expect(byItem.map((l: any) => l.name)).toEqual(['Otra lista']);
+
+    // «Linea de Compra del martes» es el nombre del item: buscar por el item tambien vale.
+    const byLine = await data(await call(alice, 'GET', '/lists?q=Linea'));
+    expect(byLine.length).toBe(2);
+  });
+
+  it('filtra por fechas sobre lo que se toco, no sobre lo que se fundo', async () => {
+    // Las fechas se fijan a mano: lo que se prueba es el filtro, y «hoy» cambia de
+    // sitio cada vez que corre el reloj de la CI.
+    const old = await listWithItem('Vieja');
+    const fresh = await listWithItem('Reciente');
+    db.prepare(`UPDATE shopping_lists SET updated_at = '2025-01-05 10:00:00' WHERE id = ?`).run(old.id);
+    db.prepare(`UPDATE shopping_lists SET updated_at = '2025-03-10 09:00:00' WHERE id = ?`).run(fresh.id);
+
+    const marzo = await data(await call(alice, 'GET', '/lists?from=2025-03-01&to=2025-03-31'));
+    expect(marzo.map((l: any) => l.name)).toEqual(['Reciente']);
+
+    const enero = await data(await call(alice, 'GET', '/lists?to=2025-01-31'));
+    expect(enero.map((l: any) => l.name)).toEqual(['Vieja']);
+
+    const desde = await data(await call(alice, 'GET', '/lists?from=2025-02-01'));
+    expect(desde.map((l: any) => l.name)).toEqual(['Reciente']);
+  });
+
+  it('una fecha con otra forma no entra (es un filtro, no un texto libre)', async () => {
+    const response = await call(alice, 'GET', '/lists?from=05/03/2025');
+    expect(response.status).toBe(400);
+  });
+
+  it('ordena por importe y por nombre, y la direccion se invierte', async () => {
+    await listWithItem('Barata', { price: 100 });
+    await listWithItem('Cara', { price: 9000 });
+    await listWithItem('Media', { price: 900 });
+
+    const byTotal = await data(await call(alice, 'GET', '/lists?sort=total&dir=desc'));
+    expect(byTotal.map((l: any) => l.name)).toEqual(['Cara', 'Media', 'Barata']);
+
+    const byTotalAsc = await data(await call(alice, 'GET', '/lists?sort=total&dir=asc'));
+    expect(byTotalAsc.map((l: any) => l.name)).toEqual(['Barata', 'Media', 'Cara']);
+
+    const byName = await data(await call(alice, 'GET', '/lists?sort=name&dir=asc'));
+    expect(byName.map((l: any) => l.name)).toEqual(['Barata', 'Cara', 'Media']);
+  });
+
+  it('la paginacion dice el total filtrado, no lo que cabe en la pagina', async () => {
+    for (const index of [1, 2, 3, 4]) await listWithItem(`Lista ${index}`);
+
+    const page = await json(await call(alice, 'GET', '/lists?limit=2&offset=0'));
+    expect(page.data).toHaveLength(2);
+    expect(page.meta).toEqual({ total: 4, limit: 2, offset: 0 });
+
+    const second = await json(await call(alice, 'GET', '/lists?limit=2&offset=2'));
+    expect(second.data).toHaveLength(2);
+    expect(second.meta.total).toBe(4);
+
+    const filtered = await json(await call(alice, 'GET', '/lists?q=Lista 3&limit=2'));
+    expect(filtered.meta.total).toBe(1);
+  });
+
+  it('GET /stores devuelve los supermercados con cuantas listas tienen', async () => {
+    await listWithItem('Una', { store: 'Ahorramas' });
+    await listWithItem('Dos', { store: 'Ahorramas' });
+    await listWithItem('Tres', { store: 'Lidl' });
+    await listWithItem('Sin tienda');
+
+    const stores = await data(await call(alice, 'GET', '/stores'));
+    expect(stores).toEqual([
+      { store: 'Ahorramas', lists: 2 },
+      { store: 'Lidl', lists: 1 }
+    ]);
+  });
+});
