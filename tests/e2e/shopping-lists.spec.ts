@@ -60,6 +60,25 @@ async function dragRow(page: Page, row: Locator, fromRatio: number, toRatio: num
  * «element not found» que no dice nada, y el trace vive en un artefacto que no
  * siempre se puede descargar. El texto del fallo, en cambio, siempre llega.
  */
+/**
+ * Registro de lo que la app llamo al backend. Un gesto que no deja barra de deshacer
+ * puede ser dos cosas muy distintas (no se borro nada, o se borro y el aviso no
+ * llega), y desde fuera se ven igual: «element not found». Las llamadas lo separan.
+ */
+function watchApi(page: Page): () => string {
+  const lines: string[] = [];
+  page.on('response', response => {
+    const url = response.url();
+    if (url.includes('/api/shopping')) {
+      lines.push(`${response.request().method()} ${response.status()} ${new URL(url).pathname.replace('/api/shopping', '')}`);
+    }
+  });
+  page.on('requestfailed', request => {
+    if (request.url().includes('/api/')) lines.push(`FALLO ${request.method()} ${new URL(request.url()).pathname}`);
+  });
+  return () => (lines.length > 0 ? lines.slice(-6).join(' | ') : 'ni una llamada a /api/shopping');
+}
+
 function watchPageErrors(page: Page): () => string {
   const errors: string[] = [];
   page.on('pageerror', event => errors.push(String(event.message).split('\n')[0]));
@@ -161,18 +180,22 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
 
   test('arrastrar del todo borra y la barra de deshacer lo devuelve', async ({ page }) => {
     const echo = watchPageErrors(page);
+    const api = watchApi(page);
     await openNewList(page, 'shop-swipe-undo');
     await addItem(page, 'Pollo');
     const row = row_(page, 'Pollo');
     await expect(row).toHaveCount(1);
 
     await dragRow(page, row, 0.95, 0.2);
-    await expect(page.locator('[data-test="item-row"]'), echo()).toHaveCount(0);
+    await expect(page.locator('[data-test="item-row"]'), `${echo()} · llamadas: ${api()}`).toHaveCount(0);
 
     const bar = page.locator('.toast-container--bottom .toast');
-    await expect(bar, `avisos: ${JSON.stringify(await page.locator('.toast').allInnerTexts())} · ${echo()}`).toContainText(
-      'Pollo quitada'
-    );
+    await expect(
+      bar,
+      `avisos: ${JSON.stringify(await page.locator('.toast').allInnerTexts())} · ${echo()} · llamadas: ${api()} · estado: ${(
+        await page.locator('.detail__status').innerText()
+      ).trim()}`
+    ).toContainText('Pollo quitada');
     await expect(bar.locator('.toast__countdown')).toHaveCount(1);
 
     await bar.locator('[data-test="toast-action"]').click();
