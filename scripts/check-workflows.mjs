@@ -42,6 +42,37 @@ for (const file of files) {
       );
     }
   });
+
+  const lines = text.split('\n');
+
+  // Contextos que GitHub NO tiene en el `env` de nivel workflow. Es el error que
+  // nadie ve: el fichero se valida, no se ejecuta, y el resultado es un run de 0s
+  // sin jobs y SIN NINGUN check en el PR. `runner.*` y `hashFiles()` solo existen
+  // dentro de un job (en los `with:` de los pasos, entre otros).
+  const envStart = lines.findIndex((line) => /^env:/.test(line));
+  if (envStart !== -1) {
+    for (let index = envStart + 1; index < lines.length; index++) {
+      const line = lines[index];
+      if (/^[A-Za-z_-]+:/.test(line)) break; // siguiente clave de nivel raiz
+      if (/\$\{\{[^}]*(runner\.|hashFiles\()/.test(line)) {
+        problems.push(
+          `${path}:${index + 1}: expresion con runner./hashFiles() en el env del workflow -> ${line.trim()}\n` +
+          `            mueve la expresion al paso que la usa (jobs.<id>.steps[*].with), que es donde existe`
+        );
+      }
+    }
+  }
+
+  // `strategy.*` tampoco esta disponible en el nombre de un job; y un nombre roto
+  // tumba el fichero entero, igual que un dos puntos sin comillas.
+  lines.forEach((line, index) => {
+    if (/^\s+name:.*\$\{\{[^}]*strategy\./.test(line)) {
+      problems.push(
+        `${path}:${index + 1}: strategy.* en el name de un job -> ${line.trim()}\n` +
+        `            usa matrix.<clave> (o hardcodea el total: el numero de shards se decide aqui)`
+      );
+    }
+  });
 }
 
 if (problems.length > 0) {

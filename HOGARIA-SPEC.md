@@ -562,6 +562,37 @@ layer already does this with zod) and every enum is validated before it reaches 
 - **CI**: Type Check · Server Tests · Production Build · E2E stay green on every push; a phase is not
   done while the suite is red.
 
+## 11d. CI: a five-minute budget, and no silence
+
+Two rules, and the second one only exists because of how the first was broken once.
+
+**Budget.** No job may run over five minutes, so the work that is not testing happens once:
+`install` runs `pnpm install --frozen-lockfile` plus `playwright install --with-deps chromium` and
+*publishes* `node_modules` and `~/.cache/ms-playwright` through `actions/cache/save@v4`. Every other
+job restores those keys and only falls back to installing when the restore missed (`if:
+steps.nm.outputs.cache-hit != 'true'`). The key carries `hashFiles('pnpm-lock.yaml')`,
+`github.run_id` and `github.run_attempt`, so a cache is never reused across commits and a retry never
+poisons the next run. The e2e suite runs as four shards (`--shard=i/4`) with two workers each — the
+count is hardcoded in the matrix, see below — and the dev-server cold compile is paid once in
+`globalSetup`, not per test. Per-test timeout is 90 s in CI: 120 s turned five real failures into
+sixty-nine waiting ones.
+
+**No silence.** A workflow file GitHub cannot *validate* does not fail red: it produces a 0-second run
+named after the file path and **no checks on the pull request at all**. That is how a broken CI passed
+for several pushes. `make ci:yaml` (`scripts/check-workflows.mjs`, dependency-free) is the guard, and
+it checks the three things that actually hurt:
+
+- an unquoted scalar containing `: ` (YAML opens a map there and the whole file dies);
+- tabs;
+- expressions whose context does not exist where they were written — `runner.*` and `hashFiles()` in
+  the workflow-level `env:` (they are only available inside a job, e.g. in a step's `with:`), and
+  `strategy.*` in a job `name:` (use `matrix.<key>`; the shard total lives in the matrix, so it is
+  written where it is decided).
+
+One more inherited trap, same family: with `"packageManager": "pnpm@10.15.0"` in `package.json`,
+passing `version:` to `pnpm/action-setup@v4` is an input error — the version is written once, in the
+manifest.
+
 ## 12. Checklist
 
 Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
@@ -794,6 +825,9 @@ state). The suite runs on `chromium` in CI for wall-time reasons; all three proj
 - [x] Coverage ramp: the three shopping server files moved into `COVERED` (they were already above the
       floor); the frontend got its pure logic under `frontend/src/app/shared/**` specs.
 - [ ] Not in this round: SSE invalidation, drag-to-reorder UI, price catalogue, receipts/OCR.
+- [x] CI: the workflow file was invalid since the cache/shard round (expressions in the workflow-level
+      `env`), which is why no check appeared on the PR. Fixed, and `make ci:yaml` now refuses that class
+      of mistake instead of trusting a red job to show up. See §11d.
 
 
 ## 13. Coming soon (deliberately not in this program)

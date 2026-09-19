@@ -72,7 +72,7 @@ test-coverage: ## Run tests with coverage
 # Linting & Formatting
 # =============================================================================
 
-ci:yaml: ## Revisa que los YAML de Actions parsean (un ':' sin comillas tumba el workflow)
+ci:yaml: ## Revisa los YAML de Actions: comillas, tabs y contextos que GitHub no tiene
 	@node scripts/check-workflows.mjs
 
 lint: ## Run all linters
