@@ -31,6 +31,56 @@ export const GOAL_LABELS: Record<string, string> = {
   custom: 'Personalizada'
 };
 
+/**
+ * Nivel en la cocina. `none` («apenas cocino») llega con HogarIA: la app ya no
+ * es solo de recetas, así que quien no cocina también tiene que poder decirlo.
+ * Se guarda en `users.cooking_level` (TEXT sin CHECK: no hace falta migración).
+ */
+export const COOKING_LEVELS = ['none', 'beginner', 'intermediate', 'expert'] as const;
+export const cookingLevelEnum = z.enum(COOKING_LEVELS);
+export type CookingLevel = (typeof COOKING_LEVELS)[number];
+
+/** Secciones de HogarIA que la persona quiere llevar desde la app. */
+export const HOME_MODULES = ['meals', 'pantry', 'shopping', 'receipts', 'home'] as const;
+export const homeModuleEnum = z.enum(HOME_MODULES);
+export type HomeModule = (typeof HOME_MODULES)[number];
+
+/** Qué se responde y qué se guarda: el nivel vive en la columna, los módulos en el JSON. */
+export interface HomeProfileView {
+  cookingLevel: CookingLevel;
+  modules: HomeModule[];
+}
+
+/**
+ * El nivel tiene que servir para algo: sin petición explícita de la UI, la IA
+ * explica más a quien empieza y va al grano con quien domina la cocina.
+ */
+export function detailLevelForCookingLevel(level: unknown): 'basic' | 'intermediate' | 'expert' {
+  if (level === 'expert') return 'expert';
+  if (level === 'intermediate') return 'intermediate';
+  return 'basic';
+}
+
+/** Defensivo al leer: JSON antiguos o escritos a mano no pueden colar valores desconocidos. */
+export function toHomeProfile(
+  stored: unknown,
+  cookingLevel: unknown
+): HomeProfileView {
+  const raw = readPreferences(stored);
+  const modules: HomeModule[] = [];
+  if (Array.isArray(raw.modules)) {
+    for (const item of raw.modules) {
+      const value = String(item ?? '') as HomeModule;
+      if (!HOME_MODULES.includes(value) || modules.includes(value)) continue;
+      modules.push(value);
+    }
+  }
+  const level = COOKING_LEVELS.includes(cookingLevel as CookingLevel)
+    ? (cookingLevel as CookingLevel)
+    : 'beginner';
+  return { cookingLevel: level, modules: modules.slice(0, HOME_MODULES.length) };
+}
+
 /** Listas cortas y sin vacíos: son cadenas que se envían tal cual a la IA. */
 const stringList = z.array(z.string().trim().min(1).max(60)).max(60).optional();
 
@@ -46,7 +96,11 @@ export const tasteProfileSchema = z.object({
 export const updateTasteSchema = z.object({
   taste: tasteProfileSchema.optional(),
   /** 'done' al terminar el onboarding, 'skipped' si se salta. */
-  onboardingStatus: z.enum(['done', 'skipped']).optional()
+  onboardingStatus: z.enum(['done', 'skipped']).optional(),
+  /** Nivel de cocina: se escribe en su columna, no en el JSON. */
+  cookingLevel: cookingLevelEnum.optional(),
+  /** Qué se quiere llevar desde la app (ver HOME_MODULES). */
+  modules: z.array(homeModuleEnum).max(HOME_MODULES.length).optional()
 });
 
 export type TasteProfileInput = z.infer<typeof tasteProfileSchema>;
@@ -69,6 +123,7 @@ export interface OnboardingState {
 export interface TasteResponse {
   taste: TasteProfile;
   onboarding: OnboardingState;
+  profile: HomeProfileView;
 }
 
 export const emptyTasteProfile = (): TasteProfile => ({
@@ -140,18 +195,32 @@ function toOnboardingState(stored: unknown): OnboardingState {
   return { status, completedAt: typeof raw.at === 'string' ? raw.at : null };
 }
 
-function selectTaste(db: Database.Database, userId: string): string | undefined {
-  const row = db.prepare('SELECT preferences FROM users WHERE id = ?').get(userId) as
-    { preferences: string | null } | undefined;
-  return row?.preferences ?? undefined;
+interface UserPreferenceRow {
+  preferences: string | null;
+  cooking_level: string | null;
+}
+
+function selectUserRow(db: Database.Database, userId: string): UserPreferenceRow | undefined {
+  return db
+    .prepare('SELECT preferences, cooking_level FROM users WHERE id = ?')
+    .get(userId) as UserPreferenceRow | undefined;
 }
 
 export function readTasteResponse(db: Database.Database, userId: string): TasteResponse {
-  const prefs = readPreferences(selectTaste(db, userId));
+  const row = selectUserRow(db, userId);
+  const prefs = readPreferences(row?.preferences);
   return {
     taste: toTasteProfile(prefs.taste),
-    onboarding: toOnboardingState(prefs.onboarding)
+    onboarding: toOnboardingState(prefs.onboarding),
+    profile: toHomeProfile(prefs.profile, row?.cooking_level)
   };
+}
+
+/** Lo que necesita la IA antes de escribir un prompt: el nivel del comensal. */
+export function readCookingLevel(db: Database.Database, userId: string): CookingLevel {
+  const row = selectUserRow(db, userId);
+  const level = row?.cooking_level;
+  return COOKING_LEVELS.includes(level as CookingLevel) ? (level as CookingLevel) : 'beginner';
 }
 
 /**
@@ -164,8 +233,7 @@ export function saveTasteProfile(
   userId: string,
   patch: UpdateTasteInput
 ): TasteResponse {
-  const row = db.prepare('SELECT preferences FROM users WHERE id = ?').get(userId) as
-    { preferences: string | null } | undefined;
+  const row = selectUserRow(db, userId);
   const prefs = readPreferences(row?.preferences);
 
   if (patch.taste) {
@@ -189,15 +257,23 @@ export function saveTasteProfile(
     };
   }
 
-  db.prepare('UPDATE users SET preferences = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-    JSON.stringify(prefs),
-    userId
-  );
+  if (patch.modules !== undefined) {
+    const profile = readPreferences(prefs.profile);
+    profile.modules = [...new Set(patch.modules)];
+    prefs.profile = profile;
+  }
 
-  return {
-    taste: toTasteProfile(prefs.taste),
-    onboarding: toOnboardingState(prefs.onboarding)
-  };
+  const sets = ['preferences = ?', 'updated_at = CURRENT_TIMESTAMP'];
+  const values: unknown[] = [JSON.stringify(prefs)];
+  if (patch.cookingLevel !== undefined) {
+    sets.unshift('cooking_level = ?');
+    values.unshift(patch.cookingLevel);
+  }
+  values.push(userId);
+
+  db.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+
+  return readTasteResponse(db, userId);
 }
 
 /** Solo el perfil, para los prompts de la IA. */

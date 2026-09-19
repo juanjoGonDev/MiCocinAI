@@ -12,7 +12,13 @@ import {
 } from '../schemas/ai.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 
-import { hasTasteProfile, readTasteProfile, tastePromptLines } from '../utils/taste-profile.js';
+import {
+  detailLevelForCookingLevel,
+  hasTasteProfile,
+  readCookingLevel,
+  readTasteProfile,
+  tastePromptLines
+} from '../utils/taste-profile.js';
 import { persistWeeklyPlan } from '../utils/weekly-plan.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
@@ -218,7 +224,15 @@ async function callAI(userId: string, messages: any[], db: any): Promise<any> {
 aiRoutes.post('/generate-recipe', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.json();
-  const input = generateRecipeSchema.parse(body);
+  // El nivel de cocina del comensal fija cuánto hay que explicar, salvo que la
+  // petición traiga un detalle explícito (lo que elija el formulario manda).
+  const input = generateRecipeSchema.parse({
+    ...body,
+    detailLevel:
+      typeof body?.detailLevel === 'string'
+        ? body.detailLevel
+        : detailLevelForCookingLevel(readCookingLevel(getDatabase(), userId))
+  });
 
   const db = getDatabase();
 
@@ -305,8 +319,16 @@ Responde SOLO con un JSON válido con esta estructura:
 
 // POST /api/ai/generate-multiple-recipes
 aiRoutes.post('/generate-multiple-recipes', async (c) => {
+  const userId = c.get('userId');
   const body = await c.req.json();
-  const input = generateRecipeSchema.parse({ ...body, generateMultiple: true });
+  const input = generateRecipeSchema.parse({
+    ...body,
+    generateMultiple: true,
+    detailLevel:
+      typeof body?.detailLevel === 'string'
+        ? body.detailLevel
+        : detailLevelForCookingLevel(readCookingLevel(getDatabase(), userId))
+  });
 
   const recipes = [];
 

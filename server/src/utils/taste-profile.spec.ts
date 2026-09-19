@@ -127,6 +127,81 @@ describe('saveTasteProfile', () => {
   });
 });
 
+describe('perfil del hogar (nivel y módulos)', () => {
+  function readCookingLevelColumn(userId: string): string | null {
+    const row = db.prepare('SELECT cooking_level FROM users WHERE id = ?').get(userId) as {
+      cooking_level: string | null;
+    };
+    return row.cooking_level;
+  }
+
+  it('quien no ha contestado nada está en beginner y sin módulos', () => {
+    const user = createUser();
+
+    expect(taste.readTasteResponse(db, user).profile).toEqual({
+      cookingLevel: 'beginner',
+      modules: []
+    });
+  });
+
+  it('el nivel va a su columna y los módulos al JSON, sin tocar el resto', () => {
+    const user = createUser(JSON.stringify({ theme: 'dark', language: 'en' }));
+
+    taste.saveTasteProfile(db, user, {
+      cookingLevel: 'none',
+      modules: ['meals', 'shopping', 'receipts']
+    });
+
+    expect(readCookingLevelColumn(user)).toBe('none');
+    const stored = readPreferencesColumn(user);
+    expect(stored.theme).toBe('dark');
+    expect(stored.language).toBe('en');
+    expect(stored.profile.modules).toEqual(['meals', 'shopping', 'receipts']);
+
+    const response = taste.readTasteResponse(db, user);
+    expect(response.profile.cookingLevel).toBe('none');
+    expect(response.profile.modules).toEqual(['meals', 'shopping', 'receipts']);
+  });
+
+  it('cambiar el nivel no borra los módulos y viceversa', () => {
+    const user = createUser();
+    taste.saveTasteProfile(db, user, { modules: ['pantry'] });
+    taste.saveTasteProfile(db, user, { cookingLevel: 'expert' });
+    taste.saveTasteProfile(db, user, { taste: { notes: 'Cocino los domingos' } });
+
+    const response = taste.readTasteResponse(db, user);
+    expect(response.profile.modules).toEqual(['pantry']);
+    expect(response.profile.cookingLevel).toBe('expert');
+    expect(response.taste.notes).toBe('Cocino los domingos');
+  });
+
+  it('al leer se descartan módulos inventados y duplicados', () => {
+    const user = createUser();
+
+    taste.saveTasteProfile(db, user, {
+      modules: ['meals', 'meals', 'invento-del-cliente'] as never
+    });
+
+    expect(taste.readTasteResponse(db, user).profile.modules).toEqual(['meals']);
+  });
+
+  it('un nivel ilegible en la base de datos no rompe la lectura', () => {
+    const user = createUser();
+    db.prepare('UPDATE users SET cooking_level = ? WHERE id = ?').run('chefa', user);
+
+    expect(taste.readTasteResponse(db, user).profile.cookingLevel).toBe('beginner');
+    expect(taste.readCookingLevel(db, user)).toBe('beginner');
+  });
+
+  it('el nivel decide cuánto explica la IA cuando la UI no pide nada', () => {
+    expect(taste.detailLevelForCookingLevel('none')).toBe('basic');
+    expect(taste.detailLevelForCookingLevel('beginner')).toBe('basic');
+    expect(taste.detailLevelForCookingLevel('intermediate')).toBe('intermediate');
+    expect(taste.detailLevelForCookingLevel('expert')).toBe('expert');
+    expect(taste.detailLevelForCookingLevel(undefined)).toBe('basic');
+  });
+});
+
 describe('tastePromptLines', () => {
   it('no escribe nada para un perfil vacío', () => {
     const empty = taste.emptyTasteProfile();
