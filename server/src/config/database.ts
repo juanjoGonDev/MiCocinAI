@@ -359,6 +359,25 @@ async function runMigrations(db: Database.Database): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_price_obs_key ON price_observations(product_key, observed_at);
     CREATE INDEX IF NOT EXISTS idx_price_obs_user ON price_observations(user_id);
     CREATE INDEX IF NOT EXISTS idx_price_obs_household ON price_observations(household_id);
+
+    -- Secciones de la lista. Son dato y no constante del frontend porque el que tiene
+    -- que clasificar una foto es el modelo, y el modelo no puede leer una pantalla
+    -- (HOGARIA-SPEC 8f). El color viaja con la fila: se elige, no lo pinta la hoja
+    -- de estilos, y «Frutas y verduras» en verde se reconoce en el pasillo sin leer.
+    CREATE TABLE IF NOT EXISTS shopping_categories (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      key TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#8A8F98',
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_shopping_categories_user ON shopping_categories(user_id, position);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_shopping_categories_key ON shopping_categories(user_id, key);
   `);
 
   // Auto-migrations: add columns that may be missing in older databases

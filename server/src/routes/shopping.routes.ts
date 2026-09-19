@@ -5,6 +5,7 @@ import { authMiddleware } from '../middleware/auth.middleware.js';
 import { productKeyOf } from '../utils/product-key.js';
 import {
   bulkItemsSchema,
+  createCategorySchema,
   createItemSchema,
   createListSchema,
   createPriceSchema,
@@ -15,6 +16,11 @@ import {
   updateItemSchema,
   updateListSchema
 } from '../schemas/shopping.schema.js';
+import {
+  ensureDefaultCategories,
+  listCategories,
+  upsertCategory
+} from '../utils/shopping-categories.js';
 import type { AppEnv } from '../types/hono-env.js';
 
 /**
@@ -82,6 +88,40 @@ function listTotals(db: ReturnType<typeof getDatabase>, listId: string) {
     .get(listId) as { total: number; checked: number; priced: number };
   return { totalItems: row.total, checkedItems: row.checked, pricedTotalMinor: row.priced };
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// Secciones del carrito (catalogo con color, ver §8f)
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * El catalogo del usuario, con las por defecto sembradas a la primera lectura. Se
+ * siembra aqui y no en una migracion global para no escribir filas de todos los
+ * usuarios al actualizar el server.
+ */
+shoppingRoutes.get('/categories', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const scope = getScope(userId);
+  ensureDefaultCategories(db, userId, scope.householdId);
+  return c.json({ success: true, data: listCategories(db, scope.clause, scope.params) });
+});
+
+/** Idempotente por clave: 201 si nace, 200 si ya estaba. La IA llama a esto mismo. */
+shoppingRoutes.post('/categories', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const scope = getScope(userId);
+  const body = createCategorySchema.parse(await c.req.json());
+
+  const { category, created } = upsertCategory(db, {
+    userId,
+    householdId: scope.householdId,
+    name: body.name,
+    color: body.color ?? null,
+    idFactory: () => nanoid()
+  });
+  return c.json({ success: true, data: category }, created ? 201 : 200);
+});
 
 // ═══════════════════════════════════════════════════════════════════
 // Listas

@@ -20,6 +20,7 @@ import {
   tastePromptLines
 } from '../utils/taste-profile.js';
 import { persistWeeklyPlan } from '../utils/weekly-plan.js';
+import { callAI, extractJsonObject } from '../utils/ai-client.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
 
@@ -185,41 +186,6 @@ aiRoutes.post('/test-connection', async (c) => {
 // AI Generation
 // ═══════════════════════════════════════════════════════════════════
 
-// Helper to call AI API
-async function callAI(userId: string, messages: any[], db: any): Promise<any> {
-  const config = db.prepare('SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1').get(userId) as any;
-
-  if (!config) {
-    throw new Error('No active AI configuration found');
-  }
-
-  const response = await fetch(`${config.base_url}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.api_key}`
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      temperature: config.temperature,
-      max_tokens: config.max_tokens,
-      top_p: config.top_p,
-      frequency_penalty: config.frequency_penalty,
-      presence_penalty: config.presence_penalty
-    }),
-    signal: AbortSignal.timeout(config.timeout)
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`AI API error: ${error}`);
-  }
-
-  const data = await response.json() as any;
-  return data.choices[0].message.content;
-}
-
 // POST /api/ai/generate-recipe
 aiRoutes.post('/generate-recipe', async (c) => {
   const userId = c.get('userId');
@@ -290,12 +256,7 @@ Responde SOLO con un JSON válido con esta estructura:
     ], db);
 
     // Parse JSON from response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Invalid AI response format');
-    }
-
-    const recipe = JSON.parse(jsonMatch[0]);
+    const recipe = extractJsonObject(response) as any;
 
     // Save recipe to database
     const id = nanoid();
@@ -378,12 +339,7 @@ Responde SOLO con un JSON válido: {"recommendations": [{"name": "", "reason": "
       { role: 'user', content: prompt }
     ], db);
 
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Invalid AI response format');
-    }
-
-    const result = JSON.parse(jsonMatch[0]);
+    const result = extractJsonObject(response) as any;
     return c.json({ success: true, data: result.recommendations });
   } catch (error: any) {
     return c.json({ success: false, message: error.message }, 500);
@@ -431,12 +387,7 @@ Responde SOLO con un JSON válido con esta estructura:
       { role: 'user', content: prompt }
     ], db);
 
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Invalid AI response format');
-    }
-
-    const plan = JSON.parse(jsonMatch[0]);
+    const plan = extractJsonObject(response) as any;
 
     // El plan se guarda en la semana pedida: si no, «Planificar con IA» se
     // quedaba en un toast de éxito sobre un calendario vacío.

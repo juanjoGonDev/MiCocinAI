@@ -55,7 +55,9 @@ let alice: User;
 let bob: User;
 
 beforeEach(async () => {
-  db.exec('DELETE FROM shopping_list_items; DELETE FROM price_observations; DELETE FROM shopping_lists;');
+  db.exec(
+    'DELETE FROM shopping_list_items; DELETE FROM price_observations; DELETE FROM shopping_lists; DELETE FROM shopping_categories;'
+  );
   alice = await makeUser(`alice-${Math.random().toString(36).slice(2)}@test.local`);
   bob = await makeUser(`bob-${Math.random().toString(36).slice(2)}@test.local`);
 });
@@ -395,5 +397,54 @@ describe('precios y estimacion', () => {
     expect([400, 500]).toContain(response.status);
     const empty = await call(alice, 'POST', `/prices`, { productName: '', priceMinor: 100 });
     expect([400, 500]).toContain(empty.status);
+  });
+});
+
+describe('categorias: el inventario de secciones (§8f)', () => {
+  it('la primera lectura siembra las por defecto y la segunda no duplica', async () => {
+    const first = await data(await call(alice, 'GET', '/categories'));
+    expect(first.map((c: any) => c.name)).toContain('Frutas y verduras');
+    expect(first.at(-1).name).toBe('Otros');
+    expect(first.every((c: any) => /^#[0-9a-f]{6}$/i.test(c.color))).toBe(true);
+
+    const again = await data(await call(alice, 'GET', '/categories'));
+    expect(again.length).toBe(first.length);
+  });
+
+  it('crear una seccion que ya existe por clave no la duplica', async () => {
+    await call(alice, 'GET', '/categories'); // sin catalogo todavia no hay nada que reutilizar
+    // El nombre esta escrito de otra forma a proposito: lo que compara es la clave.
+    const created = await call(alice, 'POST', '/categories', { name: '  frutas   Y VERDURAS ', color: '#112233' });
+    expect(created.status).toBe(200);
+    const rows = await data(await call(alice, 'GET', '/categories'));
+    expect(rows.filter((c: any) => c.key === 'frutas y verduras')).toHaveLength(1);
+    // El color del que ya estaba manda: reutilizar no es re-pintar la seccion de otra persona.
+    expect(rows.find((c: any) => c.key === 'frutas y verduras').color).not.toBe('#112233');
+  });
+
+  it('una seccion nueva nace con color valido y detras de las demas', async () => {
+    const response = await call(alice, 'POST', '/categories', { name: 'Comida para el bebé' });
+    expect(response.status).toBe(201);
+    const created = await data(response);
+    expect(created.key).toBe('comida para el bebe');
+    expect(/^#[0-9a-f]{6}$/i.test(created.color)).toBe(true);
+
+    const rows = await data(await call(alice, 'GET', '/categories'));
+    expect(rows.at(-1).id).toBe(created.id);
+  });
+
+  it('un color que no es hexadecimal no entra', async () => {
+    const response = await call(alice, 'POST', '/categories', { name: 'Verde que te quiero', color: 'rojo' });
+    expect(response.status).toBe(400);
+  });
+
+  it('el catalogo es de quien lo creo: otra cuenta no lo ve ni lo pisa', async () => {
+    await call(alice, 'POST', '/categories', { name: 'Seccion de Alice' });
+    const bobSees = await data(await call(bob, 'GET', '/categories'));
+    expect(bobSees.some((c: any) => c.name === 'Seccion de Alice')).toBe(false);
+
+    // Y bob, que no la tiene, si puede crear la suya con el mismo nombre.
+    const bobCreates = await call(bob, 'POST', '/categories', { name: 'Seccion de Alice' });
+    expect(bobCreates.status).toBe(201);
   });
 });

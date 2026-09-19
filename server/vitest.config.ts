@@ -22,6 +22,8 @@ const COVERED = [
   'src/routes/shopping.routes.ts',
   'src/schemas/shopping.schema.ts',
   'src/utils/product-key.ts',
+  'src/utils/shopping-categories.ts',
+  'src/utils/ai-client.ts',
   'src/config/database.ts',
   'src/utils/memory-monitor.ts',
   'src/utils/seed-data.ts',

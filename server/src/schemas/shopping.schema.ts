@@ -47,6 +47,21 @@ export const listFilterSchema = z.object({
   offset
 });
 
+/**
+ * Una seccion es un nombre y un color. El color se valida aqui y no «se ve luego»:
+ * un `color: 'rojo'` guardado tal cual pinta un texto en la hoja de estilos y la
+ * fila sale sin color, que es un bug silencioso. `#rrggbb` o nada.
+ */
+export const createCategorySchema = z.object({
+  name: trimmed(60),
+  color: z
+    .string()
+    .trim()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'El color ha de ser un hexadecimonal de 6 digitos, p.ej. #4CAF50')
+    .nullable()
+    .optional()
+});
+
 export const createListSchema = z.object({
   name: trimmed(80),
   store: z.string().trim().max(80).nullable().optional()
