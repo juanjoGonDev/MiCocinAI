@@ -56,7 +56,7 @@ let bob: User;
 
 beforeEach(async () => {
   db.exec(
-    'DELETE FROM shopping_list_discounts; DELETE FROM shopping_list_items; DELETE FROM price_observations; DELETE FROM shopping_lists; DELETE FROM shopping_categories;'
+    'DELETE FROM shopping_list_events; DELETE FROM shopping_list_discounts; DELETE FROM shopping_list_items; DELETE FROM price_observations; DELETE FROM shopping_lists; DELETE FROM shopping_categories;'
   );
   alice = await makeUser(`alice-${Math.random().toString(36).slice(2)}@test.local`);
   bob = await makeUser(`bob-${Math.random().toString(36).slice(2)}@test.local`);
@@ -655,5 +655,117 @@ describe('bandeja: filtros, orden y paginacion (§8f)', () => {
       { store: 'Ahorramas', lists: 2 },
       { store: 'Lidl', lists: 1 }
     ]);
+  });
+});
+
+describe('auditoria y en-vivo (§8f)', () => {
+  it('anadir, marcar y quitar dejan rastro de quien fue y en que orden', async () => {
+    const list = await createList(alice);
+    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pollo' }));
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: true });
+    await call(alice, 'DELETE', `/lists/${list.id}/items/${item.id}`);
+
+    const events = await data(await call(alice, 'GET', `/lists/${list.id}/events`));
+    // `list.create` tambien esta, al final: la auditoria cuenta todo, incluida la
+    // propia creacion de la lista (de donde si no va a salir la primera fila).
+    expect(events.map((e: any) => e.action)).toEqual(['item.remove', 'item.check', 'item.add', 'list.create']);
+    expect(events[0].user_name).toBe('Comprador');
+    expect(events[0].item_name).toBe('Pollo');
+    // La frase ya viene hecha: la pantalla no concatena textos, que es como se
+    // escriben las incoherencias.
+    expect(events[0].description).toContain('ha quitado «Pollo»');
+  });
+
+  it('el descuento y el vaciado del carro tambien se cuentan', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', quantity: 2, priceMinor: 100 });
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${(await data(await call(alice, 'GET', `/lists/${list.id}`))).items[0].id}`, {
+      checked: true
+    });
+    await call(alice, 'POST', `/lists/${list.id}/clear-checked`);
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'percent', percentBps: 500 });
+
+    const actions = (await data(await call(alice, 'GET', `/lists/${list.id}/events`))).map((e: any) => e.action);
+    expect(actions).toEqual(['list.discount', 'list.clear-checked', 'item.check', 'item.add', 'list.create']);
+  });
+
+  it('la auditoria de otra persona del hogar no se lee desde fuera', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Secreto' });
+    expect((await call(bob, 'GET', `/lists/${list.id}/events`)).status).toBe(404);
+  });
+
+  it('el limite recorta la auditoria', async () => {
+    const list = await createList(alice);
+    for (const name of ['A', 'B', 'C']) await call(alice, 'POST', `/lists/${list.id}/items`, { name });
+    const two = await data(await call(alice, 'GET', `/lists/${list.id}/events?limit=2`));
+    expect(two).toHaveLength(2);
+    expect(two.map((e: any) => e.item_name)).toEqual(['C', 'B']);
+  });
+
+  it('el stream avisa de lo que pase mientras la pantalla esta abierta', async () => {
+    const hub = await import('../utils/live-hub.js');
+    const list = await createList(alice);
+
+    const response = await app.request(`/api/shopping/stream/lists/${list.id}`, {
+      headers: { authorization: `Bearer ${alice.token}` }
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    const seen: string[] = [];
+    const collect = async (max: number, until: string) => {
+      for (let index = 0; index < max; index += 1) {
+        const chunk = await Promise.race([
+          reader.read(),
+          new Promise((resolve) => setTimeout(() => resolve(null), 1500))
+        ]);
+        if (!chunk || (chunk as any).done) return;
+        seen.push(decoder.decode((chunk as any).value));
+        if (seen.join('').includes(until)) return;
+      }
+    };
+
+    await collect(1, 'event: ready');
+    expect(seen.join('')).toContain('event: ready');
+
+    hub.publish([hub.channelForList(list.id)], {
+      type: 'items',
+      listId: list.id,
+      action: 'item.check',
+      by: alice.id,
+      byName: 'Comprador',
+      itemName: 'Pollo',
+      at: new Date().toISOString()
+    });
+    await collect(3, 'event: change');
+    const text = seen.join('');
+    expect(text).toContain('event: change');
+    expect(text).toContain('item.check');
+
+    await reader.cancel();
+  }, 15_000);
+
+  it('un cambio real en la lista le llega al stream de otra pantalla', async () => {
+    const list = await createList(alice);
+    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche' }));
+    const bobWatch = await app.request(`/api/shopping/stream/lists/${list.id}`, {
+      headers: { authorization: `Bearer ${bob.token}` }
+    });
+    // Bob no es del hogar de Alice: el stream no le abre la lista a nadie.
+    expect(bobWatch.status).toBe(404);
+
+    const aliceWatch = await app.request(`/api/shopping/stream/lists/${list.id}?access_token=${alice.token}`);
+    expect(aliceWatch.status).toBe(200);
+    await aliceWatch.body!.cancel();
+    void item;
+  }, 15_000);
+
+  it('el token por URL solo vale en el stream, y solo con GET', async () => {
+    expect((await app.request(`/api/shopping/lists?access_token=${alice.token}`)).status).toBe(401);
+    expect((await app.request(`/api/shopping/lists?access_token=no-pega`)).status).toBe(401);
+    expect((await app.request(`/api/shopping/lists`, { headers: { authorization: `Bearer ${alice.token}` } })).status).toBe(200);
   });
 });

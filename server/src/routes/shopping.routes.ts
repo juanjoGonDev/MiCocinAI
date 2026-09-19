@@ -22,6 +22,8 @@ import {
   listCategories,
   upsertCategory
 } from '../utils/shopping-categories.js';
+import { describeEvent, readEvents, recordEvent } from '../utils/shopping-events.js';
+import { channelForList, channelsForTray, publish, subscribe, type LiveEvent } from '../utils/live-hub.js';
 import {
   basketMoney,
   describeDiscount,
@@ -30,6 +32,7 @@ import {
   paidUnits,
   type Discount
 } from '../utils/list-discount.js';
+import { streamSSE } from 'hono/streaming';
 import type { AppEnv } from '../types/hono-env.js';
 
 /**
@@ -81,6 +84,56 @@ function readList(db: ReturnType<typeof getDatabase>, scope: Scope, listId: stri
   return db
     .prepare(`SELECT * FROM shopping_lists WHERE id = ? AND ${scope.clause}`)
     .get(listId, ...scope.params) as any;
+}
+
+/**
+ * Suceso + aviso en vivo, en la misma llamada. Van juntas SIEMPRE: un `recordEvent`
+ * sin `publish` es una auditoria que nadie ve, y un `publish` sin `recordEvent` es un
+ * refresco sin rastro de quien lo provoco.
+ */
+function announce(
+  db: ReturnType<typeof getDatabase>,
+  list: { id: string; household_id?: string | null } | null,
+  userId: string | null,
+  action: string,
+  itemName: string | null = null
+): void {
+  if (list) recordEvent(db, { listId: list.id, userId, action, itemName });
+  const byName = userId
+    ? ((db.prepare('SELECT name FROM users WHERE id = ?').get(userId) as any)?.name ?? null)
+    : null;
+  const event: LiveEvent = {
+    type: action.startsWith('item') || action === 'list.clear-checked' ? 'items' : 'list',
+    listId: list?.id ?? null,
+    action,
+    by: userId,
+    byName,
+    itemName,
+    at: new Date().toISOString()
+  };
+  const channels = [
+    ...(list ? [channelForList(list.id)] : []),
+    ...channelsForTray({ userId: userId ?? '', householdId: list?.household_id ?? null })
+  ];
+  publish(channels, event);
+}
+
+/** Solo a la bandeja: para el borrado, donde la fila de la lista ya no va a existir. */
+function announceToTray(
+  db: ReturnType<typeof getDatabase>,
+  scope: { userId: string; householdId: string | null },
+  action: string,
+  listId: string | null
+): void {
+  publish(channelsForTray(scope), {
+    type: 'list',
+    listId,
+    action,
+    by: scope.userId,
+    byName: (db.prepare('SELECT name FROM users WHERE id = ?').get(scope.userId) as any)?.name ?? null,
+    itemName: null,
+    at: new Date().toISOString()
+  });
 }
 
 /**
@@ -283,6 +336,7 @@ shoppingRoutes.post('/lists', async (c) => {
   ).run(id, userId, scope.householdId, body.name, body.store ?? null);
 
   const list = readList(db, scope, id);
+  announce(db, list, userId, 'list.create', null);
   return c.json({ success: true, data: { ...list, ...listTotals(db, id) } }, 201);
 });
 
@@ -341,10 +395,24 @@ shoppingRoutes.patch('/lists/:id', async (c) => {
     sets.push(body.status === 'done' ? 'completed_at = CURRENT_TIMESTAMP' : 'completed_at = NULL');
   }
 
-  sets.push('version = version + 1', 'updated_at = CURRENT_TIMESTAMP');
+  sets.push('version = version + 1', 'updated_at = CURRENT_TIMESTAMP', 'updated_by = ?');
+  params.push(c.get('userId'));
   db.prepare(`UPDATE shopping_lists SET ${sets.join(', ')} WHERE id = ?`).run(...params, list.id);
 
   const updated = readList(db, scope, list.id);
+  // Reabrir una lista es el mismo PATCH con otro estado, y aqui se traduce a un
+  // suceso distinto: en la auditoria «la termino» y «la volvio a abrir» no se leen igual.
+  announce(
+    db,
+    updated,
+    c.get('userId'),
+    updated.status === 'done' && list.status !== 'done'
+      ? 'list.complete'
+      : list.status === 'done' && updated.status !== 'done'
+        ? 'list.reopen'
+        : 'list.update',
+    updated.name
+  );
   return c.json({ success: true, data: { ...updated, ...listTotals(db, list.id) } });
 });
 
@@ -357,6 +425,10 @@ shoppingRoutes.delete('/lists/:id', async (c) => {
   // Borrado fisico: la lista es el contenedor, y su historial de precios vive
   // en price_observations, que sobrevive (ON DELETE no la toca).
   db.prepare('DELETE FROM shopping_lists WHERE id = ?').run(list.id);
+  // El suceso no se guarda: la FK de la auditoria es `ON DELETE CASCADE`, y una
+  // auditoria de una lista que ya no existe no tiene donde leerse. Lo que si hace
+  // falta es que la bandeja de las demas personas se entere.
+  announceToTray(db, { userId: c.get('userId'), householdId: list.household_id }, 'list.delete', list.id);
   return c.json({ success: true, data: { id: list.id } });
 });
 
@@ -371,14 +443,15 @@ function nextPosition(db: ReturnType<typeof getDatabase>, listId: string): numbe
   return row.last + 1;
 }
 
-function insertItem(db: ReturnType<typeof getDatabase>, listId: string, input: any) {
+function insertItem(db: ReturnType<typeof getDatabase>, listId: string, input: any, userId: string | null = null) {
   const id = nanoid();
+  const offer = normalizeOffer(input.offer);
   const key = productKeyOf(input.name);
   db.prepare(
     `INSERT INTO shopping_list_items
        (id, list_id, name, product_key, quantity, unit, category, price_minor, note, position,
-        promo_buy, promo_take)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        promo_buy, promo_take, added_by, updated_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     listId,
@@ -390,8 +463,10 @@ function insertItem(db: ReturnType<typeof getDatabase>, listId: string, input: a
     input.priceMinor ?? input.price_minor ?? null,
     input.note ?? null,
     nextPosition(db, listId),
-    normalizeOffer(input.offer)?.buy ?? null,
-    normalizeOffer(input.offer)?.take ?? null
+    offer?.buy ?? null,
+    offer?.take ?? null,
+    userId,
+    userId
   );
   return id;
 }
@@ -432,15 +507,17 @@ shoppingRoutes.post('/lists/:id/items', async (c) => {
     // Se relee la fila: responder con la copia leida ANTES del UPDATE devolvria la
     // cantidad vieja y la UI tendria que adivinar el resultado de su propio toque.
     const mergedRow = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(existing.id) as any;
+    announce(db, list, c.get('userId'), 'item.merge', mergedRow.name);
     return c.json({ success: true, data: { ...mergedRow, merged: true } }, 200);
   }
 
-  const id = insertItem(db, list.id, body);
+  const id = insertItem(db, list.id, body, c.get('userId'));
   db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
     list.id
   );
 
   const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id) as any;
+  announce(db, list, c.get('userId'), 'item.add', item.name);
   return c.json({ success: true, data: { ...item, merged: false } }, 201);
 });
 
@@ -481,18 +558,30 @@ shoppingRoutes.post('/lists/:id/items/bulk', async (c) => {
 
       if (existing) {
         db.prepare(
-          'UPDATE shopping_list_items SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-        ).run(line.quantity ?? 1, existing.id);
+          `UPDATE shopping_list_items
+             SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?
+           WHERE id = ?`
+        ).run(line.quantity ?? 1, c.get('userId'), existing.id);
         merged.push(db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(existing.id));
         continue;
       }
-      added.push(db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(insertItem(db, list.id, line)));
+      added.push(
+        db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(insertItem(db, list.id, line, c.get('userId')))
+      );
     }
     db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
       list.id
     );
   });
   transaction();
+
+  announce(
+    db,
+    list,
+    c.get('userId'),
+    'items.bulk',
+    `${added.length + merged.length} lineas anadidas${skipped.length ? `, ${skipped.length} ignoradas` : ''}`
+  );
 
   return c.json(
     { success: true, data: { added, merged, skipped, version: (readList(db, scope, list.id) as any).version } },
@@ -541,13 +630,26 @@ shoppingRoutes.patch('/lists/:id/items/:itemId', async (c) => {
     params.push(normalizeOffer(body.offer)?.buy ?? null, normalizeOffer(body.offer)?.take ?? null);
   }
 
+  // `updated_by` se escribe siempre, no solo cuando cambia el nombre: lo que interesa
+  // en la auditoria es quien toco la linea por ultima vez.
   sets.push('updated_at = CURRENT_TIMESTAMP');
+  sets.push('updated_by = ?');
+  params.push(c.get('userId'));
   db.prepare(`UPDATE shopping_list_items SET ${sets.join(', ')} WHERE id = ?`).run(...params, item.id);
   db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
     list.id
   );
 
   const updated = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(item.id) as any;
+  // El suceso distingue marcar de editar porque la pantalla lo cuenta aparte: «Ana ha
+  // marcado el pollo» y «Ana ha editado el pollo» no son la misma noticia.
+  announce(
+    db,
+    list,
+    c.get('userId'),
+    body.checked !== undefined ? (updated.checked ? 'item.check' : 'item.uncheck') : 'item.update',
+    updated.name
+  );
   return c.json({ success: true, data: updated });
 });
 
@@ -558,18 +660,28 @@ shoppingRoutes.delete('/lists/:id/items/:itemId', async (c) => {
   const list = readList(db, scope, c.req.param('id'));
   if (!list) return notFound(c, 'List');
 
+  // El nombre se lee ANTES de borrar: es lo que va a decir la auditoria, y despues
+  // de marcar `deleted_at` ya no se sabe cual de las dos lineas del carrito era.
+  const before = db
+    .prepare(
+      'SELECT name FROM shopping_list_items WHERE id = ? AND list_id = ? AND deleted_at IS NULL'
+    )
+    .get(c.req.param('itemId'), list.id) as { name: string } | undefined;
+
   const result = db
     .prepare(
-      `UPDATE shopping_list_items SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      `UPDATE shopping_list_items
+         SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP, updated_by = ?
        WHERE id = ? AND list_id = ? AND deleted_at IS NULL`
     )
-    .run(c.req.param('itemId'), list.id);
+    .run(c.get('userId'), c.req.param('itemId'), list.id);
 
   if (result.changes === 0) return notFound(c, 'Item');
   db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
     list.id
   );
 
+  announce(db, list, c.get('userId'), 'item.remove', before?.name ?? null);
   return c.json({ success: true, data: { id: c.req.param('itemId'), deletedAt: new Date().toISOString() } });
 });
 
@@ -585,6 +697,7 @@ shoppingRoutes.post('/lists/:id/items/:itemId/restore', async (c) => {
   if (result.changes === 0) return notFound(c, 'Item');
 
   const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(c.req.param('itemId')) as any;
+  announce(db, list, c.get('userId'), 'item.restore', item.name);
   return c.json({ success: true, data: item });
 });
 
@@ -624,6 +737,7 @@ shoppingRoutes.put('/lists/:id/discount', async (c) => {
   );
 
   const discount = readDiscount(db, list.id);
+  announce(db, list, c.get('userId'), 'list.discount', describeDiscount(discount));
   return c.json({ success: true, data: { ...discount, description: describeDiscount(discount) } });
 });
 
@@ -634,6 +748,7 @@ shoppingRoutes.delete('/lists/:id/discount', async (c) => {
   if (!list) return notFound(c, 'List');
 
   db.prepare('DELETE FROM shopping_list_discounts WHERE list_id = ?').run(list.id);
+  announce(db, list, c.get('userId'), 'list.discount-remove', null);
   return c.json({ success: true, data: { removed: true } });
 });
 
@@ -651,6 +766,7 @@ shoppingRoutes.post('/lists/:id/clear-checked', async (c) => {
     list.id
   );
 
+  announce(db, list, c.get('userId'), 'list.clear-checked', `${removed.changes} lineas`);
   return c.json({ success: true, data: { removed: removed.changes } });
 });
 
@@ -847,6 +963,7 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
     ).run(list.id);
   })();
 
+  announce(db, list, userId, 'list.complete', `${recorded} precios`);
   return c.json({ success: true, data: { pricesRecorded: recorded, items: bought.length } });
 });
 
@@ -923,5 +1040,108 @@ shoppingRoutes.delete('/prices/:id', async (c) => {
   if (result.changes === 0) return notFound(c, 'Price');
   return c.json({ success: true, data: { id: c.req.param('id') } });
 });
+
+// ═══════════════════════════════════════════════════════════════════
+// Auditoria y en-vivo (§8f)
+// ═══════════════════════════════════════════════════════════════════
+
+shoppingRoutes.get('/lists/:id/events', async (c) => {
+  const db = getDatabase();
+  const scope = getScope(c.get('userId'));
+  const list = readList(db, scope, c.req.param('id'));
+  if (!list) return notFound(c, 'List');
+
+  const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 50));
+  const rows = readEvents(db, { listId: list.id, limit });
+  return c.json({ success: true, data: rows.map((row) => ({ ...row, description: describeEvent(row) })) });
+});
+
+const HEARTBEAT_MS = 15_000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    // El reloj no puede mantener vivo el proceso: en un Raspberry Pi el server se
+    // para y se queda esperando a un timer de un navegador ya cerrado.
+    (timer as any).unref?.();
+  });
+}
+
+/**
+ * Un solo mecanismo para los dos canales. Se escribe aqui y no en el frontend porque
+ * el unico que sabe si una conexion sigue viva es el server: el navegador puede estar
+ * en el pasillo, con la pantalla apagada y el socket ya roto.
+ *
+ * El cliente recibe `change` y VUELVE A LEER; nunca pinta lo que trae el evento. El
+ * payload es una pista de refresco, no la verdad — si se perdiera un evento, la
+ * pantalla se corrige con el siguiente toque en vez de quedarse con un dato inventado.
+ */
+async function pumpStream(stream: any, channels: string[], listId: string | null): Promise<void> {
+  const queue: LiveEvent[] = [];
+  let wake: (() => void) | null = null;
+  let closed = false;
+
+  const offs = channels.map((channel) =>
+    subscribe(channel, (event) => {
+      if (listId && event.listId && event.listId !== listId) return;
+      queue.push(event);
+      wake?.();
+    })
+  );
+  stream.onAbort(() => {
+    closed = true;
+    wake?.();
+  });
+
+  try {
+    await stream.writeSSE({ event: 'ready', data: JSON.stringify({ at: new Date().toISOString(), channels }) });
+    while (!closed) {
+      const event = queue.shift();
+      if (event) {
+        await stream.writeSSE({ event: 'change', data: JSON.stringify(event) });
+        continue;
+      }
+      await Promise.race([
+        new Promise<void>((resolve) => {
+          wake = () => {
+            wake = null;
+            resolve();
+          };
+        }),
+        sleep(HEARTBEAT_MS)
+      ]);
+      if (closed) break;
+      // Corazon: un proxy del enjambre corta una conexion silenciosa, y el usuario
+      // no tiene forma de saber que su lista dejo de estar en vivo.
+      await stream.writeSSE({ event: 'ping', data: '{}' });
+    }
+  } catch {
+    // El otro extremo cerro la pestana a medias: no hay nada que reportar.
+  } finally {
+    offs.forEach((off) => off());
+  }
+}
+
+/** El detalle de una lista en vivo. */
+shoppingRoutes.get('/stream/lists/:listId', async (c) => {
+  const db = getDatabase();
+  const scope = getScope(c.get('userId'));
+  const list = readList(db, scope, c.req.param('listId'));
+  if (!list) return notFound(c, 'List');
+
+  return streamSSE(c, async (stream) => {
+    await pumpStream(stream, [channelForList(list.id)], list.id);
+  });
+});
+
+/** La bandeja: listas que nacen, se terminan o se borran en otra pantalla del hogar. */
+shoppingRoutes.get('/stream/tray', async (c) => {
+  const userId = c.get('userId');
+  const scope = getScope(userId);
+  return streamSSE(c, async (stream) => {
+    await pumpStream(stream, channelsForTray({ userId, householdId: scope.householdId }), null);
+  });
+});
+
 
 export { shoppingRoutes };

@@ -387,6 +387,21 @@ async function runMigrations(db: Database.Database): Promise<void> {
     -- El descuento es de la LISTA porque cambia cuanto se paga del subtotal, y solo
     -- puede haber uno por lista: dos cupones apilados es una conversacion con la
     -- caja, no un dato que la app pueda resolver por su cuenta.
+    -- Auditoria de la cesta: quien ha anadido o tocado que. El nombre va COPIADO en
+    -- la fila (no es un JOIN), porque «de quien fue» no cambia si esa persona se
+    -- renombra manana.
+    CREATE TABLE IF NOT EXISTS shopping_list_events (
+      id TEXT PRIMARY KEY,
+      list_id TEXT NOT NULL,
+      user_id TEXT,
+      user_name TEXT,
+      action TEXT NOT NULL,
+      item_name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_shopping_events_list ON shopping_list_events(list_id, created_at);
+
     CREATE TABLE IF NOT EXISTS shopping_list_discounts (
       list_id TEXT PRIMARY KEY,
       kind TEXT NOT NULL CHECK (kind IN ('amount', 'percent')),

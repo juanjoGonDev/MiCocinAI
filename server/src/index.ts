@@ -37,7 +37,10 @@ app.use('*', secureHeaders());
 // that the user saw in their terminal.
 app.use('*', async (c, next) => {
   const start = Date.now();
-  const { method, url } = c.req;
+  const { method } = c.req;
+  // Un token que pasa por la URL (solo el stream, ver auth.middleware) no tiene por
+  // que acabar en el visor de logs ni en el fichero que lo respalda.
+  const url = c.req.url.replace(/([?&]access_token=)[^&]+/g, '$1···');
   // eslint-disable-next-line no-console
   console.log(`<-- ${method} ${url}`);
   await next();

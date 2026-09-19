@@ -748,6 +748,12 @@ evidence *inside the assertion message*: the row's text, the visible toasts, the
 `/api/shopping` responses and any `pageerror` Angular threw. That is what turned three
 «element(s) not found» into one sentence: a `PATCH` where a `DELETE` belonged.
 
+**Backticks do not belong inside a SQL or `styles:` template literal.** A comment written with
+`` `column` `` inside `db.exec(`…`)` (or an Angular `styles: [`…`]`) terminates the string, and what
+comes back is either a `TS1005 ',' expected` in a file that looks untouched or
+`Failed to resolve styles at position 1` from the Angular compiler. It has bitten three times in this
+repo; the rule is to write comments in SQL and in `styles` without a single backtick.
+
 One more inherited trap, same family: with `"packageManager": "pnpm@10.15.0"` in `package.json`,
 passing `version:` to `pnpm/action-setup@v4` is an input error — the version is written once, in the
 manifest.
