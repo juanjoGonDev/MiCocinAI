@@ -35,12 +35,22 @@ export const createIngredientSchema = z.object({
 
 export const updateIngredientSchema = createIngredientSchema.partial();
 
+/**
+ * Un flag pasado por la URL. `z.boolean()` a secas no sirve: la query siempre manda texto, y
+ * el `?expiringSoon=true` que manda la pantalla de la despensa reventaba con un ZodError en
+ * vez de filtrar — o sea, los dos unicos botones de filtro de la despensa no funcionaban.
+ */
+export const queryFlag = z
+  .enum(['true', 'false', '1', '0'])
+  .optional()
+  .transform((value) => (value === undefined ? undefined : value === 'true' || value === '1'));
+
 export const ingredientFilterSchema = z.object({
   search: z.string().optional(),
   category: ingredientCategoryEnum.optional(),
   location: storageLocationEnum.optional(),
-  expiringSoon: z.boolean().optional(),
-  expired: z.boolean().optional(),
+  expiringSoon: queryFlag,
+  expired: queryFlag,
   // Los query params llegan como string: hay que coercionarlos.
   page: z.coerce.number().int().positive().optional().default(1),
   pageSize: z.coerce.number().int().positive().max(100).optional().default(20)
@@ -59,7 +69,7 @@ export const updateUtensilSchema = createUtensilSchema.partial();
 export const utensilFilterSchema = z.object({
   search: z.string().optional(),
   category: utensilCategoryEnum.optional(),
-  available: z.boolean().optional()
+  available: queryFlag
 });
 
 export type CreateIngredientInput = z.infer<typeof createIngredientSchema>;

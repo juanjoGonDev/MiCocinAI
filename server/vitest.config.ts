@@ -13,10 +13,15 @@ import { defineConfig } from 'vitest/config';
  * las ramas del bootstrap que estos tests no montan, no codigo sin probar).
  *
  * Hoy quedan fuera, con su prueba atada a la fase que les corresponde:
- *   - src/routes/** y src/index.ts    → se prueban de momento con la suite e2e
- *   - src/middleware/**, src/schemas/**, src/utils/log-store.ts,
- *     src/utils/logger.ts              → unidades puras; entran con P1/P2, que es
- *     cuando se escriben sus tests de contrato
+ *   - src/routes/** (salvo shopping.routes.ts, que tiene spec desde la ronda 9, y
+ *     src/routes/pantry.routes.ts, que empezo en la 10 con los filtros por dias: el
+ *     fichero entero no entra hasta que el alta y los utensilios tengan la suya, porque
+ *     el umbral es por fichero y un 20 % maquillaria la rampa) y src/index.ts
+ *                             → el resto se prueba de momento con la suite e2e
+ *   - src/middleware/** (salvo timestamp, que entro el dia que se escribio),
+ *     src/schemas/**, src/utils/log-store.ts,
+ *     src/utils/logger.ts      → unidades puras; entran con P1/P2, que es cuando se
+ *     escriben sus tests de contrato
  */
 const COVERED = [
   'src/routes/shopping.routes.ts',
