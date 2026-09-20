@@ -6,6 +6,7 @@ import {
   MAX_AVATAR_BYTES,
   assertWritten,
   deleteUpload,
+  isInside,
   parseImageDataUrl,
   readUpload,
   resolveUploadUrl,
@@ -49,6 +50,21 @@ describe('uploads — la foto de la cuenta', () => {
     expect(file).not.toContain('/');
     expect(readdirSync(join(root, 'avatars'))).toEqual([file]);
     expect(resolveUploadUrl(url, root)?.endsWith(join('avatars', file))).toBe(true);
+  });
+
+  it('la contencion no depende del separador: en Windows tambien', () => {
+    // El fallo real que esto cubre: en Windows resolve devuelve barras invertidas, y la
+    // comprobacion antigua comparaba contra dir + barra, que alli no se cumple nunca. La foto se
+    // escribia, la URL se guardaba y cada lectura era un 404 —en el unico sitio donde no se veia.
+    const winDir = 'D:\\projects\\hogaria\\server\\data\\uploads\\avatars';
+    expect(isInside(winDir, winDir + '\\u-ana-1a2b.png', '\\')).toBe(true);
+    expect(isInside(winDir, 'D:\\windows\\system32\\drivers\\etc\\hosts', '\\')).toBe(false);
+    expect(isInside(winDir, winDir, '\\')).toBe(false); // el propio directorio no es un fichero dentro
+
+    // Y en POSIX sigue valiendo para lo que tiene que valer, con el separador por defecto.
+    expect(isInside('/srv/uploads/avatars', '/srv/uploads/avatars/a.png')).toBe(true);
+    // Un prefijo comun no es un hijo: sin la barra final, esto se colaria.
+    expect(isInside('/srv/uploads/avatars', '/srv/uploads/avatars-x/a.png')).toBe(false);
   });
 
   it('la foto se lee por su URL, y una URL que no es nuestra no lee nada', () => {

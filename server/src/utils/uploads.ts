@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 /**
  * Lo que la persona sube (la foto de su cuenta), en disco y no en la base de datos.
@@ -108,6 +108,19 @@ export function storeImage(kind: UploadKind, ownerId: string, image: ParsedImage
   return `/api/uploads/${kind}/${file}`;
 }
 
+/**
+ * Si `candidate` es un fichero DENTRO de `dir`. El detalle que no es detalle: la primera version
+ * comparaba con `dir + '/'`, y en Windows `resolve` devuelve barras invertidas —el `startsWith` no
+ * se cumplia jamais, la foto se escribia, la URL se guardaba y cada lectura era un 404. Un bug que
+ * solo existe en el otro sistema de ficheros es exactamente lo que una comprobacion de rutas no se
+ * puede permitir, asi que el separador es un parametro: se puede probar en los dos sentidos.
+ */
+export function isInside(dir: string, candidate: string, separator = sep): boolean {
+  if (!candidate || !dir) return false;
+  const base = dir.endsWith(separator) ? dir : dir + separator;
+  return candidate.startsWith(base) && candidate.length > base.length;
+}
+
 /** URL publica -> ruta en disco, con el recorrido validado (nunca un `..` hacia fuera). */
 export function resolveUploadUrl(url: string | null | undefined, root = uploadsRoot()): string | null {
   if (!url) return null;
@@ -118,7 +131,7 @@ export function resolveUploadUrl(url: string | null | undefined, root = uploadsR
   if (!/^[a-zA-Z0-9._-]{4,80}$/.test(file) || file.includes('..')) return null;
   const dir = resolve(root, kind);
   const full = resolve(dir, file);
-  return full.startsWith(dir + '/') ? full : null;
+  return isInside(dir, full) ? full : null;
 }
 
 export function readUpload(url: string, root = uploadsRoot()): { body: Buffer; type: string } | null {
