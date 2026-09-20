@@ -64,7 +64,11 @@ describe('que no consume cupo', () => {
     expect(isRateLimitExempt('/health')).toBe(true);
     // Una conexion SSE viva no son 300 peticiones: es una.
     expect(isRateLimitExempt('/api/shopping/stream/lists/abc')).toBe(true);
+    expect(isRateLimitExempt('/api/uploads/avatars/u-ana-1a2b3c.png')).toBe(true);
+    expect(isRateLimitExempt('/api/uploads/avatars')).toBe(true);
     expect(isRateLimitExempt('/api/logs-x')).toBe(false);
+    // La excepcion es del carpetillo de ficheros, no del resto de la API.
+    expect(isRateLimitExempt('/api/uploads-x')).toBe(false);
     expect(isRateLimitExempt('/api/shopping/lists')).toBe(false);
   });
 

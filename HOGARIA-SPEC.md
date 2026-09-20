@@ -1547,6 +1547,9 @@ that runs; what only a pair of eyes can decide says so.
       token — an `<img>` cannot send one — which is why the random suffix is the whole permission.
       `auth.routes.spec.ts` uploads a real PNG, reads it back through the public URL and checks the
       profile carries the path.
+- [x] The public route is out of the request budget (`EXEMPT_PATHS`), next to `logs` and the SSE
+      streams: a tray with thirty authored rows is thirty `img` GETs that cannot carry a token to
+      key on, and round 7 is the precedent for what that does to a household.
 - [x] `avatarField` accepts the app's own `/api/uploads/avatars/…` path or an absolute URL:
       `z.string().url()` was rejecting the exact string the server hands out, which is the kind of
       bug only an end-to-end test catches. `null` clears it, `sanitizeUser` omits the key when there

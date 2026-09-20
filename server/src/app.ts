@@ -47,7 +47,14 @@ export type AppOptions = {
 };
 
 /** Rutas que NO consumen el cupo: diagnosticos y streams. Ver el comentario de abajo. */
-const EXEMPT_PATHS = [/^\/api\/logs(\/|$)/, /^\/api\/health(\/|$)/, /^\/health$/, /\/stream(\/|$)/];
+/**
+ * Lo que no gasta cupo. `logs`, `health` y cualquier `stream` (una conexion SSE viva es UNA
+ * peticion, no trescientas) —y `uploads`, que son las fotos de las personas: un `<img>` no puede
+ * mandar token, asi que caeria en el cubo por IP y una lista con treinta autores seria un pico de
+ * treinta peticiones en la primera carga. Son ficheros estaticos con nombre unico y cache
+ * `immutable`: no hay nada aqui a lo que haya que poner un techo.
+ */
+const EXEMPT_PATHS = [/^\/api\/logs(\/|$)/, /^\/api\/health(\/|$)/, /^\/health$/, /\/stream(\/|$)/, /^\/api\/uploads(\/|$)/];
 
 export function isRateLimitExempt(pathname: string): boolean {
   return EXEMPT_PATHS.some((pattern) => pattern.test(pathname));
