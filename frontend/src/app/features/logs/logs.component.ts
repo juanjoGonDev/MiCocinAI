@@ -1,11 +1,12 @@
 import { Component, inject, signal, OnInit, OnDestroy, AfterViewChecked, ElementRef, ViewChild, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { formatTimePrecise, timeZoneLabel } from '../../core/time';
+import { clientTimeZone, formatTimePrecise, timeZoneLabel } from '../../core/time';
 import { LogService, LogEntry, LogLevel, LogSource } from '../../core/services/log.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 
 interface FilterOption<T extends string> {
   value: T;
@@ -15,13 +16,16 @@ interface FilterOption<T extends string> {
 @Component({
   selector: 'app-logs',
   standalone: true,
-  imports: [CommonModule, FormsModule, ButtonComponent],
+  imports: [CommonModule, FormsModule, ButtonComponent, IconComponent],
   template: `
     <div class="logs-page">
       <!-- Toolbar -->
       <div class="logs-toolbar">
         <div class="logs-toolbar__title">
-          <h1>📋 Logs</h1>
+          <h1>
+            <app-icon name="description" [size]="18" [label]="null" />
+            Logs
+          </h1>
           <span
             class="logs-status"
             [class.logs-status--connected]="logService.connected()"
@@ -36,6 +40,12 @@ interface FilterOption<T extends string> {
             <button type="button" class="logs-reconnect" data-test="logs-reconnect" (click)="reconnect()">Reintentar la conexion</button>
           }
           <span class="logs-count">{{ visibleCount() }} / {{ logService.logs().length }}</span>
+          <!-- Se ensena LA ZONA porque el server habla UTC: sin esta linea, dudar de si la hora
+               del log es la tuya o la del Raspberry es la pregunta obligada. -->
+          <span class="logs-timezone" data-test="logs-timezone" [attr.title]="'Zona detectada: ' + clientZone()">
+            <app-icon name="schedule" [size]="14" [label]="null" />
+            hora de {{ timeZoneName() }}
+          </span>
         </div>
 
         <div class="logs-toolbar__filters">
@@ -60,7 +70,8 @@ interface FilterOption<T extends string> {
             size="sm"
             (onClick)="logService.togglePause()"
           >
-            {{ logService.paused() ? '▶ Reanudar' : '⏸ Pausar' }}
+            <app-icon [name]="logService.paused() ? 'play_arrow' : 'pause'" [size]="16" [label]="null" />
+            {{ logService.paused() ? 'Reanudar' : 'Pausar' }}
           </app-button>
 
           <app-button
@@ -76,7 +87,8 @@ interface FilterOption<T extends string> {
             size="sm"
             (onClick)="copyVisible()"
           >
-            {{ hasSelection() ? '📋 Copiar seleccionado (' + selectedCount() + ')' : '📋 Copiar todo' }}
+            <app-icon name="content_copy" [size]="16" [label]="null" />
+            {{ hasSelection() ? 'Copiar seleccionado (' + selectedCount() + ')' : 'Copiar todo' }}
           </app-button>
 
           <app-button
@@ -85,7 +97,8 @@ interface FilterOption<T extends string> {
             size="sm"
             (onClick)="clearSelection()"
           >
-            ✕ Limpiar selección
+            <app-icon name="close" [size]="16" [label]="null" />
+            Limpiar selección
           </app-button>
 
           <app-button
@@ -93,7 +106,8 @@ interface FilterOption<T extends string> {
             size="sm"
             (onClick)="clearLogs()"
           >
-            🗑 Limpiar
+            <app-icon name="delete_sweep" [size]="16" [label]="null" />
+            Limpiar
           </app-button>
         </div>
       </div>
@@ -239,6 +253,20 @@ interface FilterOption<T extends string> {
       50% { opacity: 0.5; }
     }
 
+    /* La zona detectada, a la vista: «la hora esta bien» se comprueba mirando, no preguntando. */
+    .logs-timezone {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: var(--text-xs);
+      color: var(--text-tertiary);
+      cursor: help;
+    }
+    .logs-toolbar__title h1 {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
     .logs-count {
       font-size: var(--text-xs);
       color: var(--text-secondary);
@@ -607,6 +635,11 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   readonly timeZoneName = timeZoneLabel;
+
+  /** El nombre IANA completo, para el `title` de quien lo quiera exacto. */
+  clientZone(): string {
+    return clientTimeZone();
+  }
 
   levelTag(level: string): string {
     return level.toUpperCase().slice(0, 5);

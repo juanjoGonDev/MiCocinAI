@@ -111,6 +111,8 @@ export const ICON_SHAPES = {
   "numbers": { viewBox: '0 0 24 24', d: ['M20.5 10l.5-2h-4l1-4h-2l-1 4h-4l1-4h-2L9 8H5l-.5 2h4l-1 4h-4L3 16h4l-1 4h2l1-4h4l-1 4h2l1-4h4l.5-2h-4l1-4h4zm-7 4h-4l1-4h4l-1 4z'] },
   "inventory_2": { viewBox: '0 0 24 24', d: ['M20 2H4c-1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-1-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4h16v3z'] },
   "kitchen": { viewBox: '0 0 24 24', d: ['M20 9V4c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v5h16zM8 5h2v3H8V5zm-4 6v9c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-9H4zm6 6H8v-5h2v5z'] },
+  "play_arrow": { viewBox: '0 0 24 24', d: ['M8 5v14l11-7z'] },
+  "pause": { viewBox: '0 0 24 24', d: ['M6 19h4V5H6v14zm8-14v14h4V5h-4z'] },
 } as const;
 
 export type IconName = keyof typeof ICON_SHAPES;

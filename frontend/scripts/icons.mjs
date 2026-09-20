@@ -31,7 +31,9 @@ const NAMES = [
   'undo', 'unfold_more', 'visibility',
   // Familias de unidad del selector de la hoja de linea (§12h): un icono por familia para que
   // el panel se recorra de un vistazo con el pulgar.
-  'scale', 'local_drink', 'numbers', 'inventory_2', 'kitchen'
+  'scale', 'local_drink', 'numbers', 'inventory_2', 'kitchen',
+  // El visor de logs: pausar/reanudar son botones con icono, no un glifo del sistema.
+  'play_arrow', 'pause'
 ];
 
 const OUT = join(ROOT, 'src/app/shared/components/ui/icon/icon-paths.ts');
