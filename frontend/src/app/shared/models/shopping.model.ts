@@ -54,6 +54,21 @@ export interface ShoppingListItem {
   updated_by_name?: string | null;
 }
 
+/**
+ * Clave de producto, igual que en el server (`utils/product-key.ts`): acentos fuera,
+ * mayusculas fuera, simbolos  espacios, y se compara por esa clave. Se duplica el criterio
+ * a proposito en una linea —lo que no se puede duplicar es que la pantalla crea que «Jamón»
+ * y «jamon» son dos productos—, y por eso vive aqui y no en cada componente.
+ */
+export function productKeyOf(name: string | null | undefined): string {
+  return String(name ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 /** La oferta como dato de UI: solo existe si es valida (take < buy y buy >= 2). */
 export function offerOfItem(item: Pick<ShoppingListItem, 'promo_buy' | 'promo_take'>): LineOffer | null {
   const buy = Number(item.promo_buy ?? 0);
@@ -67,9 +82,23 @@ export interface EstimateLine {
   name: string;
   source: 'manual' | 'observed' | 'unpriced';
   unitMinor?: number;
+  /** Lo que cuesta la linea (con su oferta, sin el descuento de la lista): el ticket. */
   lineTotalMinor: number | null;
+  /** Lo que se paga de esa linea despues del reparto del descuento. */
+  netMinor?: number;
+  units?: number;
+  paidUnits?: number;
+  offerSavingsMinor?: number;
   store?: string | null;
   observedAt?: string;
+  /**
+   * El precio viene de OTRA tienda. Un numero sin procedencia se cree; uno que dice
+   * «esto es lo de Lidl» se acepta o se corrige, y en una casa con dos supermercados la
+   * diferencia es el 20 % de la cesta.
+   */
+  otherStore?: boolean;
+  /** Unidades pagadas de la oferta (3x2: llevas 3, pagas 2). */
+  offer?: { buy: number; take: number } | null;
 }
 
 export interface ListEstimate {
@@ -101,6 +130,11 @@ export interface CreateItemInput {
   note?: string | null;
   /** 3x2 = {buy:3, take:2}; `null` la quita. En la fila son promo_buy/promo_take. */
   offer?: LineOffer | null;
+  /**
+   * Enlazar la linea con un producto que la casa ya conoce, porque en la tienda se llama
+   * de otra forma. `null` lo desengancha y la clave vuelve a ser la del nombre.
+   */
+  productKey?: string | null;
 }
 
 /** Categorias de la lista, en el orden en que se recorren en la tienda. */
@@ -255,6 +289,8 @@ export interface ListDiscount {
   first_units: number | null;
   /** Que producto o seccion entra con `scope: 'product' | 'category'`. */
   target?: string | null;
+  /** Las demas dianas del mismo cartel: «2,50 € en jamon, queso y pan» es UN descuento. */
+  targets?: string[] | null;
   label: string | null;
   /** La frase que pinta la fila de totales: el server la escribe, la app no la reconstruye. */
   description?: string | null;
@@ -268,7 +304,70 @@ export interface DiscountInput {
   firstUnits?: number | null;
   /** Obligatorio cuando `scope` promete un producto o una seccion: sin diana no hay descuento. */
   target?: string | null;
+  /** Se mandan los nombres legibles de las lineas elegidas; el server normaliza al comparar. */
+  targets?: string[] | null;
   label?: string | null;
+}
+
+/** Lo que se escribe al cerrar la compra, linea a linea. */
+export interface CompletePriceInput {
+  itemId: string;
+  /** Precio POR UNIDAD, la alternativa a decir cuanto se pago en total. */
+  priceMinor?: number | null;
+  /** Lo que decia el ticket. La app divide por lo que llevabas; no al reves. */
+  totalPaidMinor?: number | null;
+  /** Unidades que se llevaron (por defecto, las pagadas de la linea). */
+  quantity?: number | null;
+  store?: string | null;
+  /** Como se llamaba el producto en esa tienda. */
+  productName?: string | null;
+}
+
+export interface CompletePurchaseInput {
+  store?: string | null;
+  prices?: CompletePriceInput[];
+}
+
+export interface CompleteReceipt {
+  pricesRecorded: number;
+  items: number;
+  paidMinor: number;
+  store: string | null;
+}
+
+/** La linea que impide cerrar la compra, en la forma que necesita la hoja de precios. */
+export interface MissingPriceLine {
+  itemId: string;
+  name: string;
+  quantity: number;
+  unit: string | null;
+}
+
+/**
+ * Cerrar la compra puede no poder cerrarse, y eso no es un error de red: es un
+ * formulario. Por eso `complete` devuelve un resultado en vez de prometer y fallar.
+ */
+export type CompleteResult =
+  | ({ ok: true } & CompleteReceipt)
+  | { ok: false; code: 'PRICES_MISSING'; missing: MissingPriceLine[] }
+  | { ok: false; code: 'STORE_REQUIRED' }
+  | { ok: false; code: 'STALE_LIST' }
+  | { ok: false; code: 'ERROR' };
+
+/** Cuanto cuesta el mismo producto en cada tienda. */
+export interface ProductVariant {
+  store: string | null;
+  productName: string;
+  unitMinor: number;
+  observedAt: string;
+}
+
+export interface KnownProduct {
+  productKey: string;
+  name: string;
+  lastObservedAt: string;
+  observations: number;
+  variants: ProductVariant[];
 }
 
 /** Oferta de linea (3x2, 2x1): se pagan `buy - take` unidades de cada `buy`. */

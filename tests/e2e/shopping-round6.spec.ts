@@ -156,9 +156,9 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     await page.locator('[data-test="discount-save"]').click();
 
     await expect(page.locator('[data-test="total"]')).toHaveText('9,00 €');
-    await expect(page.locator('[data-test="discount-row"]')).toContainText('10');
+    await expect(page.locator('[data-test="discount-open"]')).toContainText('10');
 
-    await page.locator('[data-test="discount-row"]').click();
+    await page.locator('[data-test="discount-open"]').click();
     await page.locator('[data-test="discount-remove"]').click();
     await expect(page.locator('[data-test="total"]')).toHaveText('10,00 €');
   });
@@ -245,18 +245,19 @@ test.describe('Descuento por producto (la etiqueta del supermercado)', () => {
     await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
 
     await page.locator('[data-test="discount-open"]').click();
-    await page.locator('[data-test="discount-scope"]', { hasText: 'Un producto' }).click();
+    await page.locator('[data-test="discount-scope"]', { hasText: 'En productos' }).click();
     // Sin diana no se guarda: «-2 €» a secas mentiria el total de la cesta.
     await page.locator('[data-test="discount-amount"] input').fill('2');
     await page.locator('[data-test="discount-save"]').click();
     await expect(page.locator('[data-test="discount-sheet"]')).toBeVisible();
 
-    await page.locator('[data-test="discount-target"] button').first().click();
-    await page.getByRole('option', { name: /Jamon Serrano/ }).click();
+    // Se elige la linea de la lista, no un nombre escrito a mano: asi el descuento no
+    // depende de que alguien acierte con el acento.
+    await page.locator('[data-test="discount-target-jamon-serrano"]').click();
     await page.locator('[data-test="discount-save"]').click();
 
     await expect(page.locator('[data-test="total"]')).toHaveText('3,00 €');
-    await expect(page.locator('[data-test="discount-row"]')).toContainText('Jamon Serrano');
+    await expect(page.locator('[data-test="discount-open"]')).toContainText('Jamon Serrano');
 
     // Y la X de la hoja cierra sin tocar nada: la prueba de que hay forma de cancelar.
     await page.locator('[data-test="discount-open"]').click();

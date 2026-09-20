@@ -1,13 +1,16 @@
 import { Injectable, DestroyRef, inject, signal } from '@angular/core';
-import { HttpClient, HttpErrorResponse, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpContext, HttpParams } from '@angular/common/http';
 import { Observable, fromEvent } from 'rxjs';
 import { catchError, finalize, map, tap } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { openResilientStream } from '../../core/sse';
 import { ToastService } from './toast.service';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import { AuthService } from './auth.service';
 import {
+  CompletePurchaseInput,
+  CompleteReceipt,
   CreateItemInput,
   ListDiscount,
   ListEvent,
@@ -15,10 +18,14 @@ import {
   ListsQuery,
   DiscountInput,
   ListEstimate,
+  KnownProduct,
+  MissingPriceLine,
+  CompleteResult,
   PhotoAnalysis,
   PhotoLine,
   PhotoOutcome,
   PriceObservation,
+  productKeyOf,
   ShoppingCategory,
   ShoppingList,
   ShoppingListItem,
@@ -60,6 +67,8 @@ export class ShoppingService {
   readonly items = signal<ShoppingListItem[]>([]);
   readonly estimate = signal<ListEstimate | null>(null);
   readonly prices = signal<PriceObservation[]>([]);
+  /** Catalogo improvisado: lo que la casa ya pago, agrupado por producto y por tienda. */
+  readonly knownProducts = signal<KnownProduct[]>([]);
   readonly loadingLists = signal(false);
   readonly loadingList = signal(false);
   readonly saving = signal(false);
@@ -279,14 +288,75 @@ export class ShoppingService {
    */
   setStatus(id: string, status: ShoppingListStatus): Promise<unknown> {
     if (status === 'done') {
-      return this.request<unknown>(() =>
-        this.http.post<{ data: unknown }>(`${this.apiUrl}/lists/${id}/complete`, {}).pipe(tap(() => this.loadLists()))
-      );
+      return this.complete(id).then(result => {
+        if (!result.ok && result.code === 'PRICES_MISSING') {
+          // Desde la bandeja no hay hoja de precios a la que llevar a la persona: se le dice
+          // lo que falta, y el detalle de la lista si que tiene donde escribirlo.
+          this.toast.warning(
+            'Faltan precios',
+            `${result.missing.length} ${result.missing.length === 1 ? 'linea comprada sin precio' : 'lineas compradas sin precio'}. Abre la lista para anotarlos.`
+          );
+        }
+        if (!result.ok && result.code === 'STORE_REQUIRED') {
+          this.toast.warning('Falta el establecimiento', 'El precio se guarda por tienda: di donde has comprado.');
+        }
+        return null;
+      });
     }
     return this.renameList(id, { status }).then(list => {
       this.loadLists();
       return list;
     });
+  }
+
+  /**
+   * Cerrar la compra. Devuelve un RESULTADO, no una promesa que falla: los dos rechazos del
+   * server (lineas sin precio, tienda sin decir) son un formulario que se abre en la propia
+   * pantalla, y tratarlos como un error de red es la diferencia entre «lo arreglo aqui» y
+   * «no se que ha pasado». Por eso la llamada se marca como silenciosa en el interceptor.
+   */
+  async complete(listId: string, body: CompletePurchaseInput = {}): Promise<CompleteResult> {
+    try {
+      const response = await firstValue(
+        this.track(
+          this.http.post<{ data: CompleteReceipt }>(`${this.apiUrl}/lists/${listId}/complete`, body, {
+            context: new HttpContext().set(SILENT_TOAST, true)
+          })
+        )
+      );
+      this.loadList(listId);
+      this.loadLists();
+      return { ok: true, ...response.data };
+    } catch (error) {
+      const original = (error as { original?: HttpErrorResponse })?.original ?? error;
+      const status = (original as { status?: number })?.status;
+      const payload = ((original as { error?: { message?: string; data?: { missing?: MissingPriceLine[] } } })?.error ??
+        {}) as { message?: string; data?: { missing?: MissingPriceLine[] } };
+      if (status === 409 && payload.message === 'PRICES_MISSING') {
+        return { ok: false, code: 'PRICES_MISSING', missing: payload.data?.missing ?? [] };
+      }
+      if (status === 409 && payload.message === 'STORE_REQUIRED') return { ok: false, code: 'STORE_REQUIRED' };
+      if (status === 400) return { ok: false, code: 'STALE_LIST' };
+      return { ok: false, code: 'ERROR' };
+    }
+  }
+
+  /**
+   * Los productos que la casa ya conoce, con lo que cuesta cada uno en cada tienda. Sirve
+   * para las dos cosas que sin esto se hacen a ciegas: enlazar «Leche semi» con la leche a la
+   * que ya se puso precio, y saber si los 0,85 € eran de Mercadona o de hace un ano.
+   */
+  async loadKnownProducts(query = ''): Promise<KnownProduct[]> {
+    try {
+      let params = new HttpParams().set('limit', '60');
+      if (query.trim()) params = params.set('q', query.trim());
+      const response = await firstValue(this.http.get<{ data: KnownProduct[] }>(`${this.apiUrl}/prices/products`, { params }));
+      this.knownProducts.set(response.data);
+      return response.data;
+    } catch {
+      this.knownProducts.set([]);
+      return [];
+    }
   }
 
   deleteList(id: string): Promise<unknown> {
@@ -363,8 +433,32 @@ export class ShoppingService {
    * Autoguardado: pinta el cambio al instante y encola el PATCH. La clave es el item
    * y no el campo, porque teclear «1,9» y despues «5» en el precio es UNA escritura.
    */
+  /**
+   * Como `updateItem`, pero esperable y sin encolar: el enlace de producto cambia la clave
+   * con la que se busca el precio, y si nadie espera, la hoja sigue ensenando el enlace
+   * antiguo mientras el server ya ha puesto el nuevo.
+   */
+  async updateItemSync(listId: string, item: ShoppingListItem, patch: Partial<CreateItemInput>): Promise<ShoppingListItem | null> {
+    this.replaceItem({ ...item, ...this.fromPatch(patch, item) } as ShoppingListItem);
+    try {
+      const next = await firstValue(
+        this.track(
+          this.http
+            .patch<{ data: ShoppingListItem }>(`${this.apiUrl}/lists/${listId}/items/${item.id}`, patch)
+            .pipe(map(response => response.data))
+        )
+      );
+      this.replaceItem(next);
+      await this.loadEstimate(listId);
+      return next;
+    } catch {
+      this.loadList(listId);
+      return null;
+    }
+  }
+
   updateItem(listId: string, item: ShoppingListItem, patch: Partial<CreateItemInput>): void {
-    this.replaceItem({ ...item, ...this.fromPatch(patch) } as ShoppingListItem);
+    this.replaceItem({ ...item, ...this.fromPatch(patch, item) } as ShoppingListItem);
     this.enqueue(`item:${item.id}:patch`, () =>
       this.http
         .patch<{ data: ShoppingListItem }>(`${this.apiUrl}/lists/${listId}/items/${item.id}`, patch)
@@ -378,13 +472,18 @@ export class ShoppingService {
     );
   }
 
-  private fromPatch(patch: Partial<CreateItemInput>): Partial<ShoppingListItem> {
+  private fromPatch(patch: Partial<CreateItemInput>, item?: ShoppingListItem): Partial<ShoppingListItem> {
     return {
       ...(patch.quantity !== undefined ? { quantity: patch.quantity } : {}),
       ...(patch.unit !== undefined ? { unit: patch.unit } : {}),
       ...(patch.category !== undefined ? { category: patch.category } : {}),
       ...(patch.note !== undefined ? { note: patch.note } : {}),
       ...(patch.priceMinor !== undefined ? { price_minor: patch.priceMinor } : {}),
+      // El enlace viaja a la vez que el nombre: en dos llamadas, la segunda pisa la clave de
+      // la primera y el precio vuelve a perderse, que es el bug que el enlace venia a cerrar.
+      ...(patch.productKey !== undefined
+        ? { product_key: patch.productKey?.trim() || (item ? productKeyOf(item.name) : undefined) }
+        : {}),
       // La oferta optimisticamente: si no, al tocar 3x2 la fila no cambia hasta que
       // conteste el servidor, y el usuario toca otra vez.
       ...(patch.offer !== undefined

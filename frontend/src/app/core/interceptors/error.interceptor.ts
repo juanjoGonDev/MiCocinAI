@@ -1,7 +1,14 @@
-import { HttpInterceptorFn, HttpErrorResponse } from '@angular/common/http';
+import { HttpInterceptorFn, HttpErrorResponse, HttpContextToken } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../services/toast.service';
+
+/**
+ * Peticiones cuyo fracaso tiene pantalla propia. Cerrar una compra con lineas sin precio
+ * es un 409 que abre una hoja para escribirlos ahi mismo: un toast encima repitiendo el
+ * codigo del server es ruido encima de la solucion.
+ */
+export const SILENT_TOAST = new HttpContextToken<boolean>(() => false);
 
 /** Última vez que se mostró un toast por código de estado. */
 const recentlyShown = new Map<number, number>();
@@ -56,7 +63,8 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       const now = Date.now();
       const last = recentlyShown.get(error.status) ?? 0;
       const throttleMs = error.status === 429 ? 30_000 : 4_000;
-      if (error.status !== 401 && now - last > throttleMs) {
+      const silent = req.context?.get(SILENT_TOAST) === true;
+      if (!silent && error.status !== 401 && now - last > throttleMs) {
         recentlyShown.set(error.status, now);
         const retryAfter = Number(error.error?.retryAfter ?? error.headers?.get('Retry-After') ?? '');
         toastService.error(

@@ -8,6 +8,7 @@ import { ConfirmService } from '../../core/services/confirm.service';
 import {
   CreateItemInput,
   DiscountScope,
+  MissingPriceLine,
   LIST_CATEGORIES,
   ShoppingListItem,
   formatMoney,
@@ -15,9 +16,11 @@ import {
   groupItemsByCategory,
   parseMoneyToMinor,
   describeOffer,
+  productKeyOf,
   offerOfItem,
   LineOffer,
   OFFER_PRESETS,
+  CompletePriceInput,
   DiscountInput,
   PhotoLine,
 } from '../../shared/models/shopping.model';
@@ -319,22 +322,20 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
             {{ estimateOpen() ? 'Ocultar desglose' : 'Ver desglose' }}
           </button>
         </div>
-        @if (list()?.discountDescription) {
-          <button type="button" class="detail__discount" data-test="discount-row" (click)="openDiscount()">
-            <app-icon name="percent" [size]="16" [label]="null" />
-            <span>{{ list()?.discountDescription }}</span>
-            <app-icon name="edit" [size]="14" [label]="null" />
-          </button>
-        }
+        <!-- Un boton con texto, no un icono suelto: «el porcentaje» es el ultimo sitio donde
+             alguien busca el descuento que no encuentra, y aqui se ha pedido tres veces. Con
+             texto en la barra se ve tambien CUANDO no hay ninguno, que es el caso por defecto. -->
         <div class="detail__bar-actions">
-          <app-icon-button
-            icon="percent"
-            [label]="list()?.discount ? 'Editar el descuento de la lista' : 'Anadir descuento a la lista'"
-            size="md"
-            variant="soft"
+          <button
+            type="button"
+            class="detail__discount"
+            [class.detail__discount--on]="!!list()?.discount"
             data-test="discount-open"
-            (onClick)="openDiscount()"
-          />
+            (click)="openDiscount()"
+          >
+            <app-icon name="percent" [size]="16" [label]="null" />
+            <span>{{ discountSummary() }}</span>
+          </button>
           <app-icon-button
             icon="delete_sweep"
             label="Vaciar el carro"
@@ -367,6 +368,10 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
           <span class="detail__selection-count">{{ selection().length }} seleccionadas</span>
           <button type="button" class="detail__ghost" data-test="bulk-check" (click)="bulkCheck(true)">Marcar comprado</button>
           <button type="button" class="detail__ghost" data-test="bulk-remove" (click)="bulkRemove()">Quitar</button>
+          <button type="button" class="detail__ghost" data-test="bulk-discount" (click)="openDiscountForSelection()">
+            <app-icon name="percent" [size]="16" [label]="null" />
+            Descuento
+          </button>
           <button type="button" class="detail__ghost" (click)="selection.set([])">Cancelar</button>
         </div>
       }
@@ -481,6 +486,35 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                 maxlength="120"
               />
             </label>
+            <div class="detail__field" data-test="product-link">
+              <span class="detail__field-label">
+                <app-icon name="link" [size]="14" [label]="null" />
+                Es el mismo producto que
+              </span>
+              @if (item.product_key && item.product_key !== keyOf(item.name)) {
+                <div class="detail__chips">
+                  <span class="detail__chip detail__chip--linked" data-test="product-link-current">{{ item.product_key }}</span>
+                  <button type="button" class="detail__link" data-test="product-link-clear" (click)="unlinkProduct(item)">
+                    <app-icon name="link_off" [size]="14" [label]="null" />
+                    Quitar el enlace
+                  </button>
+                </div>
+              }
+              <app-picker
+                label="Productos con precio anotado"
+                [options]="productLinkOptions()"
+                [value]="item.product_key"
+                placeholder="Busca entre lo que ya has pagado"
+                searchPlaceholder="Buscar producto"
+                emptyText="Nada aun: en cuanto anotes un precio aparecera aqui"
+                leadingIcon="local_offer"
+                (valueChange)="linkProduct(item, $event)"
+                data-test="product-link-picker"
+              />
+              @if (linkVariants(item); as variants) {
+                <p class="detail__hint" data-test="product-link-variants">{{ variants }}</p>
+              }
+            </div>
             <div class="detail__sheet-actions">
               <button type="button" class="detail__ghost detail__ghost--danger" (click)="remove(item)">Quitar linea</button>
               <button type="button" class="detail__primary" (click)="closeEdit()">Hecho</button>
@@ -496,9 +530,10 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
             <h2 class="detail__sheet-title">Descuento de la lista</h2>
 <app-icon-button class="detail__sheet-x" icon="close" label="Cerrar sin cambiar el descuento" size="sm" variant="ghost" data-test="discount-close" (onClick)="discountOpen.set(false)" />
             <p class="detail__hint">
-              El descuento se aplica al TOTAL de la cesta. Si solo cubre las primeras unidades
-              («2 primeros cafés a 1 €»), se reparte entre esas lineas en proporcion a lo que
-              pesa cada una.
+              El importe o el porcentaje se aplica a la cesta; con «primeras unidades» o
+              «productos concretos», solo a lo que entre, y se reparte en proporcion a lo que
+              pesa cada linea. Lo que no cuadra se dice: un descuento mayor que lo que cubre se
+              recorta, no devuelve dinero.
             </p>
             <div class="detail__chips" role="group" aria-label="Tipo de descuento">
               @for (kind of discountKinds; track kind.value) {
@@ -568,19 +603,104 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                 }
               </div>
               @if (discountDraft().scope === 'product' || discountDraft().scope === 'category') {
-                <div class="detail__target">
-                  <app-picker
-                    [label]="discountDraft().scope === 'category' ? 'Sección afectada' : 'Producto afectado'"
-                    [options]="discountTargetOptions()"
-                    [value]="discountDraft().target"
-                    [placeholder]="discountDraft().scope === 'category' ? 'Escribe la sección' : 'Escribe el producto'"
-                    searchPlaceholder="Buscar en la lista"
-                    emptyText="No está en la lista: se aplicara igualmente si el nombre coincide"
-                    leadingIcon="local_offer"
-                    [allowCustom]="true"
-                    (valueChange)="patchDiscount({ target: $event })"
-                    data-test="discount-target"
-                  />
+                <div class="detail__targets" data-test="discount-targets">
+                  <div class="detail__targets-head">
+                    <span>{{ discountDraft().scope === 'category' ? 'Que pasillos entran' : 'Que lineas entran' }}</span>
+                    <button type="button" class="detail__link" data-test="discount-targets-all" (click)="toggleAllTargets()">
+                      {{ allTargetsSelected() ? 'Quitar todas' : 'Elegir todas' }}
+                    </button>
+                  </div>
+
+                  @if (discountDraft().targets.length) {
+                    <div class="detail__chips" role="list" aria-label="Elegidas">
+                      @for (target of discountDraft().targets; track target) {
+                        <button
+                          type="button"
+                          class="detail__chip-btn detail__chip-btn--active"
+                          role="listitem"
+                          [attr.aria-label]="'Quitar ' + target + ' del descuento'"
+                          [attr.data-test]="'discount-target-chip-' + target"
+                          (click)="toggleTarget(target)"
+                        >
+                          {{ target }}
+                          <app-icon name="close" [size]="12" [label]="null" />
+                        </button>
+                      }
+                    </div>
+                  }
+
+                  @if (discountDraft().scope === 'category') {
+                    <div class="detail__chips" role="group" aria-label="Secciones de la lista">
+                      @for (option of discountTargetOptions(); track option.value) {
+                        <button
+                          type="button"
+                          class="detail__chip-btn"
+                          [class.detail__chip-btn--active]="isTargetSelected(option.label)"
+                          role="checkbox"
+                          [attr.aria-checked]="isTargetSelected(option.label)"
+                          [attr.data-test]="'discount-target-' + slug(option.value)"
+                          (click)="toggleTarget(option.label)"
+                        >
+                          {{ option.label }}
+                          <span class="detail__chip-hint">{{ option.hint }}</span>
+                        </button>
+                      }
+                    </div>
+                  } @else {
+                    <ul class="detail__target-list" data-test="discount-target-list">
+                      @for (option of discountTargetOptions(); track option.value) {
+                        <li>
+                          <button
+                            type="button"
+                            class="detail__target-row"
+                            [class.is-on]="isTargetSelected(option.label)"
+                            role="checkbox"
+                            [attr.aria-checked]="isTargetSelected(option.label)"
+                            [attr.data-test]="'discount-target-' + slug(option.value)"
+                            (click)="toggleTarget(option.label)"
+                          >
+                            <app-icon
+                              [name]="isTargetSelected(option.label) ? 'check_box' : 'check_box_outline_blank'"
+                              [size]="20"
+                              [label]="null"
+                            />
+                            <span class="detail__target-dot" [style.background]="option.color ?? 'transparent'"></span>
+                            <span class="detail__target-name">{{ option.label }}</span>
+                            <span class="detail__target-hint">{{ option.hint }}</span>
+                          </button>
+                        </li>
+                      }
+                      @if (!discountTargetOptions().length) {
+                        <li class="detail__target-empty">La lista esta vacia: anade las lineas primero, o escribe el nombre abajo.</li>
+                      }
+                    </ul>
+                  }
+
+                  <div class="detail__target-add">
+                    <input
+                      name="targetAdd"
+                      [ngModel]="targetDraft()"
+                      (ngModelChange)="targetDraft.set($event)"
+                      (keyup.enter)="addTarget()"
+                      placeholder="Otro nombre (p. ej. jamon cocido)"
+                      maxlength="80"
+                      data-test="discount-target-input"
+                    />
+                    <button
+                      type="button"
+                      class="detail__ghost"
+                      [disabled]="!targetDraft().trim()"
+                      data-test="discount-target-add"
+                      (click)="addTarget()"
+                    >
+                      <app-icon name="add" [size]="16" [label]="null" />
+                      Anadir
+                    </button>
+                  </div>
+                  <p class="detail__hint">
+                    Se compara el nombre normalizado: «Jamon» no arrastra a «jamon curado», para
+                    que un descuento no se aplique a lineas que nadie eligio.
+                  </p>
                 </div>
               }
               @if (discountDraft().scope === 'firstUnits') {
@@ -611,6 +731,126 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
               }
               <button type="button" class="detail__primary" data-test="discount-save" (click)="saveDiscount()">Guardar</button>
             </div>
+          </section>
+        </div>
+      }
+
+      @if (payOpen()) {
+        <div class="detail__sheet-backdrop" (click)="closePay()">
+          <section class="detail__sheet detail__sheet--wide" data-test="pay-sheet" (click)="$event.stopPropagation()" aria-label="Precios pagados por tienda">
+            <h2 class="detail__sheet-title">Cuanto has pagado</h2>
+            <app-icon-button
+              class="detail__sheet-x"
+              icon="close"
+              label="Cerrar sin terminar la compra"
+              size="sm"
+              variant="ghost"
+              data-test="pay-close"
+              (onClick)="closePay()"
+            />
+            <p class="detail__hint">
+              Se guarda por establecimiento y con el nombre que usa esa tienda: es lo que hace
+              que la proxima lista en Mercadona sepa cuanto cuesta ahi el pan, en vez de
+              recordar lo que valia en Lidl en marzo.
+            </p>
+
+            <div class="detail__field">
+              <span class="detail__field-label">
+                <app-icon name="storefront" [size]="14" [label]="null" />
+                Establecimiento
+              </span>
+              @if (storeChips().length) {
+                <div class="detail__chips" role="group" aria-label="Tiendas de esta casa">
+                  @for (store of storeChips(); track store) {
+                    <button
+                      type="button"
+                      class="detail__chip-btn"
+                      [class.detail__chip-btn--active]="payStore().trim() === store"
+                      [attr.data-test]="'pay-store-' + store"
+                      (click)="choosePayStore(store)"
+                    >
+                      {{ store }}
+                    </button>
+                  }
+                </div>
+              }
+              <input
+                name="payStore"
+                [ngModel]="payStore()"
+                (ngModelChange)="setPayStore($event)"
+                placeholder="Mercadona"
+                maxlength="80"
+                data-test="pay-store"
+              />
+              @if (payStoreError()) {
+                <p class="detail__hint detail__hint--warn" data-test="pay-store-error">
+                  Sin tienda no se guarda: un precio sin establecimiento no se puede volver a usar.
+                </p>
+              }
+            </div>
+
+            <ul class="detail__pay">
+              @for (line of payLines(); track line.itemId) {
+                <li class="detail__pay-row" [class.detail__pay-row--empty]="!payValue(line.itemId).trim()">
+                  <div class="detail__pay-head">
+                    <span class="detail__pay-name">{{ line.name }}</span>
+                    <span class="detail__pay-qty">{{ line.quantity }}{{ line.unit ? ' ' + line.unit : '' }}</span>
+                  </div>
+                  @if (paySuggestion(line.itemId); as hint) {
+                    <button
+                      type="button"
+                      class="detail__pay-suggest"
+                      [attr.data-test]="'pay-suggest-' + line.itemId"
+                      (click)="usePaySuggestion(line.itemId, hint.minor)"
+                    >
+                      <app-icon name="history" [size]="14" [label]="null" />
+                      Usar {{ money(hint.minor) }} <span *ngIf="hint.store">({{ hint.store }})</span>
+                    </button>
+                  }
+                  <div class="detail__pay-money">
+                    <input
+                      inputmode="decimal"
+                      [placeholder]="payMode(line.itemId) === 'unit' ? '1,95 por unidad' : '3,90 en total'"
+                      [ngModel]="payValue(line.itemId)"
+                      (ngModelChange)="setPayValue(line.itemId, $event)"
+                      [attr.data-test]="'pay-price-' + line.itemId"
+                    />
+                    <button type="button" class="detail__link" [attr.data-test]="'pay-mode-' + line.itemId" (click)="togglePayMode(line.itemId)">
+                      {{ payMode(line.itemId) === 'unit' ? '€/unidad' : 'total pagado' }}
+                    </button>
+                  </div>
+                  <input
+                    class="detail__pay-alias"
+                    [name]="'payAlias' + line.itemId"
+                    [ngModel]="payAlias(line.itemId)"
+                    (ngModelChange)="setPayAlias(line.itemId, $event)"
+                    placeholder="Como se llama aqui (opcional)"
+                    maxlength="120"
+                    [attr.data-test]="'pay-alias-' + line.itemId"
+                  />
+                </li>
+              }
+            </ul>
+
+            <div class="detail__sheet-actions">
+              <button type="button" class="detail__ghost" data-test="pay-cancel" (click)="closePay()">Cancelar</button>
+              <button
+                type="button"
+                class="detail__primary"
+                data-test="pay-confirm"
+                [disabled]="payMissing() > 0"
+                (click)="finishPurchase()"
+              >
+                <app-icon name="done_all" [size]="16" [label]="null" />
+                Guardar y terminar
+              </button>
+            </div>
+            <p class="detail__hint" data-test="pay-foot">
+              @if (payMissing() > 0) {
+                Faltan {{ payMissing() }} {{ payMissing() === 1 ? 'linea' : 'lineas' }} por anotar ·
+              }
+              total {{ money(payTotal()) }} · lo que no se escribe aqui no entra en el historial.
+            </p>
           </section>
         </div>
       }
@@ -1535,6 +1775,186 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
         justify-content: space-between;
         gap: var(--space-2);
       }
+
+      /* ── descuento con varias dianas ─────────────────────────────── */
+      /* La fila tocable es de 44 px minimo: quien elige los productos esta en la tienda,
+         con una mano y el carrito delante, y una lista compacta de checkboxes es la receta
+         para marcar la linea de al lado. */
+      .detail__targets {
+        display: grid;
+        gap: var(--space-2);
+        margin-top: var(--space-2);
+      }
+      .detail__targets-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+      }
+      .detail__target-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: 2px;
+        max-height: 45vh;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--bg-primary);
+      }
+      .detail__target-row {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        width: 100%;
+        min-height: 44px;
+        padding: var(--space-2) var(--space-3);
+        border: none;
+        border-bottom: 1px solid var(--border-default);
+        background: transparent;
+        color: var(--text-primary);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .detail__target-row:last-child {
+        border-bottom: none;
+      }
+      .detail__target-row.is-on {
+        background: var(--primary-subtle);
+      }
+      .detail__target-row:active {
+        transform: scale(0.99);
+      }
+      .detail__target-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: var(--radius-full);
+        flex: 0 0 auto;
+      }
+      .detail__target-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .detail__target-hint,
+      .detail__chip-hint {
+        flex: 0 0 auto;
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+      }
+      .detail__target-empty {
+        padding: var(--space-3);
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+      }
+      .detail__target-add {
+        display: flex;
+        gap: var(--space-2);
+        align-items: center;
+      }
+      .detail__target-add input {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .detail__discount--on {
+        border-style: solid;
+        background: var(--primary-subtle);
+      }
+
+      /* ── hoja de precios del cierre ────────────────────────────────── */
+      .detail__pay {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        display: grid;
+        gap: var(--space-3);
+        max-height: 45vh;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+      .detail__pay-row {
+        display: grid;
+        gap: var(--space-1);
+        padding: var(--space-3);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--bg-primary);
+      }
+      .detail__pay-row--empty {
+        border-color: var(--warning, #d9822b);
+      }
+      .detail__pay-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: var(--space-2);
+      }
+      .detail__pay-name {
+        font-weight: 600;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .detail__pay-qty {
+        flex: 0 0 auto;
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+        font-variant-numeric: tabular-nums;
+      }
+      .detail__pay-money {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
+      .detail__pay-money input {
+        flex: 1 1 auto;
+        min-width: 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .detail__pay-suggest {
+        justify-self: start;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px var(--space-2);
+        border: 1px dashed var(--border-default);
+        border-radius: var(--radius-full);
+        background: transparent;
+        color: var(--text-secondary);
+        font: inherit;
+        font-size: var(--text-xs);
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .detail__pay-suggest:hover {
+        border-style: solid;
+        color: var(--primary-dark);
+      }
+      .detail__pay-alias {
+        font-size: var(--text-sm);
+      }
+      .detail__chip--linked {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px var(--space-2);
+        border-radius: var(--radius-full);
+        background: var(--primary-subtle);
+        color: var(--primary-dark);
+        font-size: var(--text-xs);
+      }
+      .detail__hint--warn {
+        color: var(--danger, #c62828);
+      }
     `
   ]
 })
@@ -1807,7 +2227,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
 
   // ------------------------------------------------------- hoja de edicion
 
+  /** Al abrir la hoja se traen los productos con precio: el enlace se elige ahi, y no se
+   *  puede elegir lo que no se ha cargado. */
   openEdit(item: ShoppingListItem): void {
+    void this.shopping.loadKnownProducts();
     // Un ⋯ que llega tarde (el arrastre que lo precedio ya borro la linea) no abre
     // una hoja sobre una fila que ya no existe.
     if (!this.items().some(candidate => candidate.id === item.id)) return;
@@ -1900,19 +2323,205 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.debounced('list:name', () => void this.shopping.renameList(list.id, { name }, list.version));
   }
 
+  /**
+   * Terminar la compra. Decide el server (toda linea comprada necesita precio y tienda), y
+   * su rechazo no se traduce a un toast: abre la hoja donde se escriben los precios, porque
+   * quien cierra una lista esta de pie en el pasillo con el ticket en la mano, y lo ultimo
+   * que necesita es otro sitio al que ir a buscar el boton.
+   */
   async complete(): Promise<void> {
     const list = this.list();
     if (!list) return;
+    const result = await this.shopping.complete(list.id);
+    if (result.ok) {
+      this.finishCompleteToast(result.paidMinor, result.pricesRecorded, result.store);
+      return;
+    }
+    if (result.code === 'PRICES_MISSING') {
+      this.openPay(result.missing);
+      return;
+    }
+    if (result.code === 'STORE_REQUIRED') {
+      this.payOpen.set(true);
+      this.payStoreError.set(true);
+      return;
+    }
+    if (result.code === 'STALE_LIST') {
+      this.toast.show({ type: 'info', title: 'La lista habia cambiado', message: 'Se ha vuelto a cargar: vuelve a terminar la compra.' });
+      this.shopping.loadList(list.id);
+    }
+  }
+
+  private finishCompleteToast(paidMinor: number, recorded: number, store: string | null): void {
     const total = this.estimate()?.totalMinor ?? 0;
     const unpriced = this.unpricedCount();
-    await this.shopping.setStatus(list.id, 'done');
     this.toast.success(
       'Compra terminada',
-      unpriced > 0
-        ? `${formatMoney(total)} contados y ${unpriced} lineas sin precio.`
-        : `${formatMoney(total)} en total. Los precios se quedan para la proxima lista.`
+      `${formatMoney(paidMinor || total)} pagados${store ? ' en ' + store : ''} · ${recorded} ${
+        recorded === 1 ? 'precio apuntado' : 'precios apuntados'
+      }${unpriced > 0 ? ` · ${unpriced} ${unpriced === 1 ? 'linea pendiente' : 'lineas pendientes'} sin precio` : ''}.`
     );
     void this.router.navigate(['/shopping'], { queryParams: { tab: 'hechas' } });
+  }
+
+  // ------------------------------------------------ hoja de precios del cierre
+
+  readonly payOpen = signal(false);
+  readonly payLines = signal<MissingPriceLine[]>([]);
+  readonly payStore = signal('');
+  readonly payStoreError = signal(false);
+  private payValues = new Map<string, string>();
+  private payModes = new Map<string, 'unit' | 'total'>();
+  private payAliases = new Map<string, string>();
+
+  readonly storeChips = computed(() => this.shopping.stores().slice(0, 4).map(entry => entry.store));
+
+  /**
+   * Se parte de lo que el server ha rechazado, no de toda la lista: las lineas con precio
+   * ya estan bien, y volver a pedirlas es desconfiar de quien lo acaba de escribir.
+   */
+  openPay(missing: MissingPriceLine[]): void {
+    this.payLines.set(missing);
+    this.payStore.set(this.list()?.store?.trim() ?? '');
+    this.payStoreError.set(false);
+    for (const line of missing) {
+      const suggested = this.paySuggestion(line.itemId);
+      if (suggested && !this.payValue(line.itemId).trim()) this.payValues.set(line.itemId, formatMoney(suggested.minor));
+    }
+    this.payOpen.set(true);
+  }
+
+  payValue(itemId: string): string {
+    return this.payValues.get(itemId) ?? '';
+  }
+
+  setPayValue(itemId: string, value: string | null): void {
+    this.payValues.set(itemId, String(value ?? ''));
+  }
+
+  setPayStore(value: string | null): void {
+    this.payStore.set(String(value ?? ''));
+    this.payStoreError.set(false);
+  }
+
+  choosePayStore(store: string): void {
+    this.setPayStore(store);
+  }
+
+  payMode(itemId: string): 'unit' | 'total' {
+    return this.payModes.get(itemId) ?? 'unit';
+  }
+
+  /**
+   * Un ticket dice «3,90 €», una memoria dice «a 1,30». Se puede entrar cualquiera de las
+   * dos y la otra se calcula: la division la hace el server sobre las unidades PAGADAS, que
+   * con una oferta 3x2 no son las llevadas —y ahi es donde un reparto a mano enseña a la app
+   * un precio un tercio mas barato del real, para siempre.
+   */
+  togglePayMode(itemId: string): void {
+    this.payModes.set(itemId, this.payMode(itemId) === 'unit' ? 'total' : 'unit');
+  }
+
+  payAlias(itemId: string): string {
+    return this.payAliases.get(itemId) ?? '';
+  }
+
+  setPayAlias(itemId: string, value: string | null): void {
+    this.payAliases.set(itemId, String(value ?? ''));
+  }
+
+  paySuggestion(itemId: string): { minor: number; store: string | null } | null {
+    const line = this.estimate()?.lines.find(entry => entry.itemId === itemId);
+    if (!line || line.source === 'unpriced' || line.unitMinor == null) return null;
+    const quantity = this.items().find(item => item.id === itemId)?.quantity ?? 1;
+    return { minor: Math.max(0, Math.round(line.unitMinor * (quantity || 1))), store: line.store ?? null };
+  }
+
+  usePaySuggestion(itemId: string, minor: number): void {
+    this.payModes.set(itemId, 'total');
+    this.payValues.set(itemId, formatMoney(minor));
+  }
+
+  payMissing(): number {
+    return this.payLines().filter(line => parseMoneyToMinor(this.payValue(line.itemId)) === null).length;
+  }
+
+  payTotal(): number {
+    let total = 0;
+    for (const line of this.payLines()) {
+      const minor = parseMoneyToMinor(this.payValue(line.itemId));
+      if (minor === null) continue;
+      total += this.payMode(line.itemId) === 'unit' ? Math.round(minor * (line.quantity || 1)) : minor;
+    }
+    return total;
+  }
+
+  closePay(): void {
+    this.payOpen.set(false);
+    this.payStoreError.set(false);
+  }
+
+  /** Escribir los precios y cerrar va en la MISMA llamada: dos peticiones sueltas dejan la
+   *  ventana en la que el cierre llega antes que el precio y la lista se archiva coja. */
+  async finishPurchase(): Promise<void> {
+    const list = this.list();
+    if (!list) return;
+    const store = this.payStore().trim();
+    const prices: CompletePriceInput[] = [];
+    for (const line of this.payLines()) {
+      const minor = parseMoneyToMinor(this.payValue(line.itemId));
+      if (minor === null) continue;
+      const alias = this.payAlias(line.itemId).trim();
+      prices.push(
+        this.payMode(line.itemId) === 'unit'
+          ? { itemId: line.itemId, priceMinor: minor, ...(alias ? { productName: alias } : {}) }
+          : { itemId: line.itemId, totalPaidMinor: minor, quantity: line.quantity || 1, ...(alias ? { productName: alias } : {}) }
+      );
+    }
+    const result = await this.shopping.complete(list.id, { store: store || null, prices });
+    if (result.ok) {
+      this.payOpen.set(false);
+      this.finishCompleteToast(result.paidMinor, result.pricesRecorded, result.store || store || null);
+      return;
+    }
+    if (result.code === 'PRICES_MISSING') {
+      this.openPay(result.missing);
+      return;
+    }
+    if (result.code === 'STORE_REQUIRED') this.payStoreError.set(true);
+  }
+
+  // ---------------------------------------------------------- enlace de producto
+
+  /** La clave se compara como en el server: dos normalizaciones distintas es tener dos
+   *  opiniones sobre si «Jamón Serrano» es el producto que ya tiene precio. */
+  keyOf(name: string): string {
+    return productKeyOf(name);
+  }
+
+  readonly productLinkOptions = computed<PickerOption[]>(() =>
+    this.shopping.knownProducts().map(product => ({
+      value: product.productKey,
+      label: product.name,
+      hint: product.variants.length > 1 ? product.variants.length + ' tiendas' : product.observations + ' precios'
+    }))
+  );
+
+  /** Cuanto cuesta el producto enlazado en cada tienda: la frase que hace saber que el
+   *  enlace existe y que los precios no son uno solo. */
+  linkVariants(item: ShoppingListItem): string | null {
+    const product = this.shopping.knownProducts().find(entry => entry.productKey === item.product_key);
+    if (!product?.variants.length) return null;
+    return product.variants.map(variant => `${variant.store ?? 'sin tienda'} ${formatMoney(variant.unitMinor)}`).join(' · ');
+  }
+
+  async linkProduct(item: ShoppingListItem, key: string | null): Promise<void> {
+    if (!key || key === item.product_key) return;
+    await this.shopping.updateItemSync(item.list_id, item, { productKey: key });
+  }
+
+  async unlinkProduct(item: ShoppingListItem): Promise<void> {
+    await this.shopping.updateItemSync(item.list_id, item, { productKey: null });
   }
 
   sourceLabel(source: 'manual' | 'observed' | 'unpriced'): string {
@@ -2021,17 +2630,25 @@ export class ShoppingListDetailComponent implements OnDestroy {
   readonly discountScopes: { value: DiscountScope; label: string; hint: string }[] = [
     { value: 'all', label: 'Toda la cesta', hint: 'Se aplica al total' },
     { value: 'firstUnits', label: 'Primeras unidades', hint: 'Tipo «2 primeros cafés a 1 €»' },
-    { value: 'product', label: 'Un producto', hint: '«2 € en el jamón»: solo esa línea baja' },
-    { value: 'category', label: 'Una sección', hint: 'Todo el pasillo, p. ej. lácteos' }
+    { value: 'product', label: 'En productos', hint: '«2 € en jamón y queso»: solo esas líneas bajan' },
+    { value: 'category', label: 'En secciones', hint: 'Pasillos enteros, p. ej. lácteos y charcutería' }
   ];
   readonly percentOptions: PickerOption[] = [5, 10, 15, 20, 25, 50].map((value) => ({ value: String(value), label: value + ' %' }));
   readonly discountDraft = signal<{
     kind: 'amount' | 'percent';
     scope: DiscountScope;
     firstUnits: number | null;
-    target: string | null;
+    /**
+     * Lo que entra en el descuento, en los nombres legibles de la lista. Es un array y no
+     * un string porque el cartel del pasillo casi nunca habla de un producto: «2 € en
+     * jamón, queso y pan» es UN descuento sobre tres lineas, y partirlo en tres seria
+     * aplicar tres recortes donde la caja aplico uno.
+     */
+    targets: string[];
     label: string | null;
-  }>({ kind: 'amount', scope: 'all', firstUnits: null, target: null, label: null });
+  }>({ kind: 'amount', scope: 'all', firstUnits: null, targets: [], label: null });
+  /** Nombre escrito a mano para anadirlo a las dianas (lo que no esta en la lista). */
+  readonly targetDraft = signal('');
   readonly amountDraft = signal('');
   readonly percentDraft = signal<string | null>(null);
 
@@ -2044,9 +2661,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
       kind: discount?.kind ?? 'amount',
       scope: discount?.scope ?? 'all',
       firstUnits: discount?.first_units ?? null,
-      // Con 'all' el target puede venir de cuando era «en el jamón»: se limpia aqui para
+      // Con 'all' las dianas pueden venir de cuando era «en el jamón»: se limpian aqui para
       // que la hoja no muestre una diana que ya no esta aplicando nada.
-      target: discount?.scope === 'product' || discount?.scope === 'category' ? discount?.target ?? null : null,
+      targets:
+        discount && (discount.scope === 'product' || discount.scope === 'category')
+          ? [...new Set([...(discount.targets ?? []), discount.target ?? null].filter((v): v is string => !!v))]
+          : [],
       label: discount?.label ?? null
     });
     this.amountDraft.set(discount?.value_minor ? (discount.value_minor / 100).toFixed(2).replace('.', ',') : '');
@@ -2057,14 +2677,59 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.discountDraft.update((draft) => ({ ...draft, kind }));
   }
 
-  patchDiscount(changes: Partial<{ scope: DiscountScope; firstUnits: number | null; target: string | null; label: string | null }>): void {
+  patchDiscount(changes: Partial<{ scope: DiscountScope; firstUnits: number | null; label: string | null }>): void {
     this.discountDraft.update((draft) => ({ ...draft, ...changes }));
     // Cambiar de alcance deja de tener sentido la diana anterior (una seccion no es un
     // producto), y arrastrarla daria un descuento guardado con una nota que no se corresponde.
     if (changes.scope && changes.scope !== 'product' && changes.scope !== 'category') {
-      this.discountDraft.update((draft) => ({ ...draft, target: null }));
+      this.discountDraft.update((draft) => ({ ...draft, targets: [] }));
     }
   }
+
+  /** Clave de un `data-test`: los nombres de producto llevan espacios y acentos. */
+  slug(value: string): string {
+    return productKeyOf(value).replace(/\s+/g, '-');
+  }
+
+  isTargetSelected(name: string): boolean {
+    return this.discountDraft().targets.includes(name);
+  }
+
+  /** Conmutar: deseleccionar es la unica forma de deshacer un toque en la hoja. */
+  toggleTarget(name: string): void {
+    const clean = String(name ?? '').trim();
+    if (!clean) return;
+    this.discountDraft.update((draft) => ({
+      ...draft,
+      targets: draft.targets.includes(clean) ? draft.targets.filter((entry) => entry !== clean) : [...draft.targets, clean]
+    }));
+  }
+
+  addTarget(): void {
+    const clean = this.targetDraft().trim();
+    if (!clean) return;
+    this.toggleTarget(clean);
+    this.targetDraft.set('');
+  }
+
+  allTargetsSelected(): boolean {
+    const options = this.discountTargetOptions();
+    return options.length > 0 && options.every((option) => this.isTargetSelected(option.label));
+  }
+
+  toggleAllTargets(): void {
+    const options = this.discountTargetOptions();
+    this.discountDraft.update((draft) => ({
+      ...draft,
+      targets: this.allTargetsSelected() ? [] : options.map((option) => option.label)
+    }));
+  }
+
+  /** La fila de totales: el descuento presente o ausente, pero dicho con palabras. */
+  readonly discountSummary = computed(() => {
+    const description = this.list()?.discountDescription;
+    return description ? `Descuento · ${description}` : 'Anadir descuento';
+  });
 
   /**
    * Dianas posibles del descuento, sacadas de LO QUE HAY EN LA LISTA: prometer un
@@ -2134,14 +2799,14 @@ export class ShoppingListDetailComponent implements OnDestroy {
     }
     if (draft.scope === 'firstUnits') input.firstUnits = draft.firstUnits ?? 1;
     if (draft.scope === 'product' || draft.scope === 'category') {
-      const target = String(draft.target ?? '').trim();
-      if (!target) {
+      const targets = [...new Set(draft.targets.map((entry) => String(entry).trim()).filter(Boolean))];
+      if (!targets.length) {
         // Sin diana el server responderia 400, y un 400 despues de pulsar «Guardar» sabe a
-        // castigo: se lo decimos antes, con el campo marcado.
-        this.toast.warning('Dime donde', 'Elige el producto o la sección a la que se aplica.');
+        // castigo: se lo decimos antes, con la lista de lineas marcada.
+        this.toast.warning('Dime donde', 'Elige al menos un producto o una sección a la que se aplica.');
         return;
       }
-      input.target = target;
+      input.targets = targets;
     }
     if (draft.label) input.label = draft.label;
 
@@ -2197,9 +2862,23 @@ export class ShoppingListDetailComponent implements OnDestroy {
     { value: 'shelf', label: 'Estanteria', hint: 'precio por unidad' }
   ];
 
-  openDiscount(): void {
+  openDiscount(prefill?: string[]): void {
     this.hydrateDiscount();
+    // Desde la seleccion multiple las lineas elegidas SON las dianas: es el gesto de
+    // «esto tres, que me han dicho que llevan descuento», y no hay que volver a buscarlas.
+    if (prefill?.length) {
+      this.discountDraft.update((draft) => ({
+        ...draft,
+        scope: draft.scope === 'all' ? 'product' : draft.scope,
+        targets: [...new Set([...draft.targets, ...prefill])]
+      }));
+    }
     this.discountOpen.set(true);
+  }
+
+  openDiscountForSelection(): void {
+    const chosen = this.items().filter((item) => this.selection().includes(item.id)).map((item) => item.name);
+    this.openDiscount(chosen.length ? chosen : undefined);
   }
 
   openPhoto(): void {

@@ -91,6 +91,7 @@ const PAGE_SIZES: PickerOption[] = [
             <span>Tienda (opcional)</span>
             <input
               name="listStore"
+              data-test="list-store"
               [(ngModel)]="draftStore"
               placeholder="Mercadona"
               autocomplete="off"

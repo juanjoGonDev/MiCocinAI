@@ -1,5 +1,6 @@
 import {
   formatMoney,
+  productKeyOf,
   formatQuantity,
   groupItemsByCategory,
   parseMoneyToMinor,
@@ -94,5 +95,28 @@ describe('shopping.model — cantidades y secciones', () => {
 
   it('no crea grupo fantasma cuando la lista esta vacia', () => {
     expect(groupItemsByCategory([])).toEqual([]);
+  });
+});
+
+describe('productKeyOf (la clave con la que se enlaza un producto)', () => {
+  it('quita acentos y mayusculas, que es lo que hace que «Jamón» sea «jamon»', () => {
+    expect(productKeyOf('Jamón Serrano')).toBe('jamon serrano');
+    expect(productKeyOf('  JAMON  SERRANO ')).toBe('jamon serrano');
+  });
+
+  it('los simbolos se convierten en espacios, no en basura: «1/2 pieza» sigue siendo legible', () => {
+    expect(productKeyOf('Leche 1L')).toBe('leche 1l');
+    expect(productKeyOf('Pan de molde (grande)')).toBe('pan de molde grande');
+  });
+
+  it('lo vacio es clave vacia: «sin enlace» tiene que ser distinguishle de «el nombre raro»', () => {
+    expect(productKeyOf('')).toBe('');
+    expect(productKeyOf(null)).toBe('');
+    expect(productKeyOf(undefined)).toBe('');
+  });
+
+  it('dos nombres que son el mismo producto dan la misma clave, y «pan» y «pan de molde» no', () => {
+    expect(productKeyOf('Jamón')).not.toBe(productKeyOf('Jamón Serrano'));
+    expect(productKeyOf('Leche semidesnatada')).toBe(productKeyOf('leche  semidesnatada'));
   });
 });
