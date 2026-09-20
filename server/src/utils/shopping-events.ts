@@ -22,6 +22,8 @@ export const EVENT_ACTIONS = [
   'item.add',
   'item.merge',
   'item.update',
+  'item.discount',
+  'item.offer',
   'item.check',
   'item.uncheck',
   'item.remove',
@@ -90,6 +92,10 @@ export function describeEvent(event: { action: string; item_name: string | null;
       return `${who} ha sumado unidades a${item}`;
     case 'item.update':
       return `${who} ha editado${item}`;
+    case 'item.discount':
+      return `${who} ha cambiado el descuento de${item}`;
+    case 'item.offer':
+      return `${who} ha cambiado la oferta de${item}`;
     case 'item.check':
       return `${who} ha marcado${item} como comprada`;
     case 'item.uncheck':

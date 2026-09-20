@@ -397,7 +397,11 @@ export class ShoppingService {
       unit: input.unit ?? null,
       category: input.category ?? null,
       priceMinor: input.priceMinor ?? null,
-      note: input.note ?? null
+      note: input.note ?? null,
+      // La oferta y el descuento viajan en el alta: añadir «6 Cervexas 3x2 -10 %» y que la
+      // fila nazca sin ninguna de las dos es obligar a entrar en la hoja a parchearla.
+      ...(input.offer !== undefined ? { offer: input.offer } : {}),
+      ...(input.discount !== undefined ? { discount: input.discount } : {})
     };
     return this.request<{ item: ShoppingListItem; merged: boolean }>(() =>
       this.http
@@ -488,6 +492,14 @@ export class ShoppingService {
       // conteste el servidor, y el usuario toca otra vez.
       ...(patch.offer !== undefined
         ? { promo_buy: patch.offer?.buy ?? null, promo_take: patch.offer?.take ?? null }
+        : {}),
+      ...(patch.discount !== undefined
+        ? {
+            disc_kind: patch.discount?.kind ?? null,
+            disc_value_minor: patch.discount?.kind === 'amount' ? (patch.discount.valueMinor ?? null) : null,
+            disc_percent_bps: patch.discount?.kind === 'percent' ? (patch.discount.percentBps ?? null) : null,
+            disc_units: patch.discount?.units ?? null
+          }
         : {})
     };
   }

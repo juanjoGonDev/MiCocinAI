@@ -123,6 +123,72 @@ export function isEligibleForDiscount(
   return wanted.includes(keyOf(line.productKey)) || wanted.includes(keyOf(line.name));
 }
 
+/**
+ * El descuento que pertenece a UNA linea. Existe porque el cartel del pasillo no siempre
+ * habla de la cesta: «segunda unidad a mitad de precio» o «2 € en este jamon» son de ese
+ * producto, y guardarlo en la lista entera obligaba a elegir entre mentir del carro o no
+ * anotarlo. Se aplica DESPUES de la oferta y ANTES del cupon de la cesta, que es el orden
+ * de una caja real.
+ */
+export type LineDiscount = {
+  kind: DiscountKind;
+  valueMinor: number | null;
+  percentBps: number | null;
+  /** Primeras N unidades pagadas a las que se aplica; `null` = a todas. */
+  units: number | null;
+};
+
+export type LineDiscountResult = {
+  kind: DiscountKind;
+  minor: number;
+  appliedUnits: number;
+  reason: 'applied' | 'clamped' | 'fewerUnits' | 'noValue' | 'noUnitPrice';
+};
+
+/** Nada de decimales sueltos: o es un recorte valido o no es un descuento. */
+export function normalizeLineDiscount(input: Partial<LineDiscount> | null | undefined): LineDiscount | null {
+  if (!input || (input.kind !== 'amount' && input.kind !== 'percent')) return null;
+  const units = Number.isFinite(Number(input.units)) && Number(input.units) > 0 ? Number(input.units) : null;
+  if (input.kind === 'percent') {
+    const bps = Math.round(Number(input.percentBps ?? 0));
+    if (!Number.isFinite(bps) || bps <= 0 || bps > 10_000) return null;
+    return { kind: 'percent', valueMinor: null, percentBps: bps, units };
+  }
+  const value = Math.round(Number(input.valueMinor ?? 0));
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return { kind: 'amount', valueMinor: value, percentBps: null, units };
+}
+
+/**
+ * Cuanto baja esa linea. Se devuelve el `reason` en vez de un numero mudo: «-2 €» sobre una
+ * linea de 0,95 se recorta a 0,95, y sin la razon la pantalla no puede decir que el cartel
+ * prometia mas de lo que la cesta puede dar.
+ */
+export function applyLineDiscount(
+  unitsPaid: number,
+  unitMinor: number | null | undefined,
+  discount: LineDiscount | null | undefined
+): LineDiscountResult | null {
+  if (!discount) return null;
+  const units = Number.isFinite(unitsPaid) && unitsPaid > 0 ? unitsPaid : 0;
+  if (unitMinor == null || unitMinor <= 0 || units <= 0) {
+    return { kind: discount.kind, minor: 0, appliedUnits: 0, reason: 'noUnitPrice' };
+  }
+  const wanted = discount.units != null && discount.units > 0 ? discount.units : units;
+  const applied = Math.min(wanted, units);
+  const base = HALF_UP(unitMinor * applied);
+  const raw = discount.kind === 'percent' ? HALF_UP((base * (discount.percentBps ?? 0)) / 10_000) : discount.valueMinor ?? 0;
+
+  let reason: LineDiscountResult['reason'] = 'applied';
+  if (raw <= 0) reason = 'noValue';
+  // Que falten unidades es el dato que hay que contar primero: «50 % a partir de la segunda
+  // unidad» con una sola unidad en la cesta no es un recorte, es que la promo no aplica.
+  else if (applied < wanted) reason = 'fewerUnits';
+  const minor = Math.min(raw, base);
+  if (raw > base && raw > 0 && reason === 'applied') reason = 'clamped';
+  return { kind: discount.kind, minor: HALF_UP(minor), appliedUnits: applied, reason };
+}
+
 export type MoneyLine = {
   itemId: string;
   quantity: number;
@@ -131,6 +197,8 @@ export type MoneyLine = {
   /** Para los descuentos por producto o seccion (`scope: 'product' | 'category'`). */
   productKey?: string | null;
   category?: string | null;
+  /** El descuento propio de la linea, si lo tiene. */
+  discount?: LineDiscount | null;
 };
 
 export type LineMoney = {
@@ -144,10 +212,15 @@ export type LineMoney = {
   unitMinor: number | null;
   /** Si a esta linea le toca el descuento de la lista. */
   discounted: boolean;
+  /** Lo que baja el descuento propio de la linea (antes del cupon de la cesta). */
+  lineDiscountMinor: number;
+  lineDiscount?: LineDiscountResult | null;
 };
 
 export type BasketMoney = {
   lines: LineMoney[];
+  /** Suma de los descuentos propios de las lineas, para poder decir «-0,30 € en 2 lineas». */
+  lineDiscountMinor: number;
   subtotalMinor: number;
   offerSavingsMinor: number;
   discountMinor: number;
@@ -212,18 +285,25 @@ export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | n
     // La oferta se aplica ANTES de sumar: se paga menos, no mas barato por unidad.
     const grossMinor = unit == null ? 0 : HALF_UP(unit * payable);
     const fullMinor = unit == null ? 0 : HALF_UP(unit * units);
+    // Y despues de la oferta, el descuento de la propia linea: el 2x1 cambia CUANTAS
+    // unidades se pagan, el -10 % cambia CUANTO se paga por ellas.
+    const lineDiscount = applyLineDiscount(payable, unit, line.discount);
+    const lineDiscountMinor = lineDiscount?.minor ?? 0;
     return {
       itemId: line.itemId,
       units,
       paidUnits: payable,
       unitMinor: unit,
       grossMinor,
-      netMinor: grossMinor,
+      netMinor: Math.max(0, grossMinor - lineDiscountMinor),
       offerSavingsMinor: Math.max(0, fullMinor - grossMinor),
+      lineDiscountMinor,
+      lineDiscount,
       discounted: isEligibleForDiscount(line, earlyDiscount)
     };
   });
 
+  const lineDiscountMinor = lines.reduce((sum, line) => sum + line.lineDiscountMinor, 0);
   const subtotalMinor = lines.reduce((sum, line) => sum + line.netMinor, 0);
   const offerSavingsMinor = lines.reduce((sum, line) => sum + line.offerSavingsMinor, 0);
 
@@ -235,6 +315,7 @@ export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | n
   if (!discount) {
     return {
       lines,
+      lineDiscountMinor,
       subtotalMinor,
       offerSavingsMinor,
       discountMinor: 0,
@@ -248,6 +329,7 @@ export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | n
       // «-2 € en jamon» y en la cesta no hay jamon: no es un descuento de 0, es un aviso.
       return {
         lines,
+        lineDiscountMinor,
         subtotalMinor,
         offerSavingsMinor,
         discountMinor: 0,
@@ -260,6 +342,7 @@ export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | n
   if (subtotalMinor === 0) {
     return {
       lines,
+      lineDiscountMinor,
       subtotalMinor,
       offerSavingsMinor,
       discountMinor: 0,
@@ -314,6 +397,7 @@ export function basketMoney(input: { lines: MoneyLine[]; discount?: Discount | n
 
   return {
     lines: lines.map((line) => ({ ...line, netMinor: line.netMinor - (shares.get(line.itemId) ?? 0) })),
+    lineDiscountMinor,
     subtotalMinor,
     offerSavingsMinor,
     discountMinor,
@@ -388,4 +472,22 @@ export function describeDiscount(discount: Discount | null | undefined): string 
             ? ` en ${names.slice(0, 2).join(', ')} y +${names.length - 2} mas`
             : '';
   return discount.label?.trim() ? `${discount.label.trim()} · ${core}${cap}` : `${core}${cap}`;
+}
+
+/**
+ * Como se pinta el descuento de una linea, en una frase. Se escribe aqui y no en la pantalla
+ * por el mismo motivo que el de la lista: la fila, el desglose y el «ya esta la compra» tienen
+ * que decir exactamente lo mismo, y «10 %» a secas no aclara si era sobre dos unidades.
+ */
+export function describeLineDiscount(discount: LineDiscount | null | undefined): string | null {
+  if (!discount) return null;
+  const core =
+    discount.kind === 'percent'
+      ? `${((discount.percentBps ?? 0) / 100).toLocaleString('es-ES', { maximumFractionDigits: 2 })} %`
+      : `${((discount.valueMinor ?? 0) / 100).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  const cap =
+    discount.units && discount.units > 0
+      ? ` en ${discount.units.toLocaleString('es-ES', { maximumFractionDigits: 2 })} ${discount.units === 1 ? 'unidad' : 'unidades'}`
+      : '';
+  return `${core}${cap}`;
 }

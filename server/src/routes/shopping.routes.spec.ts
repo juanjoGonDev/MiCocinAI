@@ -70,8 +70,12 @@ beforeAll(async () => {
 
   const { shoppingRoutes } = await import('./shopping.routes.js');
   const { errorHandler } = await import('../middleware/error.middleware.js');
+  const { timestampMiddleware } = await import('../middleware/timestamp.middleware.js');
   app = new Hono();
   app.onError(errorHandler as never);
+  // La cadena de pruebas es la de `app.ts`: sin este middleware, las pruebas podrian seguir
+  // asumiendo que un timestamp sin zona es un contrato valido, y no lo es.
+  app.use('/api/*', timestampMiddleware());
   app.route('/api/shopping', shoppingRoutes);
 });
 
@@ -1238,5 +1242,198 @@ describe('el precio de la tienda, no el ultimo precio (§12g)', () => {
     expect(products).toHaveLength(1);
     expect(products[0].productKey).toBe('leche');
     expect(products[0].variants.map((v: any) => v.store)).toEqual(expect.arrayContaining(['Lidl', 'Mercadona']));
+  });
+});
+
+describe('descuento propio de una linea (§12h)', () => {
+  it('se guarda en la fila y se lee tal cual', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    const item = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Leche semidesnatada',
+        unit: 'L',
+        quantity: 3,
+        priceMinor: 95,
+        discount: { kind: 'percent', percentBps: 1500, units: 2 }
+      })
+    );
+    expect(item.disc_kind).toBe('percent');
+    expect(item.disc_percent_bps).toBe(1500);
+    expect(item.disc_units).toBe(2);
+    expect(item.disc_value_minor).toBeNull();
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.lines[0].lineDiscountMinor).toBe(29); // 15 % de dos unidades de 0,95
+    expect(estimate.lines[0].lineDiscountDescription).toBe('15 % en 2 unidades');
+    expect(estimate.lineDiscountMinor).toBe(29);
+  });
+
+  it('un importe directo baja esa linea y solo esa', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Jamon cocido',
+      quantity: 2,
+      priceMinor: 250,
+      discount: { kind: 'amount', valueMinor: 300 }
+    });
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', quantity: 3, priceMinor: 100 });
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    const [jamon, pan] = estimate.lines;
+    expect(jamon.lineTotalMinor).toBe(500);
+    expect(jamon.lineDiscountMinor).toBe(300);
+    expect(jamon.netMinor).toBe(200);
+    expect(pan.lineDiscountMinor).toBe(0);
+    expect(pan.netMinor).toBe(300);
+    expect(estimate.lineDiscountMinor).toBe(300);
+    expect(estimate.totalMinor).toBe(500);
+  });
+
+  it('el -2 € no puede bajar una linea de 0,95: se recorta y lo dice', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      priceMinor: 95,
+      discount: { kind: 'amount', valueMinor: 200 }
+    });
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.lines[0].lineDiscountMinor).toBe(95);
+    expect(estimate.lines[0].netMinor).toBe(0);
+    expect(estimate.lines[0].lineDiscountReason).toBe('clamped');
+  });
+
+  it('primero la oferta y despues el descuento propio, que es el orden de una caja', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Cervezas',
+      quantity: 6,
+      priceMinor: 100,
+      offer: { buy: 3, take: 2 },
+      discount: { kind: 'percent', percentBps: 1000 }
+    });
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    const line = estimate.lines[0];
+    expect(line.paidUnits).toBe(4);
+    expect(line.lineTotalMinor).toBe(400);
+    // El 10 % va sobre lo que se paga (400), no sobre lo que se lleva (600).
+    expect(line.lineDiscountMinor).toBe(40);
+    expect(line.netMinor).toBe(360);
+  });
+
+  it('«a 2 unidades» con una sola en la cesta se avisa, no se inventa', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Aceite',
+      quantity: 1,
+      priceMinor: 100,
+      discount: { kind: 'percent', percentBps: 5000, units: 2 }
+    });
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.lines[0].lineDiscountMinor).toBe(50);
+    expect(estimate.lines[0].lineDiscountReason).toBe('fewerUnits');
+  });
+
+  it('quitarlo es un null explicito, no «no hablar de ello»', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    const item = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Tomate',
+        priceMinor: 200,
+        discount: { kind: 'amount', valueMinor: 100 }
+      })
+    );
+    expect((await data(await call(alice, 'GET', `/lists/${list.id}/estimate`))).lineDiscountMinor).toBe(100);
+
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { discount: null });
+    const cleaned = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items[0];
+    expect(cleaned.disc_kind).toBeNull();
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.lineDiscountMinor).toBe(0);
+    expect(estimate.lines[0].lineDiscountDescription).toBeUndefined();
+  });
+
+  it('un descuento sin valor no entra, y tampoco uno con un porcentaje imposible', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    const sinValor = await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      discount: { kind: 'percent' }
+    });
+    expect(sinValor.status).toBe(400);
+
+    const fueraDeRango = await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      discount: { kind: 'percent', percentBps: 15_000 }
+    });
+    expect(fueraDeRango.status).toBe(400);
+    const lineas = await data(await call(alice, 'GET', `/lists/${list.id}`));
+    expect(lineas.items).toHaveLength(0);
+  });
+
+  it('al fusionar dos lineas del mismo producto, el descuento que llega manda', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    const primera = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Huevas', quantity: 1, priceMinor: 300 })
+    );
+    expect(primera.merged).toBe(false);
+    const segunda = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Huevas',
+        quantity: 2,
+        priceMinor: 300,
+        discount: { kind: 'percent', percentBps: 2000 }
+      })
+    );
+    expect(segunda.merged).toBe(true);
+    expect(segunda.quantity).toBe(3);
+    expect(segunda.disc_percent_bps).toBe(2000);
+    // Y borrarlo en una fila no deja el hueco a medias: la fila sigue teniendo su precio.
+    const limpiada = await data(
+      await call(alice, 'PATCH', `/lists/${list.id}/items/${primera.id}`, { discount: null })
+    );
+    expect(limpiada.disc_percent_bps).toBeNull();
+    expect(limpiada.price_minor).toBe(300);
+  });
+
+  it('la lista sigue cuadradando: subtotal menos el cupon igual a total', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      quantity: 2,
+      priceMinor: 100,
+      discount: { kind: 'amount', valueMinor: 50 }
+    });
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', priceMinor: 240 });
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'percent', percentBps: 1000 });
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    // 200 - 50 + 240 = 390 de subtotal (ya con el descuento de linea dentro), y el 10 % de la
+    // lista se calcula sobre lo que de verdad se paga en caja.
+    expect(estimate.lineDiscountMinor).toBe(50);
+    expect(estimate.subtotalMinor).toBe(390);
+    expect(estimate.discountMinor).toBe(39);
+    expect(estimate.totalMinor).toBe(351);
+    expect(estimate.subtotalMinor - estimate.discountMinor).toBe(estimate.totalMinor);
+  });
+});
+
+describe('zonas horarias en la salida (§12h)', () => {
+  it('ninguna marca temporal sale sin zona: si no, el navegador la lee como hora local', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1, priceMinor: 95 });
+    expect(list.created_at).toMatch(/Z$/);
+
+    const fetched = await data(await call(alice, 'GET', `/lists/${list.id}`));
+    expect(fetched.created_at).toMatch(/Z$/);
+    expect(fetched.items[0].created_at).toMatch(/Z$/);
+    // Y la fecha suelta, cuando la hay, sigue siendo fecha: un dia de calendario no es un
+    // instante y anadirle una hora lo desplazaria medio dia.
+    for (const [key, value] of Object.entries(fetched.items[0] as Record<string, unknown>)) {
+      if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        expect(key).not.toMatch(/(?:at|time|timestamp)$/i);
+      }
+    }
   });
 });

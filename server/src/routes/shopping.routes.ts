@@ -35,6 +35,9 @@ import { channelForList, channelsForTray, publish, subscribe, type LiveEvent } f
 import {
   basketMoney,
   describeDiscount,
+  describeLineDiscount,
+  normalizeLineDiscount,
+  type LineDiscount,
   normalizeOffer,
   offerOf,
   paidUnits,
@@ -157,6 +160,21 @@ function parseTargets(raw: unknown): string[] | null {
   }
 }
 
+/** El descuento propio de una linea, en la forma que espera el motor. */
+function lineDiscountOf(row: {
+  disc_kind?: string | null;
+  disc_value_minor?: number | null;
+  disc_percent_bps?: number | null;
+  disc_units?: number | null;
+}): LineDiscount | null {
+  if (row.disc_kind !== 'amount' && row.disc_kind !== 'percent') return null;
+  return {
+    kind: row.disc_kind,
+    valueMinor: row.disc_value_minor ?? null,
+    percentBps: row.disc_percent_bps ?? null,
+    units: row.disc_units ?? null
+  };
+}
 /**
  * La fila de descuento, en la forma que consume `utils/list-discount.ts`. `null`
  * cuando la lista no tiene ninguno: el `estimate` entonces no pinta bloque de
@@ -479,12 +497,14 @@ function nextPosition(db: ReturnType<typeof getDatabase>, listId: string): numbe
 function insertItem(db: ReturnType<typeof getDatabase>, listId: string, input: any, userId: string | null = null) {
   const id = nanoid();
   const offer = normalizeOffer(input.offer);
+  const discount = normalizeLineDiscount(input.discount);
   const key = productKeyOf(input.name);
   db.prepare(
     `INSERT INTO shopping_list_items
        (id, list_id, name, product_key, quantity, unit, category, price_minor, note, position,
-        promo_buy, promo_take, added_by, updated_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        promo_buy, promo_take, added_by, updated_by,
+        disc_kind, disc_value_minor, disc_percent_bps, disc_units)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     listId,
@@ -499,7 +519,11 @@ function insertItem(db: ReturnType<typeof getDatabase>, listId: string, input: a
     offer?.buy ?? null,
     offer?.take ?? null,
     userId,
-    userId
+    userId,
+    discount?.kind ?? null,
+    discount?.valueMinor ?? null,
+    discount?.percentBps ?? null,
+    discount?.units ?? null
   );
   return id;
 }
@@ -548,6 +572,13 @@ function upsertLine(
     // quien escribe «6 Cervexas 3x2» sobre una fila de «3 Cervexas» habla de la misma
     // estanteria, y perder la oferta a mitad de camino pinta un precio mayor.
     const offer = normalizeOffer(body.offer);
+    const incomingDiscount = normalizeLineDiscount(body.discount);
+    // Como con la oferta: si la linea que llega trae descuento, se lo lleva puesta la fila
+    // existente. Si no trae, no se toca — y van las cuatro columnas juntas, porque medio
+    // descuento aplicado es peor que ninguno.
+    const discountSet = incomingDiscount
+      ? ', disc_kind = ?, disc_value_minor = ?, disc_percent_bps = ?, disc_units = ?'
+      : '';
     db.prepare(
       `UPDATE shopping_list_items
          SET quantity = quantity + ?,
@@ -559,7 +590,7 @@ function upsertLine(
              -- un PATCH con priceMinor null.
              price_minor = COALESCE(?, price_minor),
              updated_at = CURRENT_TIMESTAMP,
-             updated_by = ?
+             updated_by = ?${discountSet}
        WHERE id = ?`
     ).run(
       body.quantity ?? 1,
@@ -567,6 +598,9 @@ function upsertLine(
       offer?.take ?? null,
       body.priceMinor ?? body.price_minor ?? null,
       userId,
+      ...(incomingDiscount
+        ? [incomingDiscount.kind, incomingDiscount.valueMinor, incomingDiscount.percentBps, incomingDiscount.units]
+        : []),
       existing.id
     );
 
@@ -692,6 +726,13 @@ shoppingRoutes.patch('/lists/:id/items/:itemId', async (c) => {
       params.push(productKeyOf(body.name ?? item.name));
     }
   }
+  // El descuento de la linea, con la misma regla que la oferta: `null` lo quita, `undefined`
+  // no lo toca, y las cuatro columnas se escriben a la vez.
+  if (body.discount !== undefined) {
+    const next = normalizeLineDiscount(body.discount);
+    sets.push('disc_kind = ?', 'disc_value_minor = ?', 'disc_percent_bps = ?', 'disc_units = ?');
+    params.push(next?.kind ?? null, next?.valueMinor ?? null, next?.percentBps ?? null, next?.units ?? null);
+  }
   // `offer: null` quita la oferta; `undefined` no la toca. Un `COALESCE` aqui no
   // serviria: haria «quitar» indistinguible de «no decir nada».
   if (body.offer !== undefined) {
@@ -713,11 +754,30 @@ shoppingRoutes.patch('/lists/:id/items/:itemId', async (c) => {
   const updated = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(item.id) as any;
   // El suceso distingue marcar de editar porque la pantalla lo cuenta aparte: «Ana ha
   // marcado el pollo» y «Ana ha editado el pollo» no son la misma noticia.
+  // Un toqueteo de descuento no reordena la bandeja de nadie, pero si merece su propio nombre
+  // de evento: es lo que la pantalla escucha para refrescar el total de la cabecera.
+  const discountOnly =
+    body.checked === undefined &&
+    body.discount !== undefined &&
+    body.priceMinor === undefined &&
+    body.productKey === undefined &&
+    body.offer === undefined &&
+    body.quantity === undefined &&
+    body.unit === undefined &&
+    body.name === undefined &&
+    body.category === undefined &&
+    body.note === undefined;
   announce(
     db,
     list,
     c.get('userId'),
-    body.checked !== undefined ? (updated.checked ? 'item.check' : 'item.uncheck') : 'item.update',
+    body.checked !== undefined
+      ? updated.checked
+        ? 'item.check'
+        : 'item.uncheck'
+      : discountOnly
+        ? 'item.discount'
+        : 'item.update',
     updated.name
   );
   return c.json({ success: true, data: updated });
@@ -970,7 +1030,8 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
       unitMinor: entry.unitMinor,
       offer: offerOf(entry.item),
       productKey: entry.item.product_key ?? null,
-      category: entry.item.category ?? null
+      category: entry.item.category ?? null,
+      discount: lineDiscountOf(entry.item)
     })),
     discount
   });
@@ -997,6 +1058,15 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
       lineTotalMinor: line?.grossMinor ?? 0,
       netMinor: line?.netMinor ?? 0,
       offerSavingsMinor: line?.offerSavingsMinor ?? 0,
+      // Cuanto baja el descuento propio de la linea y con que frase se lo cuenta: la pantalla
+      // no vuelve a calcular nada, y «-15 %» a secas no aclara si era sobre dos unidades.
+      lineDiscountMinor: line?.lineDiscountMinor ?? 0,
+      ...(line?.lineDiscount && line.lineDiscount.minor > 0
+        ? {
+            lineDiscountReason: line.lineDiscount.reason,
+            lineDiscountDescription: describeLineDiscount(lineDiscountOf(entry.item))
+          }
+        : {}),
       ...(entry.store ? { store: entry.store, observedAt: entry.observedAt } : {}),
       // La pantalla lo necesita para poder decir «ojo, ese precio es de Lidl»: un numero
       // sin procedencia se discute, uno con procedencia se acepta o se corrige.
@@ -1013,6 +1083,7 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
       subtotalMinor: money.subtotalMinor,
       offerSavingsMinor: money.offerSavingsMinor,
       discountMinor: money.discountMinor,
+      lineDiscountMinor: money.lineDiscountMinor,
       discount: discount ? { ...discount, description: describeDiscount(discount), ...money.discount } : null,
       pricedLines: lines.filter((line) => line.lineTotalMinor !== null).length,
       unpriced: lines.filter((line) => line.source === 'unpriced').map((line) => line.name),

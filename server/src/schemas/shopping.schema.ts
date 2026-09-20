@@ -101,6 +101,24 @@ export const offerInput = z
   .optional();
 
 /**
+ * El descuento de UNA linea (§12h): porcentaje o importe, sobre todas las unidades pagadas o
+ * sobre las N primeras. Se guarda en la fila y no en la lista porque el cartel del pasillo
+ * habla del producto («segunda unidad a mitad de precio»), y porque dos lineas con descuentos
+ * distintos dentro de la misma cesta es lo normal en una tienda real.
+ */
+export const lineDiscountInput = z
+  .object({
+    kind: z.enum(['amount', 'percent']),
+    valueMinor: z.coerce.number().int().min(1).max(100_000_000).nullable().optional(),
+    percentBps: z.coerce.number().int().min(1).max(10_000).nullable().optional(),
+    units: z.coerce.number().positive().max(100_000).nullable().optional()
+  })
+  .refine((value) => (value.kind === 'amount' ? (value.valueMinor ?? 0) > 0 : (value.percentBps ?? 0) > 0), {
+    message: 'LineDiscountValueRequired'
+  })
+  .nullable();
+
+/**
  * El descuento de la lista. Dos unidades distintas a proposito: euros (centimos
  * enteros) o porcentaje en puntos porcentuales (12,5 % son 1250), porque un float
  * de porcentaje redondea sitios distintos que una resta de centimos. `scope` decide
@@ -168,7 +186,8 @@ export const createItemSchema = z.object({
   category: z.string().trim().max(48).nullable().optional(),
   priceMinor: priceMinor,
   note: z.string().trim().max(280).nullable().optional(),
-  offer: offerInput
+  offer: offerInput,
+  discount: lineDiscountInput.optional()
 });
 
 export const updateItemSchema = z
@@ -181,6 +200,8 @@ export const updateItemSchema = z
     priceMinor: priceMinor,
     note: z.string().trim().max(280).nullable().optional(),
     offer: offerInput,
+    /** `null` quita el descuento de la linea (no «no tocar»). */
+    discount: lineDiscountInput.optional(),
     /**
      * Enlazar la linea con un producto que la casa ya conoce. Existe porque en la tienda
      * el mismo producto se llama de otra forma («Leche semi» en el carrito, «Leche
@@ -199,6 +220,7 @@ export const updateItemSchema = z
       value.priceMinor !== undefined ||
       value.note !== undefined ||
       value.offer !== undefined ||
+      value.discount !== undefined ||
       value.productKey !== undefined,
     { message: 'NothingToUpdate' }
   );

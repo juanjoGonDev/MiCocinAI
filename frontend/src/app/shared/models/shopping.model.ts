@@ -47,6 +47,14 @@ export interface ShoppingListItem {
   /** Oferta de linea (3x2 = buy 3 / take 2). `null` = precio normal. */
   promo_buy: number | null;
   promo_take: number | null;
+  /**
+   * Descuento propio de la linea (§12h), en las cuatro columnas que guarda el server. Van
+   * juntas: `disc_kind` sin importe es una fila que se lee «hay descuento» y se calcula «0».
+   */
+  disc_kind: LineDiscountKind | null;
+  disc_value_minor: number | null;
+  disc_percent_bps: number | null;
+  disc_units: number | null;
   added_by: string | null;
   updated_by: string | null;
   /** Los resuelve el server al leer la lista: un id de usuario no es legible. */
@@ -69,6 +77,55 @@ export function productKeyOf(name: string | null | undefined): string {
     .trim();
 }
 
+/**
+ * Descuento de una linea: porcentaje o importe, sobre todas las unidades pagadas o sobre las
+ * N primeras. Va en la fila y no en la lista porque el cartel del pasillo habla del producto
+ * («segunda unidad a mitad de precio»), y porque en una cesta real conviven dos descuentos
+ * distintos. El de la lista sigue siendo el cupón: se reparte entre todas las líneas.
+ */
+export type LineDiscountKind = 'amount' | 'percent';
+
+export interface LineDiscount {
+  kind: LineDiscountKind;
+  /** Importe en céntimos que baja la línea (kind 'amount'). */
+  valueMinor?: number | null;
+  /** Porcentaje en centésimas: 1500 = 15 % (kind 'percent'). */
+  percentBps?: number | null;
+  /** Primeras N unidades pagadas a las que se aplica; `null` = a todas. */
+  units?: number | null;
+}
+
+/** Como la oferta: solo existe si es válida. Un «0 %» no es un descuento, es ruido. */
+export function lineDiscountOfItem(
+  item: Pick<ShoppingListItem, 'disc_kind' | 'disc_value_minor' | 'disc_percent_bps' | 'disc_units'>
+): LineDiscount | null {
+  if (item.disc_kind !== 'amount' && item.disc_kind !== 'percent') return null;
+  return {
+    kind: item.disc_kind,
+    valueMinor: item.disc_value_minor ?? null,
+    percentBps: item.disc_percent_bps ?? null,
+    units: item.disc_units ?? null
+  };
+}
+
+export function describeLineDiscount(discount: LineDiscount | null | undefined): string | null {
+  if (!discount) return null;
+  const core =
+    discount.kind === 'percent'
+      ? `${formatPercentBps(discount.percentBps ?? 0)} %`
+      : `${((discount.valueMinor ?? 0) / 100).toLocaleString('es-ES', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        })} €`;
+  const units = Number(discount.units ?? 0);
+  const cap = units > 0 ? ` en ${units.toLocaleString('es-ES', { maximumFractionDigits: 2 })} ${units === 1 ? 'unidad' : 'unidades'}` : '';
+  return `${core}${cap}`;
+}
+
+function formatPercentBps(bps: number): string {
+  return (bps / 100).toLocaleString('es-ES', { maximumFractionDigits: 2 });
+}
+
 /** La oferta como dato de UI: solo existe si es valida (take < buy y buy >= 2). */
 export function offerOfItem(item: Pick<ShoppingListItem, 'promo_buy' | 'promo_take'>): LineOffer | null {
   const buy = Number(item.promo_buy ?? 0);
@@ -89,6 +146,11 @@ export interface EstimateLine {
   units?: number;
   paidUnits?: number;
   offerSavingsMinor?: number;
+  /** Lo que baja el descuento propio de la línea (antes del cupón de la cesta). */
+  lineDiscountMinor?: number;
+  /** `clamped` = el cartel prometía más de lo que la línea vale; `fewerUnits` = no da. */
+  lineDiscountReason?: 'applied' | 'clamped' | 'fewerUnits' | 'noValue' | 'noUnitPrice';
+  lineDiscountDescription?: string | null;
   store?: string | null;
   observedAt?: string;
   /**
@@ -105,6 +167,11 @@ export interface ListEstimate {
   listId: string;
   currency: string;
   totalMinor: number;
+  subtotalMinor?: number;
+  offerSavingsMinor?: number;
+  discountMinor?: number;
+  /** Suma de los descuentos propios de las líneas. */
+  lineDiscountMinor?: number;
   pricedLines: number;
   unpriced: string[];
   lines: EstimateLine[];
@@ -130,6 +197,8 @@ export interface CreateItemInput {
   note?: string | null;
   /** 3x2 = {buy:3, take:2}; `null` la quita. En la fila son promo_buy/promo_take. */
   offer?: LineOffer | null;
+  /** Descuento de la línea (§12h); `null` lo quita. */
+  discount?: LineDiscount | null;
   /**
    * Enlazar la linea con un producto que la casa ya conoce, porque en la tienda se llama
    * de otra forma. `null` lo desengancha y la clave vuelve a ser la del nombre.

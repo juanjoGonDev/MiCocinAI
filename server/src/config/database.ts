@@ -497,6 +497,12 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('shopping_list_items', 'added_by', 'TEXT');
   addColumnIfMissing('shopping_list_items', 'updated_by', 'TEXT');
   addColumnIfMissing('shopping_lists', 'updated_by', 'TEXT');
+  // El descuento propio de la linea (§12h). Cuatro columnas y no un JSON: `estimate` las
+  // suma todas en una pasada y un JSON tendria que parsearse por fila para calcular dinero.
+  addColumnIfMissing('shopping_list_items', 'disc_kind', 'TEXT');
+  addColumnIfMissing('shopping_list_items', 'disc_value_minor', 'INTEGER');
+  addColumnIfMissing('shopping_list_items', 'disc_percent_bps', 'INTEGER');
+  addColumnIfMissing('shopping_list_items', 'disc_units', 'REAL');
 
   // weekly_calendars.household_id nacio NOT NULL con FK a households, y las rutas
   // metían '' para las cuentas sin hogar: la FK lo rechaza (foreign_keys = ON),

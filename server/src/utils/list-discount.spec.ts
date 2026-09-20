@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Offer } from './list-discount.js';
-import {basketMoney, describeDiscount, normalizeOffer, paidUnits, shareDiscount,
+import {basketMoney, describeDiscount, describeLineDiscount, normalizeOffer, paidUnits, shareDiscount,
   isEligibleForDiscount,
   type MoneyLine
 } from './list-discount.js';
@@ -419,5 +419,89 @@ describe('varias dianas en un mismo descuento', () => {
     expect(one).toBe('2,50 € en Jamon Serrano');
     expect(two).toBe('2,50 € en Jamon Serrano y Queso curado');
     expect(many).toBe('10 % en Jamon, Queso y +2 mas');
+  });
+});
+
+describe('descuento propio de una linea (§12h)', () => {
+  const row = (over: Partial<MoneyLine> = {}): MoneyLine => ({
+    itemId: 'a',
+    quantity: 3,
+    unitMinor: 100,
+    offer: null,
+    ...over
+  });
+
+  it('el porcentaje se aplica a la linea, no a la cesta', () => {
+    const money = basketMoney({
+      lines: [row({ discount: { kind: 'percent', valueMinor: null, percentBps: 1000, units: null } }), row({ itemId: 'b' })]
+    });
+    // 10 % de 300 (tres unidades a 1,00) = 30; la otra linea sigue a 300.
+    expect(money.lines[0].lineDiscountMinor).toBe(30);
+    expect(money.lines[0].netMinor).toBe(270);
+    expect(money.lines[1].netMinor).toBe(300);
+    expect(money.subtotalMinor).toBe(570);
+    expect(money.lineDiscountMinor).toBe(30);
+  });
+
+  it('el importe baja la linea y no la deja en negativo', () => {
+    const money = basketMoney({ lines: [row({ unitMinor: 95, quantity: 1, discount: { kind: 'amount', valueMinor: 200, percentBps: null, units: null } })] });
+    expect(money.lines[0].lineDiscountMinor).toBe(95);
+    expect(money.lines[0].netMinor).toBe(0);
+    // Se recorta y se dice: «-2 €» en una linea de 0,95 no devuelve 1,05 al resto de la cesta.
+    expect(money.lines[0].lineDiscount?.reason).toBe('clamped');
+  });
+
+  it('primero la oferta, despues el descuento de la linea', () => {
+    const money = basketMoney({
+      lines: [row({ quantity: 6, unitMinor: 100, offer: { buy: 3, take: 2 }, discount: { kind: 'percent', valueMinor: null, percentBps: 500, units: null } })]
+    });
+    // 6 llevadas, 4 pagadas (3x2) = 400; 5 % de lo que se PAGA = 20. Al reves (5 % de 600)
+    // la misma cesta daria otro numero y nadie sabria cual es el del ticket.
+    expect(money.lines[0].offerSavingsMinor).toBe(200);
+    expect(money.lines[0].lineDiscountMinor).toBe(20);
+    expect(money.lines[0].netMinor).toBe(380);
+  });
+
+  it('«solo sobre las primeras N unidades» recorta esa fraccion y nada mas', () => {
+    const money = basketMoney({
+      lines: [row({ quantity: 4, unitMinor: 250, discount: { kind: 'amount', valueMinor: 300, percentBps: null, units: 2 } })]
+    });
+    // 3,00 € de descuento a las 2 primeras (500): la linea de 10,00 acaba en 7,00.
+    expect(money.lines[0].lineDiscountMinor).toBe(300);
+    expect(money.lines[0].lineDiscount?.appliedUnits).toBe(2);
+    expect(money.lines[0].netMinor).toBe(700);
+  });
+
+  it('no llegan las unidades pedidas: se aplica a lo que hay, y consta por que', () => {
+    const money = basketMoney({
+      lines: [row({ quantity: 1, unitMinor: 250, discount: { kind: 'amount', valueMinor: 300, percentBps: null, units: 3 } })]
+    });
+    expect(money.lines[0].lineDiscount?.appliedUnits).toBe(1);
+    expect(money.lines[0].lineDiscount?.reason).toBe('fewerUnits');
+    expect(money.lines[0].lineDiscountMinor).toBe(250);
+  });
+
+  it('el descuento de la linea es la base sobre la que actua el cupon de la cesta', () => {
+    const money = basketMoney({
+      lines: [
+        row({ quantity: 1, unitMinor: 1000, discount: { kind: 'amount', valueMinor: 200, percentBps: null, units: null } }),
+        row({ itemId: 'b', quantity: 1, unitMinor: 500 })
+      ],
+      discount: { kind: 'percent', valueMinor: null, percentBps: 1000, scope: 'all', firstUnits: null }
+    });
+    // 8,00 + 5,00 = 13,00; el 10 % de la cesta es 1,30, no 1,50. El descuento del jamon ya
+    // estaba puesto antes de pasar el cupon, que es el orden de la caja.
+    expect(money.subtotalMinor).toBe(1300);
+    expect(money.discountMinor).toBe(130);
+    expect(money.totalMinor).toBe(1170);
+  });
+
+  it('sin valor no hay descuento, y la frase lo cuenta', () => {
+    const empty = basketMoney({ lines: [row({ discount: { kind: 'percent', valueMinor: null, percentBps: 0, units: null } })] });
+    expect(empty.lines[0].lineDiscountMinor).toBe(0);
+    expect(empty.lines[0].lineDiscount?.reason).toBe('noValue');
+    expect(describeLineDiscount({ kind: 'percent', valueMinor: null, percentBps: 1500, units: null })).toBe('15 %');
+    expect(describeLineDiscount({ kind: 'amount', valueMinor: 250, percentBps: null, units: 2 })).toBe('2,50 € en 2 unidades');
+    expect(describeLineDiscount(null)).toBeNull();
   });
 });
