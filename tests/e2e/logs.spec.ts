@@ -9,8 +9,10 @@ test.describe('Logs page', () => {
 
   test('should render the logs terminal', async ({ page }) => {
     await expect(page.locator('h1')).toContainText('Logs');
-    // Live/disconnected indicator
-    await expect(page.locator('.logs-toolbar')).toContainText(/En vivo|Desconectado/);
+    // El indicador dice en que estado esta el stream, y ahora hay cuatro estados: un
+    // booleano «conectado/no» esconda el «reintentando en 5 s», que es el unico que
+    // permite distinguir un servidor reiniciandose de uno que no contesta.
+    await expect(page.locator('[data-test="logs-status"]')).toContainText(/En vivo|Conectando|Reintentando|Sin conexion/);
     // Source/level filters
     await expect(page.locator('select.logs-select').first()).toBeVisible();
     // Pause / autoscroll / clear buttons exist
