@@ -1648,6 +1648,48 @@ that runs; what only a pair of eyes can decide says so.
   bridge, `tsc` for app and specs, the production build, `check-ui` on 141 files. Nothing here can be
   called visually confirmed.
 
+## 12m. Round 13b — a photo that reported success and was not on disk
+
+Reported from the preview: uploading the avatar showed a green toast, the face did not change, and the
+server log said `GET /api/uploads/avatars/<file> 404` seven milliseconds after the `POST` that had
+just answered `200`.
+
+- [ ] **A write that did not stick has to fail the request.** `storeImage` now verifies
+      (`assertWritten`): the file exists and has the bytes it was given. `mkdirSync` and
+      `writeFileSync` can both "succeed" against a directory that is about to disappear —a volume
+      remounted, a workspace restored, a deploy that forgets `data/`— and the only honest answer is
+      `500 UPLOAD_WRITE_FAILED` with the absolute path in it.
+- [ ] **A rejected upload leaves no trace in the database.** The `UPDATE` runs after the write is
+      confirmed, so the profile keeps the photo it had; a row pointing at nothing is a 404 forever,
+      which is precisely the state the user was stuck in.
+- [ ] **A 404 on an image is not cacheable.** The miss answers `cache-control: no-store`, so the
+      next load can recover the file instead of staying blank until a hard reload; the hit keeps
+      `immutable` because its name changes with every upload.
+- [ ] **The server says where it writes, once.** Startup logs `Uploads en <absolute path>` and a
+      miss logs the full path it tried (at most once a minute — the route is public). Before this,
+      the difference between «wrong directory», «read-only volume» and «bad code» was invisible
+      without a shell.
+- [ ] **Notifications say what happened, not where it propagates.** «Foto actualizada — ya aparece en
+      el menú, la compra y la agenda» is a brochure; and it is a lie the moment the write fails. The
+      account page now says `Imagen cambiada`, `Imagen quitada` (there was no toast on removal) and
+      `Nombre guardado`, and when the server could not write to disk it says exactly that, with the
+      place to look.
+- [ ] Tests: `assertWritten` (missing file, truncated file), a read-only uploads directory making
+      `storeImage` throw, and `POST /api/auth/avatar` answering 500 while the profile keeps its old
+      photo, with the same read-only directory forced through `DATABASE_PATH`.
+
+### How it turned out
+
+Verified against the real server, both ways: `POST` → `GET` returns 200 with the bytes, and with
+`chmod 0500 data/uploads/avatars` the same `POST` returns `500 UPLOAD_WRITE_FAILED` naming the path
+and the profile still holds the previous photo. The reproduction of the reported symptom as a *silent*
+404 could not be completed here — in this sandbox the flow answers 200 end to end, and the report's
+own log shows the process writing to one filesystem while reading another (`server/data/` had been
+replaced underneath the running server, which is also why the avatar from the previous session was
+already 404 before the new upload). What is fixed is the class, not just the case: an upload that
+cannot be read back can no longer be called a success, and the log now names the directory so the
+remaining environment question is answerable in one line.
+
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
   (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
