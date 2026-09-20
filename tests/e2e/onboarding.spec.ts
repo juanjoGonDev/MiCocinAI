@@ -3,9 +3,17 @@ import { registerToOnboarding, registerUser } from './helpers/auth';
 
 /**
  * Configuración inicial, nada más registrarse: perfil (nivel y qué se quiere
- * llevar desde la app), alergias, gustos, objetivo y utensilios. Es saltable,
- * se guarda en la cuenta (no en el hogar) y se puede editar a mano en
- * Preferencias.
+ * llevar desde la app), alergias, gustos, objetivo, horarios de las comidas y
+ * utensilios. Es saltable —por completo o paso a paso—, se guarda en la cuenta
+ * (no en el hogar) y se puede editar a mano en Preferencias.
+ *
+ * Los «Paso N de 6» son el contrato con `ONBOARDING_STEPS` (frontend/src/app/core/onboarding-steps.ts):
+ * el número se deriva de la lista, así que añadir una pregunta cambia estos literales y nada más. Que
+ * aquí estén escritos a propósito (y no calculados) es lo que hace que alguien tenga que decidir si el
+ * usuario debe ver seis pasos o cinco.
+ *
+ * Escrito en la ronda de los horarios; en el sandbox no hay Chromium, así que estos casos no se han
+ * ejecutado aquí —corren en CI (`playwright test`), donde el registro real y el servidor levantan.
  *
  * Los controles se buscan por sus atributos de datos (data-level, data-module),
  * no por su texto: las etiquetas viven en el idioma resuelto y en CI puede ser
@@ -16,14 +24,14 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await registerToOnboarding(page, 'Salta Tester');
 
     await expect(page.locator('.onboarding__title')).toHaveText('Configura tu HogarIA');
-    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 1 de 5 · Perfil');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 1 de 6 · Perfil');
 
     // Cuatro niveles, incluido «apenas cocino», y las cinco secciones de la casa
     await expect(page.locator('[data-level]')).toHaveCount(4);
     await expect(page.locator('label[data-module]')).toHaveCount(5);
 
     await page.getByRole('button', { name: 'Siguiente →' }).click();
-    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 2 de 5 · Alergias');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 2 de 6 · Alergias');
     // Alérgenos proposés en su paso, sin tener que escribirlos
     await expect(page.locator('.chip-select__chip').first()).toContainText('Gluten');
 
@@ -63,7 +71,7 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.getByRole('button', { name: 'Siguiente →' }).click();
 
     // ── Paso 2 · gustos y texto libre
-    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 3 de 5 · Gustos');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 3 de 6 · Gustos');
     await page
       .getByRole('group', { name: 'Lo que más te gusta' })
       .locator('.chip-select__chip', { hasText: 'Legumbres' })
@@ -77,15 +85,24 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.getByRole('button', { name: 'Siguiente →' }).click();
 
     // ── Paso 3 · objetivo
-    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 4 de 5 · Objetivo');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 4 de 6 · Objetivo');
     await page.locator('.onboarding__goal', { hasText: 'Perder peso' }).click();
     await expect(page.locator('.onboarding__goal--on')).toContainText('Perder peso');
     await page.fill('textarea#goalNotes', 'Poco frito y nada de bollería.');
 
     await page.getByRole('button', { name: 'Siguiente →' }).click();
 
-    // ── Paso 4 · con qué cuentas: se marca en la propia despensa
-    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 5 de 5 · Cocina');
+    // ── Paso 5 · a qué hora come esta casa (y se puede dejar en blanco)
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 5 de 6 · Horarios');
+    await expect(page.locator('#ob-meal-breakfast')).toHaveValue('09:00');
+    await expect(page.locator('#ob-meal-dinner')).toHaveValue('20:30');
+    await page.fill('#ob-meal-dinner', '21:45');
+    await expect(page.locator('.onboarding__skip--step')).toBeVisible();
+
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+
+    // ── Paso 6 · con qué cuentas: se marca en la propia despensa
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 6 de 6 · Cocina');
     const airfryer = page.locator('.utensil-card', { hasText: 'Airfryer' });
     await expect(airfryer.first()).toBeVisible({ timeout: 20000 });
     await airfryer.first().locator('input.utensil-card__check').check();
@@ -124,6 +141,13 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await expect(page).toHaveURL(/tab=goal/);
     await expect(page.locator('.preferences__goal--on')).toContainText('Perder peso');
     await expect(page.locator('textarea#goalNotes')).toHaveValue('Poco frito y nada de bollería.');
+
+    // La hora escrita en el tour vive en Preferencias, que es donde se cambia despues
+    await page.locator('.tab', { hasText: 'Horarios' }).click();
+    await expect(page).toHaveURL(/tab=meals/);
+    await expect(page.locator('#meal-dinner')).toHaveValue('21:45');
+    await expect(page.locator('#meal-lunch')).toHaveValue('14:00');
+    await expect(page.locator('.tab', { hasText: 'Horarios' })).toContainText('09:00–21:45');
 
     // El utencilio marcado en el onboarding vive en la despensa, no en un sitio aparte
     await page.goto('/pantry?tab=utensils');
@@ -168,6 +192,57 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await expect(page.locator('.chip-select__chip--on')).toHaveCount(0);
   });
 
+  test('se puede saltar un paso concreto sin cerrar el tour', async ({ page }) => {
+    await registerToOnboarding(page, 'Salto Tester');
+
+    // Se entra en alergias y se salta ESA pregunta: el tour continua, no se va al dashboard.
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 2 de 6 · Alergias');
+
+    await page.getByRole('button', { name: /Saltar este paso/i }).click();
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 3 de 6 · Gustos');
+
+    // Y la cabecera dice que de alergias no se ha contestado nada (no es un «hecho», es un hueco visto)
+    await page.getByRole('button', { name: /Atrás/ }).click();
+    await expect(page.locator('.onboarding__step-label')).toContainText('sin responder');
+
+    // Con el teclado: Escape salta el paso en el que estás...
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 3 de 6 · Gustos');
+    // ...y Enter pasa al siguiente, sin cerrar el tour (eso sigue siendo un boton).
+    await page.locator('input[name="chip-select-custom"]').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 4 de 6 · Objetivo');
+    await expect(page).toHaveURL(/onboarding/);
+
+    // Lo que ya estaba contestado no se pierde por saltar otro paso
+    await page.locator('.onboarding__goal', { hasText: 'Variada' }).click();
+    await page.getByRole('button', { name: 'Guardar y empezar' }).click();
+    await expect(page.locator('.toast--success')).toBeVisible();
+  });
+
+  test('los horarios del tour y de Preferencias son el mismo ajuste', async ({ page }) => {
+    await registerUser(page, 'Horarios Tester');
+
+    await page.goto('/preferences?tab=meals');
+    await expect(page.locator('#meal-breakfast')).toHaveValue('09:00');
+    await expect(page.locator('#meal-snack')).toHaveValue('17:00');
+
+    await page.fill('#meal-dinner', '22:15');
+    await expect(page.locator('.preferences__state')).toContainText('Hay cambios sin guardar');
+    await page.getByRole('button', { name: 'Guardar preferencias' }).click();
+    await expect(page.locator('.toast--success').filter({ hasText: 'Guardado' })).toBeVisible();
+
+    await page.reload();
+    await expect(page.locator('#meal-dinner')).toHaveValue('22:15');
+
+    // Vaciar la casilla no guarda una hora en blanco: devuelve la de la app
+    await page.fill('#meal-dinner', '');
+    await page.getByRole('button', { name: 'Guardar preferencias' }).click();
+    await page.reload();
+    await expect(page.locator('#meal-dinner')).toHaveValue('20:30');
+  });
+
   test('lo guardado en Preferencias es el punto de partida del planificador', async ({ page }) => {
     await registerUser(page, 'Plan Tester');
 
@@ -182,5 +257,12 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.getByRole('button', { name: /Planificar IA/ }).click();
 
     await expect(page.locator('#gen-goal')).toHaveValue('muscle-gain');
+
+    // Las cuatro comidas vienen marcadas; desmarcar la merienda es decirle a la IA que no la escriba
+    await expect(page.locator('[data-test="gen-meals"]')).toBeVisible();
+    await expect(page.locator('[data-test="gen-meal-breakfast"]')).toBeVisible();
+    await page.locator('[data-test="gen-meal-snack"] input[type="checkbox"]').uncheck();
+    await page.locator('[data-test="gen-meal-dinner"] input[type="checkbox"]').uncheck();
+    await expect(page.locator('[data-test="gen-meal-snack"] input[type="checkbox"]')).not.toBeChecked();
   });
 });

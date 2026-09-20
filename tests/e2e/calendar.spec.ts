@@ -1,5 +1,5 @@
 import { expect, test } from './fixtures';
-import { registerAndGoto } from './helpers/auth';
+import { registerAndGoto, skipOnboarding } from './helpers/auth';
 
 /**
  * El calendario se ve en tres formatos (día / semana / mes) y lo que se pinta es
@@ -233,6 +233,20 @@ test.describe('Calendario', () => {
     await expect(page.locator('.cal-note[role="alert"]')).toHaveCount(0);
   });
 
+  test('quien no tiene casa no ve un picker de invitados: no hay a quien invitar', async ({ page }) => {
+    // No es que el control este roto: es que no hay hogar. Y la distincion importa, porque el bug que
+    // trajo esta ronda era exactamente un bloque que no se pintaba por no haber cargado la casa.
+    await page.locator('[data-test="event-add"]').click();
+    await expect(page.locator('.modal__title')).toContainText('Apuntar un evento');
+    await expect(page.locator('[data-test="event-attendees"]')).toHaveCount(0);
+    await expect(page.locator('[data-test="event-no-people"]')).toHaveCount(0);
+
+    await page.fill('#event-title', 'Regar los tomates');
+    await page.locator('[data-test="event-save"]').click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
+    await expect(page.locator('[data-test="household-event"]')).toContainText('Regar los tomates');
+  });
+
   test('la pestaña Receta elige del recetario en lugar de escribir el plato', async ({ page }) => {
     await page.locator('[data-test="timeline-add-meal"]').first().click();
     await page.locator('.meal-form__tabs button', { hasText: 'Receta' }).click();
@@ -240,5 +254,97 @@ test.describe('Calendario', () => {
 
     // Sin receta elegida no se puede guardar
     await expect(page.locator('app-modal').getByRole('button', { name: 'Añadir', exact: true })).toBeDisabled();
+  });
+});
+
+/**
+ * Invitaciones a un evento. Viven en su propio describe porque necesitan dos sesiones: «invitar a
+ * alguien de la casa» no se puede probar con un usuario solo, que es justo el caso en el que el control
+ * dejo de existir.
+ *
+ * Escrito en la ronda de los horarios y con `typecheck:e2e` pasado; no se ha ejecutado aqui porque el
+ * sandbox no tiene Chromium. Corre en el job de Playwright.
+ */
+test.describe('Calendario — invitar a la casa', () => {
+  test('una casa de uno dice que no hay a quien invitar, en lugar de callarse', async ({
+    browser
+  }) => {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await registerAndGoto(page, '/household');
+    await page.getByRole('button', { name: /Crear hogar/i }).click();
+    await page.fill('input#householdName', 'Familia Uno');
+    await page.click('button[type="submit"]');
+
+    await page.goto('/calendar');
+    await page.locator('[data-test="event-add"]').click();
+    // El bloque sale (hay casa) y dice lo que hay: una persona. Antes de esta ronda, «no hay mas» y «no
+    // he cargado la casa» se pintaban igual: nada.
+    await expect(page.locator('[data-test="event-attendees"]')).toBeVisible();
+    await expect(page.locator('[data-test="event-no-people"]')).toContainText('única persona');
+    await expect(page.getByRole('button', { name: /Invitar a alguien/i })).toBeVisible();
+
+    await page.getByRole('button', { name: /Invitar a alguien/i }).click();
+    await expect(page).toHaveURL(/household/);
+    await ctx.close();
+  });
+
+  test('se marca a otra persona, se guarda, y al reabrir el evento sigue marcada', async ({
+    browser
+  }) => {
+    const ownerName = `Sótano de ${Date.now()}`;
+    const ownerCtx = await browser.newContext();
+    const page = await ownerCtx.newPage();
+    await registerAndGoto(page, '/household');
+    await page.getByRole('button', { name: /Crear hogar/i }).click();
+    await page.fill('input#householdName', ownerName);
+    await page.click('button[type="submit"]');
+    const inviteUrl = (await page.locator('.invite-card__code').textContent()) ?? '';
+    expect(inviteUrl).toContain('/invite/');
+    const code = inviteUrl.split('/invite/')[1];
+
+    // Segunda persona, en su propia sesion: el picker tiene que listar a la OTRA y nunca a quien escribe.
+    const memberCtx = await browser.newContext();
+    const memberPage = await memberCtx.newPage();
+    await memberPage.goto('/auth/register');
+    await memberPage.fill('input#name', 'Bea');
+    await memberPage.fill('input#email', `bea-${Date.now()}@example.com`);
+    await memberPage.fill('input#password', 'Test1234');
+    await memberPage.click('button[type="submit"]');
+    await skipOnboarding(memberPage);
+    await memberPage.goto('/household');
+    await memberPage.getByRole('button', { name: /Unirse con código/i }).click();
+    await memberPage.locator('.join-form input').fill(code);
+    await memberPage.getByRole('button', { name: 'Unirse', exact: true }).click();
+    await expect(memberPage.locator('.household-info')).toBeVisible();
+
+    await page.goto('/calendar');
+    await page.locator('[data-test="event-add"]').click();
+    const people = page.locator('[data-test="event-attendees"] .cal-person');
+    await expect(people).toHaveCount(1);
+    await expect(people.first()).toContainText('Bea');
+
+    await people.first().click();
+    await expect(people.first()).toHaveAttribute('aria-pressed', 'true');
+    await page.fill('#event-title', 'Medir el pasillo');
+    await page.locator('[data-test="event-save"]').click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
+    await expect(page.locator('[data-test="household-event"]')).toContainText('Medir el pasillo');
+
+    // El bug que reportó el usuario: abrir «editar» empezaba sin nadie seleccionado, y guardar
+    // escribia ese vacio (desinvitar a todos sin querer). Reabierto, la marca tiene que estar.
+    await page.locator('[data-test="household-event"]').first().click();
+    await expect(page.locator('#event-title')).toHaveValue('Medir el pasillo');
+    await expect(page.locator('[data-test="event-attendees"] .cal-person').first()).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+
+    // Y la otra persona lo ve en su calendario: es un evento de la casa, no una nota privada.
+    await memberPage.goto('/calendar');
+    await expect(memberPage.locator('[data-test="household-event"]')).toContainText('Medir el pasillo');
+
+    await memberCtx.close();
+    await ownerCtx.close();
   });
 });
