@@ -24,8 +24,8 @@ import {
   emptyTasteProfile
 } from '../../shared/models/taste-profile';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
-import { MEAL_TIME_DEFAULTS, MealTimes, resolveMealTimes } from '../../core/meal-times';
-import { MEAL_ORDER, MEAL_TYPE_LABELS, MealType } from '../../shared/models/calendar.model';
+import { MEAL_TIME_DEFAULTS, MealTimes, mealTimesPatch, resolveMealTimes } from '../../core/meal-times';
+import { MEAL_ORDER, MEAL_TYPE_LABELS } from '../../shared/models/calendar.model';
 
 /**
  * Preferencias del comensal: lo que la IA tiene en cuenta al cocinar.
@@ -593,7 +593,14 @@ export class PreferencesComponent implements OnInit {
   save(): void {
     // Solo el nivel: los modulos son de Configuracion y no se pisan desde aqui.
     this.tasteService
-      .save(this.taste, undefined, { cookingLevel: this.profile.cookingLevel }, this.mealTimesPatch())
+      .save(
+        this.taste,
+        undefined,
+        { cookingLevel: this.profile.cookingLevel },
+        // Solo lo que ha cambiado: «no he tocado la cena» no puede reescribir la cena (ver
+        // `mealTimesPatch`, que es lo mismo que usa el onboarding).
+        mealTimesPatch(this.mealTimes, this.savedMealTimes)
+      )
       .subscribe({
       next: () => {
         this.markSaved();
@@ -615,23 +622,6 @@ export class PreferencesComponent implements OnInit {
     this.profile = snapshot.profile;
     this.mealTimes = { ...snapshot.mealTimes };
     this.saved.set(false);
-  }
-
-  /**
-   * Solo las horas que han cambiado. Un «no he tocado la cena» no puede reescribir la cena con el valor
-   * que se ve en pantalla, porque eso fijaria el defecto de hoy y manana el cambio de la app no llegaria
-   * a esta casa. Y una casilla vaciada se manda como null: el server lo lee como «quita el horario».
-   */
-  private mealTimesPatch(): Partial<Record<MealType, string | null>> | undefined {
-    const patch: Partial<Record<MealType, string | null>> = {};
-    let touched = false;
-    for (const type of MEAL_ORDER) {
-      const value = (this.mealTimes[type] ?? '').trim();
-      if (value === this.savedMealTimes[type]) continue;
-      touched = true;
-      patch[type] = value || null;
-    }
-    return touched ? patch : undefined;
   }
 
   private snapshot(): string {

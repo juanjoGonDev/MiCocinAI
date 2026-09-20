@@ -5,6 +5,7 @@ import {
   mealAnchors,
   mealTimeOf,
   mealTimeToMinutes,
+  mealTimesPatch,
   resolveMealTimes,
   selectedMealTypes
 } from './meal-times';
@@ -101,5 +102,41 @@ describe('mealTimeToMinutes', () => {
     expect(mealTimeToMinutes('20:30')).toBe(1230);
     expect(mealTimeToMinutes('9:30')).toBeNull();
     expect(mealTimeToMinutes('')).toBeNull();
+  });
+});
+
+describe('mealTimesPatch', () => {
+  /**
+   * Lo que sale de un formulario de horas hacia el PATCH. Las tres reglas que importan son las que
+   * evitan escribir de mas: no mandar nada si no se ha tocado nada (si no, «ver el defecto» se
+   * convierte en «tener el defecto guardado» y un cambio futuro de la app ya no llega a esta casa),
+   * mandar solo la comida editada, y mandar null al vaciar.
+   */
+  const saved = resolveMealTimes(null);
+
+  it('no hay cambio, no hay payload', () => {
+    expect(mealTimesPatch(saved, saved)).toBeUndefined();
+    expect(mealTimesPatch({ ...saved, dinner: ' 20:30 ' }, saved)).toBeUndefined();
+  });
+
+  it('cambiar una comida manda esa comida', () => {
+    expect(mealTimesPatch({ ...saved, dinner: '22:15' }, saved)).toEqual({ dinner: '22:15' });
+  });
+
+  it('vaciar manda null, que es «quita el horario»', () => {
+    const stored = resolveMealTimes({ lunch: '13:00' });
+
+    expect(mealTimesPatch({ ...stored, lunch: '' }, stored)).toEqual({ lunch: null });
+  });
+
+  it('las cuatro a la vez se mandan las cuatro', () => {
+    const cleared = { breakfast: '', lunch: '', snack: '', dinner: '' };
+
+    expect(mealTimesPatch(cleared, saved)).toEqual({
+      breakfast: null,
+      lunch: null,
+      snack: null,
+      dinner: null
+    });
   });
 });

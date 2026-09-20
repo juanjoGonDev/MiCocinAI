@@ -78,6 +78,29 @@ export function selectedMealTypes(selected: readonly string[] | null | undefined
   return valid.length > 0 ? valid : [...MEAL_ORDER];
 }
 
+/**
+ * Lo que un formulario de horas debe mandar para ser un parche y no un rewriting.
+ *
+ * `undefined` cuando no ha cambiado nada, y eso es lo que importa: si «Guardar preferencias» mandara
+ * siempre las cuatro casillas, una casa que no ha tocado nada acabaria con los defectos de la app
+ * *guardados*, y manana cambiar el defecto de producto dejaria de afectarles. Una casilla vacia manda
+ * `null` («quita el horario»), que es como se vuelve al de la app sin boton de restablecer.
+ */
+export function mealTimesPatch(
+  current: Partial<MealTimes> | null | undefined,
+  saved: MealTimes
+): Partial<Record<MealType, string | null>> | undefined {
+  const patch: Partial<Record<MealType, string | null>> = {};
+  let touched = false;
+  for (const type of MEAL_ORDER) {
+    const value = String(current?.[type] ?? '').trim();
+    if (value === saved[type]) continue;
+    touched = true;
+    patch[type] = value || null;
+  }
+  return touched ? patch : undefined;
+}
+
 /** `HH:MM` -> minutos del dia, para comparar o para el `title` de un bloque. `null` si no es una hora. */
 export function mealTimeToMinutes(time: string | null | undefined): number | null {
   return minutesFromTime(time);

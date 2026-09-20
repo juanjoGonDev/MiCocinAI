@@ -21,8 +21,16 @@ import {
   emptyTasteProfile
 } from '../../shared/models/taste-profile';
 import { Utensil } from '../../shared/models/pantry.model';
-
-type OnboardingStep = 'profile' | 'allergies' | 'tastes' | 'goal' | 'kitchen';
+import { MEAL_TIME_DEFAULTS, MealTimes, mealTimesPatch, resolveMealTimes } from '../../core/meal-times';
+import { MEAL_ORDER, MEAL_TYPE_LABELS } from '../../shared/models/calendar.model';
+import {
+  isLastIndex,
+  nextIndex,
+  ONBOARDING_STEPS,
+  OnboardingStep,
+  stepLabel,
+  tourStatus
+} from '../../core/onboarding-steps';
 
 /**
  * Configuración inicial, nada más registrarse: alergias, gustos, objetivo y
@@ -44,7 +52,7 @@ type OnboardingStep = 'profile' | 'allergies' | 'tastes' | 'goal' | 'kitchen';
   ],
   template: `
     <div class="onboarding">
-      <div class="onboarding__card">
+      <div class="onboarding__card" (keydown)="onCardKeydown($event)">
         <header class="onboarding__header">
           <span class="onboarding__logo">🏠</span>
           <h1 class="onboarding__title">Configura tu HogarIA</h1>
@@ -56,8 +64,8 @@ type OnboardingStep = 'profile' | 'allergies' | 'tastes' | 'goal' | 'kitchen';
         </header>
 
         <div class="onboarding__progress">
-          <span class="onboarding__step-label">
-            Paso {{ stepIndex() + 1 }} de {{ steps.length }} · {{ stepTitle() }}
+          <span class="onboarding__step-label" data-test="onboarding-step-label">
+            {{ stepLabel() }}
           </span>
           <span class="onboarding__bar" aria-hidden="true">
             <span class="onboarding__bar-fill" [style.width.%]="progress()"></span>
@@ -182,7 +190,39 @@ type OnboardingStep = 'profile' | 'allergies' | 'tastes' | 'goal' | 'kitchen';
             </div>
           </ng-container>
 
-          <!-- 4 · Utensilios -->
+          <!-- 4 · Horarios de las comidas -->
+          <ng-container *ngSwitchCase="'meals'">
+            <h2 class="onboarding__step-title">¿A qué hora coméis en casa?</h2>
+            <p class="onboarding__step-hint">
+              No es un adorno: con estas cuatro horas el calendario sabe dónde sentar cada comida, el
+              botón «añadir» te propone esa hora y la IA planifica el día a tu reloj. Cambiarlas más
+              adelante es igual de fácil: Preferencias → Horarios.
+            </p>
+
+            <div class="onboarding__times">
+              <div class="onboarding__time-row" *ngFor="let field of mealFields">
+                <label class="onboarding__time-label" [for]="'ob-meal-' + field.type">
+                  {{ field.label }}
+                </label>
+                <input
+                  type="time"
+                  class="onboarding__time-input"
+                  [id]="'ob-meal-' + field.type"
+                  [name]="'ob-meal-' + field.type"
+                  [attr.data-test]="'onboarding-meal-time-' + field.type"
+                  [(ngModel)]="mealTimes[field.type]"
+                />
+                <span class="onboarding__time-hint">En blanco: {{ field.default }}</span>
+              </div>
+            </div>
+
+            <p class="onboarding__step-hint">
+              Una hora que no te sirve, se deja vacía y vuelve a la de siempre. Si prefieres no pensar
+              en esto ahora, Esc o «Saltar este paso»: se puede terminar el tour y venir mañana.
+            </p>
+          </ng-container>
+
+          <!-- 5 · Utensilios -->
           <ng-container *ngSwitchCase="'kitchen'">
             <h2 class="onboarding__step-title">¿Con qué cuentas en la cocina?</h2>
             <p class="onboarding__step-hint">
@@ -236,6 +276,16 @@ type OnboardingStep = 'profile' | 'allergies' | 'tastes' | 'goal' | 'kitchen';
           >
             ← Atrás
           </app-button>
+          <!-- Saltar UN paso: hasta aqui «no quiero hablar de esto ahora» cerraba el tour entero, que
+               es lo contrario de lo que la persona acaba de pedir. -->
+          <button
+            type="button"
+            class="onboarding__skip onboarding__skip--step"
+            data-test="onboarding-skip-step"
+            (click)="skipStep()"
+          >
+            Saltar este paso
+          </button>
           <app-button *ngIf="!isLastStep()" variant="primary" (onClick)="next()">
             Siguiente →
           </app-button>
@@ -251,7 +301,8 @@ type OnboardingStep = 'profile' | 'allergies' | 'tastes' | 'goal' | 'kitchen';
       </div>
 
       <p class="onboarding__footnote">
-        Se guarda en tu cuenta, no en el hogar: cada comensal puede tener lo suyo.
+        Se guarda en tu cuenta, no en el hogar: cada comensal puede tener lo suyo. Con el teclado: Esc
+        salta este paso, Enter pasa al siguiente.
       </p>
     </div>
   `,
@@ -481,6 +532,36 @@ type OnboardingStep = 'profile' | 'allergies' | 'tastes' | 'goal' | 'kitchen';
         color: var(--text-tertiary);
       }
 
+      .onboarding__times {
+        display: grid;
+        gap: var(--space-2);
+        margin: var(--space-3) 0;
+      }
+      .onboarding__time-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: var(--space-1) var(--space-3);
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .onboarding__time-label {
+        font-weight: var(--font-medium);
+      }
+      .onboarding__time-input {
+        font: inherit;
+        padding: var(--space-1) var(--space-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+      }
+      .onboarding__time-hint {
+        grid-column: 1 / -1;
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+      }
+
       @media (max-width: 560px) {
         .onboarding__card {
           padding: var(--space-4);
@@ -498,10 +579,17 @@ export class OnboardingComponent implements OnInit {
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
 
-  readonly steps: OnboardingStep[] = ['profile', 'allergies', 'tastes', 'goal', 'kitchen'];
+  /** Los pasos, en el orden en que se preguntan (ver `core/onboarding-steps.ts`). */
+  readonly steps = ONBOARDING_STEPS;
   readonly stepIndex = signal(0);
   readonly isSaving = signal(false);
   readonly isLoadingUtensils = signal(false);
+  /**
+   * Pasos saltados uno a uno. No cambian lo que se guarda —lo que haya en el formulario se guarda
+   * igual—; cambian lo que se *dice* del paso (la cabecera lo anuncia «sin responder») y si el tour
+   * entero acaba siendo un salto, ese es el estado que se registra.
+   */
+  readonly skippedSteps = signal<ReadonlySet<OnboardingStep>>(new Set<OnboardingStep>());
   /** Evita persistir por defecto antes de que la carga inicial haya terminado. */
   private loaded = false;
 
@@ -514,23 +602,24 @@ export class OnboardingComponent implements OnInit {
   readonly dislikeOptions = COMMON_DISLIKES;
   readonly goalOptions = GOAL_OPTIONS;
 
-  readonly stepTitle = computed(() => {
-    switch (this.steps[this.stepIndex()]) {
-      case 'profile':
-        return 'Perfil';
-      case 'allergies':
-        return 'Alergias';
-      case 'tastes':
-        return 'Gustos';
-      case 'goal':
-        return 'Objetivo';
-      default:
-        return 'Cocina';
-    }
-  });
+  /** «Paso 4 de 6 · Horarios · sin responder»: numero y titulo derivados de la misma lista. */
+  readonly stepLabel = computed(() =>
+    stepLabel(this.stepIndex(), this.steps, this.skippedSteps().has(this.steps[this.stepIndex()]))
+  );
 
   readonly progress = computed(() => ((this.stepIndex() + 1) / this.steps.length) * 100);
-  readonly isLastStep = computed(() => this.stepIndex() >= this.steps.length - 1);
+  readonly isLastStep = computed(() => isLastIndex(this.stepIndex(), this.steps.length));
+
+  /** Las cuatro comidas con su defecto, para que el paso sea un bucle y no cuatro bloques pegados. */
+  readonly mealFields = MEAL_ORDER.map((type) => ({
+    type,
+    label: MEAL_TYPE_LABELS[type],
+    default: MEAL_TIME_DEFAULTS[type]
+  }));
+
+  /** Copia editable: viaja al backend con el resto del perfil, y solo lo que ha cambiado. */
+  mealTimes: MealTimes = resolveMealTimes(null);
+  private savedMealTimes: MealTimes = resolveMealTimes(null);
 
   /** Electrodomésticos del catálogo: los que cambian qué recetas son posibles. */
   readonly applianceUtensils = computed(() =>
@@ -545,11 +634,15 @@ export class OnboardingComponent implements OnInit {
       next: (data) => {
         this.taste = { ...emptyTasteProfile(), ...data.taste };
         this.profile = toHomeProfile(data.profile);
+        this.applyMealTimes(this.tasteService.mealTimes());
         this.loaded = true;
       },
       error: () => {
         this.taste = emptyTasteProfile();
         this.profile = DEFAULT_HOME_PROFILE;
+        // Sin respuesta no hay horas guardadas que mostrar: se enseñan las de la app, y si el usuario
+        // no las toca, el parche que se manda es vacio (nada de fijar un defecto por defecto).
+        this.applyMealTimes(resolveMealTimes(null));
         this.loaded = true;
       }
     });
@@ -576,6 +669,11 @@ export class OnboardingComponent implements OnInit {
     return utensil.id;
   }
 
+  private applyMealTimes(times: MealTimes): void {
+    this.mealTimes = { ...times };
+    this.savedMealTimes = { ...times };
+  }
+
   selectGoal(goal: TasteGoal): void {
     this.taste.goal = goal;
   }
@@ -592,13 +690,57 @@ export class OnboardingComponent implements OnInit {
    */
   persistProgress(): void {
     if (!this.loaded) return;
-    this.tasteService.save(this.taste, undefined, this.profile).subscribe({ error: () => undefined });
+    this.tasteService
+      .save(this.taste, undefined, this.profile, this.mealTimesPatch())
+      .subscribe({ error: () => undefined });
+  }
+
+  /** Solo las horas que han cambiado: verlas en pantalla no es editarlas. */
+  private mealTimesPatch() {
+    return mealTimesPatch(this.mealTimes, this.savedMealTimes);
+  }
+
+  /**
+   * Esc salta el paso y Enter lo cierra, que es lo que la mano ya espera de un asistente. Dos excepciones
+   * que son peores que el atajo si no estan: un textarea necesita el Enter para partir la nota, y con el
+   * picker nativo de una hora abierto, Esc tiene que cerrar el picker, no el paso.
+   */
+  onCardKeydown(event: KeyboardEvent): void {
+    const target = event.target as HTMLElement | null;
+    const tag = (target?.tagName ?? '').toUpperCase();
+    const inputType = (target as HTMLInputElement | null)?.type;
+
+    if (event.key === 'Enter') {
+      if (tag === 'TEXTAREA' || tag === 'BUTTON' || target?.getAttribute('role') === 'button') return;
+      // Y no acaba el tour: terminar y guardar tiene que ser un boton, no una tecla que se pulsa sola.
+      event.preventDefault();
+      this.next();
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      if (inputType === 'time' || inputType === 'date') return;
+      event.preventDefault();
+      this.skipStep();
+    }
   }
 
   next(): void {
-    const target = Math.min(this.stepIndex() + 1, this.steps.length - 1);
+    const target = nextIndex(this.stepIndex(), this.steps.length);
     this.stepIndex.set(target);
     if (this.steps[target] === 'kitchen') this.ensureUtensils();
+  }
+
+  /**
+   * Saltar SOLO este paso. Se guarda lo que hubiera escrito hasta aqui (la misma regla que
+   * `persistProgress`), se marca el paso como sin responder y se avanza: en el ultimo paso, avanzar
+   * significa quedarse y pulsar «Guardar y empezar», que es el unico boton que cierra el tour.
+   */
+  skipStep(): void {
+    const step = this.steps[this.stepIndex()];
+    this.skippedSteps.update((skipped) => new Set(skipped).add(step));
+    this.persistProgress();
+    this.next();
   }
 
   back(): void {
@@ -607,7 +749,14 @@ export class OnboardingComponent implements OnInit {
   }
 
   finish(): void {
-    this.save('done', 'Listo', 'Tu perfil y tus preferencias ya están: la IA lo tendrá en cuenta.');
+    const status = tourStatus([...this.skippedSteps()]);
+    this.save(
+      status,
+      status === 'done' ? 'Listo' : 'Guardado',
+      status === 'done'
+        ? 'Tu perfil y tus preferencias ya están: la IA lo tendrá en cuenta.'
+        : 'Sin problema: te lo preguntamos cuando quieras desde Preferencias.'
+    );
   }
 
   /** Se salta, pero lo que haya escrito se guarda igualmente. */
@@ -618,7 +767,9 @@ export class OnboardingComponent implements OnInit {
   private save(status: 'done' | 'skipped', title: string, body: string): void {
     this.isSaving.set(true);
 
-    this.tasteService.save(this.taste, status, this.profile).subscribe({
+    this.tasteService
+      .save(this.taste, status, this.profile, this.mealTimesPatch())
+      .subscribe({
       next: () => {
         this.isSaving.set(false);
         this.toastService.success(title, body);
