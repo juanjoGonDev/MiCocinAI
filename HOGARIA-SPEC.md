@@ -1351,43 +1351,66 @@ Feedback on the screenshots of the line sheet, plus one thing that was visible o
 
 ### The unit picker, again (it was half right)
 
-- [ ] Families are **not** a choice. A family is a title: what you can tap is a unit. The
+- [x] Families are **not** a choice. A family is a title: what you can tap is a unit. The
       previous round made "Peso" an option that selected `kg`, which read well in the spec and
       badly on the phone —the trigger then said «Volumen» instead of «1,5 L» because the family
       row and the unit row shared the value `L` and the picker matched the first one.
-- [ ] No per-row descriptions. The hint next to each unit was cut to two letters in a
+- [x] No per-row descriptions. The hint next to each unit was cut to two letters in a
       320-pixel-wide column; a truncated description is noise with an ellipsis. Title only.
-- [ ] The trigger says the unit, and the panel is the list of units grouped by title. Typing
+- [x] The trigger says the unit, and the panel is the list of units grouped by title. Typing
       still filters across everything, and writing «bote de 400 g» is still a value.
 
 ### The photo sheet was printing its own test attribute
 
-- [ ] `data-test="photo-drop">` was visible as text in the drop zone: the tag was closed before
+- [x] `data-test="photo-drop">` was visible as text in the drop zone: the tag was closed before
       the attribute, so the attribute became content. Fix the markup, and teach `check-ui` to
       catch the shape —an attribute-looking token sitting between a `>` and a `>` is not
       something a user should ever read.
 
 ### Who is using this, in the sidebar
 
-- [ ] Bottom-left is the **person**, not a logout row: avatar (their photo if they set one,
+- [x] Bottom-left is the **person**, not a logout row: avatar (their photo if they set one,
       otherwise their initial —like Google's chip), their name, and a separate small logout icon
       button. One tap does not log you out by accident, and you can see who you are logged in as.
-- [ ] The layout's own icons stop being emoji (`🏠 📦  📅  👨‍👩‍👧‍ 👤 🤖 📋 ⚙️  ☰ ✕`): same
+- [x] The layout's own icons stop being emoji (`🏠 📦  📅  👨‍👩‍👧‍ 👤 🤖 📋 ⚙️  ☰ ✕`): same
       rule as the rest of the app, and it takes `main-layout` off the guard's debt lists.
 
 ### The person, in every history line
 
-- [ ] Wherever a line says *who* did something, it shows the **same icon**: the shopping row
+- [x] Wherever a line says *who* did something, it shows the **same icon**: the shopping row
       (it printed bare initials letters), the tray, the audit trail (already an avatar) and the
       household agenda (which computed initials by hand in two places). `app-avatar` is the only
       implementation of "a person as a circle".
-- [ ] For that to be a picture and not a letter, the reads that already join a name now join the
+- [x] For that to be a picture and not a letter, the reads that already join a name now join the
       avatar too: `added_by_avatar`/`updated_by_avatar` on shopping items, `authorAvatar` on
       calendar events. The client never guesses a color: `app-avatar` hashes the name, so the
       same person is the same circle everywhere.
-- [ ] Tests: the unit options contain no family values and no duplicated values (that is what
+- [x] Tests: the unit options contain no family values and no duplicated values (that is what
       made the trigger lie), `app-avatar` renders the initial when there is no image, and the two
       API reads return the avatar field they promise.
+
+### How it actually turned out
+
+- The group titles live in `PickerOption.group`, and `rows()` returns a discriminated union
+  (`kind: 'header' | 'option'`). Two `@if (row.kind === …)` blocks, not `@if/@else`: the AOT
+  compiler does not narrow a union in an `@else` branch and fails the *build* with NG1
+  «Object is possibly 'null'» even though `tsc -p tsconfig.app.json` is happy —`ng build` is
+  the gate that catches this class of template bug.
+- The unit field's caption under the trigger ("Peso") went with the row descriptions: the icon
+  in the trigger already says the family, and two descriptions of the same thing in a 320 px
+  column is one too many.
+- `check-ui` grew rule 6 (`atributo-como-texto`) and prints its rule count; it flags the broken
+  drop zone, stays quiet on the fixed one and on `a > b ? "x" : "y"`. `main-layout` left the
+  emoji debt list (20 files left) and the icon set is 85 names.
+- The sizes follow the row: `xs` in list rows, agenda chips and the tray, `sm` in the audit
+  sheet. `.detail__who` stopped being a circle —it used to draw one around the letters, which
+  would have nested two.
+- On the way, the tray rows gained the owner of each list (`ownerName`/`ownerAvatar`), because
+  the history tab is exactly where «did I close this?» is asked.
+- **What the app still cannot say:** a `meals` row has no author —the table has no user column,
+  a meal belongs to the calendar day, not to whoever typed it— so the food part of the agenda
+  has no face to show without widening the schema. `calendar_events.user_id` exists, and those
+  lines do show one.
 
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
