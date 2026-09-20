@@ -14,6 +14,8 @@ import {
   changePasswordSchema,
   updateProfileSchema
 } from '../schemas/auth.schema.js';
+import { deleteUpload, parseImageDataUrl, MAX_AVATAR_BYTES, storeImage } from '../utils/uploads.js';
+import { avatarImageSchema } from '../schemas/auth.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 import { seedDefaultsForUser } from '../utils/seed-data.js';
 import {
@@ -261,6 +263,43 @@ authRoutes.post('/change-password', authMiddleware, async (c) => {
 });
 
 // GET /api/auth/profile (protected)
+/**
+ * La foto de la cuenta. Escribe un fichero y guarda SU RUTA en `users.avatar`; el base64 no
+ * entra en la base de datos ni en el JSON de nadie (ver `utils/uploads.ts`). Se sirve sin token
+ * porque un `img` no puede mandar cabeceras: quien conoce la URL, ve la foto.
+ */
+authRoutes.post('/avatar', authMiddleware, async (c) => {
+  const userId = c.get('userId') as string;
+  const parsed = avatarImageSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) {
+    return c.json({ success: false, message: 'INVALID_IMAGE', data: { issues: parsed.error.issues.slice(0, 3) } }, 400);
+  }
+  const image = parseImageDataUrl(parsed.data.image);
+  if (!image) {
+    return c.json({ success: false, message: 'UNSUPPORTED_IMAGE', data: { allowed: ['image/jpeg', 'image/png', 'image/webp'] } }, 415);
+  }
+  if (image.buffer.byteLength > MAX_AVATAR_BYTES) {
+    return c.json({ success: false, message: 'IMAGE_TOO_LARGE', data: { maxBytes: MAX_AVATAR_BYTES } }, 413);
+  }
+
+  const db = getDatabase();
+  const previous = db.prepare('SELECT avatar FROM users WHERE id = ?').get(userId) as { avatar: string | null } | undefined;
+  const avatar = storeImage('avatars', userId, image);
+  db.prepare(`UPDATE users SET avatar = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(avatar, userId);
+  deleteUpload(previous?.avatar);
+  return c.json({ success: true, data: { avatar } });
+});
+
+// Quitar la foto: vuelve a la inicial con color, que es lo que la mayoria vera siempre.
+authRoutes.delete('/avatar', authMiddleware, async (c) => {
+  const userId = c.get('userId') as string;
+  const db = getDatabase();
+  const current = db.prepare('SELECT avatar FROM users WHERE id = ?').get(userId) as { avatar: string | null } | undefined;
+  db.prepare(`UPDATE users SET avatar = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(userId);
+  deleteUpload(current?.avatar);
+  return c.json({ success: true, data: { avatar: null } });
+});
+
 authRoutes.get('/profile', authMiddleware, async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();

@@ -37,9 +37,29 @@ export const changePasswordSchema = z.object({
     .regex(/[0-9]/, 'Password must contain at least one number')
 });
 
+/**
+ * La foto de la cuenta: una URL absoluta (una foto que ya vive en otro sitio) o la ruta que
+ * produce el propio `POST /auth/avatar`. `z.string().url()` a secas RECHAZABA esa ruta propia,
+ * o sea: el backend no aceptaba el valor que el backend mismo devuelve. `null` la quita.
+ */
+export const avatarField = z
+  .string()
+  .min(1)
+  .max(512)
+  .refine(
+    (value) => /^\/api\/uploads\/avatars\/[a-zA-Z0-9._-]{4,80}$/.test(value) || /^https?:\/\//.test(value),
+    'avatar debe ser una ruta de subida de esta app o una URL absoluta'
+  );
+
+export const avatarImageSchema = z.object({
+  // El navegador recorta y comprime antes de mandar: 128 px de lado no necesitan mas de unas
+  // decenas de KB, y el techo existe para que un `POST` con 40 MB no llegue ni a parsearse.
+  image: z.string().min(24).max(1_000_000)
+});
+
 export const updateProfileSchema = z.object({
   name: z.string().min(2).max(100).optional(),
-  avatar: z.string().url().optional().nullable(),
+  avatar: avatarField.optional().nullable(),
   cookingLevel: cookingLevelEnum.optional(),
   preferences: z.object({
     theme: z.enum(['light', 'dark', 'system']).optional(),

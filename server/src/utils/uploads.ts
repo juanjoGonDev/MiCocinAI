@@ -1,0 +1,118 @@
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+
+/**
+ * Lo que la persona sube (la foto de su cuenta), en disco y no en la base de datos.
+ *
+ * El avatar se lee en las subconsultas que decoran cada fila de la compra, cada suceso de la
+ * auditoria y cada chip de la agenda. Guardar ahi un base64 de 40 KB es pagar 40 KB por fila en
+ * la pantalla mas caliente de la app; guardar una ruta cuesta 30 bytes y el navegador cachea la
+ * imagen. De ahi tambien que el nombre lleve un sufijo aleatorio: la URL del fichero ES el
+ * permiso —se sirve sin autenticacion porque un `img` no puede mandar la cabecera `Authorization`—,
+ * asi que nadie tiene que poder adivinarla.
+ */
+
+/** Un avatar es un recorte pequeno: 128 px de lado, JPEG. Media megabierto es el techo. */
+export const MAX_AVATAR_BYTES = 512 * 1024;
+export const AVATAR_URL_PREFIX = '/api/uploads/avatars/';
+
+const KINDS = ['avatars'] as const;
+export type UploadKind = (typeof KINDS)[number];
+
+const MIME_BY_EXT: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp'
+};
+const EXT_BY_MIME: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp'
+};
+
+/** Donde se escribe: junto a la base de datos, para que un volumen monte las dos cosas. */
+export function uploadsRoot(path = process.env.DATABASE_PATH || './data/hogaria.sqlite'): string {
+  // Con `:memory:` (los tests) no hay carpeta de la BD: se cae a un temporal del proceso, y asi
+  // ninguna prueba escribe dentro del arbol del repo.
+  if (path === ':memory:') return join(tmpdir(), `hogaria-uploads-${process.pid}`);
+  return join(dirname(resolve(path)), 'uploads');
+}
+
+export type ParsedImage = { mime: string; buffer: Buffer };
+
+/**
+ * Acepta SOLO un data URL de imagen de siempre, y nada mas: ni `http:` (seria un redirect a
+ * otro servidor con nuestra ruta), ni SVG (que es texto con script dentro).
+ */
+export function parseImageDataUrl(value: string): ParsedImage | null {
+  const match = /^data:([a-z/+.-]+);base64,([\s\S]+)$/i.exec(value.trim());
+  if (!match) return null;
+  const mime = match[1].toLowerCase();
+  const ext = EXT_BY_MIME[mime];
+  if (!ext) return null;
+  const buffer = Buffer.from(match[2].replace(/\s+/g, ''), 'base64');
+  if (!buffer.byteLength) return null;
+  return { mime: ext === '.jpg' ? 'image/jpeg' : mime, buffer };
+}
+
+const safe = (value: string): string =>
+  // Los puntos se collapsan: sin esto, `../..` acababa en un nombre con `..` dentro, y un nombre
+  // asi es un pie de pagina para cualquier consumidor que reconstruya la ruta a mano.
+  value
+    .replace(/[^a-zA-Z0-9._-]/g, '-')
+    .replace(/\.{2,}/g, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 48) || 'anon';
+
+/** Escribe la imagen y devuelve su URL publica. El nombre no lo decide quien sube. */
+export function storeImage(kind: UploadKind, ownerId: string, image: ParsedImage, root = uploadsRoot()): string {
+  const dir = join(root, kind);
+  mkdirSync(dir, { recursive: true });
+  const ext = EXT_BY_MIME[image.mime] ?? '.jpg';
+  const file = `${safe(ownerId)}-${randomBytes(5).toString('hex')}${ext}`;
+  writeFileSync(join(dir, file), image.buffer, { mode: 0o644 });
+  return `/api/uploads/${kind}/${file}`;
+}
+
+/** URL publica -> ruta en disco, con el recorrido validado (nunca un `..` hacia fuera). */
+export function resolveUploadUrl(url: string | null | undefined, root = uploadsRoot()): string | null {
+  if (!url) return null;
+  const parts = url.replace(/^\/api\/uploads\//, '').split('/');
+  if (parts.length !== 2) return null;
+  const [kind, file] = parts;
+  if (!(KINDS as readonly string[]).includes(kind)) return null;
+  if (!/^[a-zA-Z0-9._-]{4,80}$/.test(file) || file.includes('..')) return null;
+  const dir = resolve(root, kind);
+  const full = resolve(dir, file);
+  return full.startsWith(dir + '/') ? full : null;
+}
+
+export function readUpload(url: string, root = uploadsRoot()): { body: Buffer; type: string } | null {
+  const file = resolveUploadUrl(url, root);
+  if (!file) return null;
+  try {
+    return { body: readFileSync(file), type: MIME_BY_EXT[file.slice(file.lastIndexOf('.')).toLowerCase()] ?? 'application/octet-stream' };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Cambiar de foto borra la anterior: si no, cada persona acumula archivos para siempre.
+ * Devuelve si HABIA algo que borrar — `rmSync(force)` no falla contra la nada, y contestar
+ * `true` cuando ya no existia es mentirle a quien llama.
+ */
+export function deleteUpload(url: string | null | undefined, root = uploadsRoot()): boolean {
+  const file = resolveUploadUrl(url, root);
+  if (!file || !existsSync(file)) return false;
+  try {
+    rmSync(file);
+    return true;
+  } catch {
+    return false;
+  }
+}

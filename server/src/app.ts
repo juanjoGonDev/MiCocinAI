@@ -10,6 +10,7 @@ import { config } from './config/app.config.js';
 import { errorHandler } from './middleware/error.middleware.js';
 import { timestampMiddleware } from './middleware/timestamp.middleware.js';
 import { authRoutes } from './routes/auth.routes.js';
+import { readUpload } from './utils/uploads.js';
 import { pantryRoutes } from './routes/pantry.routes.js';
 import { shoppingRoutes } from './routes/shopping.routes.js';
 import { recipeRoutes } from './routes/recipes.routes.js';
@@ -333,6 +334,21 @@ export function createApp(options: AppOptions = {}): Hono {
   app.route('/health', healthRoutes);
   app.route('/api/health', healthRoutes);
   app.route('/api/auth', authRoutes);
+
+  // Las fotos que suben las cuentas (`users.avatar`) se sirven aqui y NO detras del token: un
+  // `<img>` no puede mandar cabeceras de autorizacion. Lo que hace esto seguro es el nombre del
+  // fichero, que lleva un sufijo aleatorio por subida —la URL es el permiso—, y que el unico
+  // directorio del que se lee es `uploads/avatars`, resuelto y validado en `utils/uploads.ts`.
+  app.get('/api/uploads/:kind/:file', (c) => {
+    const url = `/api/uploads/${c.req.param('kind')}/${c.req.param('file')}`;
+    const found = readUpload(url);
+    if (!found) return next404(c);
+    // `immutable`: el nombre cambia con cada foto, asi que un 404 de cache no puede quedar viejo.
+    return new Response(found.body, {
+      status: 200,
+      headers: { 'content-type': found.type, 'cache-control': 'private, max-age=3600, immutable' }
+    });
+  });
   app.route('/api/pantry', pantryRoutes);
   app.route('/api/shopping', shoppingRoutes);
   app.route('/api/recipes', recipeRoutes);

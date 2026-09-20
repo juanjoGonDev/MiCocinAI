@@ -38,7 +38,6 @@ const LEGACY = {
     'frontend/src/app/features/invite/invite.component.ts',
     'frontend/src/app/features/onboarding/onboarding.component.ts',
     'frontend/src/app/features/pantry/pantry.component.ts',
-    'frontend/src/app/features/preferences/preferences.component.ts',
     'frontend/src/app/features/recipes/recipes.component.ts',
     'frontend/src/app/features/settings/settings.component.ts',
     'frontend/src/app/layouts/auth-layout/auth-layout.component.ts',

@@ -1,7 +1,7 @@
 import { Injectable, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, map, catchError, of } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { STORAGE_KEYS } from './storage.service';
@@ -181,6 +181,35 @@ export class AuthService {
         localStorage.setItem(this.USER_KEY, JSON.stringify(user));
       })
     );
+  }
+
+  /**
+   * La foto de la cuenta. El servidor guarda un fichero y devuelve SU RUTA —no los bytes—, y el
+   * usuario en cache se actualiza con ella: si no, al volver de la foto seguiria viendo la inicial
+   * hasta recargar.
+   */
+  uploadAvatar(image: string): Observable<string | null> {
+    return this.http
+      .post<{ data: { avatar: string | null } }>(`${this.apiUrl}/avatar`, { image })
+      .pipe(map((response) => this.applyAvatar(response.data?.avatar ?? null)));
+  }
+
+  removeAvatar(): Observable<null> {
+    return this.http.delete(`${this.apiUrl}/avatar`).pipe(
+      map(() => {
+        this.applyAvatar(null);
+        return null;
+      })
+    );
+  }
+
+  private applyAvatar(avatar: string | null): string | null {
+    const current = this.currentUserSignal();
+    if (!current) return avatar;
+    const next: User = { ...current, avatar: avatar ?? undefined };
+    this.currentUserSignal.set(next);
+    localStorage.setItem(this.USER_KEY, JSON.stringify(next));
+    return avatar;
   }
 
   changePassword(oldPassword: string, newPassword: string): Observable<void> {
