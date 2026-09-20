@@ -187,3 +187,33 @@ describe('la cuenta de la persona', () => {
     expect((await app.request('/api/uploads/secrets/x.png')).status).toBe(404);
   });
 });
+
+describe('saltarse el onboarding (HOGARIA-SPEC 12o)', () => {
+  it('un PATCH de gusto sin ningun campo no es un 500 y no borra lo que habia', async () => {
+    // «Saltar por ahora» manda el cuerpo vacio: los cuatro campos del perfil son opcionales, y hasta
+    // esta ronda `z.string().min(1)` los exigia todos. Ademas el perfil se fusiona sobre
+    // `users.preferences`, que es donde vive el tema y el idioma: si el vacio escribiera algo, saltarse
+    // el onboarding cambiaria el idioma de la cuenta.
+    const { token } = await register('Rafa');
+    const before = await json(await app.request('/api/auth/taste', withAuth(token)));
+    const response = await app.request('/api/auth/taste', withAuth(token, { method: 'PATCH', body: '{}' }));
+    expect(response.status).toBe(200);
+
+    const after = await json(await app.request('/api/auth/taste', withAuth(token)));
+    expect(after.data).toEqual(before.data);
+
+    // Y vaciar un campo con `null` si lo borra: ausente no tocar, null quitar.
+    const filled = await app.request(
+      '/api/auth/taste',
+      withAuth(token, { method: 'PATCH', body: JSON.stringify({ dislikes: ['el cilantro'] }) })
+    );
+    expect(filled.status).toBe(200);
+    const emptied = await app.request(
+      '/api/auth/taste',
+      withAuth(token, { method: 'PATCH', body: JSON.stringify({ dislikes: null }) })
+    );
+    expect(emptied.status).toBe(200);
+    const final = await json(await app.request('/api/auth/taste', withAuth(token)));
+    expect(final.data.dislikes ?? []).toEqual([]);
+  });
+});

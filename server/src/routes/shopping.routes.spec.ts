@@ -1535,3 +1535,31 @@ describe('quien escribio la linea, con cara (§12i)', () => {
     expect(events[0].user_avatar).toBe('/uploads/ana-nueva.png');
   });
 });
+
+describe('lo opcional de verdad (HOGARIA-SPEC 12o)', () => {
+  it('un producto con solo el nombre entra en la lista y lo demas queda vacio', async () => {
+    // «Con precio, tienda, nota, categoria y oferta» es lo que la pantalla pregunta, nada de eso es
+    // obligatorio. Se prueba a nivel de ruta porque entre el schema y la fila hay un INSERT que liga
+    // campo por campo: ahi un ausente se convierte en un 500, no en un NULL.
+    const user = await makeUser(`minimo-${Math.random().toString(36).slice(2, 8)}@hogaria.test`);
+    const list = await data(await call(user, 'POST', '/lists', { name: 'Compra minima' }));
+
+    const created = await call(user, 'POST', `/lists/${list.id}/items`, { name: 'Pan de pueblo' });
+    expect(created.status).to.be.oneOf([200, 201]);
+    const item = await data(created);
+    expect(item.name).toBe('Pan de pueblo');
+    expect(item.note ?? null).toBeNull();
+    expect(item.price_minor ?? item.priceMinor ?? null).toBeNull();
+
+    // Vaciar lo que si se habia escrito: `null` quita, y el resto de la fila se queda.
+    const priced = await data(
+      await call(user, 'PATCH', `/lists/${list.id}/items/${item.id}`, { note: 'de la hornilla', priceMinor: 120 })
+    );
+    expect(priced.note ?? null).toBe('de la hornilla');
+    const cleared = await data(
+      await call(user, 'PATCH', `/lists/${list.id}/items/${item.id}`, { note: null, priceMinor: null })
+    );
+    expect(cleared.note ?? null).toBeNull();
+    expect(cleared.price_minor ?? cleared.priceMinor ?? null).toBeNull();
+  });
+});

@@ -138,4 +138,33 @@ describe('dias de caducidad', () => {
     // pasaria a ser «hoy» en media Europa.
     expect(created.expirationDate ?? created.expiration_date).toBe(today);
   });
+
+  it('un ingrediente con lo minimo que pide la pantalla se guarda, y lo opcional no existe', async () => {
+    // La pantalla marca como obligatorio Nombre y Cantidad; caducidad, notas, foto y codigo de
+    // barras se pueden dejar sin tocar. Es la misma queja del usuario, en otra pantalla: aqui el
+    // riesgo no era un 400 (eso lo cubre el contrato de schemas) sino un 500, porque el INSERT liga
+    // cada campo a mano y un `undefined` en better-sqlite3 no se convierte en NULL: revienta.
+    const response = await call('POST', '/ingredients', {
+      name: 'Pimentón de la Vera',
+      quantity: 1,
+      category: 'other',
+      unit: 'unit'
+    });
+    expect(response.status).toBe(201);
+    const saved = await data(response);
+    const column = (row: any, camel: string, snake: string) => row[camel] ?? row[snake] ?? null;
+    expect(column(saved, 'expirationDate', 'expiration_date')).toBeNull();
+    expect(saved.notes ?? null).toBeNull();
+
+    // Escribir la caducidad y luego vaciarla: `null` borra, `undefined` no toca.
+    const withDate = await data(await call('PATCH', `/ingredients/${saved.id}`, { expirationDate: dayFromNow(3) }));
+    expect(column(withDate, 'expirationDate', 'expiration_date')).toBe(dayFromNow(3));
+    const cleared = await data(await call('PATCH', `/ingredients/${saved.id}`, { expirationDate: null }));
+    expect(column(cleared, 'expirationDate', 'expiration_date')).toBeNull();
+    // Y una clave ausente en el mismo PATCH no se lleva por delante las notas escritas antes.
+    const noted = await data(await call('PATCH', `/ingredients/${saved.id}`, { notes: 'para el gazpacho' }));
+    expect(noted.notes).toBe('para el gazpacho');
+    const untouched = await data(await call('PATCH', `/ingredients/${saved.id}`, { quantity: 2 }));
+    expect(untouched.notes).toBe('para el gazpacho');
+  });
 });
