@@ -993,3 +993,250 @@ describe('entrada por foto (§8f)', () => {
     expect((await data(await call(alice, 'GET', `/lists/${list.id}`))).version).toBe(before);
   });
 });
+
+describe('descuento sobre varios productos (§12g)', () => {
+  /** Cesta con tres lineas con precio: solo dos entran en la promocion del cartel. */
+  async function basket() {
+    const list = await createList(alice, 'Compra con oferta');
+    const jamon = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Jamon Serrano', quantity: 1, priceMinor: 1200 }));
+    const queso = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Queso Curado', quantity: 1, priceMinor: 600 }));
+    const leche = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1, priceMinor: 100 }));
+    return { list, jamon, queso, leche };
+  }
+
+  it('acepta varias dianas y las devuelve en la frase del descuento', async () => {
+    const { list } = await basket();
+    const saved = await data(
+      await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+        kind: 'amount',
+        valueMinor: 250,
+        scope: 'product',
+        targets: ['Jamon Serrano', 'Queso Curado']
+      })
+    );
+    expect(saved.targets).toEqual(['Jamon Serrano', 'Queso Curado']);
+    expect(saved.description).toContain('Jamon Serrano');
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.discountMinor).toBe(250);
+    // 1900 - 250: la leche (que no esta en la promocion) no se entera.
+    expect(estimate.totalMinor).toBe(1900 - 250);
+    expect(estimate.lines.find((l: any) => l.name === 'Leche').netMinor).toBe(100);
+
+    const detail = await data(await call(alice, 'GET', `/lists/${list.id}`));
+    expect(detail.discountDescription).toContain('Queso Curado');
+  });
+
+  it('el porcentaje se calcula sobre lo que elegiste, no sobre el carro entero', async () => {
+    const { list } = await basket();
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'percent', percentBps: 1000, scope: 'product', targets: ['Jamon Serrano'] });
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.discountMinor).toBe(120);
+  });
+
+  it('un alcance que promete producto sin ninguna diana no se guarda', async () => {
+    const { list } = await basket();
+    const empty = await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 250, scope: 'product', targets: [] });
+    expect(empty.status).toBe(400);
+    // El codigo va en `details[].message` (el envoltorio de zod), no en `message`: es el
+    // contrato de todas las validaciones del server, y una hoja nueva no lo cambia.
+    expect(JSON.stringify(await json(empty))).toContain('DiscountTargetRequired');
+    const nothing = await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 250, scope: 'category' });
+    expect(nothing.status).toBe(400);
+  });
+
+  it('guardar otra vez sobre las mismas dianas no duplica ni deja las anteriores', async () => {
+    const { list } = await basket();
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 250, scope: 'product', targets: ['Jamon Serrano', 'Queso Curado'] });
+    const saved = await data(await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 250, scope: 'product', targets: ['Leche'] }));
+    expect(saved.targets).toEqual(['Leche']);
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    // 250 sobre una linea de 100 se recorta a 100: no devuelve dinero, y lo dice.
+    expect(estimate.discount?.reason).toBe('clampedToZero');
+    expect(estimate.discountMinor).toBe(100);
+  });
+
+  it('la forma antigua (una sola diana) sigue leyendose', async () => {
+    const { list } = await basket();
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 200, scope: 'product', target: 'jamon serrano' });
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.discountMinor).toBe(200);
+    const stored = db.prepare('SELECT targets FROM shopping_list_discounts WHERE list_id = ?').get(list.id) as any;
+    expect(stored.targets).toBeNull();
+  });
+});
+
+describe('cerrar una compra deja el precio por establecimiento (§12g)', () => {
+  async function bought(store: string | null = 'Mercadona') {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra dia', store }));
+    const milk = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 3, unit: 'ud' }));
+    const bread = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', quantity: 1, unit: 'ud' }));
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${milk.id}`, { checked: true });
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${bread.id}`, { checked: true });
+    return { list, milk, bread };
+  }
+
+  it('no cierra lo que no puede aprender: exige el precio de cada linea comprada', async () => {
+    const { list, milk } = await bought();
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${milk.id}`, { priceMinor: 85 });
+
+    const refused = await call(alice, 'POST', `/lists/${list.id}/complete`);
+    expect(refused.status).toBe(409);
+    const body = await json(refused);
+    expect(body.message).toBe('PRICES_MISSING');
+    expect(body.data.missing).toEqual([{ itemId: expect.any(String), name: 'Pan', quantity: 1, unit: 'ud' }]);
+    // Y no lo hace a medias: la lista sigue viva y el precio aportado no se anota como
+    // observacion, porque un cierre rechazado no deja huella en el historico de precios.
+    expect((await data(await call(alice, 'GET', `/lists/${list.id}`))).status).toBe('active');
+    expect(db.prepare('SELECT COUNT(*) AS c FROM price_observations').get()).toEqual({ c: 0 });
+  });
+
+  it('con los precios del cuerpo, cierra, los anota en la linea y aprende el de la tienda', async () => {
+    const { list, milk, bread } = await bought();
+    const closed = await data(
+      await call(alice, 'POST', `/lists/${list.id}/complete`, {
+        prices: [
+          { itemId: milk.id, priceMinor: 95 },
+          { itemId: bread.id, totalPaidMinor: 240, quantity: 2, productName: 'Barra de pan cristal' }
+        ]
+      })
+    );
+    expect(closed.pricesRecorded).toBe(2);
+
+    const stored = db.prepare('SELECT * FROM price_observations ORDER BY product_key').all() as any[];
+    // El ticket dice «2,40 € por 2 barras»: eso es lo que se guarda, y el precio por
+    // unidad (120) se deriva, no se anota a mano dos veces.
+    expect(stored.map((row) => [row.product_key, row.price_minor, row.quantity, row.store_name])).toEqual([
+      ['leche', 285, 3, 'Mercadona'],
+      ['pan', 240, 2, 'Mercadona']
+    ]);
+    expect(stored.find((row) => row.product_key === 'pan')!.product_name).toBe('Barra de pan cristal');
+
+    const items = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items as any[];
+    expect(items.find((item) => item.name === 'Leche').price_minor).toBe(95);
+    expect(items.find((item) => item.name === 'Pan').price_minor).toBe(120);
+  });
+
+  it('un precio nuevo sin establecimiento no es un precio: pregunta antes de cerrar', async () => {
+    const { list, milk, bread } = await bought(null);
+    const refused = await call(alice, 'POST', `/lists/${list.id}/complete`, {
+      prices: [
+        { itemId: milk.id, priceMinor: 95 },
+        { itemId: bread.id, priceMinor: 120 }
+      ]
+    });
+    expect(refused.status).toBe(409);
+    const body = await json(refused);
+    expect(body.message).toBe('STORE_REQUIRED');
+    expect(body.data.hint).toContain('establecimiento');
+    // Con la tienda en la propia llamada, si se puede: es el «estoy en Lidl» que llega
+    // cuando la lista se abrio sin pensar donde se iba a comprar.
+    const ok = await call(alice, 'POST', `/lists/${list.id}/complete`, {
+      store: 'Lidl',
+      prices: [
+        { itemId: milk.id, priceMinor: 95 },
+        { itemId: bread.id, priceMinor: 120 }
+      ]
+    });
+    expect(ok.ok).toBe(true);
+    expect(db.prepare('SELECT DISTINCT store_name FROM price_observations').get()).toEqual({ store_name: 'Lidl' });
+  });
+
+  it('lo que no se compro no se exige: cerrar con la mitad del carro vacio es legitimo', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Media cesta', store: 'Aldi' }));
+    const boughtItem = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Cafe', quantity: 1, priceMinor: 450 }));
+    await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Aceite', quantity: 1 }));
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${boughtItem.id}`, { checked: true });
+
+    const closed = await call(alice, 'POST', `/lists/${list.id}/complete`);
+    expect(closed.ok).toBe(true);
+    expect((await json(closed)).data.pricesRecorded).toBe(1);
+    expect((await data(await call(alice, 'GET', `/lists/${list.id}`))).status).toBe('done');
+  });
+
+  it('rechaza una linea que no esta en la lista, en vez de anotar el precio en otra parte', async () => {
+    const { list, milk } = await bought();
+    const response = await call(alice, 'POST', `/lists/${list.id}/complete`, {
+      prices: [
+        { itemId: milk.id, priceMinor: 95 },
+        { itemId: 'no-existe', priceMinor: 100 }
+      ]
+    });
+    expect(response.status).toBe(400);
+    expect((await json(response)).data.unknown).toEqual(['no-existe']);
+  });
+
+  it('una linea sin cantidad pagada razonable no puede multiplicar el precio por cero', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Peso', store: 'Carniceria' }));
+    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Filete', quantity: 0.75, unit: 'kg' }));
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: true });
+
+    await call(alice, 'POST', `/lists/${list.id}/complete`, { prices: [{ itemId: item.id, totalPaidMinor: 890 }] });
+    const row = db.prepare('SELECT price_minor, quantity FROM price_observations').get() as any;
+    // 8,90 € por 0,75 kg: la observacion guarda lo pagado y cuanto llevabas, y la linea
+    // acaba con el precio por kilo (1187) que es lo que se recuerda en la proxima lista.
+    expect(row).toEqual({ price_minor: 890, quantity: 0.75 });
+    expect((await data(await call(alice, 'GET', `/lists/${list.id}`))).items[0].price_minor).toBe(1187);
+  });
+});
+
+describe('el precio de la tienda, no el ultimo precio (§12g)', () => {
+  async function observe(productName: string, store: string, priceMinor: number, quantity = 1) {
+    await call(alice, 'POST', '/prices', { productName, store, priceMinor, quantity });
+  }
+
+  it('con la lista en Mercadona, el desglose ignora lo que cuesta en Lidl', async () => {
+    await observe('Leche', 'Lidl', 100);
+    await observe('Leche', 'Mercadona', 85);
+    // El orden importa: se escribe primero el de Lidl para que «ultimo precio» no coincida
+    // con «precio de esta tienda» y la eleccion quede probada de verdad.
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Mercadona', store: 'Mercadona' }));
+    await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 2 }));
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.lines[0]).toMatchObject({ unitMinor: 85, lineTotalMinor: 170, store: 'Mercadona' });
+    expect(estimate.lines[0].otherStore).toBeFalsy();
+  });
+
+  it('si esa tienda no tiene dato, usa el de otra y lo dice', async () => {
+    await observe('Leche', 'Lidl', 100);
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Aldi', store: 'Aldi' }));
+    await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1 }));
+
+    const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(estimate.lines[0]).toMatchObject({ unitMinor: 100, store: 'Lidl', otherStore: true });
+  });
+
+  it('una linea enlazada a otro producto hereda su precio aunque el nombre sea otro', async () => {
+    await observe('Leche semidesnatada', 'Mercadona', 170);
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Mercadona', store: 'Mercadona' }));
+    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche semi', quantity: 1 }));
+
+    // Sin enlazar: «leche semi» no es «leche semidesnatada», y no hay precio.
+    const before = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(before.lines[0].source).toBe('unpriced');
+
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { productKey: 'leche semidesnatada' });
+    const after = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(after.lines[0]).toMatchObject({ source: 'observed', unitMinor: 170 });
+
+    // Quitar el enlace devuelve la linea a su propio nombre: borrar tambien es editable.
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { productKey: null });
+    const unlinked = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
+    expect(unlinked.lines[0].source).toBe('unpriced');
+  });
+
+  it('los precios se pueden filtrar por tienda y agrupar por producto', async () => {
+    await observe('Leche', 'Lidl', 100);
+    await observe('Leche', 'Mercadona', 85);
+
+    const lidl = await data(await call(alice, 'GET', '/prices?store=Lidl'));
+    expect(lidl).toHaveLength(1);
+    expect(lidl[0].store_name).toBe('Lidl');
+
+    const products = await data(await call(alice, 'GET', '/prices/products?q=lech'));
+    expect(products).toHaveLength(1);
+    expect(products[0].productKey).toBe('leche');
+    expect(products[0].variants.map((v: any) => v.store)).toEqual(expect.arrayContaining(['Lidl', 'Mercadona']));
+  });
+});

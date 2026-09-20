@@ -488,6 +488,10 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
   addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
   addColumnIfMissing('household_members', 'permissions', 'TEXT DEFAULT \'{}\'');
+  // Las dianas del descuento: `target` se queda para las filas ya escritas (una sola
+  // diana) y `targets` es el JSON con las demas. Reconstruir la tabla para migrar el
+  // formato antiguo habria sido una forma cara de perder datos si algo iba mal.
+  addColumnIfMissing('shopping_list_discounts', 'targets', 'TEXT');
   addColumnIfMissing('shopping_list_items', 'promo_buy', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'promo_take', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'added_by', 'TEXT');

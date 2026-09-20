@@ -118,15 +118,25 @@ export const discountSchema = z
     // A que producto o seccion se aplica. Se guarda tal cual (nombre legible) y se compara
     // normalizado: ver «Jamón Serrano» en la pantalla es mas util que ver una clave.
     target: z.string().trim().max(80).nullable().optional(),
+    /**
+     * Las demas dianas del mismo cartel. Un «-2 € en jamon, queso y pan» real son tres
+     * lineas bajo UNA promocion, no tres descuentos: guardados aparte, el tercer producto
+     * se comeria un recorte que la caja ya aplico dos veces.
+     */
+    targets: z.array(z.string().trim().min(1).max(80)).max(50).nullable().optional(),
     label: z.string().trim().max(60).nullable().optional()
   })
   .refine((value) => (value.kind === 'amount' ? (value.valueMinor ?? 0) > 0 : (value.percentBps ?? 0) > 0), {
     message: 'DiscountValueRequired'
   })
   .refine((value) => value.scope !== 'firstUnits' || (value.firstUnits ?? 0) > 0, { message: 'FirstUnitsRequired' })
-  .refine((value) => (value.scope === 'product' || value.scope === 'category' ? !!value.target?.trim() : true), {
-    message: 'DiscountTargetRequired'
-  });
+  .refine(
+    (value) =>
+      value.scope !== 'product' && value.scope !== 'category'
+        ? true
+        : !!value.target?.trim() || (value.targets?.length ?? 0) > 0,
+    { message: 'DiscountTargetRequired' }
+  );
 
 export const createListSchema = z.object({
   name: trimmed(80),
@@ -170,7 +180,14 @@ export const updateItemSchema = z
     checked: booleanish.optional(),
     priceMinor: priceMinor,
     note: z.string().trim().max(280).nullable().optional(),
-    offer: offerInput
+    offer: offerInput,
+    /**
+     * Enlazar la linea con un producto que la casa ya conoce. Existe porque en la tienda
+     * el mismo producto se llama de otra forma («Leche semi» en el carrito, «Leche
+     * semidesnatada» en el ticket de hace dos semanas) y sin enlace esa busqueda de precio
+     * no encuentra nada. `null` lo quita y la clave vuelve a ser la del nombre.
+     */
+    productKey: z.string().trim().min(2).max(80).nullable().optional()
   })
   .refine(
     (value) =>
@@ -181,7 +198,8 @@ export const updateItemSchema = z
       value.checked !== undefined ||
       value.priceMinor !== undefined ||
       value.note !== undefined ||
-      value.offer !== undefined,
+      value.offer !== undefined ||
+      value.productKey !== undefined,
     { message: 'NothingToUpdate' }
   );
 
@@ -200,10 +218,53 @@ export const orderSchema = z.object({
   version: z.coerce.number().int().positive()
 });
 
+/**
+ * Cerrar la compra. `prices` es OPCIONAL a proposito: si la pantalla ya tenia los
+ * precios escritos, el cierre solo cierra; si no, escribe y cierra en la misma
+ * transaccion, que es lo que impide el «marque comprado, se me fue el metro y la
+ * lista quedo a medias». Un precio sin establecimiento no se acepta: `price_observations`
+ * sin tienda no se puede volver a usar en la proxima lista de ese sitio.
+ */
+export const completeListSchema = z.object({
+  store: z.string().trim().max(80).nullable().optional(),
+  prices: z
+    .array(
+      z
+        .object({
+          itemId: trimmed(40),
+          /** Precio POR UNIDAD, la misma unidad que guarda la linea. */
+          priceMinor: z.coerce.number().int().min(0).max(100_000_000).nullable().optional(),
+          /**
+           * Lo pagado en total, tal y como lo dice el ticket. Con esto no hay que hacer la
+           * division a mano —y la division mal hecha es como una oferta 3x2 acaba enseñando
+           * a la app un precio por unidad un 33 % mas barato del real.
+           */
+          totalPaidMinor: z.coerce.number().int().min(1).max(100_000_000).nullable().optional(),
+          /** Unidades que realmente se llevaron (por defecto, las pagadas de la linea). */
+          quantity: z.coerce.number().positive().max(10000).nullable().optional(),
+          store: z.string().trim().max(80).nullable().optional(),
+          /** Como se llamaba en esa tienda. Se anota en la observacion, no en la linea. */
+          productName: z.string().trim().max(120).nullable().optional()
+        })
+        .refine((value) => value.priceMinor != null || value.totalPaidMinor != null, { message: 'PriceValueRequired' })
+    )
+    .max(500)
+    .optional()
+});
+
 export const priceFilterSchema = z.object({
   q: z.string().trim().max(120).optional(),
+  /** Los precios de una tienda concreta («cuanto cuesta aqui la leche»). */
+  store: z.string().trim().max(80).optional(),
+  productKey: z.string().trim().max(80).optional(),
   limit: pageSize,
   offset
+});
+
+/** Indice de productos conocidos, para enlazar una linea y para el buscador de precios. */
+export const productIndexSchema = z.object({
+  q: z.string().trim().max(120).optional(),
+  limit: z.coerce.number().int().min(1).max(500).default(200)
 });
 
 export const createPriceSchema = z.object({

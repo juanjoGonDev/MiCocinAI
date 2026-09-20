@@ -6,6 +6,7 @@ import { productKeyOf } from '../utils/product-key.js';
 import {
   applyLinesSchema,
   bulkItemsSchema,
+  completeListSchema,
   createCategorySchema,
   discountSchema,
   photoAnalyzeSchema,
@@ -17,6 +18,7 @@ import {
   orderSchema,
   parseItemLine,
   priceFilterSchema,
+  productIndexSchema,
   updateItemSchema,
   updateListSchema
 } from '../schemas/shopping.schema.js';
@@ -142,6 +144,19 @@ function announceToTray(
   });
 }
 
+/** JSON de las dianas multiples, o `null` para que el motor use solo `target`. */
+function parseTargets(raw: unknown): string[] | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    const values = parsed.map((value) => String(value ?? '').trim()).filter((value) => value.length > 0);
+    return values.length ? [...new Set(values)] : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * La fila de descuento, en la forma que consume `utils/list-discount.ts`. `null`
  * cuando la lista no tiene ninguno: el `estimate` entonces no pinta bloque de
@@ -157,6 +172,9 @@ function readDiscount(db: ReturnType<typeof getDatabase>, listId: string): Disco
     scope: row.scope,
     firstUnits: row.first_units ?? null,
     target: row.target ?? null,
+    // Se lee con tolerancia: un JSON corrupto (una escritura interrumpida) no puede
+    // dejar la lista sin abrir; sin dianas el descuento simplemente no se aplica.
+    targets: parseTargets(row.targets),
     label: row.label ?? null
   };
 }
@@ -662,6 +680,18 @@ shoppingRoutes.patch('/lists/:id/items/:itemId', async (c) => {
     sets.push('price_minor = ?');
     params.push(body.priceMinor);
   }
+  // Enlazar la linea con un producto conocido. `null` no es «no tocar»: es «vuelve a ser
+  // la clave de tu nombre», que es lo que espera quien quita el enlace en la pantalla.
+  if (body.productKey !== undefined) {
+    const key = body.productKey?.trim() ?? '';
+    if (key) {
+      sets.push('product_key = ?');
+      params.push(key.toLowerCase());
+    } else {
+      sets.push('product_key = ?');
+      params.push(productKeyOf(body.name ?? item.name));
+    }
+  }
   // `offer: null` quita la oferta; `undefined` no la toca. Un `COALESCE` aqui no
   // serviria: haria «quitar» indistinguible de «no decir nada».
   if (body.offer !== undefined) {
@@ -754,10 +784,16 @@ shoppingRoutes.put('/lists/:id/discount', async (c) => {
   if (!list) return notFound(c, 'List');
 
   const body = discountSchema.parse(await c.req.json());
+  const scoped = body.scope === 'product' || body.scope === 'category';
+  // Las dianas se guardan como las escribe la pantalla (nombres legibles) y deduplicadas:
+  // el motor compara por clave normalizada, y lo que se ensena tiene que ser lo que alguien
+  // reconozca en el pasillo. `target` se deja intacto para las filas que ya existian.
+  const targets = scoped ? JSON.stringify([...new Set((body.targets ?? []).map((value) => value.trim()).filter(Boolean))]) : null;
+
   db.prepare(
     `INSERT INTO shopping_list_discounts
-       (list_id, kind, value_minor, percent_bps, scope, first_units, target, label)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       (list_id, kind, value_minor, percent_bps, scope, first_units, target, targets, label)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(list_id) DO UPDATE SET
        kind = excluded.kind,
        value_minor = excluded.value_minor,
@@ -768,6 +804,7 @@ shoppingRoutes.put('/lists/:id/discount', async (c) => {
        -- «en jamon» a «toda la cesta» haria que el descuento siguiera persiguiendo al
        -- jamon mientras la pantalla dice «toda la cesta».
        target = excluded.target,
+       targets = excluded.targets,
        label = excluded.label,
        updated_at = CURRENT_TIMESTAMP`
   ).run(
@@ -777,7 +814,10 @@ shoppingRoutes.put('/lists/:id/discount', async (c) => {
     body.kind === 'percent' ? body.percentBps ?? 0 : null,
     body.scope,
     body.scope === 'firstUnits' ? body.firstUnits ?? null : null,
-    body.scope === 'product' || body.scope === 'category' ? body.target?.trim() ?? null : null,
+    scoped ? body.target?.trim() || null : null,
+    // `[]` serializado es una lista vacia, que el motor lee como «sin dianas»: para que
+    // el estado «sin lista de dianas» sea la ausencia de dato, se guarda null.
+    targets === '[]' ? null : targets,
     body.label ?? null
   );
 
@@ -873,22 +913,37 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
     )
     .all(list.id) as any[];
 
-  const observation = db.prepare(
-    `SELECT price_minor, quantity, store_name, observed_at FROM price_observations
-     WHERE product_key = ? AND (user_id = ? OR (household_id IS NOT NULL AND household_id = ?))
-     ORDER BY observed_at DESC LIMIT 1`
-  );
+  const observationSql = `SELECT price_minor, quantity, store_name, observed_at FROM price_observations
+     WHERE product_key = ? AND (user_id = ? OR (household_id IS NOT NULL AND household_id = ?))`;
+  // Primero el precio DE LA TIENDA de la lista, y solo si alli no hay dato, el ultimo de
+  // cualquier otra. «El ultimo precio» a secas era un bug con muy buena pinta: ponía la
+  // leche de Mercadona al precio de Lidl, y con dos tiendas en la casa el numero de la
+  // pantalla ya no significaba nada.
+  const observationAny = db.prepare(`${observationSql} ORDER BY observed_at DESC LIMIT 1`);
+  const observationAtStore = db.prepare(`${observationSql} AND store_name = ? ORDER BY observed_at DESC LIMIT 1`);
+  const listStore = String(list.store ?? '').trim();
 
   let totalMinor = 0;
-  const priced: { item: any; unitMinor: number | null; source: 'manual' | 'observed' | 'unpriced'; store: string | null; observedAt: string | null }[] = [];
+  const priced: { item: any; unitMinor: number | null; source: 'manual' | 'observed' | 'unpriced'; store: string | null; observedAt: string | null; otherStore?: boolean }[] = [];
 
   for (const item of items) {
     if (item.price_minor != null) {
       priced.push({ item, unitMinor: item.price_minor, source: 'manual', store: null, observedAt: null });
       continue;
     }
-    const found = observation.get(productKeyOf(item.name), c.get('userId'), list.household_id) as
-      | { price_minor: number; quantity: number; store_name: string | null; observed_at: string }
+    // La clave de la linea manda: es el enlace a «el producto que la casa ya conoce», que
+    // existe porque el carrito dice «Leche semi» y el ticket decia «Leche semidesnatada».
+    const key = String(item.product_key || productKeyOf(item.name));
+    const found = (listStore
+      ? (observationAtStore.get(key, c.get('userId'), list.household_id, listStore) ??
+        (() => {
+          const fallback = observationAny.get(key, c.get('userId'), list.household_id) as
+            | { price_minor: number; quantity: number; store_name: string | null; observed_at: string }
+            | undefined;
+          return fallback ? { ...fallback, __otherStore: true } : undefined;
+        })())
+      : observationAny.get(key, c.get('userId'), list.household_id)) as
+      | { price_minor: number; quantity: number; store_name: string | null; observed_at: string; __otherStore?: boolean }
       | undefined;
     if (!found) {
       priced.push({ item, unitMinor: null, source: 'unpriced', store: null, observedAt: null });
@@ -901,7 +956,8 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
       unitMinor: roundMinor(found.price_minor / (found.quantity || 1)),
       source: 'observed',
       store: found.store_name,
-      observedAt: found.observed_at
+      observedAt: found.observed_at,
+      otherStore: Boolean(found.__otherStore)
     });
   }
   void totalMinor;
@@ -941,7 +997,10 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
       lineTotalMinor: line?.grossMinor ?? 0,
       netMinor: line?.netMinor ?? 0,
       offerSavingsMinor: line?.offerSavingsMinor ?? 0,
-      ...(entry.store ? { store: entry.store, observedAt: entry.observedAt } : {})
+      ...(entry.store ? { store: entry.store, observedAt: entry.observedAt } : {}),
+      // La pantalla lo necesita para poder decir «ojo, ese precio es de Lidl»: un numero
+      // sin procedencia se discute, uno con procedencia se acepta o se corrige.
+      ...(entry.otherStore ? { otherStore: true } : {})
     };
   });
 
@@ -962,56 +1021,168 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
   });
 });
 
-/** Cerrar la compra: archivar y aprender los precios de lo que se pago. */
+/**
+ * Cerrar la compra: archivar y aprender los precios de lo que se pago.
+ *
+ * Dos reglas que no estaban y que son las que hacen que la funcion valga algo:
+ * - **Solo se cierra lo que se puede anotar.** Toda linea comprada necesita un precio.
+ *   Cerrar la lista con huecos era la forma mas eficiente de envenenar el historico: la
+ *   proxima cesta estimaria «sin dato» justo en los productos que alguien ya habia pagado.
+ *   El 409 nombra las lineas que faltan, y la pantalla las abre en una hoja donde se
+ *   escriben ahi mismo, en el mismo sitio donde se ha pagado.
+ * - **Un precio es de una tienda.** Se anota con el establecimiento y con el nombre que
+ *   alli usaban («Barra de pan cristal» no es «Pan», y los dos son el mismo producto).
+ *   Sin tienda, el numero no tiene a donde volver.
+ */
 shoppingRoutes.post('/lists/:id/complete', async (c) => {
   const db = getDatabase();
   const scope = getScope(c.get('userId'));
   const list = readList(db, scope, c.req.param('id'));
   if (!list) return notFound(c, 'List');
 
+  const raw = await c.req.json().catch(() => ({}));
+  const body = completeListSchema.parse(raw ?? {});
+
   const userId = c.get('userId');
-  const bought = db
-    .prepare(
-      `SELECT * FROM shopping_list_items
-       WHERE list_id = ? AND checked = 1 AND deleted_at IS NULL AND price_minor IS NOT NULL`
-    )
+  const items = db
+    .prepare('SELECT * FROM shopping_list_items WHERE list_id = ? AND deleted_at IS NULL')
     .all(list.id) as any[];
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const listStore = String(list.store ?? '').trim();
+  const bodyStore = String(body.store ?? '').trim();
+
+  // Un id que no es de esta lista no se ignora «porque no toca»: es otra persona
+  // escribiendo en la lista de al lado, y eso se dice (mismo codigo que el reorden).
+  const requested = body.prices ?? [];
+  const unknown = [...new Set(requested.map((entry) => entry.itemId))].filter((id) => !byId.has(id));
+  if (unknown.length) {
+    return c.json({ success: false, message: 'ITEMS_NOT_IN_LIST', data: { unknown } }, 400);
+  }
+
+  type Typed = { item: any; unitMinor: number; unitsPaid: number; paidMinor: number; store: string; productName: string };
+  const typed: Typed[] = [];
+  for (const entry of requested) {
+    const item = byId.get(entry.itemId);
+    if (!item) continue;
+    const carried = Number.isFinite(item.quantity) && item.quantity > 0 ? item.quantity : 1;
+    const unitsPaid = entry.quantity ?? (paidUnits(carried, offerOf(item)) || carried);
+    // El ticket dice lo pagado; la linea guarda precio por unidad. Se convierte una vez,
+    // aqui, y el redondeo se queda en la linea: la observacion conserva el total exacto.
+    const unitMinor =
+      entry.totalPaidMinor != null ? roundMinor(entry.totalPaidMinor / unitsPaid) : roundMinor(entry.priceMinor ?? 0);
+    const paidMinor = entry.totalPaidMinor != null ? entry.totalPaidMinor : roundMinor(unitMinor * unitsPaid);
+    const store = String(entry.store ?? '').trim() || listStore || bodyStore;
+    const productName = String(entry.productName ?? '').trim() || item.name;
+    typed.push({ item, unitMinor, unitsPaid, paidMinor, store, productName });
+  }
+
+  // Lo que se aprende es de las lineas COMPRADAS; una linea anotada pero no llevada no es
+  // un dato de mercado, es una intencion.
+  const bought = items.filter((item) => item.checked === 1);
+  const unitOf = new Map(typed.filter((entry) => entry.item.checked === 1).map((entry) => [entry.item.id, entry]));
+
+  const missing = bought
+    .filter((item) => item.price_minor == null && !unitOf.has(item.id))
+    .map((item) => ({ itemId: item.id, name: item.name, quantity: item.quantity, unit: item.unit ?? null }));
+  if (missing.length) {
+    return c.json(
+      {
+        success: false,
+        message: 'PRICES_MISSING',
+        data: {
+          missing,
+          missingCount: missing.length,
+          boughtCount: bought.length,
+          hint: 'Escribe cuanto has pagado por cada linea antes de dar la compra por terminada.'
+        }
+      },
+      409
+    );
+  }
+
+  // Solo hace falta saber donde se ha comprado si hay algo nuevo que anotar: cerrar una
+  // lista cuyos precios ya estaban escritos no puede exigir una tienda que nadie cambio.
+  const needsStore = typed.some((entry) => entry.item.checked === 1);
+  if (needsStore && !listStore && !bodyStore && typed.some((entry) => !entry.store)) {
+    return c.json(
+      {
+        success: false,
+        message: 'STORE_REQUIRED',
+        data: {
+          hint: 'El precio se guarda por establecimiento: di en cual has comprado (cabecera de la lista) para poder usarlo la proxima vez.'
+        }
+      },
+      409
+    );
+  }
 
   const insertObservation = db.prepare(
     `INSERT INTO price_observations
        (id, user_id, household_id, product_key, product_name, store_name, price_minor, quantity, source, observed_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'manual', CURRENT_TIMESTAMP)`
   );
+  const updatePrice = db.prepare(
+    'UPDATE shopping_list_items SET price_minor = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?'
+  );
 
   let recorded = 0;
+  let paidMinor = 0;
   db.transaction(() => {
-    for (const item of bought) {
-      // El item guarda precio/unidad; la observacion, lo pagado por la cantidad que
-      // realmente se pago. Con una oferta 3x2 alguien se llevo 6 y pago 4: anotar
-      // «4 € por 6 unidades» aprenderia un precio por unidad un 33 % mas barato que
-      // el real, y ese error se propaga a todas las estimaciones futuras.
-      const paid = paidUnits(item.quantity ?? 1, offerOf(item)) || item.quantity || 1;
+    // Lo escrito en esta llamada acaba primero en la linea: si el cierre se rechaza por
+    // cualquier otra comprobacion no habremos llegado aqui, y si se acepta, la lista
+    // cerrada y el historico tienen que decir lo mismo.
+    for (const entry of typed) {
+      updatePrice.run(entry.unitMinor, userId, entry.item.id);
+      if (entry.item.checked !== 1) continue;
+      // La clave es la de la linea (que puede estar enlazada a otro producto), no la del
+      // nombre: si no, «Barra de pan cristal» aprenderia un producto nuevo cada vez.
       insertObservation.run(
         nanoid(),
         userId,
         list.household_id,
-        item.product_key,
-        item.name,
-        list.store,
-        roundMinor(item.price_minor * paid),
-        paid
+        String(entry.item.product_key || productKeyOf(entry.item.name)),
+        entry.productName,
+        entry.store || null,
+        entry.paidMinor,
+        entry.unitsPaid
       );
       recorded += 1;
+      paidMinor += entry.paidMinor;
+    }
+    for (const item of bought) {
+      if (unitOf.has(item.id) || item.price_minor == null) continue;
+      // Precio que ya estaba en la linea: se aprende igual, con la tienda de la lista.
+      const unitsPaid = paidUnits(item.quantity ?? 1, offerOf(item)) || item.quantity || 1;
+      insertObservation.run(
+        nanoid(),
+        userId,
+        list.household_id,
+        String(item.product_key || productKeyOf(item.name)),
+        item.name,
+        listStore || null,
+        roundMinor(item.price_minor * unitsPaid),
+        unitsPaid
+      );
+      recorded += 1;
+      paidMinor += roundMinor(item.price_minor * unitsPaid);
     }
     db.prepare(
       `UPDATE shopping_lists SET status = 'done', completed_at = CURRENT_TIMESTAMP,
-         version = version + 1, updated_at = CURRENT_TIMESTAMP
+         store = COALESCE(?, store), version = version + 1, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
-    ).run(list.id);
+    ).run(bodyStore || null, list.id);
   })();
 
   announce(db, list, userId, 'list.complete', `${recorded} precios`);
-  return c.json({ success: true, data: { pricesRecorded: recorded, items: bought.length } });
+  return c.json({
+    success: true,
+    data: {
+      pricesRecorded: recorded,
+      items: bought.length,
+      paidMinor,
+      store: listStore || bodyStore || null
+    }
+  });
 });
 
 /**
@@ -1200,6 +1371,14 @@ shoppingRoutes.get('/prices', async (c) => {
     conditions.push('(p.product_name LIKE ? OR p.store_name LIKE ?)');
     params.push(`%${filter.q}%`, `%${filter.q}%`);
   }
+  if (filter.store) {
+    conditions.push('p.store_name = ?');
+    params.push(filter.store);
+  }
+  if (filter.productKey) {
+    conditions.push('p.product_key = ?');
+    params.push(filter.productKey.toLowerCase());
+  }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
   const rows = db
@@ -1215,6 +1394,63 @@ shoppingRoutes.get('/prices', async (c) => {
     .all(...params, filter.limit, filter.offset) as any[];
 
   return c.json({ success: true, data: rows, meta: { limit: filter.limit, offset: filter.offset } });
+});
+
+/**
+ * Los productos que la casa ya conoce, agrupados por clave. Dos cosas se resuelven aqui:
+ * enlazar una linea con el producto que ya tiene historial («Leche semi» = «Leche
+ * semidesnatada»), y ver cuanto cuesta lo mismo en cada tienda. Se agrupa en JS y no con
+ * `GROUP_CONCAT` porque lo que se quiere devolver es la lista de variantes por tienda, con
+ * su precio por unidad, y un `GROUP_CONCAT` obligaria a la UI a volver a parsear un string.
+ */
+shoppingRoutes.get('/prices/products', async (c) => {
+  const db = getDatabase();
+  const scope = getScope(c.get('userId'));
+  const filter = productIndexSchema.parse(c.req.query());
+
+  const conditions = [scope.clause.replace(/(user_id|household_id)/g, 'p.$1')];
+  const params: unknown[] = [...scope.params];
+  if (filter.q) {
+    conditions.push('(p.product_key LIKE ? OR p.product_name LIKE ? OR p.store_name LIKE ?)');
+    params.push(`%${filter.q.toLowerCase()}%`, `%${filter.q}%`, `%${filter.q}%`);
+  }
+
+  const rows = db
+    .prepare(
+      `SELECT p.product_key, p.product_name, p.store_name, p.price_minor, p.quantity, p.observed_at
+       FROM price_observations p
+       WHERE ${conditions.join(' AND ')}
+       ORDER BY p.observed_at DESC
+       LIMIT ?`
+    )
+    .all(...params, filter.limit) as any[];
+
+  const byKey = new Map<
+    string,
+    { productKey: string; name: string; lastObservedAt: string; observations: number; variants: any[] }
+  >();
+  for (const row of rows) {
+    const unitMinor = roundMinor(Number(row.price_minor) / (Number(row.quantity) || 1));
+    const entry = byKey.get(row.product_key) ?? {
+      productKey: row.product_key,
+      name: row.product_name,
+      lastObservedAt: row.observed_at,
+      observations: 0,
+      variants: [] as { store: string | null; productName: string; unitMinor: number; observedAt: string }[]
+    };
+    entry.observations += 1;
+    // Una variante por tienda: la ultima vez que se comprando alli es el dato que interesa
+    // («aqui cuesta 0,85»), y las anteriores se quedan en /prices para quien las quiera.
+    const storeName = String(row.store_name ?? '').trim();
+    const seen = entry.variants.find((variant) => variant.store === storeName);
+    if (!seen) {
+      entry.variants.push({ store: storeName || null, productName: row.product_name, unitMinor, observedAt: row.observed_at });
+    }
+    byKey.set(row.product_key, entry);
+  }
+
+  const data = [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name, 'es'));
+  return c.json({ success: true, data, meta: { limit: filter.limit } });
 });
 
 shoppingRoutes.post('/prices', async (c) => {

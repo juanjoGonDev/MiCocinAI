@@ -68,6 +68,13 @@ export type Discount = {
    * importe de todo el carro. Opcional porque los alcances viejos nunca lo tuvieron.
    */
   target?: string | null;
+  /**
+   * Las demas dianas del mismo descuento. `target` sigue existiendo porque es la forma
+   * antigua de la fila y porque un cartel de «-2 € en jamon» se escribe con una palabra,
+   * pero un carro real lleva cuatro productos bajo la misma promocion y elegirlos de uno en
+   * uno es inventar descuentos aparte que luego no cuadran con el ticket.
+   */
+  targets?: string[] | null;
   label?: string | null;
 };
 
@@ -81,6 +88,22 @@ function keyOf(value: string | null | undefined): string {
     .trim();
 }
 
+/** Las dianas declaradas, en la forma normalizada con la que comparan las lineas. */
+function targetsOf(discount: Discount): string[] {
+  const raw = [...(discount.targets ?? []), discount.target ?? null].filter(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0
+  );
+  return [...new Set(raw.map((value) => keyOf(value)))].filter(Boolean);
+}
+
+/** Las dianas como las vio quien las escribio, para poder repetirlas en pantalla. */
+function targetNames(discount: Discount): string[] {
+  const raw = [...(discount.targets ?? []), discount.target ?? null].filter(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0
+  );
+  return [...new Set(raw.map((value) => value.trim()))];
+}
+
 /**
  * Si la linea entra en el descuento. Con `product` se compara por CLAVE, no por texto:
  * «Jamón Serrano» y «jamon serrano » son el mismo producto, y un descuento que depende
@@ -91,10 +114,13 @@ export function isEligibleForDiscount(
   discount: Discount | null | undefined
 ): boolean {
   if (!discount || discount.scope === 'all' || discount.scope === 'firstUnits') return true;
-  const wanted = keyOf(discount.target);
-  if (!wanted) return false;
-  if (discount.scope === 'category') return keyOf(line.category) === wanted;
-  return keyOf(line.productKey ?? line.name) === wanted;
+  const wanted = targetsOf(discount);
+  if (!wanted.length) return false;
+  if (discount.scope === 'category') return wanted.includes(keyOf(line.category));
+  // Por clave primero, y por nombre despues: la clave es lo que la casa usa para saber
+  // que «Leche semi» y «Leche semidesnatada» son el mismo producto, pero quien escribe
+  // «pan de molde» a mano en el descuento no tiene por que haberla visto nunca.
+  return wanted.includes(keyOf(line.productKey)) || wanted.includes(keyOf(line.name));
 }
 
 export type MoneyLine = {
@@ -348,13 +374,18 @@ export function describeDiscount(discount: Discount | null | undefined): string 
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         })} €`;
+  const names = discount.scope === 'product' || discount.scope === 'category' ? targetNames(discount) : [];
+  // «Jamon, Queso y +2 mas» en vez de una lista de seis que se come la fila de totales:
+  // lo que importa ahi es que el recorte NO es de toda la cesta, el detalle esta en la hoja.
   const cap =
     discount.scope === 'firstUnits' && discount.firstUnits
       ? ` en ${discount.firstUnits.toLocaleString('es-ES', { maximumFractionDigits: 2 })} unidades`
-      : discount.scope === 'product' && discount.target
-        ? ` en ${discount.target}`
-        : discount.scope === 'category' && discount.target
-          ? ` en ${discount.target}`
-          : '';
+      : names.length === 1
+        ? ` en ${names[0]}`
+        : names.length === 2
+          ? ` en ${names[0]} y ${names[1]}`
+          : names.length > 2
+            ? ` en ${names.slice(0, 2).join(', ')} y +${names.length - 2} mas`
+            : '';
   return discount.label?.trim() ? `${discount.label.trim()} · ${core}${cap}` : `${core}${cap}`;
 }

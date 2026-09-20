@@ -303,3 +303,121 @@ describe('descuentos por producto y por seccion', () => {
     expect(isEligibleForDiscount(line(), { kind: 'amount', valueMinor: 100, percentBps: null, scope: 'product', firstUnits: null, target: null })).toBe(false);
   });
 });
+
+describe('varias dianas en un mismo descuento', () => {
+  const row = (over: Partial<MoneyLine> = {}): MoneyLine => ({
+    itemId: 'a',
+    quantity: 1,
+    unitMinor: 1000,
+    offer: null,
+    productKey: 'jamon serrano',
+    category: 'Charcuteria',
+    ...over
+  });
+
+  const money = (discount: Parameters<typeof basketMoney>[0]['discount'], lines: MoneyLine[]) =>
+    basketMoney({ lines, discount });
+
+  it('«2,50 € en jamon y queso» baja esas dos lineas y no la tercera', () => {
+    const result = money(
+      {
+        kind: 'amount',
+        valueMinor: 250,
+        percentBps: null,
+        scope: 'product',
+        firstUnits: null,
+        target: null,
+        targets: ['jamon serrano', 'queso curado']
+      },
+      [
+        row({ itemId: 'a' }),
+        row({ itemId: 'b', productKey: 'queso curado', category: 'Lacteos', unitMinor: 600 }),
+        row({ itemId: 'c', productKey: 'leche', category: 'Lacteos', unitMinor: 100 })
+      ]
+    );
+    // La base del descuento son SOLO las dos lineas con nombre (1600), y el total paga
+    // la cesta entera menos el recorte: ni la leche se entera, ni el recorte se pierde.
+    expect(result.discount?.applicableMinor).toBe(1600);
+    expect(result.discountMinor).toBe(250);
+    expect(result.totalMinor).toBe(1700 - 250);
+    expect(result.lines.find((l) => l.itemId === 'c')!.netMinor).toBe(100);
+    expect(result.lines.find((l) => l.itemId === 'a')!.discounted).toBe(true);
+    expect(result.lines.find((l) => l.itemId === 'c')!.discounted).toBe(false);
+  });
+
+  it('el porcentaje sobre x productos sale del subtotal de esos x, no de la cesta', () => {
+    const result = money(
+      {
+        kind: 'percent',
+        valueMinor: null,
+        percentBps: 1000,
+        scope: 'product',
+        firstUnits: null,
+        targets: ['jamon serrano', 'queso curado']
+      },
+      [row(), row({ itemId: 'b', productKey: 'queso curado', unitMinor: 600 }), row({ itemId: 'c', productKey: 'leche', unitMinor: 4000 })]
+    );
+    // 10 % de 1600 son 160, no 560. El cartel del pasillo habla de dos productos.
+    expect(result.discountMinor).toBe(160);
+  });
+
+  it('la diana normaliza acentos y mayusculas, pero no adivina: «Jamón» no es «Jamón Serrano»', () => {
+    const discount = {
+      kind: 'amount' as const,
+      valueMinor: 100,
+      percentBps: null,
+      scope: 'product' as const,
+      firstUnits: null,
+      target: null,
+      targets: ['  JAMÓN SERRANO ']
+    };
+    expect(isEligibleForDiscount({ productKey: 'jamon serrano', name: 'Jamón Serrano' }, discount)).toBe(true);
+    // Comparar por prefijo haria que «pan» se comiera tambien «pan rallado» y «pan de
+    // hamburguesa»: un descuento aplicado a lineas que nadie eligió. El picker de la hoja
+    // existe para esto; si aun asi se escribe a mano, la otra asercion es el contrato.
+    expect(isEligibleForDiscount({ productKey: 'pan de molde', name: 'Pan de molde' }, { ...discount, targets: ['pan'] })).toBe(false);
+  });
+
+  it('ninguna diana de la cesta: lo dice, no un descuento de 0 €', () => {
+    const result = money({ kind: 'amount', valueMinor: 200, percentBps: null, scope: 'product', firstUnits: null, targets: ['pan', 'huevos'] }, [row()]);
+    expect(result.discountMinor).toBe(0);
+    expect(result.discount?.reason).toBe('noMatchingLine');
+  });
+
+  it('el alcance por seccion admite varias secciones a la vez', () => {
+    const result = money(
+      { kind: 'percent', valueMinor: null, percentBps: 500, scope: 'category', firstUnits: null, targets: ['Frutas', 'Verduras'] },
+      [
+        row({ itemId: 'a', category: 'Frutas', productKey: 'manzana' }),
+        row({ itemId: 'b', category: 'Verduras', productKey: 'tomate' }),
+        row({ itemId: 'c', category: 'Lacteos', productKey: 'leche' })
+      ]
+    );
+    expect(result.discount?.applicableMinor).toBe(2000);
+    expect(result.discountMinor).toBe(100);
+  });
+
+  it('una sola diana sigue valiendo: la forma antigua de la fila no se retira', () => {
+    const result = money({ kind: 'amount', valueMinor: 200, percentBps: null, scope: 'product', firstUnits: null, target: 'jamon serrano' }, [
+      row(),
+      row({ itemId: 'b', productKey: 'leche' })
+    ]);
+    expect(result.discountMinor).toBe(200);
+  });
+
+  it('la frase del descuento enumera las dianas y dice cuantas faltan', () => {
+    const one = describeDiscount({ kind: 'amount', valueMinor: 250, percentBps: null, scope: 'product', firstUnits: null, targets: ['Jamon Serrano'] });
+    const two = describeDiscount({ kind: 'amount', valueMinor: 250, percentBps: null, scope: 'product', firstUnits: null, targets: ['Jamon Serrano', 'Queso curado'] });
+    const many = describeDiscount({
+      kind: 'percent',
+      valueMinor: null,
+      percentBps: 1000,
+      scope: 'product',
+      firstUnits: null,
+      targets: ['Jamon', 'Queso', 'Pan', 'Leche']
+    });
+    expect(one).toBe('2,50 € en Jamon Serrano');
+    expect(two).toBe('2,50 € en Jamon Serrano y Queso curado');
+    expect(many).toBe('10 % en Jamon, Queso y +2 mas');
+  });
+});
