@@ -1654,27 +1654,27 @@ Reported from the preview: uploading the avatar showed a green toast, the face d
 server log said `GET /api/uploads/avatars/<file> 404` seven milliseconds after the `POST` that had
 just answered `200`.
 
-- [ ] **A write that did not stick has to fail the request.** `storeImage` now verifies
+- [x] **A write that did not stick has to fail the request.** `storeImage` now verifies
       (`assertWritten`): the file exists and has the bytes it was given. `mkdirSync` and
       `writeFileSync` can both "succeed" against a directory that is about to disappear —a volume
       remounted, a workspace restored, a deploy that forgets `data/`— and the only honest answer is
       `500 UPLOAD_WRITE_FAILED` with the absolute path in it.
-- [ ] **A rejected upload leaves no trace in the database.** The `UPDATE` runs after the write is
+- [x] **A rejected upload leaves no trace in the database.** The `UPDATE` runs after the write is
       confirmed, so the profile keeps the photo it had; a row pointing at nothing is a 404 forever,
       which is precisely the state the user was stuck in.
-- [ ] **A 404 on an image is not cacheable.** The miss answers `cache-control: no-store`, so the
+- [x] **A 404 on an image is not cacheable.** The miss answers `cache-control: no-store`, so the
       next load can recover the file instead of staying blank until a hard reload; the hit keeps
       `immutable` because its name changes with every upload.
-- [ ] **The server says where it writes, once.** Startup logs `Uploads en <absolute path>` and a
+- [x] **The server says where it writes, once.** Startup logs `Uploads en <absolute path>` and a
       miss logs the full path it tried (at most once a minute — the route is public). Before this,
       the difference between «wrong directory», «read-only volume» and «bad code» was invisible
       without a shell.
-- [ ] **Notifications say what happened, not where it propagates.** «Foto actualizada — ya aparece en
+- [x] **Notifications say what happened, not where it propagates.** «Foto actualizada — ya aparece en
       el menú, la compra y la agenda» is a brochure; and it is a lie the moment the write fails. The
       account page now says `Imagen cambiada`, `Imagen quitada` (there was no toast on removal) and
       `Nombre guardado`, and when the server could not write to disk it says exactly that, with the
       place to look.
-- [ ] Tests: `assertWritten` (missing file, truncated file), a read-only uploads directory making
+- [x] Tests: `assertWritten` (missing file, truncated file), a read-only uploads directory making
       `storeImage` throw, and `POST /api/auth/avatar` answering 500 while the profile keeps its old
       photo, with the same read-only directory forced through `DATABASE_PATH`.
 
