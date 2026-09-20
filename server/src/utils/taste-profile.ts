@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3';
 import { z } from 'zod';
+import { formField } from '../schemas/form.js';
 
 /**
  * Perfil de gustos, alergias y objetivo del comensal.
@@ -94,13 +95,15 @@ export const tasteProfileSchema = z.object({
 });
 
 export const updateTasteSchema = z.object({
-  taste: tasteProfileSchema.optional(),
+  // `formField` en todo: el onboarding manda el perfil por partes (y «omitir el onboarding» es un
+  // PATCH con un solo campo), y un hueco aqui tiene que significar «no tocar», no un 400.
+  taste: formField(tasteProfileSchema.optional()),
   /** 'done' al terminar el onboarding, 'skipped' si se salta. */
-  onboardingStatus: z.enum(['done', 'skipped']).optional(),
+  onboardingStatus: formField(z.enum(['done', 'skipped'])),
   /** Nivel de cocina: se escribe en su columna, no en el JSON. */
-  cookingLevel: cookingLevelEnum.optional(),
+  cookingLevel: formField(cookingLevelEnum),
   /** Qué se quiere llevar desde la app (ver HOME_MODULES). */
-  modules: z.array(homeModuleEnum).max(HOME_MODULES.length).optional()
+  modules: formField(z.array(homeModuleEnum).max(HOME_MODULES.length))
 });
 
 export type TasteProfileInput = z.infer<typeof tasteProfileSchema>;

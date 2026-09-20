@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { formDefault, formField } from './form.js';
 import { cookingLevelEnum } from '../utils/taste-profile.js';
 
 export const loginSchema = z.object({
@@ -12,7 +13,7 @@ export const registerSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters')
     .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
-  cookingLevel: cookingLevelEnum.optional().default('beginner')
+  cookingLevel: formDefault(cookingLevelEnum, 'beginner')
 });
 
 export const refreshTokenSchema = z.object({
@@ -58,19 +59,21 @@ export const avatarImageSchema = z.object({
 });
 
 export const updateProfileSchema = z.object({
-  name: z.string().min(2).max(100).optional(),
-  avatar: avatarField.optional().nullable(),
-  cookingLevel: cookingLevelEnum.optional(),
-  preferences: z.object({
-    theme: z.enum(['light', 'dark', 'system']).optional(),
-    language: z.enum(['es', 'en']).optional(),
-    detailLevel: z.enum(['basic', 'intermediate', 'expert']).optional(),
+  name: formField(z.string().min(2).max(100)),
+  avatar: formField(avatarField),
+  cookingLevel: formField(cookingLevelEnum),
+  // El grupo entero tambien admite el hueco: un panel de preferencias que llega `null` es «no lo he
+  // tocado», no «prefiero un objeto vacio».
+  preferences: formField(z.object({
+    theme: formField(z.enum(['light', 'dark', 'system'])),
+    language: formField(z.enum(['es', 'en'])),
+    detailLevel: formField(z.enum(['basic', 'intermediate', 'expert'])),
     notifications: z.object({
-      expirationAlerts: z.boolean().optional(),
-      mealReminders: z.boolean().optional(),
-      recipeSuggestions: z.boolean().optional()
+      expirationAlerts: formField(z.boolean()),
+      mealReminders: formField(z.boolean()),
+      recipeSuggestions: formField(z.boolean())
     }).optional()
-  }).optional()
+  }))
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

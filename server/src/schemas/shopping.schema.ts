@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { formColor, formDefault, formField } from './form.js';
 
 /**
  * Contrato de la lista de la compra y de los precios.
@@ -59,14 +60,14 @@ export const listFilterSchema = z.object({
   // `all` es del filtro de la bandeja («ver todas»). No es un estado: si se tratara
   // como uno, la consulta pediria `status = 'all'` y la pantalla saldria vacia —que es
   // exactamente como se manifesto el bug.
-  status: z.enum([...LIST_STATUSES, 'all'] as const).optional(),
-  q: z.string().trim().max(120).optional(),
-  store: z.string().trim().max(80).optional(),
-  minTotalMinor: z.coerce.number().int().min(0).max(100_000_000).optional(),
-  from: isoDate.optional(),
-  to: isoDate.optional(),
-  sort: z.enum(['updated', 'name', 'total', 'lines']).default('updated'),
-  dir: z.enum(['asc', 'desc']).default('desc'),
+  status: formField(z.enum([...LIST_STATUSES, 'all'] as const)),
+  q: formField(z.string().trim().max(120)),
+  store: formField(z.string().trim().max(80)),
+  minTotalMinor: formField(z.coerce.number().int().min(0).max(100_000_000)),
+  from: formField(isoDate),
+  to: formField(isoDate),
+  sort: formDefault(z.enum(['updated', 'name', 'total', 'lines']), 'updated'),
+  dir: formDefault(z.enum(['asc', 'desc']), 'desc'),
   limit: pageSize,
   offset
 });
@@ -78,12 +79,9 @@ export const listFilterSchema = z.object({
  */
 export const createCategorySchema = z.object({
   name: trimmed(60),
-  color: z
-    .string()
-    .trim()
-    .regex(/^#[0-9a-fA-F]{6}$/, 'El color ha de ser un hexadecimal de 6 digitos, p.ej. #4CAF50')
-    .nullable()
-    .optional()
+  // `formColor()` en vez del regex a mano: una seccion puede quedarse sin color, y «sin color» es la
+  // cadena vacia del selector, no un hexadecimal invalido.
+  color: formColor()
 });
 
 /**
@@ -109,9 +107,9 @@ export const offerInput = z
 export const lineDiscountInput = z
   .object({
     kind: z.enum(['amount', 'percent']),
-    valueMinor: z.coerce.number().int().min(1).max(100_000_000).nullable().optional(),
-    percentBps: z.coerce.number().int().min(1).max(10_000).nullable().optional(),
-    units: z.coerce.number().positive().max(100_000).nullable().optional()
+    valueMinor: formField(z.coerce.number().int().min(1).max(100_000_000)),
+    percentBps: formField(z.coerce.number().int().min(1).max(10_000)),
+    units: formField(z.coerce.number().positive().max(100_000))
   })
   .refine((value) => (value.kind === 'amount' ? (value.valueMinor ?? 0) > 0 : (value.percentBps ?? 0) > 0), {
     message: 'LineDiscountValueRequired'
@@ -129,20 +127,20 @@ export const lineDiscountInput = z
 export const discountSchema = z
   .object({
     kind: z.enum(['amount', 'percent']),
-    valueMinor: z.coerce.number().int().min(0).max(100_000_000).nullable().optional(),
-    percentBps: z.coerce.number().int().min(0).max(10_000).nullable().optional(),
-    scope: z.enum(['all', 'firstUnits', 'product', 'category']).default('all'),
-    firstUnits: z.coerce.number().positive().max(100_000).nullable().optional(),
+    valueMinor: formField(z.coerce.number().int().min(0).max(100_000_000)),
+    percentBps: formField(z.coerce.number().int().min(0).max(10_000)),
+    scope: formDefault(z.enum(['all', 'firstUnits', 'product', 'category']), 'all'),
+    firstUnits: formField(z.coerce.number().positive().max(100_000)),
     // A que producto o seccion se aplica. Se guarda tal cual (nombre legible) y se compara
     // normalizado: ver «Jamón Serrano» en la pantalla es mas util que ver una clave.
-    target: z.string().trim().max(80).nullable().optional(),
+    target: formField(z.string().trim().max(80)),
     /**
      * Las demas dianas del mismo cartel. Un «-2 € en jamon, queso y pan» real son tres
      * lineas bajo UNA promocion, no tres descuentos: guardados aparte, el tercer producto
      * se comeria un recorte que la caja ya aplico dos veces.
      */
-    targets: z.array(z.string().trim().min(1).max(80)).max(50).nullable().optional(),
-    label: z.string().trim().max(60).nullable().optional()
+    targets: formField(z.array(z.string().trim().min(1).max(80)).max(50)),
+    label: formField(z.string().trim().max(60))
   })
   .refine((value) => (value.kind === 'amount' ? (value.valueMinor ?? 0) > 0 : (value.percentBps ?? 0) > 0), {
     message: 'DiscountValueRequired'
@@ -158,7 +156,7 @@ export const discountSchema = z
 
 export const createListSchema = z.object({
   name: trimmed(80),
-  store: z.string().trim().max(80).nullable().optional()
+  store: formField(z.string().trim().max(80))
 });
 
 /**
@@ -170,9 +168,9 @@ export const createListSchema = z.object({
  */
 export const updateListSchema = z
   .object({
-    name: trimmed(80).optional(),
-    store: z.string().trim().max(80).nullable().optional(),
-    status: z.enum(LIST_STATUSES).optional(),
+    name: formField(trimmed(80)),
+    store: formField(z.string().trim().max(80)),
+    status: formField(z.enum(LIST_STATUSES)),
     version: z.coerce.number().int().positive()
   })
   .refine((value) => value.name !== undefined || value.store !== undefined || value.status !== undefined, {
@@ -181,34 +179,34 @@ export const updateListSchema = z
 
 export const createItemSchema = z.object({
   name: trimmed(120),
-  quantity: quantity.optional(),
-  unit: z.string().trim().max(24).nullable().optional(),
-  category: z.string().trim().max(48).nullable().optional(),
+  quantity: formField(quantity),
+  unit: formField(z.string().trim().max(24)),
+  category: formField(z.string().trim().max(48)),
   priceMinor: priceMinor,
-  note: z.string().trim().max(280).nullable().optional(),
+  note: formField(z.string().trim().max(280)),
   offer: offerInput,
-  discount: lineDiscountInput.optional()
+  discount: formField(lineDiscountInput)
 });
 
 export const updateItemSchema = z
   .object({
-    name: trimmed(120).optional(),
-    quantity: quantity.optional(),
-    unit: z.string().trim().max(24).nullable().optional(),
-    category: z.string().trim().max(48).nullable().optional(),
-    checked: booleanish.optional(),
+    name: formField(trimmed(120)),
+    quantity: formField(quantity),
+    unit: formField(z.string().trim().max(24)),
+    category: formField(z.string().trim().max(48)),
+    checked: formField(booleanish),
     priceMinor: priceMinor,
-    note: z.string().trim().max(280).nullable().optional(),
+    note: formField(z.string().trim().max(280)),
     offer: offerInput,
     /** `null` quita el descuento de la linea (no «no tocar»). */
-    discount: lineDiscountInput.optional(),
+    discount: formField(lineDiscountInput),
     /**
      * Enlazar la linea con un producto que la casa ya conoce. Existe porque en la tienda
      * el mismo producto se llama de otra forma («Leche semi» en el carrito, «Leche
      * semidesnatada» en el ticket de hace dos semanas) y sin enlace esa busqueda de precio
      * no encuentra nada. `null` lo quita y la clave vuelve a ser la del nombre.
      */
-    productKey: z.string().trim().min(2).max(80).nullable().optional()
+    productKey: formField(z.string().trim().min(2).max(80))
   })
   .refine(
     (value) =>
@@ -229,7 +227,7 @@ export const updateItemSchema = z
 export const bulkItemsSchema = z
   .object({
     lines: z.string().max(20000),
-    items: z.array(createItemSchema).max(200).optional()
+    items: formField(z.array(createItemSchema).max(200))
   })
   .refine((value) => value.lines.trim().length > 0 || (value.items?.length ?? 0) > 0, {
     message: 'NothingToAdd'
@@ -248,53 +246,53 @@ export const orderSchema = z.object({
  * sin tienda no se puede volver a usar en la proxima lista de ese sitio.
  */
 export const completeListSchema = z.object({
-  store: z.string().trim().max(80).nullable().optional(),
-  prices: z
-    .array(
+  store: formField(z.string().trim().max(80)),
+  prices: formField(
+    z.array(
       z
         .object({
           itemId: trimmed(40),
           /** Precio POR UNIDAD, la misma unidad que guarda la linea. */
-          priceMinor: z.coerce.number().int().min(0).max(100_000_000).nullable().optional(),
+          priceMinor: formField(z.coerce.number().int().min(0).max(100_000_000)),
           /**
            * Lo pagado en total, tal y como lo dice el ticket. Con esto no hay que hacer la
            * division a mano —y la division mal hecha es como una oferta 3x2 acaba enseñando
            * a la app un precio por unidad un 33 % mas barato del real.
            */
-          totalPaidMinor: z.coerce.number().int().min(1).max(100_000_000).nullable().optional(),
+          totalPaidMinor: formField(z.coerce.number().int().min(1).max(100_000_000)),
           /** Unidades que realmente se llevaron (por defecto, las pagadas de la linea). */
-          quantity: z.coerce.number().positive().max(10000).nullable().optional(),
-          store: z.string().trim().max(80).nullable().optional(),
+          quantity: formField(z.coerce.number().positive().max(10000)),
+          store: formField(z.string().trim().max(80)),
           /** Como se llamaba en esa tienda. Se anota en la observacion, no en la linea. */
-          productName: z.string().trim().max(120).nullable().optional()
+          productName: formField(z.string().trim().max(120))
         })
         .refine((value) => value.priceMinor != null || value.totalPaidMinor != null, { message: 'PriceValueRequired' })
     )
     .max(500)
-    .optional()
+  )
 });
 
 export const priceFilterSchema = z.object({
-  q: z.string().trim().max(120).optional(),
+  q: formField(z.string().trim().max(120)),
   /** Los precios de una tienda concreta («cuanto cuesta aqui la leche»). */
-  store: z.string().trim().max(80).optional(),
-  productKey: z.string().trim().max(80).optional(),
+  store: formField(z.string().trim().max(80)),
+  productKey: formField(z.string().trim().max(80)),
   limit: pageSize,
   offset
 });
 
 /** Indice de productos conocidos, para enlazar una linea y para el buscador de precios. */
 export const productIndexSchema = z.object({
-  q: z.string().trim().max(120).optional(),
-  limit: z.coerce.number().int().min(1).max(500).default(200)
+  q: formField(z.string().trim().max(120)),
+  limit: formDefault(z.coerce.number().int().min(1).max(500), 200)
 });
 
 export const createPriceSchema = z.object({
   productName: trimmed(120),
   priceMinor: z.coerce.number().int().min(1).max(100_000_000),
-  quantity: quantity.optional(),
-  unit: z.string().trim().max(24).nullable().optional(),
-  store: z.string().trim().max(80).nullable().optional()
+  quantity: formField(quantity),
+  unit: formField(z.string().trim().max(24)),
+  store: formField(z.string().trim().max(80))
 });
 
 /**
@@ -333,8 +331,8 @@ export const photoAnalyzeSchema = z.object({
     .min(64, 'La imagen llega vacia')
     .max(8_000_000, 'La imagen es demasiado grande')
     .regex(/^data:image\/(png|jpe?g|webp);base64,[A-Za-z0-9+/=]+$/, 'Se espera una imagen en dataURL (png, jpeg o webp)'),
-  mode: z.enum(['auto', 'ticket', 'shelf']).default('auto'),
-  note: z.string().trim().max(280).optional()
+  mode: formDefault(z.enum(['auto', 'ticket', 'shelf']), 'auto'),
+  note: formField(z.string().trim().max(280))
 });
 
 /** Lo que se le PIDE al modelo. Se valida su respuesta con esto y con nada mas. */
@@ -344,22 +342,22 @@ export const photoLinesSchema = z.object({
       z
         .object({
           name: trimmed(120),
-          quantity: z.coerce.number().positive().max(10000).default(1),
-          unit: z.string().trim().max(24).nullable().optional(),
-          category: z.string().trim().max(48).nullable().optional(),
+          quantity: formDefault(z.coerce.number().positive().max(10000), 1),
+          unit: formField(z.string().trim().max(24)),
+          category: formField(z.string().trim().max(48)),
           /** Se propone una seccion nueva: solo se crea si quien confirma lo pide. */
-          createCategory: z.boolean().optional(),
-          priceMinor: z.coerce.number().int().min(0).max(100_000_000).nullable().optional(),
+          createCategory: formField(z.boolean()),
+          priceMinor: formField(z.coerce.number().int().min(0).max(100_000_000)),
           offer: offerInput,
-          confidence: z.coerce.number().min(0).max(1).default(0.5),
-          note: z.string().trim().max(280).nullable().optional()
+          confidence: formDefault(z.coerce.number().min(0).max(1), 0.5),
+          note: formField(z.string().trim().max(280))
         })
         // Un nombre vacio no es una linea: es el modelo rellenando huecos.
         .refine((line) => line.name.trim().length > 1, { message: 'NombreVacio' })
     )
     .max(200),
-  currency: z.enum(['EUR', 'eur']).optional(),
-  warnings: z.array(z.string().trim().max(280)).max(20).optional()
+  currency: formField(z.enum(['EUR', 'eur'])),
+  warnings: formField(z.array(z.string().trim().max(280)).max(20))
 });
 
 /** Lo que la persona confirmo, en la forma que escribe la BD. */
@@ -368,12 +366,12 @@ export const applyLinesSchema = z.object({
     .array(
       z.object({
         name: trimmed(120),
-        quantity: quantity.optional(),
-        unit: z.string().trim().max(24).nullable().optional(),
-        category: z.string().trim().max(48).nullable().optional(),
-        createCategory: z.boolean().optional(),
+        quantity: formField(quantity),
+        unit: formField(z.string().trim().max(24)),
+        category: formField(z.string().trim().max(48)),
+        createCategory: formField(z.boolean()),
         priceMinor: priceMinor,
-        note: z.string().trim().max(280).nullable().optional(),
+        note: formField(z.string().trim().max(280)),
         offer: offerInput
       })
     )

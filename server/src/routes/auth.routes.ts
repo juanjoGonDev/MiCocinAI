@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { nanoid } from 'nanoid';
 import { config } from '../config/app.config.js';
 import { getDatabase } from '../config/database.js';
+import { readForm } from '../utils/form-body.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import {
   loginSchema,
@@ -344,8 +345,9 @@ authRoutes.get('/taste', authMiddleware, async (c) => {
 // pisan entre sí ni borran tema/idioma al guardar.
 authRoutes.patch('/taste', authMiddleware, async (c) => {
   const userId = c.get('userId');
-  const body = await c.req.json();
-  const input = updateTasteSchema.parse(body);
+  const parsed = await readForm(c, updateTasteSchema, 'Perfil');
+  if (!parsed.ok) return parsed.response;
+  const input = parsed.data;
 
   const db = getDatabase();
   const saved = saveTasteProfile(db, userId, input);

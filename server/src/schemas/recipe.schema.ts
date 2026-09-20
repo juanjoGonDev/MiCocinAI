@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { formDefault, formField, formPartial } from './form.js';
 
 const difficultyEnum = z.enum(['easy', 'medium', 'hard']);
 const mealTypeEnum = z.enum(['breakfast', 'brunch', 'lunch', 'snack', 'dinner', 'dessert']);
@@ -7,14 +8,14 @@ const measurementUnitEnum = z.enum([
 ]);
 
 const recipeIngredientSchema = z.object({
-  ingredientId: z.string().optional().nullable(),
+  ingredientId: formField(z.string()),
   name: z.string().min(1),
   quantity: z.number().positive(),
   unit: measurementUnitEnum,
-  preparation: z.string().optional().nullable(),
-  isOptional: z.boolean().default(false),
-  substitutes: z.array(z.string()).optional().default([]),
-  notes: z.string().optional().nullable()
+  preparation: formField(z.string()),
+  isOptional: formDefault(z.boolean(), false),
+  substitutes: formDefault(z.array(z.string()), []),
+  notes: formField(z.string())
 });
 
 const temperatureSchema = z.object({
@@ -25,13 +26,13 @@ const temperatureSchema = z.object({
 const recipeStepSchema = z.object({
   stepNumber: z.number().int().positive(),
   instruction: z.string().min(1),
-  duration: z.number().int().positive().optional().nullable(),
-  temperature: temperatureSchema.optional().nullable(),
-  timerRequired: z.boolean().default(false),
-  timerDuration: z.number().int().positive().optional().nullable(),
-  tips: z.string().optional().nullable(),
-  warning: z.string().optional().nullable(),
-  image: z.string().url().optional().nullable()
+  duration: formField(z.number().int().positive()),
+  temperature: formField(temperatureSchema),
+  timerRequired: formDefault(z.boolean(), false),
+  timerDuration: formField(z.number().int().positive()),
+  tips: formField(z.string()),
+  warning: formField(z.string()),
+  image: formField(z.string().url())
 });
 
 const nutritionInfoSchema = z.object({
@@ -39,62 +40,62 @@ const nutritionInfoSchema = z.object({
   protein: z.number(),
   carbs: z.number(),
   fat: z.number(),
-  fiber: z.number().optional(),
-  sugar: z.number().optional(),
-  sodium: z.number().optional()
+  fiber: formField(z.number()),
+  sugar: formField(z.number()),
+  sodium: formField(z.number())
 });
 
 const storageInfoSchema = z.object({
   method: z.string(),
   container: z.string(),
   duration: z.string(),
-  reheatingInstructions: z.string().optional().nullable(),
-  freezingPossible: z.boolean().default(false),
-  freezingDuration: z.string().optional().nullable()
+  reheatingInstructions: formField(z.string()),
+  freezingPossible: formDefault(z.boolean(), false),
+  freezingDuration: formField(z.string())
 });
 
 // Create recipe schema
 export const createRecipeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
-  description: z.string().max(1000).optional().nullable(),
-  difficulty: difficultyEnum.default('medium'),
-  cuisine: z.string().max(50).optional().nullable(),
-  mealType: z.array(mealTypeEnum).optional().default([]),
-  totalTime: z.number().int().positive().optional().nullable(),
-  prepTime: z.number().int().positive().optional().nullable(),
-  cookTime: z.number().int().positive().optional().nullable(),
-  restTime: z.number().int().positive().optional().nullable(),
-  servings: z.number().int().positive().default(4),
-  calories: z.number().positive().optional().nullable(),
-  image: z.string().url().optional().nullable(),
+  description: formField(z.string().max(1000)),
+  difficulty: formDefault(difficultyEnum, 'medium'),
+  cuisine: formField(z.string().max(50)),
+  mealType: formDefault(z.array(mealTypeEnum), []),
+  totalTime: formField(z.number().int().positive()),
+  prepTime: formField(z.number().int().positive()),
+  cookTime: formField(z.number().int().positive()),
+  restTime: formField(z.number().int().positive()),
+  servings: formDefault(z.number().int().positive(), 4),
+  calories: formField(z.number().positive()),
+  image: formField(z.string().url()),
   ingredients: z.array(recipeIngredientSchema).min(1, 'At least one ingredient is required'),
-  utensils: z.array(z.string()).optional().default([]),
+  utensils: formDefault(z.array(z.string()), []),
   steps: z.array(recipeStepSchema).min(1, 'At least one step is required'),
-  nutrition: nutritionInfoSchema.optional().nullable(),
-  storage: storageInfoSchema.optional().nullable(),
-  tags: z.array(z.string()).optional().default([]),
-  isPublic: z.boolean().optional().default(false)
+  nutrition: formField(nutritionInfoSchema),
+  storage: formField(storageInfoSchema),
+  tags: formDefault(z.array(z.string()), []),
+  isPublic: formDefault(z.boolean(), false)
 });
 
 // Update recipe schema
-export const updateRecipeSchema = createRecipeSchema.partial().extend({
-  isFavorite: z.boolean().optional()
+export const updateRecipeSchema = formPartial(createRecipeSchema).extend({
+  isFavorite: formField(z.boolean())
 });
 
 // Recipe filter schema
 export const recipeFilterSchema = z.object({
-  search: z.string().optional(),
-  difficulty: difficultyEnum.optional(),
-  mealType: mealTypeEnum.optional(),
-  maxTime: z.number().int().positive().optional(),
-  cuisine: z.string().optional(),
-  tags: z.array(z.string()).optional(),
-  isFavorite: z.boolean().optional(),
-  author: z.enum(['ai', 'user']).optional(),
-  page: z.number().int().positive().optional().default(1),
-  pageSize: z.number().int().positive().max(100).optional().default(20),
-  sortBy: z.enum(['name', 'difficulty', 'totalTime', 'rating', 'createdAt']).optional().default('createdAt'),
-  sortOrder: z.enum(['asc', 'desc']).optional().default('desc')
+  search: formField(z.string()),
+  difficulty: formField(difficultyEnum),
+  mealType: formField(mealTypeEnum),
+  maxTime: formField(z.number().int().positive()),
+  cuisine: formField(z.string()),
+  tags: formField(z.array(z.string())),
+  isFavorite: formField(z.boolean()),
+  author: formField(z.enum(['ai', 'user'])),
+  page: formDefault(z.number().int().positive(), 1),
+  pageSize: formDefault(z.number().int().positive().max(100), 20),
+  sortBy: formDefault(z.enum(['name', 'difficulty', 'totalTime', 'rating', 'createdAt']), 'createdAt'),
+  sortOrder: formDefault(z.enum(['asc', 'desc']), 'desc')
 });
 
 // Adjust servings schema
