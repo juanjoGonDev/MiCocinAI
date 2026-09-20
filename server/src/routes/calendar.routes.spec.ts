@@ -321,6 +321,10 @@ describe('calendario de la casa (§8f)', () => {
     expect(seen.map((row) => row.id)).toContain(created.id);
     expect(seen[0].editable).toBe(false);
     expect(seen[0].attendees[0].name).toBe('Bob');
+    // El listado tiene que traer la pareja: el dialogo de edicion marca las casillas con `attendeeIds`,
+    // y sin el se abria con la cara de Bob pintada y la casilla vacia —guardar sin tocar nada borraba la
+    // invitacion. Es el bug que el usuario volvio a reportar, y estaba aqui, no en el POST.
+    expect(seen[0].attendeeIds).toEqual([bob.id]);
 
     // Bob no puede reescribirlo...
     expect((await call(bob, 'PATCH', `/events/${created.id}`, { title: 'Otra cosa' })).status).toBe(403);
@@ -363,6 +367,10 @@ describe('calendario de la casa (§8f)', () => {
 
     const updated = (await data(await call(alice, 'PATCH', `/events/${created.id}`, { attendeeIds: [] }))) as any;
     expect(updated.attendeeIds).toEqual([]);
+    // ...y el proximo listado ya no la trae: una lectura que no refleja el vaciado es un guardado que
+    // el usuario dara por perdido.
+    const after = (await data(await call(alice, 'GET', '/events?from=2026-03-09&to=2026-03-15'))) as any[];
+    expect(after.find((event) => event.id === created.id)?.attendeeIds).toEqual([]);
     expect(await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);
   });
 });

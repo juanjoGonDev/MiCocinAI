@@ -41,6 +41,7 @@ import { CalendarMonthComponent } from './calendar-month.component';
 import { CalendarTimelineComponent } from './calendar-timeline.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
+import { attendeeIdsPayload, inviteCandidates, selectedInvitees } from '../../core/event-invitations';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { CheckboxComponent } from '../../shared/components/ui/checkbox/checkbox.component';
 import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
@@ -428,29 +429,34 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (checkedChange)="eventDraft.sharedWithHousehold = $event"
             />
 
-            @if (householdPeople().length) {
-              <div class="meal-form__field">
-                <label id="event-people-label">Quién viene (opcional)</label>
-                <div class="cal-people" role="group" aria-labelledby="event-people-label" data-test="event-attendees">
-                  @for (person of householdPeople(); track person.userId) {
-                    <button
-                      type="button"
-                      class="cal-person"
-                      [class.is-on]="eventDraft.attendeeIds.includes(person.userId)"
-                      [attr.aria-pressed]="eventDraft.attendeeIds.includes(person.userId)"
-                      (click)="toggleAttendee(person.userId)"
-                    >
-                      <app-avatar [name]="person.name" [src]="person.avatar" size="xs" />
-                      <span>{{ person.name }}</span>
-                      @if (eventDraft.attendeeIds.includes(person.userId)) {
-                        <app-icon name="check" class="cal-person__check" />
-                      }
-                    </button>
-                  }
-                </div>
-                <p class="cal-note">Solo cambia tu visibilidad: la casa ya comparte la agenda.</p>
+            <div class="meal-form__field">
+              <label id="event-people-label">Quién viene (opcional)</label>
+              <div class="cal-people" role="group" aria-labelledby="event-people-label" data-test="event-attendees">
+                @for (person of householdPeople(); track person.userId) {
+                  <button
+                    type="button"
+                    class="cal-person"
+                    [class.is-on]="eventDraft.attendeeIds.includes(person.userId)"
+                    [attr.aria-pressed]="eventDraft.attendeeIds.includes(person.userId)"
+                    (click)="toggleAttendee(person.userId)"
+                  >
+                    <app-avatar [name]="person.name" [src]="person.avatar" size="xs" />
+                    <span>{{ person.name }}</span>
+                    @if (eventDraft.attendeeIds.includes(person.userId)) {
+                      <app-icon name="check" class="cal-person__check" />
+                    }
+                  </button>
+                }
               </div>
-            }
+              @if (!householdPeople().length) {
+                <p class="cal-note" data-test="event-no-people">
+                  Eres la única persona de la casa.
+                  <button type="button" class="cal-link" (click)="openHouseholdPage()">Invitar a alguien</button>
+                </p>
+              } @else {
+                <p class="cal-note">Solo cambia tu visibilidad: la casa ya comparte la agenda.</p>
+              }
+            </div>
           }
           <p class="cal-note" *ngIf="calendarService.eventsError()" role="alert">{{ calendarService.eventsError() }}</p>
 
@@ -1705,6 +1711,9 @@ export class CalendarComponent implements OnInit {
 
   ngOnInit(): void {
     this.readLayersFromUrl();
+    // La casa es lo que decide si se puede invitar a alguien: sin pedirla aqui, abrir el calendario
+    // directamente (enlace, recarga) dejaba el picker fuera de pantalla.
+    this.householdService.ensureHousehold();
     // El recetario alimenta la pestaña «Receta» del modal (antes estaba vacío).
     this.recipeService.loadRecipes();
     this.tasteService.ensureLoaded();
@@ -2254,9 +2263,12 @@ export class CalendarComponent implements OnInit {
       location: event?.location ?? '',
       notes: event?.notes ?? '',
       sharedWithHousehold: event ? true : true,
-      attendeeIds: [...(event?.attendeeIds ?? [])],
+      attendeeIds: selectedInvitees(event),
       editable: event?.editable ?? true
     };
+    // El picker solo existe si la casa estaba cargada al abrir. Guardar sin esa marca NO manda lista:
+    // `attendeeIds: []` es «que no quede nadie», y eso no lo puede decidir un renderido a medias.
+    this.eventAttendeesShown = this.hasHousehold();
     this.calendarService.eventsError.set(null);
     this.isEventModalOpen.set(true);
   }
@@ -2280,19 +2292,22 @@ export class CalendarComponent implements OnInit {
     this.toastService.error('No se pudo salir', 'Vuelve a intentarlo en un momento.');
   }
 
-  protected householdPeople(): { userId: string; name: string; avatar?: string }[] {
-    const household = this.householdService.household();
-    const me = this.authService.userId();
-    if (!household) return [];
-    return household.members
-      .filter((member) => member.userId !== me)
-      .map((member) => ({ userId: member.userId, name: member.name, avatar: member.avatar }));
+  /** Los de la casa, menos yo, en orden de nombre: la regla vive en `core/event-invitations`. */
+  protected householdPeople(): ReturnType<typeof inviteCandidates> {
+    return inviteCandidates(this.householdService.household()?.members ?? [], this.authService.userId() || null);
+  }
+
+  protected openHouseholdPage(): void {
+    void this.router.navigate(['/household']);
   }
 
   toggleAttendee(userId: string): void {
     const list = this.eventDraft.attendeeIds;
     this.eventDraft.attendeeIds = list.includes(userId) ? list.filter((entry) => entry !== userId) : [...list, userId];
   }
+
+  /** Si el borrador actual lleva picker visible: ver `attendeeIdsPayload`. */
+  private eventAttendeesShown = false;
 
   closeEventModal(): void {
     this.isEventModalOpen.set(false);
@@ -2349,8 +2364,9 @@ export class CalendarComponent implements OnInit {
       startTime: draft.allDay ? null : draft.startTime || null,
       endTime: draft.allDay ? null : draft.endTime || null
     };
-    // Las caras van con el mismo criterio: la lista vacia es «nadie invitado», no «no cambies esto».
-    if (this.hasHousehold()) body.attendeeIds = draft.attendeeIds;
+    // Las caras van con el criterio del pure helper: lista vacia es «nadie invitado» SOLO si el picker
+    // se vio; si no se vio, la clave no va y el servidor no toca la lista.
+    Object.assign(body, attendeeIdsPayload(this.eventAttendeesShown, draft.attendeeIds));
     const saved = await this.calendarService.saveHouseholdEvent(body, draft.id);
     if (saved) this.closeEventModal();
   }

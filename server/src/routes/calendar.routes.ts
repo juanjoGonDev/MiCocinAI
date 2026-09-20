@@ -474,6 +474,10 @@ calendarRoutes.get('/events', async (c) => {
       // Los invitados van en la proyeccion y no en un detalle aparte: en la rejilla se pintan las
       // caras, y una cara sin nombre debajo (o un nombre sin cara) es media identidad.
       attendees: invited.get(row.id) ?? [],
+      // La pareja `attendees` / `attendeeIds` es lo que el dialogo de edicion necesita para pintar las
+      // casillas marcadas. Sin `attendeeIds` en el listado, abrir «editar» sobre un evento con dos
+      // invitados los mostraba con dos caras y cero casillas, y guardar las borraba.
+      attendeeIds: (invited.get(row.id) ?? []).map((person) => person.id),
       // El frontend no adivina si puede editar: lo dice el servidor, que es quien sabe
       // quien es quien. Y es `editable`, no `es mio`, porque el dia que haya roles de
       // admin de casa solo hay que cambiar esta linea.
