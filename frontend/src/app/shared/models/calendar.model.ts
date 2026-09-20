@@ -99,7 +99,13 @@ export const DAY_ORDER: DayOfWeek[] = [
   'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
 ];
 
-export const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
+/**
+ * El orden del día español: desayuno, almuerzo, merienda, cena. Estuvo al revés (cena antes que
+ * merienda) desde la primera version, y no era un detalle de etiqueta: es la clave con la que se
+ * ordenan la rejilla, el mes y las filas que escribe la IA, asi que ahi se leia una cena a media
+ * tarde. La convenciones de hora viven en `calendar-grid.ts`, y siguen este mismo orden.
+ */
+export const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'snack', 'dinner'];
 
 /* ═══════════════════════════════════════════════════════════════════════
    Modelo de vistas del calendario (mes / semana / día)
@@ -155,16 +161,23 @@ export interface CalendarDay {
 /** Cómo se pinta cada tipo de comida: color por tipo, como en Google Calendar. */
 export interface MealTypeMeta {
   label: string;
+  /**
+   * El acento del tipo. Es un `var()` y no un hex, y por eso puede vivir en el modelo: lo que hace
+   * legible una rejilla de 40 celdas es que «desayuno» sea siempre el mismo color, y ese color tiene
+   * que cambiar con el tema. Un hex aqui seria un segundo tema que la hoja de estilos no alcanza.
+   */
+  color: string;
   /** Texto del hueco vacío, para no escribir «Agregar» cuatro veces. */
   addAction: string;
 }
 
 export const MEAL_TYPE_META: Record<MealType, MealTypeMeta> = {
-  breakfast: { label: 'Desayuno', addAction: 'Desayuno' },
-  lunch: { label: 'Almuerzo', addAction: 'Almuerzo' },
-  dinner: { label: 'Cena', addAction: 'Cena' },
-  snack: { label: 'Merienda', addAction: 'Merienda' }
+  breakfast: { label: 'Desayuno', addAction: 'Desayuno', color: 'var(--warning)' },
+  lunch: { label: 'Almuerzo', addAction: 'Almuerzo', color: 'var(--primary)' },
+  snack: { label: 'Merienda', addAction: 'Merienda', color: 'var(--secondary)' },
+  dinner: { label: 'Cena', addAction: 'Cena', color: 'var(--info)' }
 };
+
 
 /**
  * Día ya preparado para pintar: las comidas repartidas por franja, para que las
@@ -175,7 +188,7 @@ export interface CalendarDayView extends CalendarDay {
   slots: Record<MealType, CalendarMeal[]>;
   planned: number;
   done: number;
-  /** Sueltas de la casa del mismo dia (HOGARIA-SPEC §8f), ya filtradas por capas. */
+  /** Sueltas de la casa del mismo día (HOGARIA-SPEC §8f), ya filtradas por capas. */
   events: HouseholdEvent[];
 }
 
@@ -186,6 +199,13 @@ export interface CalendarDayView extends CalendarDay {
  */
 export const HOUSEHOLD_EVENT_KINDS = ['shopping', 'home', 'appointment', 'personal', 'other'] as const;
 export type HouseholdEventKind = (typeof HOUSEHOLD_EVENT_KINDS)[number];
+
+/** Quien esta invitado a una suelta: nombre y foto, como en todo lo que es identidad. */
+export interface EventAttendee {
+  id: string;
+  name: string;
+  avatar?: string | null;
+}
 
 export interface HouseholdEvent {
   id: string;
@@ -204,6 +224,13 @@ export interface HouseholdEvent {
   /** La foto del autor, si la tiene. El nombre se congelo al escribir; la foto es la de hoy. */
   authorAvatar?: string | null;
   editable: boolean;
+  /**
+   * Quien mas entra en el evento (HOGARIA-SPEC 12o). Viene del servidor con la lista ya resuelta, y
+   * `attendeeIds` es lo que el dialog tiene que volver a marcar al editar: sin las dos, o se pintan
+   * caras sin seleccion o se pierde a alguien al guardar.
+   */
+  attendees?: EventAttendee[];
+  attendeeIds?: string[];
 }
 
 export const HOUSEHOLD_EVENT_META: Record<

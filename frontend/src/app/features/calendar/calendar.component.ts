@@ -38,13 +38,14 @@ import {
   weekDays
 } from './calendar.util';
 import { CalendarMonthComponent } from './calendar-month.component';
-import { CalendarWeekComponent } from './calendar-week.component';
-import { CalendarDayComponent } from './calendar-day.component';
+import { CalendarTimelineComponent } from './calendar-timeline.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { CheckboxComponent } from '../../shared/components/ui/checkbox/checkbox.component';
 import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
 import { HouseholdService } from '../../core/services/household.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ModulesService } from '../../core/services/modules.service';
 import {
   HOUSEHOLD_EVENT_COLORS,
@@ -100,6 +101,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
   standalone: true,
   imports: [
     IconComponent,
+    AvatarComponent,
     PickerComponent,
     CheckboxComponent,
     CalendarHouseholdEventsComponent,
@@ -108,8 +110,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     FormsModule,
     ModalComponent,
     CalendarMonthComponent,
-    CalendarWeekComponent,
-    CalendarDayComponent
+    CalendarTimelineComponent
   ],
   host: {
     '(window:keydown)': 'onKeydown($event)'
@@ -286,40 +287,32 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (editEvent)="openEventModal(undefined, $event)"
             ></app-calendar-month>
 
-            <app-calendar-week
+            <!-- Semana y dia son LA MISMA rejilla de horas: lo unico que cambia es cuantas
+                 columnas hay. days() ya trae 7 o 1 segun la vista, asi que el componente no tiene
+                 que saber en que pestaña esta. -->
+            <app-calendar-timeline
               *ngSwitchDefault
               [kitchen]="kitchen()"
               [days]="days()"
-              (addMeal)="openAddModal($event.date, $event.mealType)"
+              [targetCalories]="calendarService.targetCalories()"
+              (addMeal)="onTimelineAddMeal($event)"
+              (addEvent)="onTimelineAddEvent($event)"
               (openMeal)="openEditModal($event)"
               (toggleMeal)="toggleMeal($event)"
               (removeMeal)="removeMeal($event)"
               (openDay)="openDayFor($event)"
               (editEvent)="openEventModal(undefined, $event)"
-            ></app-calendar-week>
-
-            <app-calendar-day
-              *ngSwitchCase="'day'"
-              [day]="singleDay()"
-              [kitchen]="kitchen()"
-              [targetCalories]="calendarService.targetCalories()"
-              [goalLabel]="goalLabel()"
-              (addMeal)="openAddModal($event.date, $event.mealType)"
-              (openMeal)="openEditModal($event)"
-              (toggleMeal)="toggleMeal($event)"
-              (removeMeal)="removeMeal($event)"
-              (editEvent)="openEventModal(undefined, $event)"
-            ></app-calendar-day>
+            ></app-calendar-timeline>
           </ng-container>
         </div>
 
-        <!-- ══ Agenda del dia señalado ══ -->
+        <!-- ══ Agenda del día señalado ══ -->
         <!-- Un solo boton para anadir, arriba, y ya apunta al dia que se esta mirando
            (openEventModal usa anchorIso() cuando no le llega dia): dos botones de
            «anadir» a seis lineas de distancia son dos formas de preguntar lo mismo, y la
            de abajo se comia el encabezado de una seccion que va de lista en lista.
            OJO: dentro de este literal no pueden aparecer backticks, cierran el string. -->
-        <section class="cal-agenda" data-test="agenda" aria-label="Agenda del dia">
+        <section class="cal-agenda" data-test="agenda" aria-label="Agenda del día">
           <header class="cal-agenda__head">
             <div class="cal-agenda__who">
               <p class="cal-agenda__eyebrow">Agenda</p>
@@ -384,7 +377,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
           <div class="meal-form__row">
             <app-checkbox
-              label="Todo el dia"
+              label="Todo el día"
               name="eventAllDay"
               [checked]="eventDraft.allDay"
               (checkedChange)="setAllDay($event)"
@@ -434,6 +427,30 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               [checked]="eventDraft.sharedWithHousehold"
               (checkedChange)="eventDraft.sharedWithHousehold = $event"
             />
+
+            @if (householdPeople().length) {
+              <div class="meal-form__field">
+                <label id="event-people-label">Quién viene (opcional)</label>
+                <div class="cal-people" role="group" aria-labelledby="event-people-label" data-test="event-attendees">
+                  @for (person of householdPeople(); track person.userId) {
+                    <button
+                      type="button"
+                      class="cal-person"
+                      [class.is-on]="eventDraft.attendeeIds.includes(person.userId)"
+                      [attr.aria-pressed]="eventDraft.attendeeIds.includes(person.userId)"
+                      (click)="toggleAttendee(person.userId)"
+                    >
+                      <app-avatar [name]="person.name" [src]="person.avatar" size="xs" />
+                      <span>{{ person.name }}</span>
+                      @if (eventDraft.attendeeIds.includes(person.userId)) {
+                        <app-icon name="check" class="cal-person__check" />
+                      }
+                    </button>
+                  }
+                </div>
+                <p class="cal-note">Solo cambia tu visibilidad: la casa ya comparte la agenda.</p>
+              </div>
+            }
           }
           <p class="cal-note" *ngIf="calendarService.eventsError()" role="alert">{{ calendarService.eventsError() }}</p>
 
@@ -685,6 +702,41 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     </div>
   `,
   styles: [`
+    .cal-people {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+    }
+
+    .cal-person {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-1);
+      padding: 4px 8px;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-full);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font: inherit;
+      font-size: var(--text-sm);
+      cursor: pointer;
+      transition: var(--transition-fast);
+    }
+
+    .cal-person:hover {
+      border-color: var(--primary);
+    }
+
+    .cal-person.is-on {
+      border-color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 16%, transparent);
+    }
+
+    .cal-person__check {
+      color: var(--primary);
+      font-size: var(--text-sm);
+    }
+
     .cal-pill--add {
       display: inline-flex;
       align-items: center;
@@ -1376,10 +1428,10 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       }
     }
 
-    /* ──────────────────────── Agenda del dia ──────────────────────── */
+    /* ──────────────────────── Agenda del día ──────────────────────── */
     /* La seccion existe para leerla de pie y con una mano. Sin su propio hueco era una
        lista de 11 px pegada al calendario —la variante que encaja DENTRO de una celda—
-       y nadie la veia. Aqui es tarjeta: aire, jerarquia y filas que se tocan. */
+       y nadie la veia. Aquí es tarjeta: aire, jerarquia y filas que se tocan. */
     .cal-agenda {
       display: grid;
       gap: var(--space-3);
@@ -1473,6 +1525,7 @@ export class CalendarComponent implements OnInit {
   private readonly tasteService = inject(TasteProfileService);
   private readonly toastService = inject(ToastService);
   private readonly confirmService = inject(ConfirmService);
+  private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
@@ -1529,7 +1582,7 @@ export class CalendarComponent implements OnInit {
     return dates.map((date) => {
       const iso = toISODate(date);
       // Apagar la capa de comidas no es esconder CSS: es no darles nada que pintar, y
-      // asi las tres vistas (mes, semana, dia) se comportan igual sin tocarlas.
+      // asi las tres vistas (mes, semana, día) se comportan igual sin tocarlas.
       const meals = this.mealsVisible() ? byDate.get(iso) ?? [] : [];
       const slots = { breakfast: [], lunch: [], dinner: [], snack: [] } as Record<MealType, CalendarMeal[]>;
       let calories = 0;
@@ -1808,8 +1861,21 @@ export class CalendarComponent implements OnInit {
 
   /* ──────────────────────── Añadir / editar ──────────────────────── */
 
-  openAddModal(date: string, mealType: MealType): void {
+  /**
+   * La rejilla de horas ya sabe la hora en la que ha caido el click: passarsela al dialog es lo que
+   * hace que el eje de horas valga algo. Sin eso, la rejilla seria una lista con ejes dibujados.
+   */
+  onTimelineAddMeal(payload: { date: string; mealType: MealType; time?: string }): void {
+    this.openAddModal(payload.date, payload.mealType, payload.time);
+  }
+
+  onTimelineAddEvent(payload: { date: string; startTime: string }): void {
+    this.openEventModal({ iso: payload.date }, null, payload.startTime);
+  }
+
+  openAddModal(date: string, mealType: MealType, time?: string): void {
     this.draft = emptyDraft(date, mealType);
+    if (time) this.draft.time = time;
     // Si la URL trae una pestaña válida (?mealTab=recipe) se respeta.
     readTabParam(this.route, 'mealTab', ['custom', 'recipe'] as const, 'custom', (tab) =>
       this.mealTab.set(tab)
@@ -1861,14 +1927,18 @@ export class CalendarComponent implements OnInit {
       notes: this.draft.notes.trim() || undefined
     };
 
+    // En el PATCH `undefined` significa «no lo toques», asi que borrar la hora exige mandar `null`
+    // explicito: con `undefined` el boton de quitar era un Guardar que no guardaba nada.
+    const patch: Record<string, unknown> = {
+      customMeal: payload.customMeal ?? null,
+      recipeId: payload.recipeId ?? null,
+      time: payload.time ?? null,
+      servings: payload.servings,
+      notes: payload.notes ?? null
+    };
+
     const request = this.draft.id
-      ? this.calendarService.updateMeal(this.draft.id, {
-          customMeal: payload.customMeal,
-          recipeId: payload.recipeId,
-          time: payload.time,
-          servings: payload.servings,
-          notes: payload.notes
-        })
+      ? this.calendarService.updateMeal(this.draft.id, patch as never)
       : this.calendarService.addMeal(payload);
 
     request.subscribe({
@@ -2058,6 +2128,13 @@ export class CalendarComponent implements OnInit {
     notes: string;
     sharedWithHousehold: boolean;
     colorTouched?: boolean;
+    /**
+     * Quien esta invitado. Es una lista de ids de usuario, no de nombres: si se guardase el nombre,
+     * una Renata que cambie de apellido seguiria invitada a la cena de hace un ano.
+     */
+    attendeeIds: string[];
+    /** Si lo escribio esta cuenta. Con `false` el modal no abre: abre la salida. */
+    editable?: boolean;
   } = {
     title: '',
     kind: 'other',
@@ -2068,7 +2145,9 @@ export class CalendarComponent implements OnInit {
     color: null,
     location: '',
     notes: '',
-    sharedWithHousehold: true
+    sharedWithHousehold: true,
+    attendeeIds: [],
+    editable: true
   };
 
   metaOf(kind: HouseholdEventKind) {
@@ -2150,30 +2229,76 @@ export class CalendarComponent implements OnInit {
     return !!this.householdService.household();
   }
 
-  openEventModal(day?: { iso?: string; date?: string }, event?: HouseholdEvent | null): void {
+  openEventModal(
+    day?: { iso?: string; date?: string },
+    event?: HouseholdEvent | null,
+    /** La hora pulsada en la rejilla. `''` es «todo el día», que es la banda de arriba. */
+    startTime?: string
+  ): void {
     const iso = event?.date ?? day?.iso ?? day?.date ?? this.anchorIso();
+    if (event && event.editable === false) {
+      // No es un «no tienes permiso» seco: lo que esa persona quiere hacer aqui es salirse, y eso si
+      // puede hacerlo. Abrir un formulario de solo lectura seria enseñarle campos que no puede tocar.
+      void this.leaveEvent(event);
+      return;
+    }
     this.eventDraft = {
       id: event?.id,
       title: event?.title ?? '',
       kind: (event?.kind ?? 'other') as HouseholdEventKind,
       date: iso,
-      allDay: event?.allDay ?? false,
-      startTime: event?.startTime ?? '',
+      allDay: event?.allDay ?? startTime === '',
+      startTime: event?.startTime ?? (startTime || ''),
       endTime: event?.endTime ?? '',
       color: event?.color ?? null,
       location: event?.location ?? '',
       notes: event?.notes ?? '',
-      sharedWithHousehold: event ? true : true
+      sharedWithHousehold: event ? true : true,
+      attendeeIds: [...(event?.attendeeIds ?? [])],
+      editable: event?.editable ?? true
     };
     this.calendarService.eventsError.set(null);
     this.isEventModalOpen.set(true);
+  }
+
+  /**
+   * Salirse de un evento que escribio otra persona. Es un DELETE en la tabla de invitados, no en el
+   * evento: lo que se borra es la relacion, la cena de la casa sigue en pie.
+   */
+  async leaveEvent(event: HouseholdEvent): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: 'Salir del evento',
+      message: `«${event.title}» lo apunto ${event.authorName ?? 'otra persona de la casa'}. Puedes salirte y dejara de verse en tu calendario; el evento sigue para los demas.`,
+      confirmText: 'Salirme'
+    });
+    if (!accepted) return;
+    const done = await this.calendarService.leaveHouseholdEvent(event.id);
+    if (done) {
+      this.toastService.show({ type: 'info', title: 'Te has salido del evento', duration: 4000, countdown: true });
+      return;
+    }
+    this.toastService.error('No se pudo salir', 'Vuelve a intentarlo en un momento.');
+  }
+
+  protected householdPeople(): { userId: string; name: string; avatar?: string }[] {
+    const household = this.householdService.household();
+    const me = this.authService.userId();
+    if (!household) return [];
+    return household.members
+      .filter((member) => member.userId !== me)
+      .map((member) => ({ userId: member.userId, name: member.name, avatar: member.avatar }));
+  }
+
+  toggleAttendee(userId: string): void {
+    const list = this.eventDraft.attendeeIds;
+    this.eventDraft.attendeeIds = list.includes(userId) ? list.filter((entry) => entry !== userId) : [...list, userId];
   }
 
   closeEventModal(): void {
     this.isEventModalOpen.set(false);
   }
 
-  /** Se abre desde la celda: el dia ya viene elegido, que es lo que ahorra el tecleo. */
+  /** Se abre desde la celda: el día ya viene elegido, que es lo que ahorra el tecleo. */
   agendaDay(): CalendarDayView {
     const iso = this.anchorIso();
     return this.days().find(day => day.iso === iso) ?? {
@@ -2208,8 +2333,10 @@ export class CalendarComponent implements OnInit {
       color: string | null;
       location: string | null;
       notes: string | null;
-      startTime?: string;
-      endTime?: string;
+      /** `null` es «quitar la hora». Ausente es «no la toques»: confundirlas es el bug de antes. */
+      startTime: string | null;
+      endTime: string | null;
+      attendeeIds?: string[];
     } = {
       title,
       kind: draft.kind,
@@ -2218,12 +2345,12 @@ export class CalendarComponent implements OnInit {
       sharedWithHousehold: draft.sharedWithHousehold,
       color: draft.color ?? this.metaOf(draft.kind).color,
       location: draft.location.trim() || null,
-      notes: draft.notes.trim() || null
+      notes: draft.notes.trim() || null,
+      startTime: draft.allDay ? null : draft.startTime || null,
+      endTime: draft.allDay ? null : draft.endTime || null
     };
-    if (!draft.allDay) {
-      if (draft.startTime) body.startTime = draft.startTime;
-      if (draft.endTime) body.endTime = draft.endTime;
-    }
+    // Las caras van con el mismo criterio: la lista vacia es «nadie invitado», no «no cambies esto».
+    if (this.hasHousehold()) body.attendeeIds = draft.attendeeIds;
     const saved = await this.calendarService.saveHouseholdEvent(body, draft.id);
     if (saved) this.closeEventModal();
   }

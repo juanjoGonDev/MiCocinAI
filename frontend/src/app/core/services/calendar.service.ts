@@ -262,7 +262,7 @@ export class CalendarService {
    * El `force` existe para `reload()` (que es literalmente "vuelve a pedir lo mismo"). Sin el
    * guardado por ventana, cualquier senal que se escriba al cargar y se lea al pintar vuelve a
    * disparar el efecto de carga, y eso es un bucle de peticiones que termina en un 429 del
-   * limitador —no en un calendario al dia.
+   * limitador —no en un calendario al día.
    */
   loadHouseholdEvents(from: string, to: string, force = false): void {
     const window = `${from}|${to}`;
@@ -287,7 +287,7 @@ export class CalendarService {
       .subscribe(events => this.householdEvents.set(events));
   }
 
-  /** Se recarga el rango actual: es lo que quiere el usuario despues de crear o borrar. */
+  /** Se recarga el rango actual: es lo que quiere el usuario después de crear o borrar. */
   refreshHouseholdEvents(): void {
     const range = this.rangeSignal();
     if (range) this.loadHouseholdEvents(range.start, range.end, true);
@@ -302,7 +302,7 @@ export class CalendarService {
     return this.householdEvents()
       .filter(event => event.date === date && kinds.includes(event.kind))
       .sort((a, b) => {
-        // Todo el dia arriba, y despues por hora: es el orden en que se lee un dia, y el
+        // Todo el día arriba, y después por hora: es el orden en que se lee un día, y el
         // que hace que una franja de 8 h no se cuele entre dos citas de la tarde.
         if (a.allDay !== b.allDay) return a.allDay ? -1 : 1;
         return (a.startTime ?? '').localeCompare(b.startTime ?? '');
@@ -351,6 +351,33 @@ export class CalendarService {
         .subscribe({
           next: () => {
             this.householdEvents.update(events => events.filter(event => event.id !== id));
+            resolve(true);
+          },
+          error: () => resolve(false)
+        });
+    });
+  }
+
+  /**
+   * Salirse de un evento ajeno (HOGARIA-SPEC 12o). Es un DELETE en la invitacion, no en el evento:
+   * `delete` del evento daria 403 y, si no lo diera, borrariria la cena de toda la casa.
+   */
+  leaveHouseholdEvent(id: string): Promise<boolean> {
+    return new Promise<boolean>(resolve => {
+      this.http
+        .delete(`${this.apiUrl}/events/${id}/attendees/me`)
+        .pipe(
+          catchError(error => {
+            this.eventsError.set(this.readError(error));
+            return of(null);
+          })
+        )
+        .subscribe({
+          next: () => {
+            // Se pide la ventana otra vez en vez de retocar la lista a mano: quien decide si un evento
+            // se ve o no es la regla de visibilidad del servidor, y replicarla aqui seria un segundo
+            // dueño de la misma verdad (que se desincroniza el día que cambie la regla).
+            this.refreshHouseholdEvents();
             resolve(true);
           },
           error: () => resolve(false)
