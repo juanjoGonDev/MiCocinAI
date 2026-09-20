@@ -3,6 +3,9 @@ import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
 import { ToastService } from '../services/toast.service';
 
+/** Última vez que se mostró un toast por código de estado. */
+const recentlyShown = new Map<number, number>();
+
 export const errorInterceptor: HttpInterceptorFn = (req, next) => {
   const toastService = inject(ToastService);
 
@@ -46,9 +49,22 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
         }
       }
 
-      // Show error toast for non-auth errors
-      if (error.status !== 401) {
-        toastService.error('Error', errorMessage);
+      // Un 429 llega en tanda (cada peticion en vuelo lo recibe), y un toast por cada
+      // una es literalmente la pantalla inutil: no se ve la app debajo. Se agrupan por
+      // mensaje y ventana, y el 429 anade cuanto hay que esperar —el `Retry-After` del
+      // server— en vez de invitar a machacar F5, que es lo que multiplica las peticiones.
+      const now = Date.now();
+      const last = recentlyShown.get(error.status) ?? 0;
+      const throttleMs = error.status === 429 ? 30_000 : 4_000;
+      if (error.status !== 401 && now - last > throttleMs) {
+        recentlyShown.set(error.status, now);
+        const retryAfter = Number(error.error?.retryAfter ?? error.headers?.get('Retry-After') ?? '');
+        toastService.error(
+          error.status === 429 ? 'Demasiadas peticiones' : 'Error',
+          error.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0
+            ? `El servidor te esta frenando. Se puede seguir en ${Math.ceil(retryAfter)} s.`
+            : errorMessage
+        );
       }
 
       return throwError(() => ({

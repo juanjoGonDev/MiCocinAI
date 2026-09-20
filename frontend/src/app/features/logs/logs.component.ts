@@ -24,11 +24,16 @@ interface FilterOption<T extends string> {
           <span
             class="logs-status"
             [class.logs-status--connected]="logService.connected()"
-            [class.logs-status--disconnected]="!logService.connected()"
+            [class.logs-status--retrying]="logService.streamStatus() === 'retrying'"
+            [class.logs-status--disconnected]="logService.streamStatus() === 'closed'"
+            data-test="logs-status"
           >
             <span class="logs-status__dot"></span>
-            {{ logService.connected() ? 'En vivo' : 'Desconectado' }}
+            {{ statusLabel() }}
           </span>
+          @if (logService.streamStatus() === 'closed') {
+            <button type="button" class="logs-reconnect" data-test="logs-reconnect" (click)="reconnect()">Reintentar la conexion</button>
+          }
           <span class="logs-count">{{ visibleCount() }} / {{ logService.logs().length }}</span>
         </div>
 
@@ -113,6 +118,7 @@ interface FilterOption<T extends string> {
           <div
             *ngFor="let entry of filtered(); trackBy: trackByEntry; let i = index"
             class="terminal__line"
+            data-test="logs-line"
             [class]="'terminal__line--' + entry.level + ' terminal__line--source-' + entry.source"
             [class.terminal__line--selected]="isSelected(entry)"
             (mousedown)="onLineMouseDown($event)"
@@ -177,6 +183,29 @@ interface FilterOption<T extends string> {
       align-items: center;
     }
 
+    /* Tres estados, no dos: «reintentando en 5 s» es accionable y «desconectado» a
+       secas era el que hacia abrir la terminal del contenedor. */
+    .logs-status--retrying .logs-status__dot {
+      background: var(--color-warning, #d98324);
+      animation: logs-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes logs-pulse {
+      from {
+        opacity: 0.35;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    .logs-reconnect {
+      border: 1px solid var(--border-default);
+      background: transparent;
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: var(--text-xs);
+      padding: var(--space-1) var(--space-2);
+      cursor: pointer;
+    }
     .logs-status {
       display: inline-flex;
       align-items: center;
@@ -508,6 +537,22 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
     textarea.select();
     document.execCommand('copy');
     document.body.removeChild(textarea);
+  }
+
+  /** 'En vivo' · 'Reintentando en 5 s' · 'Sin conexion (lo intentaba cada X s)'. */
+  statusLabel(): string {
+    const status = this.logService.streamStatus();
+    if (status === 'live') return 'En vivo';
+    if (status === 'connecting') return 'Conectando';
+    if (status === 'retrying') {
+      const ms = this.logService.retryIn();
+      return ms ? `Reintentando en ${Math.round(ms / 1000)} s` : 'Reintentando';
+    }
+    return 'Sin conexion';
+  }
+
+  reconnect(): void {
+    this.logService.connect();
   }
 
   ngOnInit(): void {

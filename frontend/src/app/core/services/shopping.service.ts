@@ -4,6 +4,7 @@ import { Observable, fromEvent } from 'rxjs';
 import { catchError, finalize, map, tap } from 'rxjs/operators';
 import { of } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { openResilientStream } from '../../core/sse';
 import { ToastService } from './toast.service';
 import { AuthService } from './auth.service';
 import {
@@ -195,15 +196,22 @@ export class ShoppingService {
    */
   openStream(path: 'lists' | `lists/${string}`, onEvent: (payload: unknown) => void): () => void {
     const token = this.auth.getToken();
-    const source = new EventSource(`${this.apiUrl}/stream/${path}?access_token=${encodeURIComponent(token ?? '')}`);
-    source.addEventListener('change', event => {
-      try {
-        onEvent(JSON.parse((event as MessageEvent).data));
-      } catch {
-        onEvent(null);
+    // El `access_token` por query sigue siendo la unica via del EventSource, pero el
+    // reconnect now is ours: un token caducado produce un 401 tras el 401, y una tanda
+    // de esos por cada pestana abierta es exactamente el bucle que deja la app sin
+    // cupo para nada mas. `maxRetries` corto: mejor «sin conexion en vivo» visible.
+    const stream = openResilientStream(`${this.apiUrl}/stream/${path}?access_token=${encodeURIComponent(token ?? '')}`, {
+      events: ['change', 'ready'],
+      maxRetries: 6,
+      onMessage: (data) => {
+        try {
+          onEvent(JSON.parse(data) as unknown);
+        } catch {
+          onEvent(null);
+        }
       }
     });
-    return () => source.close();
+    return () => stream.close();
   }
 
   // -------------------------------------------------------------- entrada por foto
