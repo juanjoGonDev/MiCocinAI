@@ -30,7 +30,11 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
             errorMessage = error.error?.message || 'Solicitud incorrecta';
             break;
           case 401:
-            errorMessage = 'No autorizado';
+            // Traducido a lo que se puede hacer, no al codigo. Un 401 callado es la peor
+            // combinacion posible: la app sigue ensenando lo que hay en el cache —el nombre, la
+            // foto, la lista— mientras toda escritura falla, que es exactamente el aspecto de una
+            // cuenta que ya no existe en el servidor (una base de datos restaurada o sustituida).
+            errorMessage = 'La sesion que guarda este navegador ya no vale. Cierra sesion y vuelve a entrar.';
             break;
           case 403:
             errorMessage = 'No tienes permiso para realizar esta acción';
@@ -62,13 +66,16 @@ export const errorInterceptor: HttpInterceptorFn = (req, next) => {
       // server— en vez de invitar a machacar F5, que es lo que multiplica las peticiones.
       const now = Date.now();
       const last = recentlyShown.get(error.status) ?? 0;
-      const throttleMs = error.status === 429 ? 30_000 : 4_000;
+      const throttleMs = error.status === 429 || error.status === 401 ? 30_000 : 4_000;
       const silent = req.context?.get(SILENT_TOAST) === true;
-      if (!silent && error.status !== 401 && now - last > throttleMs) {
+      // Un 401 contra el propio login NO se cuenta aqui: esa pantalla ya dice su mensaje al lado
+      // del campo, yrepetirlo es un mensaje que se desconfia de si mismo.
+      const authAttempt = /^\/api\/auth\/(login|register|refresh|me)$/.test(req.url);
+      if (!silent && !(error.status === 401 && authAttempt) && now - last > throttleMs) {
         recentlyShown.set(error.status, now);
         const retryAfter = Number(error.error?.retryAfter ?? error.headers?.get('Retry-After') ?? '');
         toastService.error(
-          error.status === 429 ? 'Demasiadas peticiones' : 'Error',
+          error.status === 429 ? 'Demasiadas peticiones' : error.status === 401 ? 'Sesion caducada' : 'Error',
           error.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0
             ? `El servidor te esta frenando. Se puede seguir en ${Math.ceil(retryAfter)} s.`
             : errorMessage
