@@ -94,6 +94,7 @@ test.describe('Mi cuenta', () => {
 
     await expect(page.locator('[data-test="account-photo-remove"]')).toHaveCount(0);
     await page.locator('[data-test="account-photo"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: PNG });
+    await expect(page.locator('.toast--success').filter({ hasText: 'Imagen cambiada' })).toBeVisible();
     await expect(page.locator('[data-test="account-avatar"] .avatar--photo')).toBeVisible();
 
     // La URL es una ruta del servidor, y la imagen CARGA: ahi se prueba que la ruta publica
@@ -118,6 +119,7 @@ test.describe('Mi cuenta', () => {
     await page.locator('[data-test="account-photo-remove"]').click();
     await expect(page.locator('[data-test="account-avatar"] img')).toHaveCount(0);
     await expect(page.locator('[data-test="account-avatar"] .avatar__initials')).toBeVisible();
+    await expect(page.locator('.toast--success').filter({ hasText: 'Imagen quitada' })).toBeVisible();
   });
 
   test('la contrasena se cambia aqui, y Cancelar limpia los tres campos', async ({ page }) => {

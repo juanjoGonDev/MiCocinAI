@@ -595,12 +595,18 @@ export class AccountComponent {
       const dataUrl = await avatarDataUrlFromFile(file);
       const avatar = await this.auth.uploadAvatar(dataUrl).toPromise();
       this.avatarUrl.set(avatar ?? null);
-      this.toastService.success('Foto actualizada', 'Ya aparece en el menu, la compra y la agenda.');
+      // Decir lo que ha pasado, no por cuantas pantallas se propaga: «ya aparece en el menu, la
+      // compra y la agenda» es folleto, y peor aun si resulta que la foto ni se ha guardado.
+      this.toastService.success('Imagen cambiada');
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
-      this.photoError.set(
-        message && !message.includes('Http') ? message : 'No se pudo subir la foto. Intentalo otra vez.'
-      );
+      if (message.includes('UPLOAD_WRITE_FAILED')) {
+        this.photoError.set(
+          'La imagen ha llegado al servidor, pero el servidor no ha podido escribirla en disco. La ruta donde intenta guardarla sale en sus logs.'
+        );
+      } else {
+        this.photoError.set(message && !message.includes('Http') ? message : 'No se pudo subir la foto. Intentalo otra vez.');
+      }
     } finally {
       this.uploading.set(false);
     }
@@ -612,6 +618,7 @@ export class AccountComponent {
       await this.auth.removeAvatar().toPromise();
       this.avatarUrl.set(null);
       this.photoError.set('');
+      this.toastService.success('Imagen quitada');
     } catch {
       this.photoError.set('No se pudo quitar la foto.');
     } finally {
@@ -647,7 +654,7 @@ export class AccountComponent {
         // Vuelta a sincronizar con lo que hay guardado: si el servidor recorto algo, eso es lo
         // que se ve a partir de ahora, y no lo que se escribio.
         this.nameTouched.set(false);
-        this.toastService.success('Nombre guardado', 'Asi te veran en la casa a partir de ahora.');
+        this.toastService.success('Nombre guardado');
       },
       error: () => {
         this.savingName.set(false);
