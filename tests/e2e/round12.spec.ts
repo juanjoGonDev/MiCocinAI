@@ -11,7 +11,8 @@ function watchPageErrors(page: Page): () => string {
 /**
  * Ronda 12. Dos cosas que la app hacia mal por el mismo vicio: apagar un modulo ocultaba una vista
  * que es de toda la casa (el calendario), y un chip de «quitar» se pintaba igual que un chip de
- * «poner». Las dos se comprueban aqui de punta a punta, con el servidor detras.
+ * «poner». Las dos se comprueban aqui de punta a punta, con el servidor detras. La cuenta y su
+ * avatar se fueron a `account.spec.ts` cuando /account tuvo pagina propia (ronda 13).
  */
 test.describe('el calendario es de la casa, no de la cocina', () => {
   test('con la cocina apagada queda la agenda, y no quedan los botones de comer', async ({ page }) => {
@@ -56,28 +57,6 @@ test.describe('el calendario es de la casa, no de la cocina', () => {
     await expect(page.locator('[data-test="layer-meals"]')).toHaveCount(0);
     await expect(page.locator('.meal-slot')).toHaveCount(0);
     expect(echo()).toBe('sin errores de pagina');
-  });
-
-  test('el avatar se ve en la cabecera del movil con la misma foto que en el menu', async ({ page }) => {
-    await registerAndGoto(page, '/preferences', 'r12-avatar');
-    const png = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-      'base64'
-    );
-    await page.locator('[data-test="account-photo"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: png });
-    await expect(page.locator('[data-test="account-avatar"] .avatar--photo')).toBeVisible();
-
-    // El disco con foto lleva anillo del color del nombre: si no, la foto se come el borde y la
-    // cara queda flotando sobre el fondo.
-    const ring = await page.locator('[data-test="account-avatar"] .avatar').evaluate((el) => {
-      const style = getComputedStyle(el);
-      return { shadow: style.boxShadow, border: style.borderColor };
-    });
-    expect(ring.shadow + ring.border).toMatch(/rgb|rgba/);
-
-    // Los dos sitios donde vive la cara de la persona, no solo uno.
-    await expect(page.locator('.sidebar__account app-avatar img')).toHaveCount(1);
-    await expect(page.locator('.header__profile app-avatar img')).toHaveCount(1);
   });
 });
 

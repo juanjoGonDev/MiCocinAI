@@ -58,6 +58,20 @@ test.describe('Pestañas y URL', () => {
     await expect(page.locator('.tab--active')).toContainText('Gustos');
   });
 
+  test('las sub-secciones de la cuenta también viajan en la URL', async ({ page }) => {
+    await registerAndGoto(page, '/account', 'urls-account');
+
+    await expect(page.locator('.tab--active')).toContainText('Cuenta');
+    await expect(page).not.toHaveURL(/tab=/);
+
+    await page.locator('.tab', { hasText: 'Seguridad' }).click();
+    await expect(page).toHaveURL(/[?&]tab=security/);
+
+    // Un valor que no existe no se inventa: cae en la primera, y la URL se limpia.
+    await page.goto('/account?tab=loquesea');
+    await expect(page.locator('.tab--active')).toContainText('Cuenta');
+  });
+
   test('la sección del catálogo de utensilios también viaja en la URL', async ({ page }) => {
     await registerWithHousehold(page, '/pantry?tab=utensils');
     await expect(page.locator('.utensil-group__title').first()).toContainText('Horno');

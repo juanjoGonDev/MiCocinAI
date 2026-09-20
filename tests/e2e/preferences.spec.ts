@@ -35,12 +35,16 @@ test.describe('Preferencias', () => {
   test('una pestaña por asunto, reflejada en la URL', async ({ page }) => {
     await registerAndGoto(page, '/preferences', 'prefs-tabs');
 
-    // La primera pestana es la por defecto: URL limpia. Es «Cuenta», porque por aqui se entra
-    // desde el propio avatar del menu: quien toca su cara viene por su nombre y su foto.
-    await expect(page.locator('.tab--active')).toContainText('Cuenta');
+    // La primera pestana es la por defecto: URL limpia.
+    await expect(page.locator('.tab--active')).toContainText('Perfil');
     await expect(page).not.toHaveURL(/tab=/);
-    await page.locator('.tab', { hasText: 'Perfil' }).click();
-    await expect(page).toHaveURL(/[?&]tab=profile/);
+
+    // Y la cuenta NO esta aqui: desde la ronda 13 es una pagina a parte (/account), a la que se
+    // entra pulsando tu propia cara del menu. Mezclar «quien eres» con «que comes» hacia que las
+    // dos se confundesen al buscarlas.
+    await expect(page.locator('.tab', { hasText: 'Cuenta' })).toHaveCount(0);
+    await expect(page.locator('[data-test="account-name"]')).toHaveCount(0);
+    await expect(page.locator('[data-test="account-password-new"]')).toHaveCount(0);
 
     await page.locator('.tab', { hasText: 'Alergias' }).click();
     await expect(page).toHaveURL(/[?&]tab=allergies/);
@@ -139,110 +143,6 @@ test.describe('Preferencias', () => {
     await expect(page.getByRole('button', { name: 'Descartar cambios' })).toHaveCount(0);
   });
 
-
-  test('la cuenta: nombre, foto y contrasena se cambian en Preferencias', async ({ page }) => {
-    await registerAndGoto(page, '/preferences', 'prefs-account');
-
-    // La pestana de la cuenta no tiene el boton de guardar del pie: guarda cada control el suyo,
-    // porque habla con /api/auth y no con el perfil de gustos.
-    await expect(page.getByRole('button', { name: 'Guardar preferencias' })).toHaveCount(0);
-    await expect(page.locator('[data-test="account-name"]')).toBeVisible();
-
-    // El avatar: la inicial sobre un disco de color. El color tiene que ser DISTINTO del de la
-    // letra (el fallo que esto arregla era un disco del color del fondo y letra invisible).
-    const disc = page.locator('[data-test="account-avatar"] .avatar');
-    const [background, ink] = await disc.evaluate((el) => {
-      const style = getComputedStyle(el);
-      const letters = el.querySelector('.avatar__initials');
-      return [style.backgroundColor, letters ? getComputedStyle(letters).color : ''];
-    });
-    expect(background).toBeTruthy();
-    expect(background).not.toBe('rgba(0, 0, 0, 0)');
-    expect(ink).toBeTruthy();
-    expect(ink).not.toBe(background);
-
-    // ── Renombrar ─────────────────────────────────────────────────────────
-    const name = page.locator('[data-test="account-name"]');
-    await expect(name).not.toHaveValue('');
-    await expect(page.locator('[data-test="account-name-save"]')).toBeDisabled();
-    await expect(page.locator('[data-test="account-name-cancel"]')).toHaveCount(0);
-
-    await name.fill('A');
-    await expect(page.locator('[data-test="account-name-save"]')).toBeEnabled();
-    await page.locator('[data-test="account-name-save"]').click();
-    await expect(page.locator('[data-test="account-name-error"]')).toContainText('dos caracteres');
-
-    await name.fill('Ana Belen');
-    await page.locator('[data-test="account-name-save"]').click();
-    await expect(page.locator('.toast--success').filter({ hasText: 'Nombre guardado' })).toBeVisible();
-    await expect(page.locator('[data-test="account-name-save"]')).toBeDisabled();
-
-    // El menu de la casa ya la llama asi: una sola fuente, no dos copias que se separan.
-    await expect(page.locator('.sidebar__account-name')).toHaveText('Ana Belen');
-
-    // Cancelar tira del borrador y no deja el nombre a medias
-    await name.fill('Otro nombre');
-    await page.locator('[data-test="account-name-cancel"]').click();
-    await expect(name).toHaveValue('Ana Belen');
-
-    // ── La foto ───────────────────────────────────────────────────────────
-    await expect(page.locator('[data-test="account-photo-remove"]')).toHaveCount(0);
-    const png = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-      'base64'
-    );
-    await page.locator('[data-test="account-photo"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: png });
-    await expect(page.locator('[data-test="account-avatar"] .avatar--photo')).toBeVisible();
-
-    // La URL es una ruta del propio servidor, y la imagen CARGA: eso es la prueba de que la ruta
-    // publica existe y de que un navegador no necesita el token para ver la foto.
-    const photo = page.locator('[data-test="account-avatar"] img');
-    await expect(photo).toHaveAttribute('src', /^\/api\/uploads\/avatars\/.+\.png$/);
-    await expect
-      .poll(() => photo.evaluate((el) => (el as HTMLImageElement).naturalWidth), { timeout: 10_000 })
-      .toBeGreaterThan(0);
-    await expect(page.locator('[data-test="account-photo-remove"]')).toBeVisible();
-
-    // Y en el menu de la izquierda tambien se ve la foto, no la inicial de antes.
-    await expect(page.locator('.sidebar__account app-avatar img')).toHaveCount(1);
-
-    await page.reload();
-    await expect(page.locator('[data-test="account-avatar"] .avatar--photo')).toBeVisible();
-
-    await page.locator('[data-test="account-photo-remove"]').click();
-    await expect(page.locator('[data-test="account-avatar"] img')).toHaveCount(0);
-    await expect(page.locator('[data-test="account-avatar"] .avatar__initials')).toBeVisible();
-
-    // ── La contrasena ─────────────────────────────────────────────────────
-    await expect(page.locator('[data-test="account-password-save"]')).toBeDisabled();
-    await page.locator('[data-test="account-password-current"]').fill('ClaveFalsa1');
-    await page.locator('[data-test="account-password-new"]').fill('Nueva1234');
-    await page.locator('[data-test="account-password-repeat"]').fill('Nueva1234');
-    await expect(page.locator('[data-test="account-password-save"]')).toBeEnabled();
-
-    // No coinciden: se dice aqui, antes de llamar a nadie.
-    await page.locator('[data-test="account-password-repeat"]').fill('Otra12345');
-    await page.locator('[data-test="account-password-save"]').click();
-    await expect(page.locator('[data-test="account-password-error"]')).toContainText('no coinciden');
-
-    // Floja: la regla es la del servidor, contada en la pantalla para no gastar el viaje.
-    await page.locator('[data-test="account-password-new"]').fill('nova');
-    await page.locator('[data-test="account-password-repeat"]').fill('nova');
-    await page.locator('[data-test="account-password-save"]').click();
-    await expect(page.locator('[data-test="account-password-error"]')).toContainText('mayuscula');
-
-    // Con la actual equivocada, lo que contesta el servidor, traducido.
-    await page.locator('[data-test="account-password-new"]').fill('Nueva1234');
-    await page.locator('[data-test="account-password-repeat"]').fill('Nueva1234');
-    await page.locator('[data-test="account-password-save"]').click();
-    await expect(page.locator('[data-test="account-password-error"]')).toContainText('La contrasena actual no es esa');
-
-    // Cancelar limpia los tres campos: una contrasena no se queda escrita en la pantalla.
-    await page.locator('[data-test="account-password-cancel"]').click();
-    await expect(page.locator('[data-test="account-password-current"]')).toHaveValue('');
-    await expect(page.locator('[data-test="account-password-new"]')).toHaveValue('');
-    await expect(page.locator('[data-test="account-password-repeat"]')).toHaveValue('');
-  });
 
   test('lo que falta en la cocina se sigue marcando en la despensa', async ({ page }) => {
     await registerAndGoto(page, '/preferences?tab=goal', 'prefs-kitchen');

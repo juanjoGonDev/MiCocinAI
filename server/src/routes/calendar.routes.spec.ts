@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
-import { calendarRoutes } from './calendar.routes.js';
+// Las rutas se importan DENTRO de `beforeAll`, y no arriba: una importacion estatica arrastra
+// `config/app.config.js`, que lee DATABASE_PATH al evaluarse —antes de la linea que lo pone a
+// `:memory:`— y la prueba acaba escribiendo en la BD de desarrollo del repositorio. Era la unica
+// spec de rutas con este descuido, y fallaba en cuanto alguien usaba la app en local.
 
 /**
  * Las sueltas del calendario de la casa, sobre una BD en memoria real. Lo que interesa
@@ -56,6 +59,7 @@ describe('calendario de la casa (§8f)', () => {
   const householdId = 'hh-cal';
 
   beforeAll(async () => {
+    const { calendarRoutes } = await import('./calendar.routes.js');
     const database = await import('../config/database.js');
     await database.initializeDatabase();
     closeDatabase = database.closeDatabase;
