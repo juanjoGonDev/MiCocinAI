@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, HostBinding, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import {
@@ -51,6 +51,28 @@ import {
     `
       :host {
         display: block;
+      }
+      /* La variante agenda: fuera de la celda no hay 11 px que defender, y lo que se
+         quiere es tocar la fila para editarla. Se ajusta desde :host con un atributo, en
+         vez de duplicar el HTML: las dos vistas siguen teniendo el mismo template.
+         (Sin backticks aqui dentro: cierran el literal de styles.) */
+      :host([appearance='agenda']) .cal-evt {
+        font-size: var(--text-sm);
+        line-height: 1.35;
+        padding: var(--space-2) var(--space-3);
+        border-left-width: 4px;
+        border-radius: var(--radius-md);
+        gap: var(--space-2);
+      }
+      :host([appearance='agenda']) .cal-evt__title {
+        white-space: normal;
+        font-weight: 600;
+      }
+      :host([appearance='agenda']) .cal-evt__when {
+        font-size: var(--text-xs);
+      }
+      :host([appearance='agenda']) .cal-evt__who {
+        font-size: var(--text-xs);
       }
       .cal-evt {
         display: flex;
@@ -108,8 +130,16 @@ import {
   ]
 })
 export class CalendarHouseholdEventsComponent {
+
   @Input() events: HouseholdEvent[] = [];
   @Input() dense = false;
+  /**
+   * 'cell' (dentro de una celda del mes) o 'agenda' (la lista del dia, mas grande). Va como
+   * atributo del host para que la hoja de estilos elija con :host([appearance=...]): dos
+   * aspectos del mismo componente, un solo template —lo que se duplica es el CSS, que es lo
+   * que puede cambiar sin que se olvide de hacerlo en el otro sitio.
+   */
+  @Input('appearance') @HostBinding('attr.appearance') appearance: 'cell' | 'agenda' = 'cell';
   @Output() edit = new EventEmitter<HouseholdEvent>();
 
   metaOf(event: HouseholdEvent) {

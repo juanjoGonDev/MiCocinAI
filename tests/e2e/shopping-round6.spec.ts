@@ -188,7 +188,9 @@ test.describe('Calendario de la casa', () => {
     const echo = watchPageErrors(page);
     await registerAndGoto(page, '/calendar', 'r6-calendar');
 
-    await page.locator('[data-test="agenda-add"]').click();
+    // Un unico boton de anadir, en la cabecera: apunta al dia que se esta mirando, que es
+    // lo que hacia el de abajo y por eso se fue.
+    await page.locator('[data-test="event-add"]').click();
     await page.locator('[data-test="event-title"]').fill('Carpinteria: medir el pasillo');
     // El tipo se elige en el selector de la casa (mismo control que unidades y secciones),
     // no en un `select` nativo: el nativo no lleva el color del tipo.

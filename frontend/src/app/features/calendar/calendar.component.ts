@@ -304,18 +304,39 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         </div>
 
         <!-- ══ Agenda del dia señalado ══ -->
-        <section class="cal-agenda" [attr.data-test]="'agenda'" aria-label="Agenda del dia">
+        <!-- Un solo boton para anadir, arriba, y ya apunta al dia que se esta mirando
+           (openEventModal usa anchorIso() cuando no le llega dia): dos botones de
+           «anadir» a seis lineas de distancia son dos formas de preguntar lo mismo, y la
+           de abajo se comia el encabezado de una seccion que va de lista en lista.
+           OJO: dentro de este literal no pueden aparecer backticks, cierran el string. -->
+        <section class="cal-agenda" data-test="agenda" aria-label="Agenda del dia">
           <header class="cal-agenda__head">
-            <h3 class="cal-agenda__title">Agenda · {{ anchorLabel() }}</h3>
-            <button type="button" class="cal-pill" data-test="agenda-add" (click)="openEventFor(agendaDay())">
-              <app-icon name="add" [size]="14" [label]="null" />
-              <span>Apuntar</span>
-            </button>
+            <div class="cal-agenda__who">
+              <p class="cal-agenda__eyebrow">Agenda</p>
+              <h3 class="cal-agenda__title">{{ anchorLabel() }}</h3>
+            </div>
+            @if (agendaDay().isToday) {
+              <span class="cal-agenda__today" data-test="agenda-today">Hoy</span>
+            }
+            @if (agendaDay().events.length) {
+              <span class="cal-agenda__count">{{ agendaDay().events.length }} {{ agendaDay().events.length === 1 ? 'plan' : 'planes' }}</span>
+            }
           </header>
+
           @if (agendaDay().events.length) {
-            <app-calendar-household-events [events]="agendaDay().events" (edit)="openEventModal(undefined, $event)" />
+            <div class="cal-agenda__list">
+              <app-calendar-household-events
+                [events]="agendaDay().events"
+                appearance="agenda"
+                (edit)="openEventModal(undefined, $event)"
+              />
+            </div>
           } @else {
-            <p class="cal-agenda__empty">Nada mas apuntado ese dia.</p>
+            <p class="cal-agenda__empty">
+              <app-icon name="event_note" [size]="18" [label]="null" />
+              <span>Nada mas apuntado ese dia.</span>
+              <small>«+ Evento», arriba, lo anade directamente aqui.</small>
+            </p>
           }
         </section>
       </section>
@@ -1341,6 +1362,95 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         overflow: auto;
       }
     }
+
+    /* ──────────────────────── Agenda del dia ──────────────────────── */
+    /* La seccion existe para leerla de pie y con una mano. Sin su propio hueco era una
+       lista de 11 px pegada al calendario —la variante que encaja DENTRO de una celda—
+       y nadie la veia. Aqui es tarjeta: aire, jerarquia y filas que se tocan. */
+    .cal-agenda {
+      display: grid;
+      gap: var(--space-3);
+      margin-top: var(--space-4);
+      padding: var(--space-4);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-xs);
+    }
+
+    .cal-agenda__head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .cal-agenda__who {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      margin-right: auto;
+    }
+
+    .cal-agenda__eyebrow {
+      margin: 0;
+      font-size: var(--text-xs);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-tertiary);
+    }
+
+    .cal-agenda__title {
+      margin: 0;
+      font-size: var(--text-lg);
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .cal-agenda__today,
+    .cal-agenda__count {
+      flex: 0 0 auto;
+      padding: 2px var(--space-2);
+      border-radius: var(--radius-full);
+      font-size: var(--text-xs);
+      font-weight: 600;
+      background: var(--primary-subtle);
+      color: var(--primary-dark);
+    }
+
+    .cal-agenda__count {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+    }
+
+    .cal-agenda__list {
+      display: grid;
+      gap: var(--space-2);
+    }
+
+    .cal-agenda__empty {
+      display: grid;
+      justify-items: center;
+      gap: var(--space-1);
+      margin: 0;
+      padding: var(--space-5) var(--space-4);
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: var(--text-sm);
+      background: var(--bg-tertiary);
+      border: 1px dashed var(--border-default);
+      border-radius: var(--radius-md);
+    }
+
+    .cal-agenda__empty small {
+      color: var(--text-tertiary);
+      font-size: var(--text-xs);
+    }
+
+    @media (min-width: 900px) {
+      .cal-agenda {
+        padding: var(--space-5);
+      }
+    }
   `]
 })
 export class CalendarComponent implements OnInit {
@@ -2056,10 +2166,6 @@ export class CalendarComponent implements OnInit {
 
   anchorLabel(): string {
     return labels.longDay(this.anchor());
-  }
-
-  openEventFor(day: CalendarDayView): void {
-    this.openEventModal({ iso: day.iso });
   }
 
   async saveEvent(): Promise<void> {
