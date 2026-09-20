@@ -352,6 +352,34 @@ export interface ListEvent {
   description: string;
 }
 
+/**
+ * La cara de una fila del historial, resuelta contra la sesion viva.
+ *
+ * El servidor manda ya el nombre y la foto de hoy (la instantanea de la fila es la reserva para
+ * cuando la cuenta no existe), pero entre que se sube una foto o se cambia el nombre y se vuelve a
+ * pedir la lista pueden pasar minutos de uso —y el aviso dice «foto actualizada», que se tiene que
+ * notar en la pantalla y no en la proxima visita. Por eso las filas PROPIAS se pintan con lo que
+ * hay en la senal de sesion; las de las demas personas se dejan tal cual las contesto el servidor.
+ */
+export function auditFace(
+  event: Pick<ListEvent, 'user_id' | 'user_name' | 'user_avatar' | 'description'>,
+  me: { id: string; name: string; avatar?: string | null } | null
+): { name: string; avatar?: string; description: string } {
+  const fetched = event.user_name?.trim() || 'Alguien';
+  const mine = Boolean(me?.id) && me?.id === event.user_id;
+  if (!mine) {
+    return { name: fetched, avatar: event.user_avatar ?? undefined, description: event.description };
+  }
+  const current = me?.name?.trim() || fetched;
+  // La frase del server empieza con el nombre: si se ha cambiado, se cambia tambien en la frase,
+  // y nada mas. No se reescribe el resto del texto, que es lo que la persona leyo.
+  const description =
+    fetched !== 'Alguien' && event.description.startsWith(fetched)
+      ? current + event.description.slice(fetched.length)
+      : event.description;
+  return { name: current, avatar: me?.avatar ?? event.user_avatar ?? undefined, description };
+}
+
 export type DiscountKind = 'amount' | 'percent';
 export type DiscountScope = 'all' | 'firstUnits' | 'product' | 'category';
 

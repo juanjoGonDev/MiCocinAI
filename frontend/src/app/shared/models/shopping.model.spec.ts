@@ -1,4 +1,5 @@
 import {
+  auditFace,
   formatMoney,
   productKeyOf,
   formatQuantity,
@@ -119,4 +120,38 @@ describe('productKeyOf (la clave con la que se enlaza un producto)', () => {
     expect(productKeyOf('Jamón')).not.toBe(productKeyOf('Jamón Serrano'));
     expect(productKeyOf('Leche semidesnatada')).toBe(productKeyOf('leche  semidesnatada'));
   });
+
+describe('auditFace — la cara en el historial', () => {
+  const base = { user_id: 'u-ana', user_name: 'Ana', user_avatar: '/api/uploads/avatars/ana-old.png', description: 'Ana ha añadido «Leche»' };
+
+  it('las filas de otra persona se dejan como las contesto el servidor', () => {
+    const face = auditFace(base, { id: 'u-bea', name: 'Bea', avatar: null });
+    expect(face.name).toBe('Ana');
+    expect(face.avatar).toBe('/api/uploads/avatars/ana-old.png');
+    expect(face.description).toBe('Ana ha añadido «Leche»');
+  });
+
+  it('una fila propia se pinta con el nombre y la foto de ahora', () => {
+    const face = auditFace(base, { id: 'u-ana', name: 'Ana Belén', avatar: '/api/uploads/avatars/ana-new.png' });
+    expect(face.name).toBe('Ana Belén');
+    expect(face.avatar).toBe('/api/uploads/avatars/ana-new.png');
+    // Y la frase sigue siendo legible: solo cambia quien la empieza.
+    expect(face.description).toBe('Ana Belén ha añadido «Leche»');
+  });
+
+  it('sin foto nueva no se inventa: se conserva la que vino', () => {
+    expect(auditFace(base, { id: 'u-ana', name: 'Ana' }).avatar).toBe('/api/uploads/avatars/ana-old.png');
+    // Una cuenta sin nombre no borra el de la fila.
+    expect(auditFace(base, { id: 'u-ana', name: '  ' }).name).toBe('Ana');
+  });
+
+  it('un suceso anonimo no se le asigna a quien lo mira', () => {
+    const face = auditFace({ ...base, user_name: null, user_avatar: null }, { id: 'u-ana', name: 'Ana' });
+    expect(face.name).toBe('Ana');
+    expect(face.description).toBe('Ana ha añadido «Leche»');
+    // Y si no es tuyo, se queda «Alguien».
+    expect(auditFace({ ...base, user_name: null }, { id: 'u-bea', name: 'Bea' }).name).toBe('Alguien');
+    expect(auditFace(base, null).name).toBe('Ana');
+  });
+});
 });

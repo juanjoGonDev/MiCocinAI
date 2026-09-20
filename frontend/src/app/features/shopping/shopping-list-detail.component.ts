@@ -5,10 +5,17 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { formatDateTime, formatRelative } from '../../core/time';
 import { UnitPickerComponent } from './unit-picker.component';
 import { canonicalUnit, isKnownUnit } from './unit-families';
-import { describeLineDiscount, lineDiscountOfItem, type LineDiscount } from '../../shared/models/shopping.model';
+import {
+  auditFace,
+  describeLineDiscount,
+  lineDiscountOfItem,
+  type LineDiscount,
+  type ListEvent
+} from '../../shared/models/shopping.model';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
+import { AuthService } from '../../core/services/auth.service';
 import {
   CreateItemInput,
   DiscountScope,
@@ -1113,8 +1120,8 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               <ul class="detail__audit">
                 @for (event of events(); track event.id) {
                   <li class="detail__audit-row" data-test="audit-row">
-                    <app-avatar [name]="event.user_name ?? 'Alguien'" [src]="event.user_avatar ?? undefined" size="sm" />
-                    <span class="detail__audit-text">{{ event.description }}</span>
+                    <app-avatar [name]="face(event).name" [src]="face(event).avatar" size="sm" />
+                    <span class="detail__audit-text">{{ face(event).description }}</span>
                     <span class="detail__audit-when" [title]="when(event.created_at)">{{
                       since(event.created_at)
                     }}</span>
@@ -2121,6 +2128,8 @@ export class ShoppingListDetailComponent implements OnDestroy {
   private readonly shopping = inject(ShoppingService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
+  /** Solo para el historial: las filas propias se pintan con la sesion viva. */
+  private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
 
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -2269,7 +2278,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.pasteOpen.set(false);
     const skipped = result.skipped.length;
     this.toast.success(
-      `${result.added + result.merged} lineas anadidas`,
+      `${result.added + result.merged} líneas añadidas`,
       skipped > 0 ? `${skipped} repetidas o vacias se han ignorado.` : 'Revisa las cantidades y los precios.'
     );
   }
@@ -2787,6 +2796,19 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.shopping.updateItem(item.list_id, item, { offer } as Partial<CreateItemInput>);
   }
 
+  /**
+   * La sesion viva, para el historial: ver la foto propia antigua despues de subir una nueva es
+   * peor que no ver el cambio (el aviso dijo que si). `auditFace` resuelve solo las filas propias.
+   */
+  private readonly auditMe = computed(() => {
+    const user = this.auth.currentUser();
+    return user ? { id: user.id, name: user.name, avatar: user.avatar ?? null } : null;
+  });
+
+  face(event: ListEvent): { name: string; avatar?: string; description: string } {
+    return auditFace(event, this.auditMe());
+  }
+
   /** El descuento propio de una fila, y su frase, para pintarlos en la lista. */
   lineDiscountOf(item: ShoppingListItem): LineDiscount | null {
     return lineDiscountOfItem(item);
@@ -3276,7 +3298,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.photoPreview.set(null);
     const created = applied.createdCategories.length ? ', secciones nuevas: ' + applied.createdCategories.join(', ') : '';
     this.toast.success(
-      'Lineas anadidas',
+      'Líneas añadidas',
       `${applied.added} nuevas, ${applied.merged.length} sumadas a lo que ya estaba${created}.`
     );
   }
