@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest';
 import { attendeeIdsPayload, inviteCandidates, selectedInvitees } from './event-invitations';
 
 /**
@@ -41,7 +40,7 @@ describe('inviteCandidates', () => {
 
   it('dos filas del mismo usuario no producen dos casillas', () => {
     const candidates = inviteCandidates([member('bea', 'Bea'), member('bea', 'Beatriz')], 'ana');
-    expect(candidates).toHaveLength(1);
+    expect(candidates.length).toBe(1);
     // Gana la primera fila: es la que tiene el `SELECT`, y «la que gana» tiene que ser una regla escrita.
     expect(candidates[0].name).toBe('Bea');
   });
