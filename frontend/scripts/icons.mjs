@@ -33,7 +33,9 @@ const NAMES = [
   // el panel se recorra de un vistazo con el pulgar.
   'scale', 'local_drink', 'numbers', 'inventory_2', 'kitchen',
   // El visor de logs: pausar/reanudar son botones con icono, no un glifo del sistema.
-  'play_arrow', 'pause'
+  'play_arrow', 'pause',
+  // El layout: los navItems del sidebar y de la barra inferior eran emojis del sistema.
+  'menu_book', 'smart_toy', 'logout'
 ];
 
 const OUT = join(ROOT, 'src/app/shared/components/ui/icon/icon-paths.ts');

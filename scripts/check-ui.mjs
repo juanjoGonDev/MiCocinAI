@@ -42,7 +42,6 @@ const LEGACY = {
     'frontend/src/app/features/recipes/recipes.component.ts',
     'frontend/src/app/features/settings/settings.component.ts',
     'frontend/src/app/layouts/auth-layout/auth-layout.component.ts',
-    'frontend/src/app/layouts/main-layout/main-layout.component.ts',
     'frontend/src/app/shared/components/ui/chip-select/chip-select.component.ts',
     'frontend/src/app/shared/components/ui/input/input.component.ts',
     'frontend/src/app/shared/components/ui/modal/modal.component.ts',

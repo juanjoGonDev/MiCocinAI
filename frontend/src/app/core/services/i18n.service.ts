@@ -19,6 +19,7 @@ const es: Dict = {
   'nav.settings': 'Configuración',
   'nav.preferences': 'Preferencias',
   'nav.logout': 'Cerrar sesión',
+  'nav.guest': 'Tu cuenta',
   'app.name': 'HogarIA',
 
   // Auth
@@ -131,6 +132,7 @@ const en: Dict = {
   'nav.settings': 'Settings',
   'nav.preferences': 'Preferences',
   'nav.logout': 'Log out',
+  'nav.guest': 'Your account',
   'app.name': 'HogarIA',
 
   'auth.login': 'Log in',
