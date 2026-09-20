@@ -85,9 +85,8 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
                 data-test="account-avatar"
                 (imageError)="photoBroken.set(true)"
               />
-              <span class="account__face-edit" data-test="account-avatar-edit">
-                <app-icon name="photo_camera" [size]="14" />
-                {{ avatarUrl() ? 'Cambiar' : 'Poner foto' }}
+              <span class="account__face-edit" data-test="account-avatar-edit" aria-hidden="true">
+                <app-icon name="edit" [size]="0" />
               </span>
             </button>
             <div class="account__identity-text">
@@ -427,29 +426,43 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
         outline: none;
         box-shadow: 0 0 0 2px var(--primary);
       }
+      /* Solo el icono, grande y centrado. El relleno es en porcentaje del propio disco: si manana
+         la cara mide 96 px, el icono no se come el borde —que es exactamente como se rompe un
+         hover asi cuando alguien cambia una talla en otro sitio. */
       .account__face-edit {
         position: absolute;
         inset: 0;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: var(--space-1);
+        box-sizing: border-box;
+        padding: 18%;
         border-radius: var(--radius-full);
-        background: rgba(15, 16, 18, 0.62);
+        background: rgba(15, 16, 18, 0.6);
         color: var(--text-inverse);
-        font-size: var(--text-xs);
-        font-weight: var(--font-medium);
+        /* Con size = 0 el icono vale 1em: se manda desde aqui y no con un numero fijo. */
+        font-size: 26px;
         opacity: 0;
         pointer-events: none;
+        transform: scale(0.88);
         transition: var(--transition-fast);
+      }
+      .account__face-edit app-icon {
+        display: block;
+        max-width: 100%;
+        max-height: 100%;
       }
       .account__face:hover .account__face-edit,
       .account__face:focus-visible .account__face-edit {
         opacity: 1;
+        transform: scale(1);
       }
       @media (hover: none) {
+        /* Sin puntero que avise, el boton se ensena solo: un cuadrado con una foto dentro no dice
+           «tocable» a nadie, y aqui no hay texto que lo diga. */
         .account__face-edit {
           opacity: 1;
+          background: rgba(15, 16, 18, 0.34);
         }
       }
 
