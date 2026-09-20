@@ -1734,6 +1734,24 @@ remaining environment question is answerable in one line.
       **128x128 JPEG** served through the public route, the ring, the same face in the sidebar and
       the mobile header, and the removal through the modal.
 
+### Same round, two corrections — one of them mine
+
+- [x] **The 404 was a Windows path, and nothing else.** The server the user is running prints
+      `Uploads en D:\projects\MiCocinAI\server\data\uploads`; `resolveUploadUrl` decided containment
+      with `full.startsWith(dir + '/')`, and `resolve` on Windows writes backslashes, so the check
+      never passed: the photo was written, its URL stored, the `POST` answered `200` —and every read
+      404'd. `isInside(dir, candidate, separator = sep)` says what was meant, the separator is a
+      parameter so the Windows case is a test (`uploads.spec.ts`) and not a hope, and the files
+      already on that disk light up again without re-uploading. The sandbox-reset theory written
+      above is wrong: it explained the same log lines but not `D:\`, and it was reached by
+      inspecting the wrong filesystem. Left in place, because «el diagnóstico que quedaba bien pero
+      era falso» is the lesson worth keeping here.
+- [x] **Hover = the edit icon, alone, centred.** No label: over a 64 px disc a word is either
+      truncated or a smudge. The icon is `1em` (`size = 0` on `app-icon`) governed by the overlay's
+      `font-size`, and the inset is `padding: 18%` of the disc —so if someone changes the size of the
+      face elsewhere, the icon cannot end up touching the ring. On touch (no hover) the scrim stays at
+      a lighter alpha, because a square with a photo inside does not announce itself as a button.
+
 ### How it turned out
 
 - The account chunk went from 22.7 kB to 36.7 kB raw (9.7 kB gzipped) with the editor inside it. It
