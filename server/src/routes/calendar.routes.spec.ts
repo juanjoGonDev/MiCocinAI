@@ -98,6 +98,11 @@ describe('calendario de la casa (§8f)', () => {
     expect(list[0].title).toBe(event.title);
     // El nombre de quien la escribio viaja en la lectura: es lo que pinta la burbuja.
     expect(list[0].authorName).toBe('Alice');
+    // Y su foto junto a el, para que el «de quien» sea el mismo icono en toda la app.
+    expect(list[0].authorAvatar).toBeNull();
+    db.prepare(`UPDATE users SET avatar = '/uploads/alice.png' WHERE id = ?`).run(alice.id);
+    const conFoto = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+    expect(conFoto[0].authorAvatar).toBe('/uploads/alice.png');
 
     expect((await call(alice, 'DELETE', `/events/${created.id}`)).status).toBe(200);
     expect(await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);

@@ -336,7 +336,12 @@ shoppingRoutes.get('/lists', async (c) => {
       `SELECT l.*,
               COALESCE(t.total, 0) AS totalItems,
               COALESCE(t.checked, 0) AS checkedItems,
-              COALESCE(t.priced, 0) AS pricedTotalMinor
+              COALESCE(t.priced, 0) AS pricedTotalMinor,
+              -- De quien es la lista: en el historial (y en la pestaña de la casa) la
+              -- pregunta obvia es «esta la cerro alguien o la cerré yo», y se contesta con
+              -- la cara, no con un nombre que ademas habria que traducir de un id.
+              (SELECT u.name FROM users u WHERE u.id = l.user_id)   AS ownerName,
+              (SELECT u.avatar FROM users u WHERE u.id = l.user_id) AS ownerAvatar
        FROM shopping_lists l ${totalsJoin} ${where}
        ORDER BY ${order}, l.id DESC
        LIMIT ? OFFSET ?`
@@ -398,9 +403,13 @@ shoppingRoutes.get('/lists/:id', async (c) => {
       `SELECT i.*,
               -- Los nombres van en la propia lectura: la fila de la lista dice «Quique lo
               -- cambio» sin una segunda peticion por linea, y sin eso el dato de autoria
-              -- seria un id que nadie sabe leer.
+              -- seria un id que nadie sabe leer. Y con el nombre su foto (o nada, y el
+              -- avatar saca la inicial): «quien» se reconoce por la cara antes que por el
+              -- texto, y en una fila de 44 px el nombre apenas cabe.
               (SELECT u.name FROM users u WHERE u.id = i.added_by)   AS added_by_name,
-              (SELECT u.name FROM users u WHERE u.id = i.updated_by) AS updated_by_name
+              (SELECT u.name FROM users u WHERE u.id = i.updated_by) AS updated_by_name,
+              (SELECT u.avatar FROM users u WHERE u.id = i.added_by)   AS added_by_avatar,
+              (SELECT u.avatar FROM users u WHERE u.id = i.updated_by) AS updated_by_avatar
        FROM shopping_list_items i
        WHERE i.list_id = ? ${includeDeleted ? '' : 'AND i.deleted_at IS NULL'}
        ORDER BY i.position ASC, i.created_at ASC`

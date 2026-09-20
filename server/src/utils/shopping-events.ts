@@ -67,15 +67,20 @@ export function recordEvent(
 }
 
 export function readEvents(db: Db, input: { listId: string; limit: number }) {
+  // `user_name` esta guardado en la fila: es una instantanea de cuando paso, y un «Ana
+  // renombro su perfil» no debe reescribir la historia. La foto no es historia: es un dato de
+  // la cuenta de hoy, y por eso se lee de `users` en vez de congelarse en el suceso.
   return db
     .prepare(
-      `SELECT id, list_id, user_id, user_name, action, item_name, created_at
-       FROM shopping_list_events
-       WHERE list_id = ?
+      `SELECT e.id, e.list_id, e.user_id, e.user_name, e.action, e.item_name, e.created_at,
+              u.avatar AS user_avatar
+       FROM shopping_list_events e
+       LEFT JOIN users u ON u.id = e.user_id
+       WHERE e.list_id = ?
        -- CURRENT_TIMESTAMP solo tiene resolucion de un segundo: dos sucesos de la
        -- misma pulsacion empatan, y desempatar por id (un nanoid) es aleatorio. El
        -- rowid de SQLite si es monotono por insercion, y es el orden real.
-       ORDER BY created_at DESC, rowid DESC
+       ORDER BY e.created_at DESC, e.rowid DESC
        LIMIT ?`
     )
     .all(input.listId, input.limit) as any[];

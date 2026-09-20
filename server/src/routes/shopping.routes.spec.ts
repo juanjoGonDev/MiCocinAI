@@ -1463,3 +1463,57 @@ describe('cerrar la compra con descuento de linea (§12h)', () => {
     expect(leche.variants[0].unitMinor).toBe(100);
   });
 });
+
+describe('quien escribio la linea, con cara (§12i)', () => {
+  it('la lectura lleva la foto de quien anadio y de quien toco', async () => {
+    // Hace falta un hogar comun: si no, Luis no ve la lista de Ana y su PATCH acabaria en
+    // un 404 silencioso que la prueba no llegaria a notar.
+    const hh = 'h-cara-' + Math.random().toString(36).slice(2);
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(hh, 'Hogar caras', `code-${hh}`);
+    const ana = await makeUser(`cara-ana-${hh}@hogaria.test`, hh);
+    const luis = await makeUser(`cara-luis-${hh}@hogaria.test`, hh);
+    db.prepare(`UPDATE users SET name = 'Ana', avatar = '/uploads/ana.png' WHERE id = ?`).run(ana.id);
+    db.prepare(`UPDATE users SET name = 'Luis' WHERE id = ?`).run(luis.id); // sin foto, a proposito
+
+    const list = (await data(await call(ana, 'POST', '/lists', { name: 'Mercado' }))) as any;
+    const item = (await data(await call(ana, 'POST', `/lists/${list.id}/items`, { name: 'Pan' }))) as any;
+    expect(item.added_by_avatar).toBeUndefined(); // el alta no presenta a nadie: quien llama ya se sabe
+
+    await call(luis, 'PATCH', `/lists/${list.id}/items/${item.id}`, { quantity: 3 });
+
+    const row = ((await data(await call(ana, 'GET', `/lists/${list.id}`))) as any).items[0];
+    expect(row.added_by_name).toBe('Ana');
+    expect(row.added_by_avatar).toBe('/uploads/ana.png');
+    // Y sin foto no se inventa nada: el frontend pinta la inicial con ese `null`.
+    expect(row.updated_by_name).toBe('Luis');
+    expect(row.updated_by_avatar).toBeNull();
+  });
+
+  it('la bandeja dice de quien es cada lista', async () => {
+    const hh = 'h-caras-' + Math.random().toString(36).slice(2);
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(hh, 'Hogar bandeja', `code-${hh}`);
+    const ana = await makeUser(`bandeja-ana-${hh}@hogaria.test`, hh);
+    db.prepare(`UPDATE users SET name = 'Ana', avatar = '/uploads/ana.png' WHERE id = ?`).run(ana.id);
+    const list = (await data(await call(ana, 'POST', '/lists', { name: 'Farmacia' }))) as any;
+
+    const rows = (await data(await call(ana, 'GET', '/lists?status=all'))) as any[];
+    const mine = rows.find((row) => row.id === list.id);
+    expect(mine.ownerName).toBe('Ana');
+    expect(mine.ownerAvatar).toBe('/uploads/ana.png');
+  });
+
+  it('la auditoria trae la foto actual, y el nombre congelado', async () => {
+    const ana = await makeUser('cara-audit-ana@hogaria.test');
+    const list = (await data(await call(ana, 'POST', '/lists', { name: 'Auditoria con cara' }))) as any;
+    db.prepare(`UPDATE users SET name = 'Ana', avatar = '/uploads/ana-vieja.png' WHERE id = ?`).run(ana.id);
+    await call(ana, 'POST', `/lists/${list.id}/items`, { name: 'Leche' });
+    // Ana cambia de foto despues del suceso: la auditoria no reescribe quien fue (el nombre
+    // instantaneo sigue siendo «Ana»), pero si muestra la persona de hoy.
+    db.prepare(`UPDATE users SET avatar = '/uploads/ana-nueva.png' WHERE id = ?`).run(ana.id);
+
+    const events = (await data(await call(ana, 'GET', `/lists/${list.id}/events`))) as any[];
+    expect(events.length).toBeGreaterThan(0);
+    expect(events[0].user_name).toBe('Ana');
+    expect(events[0].user_avatar).toBe('/uploads/ana-nueva.png');
+  });
+});

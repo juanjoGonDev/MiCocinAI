@@ -273,7 +273,10 @@ type CalendarEventRow = {
 const EVENT_COLUMNS =
   'id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, source';
 
-function toEvent(row: CalendarEventRow, authorName: string | null): Record<string, unknown> {
+/** Quien escribio la suelta: el nombre y su foto, resueltos de una vez para toda la lista. */
+type Author = { name: string; avatar: string | null };
+
+function toEvent(row: CalendarEventRow, author: Author | null): Record<string, unknown> {
   return {
     id: row.id,
     title: row.title,
@@ -287,7 +290,8 @@ function toEvent(row: CalendarEventRow, authorName: string | null): Record<strin
     location: row.location,
     source: row.source,
     userId: row.user_id,
-    authorName
+    authorName: author?.name ?? null,
+    authorAvatar: author?.avatar ?? null
   };
 }
 
@@ -339,14 +343,18 @@ calendarRoutes.get('/events', async (c) => {
     )
     .all(...filters) as unknown as CalendarEventRow[];
 
-  const authors = new Map<string, string>();
-  const names = db.prepare('SELECT id, name FROM users').all() as unknown as { id: string; name: string }[];
-  for (const n of names) authors.set(n.id, n.name);
+  const authors = new Map<string, Author>();
+  const names = db.prepare('SELECT id, name, avatar FROM users').all() as unknown as {
+    id: string;
+    name: string;
+    avatar: string | null;
+  }[];
+  for (const n of names) authors.set(n.id, { name: n.name, avatar: n.avatar });
 
   return c.json({
     success: true,
     data: rows.map((row) => ({
-      ...toEvent(row, authors.get(row.user_id) ?? null),
+      ...toEvent(row, authors.get(row.user_id) ?? null),  // el nombre y la foto de quien lo escribio
       // El frontend no adivina si puede editar: lo dice el servidor, que es quien sabe
       // quien es quien. Y es `editable`, no `es mio`, porque el dia que haya roles de
       // admin de casa solo hay que cambiar esta linea.
