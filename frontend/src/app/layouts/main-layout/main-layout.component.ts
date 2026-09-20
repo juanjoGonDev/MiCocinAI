@@ -39,8 +39,12 @@ interface NavItem {
           <span class="header__title-text">{{ 'app.name' | t }}</span>
         </span>
         <button type="button" class="header__profile" (click)="navigateToProfile()">
-          <app-avatar 
-            [name]="authService.userName()" 
+          <!-- La foto tambien aqui: era el unico avatar de la app que ignoraba la
+               URL del usuario, asi que en el movil se veia la inicial aunque la
+               persona tuviera foto en el sidebar. -->
+          <app-avatar
+            [name]="authService.userName()"
+            [src]="userAvatar()"
             size="sm"
           ></app-avatar>
         </button>
