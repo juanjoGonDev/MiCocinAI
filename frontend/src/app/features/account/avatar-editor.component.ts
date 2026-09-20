@@ -77,7 +77,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
             min="1"
             [max]="MAX_ZOOM"
             step="0.02"
-            [value]="zoom"
+            [value]="zoom()"
             [attr.aria-valuetext]="zoomText()"
             data-test="avatar-zoom"
             (input)="setZoom($event)"
