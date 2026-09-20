@@ -2,6 +2,7 @@ import { Component, ElementRef, effect, inject, OnInit, computed, signal, viewCh
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { daysUntil, toDayKey } from '../../core/time';
 import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
@@ -1178,7 +1179,9 @@ export class PantryComponent implements OnInit {
       unit: ingredient.unit,
       category: ingredient.category,
       location: ingredient.location,
-      expirationDate: ingredient.expirationDate ? new Date(ingredient.expirationDate).toISOString().split('T')[0] : '',
+      // `toDayKey` y no `toISOString()`: una fecha de caducidad es un DIA, y pasarla por un
+      // instante la movia media jornada arriba o abajo segun la zona del dispositivo.
+      expirationDate: toDayKey(ingredient.expirationDate),
       notes: ingredient.notes || ''
     };
     this.isIngredientModalOpen.set(true);
@@ -1346,12 +1349,15 @@ export class PantryComponent implements OnInit {
     };
     return icons[location] || '📦';
   }
+  /**
+   * Dias de calendario, no milisegundos: con `Math.ceil` sobre el instante, a las 23:00 del dia
+   * de la caducidad el yogur ya estaba «caducado» una noche antes de estarlo.
+   */
   getExpirationStatus(ingredient: Ingredient): { variant: 'error' | 'warning' | 'success'; label: string } | null {
-    if (!ingredient.expirationDate) return null;
-    const now = new Date();
-    const exp = new Date(ingredient.expirationDate);
-    const days = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    const days = daysUntil(ingredient.expirationDate);
+    if (days === null) return null;
     if (days < 0) return { variant: 'error', label: 'Caducado' };
+    if (days === 0) return { variant: 'warning', label: 'Hoy' };
     if (days <= 3) return { variant: 'warning', label: `${days}d` };
     return null;
   }

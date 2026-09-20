@@ -2,6 +2,7 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { formatDateTime, formatRelative } from '../../core/time';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
@@ -985,7 +986,9 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                   <li class="detail__audit-row" data-test="audit-row">
                     <app-avatar [name]="event.user_name ?? 'Alguien'" size="sm" />
                     <span class="detail__audit-text">{{ event.description }}</span>
-                    <span class="detail__audit-when">{{ since(event.created_at) }}</span>
+                    <span class="detail__audit-when" [title]="when(event.created_at)">{{
+                      since(event.created_at)
+                    }}</span>
                   </li>
                 }
               </ul>
@@ -3025,13 +3028,16 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (this.auditOpen()) this.shopping.loadEvents(this.listId);
   }
 
+  /**
+   * El reloj de la auditoria es relativo «a ojo» y absoluto al mantener el dedo: una hora
+   * mal situada en la zona del dispositivo se nota en cuanto se la escribe entera.
+   */
   since(value: string): string {
-    const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
-    if (minutes < 1) return 'ahora';
-    if (minutes < 60) return `hace ${minutes} min`;
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return `hace ${hours} h`;
-    return `hace ${Math.round(hours / 24)} d`;
+    return formatRelative(value);
+  }
+
+  when(value: string): string {
+    return formatDateTime(value);
   }
 }
 

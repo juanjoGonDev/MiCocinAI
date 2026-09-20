@@ -1,6 +1,7 @@
 import { Component, inject, signal, OnInit, OnDestroy, AfterViewChecked, ElementRef, ViewChild, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { formatTimePrecise, timeZoneLabel } from '../../core/time';
 import { LogService, LogEntry, LogLevel, LogSource } from '../../core/services/log.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
@@ -125,7 +126,9 @@ interface FilterOption<T extends string> {
             (click)="onLineClick($event, entry, i)"
             title="Clic: seleccionar · Ctrl/Cmd: añadir o quitar · Mayús: seleccionar rango"
           >
-            <span class="terminal__time">{{ formatTime(entry.timestamp) }}</span>
+            <span class="terminal__time" [title]="formatTime(entry.timestamp) + ' · ' + timeZoneName()">{{
+              formatTime(entry.timestamp)
+            }}</span>
             <span class="terminal__source">{{ entry.source === 'server' ? '[SRV]' : '[CLI]' }}</span>
             <span class="terminal__level">{{ levelTag(entry.level) }}</span>
             <span class="terminal__msg">{{ entry.message }}</span>
@@ -595,16 +598,15 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.clearSelection();
   }
 
+  /**
+   * La hora del log se formatea en la zona del dispositivo y se ve en el encabezado cual es:
+   * si no, contrastar el log del movil con el del server (que habla UTC) es un pasatiempo.
+   */
   formatTime(iso: string): string {
-    try {
-      const d = new Date(iso);
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
-      const ss = String(d.getSeconds()).padStart(2, '0');
-      const ms = String(d.getMilliseconds()).padStart(3, '0');
-      return `${hh}:${mm}:${ss}.${ms}`;
-    } catch { return iso; }
+    return formatTimePrecise(iso);
   }
+
+  readonly timeZoneName = timeZoneLabel;
 
   levelTag(level: string): string {
     return level.toUpperCase().slice(0, 5);

@@ -2,6 +2,7 @@ import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
+import { formatRelative } from '../../core/time';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -1152,12 +1153,9 @@ export class ShoppingListsComponent {
     this.toast.info('Lista borrada', 'El historial de precios sigue intacto.');
   }
 
+  // La hora la pone `core/time`, en la zona detectada del navegador. Cada pantalla que hacıa
+  // su propio `new Date(...)` era una pantalla con la hora torcida.
   since(value: string): string {
-    const minutes = Math.max(0, Math.round((Date.now() - new Date(value).getTime()) / 60000));
-    if (minutes < 1) return 'ahora';
-    if (minutes < 60) return `hace ${minutes} min`;
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return `hace ${hours} h`;
-    return `hace ${Math.round(hours / 24)} d`;
+    return formatRelative(value);
   }
 }
