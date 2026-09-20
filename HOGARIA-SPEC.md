@@ -1583,6 +1583,56 @@ that runs; what only a pair of eyes can decide says so.
 - [ ] Not verified here, and it cannot be: whether the tint reads as *nice* rather than merely legal,
       and how the crop behaves on a face that is not centred. That is the preview's job.
 
+## 12l. Round 13 checklist — the person gets a page, the history says *now*, and the filter keeps its distance
+
+### The layer row was flush against the card
+
+- [ ] `.cal-layers` sits inside `.calendar__panel`, which has no padding of its own — every band
+      there sets its own 16 px laterally (`.cal-top`, `.cal-strip`). The layer row never did, so the
+      filter chips touched the border of the card and read as something outside the screen.
+
+### Who acted is resolved to today's name
+
+- [ ] `readEvents` selects `COALESCE(u.name, e.user_name)`: the feed shows the name the person uses
+      now, and the row's snapshot stays in the table as the fallback for an account that no longer
+      exists. Round 11 froze the name "so a rename cannot rewrite history"; in a household feed a
+      stale first name on your own line is not history, it is a bug — the audit trail keeps the
+      snapshot, the screen resolves it.
+- [ ] The client paints its *own* rows from the live session (`auditFace` in the shopping model, with
+      a pure spec): a rename or an uploaded photo must show in the history without a refetch, or the
+      success toast lied.
+- [ ] `ha anadido` / `lineas anadidas` — the ñ and the accents were missing in the two server
+      sentences and the two frontend toasts that print them.
+
+### Mi cuenta, outside Preferences
+
+- [ ] `/account` is its own page with three sub-sections — **Cuenta** (name, photo), **Seguridad**
+      (password, ending this session) and **Información** (what the app keeps in this browser, the
+      version, the id, the household link) — reached by tapping the face in the sidebar. Preferences
+      goes back to being about the *diner*: perfil, alergias, gustos, objetivo.
+- [ ] The tab travels in the URL (`?tab=security`) with the default left clean, as everywhere else,
+      and `/account` is core: no module switch hides your own account.
+- [ ] The account state is seeded from the session signal through an `effect`, not once in the
+      constructor — the user may still be loading from cache when the page opens.
+
+### The dev database was a test dependency
+
+- [ ] `calendar.routes.spec.ts` imported its routes statically, so `app.config.js` was evaluated
+      *before* its own `process.env.DATABASE_PATH = ':memory:'` line: the spec ran on
+      `server/data/hogaria.sqlite`. Any local use of the app (a registration seeds
+      `shopping_categories`) then broke its `DELETE FROM users` cleanup with an FK error — nine red
+      tests whose only cause was that somebody had used the product. Dynamic import, like its
+      neighbours.
+
+### Tests
+
+- [ ] `tests/e2e/account.spec.ts`: entering through the sidebar face, the three tabs in the URL,
+      renaming visible in the menu *and* in the history line without a reload, uploading a real PNG
+      and reading it back through the public route, the ring around the photo, the password rules and
+      the Cancelar that wipes the fields, and the storage inventory.
+- [ ] `preferences.spec.ts` asserts the opposite: the account is not there any more.
+- [ ] `shopping.routes.spec.ts` proves the rename shows in the feed while the stored snapshot stays.
+
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
   (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
