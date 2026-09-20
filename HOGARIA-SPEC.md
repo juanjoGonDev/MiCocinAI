@@ -1245,6 +1245,67 @@ same milk has another name and another price at Mercadona than at Lidl.
       guard itself, and the discount/multi-target behaviour read back from the API by hand.
 
 
+## 12h. Round 10 checklist — one control per decision, a discount that belongs to the line, and clocks that mean what they say
+
+Four things from the screenshot of the line sheet, and the fourth was app-wide.
+
+### The line sheet (units)
+
+- [ ] The unit control is **one** control. The quick chips (`ud kg L pack`) and the picker below
+      repeated the same value twice, and a row that offers the same choice twice is a row that
+      disagrees with itself the moment one of the two is stale.
+- [ ] Families: the picker groups by what is being measured —peso, volumen, unidades, formatos,
+      medidas de cocina— and choosing the family **selects its default unit** (Peso → kg, Volumen
+      → L, Unidades → ud). Refining inside the family is one more tap, not another control, and
+      writing «bote de 400 g» by hand keeps working because a unit that is not in the catalog is a
+      unit someone actually uses.
+- [ ] `frontend/src/app/features/shopping/unit-picker.component.ts` is a component, not a fourth
+      copy of the pattern: three screens pick units (list line, pantry, photo review).
+
+### The line discount
+
+- [ ] `shopping_list_items` gains `disc_kind`, `disc_value_minor`, `disc_percent_bps`, `disc_units`
+      (added with `addColumnIfMissing`, no rebuild —the table already survived one of those and it
+      does not need to survive two in the same round).
+- [ ] `lineDiscount` in `utils/list-discount.ts`, applied **after** the offer and **before** the
+      basket coupon, which is the order a till uses: `2x1 → -10 % sobre 2 unidades → -2,50 € de la
+      cesta`. Applied in the other order, the same receipt gives a different number, and there is no
+      way to argue with it afterwards.
+- [ ] Percent over the first N units (`disc_units`) exists because that is a real sign («50 % en la
+      segunda unidad») and without it the only honest option was to lie about the whole line.
+- [ ] Clamped and said: a 3 € discount on a 2,85 € line lowers it to 0,00 and the description says
+      so; it never goes negative and never refunds the rest of the basket.
+- [ ] `createItemSchema`/`updateItemSchema` take `discount` (and `discount: null` removes it, which
+      is why it is not a `COALESCE`); `PATCH` writes the four columns; `estimate` returns
+      `lineDiscountMinor` and `lineDiscountDescription` per row; the audit trail logs
+      `item.discount`.
+- [ ] The sheet's «Oferta de la tienda» block becomes a discount block with the four kinds
+      (oferta, porcentaje, importe, ninguna), a live «de 2,85 € a 2,56 €» line before saving, and
+      autosave like every other field in that sheet.
+
+### Clocks
+
+- [ ] The server stored UTC in a column without saying so: `2026-09-20 09:44:18` has no zone, so the
+      browser read it as *local* and everything moved by the offset —in Madrid, two hours: a list
+      saved a second ago said «hace 2 horas» and the log viewer printed tomorrow's timestamps.
+      The fix is at the boundary: `timestamp.middleware.ts` rewrites naive `YYYY-MM-DD HH:MM:SS`
+      (and `T…` without zone) into ISO with `Z` on the way out, for JSON responses only. Date-only
+      strings are left alone on purpose: `2026-09-20` is a day on a calendar, not an instant, and
+      adding a zone to it would move the lunch to the previous day.
+- [ ] `frontend/src/app/core/time.ts` owns what the client knows: `clientTimeZone()` (Intl, detected,
+      not typed), `parseInstant` (Z or naive-UTC), `formatTime`/`formatDateTime`/`formatDay` and a
+      `formatRelative` that says «hace 3 min», «ayer a las 19:14» or «16 de sept» by distance. Every
+      hand-rolled `new Date(value)` in a component goes through it: the tray's «Guardado», the
+      detail's, the log viewer's clock, the pantry's expiration chip.
+- [ ] Calendar dates keep the local-day rule from `calendar.util.ts` (`toISODate` from local parts):
+      that file already stopped the UTC-shift bug for meals, and the same rule applies to expiration
+      and receipt dates —a product does not expire one day earlier because you fly to Lisbon.
+- [ ] Tests: the middleware on a Hono app (naive → Z, date-only untouched, `text/event-stream`
+      skipped, non-JSON body skipped), the engine table for line discounts (order, clamp, per-units
+      slice), `time.spec.ts` in Jasmine for parse/format/relative, and the full-stack suite gains a
+      check that the API never answers with a zone-less timestamp.
+
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Per-line discounts**: a discount that belongs to *one row* with its own value («el jamón, 2 €
