@@ -387,6 +387,20 @@ async function runMigrations(db: Database.Database): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_calendar_events_date ON calendar_events(date, kind);
     CREATE INDEX IF NOT EXISTS idx_calendar_events_household ON calendar_events(household_id, date);
     CREATE INDEX IF NOT EXISTS idx_calendar_events_user ON calendar_events(user_id, date);
+    -- Quien mas esta en la suelta (HOGARIA-SPEC 12o). El autor NO se guarda aqui: es el autor, y
+    -- mezclar los dos papeles haria que «salirme del evento» pudiera borrarlo.
+    CREATE TABLE IF NOT EXISTS calendar_event_attendees (
+      event_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      added_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (event_id, user_id),
+      FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    -- «Mis eventos, incluidos los que me invitaron» se resuelve con este indice: sin el, la
+    -- subconsulta de visibilidad seria un escaneo de toda la tabla en cada carga del calendario.
+    CREATE INDEX IF NOT EXISTS idx_calendar_attendees_user ON calendar_event_attendees(user_id, event_id);
 
 
     -- Secciones de la lista. Son dato y no constante del frontend porque el que tiene

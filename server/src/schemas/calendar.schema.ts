@@ -1,66 +1,72 @@
 import { z } from 'zod';
+import { DATE_PATTERN, formArray, formBool, formColor, formDate, formDefault, formField, formList, formNumber, formPartial, formText, formTime, optionalDate, requiredText } from './form.js';
 
-const mealTypeEnum = z.enum(['breakfast', 'lunch', 'dinner', 'snack']);
+/** Orden del dia en Espana: la merienda va antes que la cena (HOGARIA-SPEC 12o). */
+const mealTypeEnum = z.enum(['breakfast', 'lunch', 'snack', 'dinner']);
 const goalTypeEnum = z.enum([
   'balanced', 'weight-loss', 'weight-gain', 'muscle-gain', 'maintenance', 'variety', 'custom'
 ]);
 const goalFrequencyEnum = z.enum(['daily', 'weekly']);
 
 const customGoalSchema = z.object({
-  name: z.string().min(1).max(100),
-  target: z.number().positive(),
-  unit: z.string().max(20),
-  frequency: goalFrequencyEnum.default('daily')
+  name: requiredText(100, 'Objetivo'),
+  target: formNumber({ positive: true }),
+  unit: formText(20, 'Unidad'),
+  frequency: formDefault(goalFrequencyEnum, 'daily')
 });
 
 const nutritionalGoalsSchema = z.object({
-  type: goalTypeEnum.default('balanced'),
-  dailyCalories: z.number().positive().optional(),
-  dailyProtein: z.number().positive().optional(),
-  dailyCarbs: z.number().positive().optional(),
-  dailyFat: z.number().positive().optional(),
-  restrictions: z.array(z.string()).optional().default([]),
-  customGoals: z.array(customGoalSchema).optional().default([])
+  type: formDefault(goalTypeEnum, 'balanced'),
+  dailyCalories: formNumber({ positive: true }),
+  dailyProtein: formNumber({ positive: true }),
+  dailyCarbs: formNumber({ positive: true }),
+  dailyFat: formNumber({ positive: true }),
+  restrictions: formArray(z.string()),
+  customGoals: formArray(customGoalSchema)
 });
 
 const mealSchema = z.object({
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD format'),
+  date: formDate('Fecha'),
   mealType: mealTypeEnum,
-  recipeId: z.string().optional().nullable(),
-  customMeal: z.string().max(200).optional().nullable(),
-  time: z.string().regex(/^\d{2}:\d{2}$/, 'Time must be HH:mm format').optional().nullable(),
-  servings: z.number().int().positive().default(1),
-  notes: z.string().max(500).optional().nullable()
+  recipeId: formText(40, 'Receta'),
+  customMeal: formText(200, 'Plato'),
+  time: formTime('Hora'),
+  servings: formNumber({ int: true, positive: true }),
+  notes: formText(500, 'Notas')
 });
 
 // Calendar schemas
 export const createCalendarSchema = z.object({
-  weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  goals: nutritionalGoalsSchema.optional()
+  weekStart: formDate('weekStart'),
+  goals: formField(nutritionalGoalsSchema)
 });
 
 export const updateCalendarSchema = z.object({
-  goals: nutritionalGoalsSchema.optional()
+  goals: formField(nutritionalGoalsSchema)
 });
 
 export const addMealSchema = mealSchema;
 
+/**
+ * Todo opcional, y todo admite `null` para PODER quitarlo: con `.optional()` a secas borrar la hora
+ * de una comida era imposible (el frontend mandaba `undefined`, que significa «no tocar»).
+ */
 export const updateMealSchema = z.object({
-  recipeId: z.string().optional().nullable(),
-  customMeal: z.string().max(200).optional().nullable(),
-  time: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
-  servings: z.number().int().positive().optional(),
-  notes: z.string().max(500).optional().nullable(),
-  completed: z.boolean().optional()
+  recipeId: formText(40, 'Receta'),
+  customMeal: formText(200, 'Plato'),
+  time: formTime('Hora'),
+  servings: formNumber({ int: true, positive: true }),
+  notes: formText(500, 'Notas'),
+  completed: formBool()
 });
 
 export const completeMealSchema = z.object({
-  completed: z.boolean()
+  completed: z.boolean({ error: 'completed: true o false' })
 });
 
 export const calendarFilterSchema = z.object({
-  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
+  startDate: optionalDate('startDate'),
+  endDate: optionalDate('endDate')
 });
 
 export const updateGoalsSchema = nutritionalGoalsSchema;
@@ -74,26 +80,24 @@ export type CalendarFilterInput = z.infer<typeof calendarFilterSchema>;
 export type UpdateGoalsInput = z.infer<typeof updateGoalsSchema>;
 
 /**
- * Sueltas del calendario de la casa (HOGARIA-SPEC §8f). `meal` esta en la lista de
- * tipos pero NO se puede crear por aqui: la comida la manda el plan semanal, y si
- * existiera una fila suelta por plato habria dos verdades que se desincronizan en
- * cuanto alguien cambie la cena.
+ * Sueltas del calendario de la casa (HOGARIA-SPEC §8f). `meal` esta en la lista de tipos pero NO se
+ * puede crear por aqui: la comida la manda el plan semanal, y si existiera una fila suelta por plato
+ * habria dos verdades que se desincronizan en cuanto alguien cambie la cena.
  */
 export const CALENDAR_EVENT_KINDS = ['meal', 'shopping', 'home', 'appointment', 'personal', 'other'] as const;
 export type CalendarEventKind = (typeof CALENDAR_EVENT_KINDS)[number];
 const eventKindEnum = z.enum(CALENDAR_EVENT_KINDS);
-const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Hora debe ser HH:MM');
-const hexColor = z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Color debe ser #rrggbb');
-const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+const eventUserId = z.string().trim().min(1, 'Sin identificador').max(40);
 
 export const calendarEventFilterSchema = z.object({
-  from: z.string().regex(dateRe, 'Fecha debe ser AAAA-MM-DD'),
-  to: z.string().regex(dateRe, 'Fecha debe ser AAAA-MM-DD'),
-  // Coma de tipos. Un tipo que no existe se ignora en vez de reventar: es un filtro, no
-  // una escritura, y lo que se pide al cambiar de pestaña es "ensename lo que sepas".
+  from: formDate('from'),
+  to: formDate('to'),
+  // Coma de tipos. Un tipo que no existe se ignora en vez de reventar: es un filtro, no una
+  // escritura, y lo que se pide al cambiar de pestana es «ensename lo que sepas».
   kinds: z
     .string()
-    .optional()
+    .trim()
+    .nullish()
     .transform((value) =>
       !value
         ? ([] as CalendarEventKind[])
@@ -109,21 +113,27 @@ export const calendarEventFilterSchema = z.object({
 
 /** Campos, sin el refine cruzado: asi el PATCH puede reutilizarlos con `.omit()`. */
 const calendarEventFields = z.object({
-    title: z.string().trim().min(1, 'Titulo requerido').max(120),
-    kind: eventKindEnum.default('other'),
-    date: z.string().regex(dateRe, 'Fecha debe ser AAAA-MM-DD'),
-    startTime: timeSchema.optional(),
-    endTime: timeSchema.optional(),
-    allDay: z.union([z.coerce.number().int().min(0).max(1), z.boolean()]).optional(),
-    color: hexColor.optional(),
-    notes: z.string().trim().max(500).optional(),
-    location: z.string().trim().max(120).optional(),
-    sharedWithHousehold: z.boolean().optional()
+  title: requiredText(120, 'Titulo'),
+  kind: formDefault(eventKindEnum, 'other'),
+  date: formDate('Dia'),
+  startTime: formTime('Desde'),
+  endTime: formTime('Hasta'),
+  allDay: formBool(),
+  color: formColor(),
+  notes: formText(500, 'Notas'),
+  location: formText(120, 'Sitio'),
+  sharedWithHousehold: formBool(),
+  /**
+   * Quien mas entra en el evento (HOGARIA-SPEC 12o). `null` y `[]` lo dejan sin invitados, y que
+   * `undefined` signifique «no tocar» es lo que hace que el dialog pueda guardar el titulo sin
+   * desinvitar a media casa por accidente.
+   */
+  attendeeIds: formList(eventUserId)
 });
 
 // OJO: `.omit()` de zod 4 no puede usarse sobre un objeto con `.refine()` — por eso las
 // horas se validan aparte (`compareEventTimes`) y el schema de arriba queda limpio.
-function compareEventTimes(value: { startTime?: string; endTime?: string }): boolean {
+function compareEventTimes(value: { startTime?: string | null; endTime?: string | null }): boolean {
   return !value.startTime || !value.endTime || value.startTime <= value.endTime;
 }
 
@@ -133,9 +143,7 @@ export const createCalendarEventSchema = calendarEventFields.superRefine((value,
   }
 });
 
-export const updateCalendarEventSchema = calendarEventFields
-  .omit({ sharedWithHousehold: true })
-  .partial()
+export const updateCalendarEventSchema = formPartial(calendarEventFields.omit({ sharedWithHousehold: true }))
   .superRefine((value, ctx) => {
     if (Object.keys(value).length === 0) {
       ctx.addIssue({ code: 'custom', message: 'Nada que actualizar' });
@@ -147,3 +155,7 @@ export const updateCalendarEventSchema = calendarEventFields
 
 export type CalendarEventFilter = z.infer<typeof calendarEventFilterSchema>;
 export type CreateCalendarEvent = z.infer<typeof createCalendarEventSchema>;
+export type UpdateCalendarEvent = z.infer<typeof updateCalendarEventSchema>;
+
+/** Se exporta para que el contrato de formularios compruebe el patron de fecha en un solo sitio. */
+export { DATE_PATTERN };

@@ -57,7 +57,9 @@ export function ensureWeekCalendar(
   db: SqlDb,
   userId: string,
   date: unknown,
-  goals?: Record<string, unknown>
+  // `| null` porque un goals de formulario puede venir vacio, y «vacio» aqui es «sin objetivos», no
+  // «no tocar»: la fila se crea con `{}` y ya esta.
+  goals?: Record<string, unknown> | null
 ): WeekCalendarRow | null {
   const weekStart = weekStartOf(date);
   if (!weekStart) return null;

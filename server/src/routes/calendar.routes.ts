@@ -13,6 +13,8 @@ import {
   updateCalendarEventSchema
 } from '../schemas/calendar.schema.js';
 import { ensureWeekCalendar } from '../utils/week-calendar.js';
+import { readForm } from '../utils/form-body.js';
+import { describeIssues } from '../schemas/form.js';
 import type { AppEnv } from '../types/hono-env.js';
 
 const calendarRoutes = new Hono<AppEnv>();
@@ -40,12 +42,13 @@ calendarRoutes.get('/', async (c) => {
     FROM meals m
     LEFT JOIN recipes r ON r.id = m.recipe_id
     WHERE m.calendar_id = ?
-    ORDER BY m.date, 
-      CASE m.meal_type 
-        WHEN 'breakfast' THEN 1 
-        WHEN 'lunch' THEN 2 
-        WHEN 'dinner' THEN 3 
-        WHEN 'snack' THEN 4 
+    ORDER BY m.date,
+      -- El orden del dia: merienda antes que cena. Ver MEAL_ORDER en el modelo del frontend.
+      CASE m.meal_type
+        WHEN 'breakfast' THEN 1
+        WHEN 'lunch' THEN 2
+        WHEN 'snack' THEN 3
+        WHEN 'dinner' THEN 4
       END
   `).all(calendar.id);
 
@@ -93,8 +96,8 @@ calendarRoutes.get('/range', async (c) => {
       CASE m.meal_type
         WHEN 'breakfast' THEN 1
         WHEN 'lunch' THEN 2
-        WHEN 'dinner' THEN 3
-        WHEN 'snack' THEN 4
+        WHEN 'snack' THEN 3
+        WHEN 'dinner' THEN 4
       END,
       m.time
   `).all(startDate, endDate, userId);
@@ -122,8 +125,12 @@ calendarRoutes.get('/range', async (c) => {
 // POST /api/calendar
 calendarRoutes.post('/', async (c) => {
   const userId = c.get('userId');
-  const body = await c.req.json();
-  const input = createCalendarSchema.parse(body);
+  // `readForm` y no `createCalendarSchema.parse(body)`: el `parse` lanza, y un 500 con stack por un
+  // hueco que el formulario anunciaba como opcional es exactamente la confusion que reporto el
+  // usuario al decir que «el calendario da error si no mandas todos los campos».
+  const parsed = await readForm(c, createCalendarSchema, 'Calendario');
+  if (!parsed.ok) return parsed.response;
+  const input = parsed.data;
 
   const db = getDatabase();
 
@@ -145,8 +152,9 @@ calendarRoutes.post('/', async (c) => {
 // POST /api/calendar/meals
 calendarRoutes.post('/meals', async (c) => {
   const userId = c.get('userId');
-  const body = await c.req.json();
-  const input = addMealSchema.parse(body);
+  const parsed = await readForm(c, addMealSchema, 'Comida');
+  if (!parsed.ok) return parsed.response;
+  const input = parsed.data;
 
   const db = getDatabase();
   const id = nanoid();
@@ -160,10 +168,23 @@ calendarRoutes.post('/meals', async (c) => {
     return c.json({ success: false, message: 'date debe ser una fecha real YYYY-MM-DD' }, 400);
   }
 
+  // Los huecos se escriben como NULL: better-sqlite3 lanza con undefined, y «no he rellenado el
+  // opcional» es precisamente el caso en el que el formulario no manda nada. En servings el hueco
+  // vale 1, porque la columna suma calorias y «sin valor» ahi significa «una racion».
   db.prepare(`
     INSERT INTO meals (id, calendar_id, date, meal_type, recipe_id, custom_meal, time, servings, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(id, calendar.id, input.date, input.mealType, input.recipeId, input.customMeal, input.time, input.servings, input.notes);
+  `).run(
+    id,
+    calendar.id,
+    input.date,
+    input.mealType,
+    input.recipeId ?? null,
+    input.customMeal ?? null,
+    input.time ?? null,
+    input.servings ?? 1,
+    input.notes ?? null
+  );
 
   const meal = db.prepare('SELECT * FROM meals WHERE id = ?').get(id);
 
@@ -173,8 +194,9 @@ calendarRoutes.post('/meals', async (c) => {
 // PATCH /api/calendar/meals/:id
 calendarRoutes.patch('/meals/:id', async (c) => {
   const id = c.req.param('id');
-  const body = await c.req.json();
-  const input = updateMealSchema.parse(body);
+  const parsed = await readForm(c, updateMealSchema, 'Comida');
+  if (!parsed.ok) return parsed.response;
+  const input = parsed.data;
 
   const db = getDatabase();
 
@@ -183,7 +205,11 @@ calendarRoutes.patch('/meals/:id', async (c) => {
 
   if (input.recipeId !== undefined) { updates.push('recipe_id = ?'); values.push(input.recipeId); }
   if (input.customMeal !== undefined) { updates.push('custom_meal = ?'); values.push(input.customMeal); }
-  if (input.servings !== undefined) { updates.push('servings = ?'); values.push(input.servings); }
+  // Faltaba esta linea: el dialog de editar mandaba `time` y la ruta no lo escribia NUNCA, asi que
+  // cambiar la hora de una comida era un «Comida actualizada» que no cambiaba nada. `null` si vale,
+  // y vale para quitarla —que hasta aqui era lo unico que no se podia hacer.
+  if (input.time !== undefined) { updates.push('time = ?'); values.push(input.time); }
+  if (input.servings !== undefined) { updates.push('servings = ?'); values.push(input.servings ?? 1); }
   if (input.notes !== undefined) { updates.push('notes = ?'); values.push(input.notes); }
   if (input.completed !== undefined) { 
     updates.push('completed = ?'); 
@@ -218,15 +244,16 @@ calendarRoutes.delete('/meals/:id', async (c) => {
 // PATCH /api/calendar/goals
 calendarRoutes.patch('/goals', async (c) => {
   const userId = c.get('userId');
-  const body = await c.req.json();
-  const input = updateGoalsSchema.parse(body);
+  const parsed = await readForm(c, updateGoalsSchema, 'Objetivos');
+  if (!parsed.ok) return parsed.response;
+  const input = parsed.data;
 
   const db = getDatabase();
 
   // `weekStart` es opcional: el calendario que se está mirando, no «el último».
   // Antes, si la semana no tenía fila, respondía 404 y la interfaz lo enseñaba
   // como un guardado correcto igualmente.
-  const { weekStart } = body as { weekStart?: string };
+  const { weekStart } = parsed.body as { weekStart?: string };
   const calendar = ensureWeekCalendar(
     db,
     userId,
@@ -276,6 +303,20 @@ const EVENT_COLUMNS =
 /** Quien escribio la suelta: el nombre y su foto, resueltos de una vez para toda la lista. */
 type Author = { name: string; avatar: string | null };
 
+/** Un invitado. Lleva id porque el dialog tiene que poder volver a marcarlo sin otra peticion. */
+type Attendee = Author & { id: string };
+
+/**
+ * Un booleano de formulario en la columna 0/1 de SQLite. `flag` existe porque el schema acepta
+ * `true`/`false`/`null`/ausente (y la URL, `1`/`0`), y cada ruta que lo convierta a mano acaba
+ * escribiendo `input.allDay === true || input.allDay === 1` —que es la linea que dejo de compilar
+ * en cuanto el campo admitio `null`, y que alguien volveria a escribir igual manana.
+ */
+function flag(value: unknown, whenMissing: 0 | 1): 0 | 1 {
+  if (value === undefined || value === null) return whenMissing;
+  return value === true || value === 1 || value === '1' || value === 'true' ? 1 : 0;
+}
+
 function toEvent(row: CalendarEventRow, author: Author | null): Record<string, unknown> {
   return {
     id: row.id,
@@ -300,15 +341,87 @@ function toEvent(row: CalendarEventRow, author: Author | null): Record<string, u
  * `household_id` NO viene del token: se lee de `users`, igual que en la compra, porque
  * cambiar de casa a mitad de temporada no puede dejar eventos huerfanos.
  */
+/** Subconsulta comun a las dos formas del ambito: «me invitaron a esto». */
+const INVITED_CLAUSE =
+  'id IN (SELECT event_id FROM calendar_event_attendees WHERE user_id = ?)';
+
 function eventScope(userId: string) {
   const db = getDatabase();
   const user = db.prepare('SELECT household_id AS hid FROM users WHERE id = ?').get(userId) as
     | { hid: string | null }
     | undefined;
   const householdId = user?.hid ?? null;
+  // Un evento al que te han invitado se ve, casa o no casa: una invitacion que no se ve es una
+  // invitacion que no ha funcionado, y esa es justo la pregunta que hace el usuario al invitar.
   return householdId
-    ? { clause: '(household_id = ? OR user_id = ?)', params: [householdId, userId], userId, householdId }
-    : { clause: 'user_id = ?', params: [userId], userId, householdId: null };
+    ? {
+        clause: `(household_id = ? OR user_id = ? OR ${INVITED_CLAUSE})`,
+        params: [householdId, userId, userId],
+        userId,
+        householdId
+      }
+    : { clause: `(user_id = ? OR ${INVITED_CLAUSE})`, params: [userId, userId], userId, householdId: null };
+}
+
+/**
+ * Los invitados de las sueltas, de una vez para toda la lista (no una consulta por evento, que en
+ * la vista de mes son 42 dias). El autor NO esta aqui: lo ve por ser el autor, y guardarlo en la
+ * misma tabla permitiria que «salir del evento» le quitara su propio evento.
+ */
+function attendeesByEvent(db: ReturnType<typeof getDatabase>, eventIds: string[]): Map<string, Attendee[]> {
+  const byEvent = new Map<string, Attendee[]>();
+  if (!eventIds.length) return byEvent;
+  const marks = eventIds.map(() => '?').join(', ');
+  const rows = db
+    .prepare(
+      `SELECT a.event_id AS eventId, u.id, u.name, u.avatar
+       FROM calendar_event_attendees a
+       JOIN users u ON u.id = a.user_id
+       WHERE a.event_id IN (${marks})
+       ORDER BY u.name ASC`
+    )
+    .all(...eventIds) as unknown as ({ eventId: string } & Attendee)[];
+  for (const row of rows) {
+    const list = byEvent.get(row.eventId);
+    const person = { id: row.id, name: row.name, avatar: row.avatar };
+    if (list) list.push(person);
+    else byEvent.set(row.eventId, [person]);
+  }
+  return byEvent;
+}
+
+/**
+ * Reemplaza la lista de invitados. Dos cosas que se negrian aqui y que valen la pena dichas:
+ *  - un id que no es de esta casa se DEVUELVE, no se ignora —una invitacion a medias sin aviso es
+ *    peor que un error, porque quien invita cree que la otra persona ya lo ve;
+ *  - el autor se filtra: no se auto-invita, se le invita a uno mismo por un checkbox mal puesto.
+ */
+function replaceAttendees(
+  db: ReturnType<typeof getDatabase>,
+  eventId: string,
+  wanted: string[],
+  actorId: string,
+  householdId: string | null
+): { inserted: number; rejected: string[] } {
+  const allowed = new Set<string>([actorId]);
+  if (householdId) {
+    const members = db
+      .prepare('SELECT user_id AS id FROM household_members WHERE household_id = ?')
+      .all(householdId) as unknown as { id: string }[];
+    for (const member of members) allowed.add(member.id);
+  }
+  const unique = [...new Set(wanted)].filter((id) => id && id !== actorId);
+  const rejected = unique.filter((id) => !allowed.has(id));
+  const accepted = unique.filter((id) => allowed.has(id));
+
+  db.prepare('DELETE FROM calendar_event_attendees WHERE event_id = ?').run(eventId);
+  if (accepted.length) {
+    const insert = db.prepare(
+      'INSERT INTO calendar_event_attendees (event_id, user_id, added_by) VALUES (?, ?, ?)'
+    );
+    for (const id of accepted) insert.run(eventId, id, actorId);
+  }
+  return { inserted: accepted.length, rejected };
 }
 
 // GET /api/calendar/events?from=&to=&kinds=
@@ -351,10 +464,16 @@ calendarRoutes.get('/events', async (c) => {
   }[];
   for (const n of names) authors.set(n.id, { name: n.name, avatar: n.avatar });
 
+  // Una sola lectura para toda la pagina, no una por evento: en la vista de mes son 42 dias.
+  const invited = attendeesByEvent(db, rows.map((row) => row.id));
+
   return c.json({
     success: true,
     data: rows.map((row) => ({
-      ...toEvent(row, authors.get(row.user_id) ?? null),  // el nombre y la foto de quien lo escribio
+      ...toEvent(row, authors.get(row.user_id) ?? null),
+      // Los invitados van en la proyeccion y no en un detalle aparte: en la rejilla se pintan las
+      // caras, y una cara sin nombre debajo (o un nombre sin cara) es media identidad.
+      attendees: invited.get(row.id) ?? [],
       // El frontend no adivina si puede editar: lo dice el servidor, que es quien sabe
       // quien es quien. Y es `editable`, no `es mio`, porque el dia que haya roles de
       // admin de casa solo hay que cambiar esta linea.
@@ -369,14 +488,9 @@ calendarRoutes.post('/events', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = createCalendarEventSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json(
-      {
-        success: false,
-        message: parsed.error.issues[0]?.message ?? 'Datos invalidos',
-        issues: parsed.error.issues
-      },
-      400
-    );
+    // `describeIssues` en vez del primer issue de zod: el mensaje suelto decia «Invalid input» con
+    // el campo en ingles, y quien rellenaba el dialog no sabia a donde volver.
+    return c.json({ success: false, code: 'INVALID_FORM', ...describeIssues(parsed.error) }, 400);
   }
   const input = parsed.data;
   if (input.kind === 'meal') {
@@ -391,9 +505,12 @@ calendarRoutes.post('/events', async (c) => {
   }
 
   const userId = c.get('userId') as string;
-  const householdId = eventScope(userId).householdId;
+  const scope = eventScope(userId);
+  const householdId = scope.householdId;
   const id = nanoid();
-  const allDay = input.allDay === undefined ? (!input.startTime ? 1 : 0) : input.allDay === true || input.allDay === 1 ? 1 : 0;
+  // Sin `allDay` explicito, «sin hora» significa «todo el dia»: es la nota de la que no se sabe la
+  // hora, no un evento de cero minutos a medianoche.
+  const allDay = flag(input.allDay, input.startTime ? 0 : 1);
 
   db.prepare(
     `INSERT INTO calendar_events
@@ -416,8 +533,42 @@ calendarRoutes.post('/events', async (c) => {
     input.location ?? null
   );
 
+  // Los invitados se escriben DESPUES del insert y antes de responder: si la lista era imposible
+  // (ids de fuera de la casa) el evento existe igualmente —la suelta ya estaba guardada—, pero el
+  // 400 dice quien no se pudo invitar en vez de dejarlo a medias sin decir nada.
+  let rejected: string[] = [];
+  if (input.attendeeIds) {
+    const outcome = replaceAttendees(db, id, input.attendeeIds, userId, householdId);
+    rejected = outcome.rejected;
+  }
+  if (rejected.length) {
+    return c.json(
+      {
+        success: false,
+        message: 'Algun invitado no es de tu casa',
+        code: 'ATTENDEE_NOT_IN_HOUSEHOLD',
+        data: { rejected, id }
+      },
+      400
+    );
+  }
+
   const row = db.prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`).get(id) as unknown as CalendarEventRow;
-  return c.json({ success: true, data: { ...toEvent(row, null), editable: true } }, 201);
+  const attendees = attendeesByEvent(db, [id]).get(id) ?? [];
+  return c.json(
+    {
+      success: true,
+      data: {
+        ...toEvent(row, null),
+        editable: true,
+        // El dialog se rellena con esto sin otra peticion: los ids para el selector y las caras para
+        // la lista, en el mismo sitio, porque «invitado» y «invitado con nombre» no pueden divergir.
+        attendees,
+        attendeeIds: attendees.map((person) => person.id)
+      }
+    },
+    201
+  );
 });
 
 // PATCH /api/calendar/events/:id
@@ -437,9 +588,9 @@ calendarRoutes.patch('/events/:id', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const parsed = updateCalendarEventSchema.safeParse(body);
   if (!parsed.success) {
-    return c.json({ success: false, message: parsed.error.issues[0]?.message ?? 'Datos invalidos' }, 400);
+    return c.json({ success: false, code: 'INVALID_FORM', ...describeIssues(parsed.error) }, 400);
   }
-  const input = parsed.data as Record<string, unknown>;
+  const input = parsed.data as Record<string, unknown> & { attendeeIds?: string[] | null };
 
   const set: string[] = [];
   const params: (string | number | null)[] = [];
@@ -458,11 +609,11 @@ calendarRoutes.patch('/events/:id', async (c) => {
   put('location', input.location);
   if (input.allDay !== undefined) {
     set.push('all_day = ?');
-    params.push(input.allDay === true || input.allDay === 1 ? 1 : 0);
+    params.push(flag(input.allDay, 0));
   }
   // Cambiar de hora a todo el dia tiene que BORRAR las horas: si no, la siguiente
   // edicion ve un evento 'todo el dia' con 19:30 dentro y nadie sabe cual manda.
-  if (input.allDay === true || input.allDay === 1) {
+  if (flag(input.allDay, existing.all_day as 0 | 1) === 1) {
     set.push('start_time = NULL', 'end_time = NULL');
   }
   // Las horas se comprueban SOBRE LA FILA RESULTANTE, no sobre lo que llego: un PATCH
@@ -470,17 +621,79 @@ calendarRoutes.patch('/events/:id', async (c) => {
   // lo rechaza ningun schema que valide partes.
   const nextStart = input.startTime ?? existing.start_time ?? null;
   const nextEnd = input.endTime ?? existing.end_time ?? null;
-  const nextAllDay = input.allDay === true || input.allDay === 1 ? 1 : existing.all_day;
+  const nextAllDay = flag(input.allDay, existing.all_day as 0 | 1);
   if (!nextAllDay && nextStart && nextEnd && nextEnd < nextStart) {
     return c.json({ success: false, message: 'endTime no puede ser anterior a startTime' }, 400);
   }
-  if (!set.length) return c.json({ success: false, message: 'Nada que actualizar' }, 400);
+  // Guardar el titulo sin tocar a nadie NO es «nada que actualizar» si la lista de invitados
+  // cambia: `attendeeIds` es una escritura, y vacia lo es tanto como llena.
+  const wantsAttendees = input.attendeeIds !== undefined;
+  if (!set.length && !wantsAttendees) {
+    return c.json({ success: false, message: 'Nada que actualizar' }, 400);
+  }
 
-  params.push(id);
-  db.prepare(`UPDATE calendar_events SET ${set.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
+  if (set.length) {
+    params.push(id);
+    db.prepare(`UPDATE calendar_events SET ${set.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
+  }
+
+  let rejected: string[] = [];
+  if (wantsAttendees) {
+    const outcome = replaceAttendees(db, id, input.attendeeIds ?? [], userId, eventScope(userId).householdId);
+    rejected = outcome.rejected;
+  }
+  if (rejected.length) {
+    return c.json(
+      {
+        success: false,
+        message: 'Algun invitado no es de tu casa',
+        code: 'ATTENDEE_NOT_IN_HOUSEHOLD',
+        data: { rejected, id }
+      },
+      400
+    );
+  }
 
   const row = db.prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`).get(id) as unknown as CalendarEventRow;
-  return c.json({ success: true, data: { ...toEvent(row, null), editable: true } });
+  const attendees = attendeesByEvent(db, [id]).get(id) ?? [];
+  return c.json({
+    success: true,
+    data: {
+      ...toEvent(row, null),
+      editable: true,
+      attendees,
+      attendeeIds: attendees.map((person) => person.id)
+    }
+  });
+});
+
+// DELETE /api/calendar/events/:id/attendees/me —salir de un evento ajeno.
+//
+// El que se va no borra nada: se quita de la lista. Sin esto, «me has invitado a algo a lo que no
+// puedo ir» no tenia respuesta, y la unica salida era discutir con quien invita.
+calendarRoutes.delete('/events/:id/attendees/me', async (c) => {
+  const db = getDatabase();
+  const id = c.req.param('id');
+  const userId = c.get('userId') as string;
+  const event = db.prepare('SELECT user_id FROM calendar_events WHERE id = ?').get(id) as
+    | { user_id: string }
+    | undefined;
+  if (!event) return c.json({ success: false, message: 'Evento no encontrado' }, 404);
+  // El autor no «sale»: su evento no depende de una invitacion, y borrarle a el de su propia fila
+  // dejaria un evento sin dueno. Eso se borra, no se abandona.
+  if (event.user_id === userId) {
+    return c.json(
+      { success: false, message: 'FORBIDDEN', data: { hint: 'Tuyo es: lo borras, no te sales de el.' } },
+      403
+    );
+  }
+  const result = db
+    .prepare('DELETE FROM calendar_event_attendees WHERE event_id = ? AND user_id = ?')
+    .run(id, userId);
+  if (result.changes === 0) {
+    return c.json({ success: false, message: 'No estabas invitado a este evento' }, 404);
+  }
+  return c.json({ success: true, message: 'Has salido del evento' });
 });
 
 // DELETE /api/calendar/events/:id

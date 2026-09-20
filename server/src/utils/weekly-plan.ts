@@ -16,7 +16,8 @@ import { ensureWeekCalendar, toUTCISO, utcDate, weekStartOf } from './week-calen
 
 type SqlDb = import('better-sqlite3').Database;
 
-const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+/** El orden del dia: la merienda va antes que la cena (HOGARIA-SPEC 12o). */
+const MEAL_TYPES = ['breakfast', 'lunch', 'snack', 'dinner'] as const;
 
 export interface PersistWeeklyPlanInput {
   userId: string;
@@ -25,8 +26,8 @@ export interface PersistWeeklyPlanInput {
   endDate: string;
   goals?: {
     type?: string;
-    caloriesTarget?: number;
-    restrictions?: string[];
+    caloriesTarget?: number | null;
+    restrictions?: string[] | null;
   };
   /** Lo que devolvió el modelo: se valida aquí, nunca se da por bueno. */
   plan: unknown;

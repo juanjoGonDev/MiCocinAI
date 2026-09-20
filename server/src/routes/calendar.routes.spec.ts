@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
 // Las rutas se importan DENTRO de `beforeAll`, y no arriba: una importacion estatica arrastra
 // `config/app.config.js`, que lee DATABASE_PATH al evaluarse —antes de la linea que lo pone a
-// `:memory:`— y la prueba acaba escribiendo en la BD de desarrollo del repositorio. Era la unica
+// `:memory:`— y la prueba acaba escribiendo en la BD de desarrollo del repositorio. Era la única
 // spec de rutas con este descuido, y fallaba en cuanto alguien usaba la app en local.
 
 /**
@@ -76,7 +76,15 @@ describe('calendario de la casa (§8f)', () => {
     // Orden inverso a las FK: primero las sueltas, luego las cuentas, luego la casa.
     // Borrar TODO (y no solo lo de esta suite) es lo que permite repetir el mismo id
     // en cada test y leer el fallo sin ambiguedad cuando algo se queda atras.
-    for (const sql of ['DELETE FROM calendar_events', 'DELETE FROM meals', 'DELETE FROM users', 'DELETE FROM households']) {
+    for (const sql of [
+      'DELETE FROM calendar_event_attendees',
+      'DELETE FROM calendar_events',
+      'DELETE FROM household_members',
+      'DELETE FROM meals',
+      'DELETE FROM weekly_calendars',
+      'DELETE FROM users',
+      'DELETE FROM households'
+    ]) {
       db.prepare(sql).run();
     }
     db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(householdId, 'La casa', 'CALTEST1');
@@ -149,7 +157,7 @@ describe('calendario de la casa (§8f)', () => {
     expect(home.map((e: any) => e.title)).toEqual([event.title]);
     const two = await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31&kinds=home,shopping'));
     expect(two).toHaveLength(2);
-    // Las de todo el dia van delante: en el dia se pintan como franja completa y si no,
+    // Las de todo el día van delante: en el día se pintan como franja completa y si no,
     // quedan debajo de las horas, que es lo que hace legible la columna.
     expect(two[1].allDay).toBe(true);
   });
@@ -195,5 +203,166 @@ describe('calendario de la casa (§8f)', () => {
   it('sin token no hay calendario de la casa', async () => {
     const response = await app.request('/api/calendar/events?from=2026-03-01&to=2026-03-31');
     expect(response.status).toBe(401);
+  });
+
+  /* ── 12o: los huecos de un formulario, y quien entra en el evento ───────────── */
+
+  it('un evento con SOLO lo obligatorio se crea, y lo demas queda vacio de verdad', async () => {
+    // El repro del usuario: «da error si no mandas todos los campos», siendo campos que el propio
+    // dialog marca como opcionales. Aquí no se manda ninguno de esos.
+    const alice = await makeUser('cal-alice', householdId, 'Alice');
+    const created = (await data(await call(alice, 'POST', '/events', { title: 'Carpinteria', date: '2026-03-11' }))) as any;
+    expect(created.title).toBe('Carpinteria');
+    expect(created.kind).toBe('other');
+    expect(created.allDay).toBe(true); // sin hora, «todo el dia»: no un evento a medianoche
+    for (const field of ['startTime', 'endTime', 'color', 'notes', 'location']) {
+      expect(created[field], `${field} deberia estar vacio`).toBeNull();
+    }
+    // Y se lee por la ventana, que es lo que hace que exista en la rejilla.
+    const list = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+    expect(list.map((row) => row.id)).toContain(created.id);
+  });
+
+  it('los opcionales admiten null y cadena vacia, que son las formas del hueco', async () => {
+    const alice = await makeUser('cal-alice', householdId, 'Alice');
+    const shapes = [
+      { notes: null, location: null, color: null },
+      { notes: '', location: '   ', color: '' },
+      { startTime: '', endTime: '', allDay: null, sharedWithHousehold: null }
+    ];
+    for (const [index, shape] of shapes.entries()) {
+      const response = await call(alice, 'POST', '/events', { title: `Forma ${index}`, date: '2026-03-12', ...shape });
+      expect(response.status, JSON.stringify(await response.clone().json())).toBe(201);
+    }
+    const rows = (await data(await call(alice, 'GET', '/events?from=2026-03-12&to=2026-03-12'))) as any[];
+    expect(rows).toHaveLength(3);
+    // Un hueco no se guarda como cadena en blanco: se guarda como «sin valor», que es lo que
+    // permite volver a dejarlo vacio después.
+    expect(rows.map((row) => row.notes)).toEqual([null, null, null]);
+  });
+
+  it('un 400 dice el campo y el motivo, no «Invalid input data»', async () => {
+    const alice = await makeUser('cal-alice', householdId, 'Alice');
+    const response = await call(alice, 'POST', '/events', { title: '', date: '11-03-2026' });
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as any;
+    expect(body.code).toBe('INVALID_FORM');
+    expect(body.message).toMatch(/Titulo/);
+    expect(body.issues.map((issue: any) => issue.field)).toContain('date');
+  });
+
+  it('quitar la nota con null si la quita (y no es un «guardado» que no toca nada)', async () => {
+    const alice = await makeUser('cal-alice', householdId, 'Alice');
+    const created = (await data(
+      await call(alice, 'POST', '/events', { title: 'Carpinteria', date: '2026-03-11', notes: 'Medir 90 cm' })
+    )) as any;
+    expect(created.notes).toBe('Medir 90 cm');
+
+    const cleared = (await data(await call(alice, 'PATCH', `/events/${created.id}`, { notes: null }))) as any;
+    expect(cleared.notes).toBeNull();
+    // Y el resto sigue donde estaba.
+    expect(cleared.title).toBe('Carpinteria');
+  });
+
+  it('la hora de una comida se puede quitar: el PATCH la escribe, no la ignora', async () => {
+    // Dos bugs de una: `time` no estaba en la lista de columnas del PATCH (cambiar la hora no hacfa
+    // nada) y con `.optional()` a secas vaciar el campo devolvfa un 400.
+    const alice = await makeUser('cal-alice', householdId, 'Alice');
+    const created = (await data(
+      await call(alice, 'POST', '/meals', { date: '2026-03-11', mealType: 'lunch', customMeal: 'Gazpacho', time: '14:00' })
+    )) as any;
+    expect(created.time).toBe('14:00');
+
+    const moved = (await data(await call(alice, 'PATCH', `/meals/${created.id}`, { time: '15:30' }))) as any;
+    expect(moved.time).toBe('15:30');
+
+    const cleared = (await data(await call(alice, 'PATCH', `/meals/${created.id}`, { time: null }))) as any;
+    expect(cleared.time).toBeNull();
+  });
+
+  it('las comidas se ordenan por el dia, y la merienda va antes que la cena', async () => {
+    const alice = await makeUser('cal-alice', householdId, 'Alice');
+    for (const type of ['dinner', 'snack', 'lunch', 'breakfast']) {
+      await call(alice, 'POST', '/meals', { date: '2026-03-11', mealType: type, customMeal: `Plato ${type}` });
+    }
+    const range = (await data(await call(alice, 'GET', '/range?startDate=2026-03-11&endDate=2026-03-11'))) as any;
+    expect(range.meals.map((meal: any) => meal.meal_type)).toEqual(['breakfast', 'lunch', 'snack', 'dinner']);
+  });
+
+  it('invitar a alguien de la casa le abre el evento, y salirse de el no es borrarlo', async () => {
+    const alice = await makeUser('cal-alice', householdId, 'Alice');
+    const bob = await makeUser('cal-bob', householdId, 'Bob');
+    db.prepare('INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)').run(
+      'hm-a',
+      householdId,
+      alice.id,
+      'admin'
+    );
+    db.prepare('INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)').run(
+      'hm-b',
+      householdId,
+      bob.id,
+      'member'
+    );
+
+    // Un evento NO compartido con la casa, pero si con Bob: solo lo ve Bob, no «toda la casa».
+    const created = (await data(
+      await call(alice, 'POST', '/events', {
+        title: 'Cita del dentista',
+        date: '2026-03-11',
+        startTime: '09:00',
+        sharedWithHousehold: false,
+        attendeeIds: [bob.id]
+      })
+    )) as any;
+    expect(created.attendeeIds).toEqual([bob.id]);
+
+    const seen = (await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+    expect(seen.map((row) => row.id)).toContain(created.id);
+    expect(seen[0].editable).toBe(false);
+    expect(seen[0].attendees[0].name).toBe('Bob');
+
+    // Bob no puede reescribirlo...
+    expect((await call(bob, 'PATCH', `/events/${created.id}`, { title: 'Otra cosa' })).status).toBe(403);
+    // ...pero si puede salirse de el, y eso lo quita de SU calendario sin borrar el de Alice.
+    expect((await call(bob, 'DELETE', `/events/${created.id}/attendees/me`)).status).toBe(200);
+    expect(await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);
+    const stillThere = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+    expect(stillThere.map((row) => row.id)).toContain(created.id);
+
+    // Y Alice no «se sale» de lo suyo: eso se borra.
+    expect((await call(alice, 'DELETE', `/events/${created.id}/attendees/me`)).status).toBe(403);
+  });
+
+  it('invitar a quien no es de la casa se dice, no se traga', async () => {
+    const alice = await makeUser('cal-alice', householdId, 'Alice');
+    const response = await call(alice, 'POST', '/events', {
+      title: 'Cita',
+      date: '2026-03-11',
+      attendeeIds: ['no-existe']
+    });
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as any;
+    expect(body.code).toBe('ATTENDEE_NOT_IN_HOUSEHOLD');
+    expect(body.data.rejected).toEqual(['no-existe']);
+  });
+
+  it('quitar a todos los invitados con una lista vacia funciona', async () => {
+    const alice = await makeUser('cal-alice', householdId, 'Alice');
+    const bob = await makeUser('cal-bob', householdId, 'Bob');
+    db.prepare('INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)').run(
+      'hm-b',
+      householdId,
+      bob.id,
+      'member'
+    );
+    const created = (await data(
+      await call(alice, 'POST', '/events', { title: 'Mudanza', date: '2026-03-14', attendeeIds: [bob.id] })
+    )) as any;
+    expect(await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toHaveLength(1);
+
+    const updated = (await data(await call(alice, 'PATCH', `/events/${created.id}`, { attendeeIds: [] }))) as any;
+    expect(updated.attendeeIds).toEqual([]);
+    expect(await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);
   });
 });
