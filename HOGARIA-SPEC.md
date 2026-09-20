@@ -1128,6 +1128,63 @@ this sandbox the frontend runner does not exist and pretending otherwise is how 
       The first CI run is the one that turns them green.
 
 
+## 12f. Round 8 checklist — why the app locked itself out
+
+The user's report was one sentence with two halves: *still* too many requests, and *I cannot test
+anything or see the logs in the UI*. Both are the same bug with two faces, and neither was in the
+calendar: it was the request budget of the whole API, the only layer with no test —the e2e suite runs
+with the limiter switched off, and the middleware lived in the same file that opens the port.
+
+- [x] `createApp(options)` in `server/src/app.ts`: the middleware and the routes stopped being
+      inseparable from `listen()`. Without this, testing the limiter meant booting a server, which is
+      why nobody had ever done it. `index.ts` is now the binary: probe the `dist`, build the app, serve.
+- [x] The limit is per **session**, not per `unknown`. `keyGenerator` fell back to a single shared
+      bucket whenever the proxy did not set `x-forwarded-for` —which is every preview, and a lot of home
+      nginx setups— so one tab in a loop locked out the entire household, including `/api/logs`. Key
+      derived from the bearer token (FNV-1a, no material from the token in the key); credentials keep the
+      tight IP buckets they had.
+- [x] Diagnostics are outside the budget: `/api/logs*`, `/api/health*` and any `/stream` path never
+      consume the quota (server test: six hits on `/api/logs` with a bucket of 1 and no 429). Blocking the
+      screen you use to understand a lockout is not a defence.
+- [x] A 429 now says when to come back (`Retry-After`, read from the draft-6 `RateLimit` header, exposed
+      through CORS) and logs **one** line per window into the store, so the viewer shows the throttle
+      instead of the user guessing it. `rateLimitFromEnv` refuses `max=0` (returns the default and warns)
+      because `0` is how people write "disable" and how an app ends up with no limit at all.
+- [x] The node server can serve the built frontend (`resolveStaticAsset` + `resolveStaticDir`): hashed
+      chunks cached for a year, `index.html` never cached, SPA deep links to `index.html`, a missing
+      `.js` a real JSON 404 (never HTML —that is the «Unexpected token '<'» blank screen), and `..`
+      refused. The Dockerfile was already copying `frontend/dist` to `./public` with a `CMD node` that
+      could not read it.
+- [x] `core/sse.ts`: one resilient client for the two live surfaces (log viewer, shopping stream). The
+      browser reconnects a failed `EventSource` once a second forever; this closes it, backs off
+      (1 s → 2 → 5 → 10 → 30), gives up after N tries and says so, stops while the tab is hidden and
+      makes a single attempt on return. Frontend spec: five cases (Jasmine, fake clock).
+- [x] `log-store.onLogEntry()` is the single fan-out, and `addLog` calls it: previously only the browser's
+      `POST /api/logs` broadcast, so every server `console.*` line entered the ring buffer and nobody told
+      the live tail —the viewer looked dead while the server was talking. Verified against the built binary
+      with a live `curl -N` of `/api/logs/stream` (the marker appeared without reloading).
+- [x] Error interceptor: one toast per status and window (30 s for a 429, 4 s for the rest), with the wait
+      written in the message. A wall of identical toasts is how the screen becomes unusable — «no me deja
+      probar nada».
+- [x] CI runs the **whole project**: `playwright.full-stack.config.ts` boots `node server/dist/index.js`
+      (prod build, limiter ON, SSE intact) and `tests/e2e/full-stack/` covers serving + deep links, the
+      request budget of the calendar and the cart, the live log tail, and the limiter contract (429 with
+      `Retry-After`, diagnostics unaffected, quota recovers, other sessions untouched). Same command
+      locally: `pnpm run test:e2e:full-stack`, or `make test-e2e-full-stack`.
+- [x] `tsconfig.e2e.json` + `pnpm run typecheck:e2e` + a CI step: Playwright transpiles without checking
+      types, and the first run of this found a `toHaveCount(0, { message })` whose "message" option does
+      not exist —the failure the author wanted to label has been unlabeled ever since.
+- [x] `server/src/app.spec.ts` (9) and `server/src/utils/log-store.spec.ts` (3) are the first tests of
+      those two layers; `pnpm --filter @hogaria/server test` is green at 202.
+- [ ] The four full-stack specs could not be *executed* here (no Chromium in the sandbox); what was
+      executed is the same thing by hand with `curl` against the built server: HTML at `/`, 200 for a real
+      chunk, JSON 404 for a missing one, `index.html` for `/shopping/una-lista`, SSE with the live marker,
+      the 600-per-minute cut with `Retry-After: 47`, and `/api/health` + `/api/logs` answering the whole
+      time the probe bucket was blocked. CI is where they run as Playwright.
+- [ ] Limits are still configured with env, not from `/settings` —there is no `runtime_settings` table
+      yet (§10), and a rate limit is the wrong first consumer of a feature that does not exist.
+
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Drag to reorder inside a section**: the `PUT /lists/:id/order` endpoint and the `position` column are
