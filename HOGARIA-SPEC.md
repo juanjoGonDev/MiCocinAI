@@ -1587,37 +1587,37 @@ that runs; what only a pair of eyes can decide says so.
 
 ### The layer row was flush against the card
 
-- [ ] `.cal-layers` sits inside `.calendar__panel`, which has no padding of its own — every band
+- [x] `.cal-layers` sits inside `.calendar__panel`, which has no padding of its own — every band
       there sets its own 16 px laterally (`.cal-top`, `.cal-strip`). The layer row never did, so the
       filter chips touched the border of the card and read as something outside the screen.
 
 ### Who acted is resolved to today's name
 
-- [ ] `readEvents` selects `COALESCE(u.name, e.user_name)`: the feed shows the name the person uses
+- [x] `readEvents` selects `COALESCE(u.name, e.user_name)`: the feed shows the name the person uses
       now, and the row's snapshot stays in the table as the fallback for an account that no longer
       exists. Round 11 froze the name "so a rename cannot rewrite history"; in a household feed a
       stale first name on your own line is not history, it is a bug — the audit trail keeps the
       snapshot, the screen resolves it.
-- [ ] The client paints its *own* rows from the live session (`auditFace` in the shopping model, with
+- [x] The client paints its *own* rows from the live session (`auditFace` in the shopping model, with
       a pure spec): a rename or an uploaded photo must show in the history without a refetch, or the
       success toast lied.
-- [ ] `ha anadido` / `lineas anadidas` — the ñ and the accents were missing in the two server
+- [x] `ha anadido` / `lineas anadidas` — the ñ and the accents were missing in the two server
       sentences and the two frontend toasts that print them.
 
 ### Mi cuenta, outside Preferences
 
-- [ ] `/account` is its own page with three sub-sections — **Cuenta** (name, photo), **Seguridad**
+- [x] `/account` is its own page with three sub-sections — **Cuenta** (name, photo), **Seguridad**
       (password, ending this session) and **Información** (what the app keeps in this browser, the
       version, the id, the household link) — reached by tapping the face in the sidebar. Preferences
       goes back to being about the *diner*: perfil, alergias, gustos, objetivo.
-- [ ] The tab travels in the URL (`?tab=security`) with the default left clean, as everywhere else,
+- [x] The tab travels in the URL (`?tab=security`) with the default left clean, as everywhere else,
       and `/account` is core: no module switch hides your own account.
-- [ ] The account state is seeded from the session signal through an `effect`, not once in the
+- [x] The account state is seeded from the session signal through an `effect`, not once in the
       constructor — the user may still be loading from cache when the page opens.
 
 ### The dev database was a test dependency
 
-- [ ] `calendar.routes.spec.ts` imported its routes statically, so `app.config.js` was evaluated
+- [x] `calendar.routes.spec.ts` imported its routes statically, so `app.config.js` was evaluated
       *before* its own `process.env.DATABASE_PATH = ':memory:'` line: the spec ran on
       `server/data/hogaria.sqlite`. Any local use of the app (a registration seeds
       `shopping_categories`) then broke its `DELETE FROM users` cleanup with an FK error — nine red
@@ -1626,12 +1626,27 @@ that runs; what only a pair of eyes can decide says so.
 
 ### Tests
 
-- [ ] `tests/e2e/account.spec.ts`: entering through the sidebar face, the three tabs in the URL,
+- [x] `tests/e2e/account.spec.ts`: entering through the sidebar face, the three tabs in the URL,
       renaming visible in the menu *and* in the history line without a reload, uploading a real PNG
       and reading it back through the public route, the ring around the photo, the password rules and
       the Cancelar that wipes the fields, and the storage inventory.
-- [ ] `preferences.spec.ts` asserts the opposite: the account is not there any more.
-- [ ] `shopping.routes.spec.ts` proves the rename shows in the feed while the stored snapshot stays.
+- [x] `preferences.spec.ts` asserts the opposite: the account is not there any more.
+- [x] `shopping.routes.spec.ts` proves the rename shows in the feed while the stored snapshot stays.
+
+### How it turned out
+
+- The layer row, the accents and the identity fix are small; the page split was not. Moving the
+  account out of Preferences deleted ~460 lines from that component and left it doing one job again —
+  and it fixed a bug nobody had reported: `/preferences` was opening on the account tab, which is why
+  «Preferencias» felt like it had changed subject between rounds.
+- `auditFace` is deliberately narrow: it only touches rows whose `user_id` is yours, and only the
+  prefix of the sentence. A helper that rewrote other people's text would be rewriting the audit
+  trail, which is the one thing round 11 was right to freeze.
+- Not verified by eye, and not run: this sandbox cannot install Chromium, so the four new `e2e`
+  cases are written against the contracts (selectors, `data-test`, copy) and have never executed. The
+  unit and route suites are green — 272 server tests, the pure frontend models under the vitest
+  bridge, `tsc` for app and specs, the production build, `check-ui` on 141 files. Nothing here can be
+  called visually confirmed.
 
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
