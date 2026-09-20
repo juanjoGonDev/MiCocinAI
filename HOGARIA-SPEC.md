@@ -1419,6 +1419,77 @@ Feedback on the screenshots of the line sheet, plus one thing that was visible o
   has no face to show without widening the schema. `calendar_events.user_id` exists, and those
   lines do show one.
 
+## 12j. Round 12 checklist — the agenda belongs to the house, the avatar has to be readable, and the account is editable
+
+Four complaints, one of them about something that was simply invisible.
+
+### The calendar is not the property of the kitchen module
+
+- [ ] `?layers=` and the shared agenda (round 9) made `/calendar` a section of the house: shopping
+      lists, house tasks, personal sueltas. But the registry still owned the **route** from the
+      `meals` module, so switching off «Comidas y recetas» deleted the whole agenda —route and nav
+      entry— which is the opposite of what that switch means.
+- [ ] `MODULE_REGISTRY.meals.paths` is `['/recipes']` now. What the module governs is **what is
+      kitchen inside the calendar**, not the calendar: the Comidas layer, the meal affordances in
+      the three grids, the goal ring and the calories/plan strip, the `Objetivo` pill and
+      `Planificar IA`.
+- [ ] The grids receive `kitchen=false` and stop offering what the account turned off; the days
+      arrive with `meals: []`, so the blocks cannot leak in through the data. A shared
+      `?layers=meals` link with the module off is ignored —not an error, and not written back to
+      the URL, because that would re-add the thing the person just turned off.
+
+### An avatar you can actually see
+
+- [ ] `app-avatar` painted `[style.background-color]` from the **`color` input** and never from
+      the hashed colour of the name. Nobody passing only a name —which is every line of the app—
+      got no circle: white initials over the page background. And a photo had no edge, so it
+      merged into the card behind it.
+- [ ] Background always resolves (an explicit `color`, otherwise the hash of the name); the
+      initials take **white or ink depending on the luminance of that background**, so the pair is
+      readable on both themes; a photo gets a 1 px ring in `--border-strong` so the circle is a
+      circle on any surface.
+- [ ] Fixing the component fixes everywhere, which is the point of round 11 having made it the
+      only rendering of a person.
+
+### The person's own account, in Preferences
+
+- [ ] `/preferences` gains a **Cuenta** tab with the three things the server already accepted and
+      the UI never showed: the display name (`PATCH /auth/profile`), the photo, and the password
+      (`POST /auth/change-password`, which checks the current one before replacing it).
+- [ ] The photo is resized **in the browser** to a square JPEG of 128 px before leaving the
+      device, and it is stored as a file: `POST /api/auth/avatar` writes it in an `uploads`
+      directory next to the database and `users.avatar` keeps a path
+      (`/api/uploads/avatars/<userId>.jpg`), not the bytes. It is served under `/api` so the dev
+      proxy carries it without touching `proxy.conf.json`.
+- [ ] Why a path and not a data URL: `users.avatar` is read by the subqueries that decorate every
+      shopping row, every audit event and every agenda chip. A 40 KB data URL there is 40 KB per
+      row on every list view, and the list view is the hottest screen of the app.
+- [ ] `updateProfileSchema.avatar` was `z.string().url()`, which rejects the very path the app
+      generates for it. It becomes: an `uploads` path, an absolute URL, or `null` to clear.
+- [ ] Name, photo and password each have a cancel that restores what was there — the standing rule
+      for any editable control — and nothing uses `window.prompt` for a new password.
+
+### «Sin oferta» and «Sin descuento» have to look like what they are
+
+- [ ] They were muted caption-coloured chips: a removal action that reads as a label is not a
+      button, and the person cannot see that it is the way out. The chip gets a `--clear` variant:
+      accent ink, the `close` icon, and the same height as its neighbours.
+- [ ] Tapping the offer preset that is already on **takes it off**, like every other chip in the
+      app; tapping the discount kind that is active goes back to `Sin descuento`. The hint line
+      keeps saying what will be paid, and that is the feedback — no toast for a toggle.
+
+### Tests
+
+- [ ] The registry no longer claims `/calendar`; `isPathVisible('/calendar')` is true with the
+      kitchen module off, and `isPathVisible('/recipes')` is false.
+- [ ] The avatar's colour pair is a pure function (`avatar-palette.ts`) with its own spec: a name
+      always resolves to a background with enough contrast for the initials, and the choice is
+      stable for the same name.
+- [ ] `POST /api/auth/avatar` writes, replaces the previous file, and refuses a non-image MIME and
+      an oversized body; `PATCH /auth/profile` accepts the app's own path and clears with `null`.
+- [ ] The line sheet: clicking the active offer preset clears the draft, and clicking the active
+      discount kind returns it to `none`.
+
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
   (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
@@ -1427,6 +1498,10 @@ Feedback on the screenshots of the line sheet, plus one thing that was visible o
   icono, el formulario pasa a `app-picker` (con `app-unit-picker` para la unidad, que ya existe)
   y se quitan los dos ficheros de la lista. Se hizo el visor de logs en la ronda 10 porque ya
   estaba en el diff; la despensa entera merece su propia tanda con sus capturas.
+- **Fotos de las lineas de la compra, tambien en disco.** `uploads/` existe desde §12j para el
+  avatar de la cuenta; la foto que se adjunta a una linea sigue viajando como base64 dentro de la
+  propia fila, que es lo que hace pesada la lectura de una lista con diez fotos. Moverla es
+  reutilizar el mismo endpoint y cambiar una columna por una ruta.
 - **Precio por linea en la foto.** Las lineas que devuelve el modelo traen cantidad y precio, pero
   no unidad: quien revisa la foto no puede corregir «1 L» a «1 botella» y luego en la lista si. El
   control ya existe (`app-unit-picker`); falta el campo en el prompt y en la validacion.
