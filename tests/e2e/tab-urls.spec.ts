@@ -98,7 +98,7 @@ test.describe('Pestañas y URL', () => {
     await registerWithHousehold(page, '/calendar');
     await expect(page.locator('h1.calendar__title')).toBeVisible();
 
-    await page.locator('.meal-slot').first().click();
+    await page.locator('[data-test="timeline-add-meal"]').first().click();
     await expect(page.locator('.modal__title')).toContainText('Agregar Comida');
 
     await page.locator('.meal-form__tabs button', { hasText: 'Receta' }).click();

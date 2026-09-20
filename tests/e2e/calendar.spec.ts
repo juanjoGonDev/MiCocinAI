@@ -20,7 +20,9 @@ const daysFromToday = (days: number): string => {
 
 /** Añade una comida escrita a mano por el modal, en el hueco que se le diga. */
 async function addMealThroughModal(page: import('@playwright/test').Page, dish: string): Promise<void> {
-  await page.locator('.meal-slot').first().click();
+  // El hueco de franja ya no existe: se anade desde el «+» de la cabecera del dia, que es lo que
+  // queda de las cuatro filas por tipo de comida.
+  await page.locator('[data-test="timeline-add-meal"]').first().click();
   await expect(page.locator('.modal__title')).toContainText('Agregar Comida');
   await page.fill('#meal-custom', dish);
   await page.locator('app-modal').getByRole('button', { name: 'Añadir', exact: true }).click();
@@ -42,8 +44,11 @@ test.describe('Calendario', () => {
     // Titulo del periodo: «14 – 20 de septiembre»
     await expect(page.locator('h1.calendar__title')).toContainText(/\d{1,2} – \d{1,2} de/);
 
-    // Siete dias por cuatro franjas
-    await expect(page.locator('.cal-week .meal-slot')).toHaveCount(28);
+    // Siete columnas, y NO las 24 horas: la rejilla se recorta a lo que hay.
+    await expect(page.locator('[data-test="timeline-col"]')).toHaveCount(7);
+    const hours = await page.locator('.tl__hour').count();
+    expect(hours).toBeGreaterThan(5);
+    expect(hours).toBeLessThan(24);
   });
 
   test('el conmutador cambia la vista, viaja en la URL y sobrevive a recargar', async ({ page }) => {
@@ -59,7 +64,9 @@ test.describe('Calendario', () => {
 
     await page.locator('#cal-view-day').click();
     await expect(page).toHaveURL(/[?&]view=day/);
-    await expect(page.locator('.cal-band')).toHaveCount(4);
+    // Dia y semana son la MISMA rejilla con una columna; las cuatro franjas por tipo de comida se
+    // fueron con el rediseño. Lo que hay que exigir es que quede una columna de horas.
+    await expect(page.locator('[data-test="timeline-col"]')).toHaveCount(1);
 
     // Semana es la por defecto: vuelve a una URL sin parametro
     await page.locator('#cal-view-week').click();
@@ -206,11 +213,28 @@ test.describe('Calendario', () => {
     await page.locator('#cal-view-day').click();
     // El separador de miles lo decide el ICU del navegador: en un Chromium con
     // datos completos es «2.100» y con los recortados, «2100». Se admite cualquiera.
-    await expect(page.locator('.cal-day__stat-value').first()).toContainText(/2\D?100/);
+    await expect(page.locator('[data-test="timeline-kcal"]').first()).toContainText(/2\D?100/);
+  });
+
+  test('un evento se apunta escribiendo solo el titulo', async ({ page }) => {
+    // Es la repro literal del usuario: «el calendario da error si no mandas todos los campos, y eso es
+    // erroneo ya que se marcan como opcional». Aqui no se rellena nada de lo opcional: ni color, ni
+    // sitio, ni notas, ni hora. Si el servidor volviera a pedir el paquete entero, este test es el
+    // que lo cuenta, y lo cuenta con el boton que se pulsa, no con un safeParse.
+    await page.locator('[data-test="event-add"]').click();
+    await expect(page.locator('.modal__title')).toContainText('Apuntar un evento');
+
+    await page.fill('#event-title', 'Medir el pasillo');
+    await page.locator('[data-test="event-save"]').click();
+
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
+    await expect(page.locator('[data-test="household-event"]')).toContainText('Medir el pasillo');
+    // Y el dialogo de error no aparecio: los 400 del calendario se ven como nota dentro del modal.
+    await expect(page.locator('.cal-note[role="alert"]')).toHaveCount(0);
   });
 
   test('la pestaña Receta elige del recetario en lugar de escribir el plato', async ({ page }) => {
-    await page.locator('.meal-slot').first().click();
+    await page.locator('[data-test="timeline-add-meal"]').first().click();
     await page.locator('.meal-form__tabs button', { hasText: 'Receta' }).click();
     await expect(page.locator('.modal-overlay')).toContainText('Selecciona una receta');
 

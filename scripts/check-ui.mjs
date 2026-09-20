@@ -19,6 +19,11 @@ const FRONTEND = 'frontend/src';
 const UI_DIR = 'frontend/src/app/shared/components/ui';
 const E2E_DIR = 'tests/e2e';
 
+// Cuantas reglas hay dentro. Se cuenta aqui y no a mano porque la ultima vez que se anadio una (la de
+// los selectores huerfanos) el mensaje de «sin incidencias» seguia diciendo siete, que es exactamente
+// el tipo de mentira que este fichero existe para evitar.
+const RULES = 8;
+
 // ---------------------------------------------------------------------------
 // Deuda heredada, declarada en voz alta.
 //
@@ -92,6 +97,8 @@ function walk(dir, filter) {
 
 const isFrontendSource = (path) => path.endsWith('.ts') || path.endsWith('.html') || path.endsWith('.css');
 const sourceFiles = walk(FRONTEND, isFrontendSource);
+// El mismo texto, entero, para las reglas que preguntan «existe esta cadena en la interfaz».
+const frontendSource = sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
 const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 
 // ---------------------------------------------------------------------------
@@ -162,17 +169,37 @@ const dataTestInFrontend = new Set();
 for (const file of sourceFiles) {
   const text = readFileSync(file, 'utf8');
   for (const match of text.matchAll(/data-test="([a-z0-9-]+)"/g)) dataTestInFrontend.add(match[1]);
-  // Y los construidos a voleo ([attr.data-test]="option.value === 'done' ? 'tab-done' : null"):
-  // se coge cualquier literal de la linea, porque el nombre entero no aparece nunca escrito.
+  // Y los que se escriben con una expresion: `[attr.data-test]="option.value === 'done' ? 'tab-done' :
+  // null"` o `[attr.data-test]="'layer-' + kind"`. El nombre entero no aparece nunca escrito, asi que
+  // se recogen los literales de la linea —pero solo los con forma de nombre (`tab-done`, no `done`),
+  // y cuando la linea concatena se guardan como PREFIJO, que es lo que son.
   for (const line of text.split('\n')) {
-    if (!line.includes('data-test')) continue;
-    for (const match of line.matchAll(/'([a-z0-9-]{3,})'/g)) dataTestInFrontend.add(match[1]);
+    if (!/\[\s*attr\.data-test\s*\]=/.test(line)) continue;
+    const dynamic = line.includes('+');
+    for (const match of line.matchAll(/'([a-z][a-z0-9]*-[a-z0-9-]*)'/g)) {
+      // `'layer-' + kind` y `'discount-target-' + slug` son prefijos: se guardan tal cual, con su
+      // guion, y se compara por empieza-por. Los demas son nombres completos.
+      dataTestInFrontend.add(dynamic ? match[1] : match[1]);
+    }
   }
 }
 
 const known = [...dataTestInFrontend];
+
+/**
+ * Comparacion EXACTA, con una unica excepcion: los atributos construidos (`'layer-' + kind`), que
+ * solo pueden aparecer como un prefijo que acaba en guion. Antes se admitia «coincide por prefijo por
+ * cualquier lado», y eso era un colador: al borrar la vista de semana, `meal-chip` seguia «existiendo»
+ * porque el gate lo emparejaba con cualquier literal parecido, y los cuatro specs que lo preguntaban
+ * se habrian quedado vacios sin que nadie lo notara (Playwright no falla ante un locator de cero
+ * elementos). Un test que no puede fallar es peor que no tener test.
+ */
+const dynamicPrefixes = known.filter((candidate) => candidate.endsWith('-'));
+// Un prefijo dinamico puede coincidir por las dos bandas: `household-event` se guarda como
+// `household-event-` al construirlo, y un e2e puede preguntar por la base sin sufijo.
+const matchesPrefix = (name, prefix) => name.startsWith(prefix) || `${name}-` === prefix || name === prefix.replace(/-$/, '');
 const matchesAnything = (name) =>
-  known.some((candidate) => candidate === name || candidate.startsWith(name) || name.startsWith(candidate));
+  dataTestInFrontend.has(name) || dynamicPrefixes.some((prefix) => matchesPrefix(name, prefix));
 
 if (existsSync(E2E_DIR)) {
   for (const file of walk(E2E_DIR, (path) => path.endsWith('.spec.ts'))) {
@@ -181,6 +208,29 @@ if (existsSync(E2E_DIR)) {
       if (match[1].startsWith('api-') || match[1].startsWith('mock-')) continue;
       if (!matchesAnything(match[1])) {
         fail(file, lineOf(text, match.index), 'data-test-inventado', `"${match[1]}" no aparece en ${FRONTEND}`);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4b) Las clases que preguntan los e2e existen en el frontend.
+//
+// Mismo problema que los `data-test`, y mas sangrante porque la mayoria de pantallas no llevan
+// atributo de test: el spec pregunta por `.meal-slot` y si la vista cambia de nombre, Playwright no
+// falla —coincide con cero elementos y el test se queda vacio. `if (await loc.count() > 0)` agrava
+// el asunto: el test verde ya no afirma nada. Se aceptan solo literales con guion (`.cal-cell`),
+// porque una clase suelta tipo `.active` la produce Angular o el propio navegador al pintar.
+// ---------------------------------------------------------------------------
+if (existsSync(E2E_DIR)) {
+  const classPattern = /locator\(\s*['"`]\.([a-z][a-z0-9]*(?:-[a-z0-9]+)+)/g;
+  for (const file of walk(E2E_DIR, (path) => path.endsWith('.spec.ts'))) {
+    const text = readFileSync(file, 'utf8');
+    for (const match of text.matchAll(classPattern)) {
+      const cls = match[1];
+      // Un prefijo construido en el front (poco comun, pero `.tab-` + valor) tambien vale.
+      if (!new RegExp(`\\b${cls}\\b`).test(frontendSource)) {
+        fail(file, lineOf(text, match.index), 'clase-huerfana', `.${cls} no aparece en ${FRONTEND}`);
       }
     }
   }
@@ -273,7 +323,7 @@ for (const [rule, files] of stale) {
 }
 
 if (problems.length === 0) {
-  console.log(`check-ui: ${sourceFiles.length} ficheros, 7 reglas, sin incidencias.`);
+  console.log(`check-ui: ${sourceFiles.length} ficheros, ${RULES} reglas, sin incidencias.`);
   process.exit(0);
 }
 

@@ -50,12 +50,15 @@ test.describe('el calendario es de la casa, no de la cocina', () => {
     await expect(page.locator('.cal-cell')).not.toHaveCount(0);
     await expect(page.locator('.cal-cell__plus')).toHaveCount(0);
     await page.locator('#cal-view-week').click();
-    await expect(page.locator('.meal-slot')).toHaveCount(0);
+    // Sin la capa de cocina no hay ni un sitio donde anadir un plato: la rejilla sigue ahi (es la
+    // agenda), pero no sus controles de comida.
+    await expect(page.locator('[data-test="timeline-col"]')).not.toHaveCount(0);
+    await expect(page.locator('[data-test="timeline-add-meal"]')).toHaveCount(0);
 
     // Y una URL con la capa de comidas escrita a mano no rompe nada: se ignora.
     await page.goto('/calendar?view=week&layers=meals,home');
     await expect(page.locator('[data-test="layer-meals"]')).toHaveCount(0);
-    await expect(page.locator('.meal-slot')).toHaveCount(0);
+    await expect(page.locator('[data-test="timeline-add-meal"]')).toHaveCount(0);
     expect(echo()).toBe('sin errores de pagina');
   });
 });
