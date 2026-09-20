@@ -1891,6 +1891,14 @@ snack; the grid should read like Google's hours, showing only the window that ha
   as `'timeline-block-' + kind`, so the prefix rule is what matches them), and `event-attendees` in the
   dialog. The removed handles (`meal-slot`, `meal-chip`, `cal-band`, `day-meal-*`, `week-meal-*`) are
   gone from the specs too —there is no `voluntario` line for a selector nobody uses.
+- **A gate that turned out not to exist**: `npm run lint` does not lint anything in this repo, and it
+  failed before this round. `frontend` runs `ng lint`, whose builder (`@angular-eslint/builder`) is not a
+  dependency of any package or of the lockfile; `server` runs `eslint src --ext .ts`, and the pinned
+  eslint 9.17 rejected `--ext` long ago and then found no `eslint.config.js`, because the repo has none.
+  This round therefore does not claim a lint pass: what was run is `tsc` (app, spec and the e2e project),
+  the two vitest suites, `check-ui` and the production build. Fixing the lint setup is its own round —
+  flat config plus a decision about template linting— and pretending to have run it would be worse than
+  leaving it broken and said.
 - **Not claimed**: the sandbox has no Chromium, so nothing here asserts how the grid *looks*. The window
   trimming, the block placement and the scroll position are asserted as numbers, and the click and dialog
   behaviour as events. `calendar.component.ts` keeps a pre-existing component-CSS budget warning
