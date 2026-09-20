@@ -1425,70 +1425,160 @@ Four complaints, one of them about something that was simply invisible.
 
 ### The calendar is not the property of the kitchen module
 
-- [ ] `?layers=` and the shared agenda (round 9) made `/calendar` a section of the house: shopping
+- [x] `?layers=` and the shared agenda (round 9) made `/calendar` a section of the house: shopping
       lists, house tasks, personal sueltas. But the registry still owned the **route** from the
       `meals` module, so switching off «Comidas y recetas» deleted the whole agenda —route and nav
       entry— which is the opposite of what that switch means.
-- [ ] `MODULE_REGISTRY.meals.paths` is `['/recipes']` now. What the module governs is **what is
+- [x] `MODULE_REGISTRY.meals.paths` is `['/recipes']` now. What the module governs is **what is
       kitchen inside the calendar**, not the calendar: the Comidas layer, the meal affordances in
       the three grids, the goal ring and the calories/plan strip, the `Objetivo` pill and
       `Planificar IA`.
-- [ ] The grids receive `kitchen=false` and stop offering what the account turned off; the days
+- [x] The grids receive `kitchen=false` and stop offering what the account turned off; the days
       arrive with `meals: []`, so the blocks cannot leak in through the data. A shared
       `?layers=meals` link with the module off is ignored —not an error, and not written back to
       the URL, because that would re-add the thing the person just turned off.
 
 ### An avatar you can actually see
 
-- [ ] `app-avatar` painted `[style.background-color]` from the **`color` input** and never from
+- [x] `app-avatar` painted `[style.background-color]` from the **`color` input** and never from
       the hashed colour of the name. Nobody passing only a name —which is every line of the app—
       got no circle: white initials over the page background. And a photo had no edge, so it
       merged into the card behind it.
-- [ ] Background always resolves (an explicit `color`, otherwise the hash of the name); the
+- [x] Background always resolves (an explicit `color`, otherwise the hash of the name); the
       initials take **white or ink depending on the luminance of that background**, so the pair is
       readable on both themes; a photo gets a 1 px ring in `--border-strong` so the circle is a
       circle on any surface.
-- [ ] Fixing the component fixes everywhere, which is the point of round 11 having made it the
+- [x] Fixing the component fixes everywhere, which is the point of round 11 having made it the
       only rendering of a person.
 
 ### The person's own account, in Preferences
 
-- [ ] `/preferences` gains a **Cuenta** tab with the three things the server already accepted and
+- [x] `/preferences` gains a **Cuenta** tab with the three things the server already accepted and
       the UI never showed: the display name (`PATCH /auth/profile`), the photo, and the password
       (`POST /auth/change-password`, which checks the current one before replacing it).
-- [ ] The photo is resized **in the browser** to a square JPEG of 128 px before leaving the
+- [x] The photo is resized **in the browser** to a square JPEG of 128 px before leaving the
       device, and it is stored as a file: `POST /api/auth/avatar` writes it in an `uploads`
       directory next to the database and `users.avatar` keeps a path
       (`/api/uploads/avatars/<userId>.jpg`), not the bytes. It is served under `/api` so the dev
       proxy carries it without touching `proxy.conf.json`.
-- [ ] Why a path and not a data URL: `users.avatar` is read by the subqueries that decorate every
+- [x] Why a path and not a data URL: `users.avatar` is read by the subqueries that decorate every
       shopping row, every audit event and every agenda chip. A 40 KB data URL there is 40 KB per
       row on every list view, and the list view is the hottest screen of the app.
-- [ ] `updateProfileSchema.avatar` was `z.string().url()`, which rejects the very path the app
+- [x] `updateProfileSchema.avatar` was `z.string().url()`, which rejects the very path the app
       generates for it. It becomes: an `uploads` path, an absolute URL, or `null` to clear.
-- [ ] Name, photo and password each have a cancel that restores what was there — the standing rule
+- [x] Name, photo and password each have a cancel that restores what was there — the standing rule
       for any editable control — and nothing uses `window.prompt` for a new password.
 
 ### «Sin oferta» and «Sin descuento» have to look like what they are
 
-- [ ] They were muted caption-coloured chips: a removal action that reads as a label is not a
+- [x] They were muted caption-coloured chips: a removal action that reads as a label is not a
       button, and the person cannot see that it is the way out. The chip gets a `--clear` variant:
       accent ink, the `close` icon, and the same height as its neighbours.
-- [ ] Tapping the offer preset that is already on **takes it off**, like every other chip in the
+- [x] Tapping the offer preset that is already on **takes it off**, like every other chip in the
       app; tapping the discount kind that is active goes back to `Sin descuento`. The hint line
       keeps saying what will be paid, and that is the feedback — no toast for a toggle.
 
 ### Tests
 
-- [ ] The registry no longer claims `/calendar`; `isPathVisible('/calendar')` is true with the
+- [x] The registry no longer claims `/calendar`; `isPathVisible('/calendar')` is true with the
       kitchen module off, and `isPathVisible('/recipes')` is false.
-- [ ] The avatar's colour pair is a pure function (`avatar-palette.ts`) with its own spec: a name
+- [x] The avatar's colour pair is a pure function (`avatar-palette.ts`) with its own spec: a name
       always resolves to a background with enough contrast for the initials, and the choice is
       stable for the same name.
-- [ ] `POST /api/auth/avatar` writes, replaces the previous file, and refuses a non-image MIME and
+- [x] `POST /api/auth/avatar` writes, replaces the previous file, and refuses a non-image MIME and
       an oversized body; `PATCH /auth/profile` accepts the app's own path and clears with `null`.
-- [ ] The line sheet: clicking the active offer preset clears the draft, and clicking the active
+- [x] The line sheet: clicking the active offer preset clears the draft, and clicking the active
       discount kind returns it to `none`.
+
+## 12k. Round 12 — how it actually turned out
+
+The five things asked for, in the order they were done. What is checked below is checked by a test
+that runs; what only a pair of eyes can decide says so.
+
+### The agenda stayed, the kitchen went away
+
+- [x] `MODULE_REGISTRY` no longer owns `/calendar` (`meals.paths` is `['/recipes']` alone), so
+      `moduleOwningPath('/calendar')` is `undefined` and the route is core: it survives every switch
+      in Configuración. `modules.registry.spec.ts` pins that, and the Karma spec of the service
+      follows the same rule through `isPathVisible`.
+- [x] The view does not disappear; its kitchen content does. `calendar.component.ts` injects
+      `ModulesService` and derives `kitchen()`, and `mealsVisible() = kitchen() && showMeals()`.
+      With the kitchen off: no Comidas chip, no Objetivo, no Planificar IA, the period strip
+      collapses to `cal-strip--bare` (only the error line is left), the month cells lose the `+`,
+      the week and day grids show the household agenda instead of meal slots, and `?layers=` neither
+      writes nor honours `meals`.
+- [x] The three grid children take `[kitchen]` as an input rather than reaching for the service —
+      the day component keeps its aside only when there is a kitchen, and the week's `is-empty`
+      marker means "no plans" only in the sense the person can still act on.
+
+### An avatar you can actually see, everywhere
+
+- [x] `avatar-palette.ts` is the whole decision, in the open: eight discs, a tint of the hashed
+      colour at 84 % over the ink, and the letter in the colour that clears WCAG contrast against
+      that specific disc (`contrastRatio ≥ 4.5`, asserted for all eight and for a smiley-name
+      surrogate pair). `avatar-palette.spec.ts` runs it in the pure-test bridge — no browser, so the
+      numbers are the verification; how it *looks* is the preview's.
+- [x] `app-avatar` is the only place a face is drawn, so fixing it fixes the header, the sidebar
+      chip, the household list and the line sheets. `ink` is a getter, not a `computed`: with plain
+      `@Input()` fields a `computed` keeps a stale value when a row is reused.
+- [x] A photo gets a double ring (inset `--border-default`, outer `--border-strong`) so the circle
+      is still a circle on a white card, and a 404 photo falls back to the initials instead of a
+      blank disc (`broken` + `.avatar__initials--fallback`).
+- [x] The mobile header was the one avatar that ignored the stored photo — it binds `userAvatar()`
+      now, so the face you chose is the face you get at 400 px wide too.
+
+### The account, editable from Preferencias
+
+- [x] New `Cuenta` tab, first in the strip: the sidebar opens `/preferences` from the person's own
+      avatar, so the account is what should be there when they arrive. The tab strip became a loop
+      over a `tabs` list with `app-icon`s — four emojis out, `preferences.component.ts` out of the
+      `sin-emoji` debt list in `scripts/check-ui.mjs`, and the footer button that saves the
+      *comensal* profile is hidden on this tab because this tab saves itself.
+- [x] `uploads.ts`: files on disk next to the database, `dirname(DATABASE_PATH)/uploads` (and a
+      per-process temp dir under `:memory:`, which is what keeps the suite out of the repo). The
+      stored value is the *path* — a base64 avatar in `users.avatar` would be paid per row in the
+      shopping and calendar subqueries that decorate every line with its author's face.
+- [x] The filename is the server's, never the client's: `storeImage` sanitises the owner id and adds
+      a random suffix, and `uploads.spec.ts` proves that a `../../etc/passwd` id comes out as one
+      safe component inside `avatars/`. `resolveUploadUrl` refuses anything that escapes the kind
+      directory, and `deleteUpload` reports whether there was something to delete (`rmSync` with
+      `force` does not throw on absence, so answering `true` there would be a lie).
+- [x] `GET /api/uploads/:kind/:file` is mounted next to the API routes and is *not* behind the
+      token — an `<img>` cannot send one — which is why the random suffix is the whole permission.
+      `auth.routes.spec.ts` uploads a real PNG, reads it back through the public URL and checks the
+      profile carries the path.
+- [x] `avatarField` accepts the app's own `/api/uploads/avatars/…` path or an absolute URL:
+      `z.string().url()` was rejecting the exact string the server hands out, which is the kind of
+      bug only an end-to-end test catches. `null` clears it, `sanitizeUser` omits the key when there
+      is no photo (never an empty string), and the service's `avatar: avatar ?? undefined` matches.
+- [x] `avatar-image.ts`: the file never leaves the device in a form the server would reject —
+      JPEG/PNG/WebP, 4 MB, cropped to a 128 px centre square and re-encoded at 0.72 in a canvas.
+      The pure half (`avatarFileError`, `squareCrop`) has a spec; the canvas half is browser-only.
+- [x] Name and password need no new endpoints, only a screen: `updateProfile` keeps the cached user
+      in sync (so the sidebar renames itself with the same signal), `changePassword` maps the
+      server's English `Current password is incorrect` to a Spanish line, and every one of the three
+      blocks has its own Cancelar — the password fields are wiped, not left typed on the screen.
+
+### The chips that take things off
+
+- [x] `.detail__chip-btn--clear`: dashed border in `--error`, no `--active` state, and it applies to
+      `Sin oferta` (which had a `--muted` class with no rule anywhere — that is why it read as a
+      caption) and to `Sin descuento`.
+- [x] `pickOfferPreset` / `pickLineKind`: tapping the chip that is already on turns it off, with
+      `aria-pressed` carrying the state the colour no longer can. No toast for a toggle: the hint
+      line already says what will be paid.
+
+### Verification
+
+- [x] Gates: `tsc -p tsconfig.app.json`, `ng build --configuration production`,
+      `node scripts/check-ui.mjs` (137 files), server `tsc --noEmit`, server vitest 271 tests with
+      94.86 % statement coverage, `npm run typecheck:e2e`, and the frontend pure bridge at 45 tests.
+- [x] New e2e for the round (`tests/e2e/round12.spec.ts`): kitchen off with the agenda alive and
+      usable, the avatar disc readable, the photo visible in both menus and served by the public
+      route, and the two removal chips. `tests/e2e/preferences.spec.ts` covers renaming, the photo
+      and the three password fields against the real API.
+- [ ] Not verified here, and it cannot be: whether the tint reads as *nice* rather than merely legal,
+      and how the crop behaves on a face that is not centred. That is the preview's job.
 
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
