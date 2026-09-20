@@ -1249,69 +1249,114 @@ same milk has another name and another price at Mercadona than at Lidl.
 
 Four things from the screenshot of the line sheet, and the fourth was app-wide.
 
-### The line sheet (units)
+### The line sheet (units) — done
 
-- [ ] The unit control is **one** control. The quick chips (`ud kg L pack`) and the picker below
+- [x] The unit control is **one** control. The quick chips (`ud kg L pack`) and the picker below
       repeated the same value twice, and a row that offers the same choice twice is a row that
-      disagrees with itself the moment one of the two is stale.
-- [ ] Families: the picker groups by what is being measured —peso, volumen, unidades, formatos,
-      medidas de cocina— and choosing the family **selects its default unit** (Peso → kg, Volumen
+      disagrees with itself the moment one of the two is stale. Both are gone; the sheet has
+      `app-unit-picker` and nothing else for that decision.
+- [x] Families: the picker groups by what is being measured —peso, volumen, unidades, envase,
+      medida de cocina— and choosing the family **selects its default unit** (Peso → kg, Volumen
       → L, Unidades → ud). Refining inside the family is one more tap, not another control, and
       writing «bote de 400 g» by hand keeps working because a unit that is not in the catalog is a
-      unit someone actually uses.
-- [ ] `frontend/src/app/features/shopping/unit-picker.component.ts` is a component, not a fourth
-      copy of the pattern: three screens pick units (list line, pantry, photo review).
+      unit someone actually uses. `unit-families.ts` holds the data and `canonicalUnit`, shared
+      with the paste parser so «1kg Tomates» and «1 KG Tomates» are the same row.
+- [x] `app-unit-picker` is a component that wraps `app-picker` (the trigger that always says the
+      value, the filter, the keyboard, `allowCustom`) instead of a fourth copy of the pattern. It
+      also names the family it resolved to under the trigger, because «kg» alone is a number
+      without a story. The photo review has no unit control yet —its units come from the model—
+      so the picker has one consumer today, which is what the sheet needed.
 
-### The line discount
+### The line discount — done
 
-- [ ] `shopping_list_items` gains `disc_kind`, `disc_value_minor`, `disc_percent_bps`, `disc_units`
-      (added with `addColumnIfMissing`, no rebuild —the table already survived one of those and it
-      does not need to survive two in the same round).
-- [ ] `lineDiscount` in `utils/list-discount.ts`, applied **after** the offer and **before** the
-      basket coupon, which is the order a till uses: `2x1 → -10 % sobre 2 unidades → -2,50 € de la
-      cesta`. Applied in the other order, the same receipt gives a different number, and there is no
-      way to argue with it afterwards.
-- [ ] Percent over the first N units (`disc_units`) exists because that is a real sign («50 % en la
-      segunda unidad») and without it the only honest option was to lie about the whole line.
-- [ ] Clamped and said: a 3 € discount on a 2,85 € line lowers it to 0,00 and the description says
-      so; it never goes negative and never refunds the rest of the basket.
-- [ ] `createItemSchema`/`updateItemSchema` take `discount` (and `discount: null` removes it, which
-      is why it is not a `COALESCE`); `PATCH` writes the four columns; `estimate` returns
-      `lineDiscountMinor` and `lineDiscountDescription` per row; the audit trail logs
-      `item.discount`.
-- [ ] The sheet's «Oferta de la tienda» block becomes a discount block with the four kinds
-      (oferta, porcentaje, importe, ninguna), a live «de 2,85 € a 2,56 €» line before saving, and
-      autosave like every other field in that sheet.
+- [x] `shopping_list_items` gained `disc_kind`, `disc_value_minor`, `disc_percent_bps`,
+      `disc_units` via `addColumnIfMissing`. Four columns and not one JSON blob: `estimate` sums
+      them for the header in one pass, and a blob has to be parsed per row to do arithmetic.
+- [x] `applyLineDiscount` in `utils/list-discount.ts`, applied **after** the offer and **before**
+      the basket coupon, which is the order a till uses: `3x2 → -10 % sobre 2 unidades → -2,50 €
+      de la cesta`. Applied in the other order, the same receipt gives a different number, and
+      there is no way to argue with it afterwards. The percent is taken on what is *paid* (with a
+      3x2 on six units, 5 % of four units' worth), because that is what the sign at the shelf
+      means.
+- [x] Percent or amount over the first N units (`disc_units`) exists because that is a real sign
+      («50 % en la segunda unidad», «2 € en los dos primeros») and without it the only honest
+      option was to lie about the whole line.
+- [x] Clamped and said: a 2 € discount on a 0,95 € line lowers it to 0,00 and the row says
+      `clamped`; a cap of two units when the basket holds one says `fewerUnits`. It never goes
+      negative and never refunds the rest of the basket.
+- [x] `createItemSchema`/`updateItemSchema` take `discount` (and `discount: null` removes it,
+      which is why it is not a `COALESCE`); `POST` writes the four columns and merging two lines of
+      the same product carries the incoming discount over; `PATCH` writes all four at once, because
+      half a discount is worse than none; `estimate` returns `lineDiscountMinor` per row,
+      `lineDiscountDescription` and `lineDiscountReason`, plus `lineDiscountMinor` at basket level;
+      the audit trail logs `item.discount`.
+- [x] The sheet got the block («Descuento en esta linea»: ninguna / porcentaje / importe, with
+      «sobre cuantas unidades»), a live «de 0,95 € a 0,86 €» line while typing, and autosave like
+      every other field in that sheet — one debounced commit for the whole sheet, so tapping a
+      discount chip cannot swallow the price being typed. The offer block stayed separate on
+      purpose: an offer says how many units you pay for, a discount says how much; they are two
+      questions and they stack exactly like at a till. The row shows a chip with the discount so it
+      is not only visible while the sheet is open, and the breakdown strikes the old price.
+- [x] Closing the purchase separates the two numbers: `paidMinor` subtracts the line discount (that
+      is what left the wallet), while the price the household *learns* is the shelf price —learning
+      0,75 today would make next week's estimate lie.
 
-### Clocks
+### Clocks — done
 
-- [ ] The server stored UTC in a column without saying so: `2026-09-20 09:44:18` has no zone, so the
-      browser read it as *local* and everything moved by the offset —in Madrid, two hours: a list
-      saved a second ago said «hace 2 horas» and the log viewer printed tomorrow's timestamps.
-      The fix is at the boundary: `timestamp.middleware.ts` rewrites naive `YYYY-MM-DD HH:MM:SS`
-      (and `T…` without zone) into ISO with `Z` on the way out, for JSON responses only. Date-only
-      strings are left alone on purpose: `2026-09-20` is a day on a calendar, not an instant, and
-      adding a zone to it would move the lunch to the previous day.
-- [ ] `frontend/src/app/core/time.ts` owns what the client knows: `clientTimeZone()` (Intl, detected,
-      not typed), `parseInstant` (Z or naive-UTC), `formatTime`/`formatDateTime`/`formatDay` and a
-      `formatRelative` that says «hace 3 min», «ayer a las 19:14» or «16 de sept» by distance. Every
-      hand-rolled `new Date(value)` in a component goes through it: the tray's «Guardado», the
-      detail's, the log viewer's clock, the pantry's expiration chip.
-- [ ] Calendar dates keep the local-day rule from `calendar.util.ts` (`toISODate` from local parts):
-      that file already stopped the UTC-shift bug for meals, and the same rule applies to expiration
-      and receipt dates —a product does not expire one day earlier because you fly to Lisbon.
-- [ ] Tests: the middleware on a Hono app (naive → Z, date-only untouched, `text/event-stream`
-      skipped, non-JSON body skipped), the engine table for line discounts (order, clamp, per-units
-      slice), `time.spec.ts` in Jasmine for parse/format/relative, and the full-stack suite gains a
-      check that the API never answers with a zone-less timestamp.
-
+- [x] The server stored UTC in a column without saying so: `2026-09-20 09:44:18` has no zone, so
+      the browser read it as *local* and everything moved by the offset —in Madrid, two hours: a
+      list saved a second ago said «hace 2 horas» and the log viewer printed tomorrow's
+      timestamps. The fix is at the boundary: `timestamp.middleware.ts` rewrites naive
+      `YYYY-MM-DD HH:MM:SS` (and `T…` without zone) into ISO with `Z` on the way out, for JSON
+      responses only, keyed by the field name so a note that mentions a date is not rewritten.
+      Date-only strings are left alone on purpose: `2026-09-20` is a day on a calendar, not an
+      instant, and adding a zone to it would move the lunch to the previous day.
+- [x] `frontend/src/app/core/time.ts` owns what the client knows: `clientTimeZone()` (Intl,
+      detected, not typed), `parseInstant` (Z or naive-UTC), `formatTime`/`formatDateTime`/
+      `formatDay`/`formatTimePrecise`, `toDayKey`, `daysUntil` and a `formatRelative` that says
+      «hace 3 min» or «16 sept» by distance. Every hand-rolled `new Date(value)` in a component
+      goes through it: the tray's «Guardado», the audit trail, the log viewer's clock, the pantry's
+      expiration chip. The audit rows carry the absolute time in their `title`, and the log viewer
+      says which zone it is showing —the server speaks UTC, so comparing the two used to be
+      guesswork.
+- [x] Calendar dates keep the local-day rule from `calendar.util.ts` (`toISODate` from local
+      parts): that file already stopped the UTC-shift bug for meals, and the same rule now applies
+      to expiration and receipt dates —a product does not expire one day earlier because you fly to
+      Lisbon. Two places broke it and are fixed: the pantry's edit form pushed the day through an
+      instant (`toISOString().split('T')[0]`), and its «Caducado» badge counted milliseconds, so
+      at 23:00 on the expiry day the yoghurt was already expired.
+- [x] The same day-vs-instant mistake was in the pantry's **SQL**, and it was worse:
+    `expiration_date >= datetime('now')` compares `2026-09-20` with `2026-09-20 10:50:08`
+    lexicographically, so what expires today counted as *expired* from the first hour of the
+    morning and never showed up in «next 3 days». The filters now compare `date()` to `date()`.
+    And the two pantry filter flags were declared `z.boolean()` in a query schema, which never
+    parses a URL —every «solo caducados» from the app was a 500 with a ZodError. There is now a
+    `queryFlag` that takes `true`/`1`/`false`/`0`, and a route spec that pins both behaviors.
+- [x] Tests: the middleware on a Hono app (naive → Z, date-only untouched, JSON of the real API
+      checked in the shopping routes suite, non-JSON left alone), the engine table for line
+      discounts (order, clamp, per-units slice, merge, removal), `time.spec.ts` for
+      parse/format/relative with the zone passed explicitly so it runs in any browser,
+      `unit-picker.spec.ts` for the families, and `pantry.routes.spec.ts` for the day math.
+- [x] Verified against the built server, not only against the tests: an item with `3x2` plus
+      `-10 %` estimated `400 → 360` on six units of 1,00 €; a 2 € discount on a 0,95 € line
+      reported `clamped`; `discount: null` cleared the four columns; closing the list reported
+      `paidMinor 405` while the remembered price stayed at 1,00 €/ud; every timestamp in the
+      responses ended in `Z` while `expiration_date` stayed `2026-09-20`; `?expired=true` returned
+      the day-old yoghurt and not today's, and `item.discount` appeared in the audit trail as
+      «Sonda B ha cambiado el descuento de «Tortilla»».
 
 ## 13. Coming soon (deliberately not in this program)
+- **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
+  (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
+  «los iconos nunca son emojis» solo se cumple en lo que `check-ui` mira, y la despensa esta en su
+  lista de deuda. Convertirla es: `getCategoryIcon`/`getLocationIcon` devuelven el NOMBRE del
+  icono, el formulario pasa a `app-picker` (con `app-unit-picker` para la unidad, que ya existe)
+  y se quitan los dos ficheros de la lista. Se hizo el visor de logs en la ronda 10 porque ya
+  estaba en el diff; la despensa entera merece su propia tanda con sus capturas.
+- **Precio por linea en la foto.** Las lineas que devuelve el modelo traen cantidad y precio, pero
+  no unidad: quien revisa la foto no puede corregir «1 L» a «1 botella» y luego en la lista si. El
+  control ya existe (`app-unit-picker`); falta el campo en el prompt y en la validacion.
 
-- **Per-line discounts**: a discount that belongs to *one row* with its own value («el jamón, 2 €
-  menos, y el queso un 10 %»). The engine already knows how to spread a discount over chosen lines and
-  how to answer "what did I actually pay for this"; what it does not have is a second table, and one
-  coupon per list is what the till does. Coming back to this needs a real receipt, not an idea.
 - **Store catalog with aliases and barcodes**: `stores` as a table (not a column of names), one product
   with several shelf names per shop, EAN lookup. Today the link is the product key, chosen by hand in
   the line sheet, and that is enough to remember prices per shop —it is not enough to *suggest* them.
@@ -1320,8 +1365,11 @@ Four things from the screenshot of the line sheet, and the fourth was app-wide.
   being one of the shops whose prices the app already knows.
 - **Drag to reorder inside a section**: the `PUT /lists/:id/order` endpoint and the `position` column are
   ready; what is missing is a handle that cannot be confused with the swipe. Same for **picker recents**
-  (`localStorage`): useful once someone proves it, not before.
-- **The UI debt the guard counts**: 22 files still paint an emoji where a glyph should be, and five screens
+  (`localStorage`), including the unit picker: what the household actually writes («pack de 6», «barra»)
+  is already in `shopping_list_items.unit`, and showing it first would remove most typing — but a house
+  that changes shop changes format, so the window has to be decided before it becomes a canon.
+- **The UI debt the guard counts**: 21 files still paint an emoji where a glyph should be (the log viewer
+  stopped in round 10, and its filters still use a native `select`), and five screens
   still open a native `select`. They are named in `scripts/check-ui.mjs`, one PR per screen, and the list can
   only shrink — the guard prints a line when a file stops offending.
 - **Photo prices as observations**: a photographed price tag sets the line price today; it should also teach
