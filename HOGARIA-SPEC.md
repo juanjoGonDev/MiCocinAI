@@ -1690,6 +1690,61 @@ already 404 before the new upload). What is fixed is the class, not just the cas
 cannot be read back can no longer be called a success, and the log now names the directory so the
 remaining environment question is answerable in one line.
 
+## 12n. Round 13c — the photo is a control, and a dead session says so
+
+### The face in the account page had become a form field
+
+- [x] The avatar is a **button**: hover or focus shows «Cambiar / Poner foto» over the disc, and the
+      whole disc is the target. On touch (no hover) the label is there from the start —a hint that
+      only appears for a pointer that does not exist is not a hint.
+- [x] Tapping it opens a modal with the two decisions that belong together: **sustituir** and
+      **quitar** (plus the Cancelar/Escape/backdrop that every editable control in the app has). Two
+      stacked modals would have been two escapes to press; it is one modal with two steps.
+- [x] Choosing a file no longer uploads it: it opens the **editor** —drag to frame, wheel, slider or
+      `+`/`-` to zoom (1x–4x), arrows to nudge, `0` to recenter, and «Usar imagen». Before this the
+      crop was always the dead centre of the photo, which is how a face becomes a forehead.
+- [x] `avatar-crop.ts` is the single source of that geometry (pure, 7 tests, run in node): the preview
+      and the uploaded bytes come from the same `cropRegion`, so what is framed is what is saved. The
+      preview is `previewLayout` in px on the same image, not a `transform` with a second formula.
+- [x] The editor always hands over a JPEG square of `AVATAR_EDGE` px, whatever came in.
+- [x] A second photo cannot inherit the first one's broken state: `app-avatar` used to keep
+      `broken = true` when `src` changed, painting the fallback initials over the photo that had just
+      loaded —the exact signal that the upload worked.
+
+### The ghost session is the bug the user actually hit
+
+- [x] Evidence: the account in the browser (`IA4IeB_2YdLBjcQSyaHpX`) does not exist in the database
+      the API has open, and its avatar file is nowhere on disk; `server/data/` (DB *and*
+      `uploads/`) had been replaced under the running process by the sandbox reset. The screen kept
+      showing the cached name and the cached photo URL, and every write answered 401.
+- [x] That state was **silent**: the error interceptor excluded 401 from its toast, so an app on a
+      dead session looks alive. A 401 now says «La sesion que guarda este navegador ya no vale.
+      Cierra sesion y vuelve a entrar.», throttled once per 30 s (a screen full of parallel requests
+      produces one message), and suppressed when the 401 belongs to the login form itself, which
+      already answers next to the field.
+
+### Tests
+
+- [x] `avatar-crop.spec.ts`: centred crop, clamped zoom (including a `NaN` slider), the pan clamped
+      to the slack the frame leaves, drag in the direction a finger expects, preview layout matching
+      the region, and zoom anchored to the pointer (the assertion that catches «scale the offset»
+      instead of «scale the gap»).
+- [x] `account.spec.ts`: opacity of the label before/after hover, the modal's two steps, zooming
+      changing the preview, Cancelar returning without uploading, the stored file being a
+      **128x128 JPEG** served through the public route, the ring, the same face in the sidebar and
+      the mobile header, and the removal through the modal.
+
+### How it turned out
+
+- The account chunk went from 22.7 kB to 36.7 kB raw (9.7 kB gzipped) with the editor inside it. It
+  is lazy, it only loads on the one screen that needs it, and it replaces a canvas call plus a
+  hand-centred crop that was already there —the cost is honest.
+- The editor never talks to the network: it emits the finished data URL and the screen owns the
+  POST, the toasts and the failure copy. That is what keeps the two cancelable paths (Cancelar in
+  the editor, closing the modal) in one place.
+- Not verified by eye: no Chromium in this sandbox, so the drag, the wheel and the 128x128 result
+  are asserted by unit tests on the geometry and by an `e2e` case that has not been executed. The
+  preview is the reviewer.
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
   (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
