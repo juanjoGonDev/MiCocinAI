@@ -1763,6 +1763,149 @@ remaining environment question is answerable in one line.
 - Not verified by eye: no Chromium in this sandbox, so the drag, the wheel and the 128x128 result
   are asserted by unit tests on the geometry and by an `e2e` case that has not been executed. The
   preview is the reviewer.
+## 12o. Round 14 checklist — optional means optional, and the day has an hour axis
+
+Reported by the user in one breath, and each part is a separate promise below: the calendar answers
+`400` when a form is filled only with what it asks for; the day is not divided into
+desayuno/almuerzo/cena/merienda — and that list was in the wrong order anyway, dinner comes after the
+snack; the grid should read like Google's hours, showing only the window that has something in it, not
+24 rows; and an event can have another member of the house in it.
+
+### A. «Optional» has four shapes, and `.optional()` covers one of them
+
+- [x] A form sends an empty field as absent, as `null`, as `''`, or as `"   "`. `z.string().optional()`
+      accepts exactly the first. The calendar's `notes`/`location`/`color` are `.optional()` and the
+      form sends `null` on purpose, so every event saved with the notes field empty was a `400`
+      reading «Expected string, received null» —an error about the shape of the request, shown to
+      someone who had done nothing wrong.
+- [x] New `server/src/schemas/form.ts`: `formText(max)`, `formTime()`, `formDate()`, `formColor()`,
+      `formNumber(...)` accept all four shapes, and normalise blank to `null`. `null` is *cleared*,
+      absence is *untouched* —that difference is what makes PATCH able to remove a value, and it is
+      documented in the helper, because the next person will reach for `.optional()` again.
+- [x] Every request schema a route parses is converted to those helpers where the UI can leave the
+      field empty. Required stays required: `title` on an event, `date`, `name` on a product.
+- [x] `calendar.routes.ts` and friends answer a failed parse with the field and the reason in Spanish
+      (`notes: max 500`), not with the first zod sentence in English, and the dialog shows it inline.
+- [x] The frontend stops using `undefined` to mean «borrar»: editing a meal and emptying its time now
+      sends `null`, so the old hour actually disappears. Before this, the only way to lose a time was
+      to delete the meal.
+
+### B. Every form is tested with the optional fields missing — and that stays true
+
+- [x] `server/src/schemas/form-contract.spec.ts` holds a table: one row per request schema, with a full
+      sample, the list of required keys and the list of optional ones. For each row it asserts — parses
+      with only the required; parses with each optional key absent, `null`, `''`, `"   "`; and still
+      rejects a missing required key (otherwise the fix would just be «accept anything»).
+- [x] The same file reads `server/src/routes/*.routes.ts` and fails if any `…Schema.parse` /
+      `…Schema.safeParse` has no row in the table. That is the part that keeps it true in three months:
+      a new form cannot skip the contract, and the failure message says exactly what to add.
+- [x] Route level, where a schema can pass and the SQL still break on `undefined`: `POST
+      /api/calendar/events` with `{title, date}` only → `201` and the optional columns are NULL in the
+      row that comes back; the same for `PATCH` clearing `notes` with `null`; plus a minimal-payload
+      case in the existing `pantry`, `shopping` and `auth` route specs.
+- [x] `tests/e2e/calendar.spec.ts` creates an event typing only the title, and asserts the dialog
+      closes and the block appears —the user's exact repro, at the level the user touches.
+
+### C. The order of the day
+
+- [x] `MEAL_ORDER` and both SQL `CASE` blocks: breakfast, lunch, **snack, dinner**. The list was
+      breakfast, lunch, dinner, snack since the first version, so the plan read «cena» before
+      «merienda» everywhere it was sorted by type (grid, month, AI persist loop, enum).
+- [x] `MEAL_TYPES` in `server/src/utils/weekly-plan.ts` follows the same order, so what the model is
+      asked for and what gets written back agree with what is displayed.
+
+### D. Hours, not meal slots — and only the hours that have something
+
+- [x] New pure module `frontend/src/app/core/calendar-grid.ts`, tested before the component (TDD within
+      the bridge's limits): minute↔hour helpers, the conventional hour of an untimed meal (`desayuno
+      08:30 · almuerzo 14:00 · merienda 17:30 · cena 21:00` —a position, never a printed claim), the
+      visible window from the items of the range with padding, and the overlap layout (side-by-side
+      columns, same rule Google uses: groups of items that collide share the width).
+- [x] `app-calendar-timeline` renders the day/week grid: hour gutter, a column per day, blocks placed
+      by minutes, a band on top for `allDay`, and no 24 empty rows — the top and bottom of the view are
+      the first and last thing there is (default 08:00–22:00 when the range is empty).
+- [x] The window is scrolled on load to the first thing of the day, or to `now` if today has nothing —
+      the behaviour the user named («como las horas de google»).
+- [x] Clicking an empty strip creates at that time: a meal takes `time` and the type nearest to that
+      hour, an event takes `startTime`. The hour you clicked is not lost, which is the only reason a
+      time axis is worth having over a list.
+- [x] `calendar-week.component.ts` and `calendar-day.component.ts` go away rather than sit next to the
+      grid as a second way to paint the same day; the month view keeps its rows (a month has no hours).
+- [x] Meal type stops being a partition of the view and stays what it always was in the data: a label
+      and a colour. The `data-meal` accent and the labels survive; the four fixed bands do not.
+
+### E. Another member in the event
+
+- [x] `calendar_event_attendees (event_id, user_id, added_by)`, created by the migration runner, with
+      an index on `user_id`. The author is not an attendee of their own event —they are the author, and
+      mixing the two would make «leave» able to delete the event.
+- [x] `attendeeIds` on `POST`/`PATCH /api/calendar/events`: unknown ids and ids outside the house are
+      rejected with the list of who could not be invited, not silently dropped.
+- [x] Visibility follows the invitation: `GET /api/calendar/events` returns events where I am in
+      `calendar_event_attendees` as well as mine and the house's, with `editable` still only for the
+      author. An event you are invited to that you cannot see is an invitation that did not work.
+- [x] An attendee can leave (`DELETE /api/calendar/events/:id/attendees/me`) and the author can remove
+      anyone; nobody can remove the author, and the event is not deleted by the last person leaving.
+- [x] In the dialog: a member picker with faces (`app-avatar`, the same palette rule as everywhere
+      else), the author's face on the block, and the invited faces beside it; `title`/tooltip says who.
+- [x] The picker has no «save» trap: adding or removing a member there is applied with the event, and
+      `Cancelar` never sends anything.
+
+### F. Gates and honesty
+
+- [x] Server vitest green, the frontend-vitest bridge green with `calendar-grid.spec.ts` added to it,
+      `tsc` for app and spec, `typecheck:e2e`, `node scripts/check-ui.mjs`, production build.
+- [x] No claim about how the grid looks is made from a build: the sandbox has no Chromium. What is
+      asserted here is geometry (numbers), placement data, and the dialogs' behaviour.
+
+
+### What actually landed (measured, not promised)
+
+- **Server**: the vitest run in `server/` → 21 files, **542 tests** green, with `tsc --noEmit` clean.
+  The form contract file alone is **254** of them. `calendar.routes.spec.ts` is 18 tests: seven on the
+  data the routes read, and the rest the behaviour the user reported —minimal payload accepted, `null`
+  versus absent, a legible 400 naming the field in Spanish, clearing a note, changing and clearing a
+  meal's hour, the order of the day, invites, outsiders, and leaving.
+- **Route-level minimal payloads** now also exist for the pantry (ingredient with only what its screen
+  requires, then `expirationDate: null` really clearing it), the shopping list item (only `name`, then
+  `note`/`priceMinor` cleared with `null`) and `PATCH /api/auth/taste` with `{}` —which is what
+  «saltar por ahora» sends, and was a 500 before this round.
+- **Frontend geometry** is a pure module with **79** bridge tests (9 files) covering hour↔minute
+  conversion, the trimmed window (hour boundaries, six-hour minimum, full day when the range is empty),
+  the minimum block height, the overlap packing, the all-day band, the anchor order in Spanish hours,
+  the 30-minute click snap and the auto-scroll. `calendar-week.component.ts` and
+  `calendar-day.component.ts` are deleted, not deprecated: day and week are one component now.
+- **`scripts/check-ui.mjs` grew a rule and a fix.** Rule 4 (orphan selectors) previously matched
+  `data-test` names *by common prefix in either direction*, so when the week grid was deleted its
+  `meal-chip` handle still «existed» —and the e2e specs asking for it would have gone quietly vacuous,
+  because Playwright does not fail on a locator that matches nothing. It is now exact-match, with the
+  only exception being the dynamic attributes the frontend builds by concatenation (`'layer-' + kind`).
+  A second half of the rule does the same for the **CSS classes** the specs ask for, and it caught four
+  orphan classes in three spec files (`.meal-slot`, `.cal-band`, `.cal-week`, `.cal-day`) on the first
+  run; the specs were rewritten against the new handles rather than the old names being faked back into
+  existence. The rule count in its own summary line is a constant now, because the printed «7 reglas»
+  was lying the day the rule became eight.
+- **UI handles of the new grid**, for the specs and for anyone reading the template: `timeline-col` (one
+  per visible day), `timeline-band` (the all-day strip, which is also the «no he puesto hora» affordance),
+  `timeline-add-meal` (the `+` in each day header), `timeline-block-meal` / `timeline-block-event` (built
+  as `'timeline-block-' + kind`, so the prefix rule is what matches them), and `event-attendees` in the
+  dialog. The removed handles (`meal-slot`, `meal-chip`, `cal-band`, `day-meal-*`, `week-meal-*`) are
+  gone from the specs too —there is no `voluntario` line for a selector nobody uses.
+- **Not claimed**: the sandbox has no Chromium, so nothing here asserts how the grid *looks*. The window
+  trimming, the block placement and the scroll position are asserted as numbers, and the click and dialog
+  behaviour as events. `calendar.component.ts` keeps a pre-existing component-CSS budget warning
+  (13.32 kB against a 10 kB budget); its own styles are 12.6 kB of agenda and dialog CSS that predates
+  this round, and the ~0.7 kB of the member picker did not create the overrun —the same warning already
+  covers `shopping-list-detail.component.ts` at 17.86 kB. A check-ui sweep for orphan selectors in that
+  style block returned none, so nothing was left behind by the deleted views.
+
+### Coming soon, deliberately not here
+
+- RSVP / «no me va» on an event, and availability (busy hours from another calendar).
+- Dragging a block to move or resize it — the grid geometry is written so that the drop target is the
+  same pure function that paints it, but the drag is not this round.
+- A `time` per generated meal: the model does not return one, so untimed placement stays.
+
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
   (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
