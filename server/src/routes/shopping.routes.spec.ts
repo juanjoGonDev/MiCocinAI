@@ -1437,3 +1437,29 @@ describe('zonas horarias en la salida (§12h)', () => {
     }
   });
 });
+
+describe('cerrar la compra con descuento de linea (§12h)', () => {
+  it('lo pagado baja, pero el precio aprendido es el del estante', async () => {
+    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra', store: 'Mercadona' }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      quantity: 2,
+      priceMinor: 100,
+      discount: { kind: 'amount', valueMinor: 50 }
+    });
+    const items = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items;
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${items[0].id}`, { checked: true });
+
+    const receipt = await data(await call(alice, 'POST', `/lists/${list.id}/complete`, {}));
+    // 2 unidades de 1,00 menos los 0,50 del cartel: de cartera salieron 1,50.
+    expect(receipt.paidMinor).toBe(150);
+
+    // Y lo que la casa aprende es el precio de la estanteria, no el de hoy rebajado: si
+    // aprendiera 0,75, la proxima semana la estimacion mentiria.
+    const known = await data(await call(alice, 'GET', '/prices/products'));
+    const leche = known.find((entry: any) => entry.productKey === 'leche');
+    expect(leche).toBeTruthy();
+    expect(leche.variants[0].store).toBe('Mercadona');
+    expect(leche.variants[0].unitMinor).toBe(100);
+  });
+});

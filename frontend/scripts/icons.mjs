@@ -28,7 +28,10 @@ const NAMES = [
   'more_vert', 'notifications', 'percent', 'person', 'photo_camera', 'playlist_add', 'radio_button_unchecked',
   'refresh', 'remove', 'remove_circle', 'remove_shopping_cart', 'schedule', 'search', 'select_all',
   'send', 'settings', 'shopping_basket', 'shopping_cart', 'star', 'sync_problem', 'tune',
-  'undo', 'unfold_more', 'visibility'
+  'undo', 'unfold_more', 'visibility',
+  // Familias de unidad del selector de la hoja de linea (§12h): un icono por familia para que
+  // el panel se recorra de un vistazo con el pulgar.
+  'scale', 'local_drink', 'numbers', 'inventory_2', 'kitchen'
 ];
 
 const OUT = join(ROOT, 'src/app/shared/components/ui/icon/icon-paths.ts');

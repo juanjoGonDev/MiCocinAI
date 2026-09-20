@@ -3,6 +3,9 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { formatDateTime, formatRelative } from '../../core/time';
+import { UnitPickerComponent } from './unit-picker.component';
+import { canonicalUnit, isKnownUnit } from './unit-families';
+import { describeLineDiscount, lineDiscountOfItem, type LineDiscount } from '../../shared/models/shopping.model';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
@@ -47,7 +50,6 @@ interface PhotoReview {
 /** Autoguardado: 400 ms despues del ultimo tecleo, ni antes ni despues. */
 const AUTOSAVE_MS = 400;
 const UNDO_MS = 6000;
-const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
 
 /**
  * La lista, en pantalla.
@@ -57,6 +59,29 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
  * el golpeteo facil, y ninguna accion vive solo en el gesto: el riel descubierto
  * muestra `Editar · Quitar`, y la ⋯ muestra lo mismo sin deslizar nada.
  */
+/** «15,40» -> «15,4»; los ceros de mas en un campo de descuento molestan mas de lo que ayudan. */
+function trimNumber(value: number): string {
+  return String(Number(value.toFixed(2))).replace('.', ',');
+}
+
+function parsePositive(raw: string | number | null | undefined): number | null {
+  const text = String(raw ?? '').trim().replace(',', '.');
+  if (!text) return null;
+  const value = Number(text);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return value;
+}
+
+/** Unidades pagadas de una oferta: con 3x2 y 6 unidades, 4. Es el ciclo, no una resta. */
+function paidUnitsOf(quantity: number, offer: { buy: number; take: number }): number {
+  const buy = Math.max(1, Math.floor(offer.buy));
+  const take = Math.min(buy - 1, Math.max(0, Math.floor(offer.take)));
+  const cycles = Math.floor(quantity / buy);
+  return cycles * take + Math.min(quantity - cycles * buy, take);
+}
+
+type LineDiscountKindUi = 'none' | 'percent' | 'amount';
+
 @Component({
   selector: 'app-shopping-list-detail',
   standalone: true,
@@ -69,6 +94,7 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
     IconComponent,
     IconButtonComponent,
     PickerComponent,
+    UnitPickerComponent,
     AvatarComponent
   ],
   template: `
@@ -291,6 +317,21 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
                           {{ describeOffer(offer) }}
                         </button>
                       }
+                      @if (lineDiscountOf(item); as lineDiscount) {
+                        <!-- El descuento se ve en la fila o no existe: una rebaja que solo vive
+                             dentro de la hoja de edicion se anota y se olvida, y el total de la
+                             cabecera deja de cuadrar con lo que alguien recuerda. -->
+                        <button
+                          type="button"
+                          class="detail__offer detail__offer--discount"
+                          data-test="line-discount-chip"
+                          [attr.title]="'Descuento de esta linea: ' + describeLineDiscount(lineDiscount) + ' · toca para cambiarlo'"
+                          (click)="openEdit(item); $event.stopPropagation()"
+                        >
+                          <app-icon name="discount" [size]="12" [label]="null" />
+                          {{ describeLineDiscount(lineDiscount) }}
+                        </button>
+                      }
                       <span class="detail__price" [class.detail__price--none]="item.price_minor === null">
                         {{ money(item.price_minor) }}
                       </span>
@@ -357,8 +398,25 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
           @for (line of data.lines; track line.itemId) {
             <li class="detail__estimate-row">
               <span>{{ line.name }}</span>
-              <span class="detail__estimate-src">{{ sourceLabel(line.source) }}</span>
-              <span class="detail__estimate-money">{{ money(line.lineTotalMinor) }}</span>
+              <span class="detail__estimate-src">
+                {{ sourceLabel(line.source) }}
+                @if (line.lineDiscountDescription) {
+                  · {{ line.lineDiscountDescription }}
+                }
+              </span>
+              <span class="detail__estimate-money">
+                @if (line.lineDiscountMinor) {
+                  <s class="detail__estimate-was">{{ money(line.lineTotalMinor) }}</s>
+                }
+                {{ money(line.lineDiscountMinor ? (line.lineTotalMinor ?? 0) - line.lineDiscountMinor : line.lineTotalMinor) }}
+              </span>
+            </li>
+          }
+          @if (data.lineDiscountMinor) {
+            <li class="detail__estimate-row detail__estimate-row--sum">
+              <span>Descuentos de linea</span>
+              <span class="detail__estimate-src">{{ discountedLineCount() }} lineas, antes del cupon</span>
+              <span class="detail__estimate-money">-{{ money(data.lineDiscountMinor ?? 0) }}</span>
             </li>
           }
         </ul>
@@ -381,6 +439,17 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
         <div class="detail__sheet-backdrop" (click)="closeEdit()">
           <section class="detail__sheet" data-test="edit-sheet" (click)="$event.stopPropagation()" aria-label="Editar linea">
             <h2 class="detail__sheet-title">{{ item.name }}</h2>
+            <!-- No dice «Cancelar», y no es un olvido: aqui todo se guarda al tocar, asi que el
+                 boton cierra y punto. Prometer que deshace seria mentir. -->
+            <app-icon-button
+              class="detail__sheet-x"
+              icon="close"
+              label="Cerrar la hoja (los cambios ya estan guardados)"
+              size="sm"
+              variant="ghost"
+              data-test="edit-close"
+              (onClick)="closeEdit()"
+            />
             <div class="detail__sheet-grid">
               <label class="detail__field">
                 <span>Cantidad</span>
@@ -409,30 +478,11 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
             <div class="detail__sheet-grid">
               <div class="detail__field">
                 <span class="detail__field-label">Unidad</span>
-                <div class="detail__chips" role="group" aria-label="Unidades rapidas">
-                  @for (unit of quickUnits; track unit) {
-                    <button
-                      type="button"
-                      class="detail__chip-btn"
-                      [class.detail__chip-btn--active]="draft.unit === unit"
-                      (click)="patch({ unit: draft.unit === unit ? null : unit })"
-                    >
-                      {{ unit }}
-                    </button>
-                  }
-                </div>
-                <app-picker
-                  label="Unidad o formato"
-                  [options]="unitOptions"
+                <!-- UN control para UNA decision. Estaba el chip y el desplegable debajo, y al
+                     tocar el chip el desplegable seguia diciendo «Otra unidad…». -->
+                <app-unit-picker
                   [value]="draft.unit"
-                  placeholder="Otra unidad (bote de 400 g…)"
-                  searchPlaceholder="Buscar unidad"
-                  emptyText="Nada parecido: usa el texto que has escrito"
-                  [allowCustom]="true"
-                  [filterFrom]="6"
-                  leadingIcon="unfold_more"
                   (valueChange)="patch({ unit: $event })"
-                  data-test="unit-picker"
                 />
               </div>
               <div class="detail__field">
@@ -476,6 +526,78 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
               <p class="detail__hint">
                 {{ draftOffer() ? 'Se pagan ' + (draftOffer()!.buy - draftOffer()!.take) + ' de cada ' + draftOffer()!.buy + ': el desglose ya lo descuenta.' : 'Sin oferta: se paga cada unidad.' }}
               </p>
+            </div>
+            <div class="detail__field" data-test="line-discount">
+              <span class="detail__field-label">
+                <app-icon name="discount" [size]="14" [label]="null" />
+                Descuento en esta linea
+              </span>
+              <div class="detail__chips" role="group" [attr.aria-label]="'Tipo de descuento de ' + item.name">
+                @for (kind of lineKinds; track kind.value) {
+                  <button
+                    type="button"
+                    class="detail__chip-btn"
+                    [class.detail__chip-btn--active]="lineKind() === kind.value"
+                    data-test="line-discount-kind"
+                    (click)="setLineKind(kind.value)"
+                  >
+                    <app-icon [name]="kind.icon" [size]="14" [label]="null" />
+                    {{ kind.label }}
+                  </button>
+                }
+              </div>
+              @if (lineKind() !== 'none') {
+                <div class="detail__sheet-grid">
+                  @if (lineKind() === 'percent') {
+                    <label class="detail__field">
+                      <span>Porcentaje</span>
+                      <input
+                        name="lineDiscountPercent"
+                        inputmode="decimal"
+                        placeholder="15"
+                        [ngModel]="linePercent()"
+                        (ngModelChange)="setLinePercent($event)"
+                        data-test="line-discount-percent"
+                      />
+                    </label>
+                  }
+                  @if (lineKind() === 'amount') {
+                    <label class="detail__field">
+                      <span>Importe que baja</span>
+                      <input
+                        name="lineDiscountAmount"
+                        inputmode="decimal"
+                        placeholder="2,50"
+                        [ngModel]="lineAmount()"
+                        (ngModelChange)="setLineAmount($event)"
+                        data-test="line-discount-amount"
+                      />
+                    </label>
+                  }
+                  <label class="detail__field">
+                    <span>Sobre cuantas unidades</span>
+                    <input
+                      name="lineDiscountUnits"
+                      inputmode="decimal"
+                      placeholder="todas"
+                      [ngModel]="lineUnits()"
+                      (ngModelChange)="setLineUnits($event)"
+                      data-test="line-discount-units"
+                    />
+                  </label>
+                </div>
+                <p class="detail__hint" data-test="line-discount-preview">{{ lineDiscountHint() }}</p>
+                <button type="button" class="detail__link" data-test="line-discount-clear" (click)="setLineKind('none')">
+                  <app-icon name="close" [size]="14" [label]="null" />
+                  Quitar el descuento de esta linea
+                </button>
+              } @else {
+                <p class="detail__hint">
+                  Es el cartel del pasillo que habla SOLO de este producto: «2x1», «-10 % en dos
+                  unidades» o «2 € en este jamon». El cupon de la lista entera va arriba, en
+                  «Descuento de la lista», y se aplica despues de este.
+                </p>
+              }
             </div>
             <label class="detail__field">
               <span>Nota</span>
@@ -1654,6 +1776,23 @@ const UNITS = ['ud', 'kg', 'g', 'L', 'ml', 'pack'] as const;
         border-radius: var(--radius-lg);
         font-size: var(--text-sm);
       }
+      .detail__estimate-row--sum {
+        border-top: 1px solid var(--border-default);
+        font-weight: var(--font-semibold);
+      }
+      /* Lo que costaba, tachado, junto a lo que se paga: el numero nuevo sin el viejo se
+         discute; con el viejo al lado se entiende solo. */
+      .detail__estimate-was {
+        color: var(--text-tertiary);
+        font-weight: var(--font-normal);
+        text-decoration: line-through;
+        margin-right: var(--space-1);
+      }
+      .detail__offer--discount {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+      }
       .detail__estimate-row {
         display: flex;
         gap: var(--space-2);
@@ -1982,15 +2121,23 @@ export class ShoppingListDetailComponent implements OnDestroy {
   draftItem = '';
   draftPaste = '';
   draftName = '';
-  draft: { quantity: number; unit: string | null; price: string; category: string | null; note: string | null } = {
+  draft: {
+    quantity: number;
+    unit: string | null;
+    price: string;
+    category: string | null;
+    note: string | null;
+    /** El descuento propio de la linea (§12h); `null` = ninguno. */
+    discount: LineDiscount | null;
+  } = {
     quantity: 1,
     unit: null,
     price: '',
     category: null,
-    note: null
+    note: null,
+    discount: null
   };
 
-  readonly units = UNITS;
   readonly categories = LIST_CATEGORIES;
   readonly money = formatMoney;
   readonly offerPresets = OFFER_PRESETS;
@@ -2085,7 +2232,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (!match) return { name: cleaned, quantity: 1, unit: null };
     const [, amount, maybeUnit, name] = match;
     const unit = (maybeUnit ?? '').toLowerCase();
-    const known = (UNITS as readonly string[]).includes(unit) ? unit : null;
+    const known = isKnownUnit(unit) ? canonicalUnit(unit) : null;
     return {
       name: name.trim(),
       quantity: Number.parseFloat(amount.replace(',', '.')) || 1,
@@ -2243,8 +2390,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
       unit: item.unit,
       price: item.price_minor === null ? '' : (item.price_minor / 100).toFixed(2).replace('.', ','),
       category: item.category,
-      note: item.note
+      note: item.note,
+      discount: lineDiscountOfItem(item)
     };
+    this.hydrateLineDiscount(item);
   }
 
   closeEdit(): void {
@@ -2252,7 +2401,15 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   /** Autoguardado con retardo: se escribe cuando dejas de teclear, no a cada letra. */
-  patch(changes: Partial<{ quantity: number; unit: string | null; category: string | null; note: string | null }>): void {
+  patch(
+    changes: Partial<{
+      quantity: number;
+      unit: string | null;
+      category: string | null;
+      note: string | null;
+      discount: LineDiscount | null;
+    }>
+  ): void {
     const item = this.editing();
     if (!item) return;
     // Una cantidad que no es positiva se deja en el campo pero no se envia: el
@@ -2264,7 +2421,11 @@ export class ShoppingListDetailComponent implements OnDestroy {
       unit: this.draft.unit,
       category: this.draft.category,
       note: this.draft.note,
-      priceMinor: parseMoneyToMinor(this.draft.price)
+      priceMinor: parseMoneyToMinor(this.draft.price),
+      // Va en el MISMO envio que lo demas: con dos `debounced` separados, tocar un chip del
+      // descuento reemplazaba el commit del precio que estaba en el tintero, y el precio se
+      // perdía sin avisar.
+      discount: this.draft.discount
     });
   }
 
@@ -2560,25 +2721,6 @@ export class ShoppingListDetailComponent implements OnDestroy {
 
   // ------------------------------------------------------------------ unidades
 
-  readonly quickUnits = ['ud', 'kg', 'L', 'pack'];
-  readonly unitOptions: PickerOption[] = [
-    { value: 'ud', label: 'unidad', hint: 'ud' },
-    { value: 'kg', label: 'kilo', hint: 'kg' },
-    { value: 'g', label: 'gramo', hint: 'g' },
-    { value: 'L', label: 'litro', hint: 'L' },
-    { value: 'ml', label: 'mililitro', hint: 'ml' },
-    { value: 'pack', label: 'pack', hint: 'pack' },
-    { value: 'bote', label: 'bote', hint: '400 g' },
-    { value: 'lata', label: 'lata', hint: '33 cl' },
-    { value: 'botella', label: 'botella', hint: '1 L' },
-    { value: 'brick', label: 'brick', hint: '1 L' },
-    { value: 'docena', label: 'docena', hint: '12 ud' },
-    { value: 'paquete', label: 'paquete' },
-    { value: 'sobre', label: 'sobre' },
-    { value: 'cabeza', label: 'cabeza' },
-    { value: 'manojo', label: 'manojo' }
-  ];
-
   readonly categoryOptions = computed<PickerOption[]>(() => {
     const catalogue = this.shopping.categories();
     if (!catalogue.length) {
@@ -2616,9 +2758,121 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.shopping.updateItem(item.list_id, item, { offer } as Partial<CreateItemInput>);
   }
 
+  /** El descuento propio de una fila, y su frase, para pintarlos en la lista. */
+  lineDiscountOf(item: ShoppingListItem): LineDiscount | null {
+    return lineDiscountOfItem(item);
+  }
+
+  readonly describeLineDiscount = describeLineDiscount;
+
+  readonly discountedLineCount = computed(
+    () => this.estimate()?.lines.filter((line) => (line.lineDiscountMinor ?? 0) > 0).length ?? 0
+  );
+
   /** La oferta se toca desde la hoja de edicion o con un toque en la fila. */
   setOffer(item: ShoppingListItem, offer: LineOffer | null): void {
     this.shopping.updateItem(item.list_id, item, { offer } as Partial<CreateItemInput>);
+  }
+
+  // ------------------------------------------------- descuento propio de la linea (§12h)
+
+  /**
+   * Tres botones, una decision. La oferta de la tienda y este descuento NO son la misma
+   * pregunta: la oferta cambia CUANTAS unidades se pagan, este cambia CUANTO se paga por elas,
+   * y en caja van uno detras de otro — por eso siguen siendo dos bloques y no un menu unico.
+   */
+  readonly lineKinds: { value: LineDiscountKindUi; label: string; icon: 'close' | 'percent' | 'payments' }[] = [
+    { value: 'none', label: 'Sin descuento', icon: 'close' },
+    { value: 'percent', label: 'Porcentaje', icon: 'percent' },
+    { value: 'amount', label: 'Importe', icon: 'payments' }
+  ];
+  readonly lineKind = signal<LineDiscountKindUi>('none');
+  readonly linePercent = signal('');
+  readonly lineAmount = signal('');
+  /** Cadenas, no numeros: «15,» es un estado intermedio legitimo mientras se teclea. */
+  readonly lineUnits = signal('');
+
+  private hydrateLineDiscount(item: ShoppingListItem): void {
+    const discount = lineDiscountOfItem(item);
+    this.lineKind.set(discount ? discount.kind : 'none');
+    this.linePercent.set(discount?.kind === 'percent' ? trimNumber((discount.percentBps ?? 0) / 100) : '');
+    this.lineAmount.set(discount?.kind === 'amount' ? trimNumber((discount.valueMinor ?? 0) / 100) : '');
+    this.lineUnits.set(discount?.units ? trimNumber(discount.units) : '');
+  }
+
+  setLineKind(kind: LineDiscountKindUi): void {
+    this.lineKind.set(kind);
+    // Cambiar de tipo sin haber escrito todavia el numero no borra lo anterior: `buildLineDiscount`
+    // devuelve `null` y el patch deja la fila como estaba hasta que haya un valor.
+    this.patch({ discount: this.buildLineDiscount(kind) });
+  }
+
+  setLinePercent(value: string): void {
+    this.linePercent.set(value);
+    this.patch({ discount: this.buildLineDiscount() });
+  }
+
+  setLineAmount(value: string): void {
+    this.lineAmount.set(value);
+    this.patch({ discount: this.buildLineDiscount() });
+  }
+
+  setLineUnits(value: string): void {
+    this.lineUnits.set(value);
+    this.patch({ discount: this.buildLineDiscount() });
+  }
+
+  /**
+   * El descuento de la linea a partir de lo que hay en los campos. Un campo a medias («15,»)
+   * NO es «0 %»: se devuelve `null` y no se guarda nada, que es lo que evita que la fila se
+   * quede con un descuento de cero euros ocupando sitio en la hoja.
+   */
+  private buildLineDiscount(kind = this.lineKind()): LineDiscount | null {
+    if (kind === 'none') return null;
+    const units = parsePositive(this.lineUnits());
+    if (kind === 'percent') {
+      const percent = parsePositive(this.linePercent());
+      if (!percent) return null;
+      return { kind: 'percent', percentBps: Math.round(Math.min(percent * 100, 10_000)), valueMinor: null, units };
+    }
+    const amount = parseMoneyToMinor(this.lineAmount());
+    if (!amount) return null;
+    return { kind: 'amount', valueMinor: amount, percentBps: null, units };
+  }
+
+  /**
+   * «de 2,85 € a 2,56 €» mientras se escribe. La cuenta es la del server (`list-discount.ts`),
+   * aqui solo para el anticipo: lo que se guarda y se cobra lo decide `estimate`, y si las dos
+   * cifras se separaran la hoja mentiria.
+   */
+  lineDiscountHint(): string {
+    const item = this.editing();
+    if (!item) return '';
+    const discount = this.draft.discount;
+    if (!discount) {
+      return this.lineKind() === 'none'
+        ? 'Sin descuento: se paga lo que marca el estante.'
+        : 'Escribe cuanto baja y se guarda solo.';
+    }
+    const unitMinor = this.draft.price ? parseMoneyToMinor(this.draft.price) : item.price_minor;
+    if (!unitMinor) return 'Ponle un precio a la linea para ver cuanto baja.';
+    const quantity = Number(this.draft.quantity) > 0 ? Number(this.draft.quantity) : 1;
+    const offer = this.draftOffer();
+    const paid = offer ? paidUnitsOf(quantity, offer) : quantity;
+    const capped = discount.units && discount.units > 0 ? Math.min(discount.units, paid) : paid;
+    const base = Math.round(unitMinor * capped);
+    const raw = discount.kind === 'percent' ? Math.round((base * (discount.percentBps ?? 0)) / 10_000) : (discount.valueMinor ?? 0);
+    const off = Math.min(raw, base);
+    const label = describeLineDiscount(discount) ?? 'descuento';
+    if (raw <= 0) return `${label}: todavia no hay valor que aplicar.`;
+    if (discount.units && capped < paid) {
+      return `${label} · en la cesta hay ${trimNumber(paid)} ${paid === 1 ? 'unidad' : 'unidades'} pagadas; no llegan a ${trimNumber(discount.units)}.`;
+    }
+    const from = this.money(base);
+    const to = this.money(base - off);
+    return raw > base
+      ? `${label} · la linea vale ${from} y no puede bajar de 0: se queda en ${to}.`
+      : `${label} · de ${from} a ${to}.`;
   }
 
   // ------------------------------------------------------------------- descuento

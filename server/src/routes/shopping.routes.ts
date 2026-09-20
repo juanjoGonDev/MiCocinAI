@@ -33,6 +33,7 @@ import { AiCallError, callAI, extractJsonObject } from '../utils/ai-client.js';
 import { describeEvent, readEvents, recordEvent } from '../utils/shopping-events.js';
 import { channelForList, channelsForTray, publish, subscribe, type LiveEvent } from '../utils/live-hub.js';
 import {
+  applyLineDiscount,
   basketMoney,
   describeDiscount,
   describeLineDiscount,
@@ -1202,6 +1203,9 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
     // Lo escrito en esta llamada acaba primero en la linea: si el cierre se rechaza por
     // cualquier otra comprobacion no habremos llegado aqui, y si se acepta, la lista
     // cerrada y el historico tienen que decir lo mismo.
+    // Lo tecleado en el cierre ES lo que se pago en caja, descuento incluido: por eso aqui el
+    // descuento de la linea NO se vuelve a restar. Solo se resta en las lineas que se estiman
+    // con el precio del estante, que es el unico caso en que el numero no sale del ticket.
     for (const entry of typed) {
       updatePrice.run(entry.unitMinor, userId, entry.item.id);
       if (entry.item.checked !== 1) continue;
@@ -1224,6 +1228,12 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
       if (unitOf.has(item.id) || item.price_minor == null) continue;
       // Precio que ya estaba en la linea: se aprende igual, con la tienda de la lista.
       const unitsPaid = paidUnits(item.quantity ?? 1, offerOf(item)) || item.quantity || 1;
+      const shelfMinor = roundMinor(item.price_minor * unitsPaid);
+      // Y aqui se separan los dos numeros, que no son el mismo: en el historico va el precio
+      // DEL ESTANTE (manana el estante seguira costando lo mismo), y en lo pagado va el
+      // descuento de la linea, que es lo que salio de la cartera. Aprender el precio rebajado
+      // haria que la proxima semana la app estime 0,75 € un producto de 1,00 €.
+      const lineOff = applyLineDiscount(unitsPaid, item.price_minor, lineDiscountOf(item))?.minor ?? 0;
       insertObservation.run(
         nanoid(),
         userId,
@@ -1231,11 +1241,11 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
         String(item.product_key || productKeyOf(item.name)),
         item.name,
         listStore || null,
-        roundMinor(item.price_minor * unitsPaid),
+        shelfMinor,
         unitsPaid
       );
       recorded += 1;
-      paidMinor += roundMinor(item.price_minor * unitsPaid);
+      paidMinor += Math.max(0, shelfMinor - lineOff);
     }
     db.prepare(
       `UPDATE shopping_lists SET status = 'done', completed_at = CURRENT_TIMESTAMP,
