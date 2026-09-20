@@ -4,7 +4,24 @@ import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../icon/icon.component';
 import type { IconName } from '../icon/icon-paths';
 
-export type PickerOption = { value: string; label: string; hint?: string; color?: string | null; disabled?: boolean };
+export type PickerOption = {
+  value: string;
+  label: string;
+  hint?: string;
+  color?: string | null;
+  disabled?: boolean;
+  /**
+   * Titulo de la seccion a la que pertenece la opcion. Un titulo NO se puede elegir: es
+   * una etiqueta que agrupa, y meterla como opcion tiene dos efectos secundarios —un
+   * clic que no es lo que la gente cree que esta eligiendo, y dos filas con el mismo
+   * `value` (la familia y su unidad por defecto), con lo que el disparador enseña la
+   * primera coincidencia y dice «Volumen» cuando dentro hay «1,5 L».
+   */
+  group?: string;
+};
+
+/** Una fila del panel: un titulo o una opcion. `index` es su sitio en `filtered()`. */
+export type PickerRow = { header: string; option: null; index: number } | { header: null; option: PickerOption; index: number };
 
 /**
  * Selector propio, en vez de `select` nativo (HOGARIA-SPEC §8f).
@@ -72,28 +89,32 @@ export type PickerOption = { value: string; label: string; hint?: string; color?
                 <span class="picker__tag">usar este texto</span>
               </li>
             }
-            @for (option of filtered(); track option.value; let i = $index) {
+            @for (row of rows(); track row.index + ':' + (row.header ?? row.option.value)) {
+              @if (row.header !== null) {
+                <li class="picker__group" role="presentation">{{ row.header }}</li>
+              } @else {
               <li
                 class="picker__option"
                 role="option"
-                [class.picker__option--active]="active() === i"
-                [attr.aria-selected]="isSelected(option)"
-                [attr.aria-disabled]="option.disabled || null"
-                [attr.id]="listId() + '-' + i"
-                (click)="choose(option)"
-                (mouseenter)="active.set(i)"
+                [class.picker__option--active]="active() === row.index"
+                [attr.aria-selected]="isSelected(row.option)"
+                [attr.aria-disabled]="row.option.disabled || null"
+                [attr.id]="listId() + '-' + row.index"
+                (click)="choose(row.option)"
+                (mouseenter)="active.set(row.index)"
               >
-                @if (option.color) {
-                  <span class="picker__dot" [style.background]="option.color" aria-hidden="true"></span>
+                @if (row.option.color) {
+                  <span class="picker__dot" [style.background]="row.option.color" aria-hidden="true"></span>
                 }
-                <span class="picker__label">{{ option.label }}</span>
-                @if (option.hint) {
-                  <span class="picker__hint">{{ option.hint }}</span>
+                <span class="picker__label">{{ row.option.label }}</span>
+                @if (row.option.hint) {
+                  <span class="picker__hint">{{ row.option.hint }}</span>
                 }
-                @if (isSelected(option)) {
-                  <app-icon class="picker__check" name="check" [size]="18" [label]="'seleccionado: ' + option.label" />
+                @if (isSelected(row.option)) {
+                  <app-icon class="picker__check" name="check" [size]="18" [label]="'seleccionado: ' + row.option.label" />
                 }
               </li>
+              }
             }
             @if (filtered().length === 0 && !(allowCustom && query.trim())) {
               <li class="picker__none">
@@ -219,6 +240,16 @@ export type PickerOption = { value: string; label: string; hint?: string; color?
         overflow-y: auto;
         overscroll-behavior: contain;
       }
+      .picker__group {
+        padding: var(--space-2) var(--space-3) var(--space-1);
+        font-size: var(--text-xs);
+        font-weight: var(--font-semibold);
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+        cursor: default;
+        user-select: none;
+      }
       .picker__option {
         display: flex;
         align-items: center;
@@ -315,6 +346,25 @@ export class PickerComponent implements OnInit, OnDestroy {
     return this.options.filter(
       (option) => option.label.toLowerCase().includes(wanted) || option.value.toLowerCase().includes(wanted) || (option.hint ?? '').toLowerCase().includes(wanted)
     );
+  });
+
+  /**
+   * Lo que se pinta: `filtered()` con un titulo insertado antes del primer elemento de cada
+   * grupo. La navegacion por teclado sigue contando SOLO opciones —un titulo al que se puede
+   * llegar con las flechas y no se puede elegir es un tambor de vacio.
+   */
+  readonly rows = computed<PickerRow[]>(() => {
+    const out: PickerRow[] = [];
+    let current: string | null = null;
+    this.filtered().forEach((option, index) => {
+      const group = option.group ?? null;
+      if (group && group !== current) {
+        out.push({ header: group, option: null, index: -1 });
+        current = group;
+      }
+      out.push({ header: null, option, index });
+    });
+    return out;
   });
 
   selectedOption(): PickerOption | undefined {

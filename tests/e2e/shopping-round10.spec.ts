@@ -1,4 +1,4 @@
-import { Locator, Page, expect } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 import { test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 
@@ -38,12 +38,6 @@ async function openLineSheet(page: Page, slug: string, line: string): Promise<vo
   await expect(page.locator('[data-test="edit-sheet"]')).toBeVisible();
 }
 
-async function pickOption(scope: Locator, text: string | RegExp): Promise<void> {
-  await scope.locator('.picker__trigger').click();
-  await expect(scope.locator('.picker__option').first()).toBeVisible();
-  await scope.locator('.picker__option', { hasText: text }).first().click();
-}
-
 test.describe('la unidad se elige una sola vez', () => {
   test('hay un unico control, y elegir la familia ya pone su unidad', async ({ page }) => {
     const echo = watchPageErrors(page);
@@ -54,10 +48,14 @@ test.describe('la unidad se elige una sola vez', () => {
     await expect(page.locator('[data-test="unit-picker"]')).toHaveCount(1);
     await expect(page.locator('.detail__chips[aria-label="Unidades rapidas"]')).toHaveCount(0);
 
-    await pickOption(page.locator('[data-test="unit-picker"]'), 'Peso');
-    // La familia no es un valor: al pulsarla entra su unidad por defecto, y eso es lo que el
-    // disparador tiene que decir.
-    await expect(page.locator('[data-test="unit-picker"] .picker__trigger')).toContainText('kg');
+    const picker = page.locator('[data-test="unit-picker"]');
+    await picker.locator('.picker__trigger').click();
+    // La familia TITULA, no se elige: si fuera una opcion, el disparador acabaria diciendo
+    // «Peso» (o «Volumen») con una unidad dentro, que es exactamente como se veia mal.
+    await expect(picker.locator('.picker__group', { hasText: 'Peso' })).toBeVisible();
+    await expect(picker.locator('.picker__option', { hasText: /^Peso$/ })).toHaveCount(0);
+    await picker.locator('.picker__option', { hasText: /^g$/ }).first().click();
+    await expect(picker.locator('.picker__trigger')).toContainText('g');
 
     expect(echo()).toBe('sin errores de pagina');
   });

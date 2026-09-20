@@ -25,7 +25,7 @@ export { UNIT_FAMILIES, canonicalUnit, familyOf, type UnitFamily } from './unit-
  * arrancar Angular — y porque el resto de la pantalla (la fila, el pegado, la hoja) necesita la
  * MISMA regla: dos criterios de «esto es un kg» son dos unidades guardadas para el mismo bote.
  */
-import { UNIT_FAMILIES, canonicalUnit, familyOf } from './unit-families';
+import { canonicalUnit, familyOf, unitPickerOptions } from './unit-families';
 
 @Component({
   selector: 'app-unit-picker',
@@ -46,12 +46,7 @@ import { UNIT_FAMILIES, canonicalUnit, familyOf } from './unit-families';
         (valueChange)="pick($event)"
         data-test="unit-picker"
       />
-      @if (familyLabel()) {
-        <span class="unit-picker__family">
-          <app-icon [name]="familyIcon()" [size]="14" [label]="null" />
-          {{ familyLabel() }}
-        </span>
-      }
+
     </div>
   `,
   styles: [
@@ -61,14 +56,7 @@ import { UNIT_FAMILIES, canonicalUnit, familyOf } from './unit-families';
         flex-direction: column;
         gap: var(--space-1);
       }
-      /* Lo que la familia hace por detras: «kg» no es un dato, es «peso, en kilogramos». */
-      .unit-picker__family {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-1);
-        font-size: var(--text-xs);
-        color: var(--text-tertiary);
-      }
+  
     `
   ]
 })
@@ -79,30 +67,13 @@ export class UnitPickerComponent {
   @Output() valueChange = new EventEmitter<string | null>();
 
   /**
-   * Primer la familia (elegirla ya elige su unidad por defecto), despues sus unidades. Un solo
-   * `role=listbox`, sin chips al lado repitiendo la misma decision.
+   * Las unidades, agrupadas por titulo de familia. Ni descripcion por fila (en una columna
+   * de movil se recortaba a dos letras: ruido con puntos suspensivos) ni familia elegible.
    */
-  readonly options = computed<PickerOption[]>(() => {
-    const out: PickerOption[] = [];
-    for (const family of UNIT_FAMILIES) {
-      out.push({
-        value: family.defaultUnit,
-        label: family.label,
-        hint: `${family.defaultUnit} · despues ${family.units.filter((u) => u !== family.defaultUnit).join(', ')}`
-      });
-      for (const unit of family.units) {
-        if (unit === family.defaultUnit) continue;
-        out.push({ value: unit, label: unit, hint: family.label });
-      }
-    }
-    return out;
-  });
+  readonly options = computed<PickerOption[]>(() => unitPickerOptions());
 
+  /** El icono de la familia, en el disparador: «kg» se ve, «peso» se intuye. */
   readonly familyIcon = computed<IconName>(() => familyOf(this.value)?.icon ?? 'unfold_more');
-  readonly familyLabel = computed<string | null>(() => {
-    const family = familyOf(this.value);
-    return family && family.label !== this.value ? family.label : null;
-  });
 
   pick(value: string | null): void {
     this.valueChange.emit(canonicalUnit(value));

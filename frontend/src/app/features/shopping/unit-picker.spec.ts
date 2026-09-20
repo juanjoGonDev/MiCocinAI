@@ -1,4 +1,4 @@
-import { UNIT_FAMILIES, canonicalUnit, familyOf, isKnownUnit } from './unit-families';
+import { UNIT_FAMILIES, canonicalUnit, familyOf, isKnownUnit, unitPickerOptions } from './unit-families';
 
 /**
  * Las dos reglas del selector de unidad, sin Angular en medio: lo que se teclea a mano y lo que
@@ -38,6 +38,32 @@ describe('unit-picker — que sea una unidad', () => {
     expect(isKnownUnit('bote de 400 g')).toBe(false);
     expect(isKnownUnit('Tomates')).toBe(false);
     expect(isKnownUnit(null)).toBe(false);
+  });
+});
+
+describe('unit-picker — lo que se puede elegir', () => {
+  it('las familias titulan, no se eligen', () => {
+    const options = unitPickerOptions();
+    // Una opcion por familia con el `value` de su unidad por defecto hacia que el disparador
+    // dijera «Volumen» teniendo dentro «1,5 L»: dos filas con el mismo valor, y la primera
+    // gana al buscar cual esta seleccionada.
+    for (const family of UNIT_FAMILIES) {
+      expect(options.some((option) => option.label === family.label && option.value === family.label)).toBe(false);
+    }
+    const values = options.map((option) => option.value);
+    expect(new Set(values).size).toBe(values.length);
+    for (const family of UNIT_FAMILIES) {
+      for (const unit of family.units) expect(values).toContain(unit);
+    }
+  });
+
+  it('cada unidad lleva el titulo de su familia y nada mas', () => {
+    for (const option of unitPickerOptions()) {
+      expect(option.group).toBeTruthy();
+      // Sin descripcion por fila: en una columna de movil se recortaba a dos letras.
+      expect((option as { hint?: string }).hint).toBeUndefined();
+      expect(option.label).toBe(option.value);
+    }
   });
 });
 

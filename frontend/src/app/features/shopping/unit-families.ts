@@ -110,3 +110,18 @@ export function isKnownUnit(value: string | null | undefined): boolean {
   if (!canonical) return false;
   return UNIT_FAMILIES.some((family) => family.units.some((unit) => unit.toLowerCase() === canonical.toLowerCase()));
 }
+
+/**
+ * Lo que se puede elegir: las unidades, con el titulo de su familia. La familia no es una
+ * opcion —es una etiqueta—, y por eso aqui no hay filas duplicadas ni un `value` que valga
+ * dos cosas: `kg` aparece una vez y el disparador siempre dice la unidad que hay dentro.
+ */
+export function unitPickerOptions(): { value: string; label: string; group: string }[] {
+  const out: { value: string; label: string; group: string }[] = [];
+  for (const family of UNIT_FAMILIES) {
+    for (const unit of family.units) {
+      out.push({ value: unit, label: unit, group: family.label });
+    }
+  }
+  return out;
+}
