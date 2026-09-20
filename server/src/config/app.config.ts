@@ -20,9 +20,11 @@ const configSchema = z.object({
   cors: z.object({
     origin: z.string().default('http://localhost:4200')
   }),
+  // 600 por minuto Y por sesion, no 100 globales cada un cuarto de hora: ver
+  // `createApp` para el porque del cambio de clave.
   rateLimit: z.object({
-    windowMs: z.number().default(15 * 60 * 1000), // 15 minutes
-    max: z.number().default(100)
+    windowMs: z.number().default(60 * 1000), // 1 minute
+    max: z.number().default(600)
   }),
   ai: z.object({
     defaultProvider: z.enum(['openai', 'custom']).default('custom'),
@@ -61,8 +63,8 @@ function loadConfig(): Config {
       origin: process.env.CORS_ORIGIN || 'http://localhost:4200'
     },
     rateLimit: {
-      windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || String(15 * 60 * 1000), 10),
-      max: parseInt(process.env.RATE_LIMIT_MAX || '100', 10)
+      windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || String(60 * 1000), 10),
+      max: parseInt(process.env.RATE_LIMIT_MAX || '600', 10)
     },
     ai: {
       defaultProvider: process.env.AI_DEFAULT_PROVIDER || 'custom',
