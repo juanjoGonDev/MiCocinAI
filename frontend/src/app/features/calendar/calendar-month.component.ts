@@ -38,7 +38,7 @@ import { CalendarEventComponent } from './calendar-event.component';
             [class.is-today]="day.isToday"
             [class.is-anchor]="day.iso === anchorIso"
             [class.has-plans]="day.planned > 0"
-            (click)="addMeal.emit({ date: day.iso, mealType: firstFreeMealType(day) })"
+            (click)="onCellClick(day)"
           >
             <div class="cal-cell__head">
               <button
@@ -74,6 +74,7 @@ import { CalendarEventComponent } from './calendar-event.component';
             </div>
 
             <button
+              *ngIf="kitchen"
               type="button"
               class="cal-cell__plus"
               aria-label="Añadir comida"
@@ -294,6 +295,11 @@ import { CalendarEventComponent } from './calendar-event.component';
 })
 export class CalendarMonthComponent {
   @Input({ required: true }) days!: CalendarDayView[];
+  /**
+   * `false` cuando la cuenta no tiene cocina: la casilla no anade comidas —no hay nada que
+   * anadir— y pasa a hacer lo unico que quedaba por hacer aqui, abrir el dia.
+   */
+  @Input() kitchen = true;
   @Input() anchorIso = '';
   /** Comidas que se ven por celda antes de recurir a «+N más». */
   @Input() maxVisible = 3;
@@ -324,6 +330,14 @@ export class CalendarMonthComponent {
   }
 
   /** La primera franja libre del día: añadir desde el mes no debería imponer una. */
+  onCellClick(day: CalendarDayView): void {
+    if (!this.kitchen) {
+      this.openDay.emit(day.iso);
+      return;
+    }
+    this.addMeal.emit({ date: day.iso, mealType: this.firstFreeMealType(day) });
+  }
+
   firstFreeMealType(day: CalendarDayView): MealType {
     return MEAL_ORDER.find((type) => day.slots[type].length === 0) ?? 'lunch';
   }

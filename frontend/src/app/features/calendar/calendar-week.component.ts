@@ -32,7 +32,7 @@ import { CalendarEventComponent } from './calendar-event.component';
           class="cal-dayhead"
           [class.is-today]="day.isToday"
           [class.is-weekend]="isWeekend(day)"
-          [class.is-empty]="day.planned === 0"
+          [class.is-empty]="kitchen && day.planned === 0"
         >
           <button
             type="button"
@@ -62,6 +62,7 @@ import { CalendarEventComponent } from './calendar-event.component';
           [class.is-today]="day.isToday"
           [class.is-weekend]="isWeekend(day)"
         >
+          <ng-container *ngIf="kitchen; else weekAgenda">
           <div
             *ngFor="let type of mealTypes"
             class="meal-slot"
@@ -97,6 +98,17 @@ import { CalendarEventComponent } from './calendar-event.component';
 
             <span *ngIf="day.slots[type].length === 0" class="meal-slot__hint">Sin planificar</span>
           </div>
+          </ng-container>
+
+          <!-- Sin cocina la semana no es una rejilla de franjas de comida: es la agenda del dia,
+               una fila por dia. Se reutiliza la clase meal-slot para que el alto y los bordes no
+               cambien de una modalidad a otra. (Y nada de backticks aqui: cierran el literal.) -->
+          <ng-template #weekAgenda>
+            <div class="meal-slot meal-slot--agenda">
+              <app-calendar-household-events [events]="day.events" (edit)="editEvent.emit($event)" />
+              <span *ngIf="day.events.length === 0" class="meal-slot__hint">Nada en la agenda</span>
+            </div>
+          </ng-template>
         </div>
       </div>
     </div>
@@ -319,6 +331,8 @@ import { CalendarEventComponent } from './calendar-event.component';
 })
 export class CalendarWeekComponent {
   @Input() days: CalendarDayView[] = [];
+  /** Con la cocina apagada la rejilla de franjas se convierte en una lista por dia. */
+  @Input() kitchen = true;
 
   @Output() addMeal = new EventEmitter<{ date: string; mealType: MealType }>();
   @Output() openMeal = new EventEmitter<CalendarMeal>();

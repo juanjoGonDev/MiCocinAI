@@ -85,17 +85,22 @@ describe('ModulesService', () => {
   it('el nucleo nunca se oculta: inicio, hogar, preferencias y ajustes', () => {
     configure({ modules: [] });
 
-    for (const path of ['/dashboard', '/household', '/preferences', '/settings', '/logs', '/ai-config']) {
+    // La agenda es de la casa, no de la cocina: apagar «comer» no la borra, asi que vive en el
+    // nucleo y ningun modulo la gobierna (lo que se apaga dentro es el contenido de cocina).
+    for (const path of ['/dashboard', '/calendar', '/household', '/preferences', '/settings', '/logs', '/ai-config']) {
       expect(service.isPathVisible(path)).withContext(path).toBeTrue();
     }
     expect(moduleOwningPath('/settings')).toBeUndefined();
+    expect(moduleOwningPath('/calendar')).toBeUndefined();
   });
 
   it('una seleccion explicita filtra: lo que no esta marcado, fuera', () => {
     configure({ modules: ['pantry'] });
 
     expect(service.isPathVisible('/pantry')).toBeTrue();
-    expect(service.isPathVisible('/calendar')).toBeFalse();
+    // El calendario NO entra en este filtro: es la agenda de la casa. Lo que «comer» apaga son las
+    // recetas y, dentro del calendario, lo que se ve de cocina —eso lo decide la propia vista.
+    expect(service.isPathVisible('/calendar')).toBeTrue();
     expect(service.isPathVisible('/recipes')).toBeFalse();
   });
 
@@ -131,7 +136,9 @@ describe('ModulesService', () => {
     service.toggle('meals');
 
     expect(service.selected()).toEqual(['pantry', 'meals']);
+    // Lo que «comer» anade son las recetas; la agenda ya estaba, porque no es suya.
     expect(service.isPathVisible('/calendar')).toBeTrue();
+    expect(service.isPathVisible('/recipes')).toBeTrue();
     expect(saved.length).toBe(1);
     expect(saved[0].modules).toEqual(['pantry', 'meals']);
     expect(service.isSaving()).toBeTrue();

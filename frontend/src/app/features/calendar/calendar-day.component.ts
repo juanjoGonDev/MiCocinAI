@@ -23,6 +23,7 @@ import { CalendarEventComponent } from './calendar-event.component';
   template: `
     <div class="cal-day" *ngIf="day as d">
       <div class="cal-day__list">
+        <ng-container *ngIf="kitchen; else dayAgenda">
         <section
           *ngFor="let type of mealTypes; trackBy: trackByType"
           class="cal-band"
@@ -71,9 +72,26 @@ import { CalendarEventComponent } from './calendar-event.component';
             </p>
           </div>
         </section>
+        </ng-container>
+
+        <!-- Lo mismo que en la semana: sin cocina el dia no tiene bandas de comida, tiene agenda.
+             El aside (energia, comidas, objetivo) se queda fuera: es el recuento de la cocina. -->
+        <ng-template #dayAgenda>
+          <section class="cal-band cal-band--agenda">
+            <header class="cal-band__head">
+              <span class="cal-band__marker" aria-hidden="true"></span>
+              <h2 class="cal-band__title">Agenda</h2>
+              <span class="cal-band__meta">{{ d.events.length }} {{ d.events.length === 1 ? 'plan' : 'planes' }}</span>
+            </header>
+            <div class="cal-band__body">
+              <app-calendar-household-events [events]="d.events" (edit)="editEvent.emit($event)" />
+              <p class="cal-band__empty" *ngIf="d.events.length === 0">Nada por aquí.</p>
+            </div>
+          </section>
+        </ng-template>
       </div>
 
-      <aside class="cal-day__aside">
+      <aside class="cal-day__aside" *ngIf="kitchen">
         <h3 class="cal-day__aside-title">Resumen del día</h3>
 
         <div class="cal-day__stat">
@@ -347,6 +365,8 @@ import { CalendarEventComponent } from './calendar-event.component';
 })
 export class CalendarDayComponent {
   @Input() day: CalendarDayView | null = null;
+  /** `false` = sin modulo de cocina: el dia muestra la agenda y nada de recuento energetico. */
+  @Input() kitchen = true;
   @Input() targetCalories = 2000;
   @Input() goalLabel = '';
 

@@ -45,6 +45,7 @@ import { PickerComponent, PickerOption } from '../../shared/components/ui/picker
 import { CheckboxComponent } from '../../shared/components/ui/checkbox/checkbox.component';
 import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
 import { HouseholdService } from '../../core/services/household.service';
+import { ModulesService } from '../../core/services/modules.service';
 import {
   HOUSEHOLD_EVENT_COLORS,
   HOUSEHOLD_EVENT_KINDS,
@@ -174,12 +175,14 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               </button>
             </div>
 
-            <button type="button" class="cal-pill" (click)="openGoalsModal()">
-              Objetivo<span *ngIf="goalLabel()"> · {{ goalLabel() }}</span>
-            </button>
-            <button type="button" class="cal-btn cal-btn--primary" (click)="openGenerateModal()">
-              Planificar IA
-            </button>
+            @if (kitchen()) {
+              <button type="button" class="cal-pill" (click)="openGoalsModal()">
+                Objetivo<span *ngIf="goalLabel()"> · {{ goalLabel() }}</span>
+              </button>
+              <button type="button" class="cal-btn cal-btn--primary" (click)="openGenerateModal()">
+                Planificar IA
+              </button>
+            }
             <button type="button" class="cal-pill cal-pill--add" data-test="event-add" (click)="openEventModal()">
               <app-icon name="add" [size]="16" [label]="null" />
               <span>Evento</span>
@@ -189,17 +192,19 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
         <!-- ══ Capas: que se pinta hoy en la rejilla ══ -->
         <div class="cal-layers" role="group" aria-label="Que se muestra en el calendario" data-test="calendar-layers">
-          <button
-            type="button"
-            class="cal-layer"
-            [class.is-on]="showMeals()"
-            [attr.aria-pressed]="showMeals()"
-            data-test="layer-meals"
-            (click)="showMeals.set(!showMeals())"
-          >
-            <span class="cal-layer__dot" style="background: var(--primary)"></span>
-            Comidas
-          </button>
+          @if (kitchen()) {
+            <button
+              type="button"
+              class="cal-layer"
+              [class.is-on]="showMeals()"
+              [attr.aria-pressed]="showMeals()"
+              data-test="layer-meals"
+              (click)="showMeals.set(!showMeals())"
+            >
+              <span class="cal-layer__dot" style="background: var(--primary)"></span>
+              Comidas
+            </button>
+          }
           @for (kind of eventKinds; track kind) {
             <button
               type="button"
@@ -219,7 +224,8 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         </div>
 
         <!-- ══ Resumen del periodo ══ -->
-        <div class="cal-strip">
+        <div class="cal-strip" [class.cal-strip--bare]="!kitchen()">
+          @if (kitchen()) {
           <div class="cal-strip__item">
             <span class="cal-strip__label">Comidas</span>
             <span class="cal-strip__value">
@@ -254,6 +260,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               Empezar por el almuerzo
             </button>
           </span>
+          }
 
           <span class="cal-strip__hint" *ngIf="calendarService.error()">
             {{ calendarService.error() }}
@@ -271,6 +278,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             <app-calendar-month
               *ngSwitchCase="'month'"
               [days]="days()"
+              [kitchen]="kitchen()"
               [anchorIso]="anchorIso()"
               (addMeal)="openAddModal($event.date, $event.mealType)"
               (openMeal)="openEditModal($event)"
@@ -280,6 +288,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
             <app-calendar-week
               *ngSwitchDefault
+              [kitchen]="kitchen()"
               [days]="days()"
               (addMeal)="openAddModal($event.date, $event.mealType)"
               (openMeal)="openEditModal($event)"
@@ -292,6 +301,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             <app-calendar-day
               *ngSwitchCase="'day'"
               [day]="singleDay()"
+              [kitchen]="kitchen()"
               [targetCalories]="calendarService.targetCalories()"
               [goalLabel]="goalLabel()"
               (addMeal)="openAddModal($event.date, $event.mealType)"
@@ -1464,6 +1474,16 @@ export class CalendarComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly householdService = inject(HouseholdService);
+  private readonly modules = inject(ModulesService);
+
+  /**
+   * Si la cuenta tiene encendida «Comidas y recetas». No manda sobre la ruta —la agenda es de la
+   * casa y seguiria ahi sin la cocina— sino sobre lo que hay de cocina DENTRO: la capa Comidas,
+   * los anadidos de plato de las tres rejillas, la franja de energia y el planificador.
+   */
+  readonly kitchen = computed(() => this.modules.isEnabled('meals'));
+  /** Lo que de verdad se pinta: la capa elegida Y el modulo encendido. */
+  readonly mealsVisible = computed(() => this.kitchen() && this.showMeals());
 
   readonly viewOptions = CALENDAR_VIEWS;
   readonly CALENDAR_VIEW_LABELS = CALENDAR_VIEW_LABELS;
@@ -1507,7 +1527,7 @@ export class CalendarComponent implements OnInit {
       const iso = toISODate(date);
       // Apagar la capa de comidas no es esconder CSS: es no darles nada que pintar, y
       // asi las tres vistas (mes, semana, dia) se comportan igual sin tocarlas.
-      const meals = this.showMeals() ? byDate.get(iso) ?? [] : [];
+      const meals = this.mealsVisible() ? byDate.get(iso) ?? [] : [];
       const slots = { breakfast: [], lunch: [], dinner: [], snack: [] } as Record<MealType, CalendarMeal[]>;
       let calories = 0;
       let hasNutrition = false;
@@ -2096,8 +2116,10 @@ export class CalendarComponent implements OnInit {
   writeLayers(): void {
     const all = HOUSEHOLD_EVENT_KINDS;
     const visible = this.calendarService.visibleKinds();
+    // `mealsVisible`, no `showMeals`: con la cocina apagada no se escribe `meals` en la URL, que
+    // seria re-anadir por enlace lo que la cuenta acaba de apagar —y dejar un enlace que miente.
     const params: Record<string, string | null> = {
-      layers: visible.length === all.length && this.showMeals() ? null : (this.showMeals() ? 'meals,' : '') + visible.join(',')
+      layers: visible.length === all.length && this.mealsVisible() ? null : (this.mealsVisible() ? 'meals,' : '') + visible.join(',')
     };
     void this.router.navigate([], { queryParams: params, queryParamsHandling: 'merge', replaceUrl: true });
   }
@@ -2106,7 +2128,9 @@ export class CalendarComponent implements OnInit {
     const raw = new URLSearchParams(window.location.search).get('layers');
     if (!raw) return;
     const wanted = raw.split(',').map((entry) => entry.trim()).filter(Boolean);
-    this.showMeals.set(wanted.includes('meals'));
+    // Se respeta lo que pide el enlace... si la cuenta tiene cocina. Si no, `meals` se ignora:
+    // no es un error, y no se escribe de vuelta (arriba se usa `mealsVisible`).
+    this.showMeals.set(this.kitchen() && wanted.includes('meals'));
     const kinds = wanted.filter((entry): entry is HouseholdEventKind =>
       (HOUSEHOLD_EVENT_KINDS as readonly string[]).includes(entry)
     );
