@@ -1193,53 +1193,70 @@ closing a purchase was free to invent nothing and learn nothing — you could ma
 that had no price, and the price that *was* recorded did not know which shop it belonged to, although the
 same milk has another name and another price at Mercadona than at Lidl.
 
-- [ ] `shopping_list_discounts.targets` (JSON array of product keys or section names) next to the legacy
+- [x] `shopping_list_discounts.targets` (JSON array of product keys or section names) next to the legacy
       `target`. The engine gets a set instead of a string: `isEligibleForDiscount` matches `product_key` or
       the name's key, `basketMoney` builds its base from the matching lines, and `describeDiscount` writes
       «2,50 € en jamón, queso · +2 más» so what the shelf promised and what the basket applied are the same
       sentence. A discount that can only ever hit one product is a discount nobody can type at the till.
-- [ ] `discountSchema` accepts `targets` and only requires a target of some kind when the scope promises
+- [x] `discountSchema` accepts `targets` and only requires a target of some kind when the scope promises
       one; the `PUT` stores both shapes and the `GET` reads them back, so an old row (single `target`) keeps
       working with no data migration.
-- [ ] The discount sheet picks products **from the list** (rows with section, quantity and price, checkbox
+- [x] The discount sheet picks products **from the list** (rows with section, quantity and price, checkbox
       multi-select, "toda la sección X") instead of one free-text `app-picker`; the bar's affordance stops
       being a bare percent icon and says «Descuento · no aplicado» / «Descuento · 2,50 € en …»; and the
       multi-selection toolbar offers «Descuento a estas N líneas», which opens the same sheet pre-targeted.
       One editor, three ways in — the sheet is not where the discount is decided, the aisle is.
-- [ ] `POST /lists/:id/complete` refuses what it cannot learn from: if a bought line has no price, 409
+- [x] `POST /lists/:id/complete` refuses what it cannot learn from: if a bought line has no price, 409
       `PRICES_MISSING` with the offending lines (id, name, quantity, unit) and the count. Not a warning in
       the toast — the app has been asked to *remember prices* by closing the list, and closing it with holes
       is how the next estimate comes back wrong.
-- [ ] Prices can arrive *with* the close: `POST /lists/:id/complete { prices: [{ itemId, priceMinor,
+- [x] Prices can arrive *with* the close: `POST /lists/:id/complete { prices: [{ itemId, priceMinor,
       quantity?, store?, productName? }] }` writes each one onto its line and records the observation in the
       same transaction, so "pago y apunto lo que he pagado" is one tap and not a race between two calls.
       `quantity`/`productName` exist because a receipt says what was paid for what was carried, under the
       name the shop printed.
-- [ ] A price without a shop is not a price: `prices[].store` or the list's `store`, and with neither, 409
+- [x] A price without a shop is not a price: `prices[].store` or the list's `store`, and with neither, 409
       `STORE_REQUIRED` with a hint naming where to set it. This is what "el precio del producto por el
       establecimiento" means as a constraint the server can check.
-- [ ] `estimate` resolves the observed price **for the list's shop first**, then falls back to the most
+- [x] `estimate` resolves the observed price **for the list's shop first**, then falls back to the most
       recent one from any shop and marks the line `otherStore` with the shop's name. Two rows in
       `price_observations` for one `product_key` are the point of the table, and reading `ORDER BY
       observed_at DESC LIMIT 1` across all of them was silently pricing the house's milk with Lidl money.
-- [ ] Same product, different name: `PATCH /lists/:id/items/:itemId` accepts `productKey`, so a line can
+- [x] Same product, different name: `PATCH /lists/:id/items/:itemId` accepts `productKey`, so a line can
       declare itself to be the product the house already tracks, whatever the shelf calls it. `GET /prices`
       filters by `store`/`productKey`, and `GET /prices/products?q=` returns the known products with their
       variants (name per shop, price, observations) to feed the picker and the per-shop price chips.
-- [ ] The agenda is a section: its own card with padding and rhythm, a title that says the day in relative
+- [x] The agenda is a section: its own card with padding and rhythm, a title that says the day in relative
       words, rows that are not the 11 px variant built for a month cell, and an empty state that offers
       something to do. `[data-test="agenda-add"]` disappears — the header's «+ Evento» is the only add
       button and it opens the modal with the day in view prefilled, so nothing is lost by removing it.
-- [ ] Tests: `list-discount.spec.ts` for the set semantics and the plural description; `shopping.routes.spec.ts`
+- [x] Tests: `list-discount.spec.ts` for the set semantics and the plural description; `shopping.routes.spec.ts`
       for storing `targets`, the two 409s of `complete`, prices written by the close, per-shop resolution and
       the `productKey` link; `tests/e2e/full-stack/` and the dev suite for the flows that only exist in the
       browser (discount on two products, close blocked until the prices are in).
-- [ ] `HOGARIA-SPEC.md` §13 gains what this round deliberately left out (per-line discounts with their own
-      value, a canonical catalog with barcodes, photo price tags teaching observations).
+- [ ] Still env-configured, not `/settings`-configured: the completion rules are code, and the list
+      of "shops this house uses" comes from the `shopping_lists.store` column, not from a catalog
+      table. A `stores` table with its own name per product (and a barcode) is the next step, and it
+      is in §13 rather than here because it needs a UI of its own.
+- [ ] The four money flows in `tests/e2e/full-stack/shopping-money.spec.ts` typecheck (`pnpm run
+      typecheck:e2e`) but were not *executed* here —no Chromium in the sandbox—, so CI is where they
+      turn green. What was executed: the 22 new vitest cases (224 green in total), the prod build,
+      `tsc` of app and spec, `check-ui` at 126 files with the removed `discount-row` caught by the
+      guard itself, and the discount/multi-target behaviour read back from the API by hand.
 
 
 ## 13. Coming soon (deliberately not in this program)
 
+- **Per-line discounts**: a discount that belongs to *one row* with its own value («el jamón, 2 €
+  menos, y el queso un 10 %»). The engine already knows how to spread a discount over chosen lines and
+  how to answer "what did I actually pay for this"; what it does not have is a second table, and one
+  coupon per list is what the till does. Coming back to this needs a real receipt, not an idea.
+- **Store catalog with aliases and barcodes**: `stores` as a table (not a column of names), one product
+  with several shelf names per shop, EAN lookup. Today the link is the product key, chosen by hand in
+  the line sheet, and that is enough to remember prices per shop —it is not enough to *suggest* them.
+- **Photo price tags teaching observations**: a photographed shelf price still only sets the line. When
+  it also writes `price_observations` (with the store, `source: 'photo'`), the photographed shop starts
+  being one of the shops whose prices the app already knows.
 - **Drag to reorder inside a section**: the `PUT /lists/:id/order` endpoint and the `position` column are
   ready; what is missing is a handle that cannot be confused with the swipe. Same for **picker recents**
   (`localStorage`): useful once someone proves it, not before.
