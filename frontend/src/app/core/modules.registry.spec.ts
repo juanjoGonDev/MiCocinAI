@@ -25,7 +25,7 @@ describe('modules.registry — que borra un interruptor', () => {
       }
     }
     // Las rutas nucleares, declaradas aqui para que nadie las "asigne" por accidente.
-    for (const core of ['/dashboard', '/calendar', '/household', '/preferences', '/settings', '/logs']) {
+    for (const core of ['/dashboard', '/calendar', '/account', '/household', '/preferences', '/settings', '/logs']) {
       expect(seen.has(core)).toBe(false);
     }
   });

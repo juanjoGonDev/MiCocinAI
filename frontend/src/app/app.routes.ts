@@ -68,6 +68,10 @@ export const routes: Routes = [
         loadChildren: () => import('./features/logs/logs.routes').then(m => m.LOGS_ROUTES)
       },
       {
+        path: 'account',
+        loadChildren: () => import('./features/account/account.routes').then(m => m.ACCOUNT_ROUTES)
+      },
+      {
         path: 'preferences',
         loadChildren: () => import('./features/preferences/preferences.routes').then(m => m.PREFERENCES_ROUTES)
       },

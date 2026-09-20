@@ -87,7 +87,7 @@ describe('ModulesService', () => {
 
     // La agenda es de la casa, no de la cocina: apagar «comer» no la borra, asi que vive en el
     // nucleo y ningun modulo la gobierna (lo que se apaga dentro es el contenido de cocina).
-    for (const path of ['/dashboard', '/calendar', '/household', '/preferences', '/settings', '/logs', '/ai-config']) {
+    for (const path of ['/dashboard', '/calendar', '/account', '/household', '/preferences', '/settings', '/logs', '/ai-config']) {
       expect(service.isPathVisible(path)).withContext(path).toBeTrue();
     }
     expect(moduleOwningPath('/settings')).toBeUndefined();

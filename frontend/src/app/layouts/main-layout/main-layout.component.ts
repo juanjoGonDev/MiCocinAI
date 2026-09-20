@@ -487,9 +487,10 @@ export class MainLayoutComponent implements OnInit {
   }
 
   navigateToProfile(): void {
-    // El avatar habla de la persona, no de la app: lleva a Preferencias
-    // (gustos, alergias y objetivo). Configuracion queda para tema e idioma.
-    this.router.navigate(['/preferences']);
+    // El avatar habla de la persona, y desde la ronda 13 tiene pagina propia: /account (nombre,
+    // foto, contrasena). Preferencias es del comensal —gustos, alergias, objetivo— y Configuracion
+    // de la app (tema, idioma, modulos): tres preguntas distintas, tres sitios.
+    this.router.navigate(['/account']);
   }
 
   logout(): void {
