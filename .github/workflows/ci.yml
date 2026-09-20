@@ -120,6 +120,11 @@ jobs:
       - name: UI rules (no emoji, no native select, real data-test)
         run: node scripts/check-ui.mjs
 
+      # Playwright transpila sin mirar los tipos: un matcher con una opcion inexistente
+      # no falla, se ignora. Este step costo encontrar uno que hacia justo eso.
+      - name: E2E type check (tsc -p tsconfig.e2e.json)
+        run: pnpm run typecheck:e2e
+
       - name: Server type check (tsc --noEmit)
         run: pnpm --filter @hogaria/server exec tsc --noEmit
 
@@ -231,6 +236,77 @@ jobs:
   # por eso se puede partir sin coordination: no comparten servidor ni datos, cada
   # prueba registra su propio usuario. `E2E_SEED` lleva el numero de shard para
   # que los correos de dos shards no puedan colisionar nunca.
+  # ── Stack completo: el build de produccion, un solo proceso, limites ENCENDIDOS ──
+  # Por que otro job si ya hay 381 tests e2e: porque esos corren sobre `ng serve` con
+  # `DISABLE_RATE_LIMIT=1`, y las dos unicas cosas que se han roto de verdad en las
+  # ultimas rondas viven justo en lo que esa configuracion no ejercita —el limitador que
+  # asfixiaba a toda la casa y el SSE del visor de logs detras del servidor real.
+  full-stack:
+    name: 'Full-stack E2E (prod build, limits on)'
+    runs-on: ubuntu-latest
+    needs: install
+    timeout-minutes: 12
+    env:
+      E2E_SEED: r${{ github.run_id }}a${{ github.run_attempt }}fs
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore node_modules
+        id: nm
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ runner.os }}-deps-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.run_id }}-${{ github.run_attempt }}-nm
+          path: |
+            node_modules
+            frontend/node_modules
+            server/node_modules
+
+      - name: Restore Playwright browsers
+        id: pw
+        uses: actions/cache/restore@v4
+        with:
+          key: ${{ runner.os }}-deps-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.run_id }}-${{ github.run_attempt }}-pw
+          path: ~/.cache/ms-playwright
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 'Install what the cache could not bring (cache miss only)'
+        if: steps.nm.outputs.cache-hit != 'true' || steps.pw.outputs.cache-hit != 'true'
+        run: |
+          if [ "${{ steps.nm.outputs.cache-hit }}" != "true" ]; then pnpm install --frozen-lockfile; fi
+          if [ "${{ steps.pw.outputs.cache-hit }}" != "true" ]; then pnpm exec playwright install --with-deps chromium; fi
+
+      # El binario sirve la web desde `frontend/dist`, asi que el build NO es opcional:
+      # sin el, este job comprobara un API a secas y passara en verde igual.
+      - name: Build server and frontend
+        run: pnpm run build
+
+      - name: 'E2E against the single production process (rate limiter on)'
+        run: pnpm exec playwright test -c playwright.full-stack.config.ts --forbid-only
+        env:
+          CI: 'true'
+
+      - name: Publish E2E failures as annotations
+        if: failure()
+        run: node scripts/ci-e2e-summary.mjs
+
+      - name: Upload the full-stack Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-full-stack
+          path: playwright-report/
+          retention-days: 7
+
   e2e:
     name: 'E2E Tests (shard ${{ matrix.shard }})'
     runs-on: ubuntu-latest

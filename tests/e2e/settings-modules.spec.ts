@@ -111,7 +111,10 @@ test.describe('Configuración — módulos', () => {
     await page.locator('[data-module-switch="pantry"]').click();
 
     for (const path of ['/dashboard', '/household', '/preferences', '/settings']) {
-      await expect(page.locator(`a[href="${path}"]`)).not.toHaveCount(0, { message: path });
+      // El mensaje va en `expect(x, msg)`: Playwright no acepta `{ message }` como opcion
+      // del matcher y lo ignoraba en silencio —el fallo decia «expected not to have count 0»
+      // sin decir por cual de las cuatro rutas habia sido.
+      await expect(page.locator(`a[href="${path}"]`), `nav roto para ${path}`).not.toHaveCount(0);
     }
   });
 

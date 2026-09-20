@@ -59,6 +59,9 @@ test: ## Run all tests
 test-frontend: ## Run frontend tests
 	pnpm run test:client
 
+test-e2e-full-stack: ## E2E contra el proyecto entero (build + node sirviendo API y web, con limites)
+	pnpm run test:e2e-full-stack
+
 test-server: ## Run backend tests
 	pnpm run test:server
 
@@ -77,6 +80,9 @@ ci:yaml: ## Revisa los YAML de Actions: comillas, tabs y contextos que GitHub no
 
 ci:ui: ## Guarda de UI: sin emoji, sin select nativo, sin data-test inventados
 	@node scripts/check-ui.mjs
+
+ci:e2e-types: ## Type-check de la suite e2e (Playwright no lo hace por su cuenta)
+	pnpm run typecheck:e2e
 
 lint: ## Run all linters
 	pnpm run lint
