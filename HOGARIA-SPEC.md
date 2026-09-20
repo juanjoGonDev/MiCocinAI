@@ -1913,6 +1913,8 @@ snack; the grid should read like Google's hours, showing only the window that ha
 - Dragging a block to move or resize it — the grid geometry is written so that the drop target is the
   same pure function that paints it, but the drag is not this round.
 - A `time` per generated meal: the model does not return one, so untimed placement stays.
+  (Taken in the next section: the house's hour is written on generated meals —the model still does not
+  choose it.)
 
 ## 12p. Round 15 checklist — everything that deletes asks first, the house says what time it eats
 
@@ -1926,25 +1928,25 @@ The server worked —proven with two accounts against the live API: `PATCH /even
 So the report was about the app, and it turned out to be three separate breaks, each of which on its own
 is enough to make the control unusable:
 
-- [ ] `GET /api/calendar/events` (the list the calendar actually renders) attached `attendees` but not
+- [x] `GET /api/calendar/events` (the list the calendar actually renders) attached `attendees` but not
       `attendeeIds`. Opening the dialog to edit an event therefore started with **nobody selected**, and
       saving would have written that back. Fix: the list returns the same pair the POST and the PATCH
       return, derived from the same bulk query —no second read per row.
-- [ ] `/calendar` never loaded the household: `loadHousehold()` was called on login, register, dashboard
+- [x] `/calendar` never loaded the household: `loadHousehold()` was called on login, register, dashboard
       and the household page, so opening the calendar URL directly (or reloading it) left
       `householdService.household()` at `null`, `hasHousehold()` answered false, and the block that
       contains the picker did not render at all. Fix: `HouseholdService.ensureHousehold()` — load once,
       never twice in parallel, keep the failure recoverable — and the calendar calls it on init.
-- [ ] A control that is hidden because a request is in flight is a bug the user cannot distinguish from
+- [x] A control that is hidden because a request is in flight is a bug the user cannot distinguish from
       «this house has one member». When there is nobody else to invite, the dialog says so and offers
       the way to add someone; it does not disappear.
-- [ ] `saveEvent` sends `attendeeIds` only when the picker was actually shown for that draft. Absent
+- [x] `saveEvent` sends `attendeeIds` only when the picker was actually shown for that draft. Absent
       means «don't touch» on the server, so the client must not send a list it never rendered —and must
       send the empty one it did.
-- [ ] The dialog's candidate list is a pure function (`core/event-invitations.ts`): the household minus
+- [x] The dialog's candidate list is a pure function (`core/event-invitations.ts`): the household minus
       the author, stable order by name, no self-invitation. Tested in the bridge, because it is the only
       part of the invite flow with real logic in the client.
-- [ ] An e2e case that drives the whole gesture (open dialog → tick a member → save → the face appears
+- [x] An e2e case that drives the whole gesture (open dialog → tick a member → save → the face appears
       on the block), written and typechecked; it is not executed here (no Chromium), and the spec says so
       instead of claiming a green.
 
@@ -1954,75 +1956,127 @@ Listas, líneas, eventos, utensilios, configs: a delete is the only action whose
 by pressing again, so no destructive control may act on the first click. `ConfirmService` is the app's
 own dialog (round 12) and every path below goes through it.
 
-- [ ] A rule in `scripts/check-ui.mjs` finds the gaps instead of a list of promises: any method in a
+- [x] A rule in `scripts/check-ui.mjs` finds the gaps instead of a list of promises: any method in a
       component whose body calls a destructive service method (`delete…`, `remove…`) must call
       `confirmService.confirm(` **inside that method**, or declare why in `DEBT`. The rule reports the
       method name and the line, so the fix is obvious and a new screen cannot forget.
-- [ ] The gaps it found get fixed in the same commit as the rule: the shopping line (`removeItem`), the
+- [x] The gaps it found get fixed in the same commit as the rule: the shopping line (`removeItem`), the
       price/discount removals, the recipe delete, the household member removal and the calendar event
       delete. Each confirmation names the thing being deleted —«¿Borrar «Pan de pueblo» de la lista?»—,
       never «¿Estás seguro?».
-- [ ] Deliberate exceptions, each with its reason written in the rule file: «quitar la foto» of the
+- [x] Deliberate exceptions, each with its reason written in the rule file: «quitar la foto» of the
       account (it is a decision inside the avatar modal, already a two-choice step, and re-uploading
       undoes it), the PWA's local-cache discard, and anything the server itself treats as a *setting*
       rather than a deletion (a `null` that clears a field is not a delete of a row).
-- [ ] Cancelling does nothing at all: no toast, no optimistic removal from a local list, no refetch. And
+- [x] Cancelling does nothing at all: no toast, no optimistic removal from a local list, no refetch. And
       the confirm dialog already has its own cancel —the rule «todo control editable necesita forma de
       cancelar» applies double to a destruction.
 
 ### C. What time this house eats (preferences → tour → calendar → IA)
 
-- [ ] `mealTimes` in the taste profile (`users.preferences`), one key per meal type, each an `HH:MM`
+- [x] `mealTimes` in the taste profile (`users.preferences`), one key per meal type, each an `HH:MM`
       string through `formTime`: `breakfast 09:00`, `lunch 14:00`, `snack 17:00`, `dinner 20:30` are the
       defaults the app ships with, and `readMealTimes` answers them when nothing was saved —so there is
       no «no configured» state to branch on in the UI.
-- [ ] A new section in **Preferencias** («Horarios de las comidas»): four time inputs, the unsaved-changes
+- [x] A new section in **Preferencias** («Horarios de las comidas»): four time inputs, the unsaved-changes
       state, Guardar and Descartar, no more magic than the rest of the page. The values are editable
       whenever the user wants; nothing locks after the tour.
-- [ ] The **tour** asks the same question as its own step, prefilled with the defaults, and saving the
+- [x] The **tour** asks the same question as its own step, prefilled with the defaults, and saving the
       step is the same PATCH the preferences page uses. Skipping the tour must not lose the schedule:
       the defaults stay.
-- [ ] The hour grid uses them: an untimed meal is *placed* at the house's hour for its type, and the
+- [x] The hour grid uses them: an untimed meal is *placed* at the house's hour for its type, and the
       anchors that `core/calendar-grid.ts` tests (08:30/14:00/17:30/21:00) become the shipped defaults
       only as `MEAL_TIME_DEFAULTS`, imported by nothing else. Placement, the click-to-add prefill and
       the `+` in the day header read the configured values.
-- [ ] The AI gets them: the weekly-plan prompt names the hours, and `persistWeeklyPlan` writes
+- [x] The AI gets them: the weekly-plan prompt names the hours, and `persistWeeklyPlan` writes
       `time = mealTimes[type]` for the meals it inserts, because a schedule the user typed is a fact of
       the house, not an invented per-meal claim (that distinction is what round 14's
       «no printed fake hour» was protecting).
-- [ ] Blank means back to the default: clearing a field and saving does not store `''`, it stores nothing,
+- [x] Blank means back to the default: clearing a field and saving does not store `''`, it stores nothing,
       and the next read answers the default. No form here accepts a half-typed hour as a value.
 
 ### D. «Pedirle a la IA qué comidas quiero en el calendario»
 
-- [ ] The generate dialog has a selector of the four meal types (chips, default: all four), and it is a
+- [x] The generate dialog has a selector of the four meal types (chips, default: all four), and it is a
       real filter, not decoration: `POST /api/ai/plan-week` accepts `mealTypes`, the prompt's JSON example
       is built from the chosen types in the order of the day, and `persistWeeklyPlan` inserts only those
       keys —so a house that does not eat breakfast stops getting breakfasts it has to delete by hand.
-- [ ] The response keeps telling how many slots were filled and how many were skipped because the user
+- [x] The response keeps telling how many slots were filled and how many were skipped because the user
       already had something there; the toast counts what actually happened (round 13b's rule).
-- [ ] A selected set of zero means «dame las cuatro», not «no generes nada» and not a 400: it is the same
+- [x] A selected set of zero means «dame las cuatro», not «no generes nada» and not a 400: it is the same
       request as the unmodified default, and the dialog shows which is which.
 
 ### E. The tour lets you out of any step
 
-- [ ] Every step has its own «Saltar este paso» (the global «Saltar por ahora» stays for the whole tour),
+- [x] Every step has its own «Saltar este paso» (the global «Saltar por ahora» stays for the whole tour),
       and skipping a step keeps whatever the previous steps saved —skipping «horarios» must not write
       empty hours.
-- [ ] The tour is a linear array of ids, so «which step is this» and «can I go back» come from the array
+- [x] The tour is a linear array of ids, so «which step is this» and «can I go back» come from the array
       and not from `ngSwitch` branches; the number in the header («Paso 3 de 6») is derived from the same
       array.
-- [ ] Keyboard: `Escape` skips the current step (never the whole tour), and `Enter` in a text input is the
+- [x] Keyboard: `Escape` skips the current step (never the whole tour), and `Enter` in a text input is the
       «siguiente» action, not a form submit that saves the world.
 
 ### Gates
 
-- [ ] Server vitest green, contract green with the new `mealTimes`/`mealTypes` keys (the contract file
+- [x] Server vitest green, contract green with the new `mealTimes`/`mealTypes` keys (the contract file
       tests a new optional key the day it is added, so this box ticks itself), bridge green with the new
       pure modules, `tsc` (server, app, spec), `typecheck:e2e`, `check-ui` with the delete rule and the
       selector rule, production build.
-- [ ] No claim about pixels or about the tour's look: no Chromium here. What is asserted is the step
+- [x] No claim about pixels or about the tour's look: no Chromium here. What is asserted is the step
       machine, the payload the dialog sends, and the numbers the plan writes.
+
+### What changed while doing it
+
+- **The grid kept an anchor of its own.** The bullet above says the shipped hours become
+  `MEAL_TIME_DEFAULTS` «imported by nothing else»; that turned out to be wrong in a useful way.
+  `MEAL_ANCHOR_MINUTES` (08:30 / 14:00 / 17:30 / 21:00) stays in `core/calendar-grid.ts` as what the
+  grid paints *before* the profile answers, and `mealAnchors()` falls back to it per key. Without it,
+  every untimed meal is placed at midnight for the ~200 ms the taste profile takes, which is a worse
+  calendar than a slightly recoloked one. The two sets mean different things and say so in their
+  comments: one is «what the app ships as a normal day», the other is «where an untimed block sits».
+- **Blank and absent are different inside `mealTimes`.** `mealTimes: { dinner: '' }` deletes the dinner
+  key (next read answers the default); `mealTimes: { dinner: '22:00' }` leaves the other three alone;
+  no `mealTimes` at all touches nothing. That is the same absent/null contract the rest of the API
+  uses, one level deeper, and it is why the Preferences tab and the tour send a patch of *changed*
+  keys (`mealTimesPatch`) instead of the four visible ones —otherwise «look at the default» silently
+  becomes «have the default saved», and a future change of the shipped hour would stop reaching houses
+  that never chose anything.
+- **The mirror between the two sides is a text comparison.** `frontend/src/app/core/meal-times.ts`
+  cannot import `server/src/utils/taste-profile.ts` (the server file drags better-sqlite3, and
+  `rootDir` makes the reverse import break the server build), so `server/src/utils/meal-times-mirror.spec.ts`
+  reads both sources and compares the literals —defaults, the order of the day, and the Spanish names.
+  It throws if a constant moves instead of passing quietly without comparing anything.
+- **A selected set of only-unheard-of names also means «the whole day».** The checklist covers zero
+  selected; the first implementation returned zero valid types for `['cena', 'postre']`, which reads as
+  «plan nothing and insert nothing» —the quietest possible way to fail. `resolveMealTypes` (server) and
+  `selectedMealTypes` (frontend) now fall back to all four when nothing survives, and both are tested.
+- **The delete rule is a rule, not a list of screens.** `sin-confirmar-borrado` in `scripts/check-ui.mjs`
+  walks every component, follows one level of delegation (a `removeMeal` that calls `removeMealById`,
+  which does confirm), and keeps an `EXEMPT`-style `LEGACY` map with a mandatory reason per file. It
+  found four real gaps and four false positives (`removeAllRanges`, `classList.remove`,
+  `clearGenerated`, `clearTimeout`); the exceptions are in the rule, not in the components.
+- **e2e written, not executed.** The tour cases (per-step skip, Esc/Enter, the hours step feeding
+  Preferencias) and the invitation cases (one-member house says so; two members, mark, save, reopen with
+  the mark still there, and the invited session sees the event) are in `tests/e2e/onboarding.spec.ts` and
+  `tests/e2e/calendar.spec.ts`, and `npm run typecheck:e2e` passes. Nothing here ran them: the sandbox
+  has no Chromium, and CI does.
+
+### Gates as run
+
+- Server vitest: **22 files, 559 tests** green (the contract file covers `mealTimes` on the PATCH without
+  a new row, and `mealTimes` in `updateTasteSchema` inherits the whole «optional means optional» table).
+- Bridge (pure frontend specs under the server's vitest): **12 files, 121 tests** green, including the two
+  new modules `meal-times` and `onboarding-steps`.
+- `tsc` clean for server, `tsconfig.app.json` and `tsconfig.spec.json`; `typecheck:e2e` clean;
+  `check-ui`: **151 files, 9 reglas, sin incidencias**; `ng build --configuration production` OK with the
+  two pre-existing component-CSS budget warnings and no new one.
+- Against the live API (`tsx watch` on the dev database): a fresh account reads the four defaults,
+  `PATCH {mealTimes:{dinner:'22:00'}}` merges without touching `taste`, `dinner:''` + `lunch:'13:30'` in
+  one call clears one and sets the other, `lunch:'a comer'` is a 400 that names the field
+  (`mealTimes.lunch: Almuerzo: usa HH:MM`), `mealTimes:''` is a 200 that changes nothing, and
+  `POST /ai/plan-week {mealTypes:[…]}` parses (it fails later on the missing AI key, as expected).
+- `npm run lint` is still not a gate, for the reason written in §12o.
 
 ### Coming soon, deliberately not here
 
