@@ -24,7 +24,7 @@ const NAMES = [
   'description', 'discount', 'done_all', 'drag_indicator', 'edit', 'error_outline', 'event_available',
   'event_busy', 'event_note', 'expand_less', 'expand_more', 'favorite', 'filter_list', 'flag',
   'group', 'help_outline', 'history', 'home', 'image', 'location_on', 'local_offer', 'menu', 'payments',
-  'sell', 'euro_symbol',
+  'sell', 'euro_symbol', 'check_box', 'check_box_outline_blank', 'receipt_long', 'storefront', 'link', 'link_off', 'paid',
   'more_vert', 'notifications', 'percent', 'person', 'photo_camera', 'playlist_add', 'radio_button_unchecked',
   'refresh', 'remove', 'remove_circle', 'remove_shopping_cart', 'schedule', 'search', 'select_all',
   'send', 'settings', 'shopping_basket', 'shopping_cart', 'star', 'sync_problem', 'tune',
