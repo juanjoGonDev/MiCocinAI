@@ -78,7 +78,7 @@ describe('describeEvent', () => {
    * (y que ninguna se olvide) se comprueba en un sitio y no a mano en la UI.
    */
   const CASES: [string, string][] = [
-    ['item.add', 'Ana ha anadido «Pollo»'],
+    ['item.add', 'Ana ha añadido «Pollo»'],
     ['item.merge', 'Ana ha sumado unidades a «Pollo»'],
     ['item.update', 'Ana ha editado «Pollo»'],
     ['item.check', 'Ana ha marcado «Pollo» como comprada'],
@@ -110,6 +110,6 @@ describe('describeEvent', () => {
       'Ana ha tocado la lista'
     );
     // ...y sin nombre tampoco pinta un hueco.
-    expect(describeEvent({ action: 'item.add', item_name: null, user_name: null })).toBe('Alguien ha anadido');
+    expect(describeEvent({ action: 'item.add', item_name: null, user_name: null })).toBe('Alguien ha añadido');
   });
 });

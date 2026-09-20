@@ -682,7 +682,7 @@ shoppingRoutes.post('/lists/:id/items/bulk', async (c) => {
     list,
     c.get('userId'),
     'items.bulk',
-    `${added.length + merged.length} lineas anadidas${skipped.length ? `, ${skipped.length} ignoradas` : ''}`
+    `${added.length + merged.length} líneas añadidas${skipped.length ? `, ${skipped.length} ignoradas` : ''}`
   );
 
   return c.json(

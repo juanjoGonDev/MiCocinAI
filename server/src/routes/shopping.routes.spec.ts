@@ -680,6 +680,24 @@ describe('auditoria y en-vivo (§8f)', () => {
     expect(events[0].description).toContain('ha quitado «Pollo»');
   });
 
+  it('quien se renombra se renombra tambien en su historial, y la instantanea sigue en la tabla', async () => {
+    const list = await createList(alice);
+    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pollo' });
+    expect((await data(await call(alice, 'GET', `/lists/${list.id}/events`)))[0].user_name).toBe('Comprador');
+
+    // La fila NO se reescribe: `user_name` es la instantanea de cuando paso y ahi se queda. Lo que
+    // lee la pantalla es el nombre de hoy (con aquella como reserva si la cuenta desaparece), porque
+    // en «quien ha tocado que» lo que importa es saber de quien se trata.
+    db.prepare('UPDATE users SET name = ? WHERE id = ?').run('Compradora Nueva', alice.id);
+
+    const events = await data(await call(alice, 'GET', `/lists/${list.id}/events`));
+    expect(events[0].user_name).toBe('Compradora Nueva');
+    expect(events[0].description).toContain('Compradora Nueva ha añadido «Pollo»');
+    expect(db.prepare('SELECT user_name FROM shopping_list_events WHERE list_id = ?').get(list.id)).toEqual({
+      user_name: 'Comprador'
+    });
+  });
+
   it('el descuento y el vaciado del carro tambien se cuentan', async () => {
     const list = await createList(alice);
     await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', quantity: 2, priceMinor: 100 });

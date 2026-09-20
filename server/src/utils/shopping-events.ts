@@ -67,13 +67,16 @@ export function recordEvent(
 }
 
 export function readEvents(db: Db, input: { listId: string; limit: number }) {
-  // `user_name` esta guardado en la fila: es una instantanea de cuando paso, y un «Ana
-  // renombro su perfil» no debe reescribir la historia. La foto no es historia: es un dato de
-  // la cuenta de hoy, y por eso se lee de `users` en vez de congelarse en el suceso.
+  // El nombre que se enseña es el de HOY (`u.name`), y la instantanea de la fila
+  // (`e.user_name`) queda como reserva para cuando la cuenta ya no existe: lo que importa en
+  // «quien ha tocado que» es saber de quien se trata, y si Ana se renombra manana, ver «Bea» en
+  // su propia linea es un error, no historia. La fila sigue guardando la instantanea: la
+  // auditoria intacta en la tabla, resuelta en la pantalla. La foto, igual: es un dato de la
+  // cuenta, no del suceso.
   return db
     .prepare(
-      `SELECT e.id, e.list_id, e.user_id, e.user_name, e.action, e.item_name, e.created_at,
-              u.avatar AS user_avatar
+      `SELECT e.id, e.list_id, e.user_id, COALESCE(u.name, e.user_name) AS user_name, e.action,
+              e.item_name, e.created_at, u.avatar AS user_avatar
        FROM shopping_list_events e
        LEFT JOIN users u ON u.id = e.user_id
        WHERE e.list_id = ?
@@ -92,7 +95,7 @@ export function describeEvent(event: { action: string; item_name: string | null;
   const item = event.item_name ? ` «${event.item_name}»` : '';
   switch (event.action) {
     case 'item.add':
-      return `${who} ha anadido${item}`;
+      return `${who} ha añadido${item}`;
     case 'item.merge':
       return `${who} ha sumado unidades a${item}`;
     case 'item.update':
@@ -112,7 +115,7 @@ export function describeEvent(event: { action: string; item_name: string | null;
     case 'items.bulk':
       return `${who} ha pegado una lista`;
     case 'items.apply':
-      return `${who} ha anadido lineas desde una foto`;
+      return `${who} ha añadido líneas desde una foto`;
     case 'list.clear-checked':
       return `${who} ha vaciado el carro`;
     case 'list.order':
