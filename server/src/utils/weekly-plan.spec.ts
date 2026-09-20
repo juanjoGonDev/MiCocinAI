@@ -316,4 +316,12 @@ describe('resolveMealTypes', () => {
     expect(resolveMealTypes(['dinner', 'breakfast'])).toEqual(['breakfast', 'dinner']);
     expect(resolveMealTypes(['cena', 'lunch', 'lunch'])).toEqual(['lunch']);
   });
+
+  it('una seleccion sin ninguna comida valida es el dia completo, no un plan vacio', async () => {
+    // Un cliente viejo, un id renombrado o un json escrito a mano: «no entiendo nada» no puede
+    // significar «no le pidas nada a la IA y no guardes nada», que es como se lee un array vacio aqui.
+    const { resolveMealTypes } = await import('./weekly-plan.js');
+
+    expect(resolveMealTypes(['cena', 'postre'])).toEqual(['breakfast', 'lunch', 'snack', 'dinner']);
+  });
 });

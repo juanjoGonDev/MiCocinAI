@@ -74,7 +74,8 @@ export function mealTimeOf(times: Partial<MealTimes> | null | undefined, type: M
 export function selectedMealTypes(selected: readonly string[] | null | undefined): MealType[] {
   if (!selected || selected.length === 0) return [...MEAL_ORDER];
   const picked = new Set(selected);
-  return MEAL_ORDER.filter((type) => picked.has(type));
+  const valid = MEAL_ORDER.filter((type) => picked.has(type));
+  return valid.length > 0 ? valid : [...MEAL_ORDER];
 }
 
 /** `HH:MM` -> minutos del dia, para comparar o para el `title` de un bloque. `null` si no es una hora. */

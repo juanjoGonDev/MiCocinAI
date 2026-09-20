@@ -85,6 +85,15 @@ describe('selectedMealTypes', () => {
   it('devuelve el orden del día, sin duplicados y sin basura', () => {
     expect(selectedMealTypes(['dinner', 'lunch', 'dinner', 'postre'])).toEqual(['lunch', 'dinner']);
   });
+
+  it('si no queda ninguna valida, se pide el día entero', () => {
+    expect(selectedMealTypes(['postre', 'almuerzo'])).toEqual([
+      'breakfast',
+      'lunch',
+      'snack',
+      'dinner'
+    ]);
+  });
 });
 
 describe('mealTimeToMinutes', () => {

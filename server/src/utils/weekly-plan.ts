@@ -29,8 +29,11 @@ export function resolveMealTypes(selected: readonly unknown[] | null | undefined
   if (!Array.isArray(selected) || selected.length === 0) return [...MEAL_TYPES];
   const picked = new Set<string>();
   for (const raw of selected) picked.add(String(raw ?? '').trim().toLowerCase());
-  // Se devuelve en el orden del dia, no en el que llegaron: lo consume quien escribe el plan.
-  return MEAL_TYPES.filter((type) => picked.has(type));
+  // Se devuelve en el orden del dia, no en el que llegaron: lo consume quien escribe el plan. Y si no
+  // queda ninguna valida (cliente viejo, id renombrado) se pide el dia entero: un array vacio aqui se
+  // leia «no planifiques nada», que es el peor modo de fallar en silencio.
+  const valid = MEAL_TYPES.filter((type) => picked.has(type));
+  return valid.length > 0 ? valid : [...MEAL_TYPES];
 }
 
 /** Hora del reloj para la columna `meals.time`; lo demas se queda sin hora. */
