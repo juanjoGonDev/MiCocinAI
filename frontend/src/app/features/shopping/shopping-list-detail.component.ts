@@ -512,16 +512,17 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     type="button"
                     class="detail__chip-btn"
                     [class.detail__chip-btn--active]="isOffer(preset)"
+                    [attr.aria-pressed]="isOffer(preset)"
                     [attr.title]="preset.hint"
                     data-test="offer-preset"
-                    (click)="setDraftOffer(preset)"
+                    (click)="pickOfferPreset(preset)"
                   >
                     <app-icon name="local_offer" [size]="14" [label]="null" />
                     {{ preset.label }}
                   </button>
                 }
                 @if (draftOffer()) {
-                  <button type="button" class="detail__chip-btn detail__chip-btn--muted" (click)="setDraftOffer(null)">
+                  <button type="button" class="detail__chip-btn detail__chip-btn--clear" data-test="offer-clear" (click)="setDraftOffer(null)">
                     <app-icon name="close" [size]="14" [label]="null" />
                     Sin oferta
                   </button>
@@ -541,9 +542,11 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   <button
                     type="button"
                     class="detail__chip-btn"
-                    [class.detail__chip-btn--active]="lineKind() === kind.value"
+                    [class.detail__chip-btn--active]="lineKind() === kind.value && kind.value !== 'none'"
+                    [class.detail__chip-btn--clear]="kind.value === 'none'"
+                    [attr.aria-pressed]="kind.value === 'none' ? null : lineKind() === kind.value"
                     data-test="line-discount-kind"
-                    (click)="setLineKind(kind.value)"
+                    (click)="pickLineKind(kind.value)"
                   >
                     <app-icon [name]="kind.icon" [size]="14" [label]="null" />
                     {{ kind.label }}
@@ -1913,6 +1916,19 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         border-color: var(--primary);
         color: var(--white);
       }
+      /* «Sin oferta» y «Sin descuento» NO son un estado: son una accion de quitar. Con el mismo
+         borde gris que los demas chips se leian como una cuarta oferta posible. Borde discontinuo
+         y color de aviso: es un quite, y no queda nunca «activo». */
+      .detail__chip-btn--clear {
+        border-style: dashed;
+        border-color: color-mix(in srgb, var(--error) 45%, transparent);
+        color: var(--error);
+        background: transparent;
+      }
+      .detail__chip-btn--clear:hover {
+        background: var(--error-subtle);
+        border-color: var(--error);
+      }
       .detail__sheet-actions {
         display: flex;
         justify-content: space-between;
@@ -2755,6 +2771,15 @@ export class ShoppingListDetailComponent implements OnDestroy {
     return !!draft && draft.buy === preset.buy && draft.take === preset.take;
   }
 
+  /**
+   * Reclicar la oferta encendida la apaga. Estar seguro de que «2x1» es lo que hay y tener que
+   * buscar el botoncito de «Sin oferta» es un viaje de ojo para algo que se dice con un toque;
+   * el chip inactivo por dentro ya no se distingue, asi que el estado se anuncia con aria-pressed.
+   */
+  pickOfferPreset(preset: LineOffer): void {
+    this.setDraftOffer(this.isOffer(preset) ? null : preset);
+  }
+
   setDraftOffer(offer: LineOffer | null): void {
     this.draftOffer.set(offer);
     const item = this.editing();
@@ -2802,6 +2827,11 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.linePercent.set(discount?.kind === 'percent' ? trimNumber((discount.percentBps ?? 0) / 100) : '');
     this.lineAmount.set(discount?.kind === 'amount' ? trimNumber((discount.valueMinor ?? 0) / 100) : '');
     this.lineUnits.set(discount?.units ? trimNumber(discount.units) : '');
+  }
+
+  /** Lo mismo con el descuento de la linea: volver a pulsar el tipo activo lo quita. */
+  pickLineKind(kind: LineDiscountKindUi): void {
+    this.setLineKind(this.lineKind() === kind && kind !== 'none' ? 'none' : kind);
   }
 
   setLineKind(kind: LineDiscountKindUi): void {
