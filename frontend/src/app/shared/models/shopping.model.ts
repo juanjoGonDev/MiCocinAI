@@ -11,6 +11,9 @@
 export type ShoppingListStatus = 'active' | 'archived' | 'done';
 
 export interface ShoppingList {
+  /** De quien es la lista (nombre y foto), resueltos en la lectura de la bandeja. */
+  ownerName?: string | null;
+  ownerAvatar?: string | null;
   id: string;
   name: string;
   store: string | null;
@@ -60,6 +63,9 @@ export interface ShoppingListItem {
   /** Los resuelve el server al leer la lista: un id de usuario no es legible. */
   added_by_name?: string | null;
   updated_by_name?: string | null;
+  /** La foto de quien toco la linea por ultima vez; sin foto, `app-avatar` pinta la inicial. */
+  added_by_avatar?: string | null;
+  updated_by_avatar?: string | null;
 }
 
 /**
@@ -339,6 +345,7 @@ export interface ListEvent {
   list_id: string;
   user_id: string;
   user_name: string | null;
+  user_avatar?: string | null;
   action: ListEventAction;
   item_name: string | null;
   created_at: string;

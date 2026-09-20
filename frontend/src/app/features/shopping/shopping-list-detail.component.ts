@@ -336,8 +336,12 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                         {{ money(item.price_minor) }}
                       </span>
                       @if (item.updated_by_name || item.added_by_name) {
-                        <span class="detail__who" [attr.title]="'Ultimo cambio: ' + (item.updated_by_name ?? item.added_by_name)">
-                          {{ initials(item.updated_by_name ?? item.added_by_name) }}
+                        <!-- El «quien» de la fila era la inicial escrita a mano: dos letras
+                             sueltas que cada cual interpretaba como queria. Es el mismo icono
+                             que en la auditoria y en la agenda —la foto de la persona, y su
+                             inicial dentro del circulo si no tiene foto. -->
+                        <span class="detail__who" [attr.title]="'Ultimo cambio: ' + whoName(item)">
+                          <app-avatar [name]="whoName(item)" [src]="whoAvatar(item)" size="xs" />
                         </span>
                       }
                       <button
@@ -1106,7 +1110,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               <ul class="detail__audit">
                 @for (event of events(); track event.id) {
                   <li class="detail__audit-row" data-test="audit-row">
-                    <app-avatar [name]="event.user_name ?? 'Alguien'" size="sm" />
+                    <app-avatar [name]="event.user_name ?? 'Alguien'" [src]="event.user_avatar ?? undefined" size="sm" />
                     <span class="detail__audit-text">{{ event.description }}</span>
                     <span class="detail__audit-when" [title]="when(event.created_at)">{{
                       since(event.created_at)
@@ -1185,16 +1189,12 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         font-family: inherit;
         cursor: pointer;
       }
+      /* Antes este span ERA el avatar: un circulo de 22 px con dos letras dentro. Ahora el
+         circulo lo pinta `app-avatar`, y aqui solo hace falta que no se deforme ni pelee con
+         la fila —dos circulos uno dentro de otro es lo que sale si se queda el fondo. */
       .detail__who {
-        min-width: 22px;
-        height: 22px;
-        border-radius: var(--radius-full);
-        background: var(--bg-tertiary);
-        color: var(--text-secondary);
-        font-size: 10px;
-        font-weight: var(--font-bold);
-        display: inline-grid;
-        place-items: center;
+        display: inline-flex;
+        flex: none;
       }
       .detail__field-label {
         font-size: var(--text-xs);
@@ -2148,10 +2148,13 @@ export class ShoppingListDetailComponent implements OnDestroy {
     return offerOfItem(item);
   }
 
-  initials(name: string | null | undefined): string {
-    const parts = String(name ?? '').trim().split(/\s+/).filter(Boolean);
-    if (!parts.length) return '?';
-    return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
+  /** Quien toco la linea por ultima vez (y si nadie la toco, quien la anadio). */
+  whoName(item: ShoppingListItem): string {
+    return String(item.updated_by_name ?? item.added_by_name ?? '').trim();
+  }
+
+  whoAvatar(item: ShoppingListItem): string | undefined {
+    return item.updated_by_avatar ?? item.added_by_avatar ?? undefined;
   }
   readonly listId = inject(ActivatedRoute).snapshot.paramMap.get('id') ?? '';
 

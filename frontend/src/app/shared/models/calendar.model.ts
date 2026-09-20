@@ -201,6 +201,8 @@ export interface HouseholdEvent {
   source: string;
   userId: string;
   authorName: string | null;
+  /** La foto del autor, si la tiene. El nombre se congelo al escribir; la foto es la de hoy. */
+  authorAvatar?: string | null;
   editable: boolean;
 }
 

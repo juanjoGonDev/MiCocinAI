@@ -8,6 +8,7 @@ import { ConfirmService } from '../../core/services/confirm.service';
 import { ToastService } from '../../core/services/toast.service';
 import { formatMoney, ListsQuery, ListsSort, ShoppingList } from '../../shared/models/shopping.model';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 
@@ -49,7 +50,7 @@ const PAGE_SIZES: PickerOption[] = [
 @Component({
   selector: 'app-shopping-lists',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, IconButtonComponent, PickerComponent],
+  imports: [CommonModule, FormsModule, IconComponent, IconButtonComponent, PickerComponent, AvatarComponent],
   template: `
     <div class="tray">
       <header class="tray__head">
@@ -261,6 +262,16 @@ const PAGE_SIZES: PickerOption[] = [
                 } @else {
                   <a class="tray__name" [href]="hrefOf(list)" (click)="open(list, $event)" [attr.aria-label]="'Abrir ' + list.name">
                     <span>{{ list.name }}</span>
+                    @if (list.ownerName) {
+                      <app-avatar
+                        class="tray__owner"
+                        [name]="list.ownerName"
+                        [src]="list.ownerAvatar ?? undefined"
+                        size="xs"
+                        [attr.title]="'Lista de ' + list.ownerName"
+                        data-test="row-owner"
+                      />
+                    }
                   </a>
                   <div class="tray__name-tools">
                     <app-icon-button icon="edit" label="Renombrar" size="sm" (onClick)="startRename(list)" />
@@ -623,6 +634,9 @@ const PAGE_SIZES: PickerOption[] = [
       }
       .tray__cell--name {
         justify-content: space-between;
+      }
+      .tray__owner {
+        flex: none;
       }
       .tray__name-tools {
         display: inline-flex;

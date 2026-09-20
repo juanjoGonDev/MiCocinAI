@@ -2215,11 +2215,6 @@ export class CalendarComponent implements OnInit {
     return eventTimeLabel(event);
   }
 
-  authorInitials(event: HouseholdEvent): string {
-    const parts = String(event.authorName ?? '').trim().split(/\s+/).filter(Boolean);
-    if (!parts.length) return '';
-    return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
-  }
 }
 
 function sum(days: CalendarDayView[], key: 'planned' | 'done' | 'calories'): number {

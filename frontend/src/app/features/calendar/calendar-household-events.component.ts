@@ -1,6 +1,7 @@
 import { Component, EventEmitter, HostBinding, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import {
   HOUSEHOLD_EVENT_META,
   HouseholdEvent,
@@ -21,7 +22,7 @@ import {
 @Component({
   selector: 'app-calendar-household-events',
   standalone: true,
-  imports: [CommonModule, IconComponent],
+  imports: [CommonModule, IconComponent, AvatarComponent],
   template: `
     @for (event of events; track event.id) {
       <button
@@ -42,7 +43,9 @@ import {
           <span class="cal-evt__when">{{ timeOf(event) }}</span>
         }
         @if (!dense && event.authorName) {
-          <span class="cal-evt__who">{{ initialsOf(event) }}</span>
+          <!-- «De quien es esta suelta» se respondia con dos letras sueltas; ahora es el mismo
+               icono que en la lista de la compra y en la auditoria. -->
+          <app-avatar class="cal-evt__who" [name]="event.authorName" [src]="event.authorAvatar ?? undefined" size="xs" />
         }
       </button>
     }
@@ -69,9 +72,6 @@ import {
         font-weight: 600;
       }
       :host([appearance='agenda']) .cal-evt__when {
-        font-size: var(--text-xs);
-      }
-      :host([appearance='agenda']) .cal-evt__who {
         font-size: var(--text-xs);
       }
       .cal-evt {
@@ -156,9 +156,4 @@ export class CalendarHouseholdEventsComponent {
     return `${event.title}${when ? ' · ' + when : ''}${this.metaOf(event).label ? ' · ' + this.metaOf(event).label : ''}${who}`;
   }
 
-  initialsOf(event: HouseholdEvent): string {
-    const parts = String(event.authorName ?? '').trim().split(/\s+/).filter(Boolean);
-    if (!parts.length) return '';
-    return (parts[0][0] + (parts[1]?.[0] ?? '')).toUpperCase();
-  }
 }

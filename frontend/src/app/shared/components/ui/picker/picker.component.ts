@@ -21,7 +21,9 @@ export type PickerOption = {
 };
 
 /** Una fila del panel: un titulo o una opcion. `index` es su sitio en `filtered()`. */
-export type PickerRow = { header: string; option: null; index: number } | { header: null; option: PickerOption; index: number };
+export type PickerRow =
+  | { kind: 'header'; key: string; label: string }
+  | { kind: 'option'; key: string; option: PickerOption; index: number };
 
 /**
  * Selector propio, en vez de `select` nativo (HOGARIA-SPEC §8f).
@@ -89,37 +91,33 @@ export type PickerRow = { header: string; option: null; index: number } | { head
                 <span class="picker__tag">usar este texto</span>
               </li>
             }
-            @for (row of rows(); track row.index + ':' + (row.header ?? row.option.value)) {
-              @if (row.header !== null) {
-                <li class="picker__group" role="presentation">{{ row.header }}</li>
-              } @else {
-              <li
-                class="picker__option"
-                role="option"
-                [class.picker__option--active]="active() === row.index"
-                [attr.aria-selected]="isSelected(row.option)"
-                [attr.aria-disabled]="row.option.disabled || null"
-                [attr.id]="listId() + '-' + row.index"
-                (click)="choose(row.option)"
-                (mouseenter)="active.set(row.index)"
-              >
-                @if (row.option.color) {
-                  <span class="picker__dot" [style.background]="row.option.color" aria-hidden="true"></span>
-                }
-                <span class="picker__label">{{ row.option.label }}</span>
-                @if (row.option.hint) {
-                  <span class="picker__hint">{{ row.option.hint }}</span>
-                }
-                @if (isSelected(row.option)) {
-                  <app-icon class="picker__check" name="check" [size]="18" [label]="'seleccionado: ' + row.option.label" />
-                }
-              </li>
+            @for (row of rows(); track row.key) {
+              @if (row.kind === 'header') {
+                <li class="picker__group" role="presentation">{{ row.label }}</li>
               }
-            }
-            @if (filtered().length === 0 && !(allowCustom && query.trim())) {
-              <li class="picker__none">
-                {{ emptyText }}
-              </li>
+              @if (row.kind === 'option') {
+                <li
+                  class="picker__option"
+                  role="option"
+                  [class.picker__option--active]="active() === row.index"
+                  [attr.aria-selected]="isSelected(row.option)"
+                  [attr.aria-disabled]="row.option.disabled || null"
+                  [attr.id]="listId() + '-' + row.index"
+                  (click)="choose(row.option)"
+                  (mouseenter)="active.set(row.index)"
+                >
+                  @if (row.option.color) {
+                    <span class="picker__dot" [style.background]="row.option.color" aria-hidden="true"></span>
+                  }
+                  <span class="picker__label">{{ row.option.label }}</span>
+                  @if (row.option.hint) {
+                    <span class="picker__hint">{{ row.option.hint }}</span>
+                  }
+                  @if (isSelected(row.option)) {
+                    <app-icon class="picker__check" name="check" [size]="18" [label]="'seleccionado: ' + row.option.label" />
+                  }
+                </li>
+              }
             }
           </ul>
         </div>
@@ -359,10 +357,10 @@ export class PickerComponent implements OnInit, OnDestroy {
     this.filtered().forEach((option, index) => {
       const group = option.group ?? null;
       if (group && group !== current) {
-        out.push({ header: group, option: null, index: -1 });
+        out.push({ kind: 'header', key: 'h:' + group, label: group });
         current = group;
       }
-      out.push({ header: null, option, index });
+      out.push({ kind: 'option', key: 'o:' + option.value, option, index });
     });
     return out;
   });
