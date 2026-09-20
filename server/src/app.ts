@@ -8,6 +8,7 @@ import { isAbsolute, join, resolve, sep } from 'node:path';
 
 import { config } from './config/app.config.js';
 import { errorHandler } from './middleware/error.middleware.js';
+import { timestampMiddleware } from './middleware/timestamp.middleware.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { pantryRoutes } from './routes/pantry.routes.js';
 import { shoppingRoutes } from './routes/shopping.routes.js';
@@ -251,6 +252,10 @@ export function createApp(options: AppOptions = {}): Hono {
   });
 
   app.use('*', prettyJSON());
+  // Despues de `prettyJSON` y antes de las rutas: lo que sale por aqui ya es el cuerpo
+  // definitivo, y normalizarlo una vez en el borde evita que cada pantalla vuelva a
+  // inventarse como se le echa la zona horaria a una cadena de SQLite.
+  app.use('/api/*', timestampMiddleware());
 
   app.use(
     '*',
