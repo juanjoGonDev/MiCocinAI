@@ -37,7 +37,6 @@ interface TimelineItem extends GridItem {
   mealType?: MealType;
   event?: HouseholdEvent;
 }
-import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 
@@ -59,7 +58,7 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
 @Component({
   selector: 'app-calendar-timeline',
   standalone: true,
-  imports: [CommonModule, IconComponent, IconButtonComponent, AvatarComponent],
+  imports: [CommonModule, IconButtonComponent, AvatarComponent],
   template: `
     <div class="tl" [class.tl--single]="single()" [style.--hour-px]="hourPx">
       <!-- Cabecera: el hueco de las horas + una columna por dia. -->
