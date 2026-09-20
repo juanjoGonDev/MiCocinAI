@@ -32,6 +32,12 @@ export interface TasteResponse {
   onboarding: OnboardingState;
   /** Nivel de cocina y secciones de casa (ver home-profile.ts). */
   profile?: import('./home-profile').HomeProfile;
+  /**
+   * A que hora come esta casa (ver `core/meal-times.ts`). `Partial` y con `null` admitidos a proposito:
+   * esto es la forma del cable, no la del estado. La API contesta siempre las cuatro, pero el lector las
+   * normaliza, y el formulario manda el bloque incompleto cuando solo se ha cambiado una comida.
+   */
+  mealTimes?: Partial<Record<import('./calendar.model').MealType, string | null>>;
 }
 
 /** Opción de un selector de chips: lo que se guarda es el propio texto. */

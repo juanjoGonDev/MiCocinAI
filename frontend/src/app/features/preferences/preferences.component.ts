@@ -24,6 +24,8 @@ import {
   emptyTasteProfile
 } from '../../shared/models/taste-profile';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
+import { MEAL_TIME_DEFAULTS, MealTimes, resolveMealTimes } from '../../core/meal-times';
+import { MEAL_ORDER, MEAL_TYPE_LABELS, MealType } from '../../shared/models/calendar.model';
 
 /**
  * Preferencias del comensal: lo que la IA tiene en cuenta al cocinar.
@@ -33,9 +35,9 @@ import { syncTabWithUrl } from '../../core/utils/tab-url';
  * los gustos y el objetivo en una sola página no se acaba nunca. La pestaña
  * viaja en la URL (/preferences?tab=goal) como en el resto de la app.
  */
-type PreferencesTab = 'profile' | 'allergies' | 'tastes' | 'goal';
+type PreferencesTab = 'profile' | 'allergies' | 'tastes' | 'meals' | 'goal';
 
-const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'goal'] as const;
+const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as const;
 
 @Component({
   selector: 'app-preferences',
@@ -162,6 +164,36 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'goal'] as const;
               [(ngModel)]="taste.notes"
             ></textarea>
           </div>
+        </ng-container>
+
+        <!-- ── Horarios de las comidas ── -->
+        <ng-container *ngSwitchCase="'meals'">
+          <h2 class="preferences__panel-title">¿A qué hora comes?</h2>
+          <p class="preferences__panel-hint">
+            No es un adorno: estas horas deciden donde se sienta cada comida en el calendario, con que hora
+            nace un «añadir comida» y a que hora te propone comer la IA. Si manana cenan tarde, cambiarlo
+            aqui lo cambia en los tres sitios.
+          </p>
+
+          <div class="preferences__times">
+            <div class="preferences__time-row" *ngFor="let field of mealFields">
+              <label class="preferences__time-label" [for]="'meal-' + field.type">{{ field.label }}</label>
+              <input
+                class="preferences__time"
+                type="time"
+                [id]="'meal-' + field.type"
+                [name]="'meal-' + field.type"
+                [attr.data-test]="'preferences-meal-time-' + field.type"
+                [(ngModel)]="mealTimes[field.type]"
+              />
+              <span class="preferences__time-hint">{{ field.hint }}</span>
+            </div>
+          </div>
+
+          <p class="preferences__footnote">
+            Vaciar una casilla la deja en blanco y la comida vuelve a su hora de siempre (la que se
+            indica abajo, entre parentesis). Guardar no inventa un horario que no has tocado.
+          </p>
         </ng-container>
 
         <!-- ── Objetivo ── -->
@@ -396,6 +428,39 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'goal'] as const;
         color: var(--text-secondary);
       }
 
+      .preferences__times {
+        display: grid;
+        gap: var(--space-3);
+      }
+
+      .preferences__time-row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+        padding: var(--space-2) 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .preferences__time-label {
+        font-weight: 600;
+      }
+
+      .preferences__time {
+        font: inherit;
+        padding: var(--space-1) var(--space-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface);
+        color: var(--text);
+      }
+
+      .preferences__time-hint {
+        grid-column: 1 / -1;
+        font-size: var(--text-sm);
+        color: var(--text-muted);
+      }
+
       .preferences__footnote {
         font-size: var(--text-sm);
         color: var(--text-secondary);
@@ -441,8 +506,23 @@ export class PreferencesComponent implements OnInit {
     { id: 'profile', label: 'Perfil', icon: 'person', count: () => this.profileLabel() },
     { id: 'allergies', label: 'Alergias', icon: 'error_outline', count: () => this.taste.allergies.length },
     { id: 'tastes', label: 'Gustos', icon: 'favorite', count: () => this.taste.likes.length + this.taste.dislikes.length },
+    { id: 'meals', label: 'Horarios', icon: 'schedule', count: () => this.mealTimesLabel() },
     { id: 'goal', label: 'Objetivo', icon: 'flag', count: () => this.goalLabel() }
   ];
+
+  /**
+   * Las cuatro comidas con su defecto, en el orden del dia. Es un dato, no cuatro bloques de plantilla:
+   * si manana «merienda» deja de existir o sale un almuerzo largo, esto es una linea.
+   */
+  readonly mealFields = MEAL_ORDER.map((type) => ({
+    type,
+    label: MEAL_TYPE_LABELS[type],
+    hint: `En blanco: ${MEAL_TIME_DEFAULTS[type]}`
+  }));
+
+  /** Copia editable de las horas de la casa; lo guardado se compara contra `savedMealTimes`. */
+  mealTimes: MealTimes = resolveMealTimes(null);
+  private savedMealTimes: MealTimes = resolveMealTimes(null);
 
   allergenOptions = COMMON_ALLERGENS;
   likeOptions = COMMON_LIKES;
@@ -475,6 +555,9 @@ export class PreferencesComponent implements OnInit {
       next: (data) => {
         this.taste = { ...emptyTasteProfile(), ...data.taste };
         this.profile = toHomeProfile(data.profile);
+        // El servicio ya ha normalizado (y la API contesta siempre las cuatro): aqui no se vuelve a
+        // resolver el JSON, se copia lo que hay para poder editarlo.
+        this.mealTimes = this.tasteService.mealTimes();
         this.markSaved();
       },
       error: () => this.toastService.error('Error', 'No se pudieron cargar tus preferencias')
@@ -490,6 +573,14 @@ export class PreferencesComponent implements OnInit {
     return this.goalOptions.find((goal) => goal.value === this.taste.goal)?.label ?? '—';
   }
 
+  /**
+   * El resumen de la pestana: de la primera a la ultima hora del dia. Muestra las dos que mas se
+   * miran (cuando se desayuna y cuando se cena) y, sobre todo, cambia de aspecto en cuanto se toca.
+   */
+  mealTimesLabel(): string {
+    return `${this.mealTimes.breakfast}\u2013${this.mealTimes.dinner}`;
+  }
+
   hasUnsavedChanges(): boolean {
     return this.snapshot() !== this.savedSnapshot;
   }
@@ -502,7 +593,7 @@ export class PreferencesComponent implements OnInit {
   save(): void {
     // Solo el nivel: los modulos son de Configuracion y no se pisan desde aqui.
     this.tasteService
-      .save(this.taste, undefined, { cookingLevel: this.profile.cookingLevel })
+      .save(this.taste, undefined, { cookingLevel: this.profile.cookingLevel }, this.mealTimesPatch())
       .subscribe({
       next: () => {
         this.markSaved();
@@ -515,17 +606,40 @@ export class PreferencesComponent implements OnInit {
 
   /** Vuelve a lo guardado sin recargar la página. */
   discard(): void {
-    const snapshot = JSON.parse(this.savedSnapshot) as { taste: TasteProfile; profile: HomeProfile };
+    const snapshot = JSON.parse(this.savedSnapshot) as {
+      taste: TasteProfile;
+      profile: HomeProfile;
+      mealTimes: MealTimes;
+    };
     this.taste = snapshot.taste;
     this.profile = snapshot.profile;
+    this.mealTimes = { ...snapshot.mealTimes };
     this.saved.set(false);
   }
 
+  /**
+   * Solo las horas que han cambiado. Un «no he tocado la cena» no puede reescribir la cena con el valor
+   * que se ve en pantalla, porque eso fijaria el defecto de hoy y manana el cambio de la app no llegaria
+   * a esta casa. Y una casilla vaciada se manda como null: el server lo lee como «quita el horario».
+   */
+  private mealTimesPatch(): Partial<Record<MealType, string | null>> | undefined {
+    const patch: Partial<Record<MealType, string | null>> = {};
+    let touched = false;
+    for (const type of MEAL_ORDER) {
+      const value = (this.mealTimes[type] ?? '').trim();
+      if (value === this.savedMealTimes[type]) continue;
+      touched = true;
+      patch[type] = value || null;
+    }
+    return touched ? patch : undefined;
+  }
+
   private snapshot(): string {
-    return JSON.stringify({ taste: this.taste, profile: this.profile });
+    return JSON.stringify({ taste: this.taste, profile: this.profile, mealTimes: this.mealTimes });
   }
 
   private markSaved(): void {
     this.savedSnapshot = this.snapshot();
+    this.savedMealTimes = { ...this.mealTimes };
   }
 }

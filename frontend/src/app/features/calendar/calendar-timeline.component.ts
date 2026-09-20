@@ -468,6 +468,14 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   @Input() kitchen = true;
   /** El objetivo del día, para que la cifra de kcal signifique algo en lugar de ser un número suelto. */
   @Input() targetCalories = 0;
+  /**
+   * Donde se sienta cada comida sin hora, en minutos del día: las horas de la casa (Preferencias).
+   *
+   * Si no llegan, la rejilla usa las suyas (`MEAL_ANCHOR_MINUTES`): el perfil puede estar cargando, y
+   * un calendario que se pinta dos segundos despues de la rejilla es peor que un calendario que se
+   * recoloca.
+   */
+  @Input() mealAnchors?: Record<MealType, number>;
 
   @Output() openMeal = new EventEmitter<CalendarMeal>();
   @Output() toggleMeal = new EventEmitter<CalendarMeal>();
@@ -495,7 +503,14 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   });
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['days'] || changes['kitchen']) this.rebuild();
+    // `mealAnchors` entra en la lista porque es una preferencia: cambiar a que hora se cena en
+    // Preferencias y volver atras tiene que recolocar las comidas que no tienen hora escrita.
+    if (changes['days'] || changes['kitchen'] || changes['mealAnchors']) this.rebuild();
+  }
+
+  /** Las anclas a usar: las de la casa si están, las de la rejilla si no. */
+  private anchors(): Record<MealType, number> {
+    return this.mealAnchors ?? MEAL_TYPE_ANCHOR;
   }
 
   ngAfterViewInit(): void {
@@ -627,7 +642,7 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
     const minutes = day.isToday ? nowMinutes() : 14 * 60;
     this.addMeal.emit({
       date: day.iso,
-      mealType: mealTypeForMinutes(minutes),
+      mealType: mealTypeForMinutes(minutes, this.anchors()),
       time: day.isToday ? timeFromMinutes(minutes) : undefined
     });
   }
@@ -656,9 +671,10 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
       if (this.kitchen) {
         for (const meal of day.meals) {
           const written = minutesFromTime(meal.time);
-          // Sin hora escrita la comida va a su ancla del día (desayuno arriba, cena abajo). La ancla
-          // es posición, no dato: `timed: false` hace que el bloque no ensene ninguna hora.
-          const start = written ?? MEAL_TYPE_ANCHOR[meal.mealType];
+          // Sin hora escrita la comida va a su ancla del día (desayuno arriba, cena abajo), que son las
+          // horas de esta casa, no unas constantes. La ancla es posición, no dato: `timed: false` hace
+          // que el bloque no ensene ninguna hora.
+          const start = written ?? this.anchors()[meal.mealType];
           items.push({
             id: `meal-${meal.id}`,
             date: day.iso,
@@ -706,7 +722,7 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
 }
 
 /**
- * Las anclas del día vienen de `calendar-grid`, que es donde se prueban; el alias existe para que la
- * lectura del `rebuild` no dependa de saber de donde sale cada número.
+ * El fallback del rejilla, desde `calendar-grid`, donde se prueba. El alias existe para que la lectura
+ * del `rebuild` no dependa de saber de donde sale cada número.
  */
 const MEAL_TYPE_ANCHOR = MEAL_ANCHOR_MINUTES;

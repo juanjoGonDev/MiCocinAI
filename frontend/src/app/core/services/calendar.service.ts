@@ -211,6 +211,11 @@ export class CalendarService {
     startDate: string;
     endDate: string;
     goals: { type: string; caloriesTarget?: number; customInstructions?: string };
+    /**
+     * Que comidas se piden. Vacio = el dia entero (el mismo acuerdo que aplica el server en
+     * `resolveMealTypes`): «no he marcado nada» no puede significar «no quiero plan».
+     */
+    mealTypes?: string[];
   }): Observable<{ days: unknown[]; saved?: { created: number; skipped: number } } | null> {
     return this.http
       .post<any>(`${environment.apiUrl}/ai/plan-week`, params)

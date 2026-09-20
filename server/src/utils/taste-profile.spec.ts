@@ -202,6 +202,79 @@ describe('perfil del hogar (nivel y módulos)', () => {
   });
 });
 
+describe('horarios de las comidas', () => {
+  it('quien no ha dicho nada come a las horas de la casa', () => {
+    const user = createUser();
+
+    expect(taste.readMealTimes(db, user)).toEqual({
+      breakfast: '09:00',
+      lunch: '14:00',
+      snack: '17:00',
+      dinner: '20:30'
+    });
+    expect(taste.readTasteResponse(db, user).mealTimes).toEqual(taste.MEAL_TIME_DEFAULTS);
+  });
+
+  it('guardar solo la cena deja las otras tres intactas', () => {
+    const user = createUser();
+
+    const response = taste.saveTasteProfile(db, user, { mealTimes: { dinner: '22:15' } });
+
+    expect(response.mealTimes).toEqual({ ...taste.MEAL_TIME_DEFAULTS, dinner: '22:15' });
+    // Y de verdad persistida: otra lectura, otra vez la misma hora.
+    expect(taste.readMealTimes(db, user).dinner).toBe('22:15');
+    expect(readPreferencesColumn(user).mealTimes).toEqual({ dinner: '22:15' });
+  });
+
+  it('vaciar una casilla quita el horario, no escribe una hora en blanco', () => {
+    const user = createUser();
+    taste.saveTasteProfile(db, user, { mealTimes: { breakfast: '07:30', lunch: '13:00' } });
+
+    // El formulario manda '' al vaciar: debe significar «vuelve al defecto».
+    const response = taste.saveTasteProfile(db, user, { mealTimes: { breakfast: '' } });
+
+    expect(response.mealTimes.breakfast).toBe(taste.MEAL_TIME_DEFAULTS.breakfast);
+    expect(response.mealTimes.lunch).toBe('13:00');
+    expect(readPreferencesColumn(user).mealTimes).toEqual({ lunch: '13:00' });
+  });
+
+  it('no guarda «no tengo hora de cenar» como una fila suelta', () => {
+    const user = createUser();
+
+    // Mandar las cuatro null (borrón y cuenta nueva) deja el perfil sin horarios: las horas
+    // «en blanco» en la API son las de defecto, y el json no acumula claves null.
+    const response = taste.saveTasteProfile(db, user, {
+      mealTimes: { breakfast: null, lunch: null, snack: null, dinner: null }
+    });
+
+    expect(response.mealTimes).toEqual(taste.MEAL_TIME_DEFAULTS);
+    expect(readPreferencesColumn(user).mealTimes).toEqual({});
+  });
+
+  it('un horario imposible en el JSON no rompe la lectura', () => {
+    const user = createUser(JSON.stringify({ mealTimes: { lunch: 'a comer', dinner: '25:70' } }));
+
+    expect(taste.readMealTimes(db, user)).toEqual({
+      ...taste.MEAL_TIME_DEFAULTS,
+      lunch: taste.MEAL_TIME_DEFAULTS.lunch
+    });
+  });
+
+  it('el prompt lleva las cuatro horas de la casa', () => {
+    const lines = taste.mealTimesPromptLines({
+      breakfast: '08:00',
+      lunch: '14:30',
+      snack: '17:00',
+      dinner: '21:45'
+    });
+
+    expect(lines).toContain('desayuno a las 08:00');
+    expect(lines).toContain('cena a las 21:45');
+    expect(lines).toContain('almuerzo a las 14:30');
+    expect(lines).toContain('merienda a las 17:00');
+  });
+});
+
 describe('tastePromptLines', () => {
   it('no escribe nada para un perfil vacío', () => {
     const empty = taste.emptyTasteProfile();

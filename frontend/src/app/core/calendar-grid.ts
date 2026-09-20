@@ -31,6 +31,12 @@ export const DEFAULT_DURATION_MINUTES = 30;
  *
  * El orden es el del día en España: la merienda va antes que la cena. Ese era uno de los fallos que
  * trajo esta ronda, y aqui se nota: si cena < merienda, el plan se leia al reves.
+ *
+ * ESTE ES EL FALLBACK, no el ajuste del usuario: las horas reales de cada casa viven en
+ * `core/meal-times.ts` (Preferencias -> «Horarios») y llegan al componente como `mealAnchors`. Se
+ * mantienen aqui porque la rejilla tiene que poder pintarse antes de que el perfil conteste —con cero,
+ * todas las comidas sin hora quedarian amontonadas arriba del todo— y porque son numeros que se
+ * prueban mejor en este fichero que en un `ngOnInit`.
  */
 export const MEAL_ANCHOR_MINUTES: Record<MealType, number> = {
   breakfast: 8 * 60 + 30,
@@ -144,12 +150,16 @@ export function minutesAtOffset(offsetPx: number, window: GridWindow, stepMinute
 }
 
 /** El tipo de comida que corresponde a una hora pulsada, para no preguntar «que es esto». */
-export function mealTypeForMinutes(minutes: number): MealType {
-  const entries = Object.entries(MEAL_ANCHOR_MINUTES) as [MealType, number][];
+export function mealTypeForMinutes(
+  minutes: number,
+  anchors: Record<MealType, number> = MEAL_ANCHOR_MINUTES
+): MealType {
+  const entries = Object.entries(anchors) as [MealType, number][];
+  if (!entries.length) return 'breakfast';
   // Se elige el ancla más próxima, no «la última superada»: con la última, un clic a las 23:50
   // seguía siendo cena, y el hueco libre después de cenar es justo el que alguien quiere rellenar.
   return entries.reduce((best, [type, anchor]) =>
-    Math.abs(anchor - minutes) < Math.abs(MEAL_ANCHOR_MINUTES[best] - minutes) ? type : best, entries[0][0]);
+    Math.abs(anchor - minutes) < Math.abs(anchors[best] - minutes) ? type : best, entries[0][0]);
 }
 
 function overlaps(a: GridItem, b: GridItem): boolean {

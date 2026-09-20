@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 import { z } from 'zod';
-import { formField } from '../schemas/form.js';
+import { formField, formTime } from '../schemas/form.js';
 
 /**
  * Perfil de gustos, alergias y objetivo del comensal.
@@ -13,6 +13,69 @@ import { formField } from '../schemas/form.js';
  * Lo consume la IA: sin él, las recetas que genera pueden llevar ingredientes
  * que el usuario no puede comer o que no le gustan.
  */
+
+/**
+ * Los tipos de comida, en el orden del dia espanol: la merienda va antes que la cena.
+ *
+ * Viven aqui y no en una hoja de estilos porque los consume media app: el calendario (donde se
+ * colocan), el planificador de la IA (que pregunta por ellos) y las preferencias (donde se-editan las
+ * horas). Un `MEAL_ORDER` aparte en el frontend fue exactamente el origen del «el orden esta mal» que
+ * report6 el usuario.
+ */
+export const MEAL_TYPE_KEYS = ['breakfast', 'lunch', 'snack', 'dinner'] as const;
+export type MealTypeKey = (typeof MEAL_TYPE_KEYS)[number];
+
+export const MEAL_TYPE_LABELS: Record<MealTypeKey, string> = {
+  breakfast: 'Desayuno',
+  lunch: 'Almuerzo',
+  snack: 'Merienda',
+  dinner: 'Cena'
+};
+
+/**
+ * A que hora come esta casa. Un ajuste con defecto, no una constante: el usuario puede cambiarlo
+ * cuando quiera y la app no tiene opinion sobre si las 22:00 es «raro».
+ *
+ * Que exista un defecto es lo que permite que «vaciar la casilla» signifique «vuelve al defecto» en
+ * vez de «no hay hora», y que la rejilla del calendario y el plan de la IA hablen de las mismas horas
+ * sin que nadie tenga que reconciliar dos fuentes.
+ */
+export const MEAL_TIME_DEFAULTS: Record<MealTypeKey, string> = {
+  breakfast: '09:00',
+  lunch: '14:00',
+  snack: '17:00',
+  dinner: '20:30'
+};
+
+/** La hora tal y como la escribe un `<input type="time">`. */
+const HOUR_MINUTE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+export const mealTimesSchema = z.object({
+  breakfast: formTime('Desayuno'),
+  lunch: formTime('Almuerzo'),
+  snack: formTime('Merienda'),
+  dinner: formTime('Cena')
+});
+
+/** Horas de la casa, siempre completas: lo que no esta escrito es el defecto, no un hueco. */
+export type MealTimes = Record<MealTypeKey, string>;
+
+/** Defensivo igual que `toTasteProfile`: un JSON viejo o escrito a mano no puede romper una lectura. */
+export function toMealTimes(stored: unknown): MealTimes {
+  const raw = stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : {};
+  const out: MealTimes = { ...MEAL_TIME_DEFAULTS };
+  for (const key of MEAL_TYPE_KEYS) {
+    const value = String(raw[key] ?? '').trim();
+    if (HOUR_MINUTE.test(value)) out[key] = value;
+  }
+  return out;
+}
+
+/** Lo que la IA necesita saber para no proponer una cena a las 13:00. */
+export function mealTimesPromptLines(times: MealTimes): string {
+  const list = MEAL_TYPE_KEYS.map((key) => `${MEAL_TYPE_LABELS[key].toLowerCase()} a las ${times[key]}`);
+  return `Horarios de la casa: ${list.join(', ')}. Usa esas horas para situar cada comida.`;
+}
 
 export const tasteGoalEnum = z.enum([
   'balanced',
@@ -103,7 +166,13 @@ export const updateTasteSchema = z.object({
   /** Nivel de cocina: se escribe en su columna, no en el JSON. */
   cookingLevel: formField(cookingLevelEnum),
   /** Qué se quiere llevar desde la app (ver HOME_MODULES). */
-  modules: formField(z.array(homeModuleEnum).max(HOME_MODULES.length))
+  modules: formField(z.array(homeModuleEnum).max(HOME_MODULES.length)),
+  /**
+   * Las horas de las comidas. `formField` alrededor del objeto: el onboarding y Preferencias mandan el
+   * bloque entero, pero un PATCH parcial (o una casilla vaciada) tiene que significar «no tocar» y
+   * «vuelve al defecto» respectivamente, no un 400.
+   */
+  mealTimes: formField(mealTimesSchema)
 });
 
 export type TasteProfileInput = z.infer<typeof tasteProfileSchema>;
@@ -127,6 +196,8 @@ export interface TasteResponse {
   taste: TasteProfile;
   onboarding: OnboardingState;
   profile: HomeProfileView;
+  /** Siempre las cuatro horas: las que la casa no ha tocado salen con el defecto. */
+  mealTimes: MealTimes;
 }
 
 export const emptyTasteProfile = (): TasteProfile => ({
@@ -215,7 +286,8 @@ export function readTasteResponse(db: Database.Database, userId: string): TasteR
   return {
     taste: toTasteProfile(prefs.taste),
     onboarding: toOnboardingState(prefs.onboarding),
-    profile: toHomeProfile(prefs.profile, row?.cooking_level)
+    profile: toHomeProfile(prefs.profile, row?.cooking_level),
+    mealTimes: toMealTimes(prefs.mealTimes)
   };
 }
 
@@ -253,6 +325,22 @@ export function saveTasteProfile(
     };
   }
 
+  if (patch.mealTimes) {
+    // Clave que no viene = clave que no se toca (un «solo he cambiado la cena» no puede borrar el
+    // desayuno). Clave que viene vacia o null = se ELIMINA, que es lo que hace que la proxima lectura
+    // conteste el defecto: «quitar mi horario raro» no necesita boton de restablecer.
+    const stored = prefs.mealTimes && typeof prefs.mealTimes === 'object' ? prefs.mealTimes : {};
+    const next: Record<string, string> = { ...(stored as Record<string, string>) };
+    const patchTimes = patch.mealTimes as Record<string, unknown>;
+    for (const key of MEAL_TYPE_KEYS) {
+      if (!(key in patchTimes)) continue;
+      const value = String(patchTimes[key] ?? '').trim();
+      if (HOUR_MINUTE.test(value)) next[key] = value;
+      else delete next[key];
+    }
+    prefs.mealTimes = next;
+  }
+
   if (patch.onboardingStatus) {
     prefs.onboarding = {
       status: patch.onboardingStatus,
@@ -282,6 +370,12 @@ export function saveTasteProfile(
 /** Solo el perfil, para los prompts de la IA. */
 export function readTasteProfile(db: Database.Database, userId: string): TasteProfile {
   return readTasteResponse(db, userId).taste;
+}
+
+/** Las horas de la casa, para quien escribe el plan (la IA) y para quien lo guarda. */
+export function readMealTimes(db: Database.Database, userId: string): MealTimes {
+  const row = selectUserRow(db, userId);
+  return toMealTimes(readPreferences(row?.preferences).mealTimes);
 }
 
 /**

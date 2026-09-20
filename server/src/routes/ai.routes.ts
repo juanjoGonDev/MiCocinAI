@@ -15,11 +15,13 @@ import type { AppEnv } from '../types/hono-env.js';
 import {
   detailLevelForCookingLevel,
   hasTasteProfile,
+  MEAL_TYPE_LABELS,
   readCookingLevel,
+  readMealTimes,
   readTasteProfile,
   tastePromptLines
 } from '../utils/taste-profile.js';
-import { persistWeeklyPlan } from '../utils/weekly-plan.js';
+import { persistWeeklyPlan, resolveMealTypes } from '../utils/weekly-plan.js';
 import { callAI, extractJsonObject } from '../utils/ai-client.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
@@ -357,6 +359,17 @@ aiRoutes.post('/plan-week', async (c) => {
   const taste = readTasteProfile(db, userId);
   const tasteBlock = hasTasteProfile(taste) ? `\n${tastePromptLines(taste)}\n` : '';
 
+  // Las comidas pedidas y las horas de la casa entran en el prompt y en lo que se guarda: si solo
+  // cambian la peticion, el modelo seguiria escribiendo un dia completo que despues habria que tirar.
+  const mealTypes = resolveMealTypes(input.mealTypes);
+  const mealTimes = readMealTimes(db, userId);
+  const mealShape = mealTypes
+    .map((type) => `        "${type}": {"name": "", "ingredients": [], "time": 0}`)
+    .join(',\n');
+  const houseHours = mealTypes
+    .map((type) => `${MEAL_TYPE_LABELS[type].toLowerCase()} a las ${mealTimes[type]}`)
+    .join(', ');
+
   const prompt = `Genera un plan de comidas semanal:
 
 Del ${input.startDate} al ${input.endDate}
@@ -364,6 +377,8 @@ Objetivo: ${input.goals.type}
 ${input.goals.caloriesTarget ? `Calorías diarias objetivo: ${input.goals.caloriesTarget}` : ''}${input.goals.customInstructions ? `\nIndicaciones del usuario (prioritarias): ${input.goals.customInstructions}` : ''}
 ${input.availableIngredients.length > 0 ? `Ingredientes disponibles: ${input.availableIngredients.join(', ')}` : ''}
 ${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}` : ''}${tasteBlock}
+Planifica SOLO estas comidas: ${mealTypes.join(', ')}. No añadas otras.
+Horarios de esta casa: ${houseHours}. Tenlos en cuenta al elegir plato (no propongas un asado de tres horas para un desayuno de media mañana); el reloj de cada comida lo pone la app, no tú.
 
 Responde SOLO con un JSON válido con esta estructura:
 {
@@ -371,9 +386,7 @@ Responde SOLO con un JSON válido con esta estructura:
     {
       "date": "YYYY-MM-DD",
       "meals": {
-        "breakfast": {"name": "", "ingredients": [], "time": 0},
-        "lunch": {"name": "", "ingredients": [], "time": 0},
-        "dinner": {"name": "", "ingredients": [], "time": 0}
+${mealShape}
       },
       "totalCalories": 0
     }
@@ -396,7 +409,9 @@ Responde SOLO con un JSON válido con esta estructura:
       startDate: input.startDate,
       endDate: input.endDate,
       goals: input.goals,
-      plan
+      plan,
+      mealTypes,
+      mealTimes
     });
 
     return c.json({ success: true, data: { ...plan, saved } });

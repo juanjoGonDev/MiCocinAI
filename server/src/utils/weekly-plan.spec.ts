@@ -205,3 +205,115 @@ describe('persistWeeklyPlan', () => {
     expect(calendarsOf(user)[0].week_start).toBe('2026-09-14');
   });
 });
+
+/** Igual que `mealsOf`, pero con la hora: sirve para hablar del reloj sin romper las otras aserciones. */
+const mealsWithTime = (userId: string) =>
+  db
+    .prepare(
+      `SELECT m.date, m.meal_type, m.time
+       FROM meals m
+       JOIN weekly_calendars c ON c.id = m.calendar_id
+       WHERE c.user_id = ?
+       ORDER BY m.date, m.meal_type`
+    )
+    .all(userId) as Array<{ date: string; meal_type: string; time: string | null }>;
+
+describe('persistWeeklyPlan y las comidas elegidas', () => {
+  it('solo escribe las comidas que se pidieron', () => {
+    const user = createUser('selection@test');
+
+    const result = persistWeeklyPlan(db, {
+      userId: user,
+      startDate: '2026-09-14',
+      endDate: '2026-09-20',
+      plan: plan(),
+      mealTypes: ['lunch', 'dinner']
+    });
+
+    expect(result.created).toBe(3); // lunes: almuerzo y cena; martes: solo cena
+    const types = new Set(mealsWithTime(user).map((meal) => meal.meal_type));
+    expect(types).toEqual(new Set(['lunch', 'dinner']));
+  });
+
+  it('repetir un tipo o meter basura no duplica ni rompe', () => {
+    const user = createUser('dedupe@test');
+
+    const result = persistWeeklyPlan(db, {
+      userId: user,
+      startDate: '2026-09-14',
+      endDate: '2026-09-20',
+      plan: plan(),
+      mealTypes: ['dinner', 'dinner', 'postre']
+    });
+
+    expect(result.created).toBe(2);
+    expect(new Set(mealsWithTime(user).map((meal) => meal.meal_type))).toEqual(new Set(['dinner']));
+  });
+
+  it('pedir todas (o ninguna) escribe las cuatro', () => {
+    const empty = createUser('none@test');
+    const all = createUser('all@test');
+
+    const none = persistWeeklyPlan(db, {
+      userId: empty,
+      startDate: '2026-09-14',
+      endDate: '2026-09-20',
+      plan: plan(),
+      mealTypes: []
+    });
+    const every = persistWeeklyPlan(db, {
+      userId: all,
+      startDate: '2026-09-14',
+      endDate: '2026-09-20',
+      plan: plan(),
+      mealTypes: ['breakfast', 'lunch', 'snack', 'dinner']
+    });
+
+    // Lunes: desayuno, almuerzo y cena. Martes: desayuno y cena (el almuerzo viene sin nombre).
+    // Y «todas» no puede inventar la merienda que la IA no ha escrito: 5 en los dos casos.
+    expect(none.created).toBe(5);
+    expect(every.created).toBe(5);
+  });
+
+  it('anota la hora de la casa en cada comida', () => {
+    const user = createUser('hours@test');
+
+    persistWeeklyPlan(db, {
+      userId: user,
+      startDate: '2026-09-14',
+      endDate: '2026-09-20',
+      plan: plan(),
+      mealTimes: { breakfast: '08:15', lunch: '14:45', snack: '17:00', dinner: '21:30' }
+    });
+
+    const rows = mealsWithTime(user);
+    const timeOf = (type: string) => rows.find((row) => row.meal_type === type)?.time;
+    expect(timeOf('breakfast')).toBe('08:15');
+    expect(timeOf('lunch')).toBe('14:45');
+    expect(timeOf('dinner')).toBe('21:30');
+  });
+
+  it('si la casa no tiene horas, el plan no inventa ninguna', () => {
+    const user = createUser('nohours@test');
+
+    persistWeeklyPlan(db, {
+      userId: user,
+      startDate: '2026-09-14',
+      endDate: '2026-09-20',
+      plan: plan()
+    });
+
+    expect(mealsWithTime(user).every((row) => row.time === null)).toBe(true);
+  });
+});
+
+describe('resolveMealTypes', () => {
+  it('sin selección están las cuatro, en orden del día', async () => {
+    const { resolveMealTypes } = await import('./weekly-plan.js');
+
+    expect(resolveMealTypes(undefined)).toEqual(['breakfast', 'lunch', 'snack', 'dinner']);
+    expect(resolveMealTypes([])).toEqual(['breakfast', 'lunch', 'snack', 'dinner']);
+    expect(resolveMealTypes(['dinner', 'breakfast'])).toEqual(['breakfast', 'dinner']);
+    expect(resolveMealTypes(['cena', 'lunch', 'lunch'])).toEqual(['lunch']);
+  });
+});

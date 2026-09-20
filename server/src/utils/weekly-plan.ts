@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { ensureWeekCalendar, toUTCISO, utcDate, weekStartOf } from './week-calendar.js';
+import { MEAL_TYPE_KEYS, type MealTypeKey } from './taste-profile.js';
 
 /**
  * Guardar el plan que devuelve la IA en el calendario de la semana pedida.
@@ -16,8 +17,27 @@ import { ensureWeekCalendar, toUTCISO, utcDate, weekStartOf } from './week-calen
 
 type SqlDb = import('better-sqlite3').Database;
 
-/** El orden del dia: la merienda va antes que la cena (HOGARIA-SPEC 12o). */
-const MEAL_TYPES = ['breakfast', 'lunch', 'snack', 'dinner'] as const;
+/** El orden del dia: la merienda va antes que la cena (HOGARIA-SPEC 12o), y la lista es la misma
+ * que usan las horas de la casa en Preferencias: un `meal_type` nuevo tiene que salir aqui tambien. */
+const MEAL_TYPES = MEAL_TYPE_KEYS;
+
+/**
+ * Que nadie haya elegido comidas no significa «no quiero nada», significa «el dia completo»: el
+ * planificador basico no tiene selector. Por eso el conjunto vacio son las cuatro, nunca cero.
+ */
+export function resolveMealTypes(selected: readonly unknown[] | null | undefined): MealTypeKey[] {
+  if (!Array.isArray(selected) || selected.length === 0) return [...MEAL_TYPES];
+  const picked = new Set<string>();
+  for (const raw of selected) picked.add(String(raw ?? '').trim().toLowerCase());
+  // Se devuelve en el orden del dia, no en el que llegaron: lo consume quien escribe el plan.
+  return MEAL_TYPES.filter((type) => picked.has(type));
+}
+
+/** Hora del reloj para la columna `meals.time`; lo demas se queda sin hora. */
+function clockTime(value: unknown): string | null {
+  const text = String(value ?? '').trim();
+  return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : null;
+}
 
 export interface PersistWeeklyPlanInput {
   userId: string;
@@ -31,6 +51,10 @@ export interface PersistWeeklyPlanInput {
   };
   /** Lo que devolvió el modelo: se valida aquí, nunca se da por bueno. */
   plan: unknown;
+  /** Qué comidas se han pedido (ver `resolveMealTypes`: vacío = las cuatro). */
+  mealTypes?: readonly unknown[] | null;
+  /** Las horas de la casa: una comida planificada sin hora escrita no tiene reloj. */
+  mealTimes?: Record<string, unknown> | null;
 }
 
 export interface PersistWeeklyPlanResult {
@@ -100,10 +124,11 @@ export function persistWeeklyPlan(
 
   result.calendarId = calendar.id;
 
+  const types = resolveMealTypes(input.mealTypes);
   const existing = db.prepare('SELECT id FROM meals WHERE calendar_id = ? AND date = ? AND meal_type = ?');
   const insert = db.prepare(
     `INSERT INTO meals (id, calendar_id, date, meal_type, recipe_id, custom_meal, time, servings, notes)
-     VALUES (?, ?, ?, ?, NULL, ?, NULL, 1, ?)`
+     VALUES (?, ?, ?, ?, NULL, ?, ?, 1, ?)`
   );
 
   for (const rawDay of days) {
@@ -116,7 +141,7 @@ export function persistWeeklyPlan(
     const meals = asRecord(day?.meals);
     if (!meals) continue;
 
-    for (const type of MEAL_TYPES) {
+    for (const type of types) {
       const name = mealName(meals[type]);
       if (!name) continue;
 
@@ -124,7 +149,17 @@ export function persistWeeklyPlan(
         result.skipped++;
         continue;
       }
-      insert.run(nanoid(), calendar.id, iso, type, name, mealNotes(meals[type]));
+      // La hora es la de la casa, no una conjetura: si el usuario no la ha puesto, la comida queda
+      // sin reloj y la rejilla la coloca en su ancla.
+      insert.run(
+        nanoid(),
+        calendar.id,
+        iso,
+        type,
+        name,
+        clockTime(input.mealTimes?.[type]),
+        mealNotes(meals[type])
+      );
       result.created++;
     }
   }

@@ -10,6 +10,8 @@ import {
   TasteProfile,
   TasteResponse
 } from '../../shared/models/taste-profile';
+import { MealTimes, resolveMealTimes } from '../meal-times';
+import { MealType } from '../../shared/models/calendar.model';
 import {
   DEFAULT_HOME_PROFILE,
   HomeModule,
@@ -31,6 +33,14 @@ export class TasteProfileService {
   private readonly apiUrl = `${environment.apiUrl}/auth/taste`;
 
   readonly taste = signal<TasteProfile>(emptyTasteProfile());
+  /**
+   * Las horas de la casa (Desayuno 09:00, Almuerzo 14:00, Merienda 17:00, Cena 20:30 por defecto).
+   *
+   * Viven aqui y no en Preferencias porque las consume media app: la rejilla del calendario coloca sus
+   * anclas aqui, el dialog de «+» prellena la hora con ellas y el onboarding las pregunta. En un signal
+   * significa que cambiarlas en un sitio se note en los otros sin recargar la pagina.
+   */
+  readonly mealTimes = signal<MealTimes>(resolveMealTimes(null));
   /** Nivel de cocina y secciones de la casa que quiere llevar. */
   readonly profile = signal<HomeProfile>(DEFAULT_HOME_PROFILE);
   readonly onboarding = signal<OnboardingState>({ status: 'pending', completedAt: null });
@@ -55,10 +65,17 @@ export class TasteProfileService {
     );
   }
 
+  /**
+   * Un solo PATCH con todo lo que la pantalla ha editado: «Guardar preferencias» no puede ser dos
+   * escritos, porque a medias —si el segundo falla— deja una casa que cena a una hora en el calendario y
+   * a otra en el plan.
+   */
   save(
     taste: Partial<TasteProfile>,
     onboardingStatus?: OnboardingStatus,
-    profile?: Partial<HomeProfile>
+    profile?: Partial<HomeProfile>,
+    /** `null` en una comida = «quita su horario», que es como se vuelve al de la app. */
+    mealTimes?: Partial<Record<MealType, string | null>>
   ): Observable<TasteResponse> {
     this.isLoading.set(true);
 
@@ -67,7 +84,8 @@ export class TasteProfileService {
         taste,
         ...(onboardingStatus ? { onboardingStatus } : {}),
         ...(profile?.cookingLevel ? { cookingLevel: profile.cookingLevel } : {}),
-        ...(profile?.modules ? { modules: profile.modules } : {})
+        ...(profile?.modules ? { modules: profile.modules } : {}),
+        ...(mealTimes ? { mealTimes } : {})
       })
       .pipe(
         map((response) => response.data as TasteResponse),
@@ -82,6 +100,9 @@ export class TasteProfileService {
     this.taste.set({ ...emptyTasteProfile(), ...data.taste });
     this.onboarding.set(data.onboarding ?? { status: 'pending', completedAt: null });
     this.profile.set(toHomeProfile(data.profile));
+    // Se reemplaza, no se fusiona: la respuesta ya trae las cuatro (las que la casa no ha tocado salen
+    // con su defecto), y una fusion dejaria intacta la hora que el usuario acaba de vaciar.
+    if (data.mealTimes) this.mealTimes.set(resolveMealTimes(data.mealTimes));
     this.isLoaded.set(true);
   }
 }

@@ -76,6 +76,12 @@ export const generateWeeklyPlanSchema = z.object({
     })
     .passthrough(),
   availableIngredients: formDefault(z.array(z.string()), []),
+  /**
+   * Que comidas se piden («Desayuno, almuerzo, cena»). `formDefault` con la lista vacia: la UI manda
+   * lo que la persona ha marcado y el servicio resuelve vacio = el dia completo (ver
+   * `resolveMealTypes`), asi que un «no he marcado nada» no puede ser ni un 400 ni un plan vacio.
+   */
+  mealTypes: formDefault(z.array(z.string().max(20)).max(12), []),
   householdPreferences: formField(
     z.object({
       likes: formDefault(z.array(z.string()), []),

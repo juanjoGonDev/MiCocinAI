@@ -25,6 +25,7 @@ import {
   MEAL_TYPE_META
 } from '../../shared/models/calendar.model';
 import { clearTabParam, readTabParam, writeTabParam } from '../../core/utils/tab-url';
+import { mealAnchors as anchorsFor, mealTimeOf, selectedMealTypes } from '../../core/meal-times';
 import {
   addDays,
   addMonths,
@@ -296,6 +297,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               [kitchen]="kitchen()"
               [days]="days()"
               [targetCalories]="calendarService.targetCalories()"
+              [mealAnchors]="gridMealAnchors()"
               (addMeal)="onTimelineAddMeal($event)"
               (addEvent)="onTimelineAddEvent($event)"
               (openMeal)="openEditModal($event)"
@@ -661,6 +663,26 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               </option>
             </select>
           </div>
+
+          <fieldset class="meal-form__field" data-test="gen-meals">
+            <legend class="meal-form__label">¿Qué comidas quieres en el calendario?</legend>
+            <!-- Cuatro casillas, no un desplegable de multi-seleccion: «quitar la merienda» es un click,
+                 y ver las cuatro con lo que esta marcado es lo que evita pedir un dia a medias sin
+                 querer. Ninguna marcada = el dia entero, y eso se dice aqui, no en un 400. -->
+            <div class="goals-form__options">
+              <app-checkbox
+                *ngFor="let meal of mealTypesForPicker"
+                [attr.data-test]="'gen-meal-' + meal"
+                [label]="mealMeta[meal].label"
+                [checked]="generateOptions.mealTypes[meal]"
+                (checkedChange)="toggleGenerateMeal(meal, $event)"
+              />
+            </div>
+            <span class="cal-hint">
+              Solo se pediran y se guardaran esas comidas. Si no marcas ninguna, se planifica el dia
+              completo.
+            </span>
+          </fieldset>
 
           <div class="meal-form__field" *ngIf="generateOptions.goalType === 'custom'">
             <label for="gen-custom">Describe tu objetivo</label>
@@ -1573,8 +1595,31 @@ export class CalendarComponent implements OnInit {
 
   draft: MealDraft = emptyDraft(toISODate(new Date()), 'lunch');
   goalsDraft = { type: 'balanced' as GoalType | string, dailyCalories: 2000 };
-  generateOptions = { goalType: 'balanced', calories: 2000, customDescription: '' };
+  generateOptions = {
+    goalType: 'balanced',
+    calories: 2000,
+    customDescription: '',
+    /**
+     * Que comidas se piden en el plan. Un mapa por clave, no una lista: lo que la plantilla pinta son
+     * cuatro casillas y una lista obligaria a reconstruirla en cada click (y a perder el orden del dia).
+     */
+    mealTypes: { breakfast: true, lunch: true, snack: true, dinner: true } as Record<MealType, boolean>
+  };
   readonly goalOptions = GOAL_OPTIONS;
+  /** Las cuatro comidas, en el orden del dia: lo que recorre la plantilla del dialogo de IA. */
+  readonly mealTypesForPicker = MEAL_ORDER;
+  /** Nombre de cada comida (la plantilla no puede importar el modelo por su cuenta). */
+  readonly mealMeta = MEAL_TYPE_META;
+
+  /**
+   * Las horas de la casa convertidas en minutos del dia: lo que usa la rejilla para sentar una comida
+   * que no tiene hora escrita.
+   *
+   * Es un `computed` sobre el perfil: al cambiar el horario en Preferencias y volver atras, la rejilla se
+   * recoloca sola. Y si el perfil aun no ha contestado, `mealAnchors` tira de sus anclas propias —una
+   * rejilla mal colocada durante 200 ms es mejor que una medianoche con las cuatro comidas apiladas.
+   */
+  readonly gridMealAnchors = computed(() => anchorsFor(this.tasteService.mealTimes()));
 
   /** Días que se pinta cada vista, con sus comidas ya repartidas por franja. */
   readonly days = computed<CalendarDayView[]>(() => {
@@ -1884,7 +1929,10 @@ export class CalendarComponent implements OnInit {
 
   openAddModal(date: string, mealType: MealType, time?: string): void {
     this.draft = emptyDraft(date, mealType);
-    if (time) this.draft.time = time;
+    // La hora es la de la casa, no una pregunta: acabamos de decir a que hora se cena, y volver a
+    // pedirla por cada comida seria no haberse enterado. Se puede vaciar la casilla, y entonces la
+    // comida queda «sin hora» (la rejilla la coloca en su ancla) —es un estado real, no un cero.
+    this.draft.time = time ?? mealTimeOf(this.tasteService.mealTimes(), mealType);
     // Si la URL trae una pestaña válida (?mealTab=recipe) se respeta.
     readTabParam(this.route, 'mealTab', ['custom', 'recipe'] as const, 'custom', (tab) =>
       this.mealTab.set(tab)
@@ -2029,6 +2077,20 @@ export class CalendarComponent implements OnInit {
     this.applyTasteGoal();
   }
 
+  /** Case (o descase) una comida del plan pedido. */
+  toggleGenerateMeal(mealType: MealType, checked: boolean): void {
+    this.generateOptions.mealTypes[mealType] = checked;
+  }
+
+  /**
+   * Lo que se manda: las comidas marcadas, en el orden del dia. Si no se ha marcado ninguna se mandan
+   * las cuatro (ver `selectedMealTypes`), y por eso el boton de generar nunca se desactiva por eso.
+   */
+  get generateMealTypes(): MealType[] {
+    const flags = this.generateOptions.mealTypes;
+    return selectedMealTypes(MEAL_ORDER.filter((type) => flags[type]));
+  }
+
   /**
    * El objetivo de la configuración inicial es el punto de partida del plan.
    * Si el perfil aún no ha llegado, se aplica cuando llegue (mientras el
@@ -2089,7 +2151,8 @@ export class CalendarComponent implements OnInit {
       .generateWithAi({
         startDate: toISODate(start),
         endDate: toISODate(end),
-        goals
+        goals,
+        mealTypes: this.generateMealTypes
       })
       .subscribe({
         next: (data) => {
