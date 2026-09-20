@@ -690,12 +690,15 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       align-items: center;
       gap: 4px;
     }
+    /* La fila de filtros vive dentro de un panel sin padding propio (cada banda lo pone al
+       lado), y esta se habia quedado sin el suyo: las capsulas pegadas al borde de la tarjeta
+       se leian fuera de la pantalla. Mismos 16 px laterales que la cabecera y la franja. */
     .cal-layers {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 6px;
-      padding: 6px 0 0;
+      padding: 6px var(--space-4) 0;
     }
     .cal-layer {
       display: inline-flex;
