@@ -74,7 +74,7 @@ test.describe('Mi cuenta', () => {
     await expect(page.locator('[data-test="audit-row"]').first()).not.toContainText('acct-hist');
   });
 
-  test('la foto sube, se ve con anillo en todos lados y se quita', async ({ page }) => {
+  test('la cara se toca: hover, modal, encuadre y foto en todos lados', async ({ page }) => {
     await registerAndGoto(page, '/account', 'acct-photo');
 
     // El disco con la inicial: tinta sobre fondo, no sobre el fondo de la pagina (que era el
@@ -92,22 +92,56 @@ test.describe('Mi cuenta', () => {
     expect(ink).toBeTruthy();
     expect(ink).not.toBe(background);
 
-    await expect(page.locator('[data-test="account-photo-remove"]')).toHaveCount(0);
-    await page.locator('[data-test="account-photo"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: PNG });
-    await expect(page.locator('.toast--success').filter({ hasText: 'Imagen cambiada' })).toBeVisible();
-    await expect(page.locator('[data-test="account-avatar"] .avatar--photo')).toBeVisible();
+    // La cara es un control: en un escritorio con puntero la etiqueta sale al pasar por encima, y
+    // no ocupa sitio hasta ese momento.
+    const edit = page.locator('[data-test="account-avatar-edit"]');
+    await expect(edit).toHaveCSS('opacity', '0');
+    await page.locator('[data-test="account-avatar-button"]').hover();
+    await expect(edit).toHaveCSS('opacity', '1');
 
-    // La URL es una ruta del servidor, y la imagen CARGA: ahi se prueba que la ruta publica
-    // existe y que el navegador no necesita el token para ver la foto.
+    await page.locator('[data-test="account-avatar-button"]').click();
+    await expect(page.locator('[data-test="account-photo-label"]')).toBeVisible();
+    // Sin foto no hay nada que quitar: el boton de quite no se inventa.
+    await expect(page.locator('[data-test="account-photo-remove"]')).toHaveCount(0);
+
+    await page.locator('[data-test="account-photo"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: PNG });
+    await expect(page.locator('[data-test="avatar-stage"]')).toBeVisible();
+
+    // Encuadrar: acercar cambia lo que se ve dentro del cuadro. La prueba es el estilo del `img`,
+    // que sale de la MISMA region que se va a recortar (avatar-crop) —si el estilo no se mueve, el
+    // recorte tampoco.
+    const preview = page.locator('[data-test="avatar-stage"] img');
+    const before = await preview.getAttribute('style');
+    await page.locator('[data-test="avatar-zoom-in"]').click();
+    await page.locator('[data-test="avatar-zoom-in"]').click();
+    await expect.poll(() => preview.getAttribute('style')).not.toBe(before);
+    await page.locator('[data-test="avatar-recenter"]').click();
+
+    // Y Cancelar en el editor no sube nada: vuelve al paso anterior, con la eleccion deshecha.
+    await page.locator('[data-test="avatar-editor-cancel"]').click();
+    await expect(page.locator('[data-test="account-photo-label"]')).toBeVisible();
+
+    await page.locator('[data-test="account-photo"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: PNG });
+    await page.locator('[data-test="avatar-editor-use"]').click();
+    await expect(page.locator('.toast--success').filter({ hasText: 'Imagen cambiada' })).toBeVisible();
+
+    // El modal se cierra despues de subir (el editor se va con el): si se queda abierto con la
+    // foto ya guardada dentro, la pantalla miente sobre en que paso esta.
+    await expect(page.locator('[data-test="avatar-editor-use"]')).toHaveCount(0);
+
+    // El editor SIEMPRE entrega JPEG cuadrado de 128: la URL lo dice, y es la prueba de que el
+    // recorte llego al servidor y no solo al canvas.
     const photo = page.locator('[data-test="account-avatar"] img');
-    await expect(photo).toHaveAttribute('src', /^\/api\/uploads\/avatars\/.+\.png$/);
+    await expect(photo).toHaveAttribute('src', /^\/api\/uploads\/avatars\/.+\.jpg$/);
     await expect
       .poll(() => photo.evaluate((el) => (el as HTMLImageElement).naturalWidth), { timeout: 15_000 })
       .toBeGreaterThan(0);
+    await expect
+      .poll(() => photo.evaluate((el) => `${(el as HTMLImageElement).naturalWidth}x${(el as HTMLImageElement).naturalHeight}`))
+      .toBe('128x128');
 
     // La foto necesita anillo: sobre una tarjeta blanca dejaba de ser un circulo.
-    const ring = await disc.evaluate((el) => getComputedStyle(el).boxShadow);
-    expect(ring).toMatch(/rgb/);
+    await expect(disc).not.toHaveCSS('box-shadow', 'none');
 
     // La misma cara en los dos sitios donde vive: el menu y la cabecera del movil.
     await expect(page.locator('.sidebar__account app-avatar img')).toHaveCount(1);
@@ -116,6 +150,8 @@ test.describe('Mi cuenta', () => {
     await page.reload();
     await expect(page.locator('[data-test="account-avatar"] .avatar--photo')).toBeVisible();
 
+    // Quitar se hace en el mismo modal, y ahora si que existe el boton de quite.
+    await page.locator('[data-test="account-avatar-button"]').click();
     await page.locator('[data-test="account-photo-remove"]').click();
     await expect(page.locator('[data-test="account-avatar"] img')).toHaveCount(0);
     await expect(page.locator('[data-test="account-avatar"] .avatar__initials')).toBeVisible();
