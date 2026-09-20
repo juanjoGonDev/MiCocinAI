@@ -1,9 +1,10 @@
-import { mkdtempSync, readdirSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   MAX_AVATAR_BYTES,
+  assertWritten,
   deleteUpload,
   parseImageDataUrl,
   readUpload,
@@ -81,6 +82,28 @@ describe('uploads — la foto de la cuenta', () => {
     expect(dir).not.toContain('data');
     // Y con una ruta normal, al lado de la BD: un solo volumen que montar.
     expect(uploadsRoot('/srv/hogaria/data/hogar.sqlite')).toBe('/srv/hogaria/data/uploads');
+  });
+
+  it('assertWritten: ni un fichero que no esta, ni uno a medias', () => {
+    const file = join(root, 'px.png');
+    writeFileSync(file, Buffer.from([1, 2, 3]));
+    expect(() => assertWritten(file, 3)).not.toThrow();
+    // Un disco leno o un corte a media escritura deja un fichero truncado: la URL quedaria
+    // guardada y el navegador, con media foto (o con nada). Eso tambien es un fallo.
+    expect(() => assertWritten(file, 4)).toThrow(/ha quedado/);
+    expect(() => assertWritten(join(root, 'no-esta.png'), 1)).toThrow(/no se ha creado/);
+  });
+
+  it('si el disco no escribe, se dice: nunca un 200 con la foto fuera', () => {
+    const ro = mkdtempSync(join(tmpdir(), 'hogaria-uploads-ro-'));
+    mkdirSync(join(ro, 'avatars'));
+    chmodSync(join(ro, 'avatars'), 0o500); // lectura y recorrido, sin escritura
+    try {
+      expect(() => storeImage('avatars', 'u-ana', parseImageDataUrl(PNG_1PX)!, ro)).toThrow();
+      expect(readdirSync(join(ro, 'avatars'))).toEqual([]);
+    } finally {
+      chmodSync(join(ro, 'avatars'), 0o700);
+    }
   });
 
   it('una escritura repetida no pisa la foto de nadie', () => {

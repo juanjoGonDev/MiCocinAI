@@ -284,7 +284,15 @@ authRoutes.post('/avatar', authMiddleware, async (c) => {
 
   const db = getDatabase();
   const previous = db.prepare('SELECT avatar FROM users WHERE id = ?').get(userId) as { avatar: string | null } | undefined;
-  const avatar = storeImage('avatars', userId, image);
+  let avatar: string;
+  try {
+    avatar = storeImage('avatars', userId, image);
+  } catch (error) {
+    // Si no se puede escribir, NO se guarda la URL: una fila apuntando a la nada es un 404
+    // de por vida, y es justo lo que esta prueba evita.
+    console.error('[auth] avatar no guardado:', error instanceof Error ? error.message : error);
+    return c.json({ success: false, message: 'UPLOAD_WRITE_FAILED', data: { detail: error instanceof Error ? error.message : '' } }, 500);
+  }
   db.prepare(`UPDATE users SET avatar = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(avatar, userId);
   deleteUpload(previous?.avatar);
   return c.json({ success: true, data: { avatar } });

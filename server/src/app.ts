@@ -349,7 +349,15 @@ export function createApp(options: AppOptions = {}): Hono {
   app.get('/api/uploads/:kind/:file', (c) => {
     const url = `/api/uploads/${c.req.param('kind')}/${c.req.param('file')}`;
     const found = readUpload(url);
-    if (!found) return next404(c);
+    if (!found) {
+      // Un 404 no se guarda: si el disco estaba de paso (un volumen remontado, un despliegue),
+      // la proxima carga tiene que poder reintentar en vez de quedarse clavada en el vacio —y es
+      // lo que evita que «subi la foto y ya no hay forma de que aparezca» dure hasta el
+      // hard-reload. Se responde en el JSON de la casa, no con un cuerpo vacio.
+      return c.json({ success: false, error: 'Not Found', message: `Upload ${c.req.param('kind')}/${c.req.param('file')} not on disk` }, 404, {
+        'cache-control': 'no-store'
+      });
+    }
     // `immutable`: el nombre cambia con cada foto, asi que un 404 de cache no puede quedar viejo.
     return new Response(found.body, {
       status: 200,

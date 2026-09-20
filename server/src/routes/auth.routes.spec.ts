@@ -1,3 +1,6 @@
+import { chmodSync, mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -63,6 +66,28 @@ describe('la cuenta de la persona', () => {
     expect((await served.arrayBuffer()).byteLength).toBeGreaterThan(0);
 
     expect(await profileAvatar(token)).toBe(avatar);
+  });
+
+  it('con el disco de las imagenes sin permisos, se dice 500: nada de un 200 mentiroso', async () => {
+    // El fallo que esto cierra es el peor posible en una pantalla de identidad: la subida
+    // responde satisfecha, la URL queda en la base de datos y el navegador recibe un 404 en cada
+    // `img` —una foto que «no cambia» y un toast que dice que si. Si escribir no se pudo, el
+    // perfil tiene que quedarse como estaba y hay que decir por que.
+    const { token } = await register('Eun');
+    const before = await profileAvatar(token);
+    const ro = mkdtempSync(join(tmpdir(), 'hogaria-uploads-sin-permisos-'));
+    chmodSync(ro, 0o500);
+    const saved = process.env.DATABASE_PATH;
+    process.env.DATABASE_PATH = join(ro, 'hogaria.sqlite'); // `uploads/` se crea dentro: no podra
+    try {
+      const res = await app.request('/api/auth/avatar', withAuth(token, { method: 'POST', body: JSON.stringify({ image: PNG_1PX }) }));
+      expect(res.status).toBe(500);
+      expect((await json(res)).message).toBe('UPLOAD_WRITE_FAILED');
+      expect(await profileAvatar(token)).toBe(before);
+    } finally {
+      process.env.DATABASE_PATH = saved;
+      chmodSync(ro, 0o700);
+    }
   });
 
   it('la segunda foto sustituye a la primera: la URL cambia', async () => {

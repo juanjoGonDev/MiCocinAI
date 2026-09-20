@@ -5,6 +5,7 @@ import { config } from './config/app.config.js';
 import { initializeDatabase } from './config/database.js';
 import { memoryMonitor } from './utils/memory-monitor.js';
 import { installConsoleCapture } from './utils/log-store.js';
+import { uploadsRoot } from './utils/uploads.js';
 import { createApp, rateLimitFromEnv, resolveStaticDir } from './app.js';
 
 // Install console capture BEFORE anything else so that startup messages
@@ -25,6 +26,9 @@ async function startServer() {
 
     memoryMonitor.start();
     console.log('[SERVER] ✓ Memory monitor started');
+    // Donde viven las fotos subidas, en absoluto y una sola vez. Sin esta linea, un 404 de un
+    // `img` obliga a adivinar con que `cwd` se arranco el proceso —y ahi se va la tarde.
+    console.log(`[SERVER] ✓ Uploads en ${uploadsRoot()}`);
 
     const port = config.server.port;
     serve(

@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -13,6 +13,31 @@ import { dirname, join, resolve } from 'node:path';
  * permiso —se sirve sin autenticacion porque un `img` no puede mandar la cabecera `Authorization`—,
  * asi que nadie tiene que poder adivinarla.
  */
+
+/**
+ * El disco dijo si, y luego no estaba ahi. Sucede (y es lo peor que le puede pasar a esta
+ * pantalla) cuando la carpeta de `uploads` se va debajo del proceso: un volumen remontado, un
+ * snapshot del workspace, un deploy que no monta `data/`. El fichero se escribe, la base de datos
+ * guarda la URL, la API contesta 200 —y el navegador, 404. Sin esta comprobacion el usuario se
+ * queda con un toast verde y una inicial que no cambia, y nadie sabe donde mirar.
+ */
+export class UploadWriteError extends Error {
+  constructor(readonly file: string, reason: string) {
+    super(`El servidor no pudo guardar la imagen en ${file} (${reason})`);
+    this.name = 'UploadWriteError';
+  }
+}
+
+/** Tras escribir: que el fichero este, y con los bytes que tocaba. */
+export function assertWritten(file: string, bytes: number): void {
+  let size = -1;
+  try {
+    size = statSync(file).size;
+  } catch {
+    throw new UploadWriteError(file, 'no se ha creado');
+  }
+  if (size !== bytes) throw new UploadWriteError(file, `ha quedado a ${size} de ${bytes} bytes`);
+}
 
 /** Un avatar es un recorte pequeno: 128 px de lado, JPEG. Media megabierto es el techo. */
 export const MAX_AVATAR_BYTES = 512 * 1024;
@@ -74,7 +99,12 @@ export function storeImage(kind: UploadKind, ownerId: string, image: ParsedImage
   mkdirSync(dir, { recursive: true });
   const ext = EXT_BY_MIME[image.mime] ?? '.jpg';
   const file = `${safe(ownerId)}-${randomBytes(5).toString('hex')}${ext}`;
-  writeFileSync(join(dir, file), image.buffer, { mode: 0o644 });
+  const full = join(dir, file);
+  writeFileSync(full, image.buffer, { mode: 0o644 });
+  // Comprobar despues de escribir es gratis, y es lo unico que convierte un 404 misterioso en un
+  // 500 con una ruta dentro. El `mkdirSync` de arriba tambien cuenta: si la raiz es de solo
+  // lectura, aqui se sabe —no cuando el navegador ya lleva tres intentos.
+  assertWritten(full, image.buffer.byteLength);
   return `/api/uploads/${kind}/${file}`;
 }
 
@@ -97,8 +127,22 @@ export function readUpload(url: string, root = uploadsRoot()): { body: Buffer; t
   try {
     return { body: readFileSync(file), type: MIME_BY_EXT[file.slice(file.lastIndexOf('.')).toLowerCase()] ?? 'application/octet-stream' };
   } catch {
+    missWarning(file);
     return null;
   }
+}
+
+/**
+ * Un 404 de una foto es silente para siempre si no se dice: el `img` se cae a la inicial, el
+ * `catch` del `app-avatar` no pinta nada en consola, y la unica prueba de que la ruta existe y de
+ * donde estaba mirando el servidor queda en el log. Un aviso por minuto —esta ruta es publica, y
+ * alguien probando nombres no tiene que poder llenarle a la casa el visor de logs.
+ */
+let lastMissWarning = 0;
+export function missWarning(file: string, now = Date.now()): void {
+  if (now - lastMissWarning < 60_000) return;
+  lastMissWarning = now;
+  console.warn(`[uploads] imagen no encontrada en disco: ${file} (raiz: ${uploadsRoot()})`);
 }
 
 /**
