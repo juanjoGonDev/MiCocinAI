@@ -1399,6 +1399,13 @@ Feedback on the screenshots of the line sheet, plus one thing that was visible o
 - The unit field's caption under the trigger ("Peso") went with the row descriptions: the icon
   in the trigger already says the family, and two descriptions of the same thing in a 320 px
   column is one too many.
+- A comment with markdown backticks inside `styles` broke the *client* and nothing else: the
+      first backtick closes the literal, the CSS after it becomes code, `styles` ends up an
+      array of several entries and the AOT reports `Failed to resolve styles at position 1 —
+      Value could not be determined statically` (NG1010). `tsc` is happy with it, since the
+      result is still valid text for the type checker. Rule 7 of `check-ui`
+      (`backtick-cierra-el-literal`) is that trap: no backticks inside a comment that lives in
+      `template`/`styles` —and no, `ng build` is not optional in a round that touches them.
 - `check-ui` grew rule 6 (`atributo-como-texto`) and prints its rule count; it flags the broken
   drop zone, stays quiet on the fixed one and on `a > b ? "x" : "y"`. `main-layout` left the
   emoji debt list (20 files left) and the icon set is 85 names.

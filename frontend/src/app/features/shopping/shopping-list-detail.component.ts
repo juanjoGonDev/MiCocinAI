@@ -1190,8 +1190,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         cursor: pointer;
       }
       /* Antes este span ERA el avatar: un circulo de 22 px con dos letras dentro. Ahora el
-         circulo lo pinta `app-avatar`, y aqui solo hace falta que no se deforme ni pelee con
-         la fila —dos circulos uno dentro de otro es lo que sale si se queda el fondo. */
+         circulo lo pinta app-avatar, y aqui solo hace falta que no se deforme ni pelee con la
+         fila —dos circulos uno dentro de otro es lo que sale si se queda el fondo—. Nada de
+         backticks en este comentario: cierran el literal de estilos y el AOT se cae. */
       .detail__who {
         display: inline-flex;
         flex: none;

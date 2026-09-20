@@ -224,6 +224,46 @@ for (const file of sourceFiles) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 7) Nada de backticks en un comentario dentro de la plantilla: cierran el literal.
+//
+// `template` y `styles` son literales de texto, y para JS un backtick es un backtick aunque
+// este dentro de un `/* ... *\/[!]` escrito con buena fe: el primero corta el string, el CSS
+// que sigue pasa a ser codigo y `styles` acaba siendo un array de varias entradas. El AOT lo
+// cuenta como `Failed to resolve styles at position 1 — Value could not be determined
+// statically` y el cliente NO ARRANCA; `tsc -p tsconfig.app.json` no lo ve, porque el
+// resultado sigue siendo texto valido para el tipador. Paso real en la hoja de la linea de la
+// compra, escribiendo un comentario con `app-avatar` entre backticks.
+//
+// Se busca la forma, no el contexto: un bloque que abre con `/*` o `<!--` al principio de la
+// linea SOLO existe dentro de un literal en este codigo (los comentarios JS abren con `/**`).
+// ---------------------------------------------------------------------------
+const OPEN_INSIDE_LITERAL = /^\s*(?:\/\*(?!\*)|<!--)/;
+for (const file of sourceFiles) {
+  const text = readFileSync(file, 'utf8');
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (!OPEN_INSIDE_LITERAL.test(lines[i])) continue;
+    const closer = lines[i].trimStart().startsWith('<!--') ? '-->' : '*/';
+    let body = '';
+    let j = i;
+    while (j < lines.length) {
+      body += lines[j];
+      if (lines[j].includes(closer)) break;
+      j++;
+    }
+    if (body.includes('`')) {
+      fail(
+        file,
+        i + 1,
+        'backtick-cierra-el-literal',
+        'quita los backticks del comentario: dentro de template/styles cierran el string'
+      );
+    }
+    i = j;
+  }
+}
+
 // --------------------------------------------------------------------------------
 for (const [rule, files] of stale) {
   for (const file of files) {
@@ -234,7 +274,7 @@ for (const [rule, files] of stale) {
 }
 
 if (problems.length === 0) {
-  console.log(`check-ui: ${sourceFiles.length} ficheros, 6 reglas, sin incidencias.`);
+  console.log(`check-ui: ${sourceFiles.length} ficheros, 7 reglas, sin incidencias.`);
   process.exit(0);
 }
 
