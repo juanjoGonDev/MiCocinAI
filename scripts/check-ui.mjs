@@ -2,7 +2,7 @@
 // =============================================================================
 // Guarda de las reglas de UI de HogarIA, sin dependencias.
 //
-// Por que existe: las cinco reglas de abajo se escribieron a mano en el spec, se
+// Por que existe: las reglas de abajo se escribieron a mano en el spec, se
 // incumplieron tres veces en dos semanas y NINGUNO de los fallos lo pillo el
 // compilador ni los tests: un emoji en un boton se ve bonito en el commit y feo en
 // un movil pequeno; un `select` nativo funciona en desktop y sale con los colores
@@ -206,6 +206,25 @@ for (const file of sourceFiles) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 6) Un atributo NO es texto: si se escapa del tag, el usuario lo lee.
+//
+// Paso en la hoja de la foto: el tag se cerro antes de tiempo
+// (`... [class.x]="y"> data-test="photo-drop">`) y el atributo se pinto como contenido del
+// cuadro de arrastre. Nadie lo vio en el commit, y el compilador tampoco: para Angular es
+// texto perfectamente legal. La forma es facil de reconocer —un `>`, algo con forma de
+// atributo, y un `>`— y facil de olvidar.
+// ---------------------------------------------------------------------------
+const LEAKED_ATTRIBUTE = />\s+[a-zA-Z-]+(?:\.[a-zA-Z-]+)?="[^"]*"\s*>/g;
+for (const file of sourceFiles) {
+  const text = readFileSync(file, 'utf8');
+  for (const match of text.matchAll(LEAKED_ATTRIBUTE)) {
+    // Un `>` de cierre de expresion dentro del propio atributo (`a > b ? "x" : "y"`) no
+    // pega con este patron porque exige la comilla de cierre justo antes del `>` final.
+    fail(file, lineOf(text, match.index), 'atributo-como-texto', `texto suelto: "${match[0].trim()}"`);
+  }
+}
+
 // --------------------------------------------------------------------------------
 for (const [rule, files] of stale) {
   for (const file of files) {
@@ -216,7 +235,7 @@ for (const [rule, files] of stale) {
 }
 
 if (problems.length === 0) {
-  console.log(`check-ui: ${sourceFiles.length} ficheros, 5 reglas, sin incidencias.`);
+  console.log(`check-ui: ${sourceFiles.length} ficheros, 6 reglas, sin incidencias.`);
   process.exit(0);
 }
 

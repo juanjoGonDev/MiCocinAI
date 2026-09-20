@@ -988,7 +988,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               Puedes cancelar cuantas veces quieras: la lista no cambia hasta que digas «Anadir».
             </p>
 
-            <label class="detail__photo-drop" [class.detail__photo-drop--ready]="photoPreview()"> data-test="photo-drop">
+            <label class="detail__photo-drop" [class.detail__photo-drop--ready]="photoPreview()" data-test="photo-drop">
               <input type="file" accept="image/png,image/jpeg,image/webp" capture="environment" name="photoFile" (change)="onPhotoFile($event)" />
               @if (photoPreview()) {
                 <img [src]="photoPreview()" alt="Foto que se va a analizar" />
