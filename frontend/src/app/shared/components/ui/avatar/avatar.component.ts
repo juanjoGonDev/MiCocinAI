@@ -1,4 +1,4 @@
-import { Component, Input, signal } from '@angular/core';
+import { Component, EventEmitter, Input, Output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { avatarInk, initialsOf as initialsFrom } from './avatar-palette';
 
@@ -26,7 +26,7 @@ export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
         [alt]="name || ''"
         class="avatar__image"
         loading="lazy"
-        (error)="broken.set(true)"
+        (error)="broken.set(true); imageError.emit(src)"
       />
       <ng-template #initialsTemplate>
         <span class="avatar__initials">{{ getInitials() }}</span>
@@ -115,7 +115,20 @@ export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   `]
 })
 export class AvatarComponent {
-  @Input() src?: string;
+  /**
+   * Cambiar de foto borra la sospecha de estar rota. Sin esto, una URL que fallo deja la inicial
+   * pintada ENCIMA de la foto que llega despues (el `background: inherit` de la capa de reserva
+   * tapaba el `img` recien cargado), que es la senal exacta de que la subida ha funcionado.
+   */
+  @Input()
+  set src(value: string | undefined) {
+    if (value !== this._src) this.broken.set(false);
+    this._src = value;
+  }
+  get src(): string | undefined {
+    return this._src;
+  }
+  private _src?: string;
   @Input() name?: string;
   @Input() size: AvatarSize = 'md';
   /** Color forzoso (el de una tienda, una categoria). Sin el, el disco sale del nombre. */
@@ -124,6 +137,13 @@ export class AvatarComponent {
 
   /** Si la foto no carga, se pinta la inicial: un hueco en blanco no dice «no hay foto». */
   readonly broken = signal(false);
+
+  /**
+   * Y ademas se dice, porque hay una pantalla que necesita saberlo: la de la cuenta, donde una URL
+   * de foto que ya no esta en el servidor es un estado que se puede arreglar (subirla otra vez) y
+   * no un avatar que simplemente sale asi.
+   */
+  @Output() imageError = new EventEmitter<string>();
 
   /**
    * Fondo y letra, en la misma decision: la letra se elige por contraste con ese fondo, que es

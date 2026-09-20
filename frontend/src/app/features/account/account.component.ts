@@ -8,7 +8,9 @@ import { ToastService } from '../../core/services/toast.service';
 import { timeZoneLabel } from '../../core/time';
 import { COOKING_LEVEL_LABELS } from '../../shared/models/home-profile';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
-import { avatarDataUrlFromFile, avatarFileError } from '../../core/avatar-image';
+import { avatarFileError } from '../../core/avatar-image';
+import { AvatarEditorComponent } from './avatar-editor.component';
+import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import { formatBytes, pendingLabel, shortId, storageUsage } from './account-info';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
@@ -33,7 +35,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
 @Component({
   selector: 'app-account',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, ButtonComponent, AvatarComponent, IconComponent],
+  imports: [CommonModule, FormsModule, RouterLink, AvatarComponent, ButtonComponent, IconComponent, ModalComponent, AvatarEditorComponent],
   template: `
     <div class="account-page">
       <header class="account__head">
@@ -69,46 +71,33 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
         <!-- ── Como te llaman en casa ── -->
         <ng-container *ngSwitchCase="'account'">
           <div class="account__identity">
-            <app-avatar
-              [name]="auth.userName() || 'H'"
-              [src]="avatarUrl() ?? undefined"
-              size="lg"
-              data-test="account-avatar"
-            ></app-avatar>
+            <button
+              type="button"
+              class="account__face"
+              data-test="account-avatar-button"
+              [attr.aria-label]="(avatarUrl() ? 'Cambiar la foto de ' : 'Subir una foto para ') + (auth.userName() || 'tu cuenta')"
+              (click)="openAvatarModal()"
+            >
+              <app-avatar
+                [name]="auth.userName() || 'H'"
+                [src]="avatarUrl() ?? undefined"
+                size="xl"
+                data-test="account-avatar"
+                (imageError)="photoBroken.set(true)"
+              />
+              <span class="account__face-edit" data-test="account-avatar-edit">
+                <app-icon name="photo_camera" [size]="14" />
+                {{ avatarUrl() ? 'Cambiar' : 'Poner foto' }}
+              </span>
+            </button>
             <div class="account__identity-text">
               <p class="account__identity-name">{{ auth.userName() }}</p>
               <p class="account__identity-hint">
-                Sin foto se ve tu inicial sobre un color; con foto, la foto con un anillo del mismo
-                color. Es la misma cara en el menu, en el historial de la compra y en la agenda.
+                Pulsa tu cara para cambiar la foto: se puede encuadrar y acercar antes de subirla.
+                Sin foto se ve tu inicial sobre un color, y con foto un anillo alrededor.
               </p>
             </div>
           </div>
-
-          <div class="account__photo-actions">
-            <label class="account__file" for="account-photo" data-test="account-photo-label">
-              <app-icon name="add_a_photo" [size]="16" />
-              {{ uploading() ? 'Subiendo foto...' : 'Cambiar la foto' }}
-              <input
-                id="account-photo"
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                data-test="account-photo"
-                [disabled]="uploading()"
-                (change)="onPhotoPicked($event)"
-              />
-            </label>
-            <app-button
-              *ngIf="avatarUrl()"
-              variant="ghost"
-              size="sm"
-              [disabled]="uploading()"
-              data-test="account-photo-remove"
-              (onClick)="removePhoto()"
-            >
-              Quitar la foto
-            </app-button>
-          </div>
-          <p class="account__error" *ngIf="photoError()" data-test="account-photo-error">{{ photoError() }}</p>
 
           <div class="account__field">
             <label class="account__label" for="account-name">Nombre</label>
@@ -279,6 +268,64 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
           </dl>
         </ng-container>
       </section>
+
+      <!-- La foto, en dos pasos dentro del mismo modal: que hacer con la actual, y encuadrar la
+           nueva. Dos modales apilados serian dos teclados de escape que cerrar. -->
+      <app-modal
+        [isOpen]="avatarModalOpen()"
+        (isOpenChange)="onAvatarModalOpenChange($event)"
+        [title]="avatarStep() === 'crop' ? 'Encuadrar la foto' : 'Tu foto'"
+        size="sm"
+      >
+        @if (avatarStep() === 'crop') {
+          <app-avatar-editor [file]="pendingPhoto()" (cancelled)="backToChoose()" (applied)="onCropped($event)" />
+        } @else {
+          <div class="avatar-choose">
+            <div class="avatar-choose__preview">
+              <app-avatar
+                [name]="auth.userName() || 'H'"
+                [src]="avatarUrl() ?? undefined"
+                size="xl"
+                (imageError)="photoBroken.set(true)"
+              />
+            </div>
+            <p class="avatar-choose__hint" *ngIf="!avatarUrl()">
+              Todavia no tienes foto. Sube una y recortala donde quieras: se guarda un cuadrado
+              pequeno, no la foto entera del movil.
+            </p>
+            <p class="avatar-choose__broken" *ngIf="photoBroken()" data-test="avatar-broken">
+              La foto guardada ya no esta en el servidor, y por eso se ve tu inicial en su lugar.
+              Sube otra o quitala.
+            </p>
+            <div class="avatar-choose__actions">
+              <label class="account__file" for="account-photo" data-test="account-photo-label">
+                <app-icon name="add_a_photo" [size]="16" />
+                {{ avatarUrl() ? 'Sustituir la foto' : 'Subir una foto' }}
+                <input
+                  id="account-photo"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  data-test="account-photo"
+                  [disabled]="uploading()"
+                  (change)="onPhotoPicked($event)"
+                />
+              </label>
+              <app-button
+                *ngIf="avatarUrl()"
+                variant="ghost"
+                size="sm"
+                [disabled]="uploading()"
+                data-test="account-photo-remove"
+                (onClick)="removePhoto()"
+              >
+                Quitar la foto
+              </app-button>
+            </div>
+            <p class="account__error" *ngIf="photoError()" data-test="account-photo-error">{{ photoError() }}</p>
+            <p class="avatar-choose__busy" *ngIf="uploading()">Subiendo la foto...</p>
+          </div>
+        }
+      </app-modal>
     </div>
   `,
   styles: [
@@ -365,11 +412,79 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
         max-width: 46ch;
       }
 
-      .account__photo-actions {
+      /* La cara es el control: al pasar el dedo o el puntero se ve que se puede tocar. En una
+         pantalla sin hover la etiqueta sale siempre, porque ahi no hay puntero que avise. */
+      .account__face {
+        position: relative;
+        display: inline-flex;
+        padding: 0;
+        border: none;
+        background: none;
+        border-radius: var(--radius-full);
+        cursor: pointer;
+      }
+      .account__face:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--primary);
+      }
+      .account__face-edit {
+        position: absolute;
+        inset: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-1);
+        border-radius: var(--radius-full);
+        background: rgba(15, 16, 18, 0.62);
+        color: var(--text-inverse);
+        font-size: var(--text-xs);
+        font-weight: var(--font-medium);
+        opacity: 0;
+        pointer-events: none;
+        transition: var(--transition-fast);
+      }
+      .account__face:hover .account__face-edit,
+      .account__face:focus-visible .account__face-edit {
+        opacity: 1;
+      }
+      @media (hover: none) {
+        .account__face-edit {
+          opacity: 1;
+        }
+      }
+
+      .avatar-choose {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-3);
+      }
+      .avatar-choose__preview {
+        align-self: center;
+      }
+      .avatar-choose__hint {
+        margin: 0;
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+      }
+      .avatar-choose__broken {
+        margin: 0;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        background: var(--warning-subtle);
+        color: var(--text-primary);
+        font-size: var(--text-xs);
+      }
+      .avatar-choose__actions {
         display: flex;
         align-items: center;
         gap: var(--space-3);
         flex-wrap: wrap;
+      }
+      .avatar-choose__busy {
+        margin: 0;
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
       }
       /* El input[type=file] nativo es un boton feo con un texto largo dentro: se tapa y se pinta
          el label. Sigue enfocable, y el anillo se lo ponemos al label. */
@@ -544,6 +659,12 @@ export class AccountComponent {
   readonly nameError = signal('');
   readonly passwordError = signal('');
   readonly avatarUrl = signal<string | null>(null);
+  /** Si la URL guardada no carga, eso es un estado que se puede arreglar: se dice, no se calla. */
+  readonly photoBroken = signal(false);
+  readonly avatarModalOpen = signal(false);
+  /** Los dos pasos de la foto: que hacer con la actual, y encuadrar la nueva. */
+  readonly avatarStep = signal<'choose' | 'crop'>('choose');
+  readonly pendingPhoto = signal<File | null>(null);
   /** Si se toco el campo, ya no se pisa con lo guardado: quien escribe tiene la razon. */
   private readonly nameTouched = signal(false);
 
@@ -556,6 +677,9 @@ export class AccountComponent {
       const user = this.auth.currentUser();
       this.nameDraft = user?.name ?? '';
       this.avatarUrl.set(user?.avatar ?? null);
+      // Una foto nueva (o quitada) borra el aviso de foto rota: si no, el aviso se quedaria
+      // pegado despues de arreglar justo lo que avisaba.
+      this.photoBroken.set(false);
     });
 
     syncTabWithUrl<AccountTab>({
@@ -573,12 +697,37 @@ export class AccountComponent {
 
   // ── La cara y el nombre ────────────────────────────────────────────────
 
+  openAvatarModal(): void {
+    this.avatarStep.set('choose');
+    this.photoError.set('');
+    this.avatarModalOpen.set(true);
+  }
+
+  /** El modal se cierra tambien con Escape y con el fondo: los tres caminos pasan por aqui. */
+  onAvatarModalOpenChange(open: boolean): void {
+    if (open) this.openAvatarModal();
+    else this.closeAvatarModal();
+  }
+
+  closeAvatarModal(): void {
+    this.avatarModalOpen.set(false);
+    this.pendingPhoto.set(null);
+    this.avatarStep.set('choose');
+    this.photoError.set('');
+  }
+
+  backToChoose(): void {
+    this.avatarStep.set('choose');
+    this.pendingPhoto.set(null);
+    this.photoError.set('');
+  }
+
   /**
-   * El archivo se elige, se recorta a 128 px y se comprime AQUI. Si pesa o no es un formato que un
-   * canvas sepa decodificar se dice antes de subir nada: el servidor lo rechazaria igual, pero el
-   * mensaje tecnico no le sirve a nadie.
+   * Elegir el archivo NO sube nada: abre el encuadre. La foto del movil enteras son 4 MB y un
+   * cuadrado de 128 px son veinte kilobytes, y entre las dos esta el gesto de decir donde esta la
+   * cara —que antes no existia y por eso salian frentes cortadas.
    */
-  async onPhotoPicked(event: Event): Promise<void> {
+  onPhotoPicked(event: Event): void {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = ''; // el mismo fichero dos veces seguidas debe volver a disparar el change
@@ -590,16 +739,24 @@ export class AccountComponent {
       return;
     }
     this.photoError.set('');
+    this.pendingPhoto.set(file);
+    this.avatarStep.set('crop');
+  }
+
+  /** Lo que emite el editor: la imagen ya recortada. Subirla es decision de esta pantalla. */
+  async onCropped(dataUrl: string): Promise<void> {
     this.uploading.set(true);
+    this.photoError.set('');
     try {
-      const dataUrl = await avatarDataUrlFromFile(file);
       const avatar = await this.auth.uploadAvatar(dataUrl).toPromise();
       this.avatarUrl.set(avatar ?? null);
-      // Decir lo que ha pasado, no por cuantas pantallas se propaga: «ya aparece en el menu, la
-      // compra y la agenda» es folleto, y peor aun si resulta que la foto ni se ha guardado.
+      this.photoBroken.set(false);
       this.toastService.success('Imagen cambiada');
+      this.closeAvatarModal();
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
+      // Se dice el fallo sin cerrar el modal: la foto ya esta encuadrada y perder el encuadre por
+      // un reintentar seria obligar a recortar otra vez.
       if (message.includes('UPLOAD_WRITE_FAILED')) {
         this.photoError.set(
           'La imagen ha llegado al servidor, pero el servidor no ha podido escribirla en disco. La ruta donde intenta guardarla sale en sus logs.'
@@ -618,7 +775,9 @@ export class AccountComponent {
       await this.auth.removeAvatar().toPromise();
       this.avatarUrl.set(null);
       this.photoError.set('');
+      this.photoBroken.set(false);
       this.toastService.success('Imagen quitada');
+      this.closeAvatarModal();
     } catch {
       this.photoError.set('No se pudo quitar la foto.');
     } finally {
