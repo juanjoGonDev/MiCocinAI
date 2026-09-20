@@ -1345,6 +1345,50 @@ Four things from the screenshot of the line sheet, and the fourth was app-wide.
       the day-old yoghurt and not today's, and `item.discount` appeared in the audit trail as
       «Sonda B ha cambiado el descuento de «Tortilla»».
 
+## 12i. Round 11 checklist — the picker as a list of things you can choose, and the person visible wherever something happened
+
+Feedback on the screenshots of the line sheet, plus one thing that was visible on screen.
+
+### The unit picker, again (it was half right)
+
+- [ ] Families are **not** a choice. A family is a title: what you can tap is a unit. The
+      previous round made "Peso" an option that selected `kg`, which read well in the spec and
+      badly on the phone —the trigger then said «Volumen» instead of «1,5 L» because the family
+      row and the unit row shared the value `L` and the picker matched the first one.
+- [ ] No per-row descriptions. The hint next to each unit was cut to two letters in a
+      320-pixel-wide column; a truncated description is noise with an ellipsis. Title only.
+- [ ] The trigger says the unit, and the panel is the list of units grouped by title. Typing
+      still filters across everything, and writing «bote de 400 g» is still a value.
+
+### The photo sheet was printing its own test attribute
+
+- [ ] `data-test="photo-drop">` was visible as text in the drop zone: the tag was closed before
+      the attribute, so the attribute became content. Fix the markup, and teach `check-ui` to
+      catch the shape —an attribute-looking token sitting between a `>` and a `>` is not
+      something a user should ever read.
+
+### Who is using this, in the sidebar
+
+- [ ] Bottom-left is the **person**, not a logout row: avatar (their photo if they set one,
+      otherwise their initial —like Google's chip), their name, and a separate small logout icon
+      button. One tap does not log you out by accident, and you can see who you are logged in as.
+- [ ] The layout's own icons stop being emoji (`🏠 📦  📅  👨‍👩‍👧‍ 👤 🤖 📋 ⚙️  ☰ ✕`): same
+      rule as the rest of the app, and it takes `main-layout` off the guard's debt lists.
+
+### The person, in every history line
+
+- [ ] Wherever a line says *who* did something, it shows the **same icon**: the shopping row
+      (it printed bare initials letters), the tray, the audit trail (already an avatar) and the
+      household agenda (which computed initials by hand in two places). `app-avatar` is the only
+      implementation of "a person as a circle".
+- [ ] For that to be a picture and not a letter, the reads that already join a name now join the
+      avatar too: `added_by_avatar`/`updated_by_avatar` on shopping items, `authorAvatar` on
+      calendar events. The client never guesses a color: `app-avatar` hashes the name, so the
+      same person is the same circle everywhere.
+- [ ] Tests: the unit options contain no family values and no duplicated values (that is what
+      made the trigger lie), `app-avatar` renders the initial when there is no image, and the two
+      API reads return the avatar field they promise.
+
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
   (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
