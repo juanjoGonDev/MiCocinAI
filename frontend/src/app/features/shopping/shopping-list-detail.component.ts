@@ -2363,7 +2363,19 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.shopping.bumpItem(item.list_id, item);
   }
 
-  remove(item: ShoppingListItem): void {
+  /**
+   * Quitar una linea pregunta antes, y el aviso nombra la linea. El Deshacer del toast se queda:
+   * no cubre el «me he equivocado al confirmar» (para eso esta el confirm), cubre el «el servidor no se
+   * entero», que es otro fallo y necesita otro remedio.
+   */
+  async remove(item: ShoppingListItem): Promise<void> {
+    const accepted = await this.confirm.confirm({
+      title: 'Quitar de la lista',
+      message: `¿Borrar «${item.name}» de la compra?`,
+      confirmText: 'Quitar',
+      variant: 'danger'
+    });
+    if (!accepted) return;
     const listId = item.list_id;
     void this.shopping.removeItem(listId, item).then(() => {
       // La barra sale pase lo que pase con la red: la fila ya no esta en la lista,
@@ -2390,6 +2402,15 @@ export class ShoppingListDetailComponent implements OnDestroy {
   async clearChecked(): Promise<void> {
     const items = this.items().filter(item => item.checked === 1);
     if (items.length === 0) return;
+    // Es un borrado multiple, y un multiple es el unico sitio donde «le di a sin mirar» cuesta una
+    // tarde de reescribir lineas: el aviso cuenta cuantas se van.
+    const accepted = await this.confirm.confirm({
+      title: 'Vaciar lo comprado',
+      message: `Se quitaran ${items.length} ${items.length === 1 ? 'linea' : 'lineas'} marcadas como compradas.`,
+      confirmText: 'Vaciar',
+      variant: 'danger'
+    });
+    if (!accepted) return;
     await this.shopping.clearChecked(this.listId);
     this.toast.show({
       type: 'success',

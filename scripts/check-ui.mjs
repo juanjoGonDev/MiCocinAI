@@ -22,7 +22,7 @@ const E2E_DIR = 'tests/e2e';
 // Cuantas reglas hay dentro. Se cuenta aqui y no a mano porque la ultima vez que se anadio una (la de
 // los selectores huerfanos) el mensaje de «sin incidencias» seguia diciendo siete, que es exactamente
 // el tipo de mentira que este fichero existe para evitar.
-const RULES = 8;
+const RULES = 9;
 
 // ---------------------------------------------------------------------------
 // Deuda heredada, declarada en voz alta.
@@ -35,6 +35,12 @@ const RULES = 8;
 // quita de aqui en el mismo commit.
 // ---------------------------------------------------------------------------
 const LEGACY = {
+  // «Quitar la foto» NO pregunta: el propio modal de la foto es ya un paso con dos decisiones
+  // (sustituir / quitar) y su boton de cancelar, y quitar la foto se deshace volviendo a subirla. Un
+  // confirm dentro de un dialogo que ya es una confirmacion es preguntar dos veces por lo mismo.
+  'sin-confirmar-borrado': [
+    'frontend/src/app/features/account/account.component.ts'
+  ],
   'sin-emoji': [
     'frontend/src/app/core/services/i18n.service.ts',
     'frontend/src/app/features/ai-config/ai-config.component.ts',
@@ -270,6 +276,65 @@ for (const file of sourceFiles) {
     // Un `>` de cierre de expresion dentro del propio atributo (`a > b ? "x" : "y"`) no
     // pega con este patron porque exige la comilla de cierre justo antes del `>` final.
     fail(file, lineOf(text, match.index), 'atributo-como-texto', `texto suelto: "${match[0].trim()}"`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 9) Todo lo que borra pregunta antes de borrar.
+//
+// Un borrado es la unica accion cuya equivocacion no se arregla volviendo a pulsar. La regla no
+// mantiene una lista de pantallas (eso se oxida el dia que alguien anade un boton): mira los metodos de
+// los componentes que llaman a un metodo destructor de un servicio (`delete…`, `remove…`) y exige que
+// el `confirmService.confirm(` este DENTRO del mismo metodo. Si la confirmacion vive en otro metodo,
+// no cuenta: es exactamente ese salto el que se olvida cuando alguien reutiliza el servicio desde otro
+// sitio. Las excepciones se declaran en LEGACY['sin-confirmar-borrado'] con su motivo, y el propio
+// script avisa cuando un fichero de la lista ya no incumple nada.
+// ---------------------------------------------------------------------------
+const DESTRUCTIVE = /(?:^|\.)(?:delete|remove|discard|clear)[A-Z][A-Za-z0-9]*\s*\(/;
+const NOT_A_DELETION =
+  /confirmService|localStorage|sessionStorage|classList|removeEventListener|clearTimeout|clearInterval|unsubscribe|removeAllRanges|removeRange|removeChild|clearGenerated|\babort\(|draft\.|this\.eventsError\.set/;
+const METHOD_HEAD = /^  (?:(?:public|protected|private|readonly)\s+)*(?:async\s+)?([a-zA-Z][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?::\s*[^{]+)?\{\s*$/;
+
+for (const file of sourceFiles) {
+  if (!/\.component\.ts$/.test(file)) continue;
+  const text = readFileSync(file, 'utf8');
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const head = METHOD_HEAD.exec(lines[i]);
+    if (!head) continue;
+    const name = head[1];
+    // Cuerpo del metodo, siguiendo las llaves. Es burdo y a proposito: un componente de Angular no
+    // deberia tener metodos que se salgan de este patron, y si algun dia lo hacen, el aviso sera claro.
+    let depth = 0;
+    let body = '';
+    for (let j = i; j < lines.length; j++) {
+      depth += (lines[j].match(/\{/g) || []).length - (lines[j].match(/\}/g) || []).length;
+      body += lines[j] + '\n';
+      if (depth <= 0 && j > i) break;
+    }
+    if (!DESTRUCTIVE.test(body) || NOT_A_DELETION.test(body)) continue;
+    if (/confirm(?:Service)?\.confirm\(|await this\.confirm/.test(body)) continue;
+    // Un salto de una capa si cuenta, y solo uno: `removeMeal(meal)` que delega en
+    // `removeMealById(id)` es el patron normal de la app (el metodo del template necesita el objeto
+    // entero para nombrar la cosa en el aviso, y el que confirma necesita el id). Dos saltos ya no: a
+    // partir de ahi el aviso puede estar en cualquier sitio y nadie lo sabe.
+    const delegated = [...body.matchAll(/this\.([a-zA-Z][A-Za-z0-9_]*)\(/g)]
+      .map((m) => m[1])
+      .filter((target) => target !== name)
+      .some((target) => {
+        const start = lines.findIndex((line) => new RegExp(`^  (?:(?:public|protected|private|async)\\s+)*${target}\\s*\\(`).test(line));
+        if (start < 0) return false;
+        let depth = 0;
+        let inner = '';
+        for (let k = start; k < lines.length; k++) {
+          depth += (lines[k].match(/\{/g) || []).length - (lines[k].match(/\}/g) || []).length;
+          inner += lines[k] + '\n';
+          if (depth <= 0 && k > start) break;
+        }
+        return /confirm(?:Service)?\.confirm\(/.test(inner);
+      });
+    if (delegated) continue;
+    fail(file, i + 1, 'sin-confirmar-borrado', `${name}() llama a un metodo destructor sin pasar por el dialogo de confirmacion`);
   }
 }
 

@@ -2374,6 +2374,16 @@ export class CalendarComponent implements OnInit {
   async removeEvent(): Promise<void> {
     const id = this.eventDraft.id;
     if (!id) return;
+    const what = this.eventDraft.title.trim() || 'este evento';
+    // El aviso dice el alcance verdadero, que no es el que sugiere el boton: borrar el evento lo borra
+    // para toda la casa. Para quitarselo de encima sin tocar a los demas existe «salir».
+    const accepted = await this.confirmService.confirm({
+      title: 'Eliminar evento',
+      message: `«${what}» dejara de verse para toda la casa, no solo para ti. Si quien lo apunto fue otra persona, lo que puedes hacer es salirte del evento.`,
+      confirmText: 'Eliminar',
+      variant: 'danger'
+    });
+    if (!accepted) return;
     const ok = await this.calendarService.removeHouseholdEvent(id);
     if (ok) {
       this.closeEventModal();
