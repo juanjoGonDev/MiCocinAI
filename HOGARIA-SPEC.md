@@ -2860,36 +2860,81 @@ cinco palabras y `cookingLevel` devolviendo clave + `'Sin marcar'`), `household`
 
 ### Checklist
 
-- [ ] La regla 20 existe y está afinada con un fichero de prueba dentro del árbol (`features/tmp-fixture/`), creado,
+- [x] La regla 20 existe y está afinada con un fichero de prueba dentro del árbol (`features/tmp-fixture/`), creado,
       medido y borrado en la misma tanda: las tres formas malas (atributo estático con sufijo de texto, `{{ 'clave' }}`
       sin `| t`, getter `*Label` que devuelve prosa o clave) salen, y las cuatro buenas (`[hint]="'k' | t"`, getter que
       traduce dentro, objeto con `labelKey`, miembro acabado en `Key`) no. Sin esto la regla es un chiste: una regla que
       no sabe callarse se quita, y una que no sabe hablar no guarda nada.
-- [ ] 20 tiene tres brazos escritos, no uno: **a)** plantilla con clave literal sin traductor; **b)** miembro con nombre
+- [x] 20 tiene tres brazos escritos, no uno: **a)** plantilla con clave literal sin traductor; **b)** miembro con nombre
       de texto (`*Label`, `*Title`, `*Message`, `*Hint`, `*Placeholder`, `*Subtitle`, `*Description`, `*Question`) que
       devuelve la clave de un catálogo o la prosa en español; **c)** el mismo defecto en un miembro que no se llama como
       texto, que es como se coló `readonly cookingLevel = computed(...)` en Mi cuenta. El brazo **c)** exonera la
       propiedad `labelKey: MAPA[type]` (construir la clave es el patrón correcto: quien pinta traduce) y exonera al
       miembro acabado en `Key` (es lo que su nombre promete).
-- [ ] La regla 14 deja de llevar una lista cerrada de atributos, y la lista vieja se queda comentada como documentación
+- [x] La regla 14 deja de llevar una lista cerrada de atributos, y la lista vieja se queda comentada como documentación
       de los casos que la empujaron, no como filtro.
-- [ ] Las 25 incidencias traducidas, con la cadena en español **byte a byte** la que estaba escrita (aserciones e2e e
+- [x] Las 25 incidencias traducidas, con la cadena en español **byte a byte** la que estaba escrita (aserciones e2e e
       historia de la app: cambiar el texto no es trabajo de esta tanda), y reutilizando claves que ya existían cuando
       existían: los `data-label` de la bandeja pintan las mismas `shopping_lists.columna_*` que la cabecera de la tabla
       —un dato, una clave—; `levelLabel` en Preferencias se **borra** en vez de traducirse, porque `home-profile-picker`
       ya tiene ese valor por defecto traducido y lo que hacía la pantalla era pisarlo con literal.
-- [ ] `account` y `household`/`preferences` resueltos por el mismo camino: `cookingLevel` pasa a llamarse a lo que
+- [x] `account` y `household`/`preferences` resueltos por el mismo camino: `cookingLevel` pasa a llamarse a lo que
       devuelve (`cookingLevelLabel`), traduce dentro, y el `'Sin marcar'` se acuña (`account.sin_nivel`);
       `passwordStrengthLabel` deja de ser un array de cinco palabras escritas y pasa a un array de cinco claves.
-- [ ] Un detalle de ortografía **no** arreglado, y escrito aquí para que no se pierda: los literales que salen de
+- [x] Un detalle de ortografía **no** arreglado, y escrito aquí para que no se pierda: los literales que salen de
       `shopping-list-detail` y `unit-picker` están sin tildes en el código desde antes de esta tanda («Buscar
       seccion», «Nada aun: en cuanto anotes un precio aparecera aqui»). Traducir es mover la cadena al diccionario;
       corregirle la ortografía a una frase que la gente ya lee es otra decisión, con su e2e y su captura, y no cabe
       en una tanda de i18n. El diccionario guarda exactamente lo que se pintaba.
-- [ ] Gates: `check-ui` en 0 con 20 reglas, `tsc` de app y de spec, `typecheck:e2e`, puente vitest, suite del server y
+- [x] Gates: `check-ui` en 0 con 20 reglas, `tsc` de app y de spec, `typecheck:e2e`, puente vitest, suite del server y
       build de producción sin avisos nuevos. Ninguno de los cinco se declara verde sin haberlo ejecutado en la tanda.
-- [ ] `DESIGN-SYSTEM.md` (quién lo vigila, y la fila del `{{ }}` que pinta una clave) y el parte del PR dicen lo mismo
+- [x] `DESIGN-SYSTEM.md` (quién lo vigila, y la fila del `{{ }}` que pinta una clave) y el parte del PR dicen lo mismo
       que el spec, con el número medido.
+
+### Como ha quedado la tanda (2026-09-21, cierre)
+
+- [x] Reglas escritas y afinadas con el fichero de prueba dentro del árbol. **Medido: 25 incidencias (21 de
+      atributo, 4 de clave desnuda) en 7 ficheros → 0**. `check-ui` cierra con «176 ficheros, 20 reglas, sin
+      incidencias», y el contador de reglas es una constante del propio script, no del mensaje: la última vez
+      que se añadió una, el parte seguía diciendo siete.
+- [x] Los tres brazos de la 20 funcionan, y sobre todo **callan** donde deben: `goodLabel()` que traduce,
+      `passwordStrengthLabel()` que busca la clave en una linea y la traduce en la siguiente, y
+      `{ labelKey: MEAL_LABEL_KEYS[type] }` no salen en el parte. El segundo caso es el que obligó a cambiar el
+      escaneo: la primera versión miraba linea a linea y denunciaba a quien traducía una linea más tarde. Con
+      el cuerpo del miembro por delante, lo que se exige es lo que importa —que en ese miembro alguien llama al
+      traductor.
+- [x] Las 25 traducidas con la cadena en español byte a byte, y reutilizando lo que ya estaba: los seis
+      `data-label` de la bandeja pintan las mismas `shopping_lists.columna_*` que la cabecera de la tabla.
+      **Dos cosas se han caído del árbol en vez de traducirse**: `levelLabel="¿Cómo andas de cocina?"`
+      (Preferencias pisaba con un literal el valor por defecto ya traducido de `app-home-profile-picker`: se
+      borra el atributo), y los tres `emptyText="…"` repartidos entre el picker de unidades y la ficha de la
+      lista — **`app-picker` no declara ese input**, así que Angular los trataba como atributo de DOM corriente y
+      nunca se pintaron. Un literal que no llega a la pantalla no se traduce: se borra, con sus dos claves
+      huérfanas fuera del diccionario. Es también la razón por la que la regla 14 no los veía antes: no había
+      texto que ver.
+- [x] El nivel de cocina tiene una sola función, `cookingLevelWord(level, t, fallback)` en
+      `shared/models/home-profile.ts`, y la usan las tres pantallas que lo imprimían (Preferencias, Gestión de
+      hogar, Mi cuenta —esta última con su `computed` renombrado a `cookingLevelLabel`, que es lo que
+      devuelve). Escrito con las pruebas por delante: dos casos rojos contra el modelo y verdes con él. La
+      cuenta de Mi cuenta ya no imprime `'Sin marcar'` escrito a mano (`account.sin_nivel`) y el medidor de
+      contrasena son cinco claves (`account.pw_*`), no cinco palabras.
+- [x] Dos locks nuevos, además del gate: `core/i18n/dict-simetrico.spec.ts` compara los objetos `es` y `en`
+      enteros (mismas claves, ningún valor vacío, ninguna frase larga calcada del castellano) —lo que un escaneo
+      estático no ve porque es una propiedad de los dos diccionarios a la vez—, y `I18nService.t()` avisa por
+      consola en desarrollo cuando una clave no está: el hueco de texto de Angular acepta cualquier `string`, así
+      que una clave rota **no falla, se pinta**, y eso es exactamente lo que muestra la captura del parte.
+- [x] Gates, todos ejecutados en la tanda: `check-ui` 176/20/0 · `tsc` de app limpio · `typecheck:e2e` limpio ·
+      puente vitest **14 ficheros / 126 pruebas** · suite del server **23 / 592** · `ng build --configuration
+      production` sin un error nuevo. El puente ha crecido en dos ficheros: `home-profile.spec.ts` estaba excluido
+      solo por usar `toBeTrue()`/`toBeFalse()` (matchers de Jasmine que chai no tiene), y cambiarlos por
+      `toBe(true)`/`toBe(false)` lo ha devuelto a la ejecución —mismo test, ahora corre también aquí. Y ese mismo puente ha enseñado una regla de escritura: un spec que corre en los dos
+      arneses no puede usar `expect(valor, mensaje)` —en Karma ese segundo sitio no existe, alli el contexto se
+      pide con `.withContext()`, que vitest no tiene—; el `tsc -p tsconfig.spec.json` lo corto en el momento, y
+      es la razon de que los dos specs nuevos ensamblen el mensaje dentro del valor comparado.
+
+**Lo que queda, y no es de esta tanda**: el `## 13` sigue con 21 de los 35 `*.spec.ts` fuera del puente porque
+necesitan `TestBed`, y con `ng lint` sin poder ejecutarse. Y el detalle ortográfico anotado arriba: «Buscar
+seccion» y compañía siguen sin tildes porque esta tanda mueve cadenas, no las reescribe.
 
 ## 13. Coming soon (deliberately not in this program)
 

@@ -1331,7 +1331,7 @@ const textoDesnudo = (text) => {
   const PALABRAS_DE_CODIGO = new Set(['if','for','while','switch','case','return','const','let','var','else','null','true','false','new','typeof','await','async','function','catch','try','do','throw','delete','in','of','this','super','break','continue','default','export','import','from','extends','as','void','yield']);
 
   const TRADUCE = /(?:this\s*\.\s*i18n\s*\.\s*t|\bthis\s*\.\s*t|\bi18n\s*\.\s*t|\bthis\s*\.\s*i18n\s*\.\s*plural|\bplural)\s*\(/;
-  const NOMBRE_DE_TEXTO = /^(?:get\s+|set\s+)?[A-Za-z_$][\w$]*(?:[Ll]abel|[Tt]itle|[Mm]ensaje|[Mm]essage|[Hh]int|[Pp]laceholder|[Ss]ubtitle|[Dd]escription|[Qq]uestion|[Tt]exto)[A-Za-z_$0-9]*$/;
+  const NOMBRE_DE_TEXTO = /^(?:get\s+|set\s+)?[A-Za-z_$][\w$]*(?:[Ll]abel|[Tt]itle|[Mm]ensaje|[Mm]essage|[Hh]int|[Pp]laceholder|[Ss]ubtitle|[Dd]escription|[Qq]uestion|[Tt]ext)[A-Za-z_$0-9]*$/;
   const ES_PROSA = (v) => isProse(v) && !NOT_TEXT.has(v.toLowerCase()) && !CLAVE_DE_DICC.test(v);
 
   for (const file of sourceFiles) {

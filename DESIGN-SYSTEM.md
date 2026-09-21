@@ -1607,6 +1607,8 @@ etiquetas, placeholders y `title` en español repartidos por 29 pantallas, y nin
 | Tiempo relativo | `i18n.relativeTime(iso)`, que compone sobre las partes de `relativeTimeParts` (`core/time.ts`) | un `formatRelative()` que devuelva «hace 3 d» |
 | Etiqueta de un catálogo | `labelKey: TranslationKey` en el modelo y `\| t` al pintar | `label: 'Desayuno'` en un `readonly` de la clase, o `admin: 'Administrador'` en un `Record` |
 | Valor de fábrica de un `@Input` | Input sin valor + getter con `t()` | `@Input() label = 'Unidad o formato'` |
+| Un atributo de presentación | `[searchPlaceholder]="'dom.clave' \| t"` —el nombre no importa: **cualquier** atributo acabado en `label`, `title`, `message`, `hint`, `placeholder`, `text`, `subtitle`, `description`, `question`, `tooltip` o `alt` es texto | `customPlaceholder="Otra alergia"`, `data-label="Tienda"` (esto lo pinta el CSS con `content: attr()`, así que se ve) |
+| Lo que devuelve un `*Label` | `cookingLevelWord(level, (k) => this.i18n.t(k))` —texto ya resuelto | `return COOKING_LEVEL_LABEL_KEYS[level]`, que devuelve la clave y el `{{ }}` la pinta |
 
 Reglas que se siguen de ahí, y que no son estilo sino física del framework:
 
@@ -1638,19 +1640,25 @@ Reglas que se siguen de ahí, y que no son estilo sino física del framework:
   mintiera sobre la base de datos. Lo mismo aplica a lo que entiende el planificador: esas cadenas viven en el
   server (`MEAL_TYPE_LABELS`) y la app las enseña con `t('meal.<tipo>')`, que en castellano dice lo mismo. Un
   dato que a la vez es texto de interfaz se distingue por el nombre del campo —`value`/`aiLabel`, no `label`.
+- **Antes de traducir un atributo, comprobar que existe.** `app-picker` no declara `emptyText`, y durante
+  media app había tres `emptyText="…"` que Angular trataba como atributo de DOM corriente: no se pintaban,
+  no fallaban y la regla los veía como texto. Un literal que no llega a la pantalla se borra, con su clave
+  huérfana fuera del diccionario (HOGARIA-SPEC ## 12v).
 
 ### Quién lo vigila
 
 `scripts/check-ui.mjs`, reglas 14 (`texto-sin-traducir`: también los nodos de texto que pegan a una `{{ }}`, y
-los `aria-label`/`placeholder`/`title`/`alt` escritos a mano —la mitad del conteo de la tanda 21 salió de
-ahí—), 15 (`clave-sin-traduccion`: la clave existe en `es`
+**cualquier** atributo acabado en `label`/`title`/`message`/`hint`/`placeholder`/`text`/`subtitle`/`description`
+/`question`/`tooltip`/`alt` —desde la tanda 23 por sufijo y no por lista, que `customPlaceholder` y
+`data-label` no estaban en la lista y se veían en castellano—), 15 (`clave-sin-traduccion`: la clave existe en `es`
 **y** en `en`, y se usa en algún sitio), 16 (`pipe-sin-importar`), 17 (`data-test-huerfano`), 18
 (`prosa-en-un-sink`: literal con pinta de frase que acaba en `toast.*`, `*Error.set`, `note`, `title` o un
 `return`, dentro o fuera de `t()` —incluidos el `cond ? 'prosa' : 'prosa'` y las variables `t(clave)`— y 19
 (`texto-en-un-catalogo`: el campo de presentación con la frase escrita, el getter que devuelve la frase en vez de
-la clave y el `Record<clave, etiqueta>`). Además el tipo:
+la clave y el `Record<clave, etiqueta>`) y 20 (`clave-pintada-desnuda`: una clave del
+diccionario que llega cruda a un `{{ }}`, o un `*Label` que devuelve la clave en vez del texto). Además el tipo:
 `TranslationKey` es la unión de claves reales, así que una errata en una plantilla es error de compilación con
-`strictTemplates`. Contrato y deudas en `HOGARIA-SPEC.md` §12s y §12u.
+`strictTemplates`. Contrato y deudas en `HOGARIA-SPEC.md` §12s, §12u y §12v.
 
 - [ ] **Pendiente**: los pictogramas dentro de las claves (`📦 Despensa`, `⏱️ {n}min`) están perdonados por
       `sin-emoji` en cinco diccionarios. Decidir si son decoración (se quitan) o información (pasan a

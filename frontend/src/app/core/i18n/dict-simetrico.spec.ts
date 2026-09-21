@@ -23,10 +23,12 @@ describe('diccionario simetrico', () => {
 
   it('no deja ninguna traduccion vacia', () => {
     for (const [idioma, dict] of [['es', es], ['en', en]] as const) {
+      // Se aserta sobre la lista unida, y no con el segundo argumento de `expect`: en Karma (Jasmine) ese
+      // sitio lo ocupa `withContext`, que vitest no tiene —y este spec se corre en los dos.
       const vacias = Object.entries(dict)
         .filter(([, valor]) => valor.trim() === '')
-        .map(([clave]) => clave);
-      expect(vacias, `${idioma}: ${vacias.slice(0, 5).join(', ')}`).toEqual([]);
+        .map(([clave]) => `${idioma}:${clave}`);
+      expect(vacias.join(', ')).toBe('');
     }
   });
 
@@ -37,6 +39,8 @@ describe('diccionario simetrico', () => {
       if (typeof b !== 'string' || a !== b) return false;
       return /[áéíóúüñ¿¡]/.test(a) && a.trim().split(/\s+/).length >= 2;
     });
-    expect(calcos.slice(0, 10), 'mismo texto en los dos idiomas').toEqual([]);
+    expect(`mismo texto en los dos idiomas: ${calcos.slice(0, 10).join(', ')}`).toBe(
+      'mismo texto en los dos idiomas: '
+    );
   });
 });
