@@ -176,6 +176,7 @@ export const shoppingListDetailEs = {
   'shopping_list_detail.familia_unidades': 'Unidades',
   'shopping_list_detail.familia_envase': 'Envase',
   'shopping_list_detail.familia_medida_de_cocina': 'Medida de cocina',
+  'shopping_list_detail.usar_importe': 'Usar {amount}',
 } as const;
 
 export const shoppingListDetailEn: Record<keyof typeof shoppingListDetailEs, string> = {
@@ -354,4 +355,5 @@ export const shoppingListDetailEn: Record<keyof typeof shoppingListDetailEs, str
   'shopping_list_detail.familia_unidades': 'Count',
   'shopping_list_detail.familia_envase': 'Packaging',
   'shopping_list_detail.familia_medida_de_cocina': 'Cooking measure',
+  'shopping_list_detail.usar_importe': 'Use {amount}',
 };

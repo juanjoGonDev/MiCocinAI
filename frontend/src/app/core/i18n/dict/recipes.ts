@@ -53,6 +53,10 @@ export const recipesEs = {
   'recipes.filtro_favoritas': 'Favoritas',
   'recipes.filtro_rapidas': 'Rápidas',
   'recipes.filtro_ia': 'IA',
+  'recipes.n_recetas_uno': '{count} receta',
+  'recipes.n_recetas_varios': '{count} recetas',
+  'recipes.ingrediente_de': '{quantity} {unit} de {name}',
+  'recipes.paso_n': 'Paso {n}',
 } as const;
 
 export const recipesEn: Record<keyof typeof recipesEs, string> = {
@@ -102,4 +106,8 @@ export const recipesEn: Record<keyof typeof recipesEs, string> = {
   'recipes.filtro_favoritas': 'Favorites',
   'recipes.filtro_rapidas': 'Quick',
   'recipes.filtro_ia': 'AI',
+  'recipes.n_recetas_uno': '{count} recipe',
+  'recipes.n_recetas_varios': '{count} recipes',
+  'recipes.ingrediente_de': '{quantity} {unit} of {name}',
+  'recipes.paso_n': 'Step {n}',
 };

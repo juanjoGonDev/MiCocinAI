@@ -30,7 +30,7 @@ import { I18nService } from '../../core/services/i18n.service';
       <div class="ai-config__header">
         <div class="ai-config__title-section">
           <h1 class="ai-config__title">{{ 'ai_config.configuracion_ia' | t }}</h1>
-          <span class="ai-config__count">{{ aiService.configs().length }} configuraciones</span>
+          <span class="ai-config__count">{{ configuracionesLabel() }}</span>
         </div>
         <app-button variant="primary" (onClick)="openAddModal()">
           {{ 'ai_config.agregar_configuracion' | t }}
@@ -519,6 +519,13 @@ import { I18nService } from '../../core/services/i18n.service';
 })
 export class AiConfigComponent implements OnInit {
   private readonly i18n = inject(I18nService);
+
+  /** «3 configuraciones» / «1 configuración»: el numero y el sustantivo se eligen a la vez. */
+  configuracionesLabel(): string {
+    const n = this.aiService.configs().length;
+    return this.i18n.plural(n, 'ai_config.n_configuraciones_uno', 'ai_config.n_configuraciones_varios', { count: n });
+  }
+
   aiService = inject(AiService);
   private toastService = inject(ToastService);
   private confirmService = inject(ConfirmService);

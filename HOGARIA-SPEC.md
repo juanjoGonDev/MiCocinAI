@@ -2742,26 +2742,51 @@ Lo que **no** es incidencia y no hay que «arreglar»:
   que es la única forma de que un hablante los reconozca.
 
 ```text
-[ ] Catálogos con label/name/hint/text en shared/models y unit-families → labelKey, y todos sus puntos de pintura.
-[ ] MEAL_TYPE_META.label → aiLabel (contrato IA); el modal del calendario pinta MEAL_LABEL_KEYS | t.
-[ ] Recipes tabs · logs (fuentes, niveles, statusLabel) · account tabs · pantry (categorías, cacharros, filtros).
-[ ] shopping-lists (tabs, filtros, columnas, tiempo relativo) · shopping-list-detail (línea, descuento, foto,
+[x] Catálogos con label/name/hint/text en shared/models y unit-families → labelKey, y todos sus puntos de pintura.
+[x] MEAL_TYPE_META: fuera `label` y `addAction` (no los leía nadie) y el modal del calendario pinta `mealLabel()`.
+[x] Recipes tabs · logs (fuentes, niveles, statusLabel) · account tabs · pantry (categorías, cacharros, filtros).
+[x] shopping-lists (tabs, filtros, columnas, tiempo relativo) · shopping-list-detail (línea, descuento, foto,
     historial, barra de selección), separando en discountKinds/Scopes el valor persistido de la etiqueta.
-[ ] time-format.pipe (unidades dentro del pipe, locale único) · household (roles).
-[ ] Regla 19 en check-ui.mjs (a) y (b) · regla 14 con centinela de interpolación y atributos.
-[ ] Claves nuevas en los diccionarios (Es e En, alineados), y el gate de paridad de claves.
-[ ] Gates: check-ui en 0 con 19 reglas · tsc app · typecheck:e2e · vitest del puente · server · ng build · lint.
+[x] Pipes: `difficulty` traduce por dentro con su lógica pura al lado; `time-format` se borra (no lo usaba nadie).
+[x] Regla 19 en check-ui.mjs, con (a) campos, (b) getters y (c) records, y la regla 14 abierta a los nodos de
+    texto que empiezan justo detrás de una interpolación.
+[x] 59 claves nuevas en los diccionarios de los siete dominios tocados (Es y En a la vez, que es como el tipo
+    exige la paridad: falta una y no compila).
+[x] Gates: check-ui 175 ficheros · 19 reglas · 0 incidencias · `tsc` de la app y de los specs · `typecheck:e2e` ·
+    puente de vitest 12 ficheros / 109 pruebas · server 23 / 592 · `ng build --configuration production`.
+[x] El test espejo (`meal-times-mirror`) reescrito para comparar el server con la clave del diccionario: era el
+    `MEAL_TYPE_LABELS` que he borrado, y ahora vigila además que lo que se ensena sea lo que se le dice a la IA.
 ```
 
-**Dónde estoy (2026-09-21, cierre de la tanda).** Regla 19 escrita y afinada: las **89 incidencias reales en 10
-ficheros** son la lista de trabajo; las 18-22 del inventario original que no aparecen son o excepción
-documentada arriba (contrato con la IA, valor persistido, `data-test`, nombres de idioma) o se arreglan a la vez
-porque comparten catálogo. La salida en `es-ES` no cambia ni un byte: lo que el e2e asserta hoy sigue saliendo
-igual, así que el `| t` añade una vuelta, no una reescritura.
+**Lo que la regla nueva no veía y la ampliación de la 14 sí.** Al abrir los nodos de texto que pegan a una
+interpolación salieron **nueve textos más** en cinco pantallas: `{{ n }} configuraciones`, `{{ n }} miembros`,
+`{{ n }} recetas`, dos veces `{{ cantidad }} {{ unidad }} de {{ nombre }}`, `Paso {{ n }}`, `Usar {{ importe }}`,
+`{{ rango }} de {{ total }}` en el paginador y `pronto` del selector de secciones. Ninguno es una frase suelta:
+todos llevan un número dentro, así que la única salida honesta era la clave con `{parametros}`. Y como cuatro de
+los nueve son contadores con sustantivo, `I18nService` gana `plural(cantidad, claveUno, claveVarios, params)` —
+en castellano la terminación del sustantivo y en inglés la `s` final son la misma decisión, y ninguna de las dos
+cabe en un `{{ n }} + 'recetas'`.
+
+**Dos cosas que se han caído del árbol, y por qué.** `time-format.pipe.ts` (con su spec): no lo consumía nadie y
+sus `'2 h 15 min'` eran español escrito dentro del pipe —traducirlo habría sido cuidar un cadáver. Los cinco
+`Record<Rol, string>` de `household.model.ts`, los dos de `user.model.ts` y el de `ai-config.model.ts`:
+exportados desde el barril y sin un solo lector. Borrajos, no `labelKey`: menos código y el mismo idioma.
+
+**Dónde estoy (2026-09-21, cierre de la tanda).** La lista de trabajo la generó el gate, no el parte: 141
+incidencias, 86 de ellas reales tras quitar los comentarios del barrido, 0 al final de la tanda con las 19 reglas
+activas. La salida en `es-ES` no cambia: cada clave nueva del diccionario lleva exactamente la cadena que estaba
+escrita en el código, así que el `| t` añade una vuelta y no una reescritura, y los e2e que assertan texto en
+español siguen assertando lo mismo. Lo que **no** he podido comprobar aquí: el render (no hay navegador en el
+sandbox; `ng test` necesita ChromeHeadless y `ng lint` no puede correr porque `frontend/package.json` declara
+`ng lint` sin tener `@angular-eslint/builder` entre sus dependencias —deuda apuntada en `## 13`).
 
 
 
 ## 13. Coming soon (deliberately not in this program)
+- **`npm run lint` no puede correrse.** `frontend/package.json` declara `"lint": "ng lint"` y ni
+  `@angular-eslint/builder` ni las reglas están entre sus dependencias: el comando falla al arrancar, asi que
+  no hay forma de que nadie lo ponga como gate. O se instala el conjunto (y se arregla lo que salga, que seran
+  cientos de avisos la primera vez), o se borra el script y se dice en el README que no hay linter.
 - **Las etiquetas de catálogo sin uso de `shared/models/household.model.ts`.** `*_LABELS` en español que no
   lee ningún componente: no son texto visible, son un residuo. O se enganchan a una pantalla con su `labelKey`
   o se borran; mientras no cuelguen de la regla 15 (que solo exige que lo que se usa esté en los dos idiomas),

@@ -62,7 +62,7 @@ import type { TranslationKey } from '../../core/i18n';
           <div class="household-info__header">
             <div>
               <h2 class="household-info__name">{{ household.name }}</h2>
-              <span class="household-info__members">{{ household.members?.length || 0 }} miembros</span>
+              <span class="household-info__members">{{ miembrosLabel(household.members?.length ?? 0) }}</span>
             </div>
             <app-badge variant="primary">
               {{ household.sharedPantry ? ('household.despensa_compartida' | t) : ('household.despensa_individual' | t) }}
@@ -494,6 +494,17 @@ import type { TranslationKey } from '../../core/i18n';
 })
 export class HouseholdComponent implements OnInit {
   private readonly i18n = inject(I18nService);
+
+  /** «4 miembros» / «1 miembro»: el contador de la casa, con su sustantivo en el diccionario. */
+  miembrosLabel(cantidad: number): string {
+    return this.i18n.plural(
+      cantidad,
+      'household.n_miembros_uno',
+      'household.n_miembros_varios',
+      { count: cantidad }
+    );
+  }
+
   householdService = inject(HouseholdService);
   private toastService = inject(ToastService);
   private confirmService = inject(ConfirmService);

@@ -100,7 +100,7 @@ import {
           <span class="profile-picker__module-text">
             <span class="profile-picker__module-label">
               {{ option.labelKey | t }}
-              <span class="profile-picker__soon" *ngIf="!option.available">pronto</span>
+              <span class="profile-picker__soon" *ngIf="!option.available">{{ 'home_profile_picker.proonto' | t }}</span>
             </span>
             <span class="profile-picker__module-hint">{{ option.hintKey | t }}</span>
           </span>

@@ -6,6 +6,7 @@ export const homeProfilePickerEs = {
   'home_profile_picker.marca_lo_que_vas_a_usar': 'Marca lo que vas a usar. Lo que no marques sigue existiendo, solo que no te lo recordamos.',
   'home_profile_picker.como_andas_de_cocina': '¿Cómo andas de cocina?',
   'home_profile_picker.lo_que_marques_con': 'Lo que marques con «pronto» está en el plan: se activará solo cuando exista.',
+  'home_profile_picker.proonto': 'pronto',
 } as const;
 
 export const homeProfilePickerEn: Record<keyof typeof homeProfilePickerEs, string> = {
@@ -14,4 +15,5 @@ export const homeProfilePickerEn: Record<keyof typeof homeProfilePickerEs, strin
   'home_profile_picker.marca_lo_que_vas_a_usar': 'Tick what you will use. Whatever you leave out still exists, we just stop reminding you about it.',
   'home_profile_picker.como_andas_de_cocina': 'How much do you cook?',
   'home_profile_picker.lo_que_marques_con': 'Anything ticked as “soon” is already in the plan: it switches on by itself once it exists.',
+  'home_profile_picker.proonto': 'soon',
 };

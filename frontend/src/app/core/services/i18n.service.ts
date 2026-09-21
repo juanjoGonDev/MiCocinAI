@@ -74,6 +74,15 @@ export class I18nService {
    * el espanol y, si tampoco esta, la clave —por si el diccionario llega a medias de una rama larga.
    */
   /**
+   * Un contador con sustantivo: en castellano la terminacion del sustantivo y en ingles la 's' final son la
+   * misma decision, y ninguna de las dos se puede tomar pegando numero y palabra en la plantilla. Se eligen
+   * dos claves y el numero entra por parametro, que es la unica forma de que «1 config» no salga «1 configs».
+   */
+  plural(count: number, oneKey: TranslationKey, manyKey: TranslationKey, params?: TranslationParams): string {
+    return this.t(count === 1 ? oneKey : manyKey, params);
+  }
+
+  /**
    * «hace 3 d», «en 22 h» y, cuando ya no es cercania, la fecha. Las partes las decide `relativeTimeParts`
    * (calendario, sin idioma); aqui se junta con la frase, que es lo que cambia entre idiomas.
    */

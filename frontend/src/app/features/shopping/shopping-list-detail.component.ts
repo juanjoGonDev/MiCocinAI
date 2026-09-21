@@ -938,7 +938,8 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       (click)="usePaySuggestion(line.itemId, hint.minor)"
                     >
                       <app-icon name="history" [size]="14" [label]="null" />
-                      Usar {{ money(hint.minor) }} <span *ngIf="hint.store">({{ hint.store }})</span>
+                      {{ 'shopping_list_detail.usar_importe' | t: { amount: money(hint.minor) } }}
+                      <span *ngIf="hint.store">({{ hint.store }})</span>
                     </button>
                   }
                   <div class="detail__pay-money">

@@ -47,6 +47,8 @@ export const householdEs = {
   'household.rol_admin': 'Admin',
   'household.rol_miembro': 'Miembro',
   'household.rol_nino': 'Niño',
+  'household.n_miembros_uno': '{count} miembro',
+  'household.n_miembros_varios': '{count} miembros',
 } as const;
 
 export const householdEn: Record<keyof typeof householdEs, string> = {
@@ -96,4 +98,6 @@ export const householdEn: Record<keyof typeof householdEs, string> = {
   'household.rol_admin': 'Admin',
   'household.rol_miembro': 'Member',
   'household.rol_nino': 'Child',
+  'household.n_miembros_uno': '{count} member',
+  'household.n_miembros_varios': '{count} members',
 };

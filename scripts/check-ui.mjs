@@ -677,6 +677,15 @@ const VISIBLE_ATTRS = [
 // decision de producto, no la forma de callar a la regla.
 const NOT_TEXT = new Set(['g', 'kg', 'mg', 'lb', 'ml', 'l', 'cl', 'dl', 'ud', 'u', 'un', 'x', '%', '€', 'kcal', 'kj']);
 
+/** Lo que hay entre dos etiquetas se lee, salvo que sea una url, una ruta, una hora o una clase. */
+const esProsaDeNodo = (raw) => {
+  const s = raw.replace(/\{\{[\s\S]*?\}\}/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!s || NOT_TEXT.has(s.toLowerCase())) return false;
+  if (!/[a-záéíóúüñ]{2,}/.test(s)) return false; // «OK», «×», «42»
+  if (/:\/\/|[.:/]|^\W|\W$|--|__/.test(s)) return false; // url, hora, ruta, clave, nombre de clase
+  return true;
+};
+
 const isProse = (raw) => {
   const s = raw.replace(/\s+/g, ' ').trim();
   if (!s || NOT_TEXT.has(s.toLowerCase())) return false;
@@ -713,7 +722,11 @@ for (const file of sourceFiles) {
     // una linea de control (`@if (a > b) {`): la `>` de una comparacion abre un falso nodo de texto.
     if (/["'`{}]/.test(raw.replace(/\{\{[\s\S]*?\}\}/g, ''))) continue;
     const visible = raw.replace(/\{\{[\s\S]*?\}\}/g, ' ');
-    if (!isProse(visible)) continue;
+    // Un nodo de texto es texto: `isProse` perdona las cadenas todas en minusculas porque en un atributo o
+    // en una expresion suelen ser una clase (`chip chip--on`), una hora (`HH:mm`) o una ruta, y ahi tiene
+    // razon. En un nudo entre dos etiquetas no: ` seleccionadas` despues de `{{ count }}` es prosa, y era el
+    // hueco por el que la barra de seleccion multipla seguia saliendo en castellano con el idioma en ingles.
+    if (!esProsaDeNodo(visible) && !isProse(visible)) continue;
     if (/\|\s*t\b/.test(visible) && !isProse(visible.replace(/'[\w.-]+'\s*\|\s*t/g, ''))) continue;
     fail(
       file,

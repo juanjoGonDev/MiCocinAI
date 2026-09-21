@@ -34,7 +34,7 @@ import { I18nService } from '../../core/services/i18n.service';
       <div class="recipes__header">
         <div class="recipes__title-section">
           <h1 class="recipes__title">{{ 'recipes.title' | t }}</h1>
-          <span class="recipes__count">{{ recipeService.total() }} recetas</span>
+          <span class="recipes__count">{{ recetasLabel() }}</span>
         </div>
         <div class="recipes__actions">
           <app-button variant="outline" (onClick)="openFilterModal()">
@@ -212,7 +212,7 @@ import { I18nService } from '../../core/services/i18n.service';
             <h4>{{ 'dashboard.ingredients' | t }}</h4>
             <ul class="generated-recipe__list">
               <li *ngFor="let ing of recipe.ingredients">
-                {{ ing.quantity }} {{ ing.unit }} de {{ ing.name }}
+                {{ 'recipes.ingrediente_de' | t: { quantity: ing.quantity, unit: ing.unit, name: ing.name } }}
                 <span *ngIf="ing.preparation" class="generated-recipe__prep">({{ ing.preparation }})</span>
               </li>
             </ul>
@@ -272,7 +272,7 @@ import { I18nService } from '../../core/services/i18n.service';
             <h3>{{ 'dashboard.ingredients' | t }}</h3>
             <ul>
               <li *ngFor="let ing of recipe.ingredients">
-                {{ ing.quantity }} {{ ing.unit }} de {{ ing.name }}
+                {{ 'recipes.ingrediente_de' | t: { quantity: ing.quantity, unit: ing.unit, name: ing.name } }}
               </li>
             </ul>
           </div>
@@ -283,7 +283,7 @@ import { I18nService } from '../../core/services/i18n.service';
             <div class="recipe-detail__steps">
               <div *ngFor="let step of recipe.steps" class="step-card">
                 <div class="step-card__header">
-                  <span class="step-card__number">Paso {{ step.stepNumber }}</span>
+                  <span class="step-card__number">{{ 'recipes.paso_n' | t: { n: step.stepNumber } }}</span>
                   <span *ngIf="step.duration" class="step-card__time">{{ 'recipes.min' | t:{n: step.duration} }}</span>
                 </div>
                 <p class="step-card__instruction">{{ step.instruction }}</p>
@@ -775,6 +775,13 @@ import { I18nService } from '../../core/services/i18n.service';
 })
 export class RecipesComponent implements OnInit {
   private readonly i18n = inject(I18nService);
+
+  /** Cuantas recetas hay, dicho como se lee: «1 receta» no es «1 recetas». */
+  recetasLabel(): string {
+    const n = this.recipeService.total();
+    return this.i18n.plural(n, 'recipes.n_recetas_uno', 'recipes.n_recetas_varios', { count: n });
+  }
+
   recipeService = inject(RecipeService);
   aiService = inject(AiService);
   pantryService = inject(PantryService);

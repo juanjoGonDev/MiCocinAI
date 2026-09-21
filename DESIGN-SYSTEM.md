@@ -1603,8 +1603,9 @@ etiquetas, placeholders y `title` en español repartidos por 29 pantallas, y nin
 |---|---|---|
 | Texto fijo | `{{ 'nav.recipes' \| t }}` | `>Recetas<` |
 | Con un dato dentro | `{{ 'recipes.porciones' \| t:{n: recipe.servings} }}` con `'👥 {n} porciones'` | `👥 {{ n }} porciones` |
-| Un plural | dos claves (`…miembro_uno` / `…miembros`) elegidas en un getter | `{{ n !== 1 ? 's' : '' }}` |
-| Etiqueta de un catálogo | `labelKey: TranslationKey` en el modelo y `\| t` al pintar | `label: 'Desayuno'` en un `readonly` de la clase |
+| Un plural | `i18n.plural(n, 'dom.uno', 'dom.varios', { count: n })`, con las dos claves en el diccionario | `{{ n !== 1 ? 's' : '' }}`, o pegar el número y la palabra en la plantilla |
+| Tiempo relativo | `i18n.relativeTime(iso)`, que compone sobre las partes de `relativeTimeParts` (`core/time.ts`) | un `formatRelative()` que devuelva «hace 3 d» |
+| Etiqueta de un catálogo | `labelKey: TranslationKey` en el modelo y `\| t` al pintar | `label: 'Desayuno'` en un `readonly` de la clase, o `admin: 'Administrador'` en un `Record` |
 | Valor de fábrica de un `@Input` | Input sin valor + getter con `t()` | `@Input() label = 'Unidad o formato'` |
 
 Reglas que se siguen de ahí, y que no son estilo sino física del framework:
@@ -1624,19 +1625,27 @@ Reglas que se siguen de ahí, y que no son estilo sino física del framework:
   (`dateLocale()`) y lo fija el `I18nService` (`en` → `en-GB`, lo demás → `es-ES`) en su `effect` y en
   `languagechange`. Nada de `'es-ES'` literal dentro de un componente: separadores de miles, días de la semana
   y «septiembre de 2026» salen de ahí, y los memoizadores guardan el idioma dentro de la clave de caché.
+- **Un catálogo pinta lo que lleva dentro.** `tabs = [{ label: 'Activas' }]` con `{{ tab.label }}` es una
+  pantalla que no cambia nunca de idioma, y cambia de golpe en todas las que comparten el catálogo. La lista de
+  opciones lleva la **clave**; quien no pueda aplicar la pipe (un `PickerOption[]`, el `aria-label` de una
+  sección) resuelve `this.i18n.t(clave)` una vez dentro de un `computed`.
 - **Traducible es lo que la app dice, no lo que la casa guarda.** Los nombres de alimentos, las categorías de
   la cesta y los alérgenos escritos por una persona se muestran tal cual: traducirlos haría que la pantalla
-  mintiera sobre la base de datos. Y `MEAL_TYPE_LABELS` sigue en español porque es la cadena que entiende el
-  planificador; donde se enseña, se pinta `t('meal.<tipo>')`.
+  mintiera sobre la base de datos. Lo mismo aplica a lo que entiende el planificador: esas cadenas viven en el
+  server (`MEAL_TYPE_LABELS`) y la app las enseña con `t('meal.<tipo>')`, que en castellano dice lo mismo. Un
+  dato que a la vez es texto de interfaz se distingue por el nombre del campo —`value`/`aiLabel`, no `label`.
 
 ### Quién lo vigila
 
-`scripts/check-ui.mjs`, reglas 14 (`texto-sin-traducir`), 15 (`clave-sin-traduccion`: la clave existe en `es`
-**y** en `en`, y se usa en algún sitio), 16 (`pipe-sin-importar`), 17 (`data-test-huerfano`) y 18
+`scripts/check-ui.mjs`, reglas 14 (`texto-sin-traducir`: también los nodos de texto que pegan a una `{{ }}`, y
+los `aria-label`/`title` escritos a mano), 15 (`clave-sin-traduccion`: la clave existe en `es`
+**y** en `en`, y se usa en algún sitio), 16 (`pipe-sin-importar`), 17 (`data-test-huerfano`), 18
 (`prosa-en-un-sink`: literal con pinta de frase que acaba en `toast.*`, `*Error.set`, `note`, `title` o un
-`return`, dentro o fuera de `t()` —incluidos el `cond ? 'prosa' : 'prosa'` y las variables `t(clave)`). Además el tipo:
+`return`, dentro o fuera de `t()` —incluidos el `cond ? 'prosa' : 'prosa'` y las variables `t(clave)`— y 19
+(`texto-en-un-catalogo`: el campo de presentación con la frase escrita, el getter que devuelve la frase en vez de
+la clave y el `Record<clave, etiqueta>`). Además el tipo:
 `TranslationKey` es la unión de claves reales, así que una errata en una plantilla es error de compilación con
-`strictTemplates`. Contrato y deudas en `HOGARIA-SPEC.md` §12s.
+`strictTemplates`. Contrato y deudas en `HOGARIA-SPEC.md` §12s y §12u.
 
 - [ ] **Pendiente**: los pictogramas dentro de las claves (`📦 Despensa`, `⏱️ {n}min`) están perdonados por
       `sin-emoji` en cinco diccionarios. Decidir si son decoración (se quitan) o información (pasan a

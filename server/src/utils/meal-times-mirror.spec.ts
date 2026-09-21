@@ -26,7 +26,9 @@ function read(relative: string): string {
 
 /** `export const NAME ... = { clave: 'valor', ... }` ignorando los comentarios. */
 function objectEntries(source: string, name: string): Record<string, string> {
-  const body = new RegExp(`export const ${name}[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};`).exec(source)?.[1];
+  // `\n}` con `;` o con ` as const;`: el diccionario del frontend cierra asi, y exigir la forma corta
+  // hacia que el regex no encontrara el bloque y el test «pasara» sin comparar nada.
+  const body = new RegExp(`export const ${name}[^=]*=\\s*\\{([\\s\\S]*?)\\n\\}(?: as const)?;`).exec(source)?.[1];
   if (!body) throw new Error(`${name} ya no esta como estaba: actualiza este test`);
 
   const out: Record<string, string> = {};
@@ -36,7 +38,10 @@ function objectEntries(source: string, name: string): Record<string, string> {
     // El valor puede venir entrecomillado (las horas, las etiquetas) o pelado (los booleanos del plan):
     // sin la segunda forma, `MEAL_PLAN_DEFAULTS` se leeria vacio en los dos lados y el `toEqual` daria
     // verde sin comparar nada, que es peor que no tener test.
-    const pair = /^'?(?<key>[\w-]+)'?:\s*(?:'(?<value>[^']*)'|(?<bare>true|false|null|-?\d+(?:\.\d+)?)),?$/.exec(clean);
+    // La clave admite puntos: en el diccionario del frontend (`uiEs`) son `meal.breakfast`, y sin el punto
+    // el parser no veia ninguna pareja y el `toEqual` se ponia verde comparando dos objetos vacios.
+    const pair =
+      /^'?(?<key>[\w.-]+)'?:\s*(?:'(?<value>[^']*)'|(?<bare>true|false|null|-?\d+(?:\.\d+)?)),?$/.exec(clean);
     if (pair?.groups) out[pair.groups.key] = pair.groups.value ?? pair.groups.bare ?? '';
   }
   return out;
@@ -89,11 +94,15 @@ describe('las comidas son las mismas en los dos lados', () => {
   });
 
   it('los nombres en español coinciden, comida por comida', () => {
+    // Desde ## 12u la app ya no tiene su propio `MEAL_TYPE_LABELS`: ese catalogo estaba en el modelo, en
+    // espanol, y lo pintaban cuatro pantallas como si fuera un dato. Lo que se ensena sale ahora del
+    // diccionario (`meal.breakfast`...), que es lo que compara este test —y compara lo correcto: si la
+    // etiqueta en castellano se separa de la cadena del prompt, la pantalla dice una cosa y la IA otra.
     const serverLabels = objectEntries(server, 'MEAL_TYPE_LABELS');
-    const frontendLabels = objectEntries(frontendModel, 'MEAL_TYPE_LABELS');
+    const dict = objectEntries(read('frontend/src/app/core/i18n/dict/ui.ts'), 'uiEs');
 
     for (const type of arrayConst(server, 'MEAL_TYPE_KEYS')) {
-      expect(frontendLabels[type]).toBe(serverLabels[type]);
+      expect(dict[`meal.${type}`]).toBe(serverLabels[type]);
     }
   });
 

@@ -58,6 +58,7 @@ export const shoppingListsEs = {
   'shopping_lists.pagina_10': '10 por pagina',
   'shopping_lists.pagina_25': '25 por pagina',
   'shopping_lists.pagina_50': '50 por pagina',
+  'shopping_lists.pager_de': '{range} de {total}',
 } as const;
 
 export const shoppingListsEn: Record<keyof typeof shoppingListsEs, string> = {
@@ -118,4 +119,5 @@ export const shoppingListsEn: Record<keyof typeof shoppingListsEs, string> = {
   'shopping_lists.pagina_10': '10 per page',
   'shopping_lists.pagina_25': '25 per page',
   'shopping_lists.pagina_50': '50 per page',
+  'shopping_lists.pager_de': '{range} of {total}',
 };

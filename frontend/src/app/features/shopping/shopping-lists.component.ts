@@ -325,7 +325,7 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
 
         <nav class="tray__pager" [attr.aria-label]="'shopping_lists.paginas_de_listas' | t">
           <app-icon-button icon="chevron_left" [label]="'shopping_lists.pagina_anterior' | t" size="md" variant="soft" [disabled]="!canGoPrev()" (onClick)="go(-1)" />
-          <span class="tray__pager-text">{{ rangeLabel() }} de {{ total() }}</span>
+          <span class="tray__pager-text">{{ 'shopping_lists.pager_de' | t: { range: rangeLabel(), total: total() } }}</span>
           <app-icon-button icon="chevron_right" [label]="'shopping_lists.pagina_siguiente' | t" size="md" variant="soft" [disabled]="!canGoNext()" (onClick)="go(1)" />
           <span class="tray__pager-spacer"></span>
           <app-picker [label]="'shopping_lists.tamano_de_pagina' | t" [options]="pageSizes()" [value]="pageSizeValue()" [filterFrom]="99" (valueChange)="setSize($event)" />
