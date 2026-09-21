@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { MEAL_ORDER, MEAL_TIME_DEFAULTS, MealTimes, MealType } from '../../../models/calendar.model';
+import { MEAL_ORDER, MEAL_TIME_DEFAULTS, MealPlan, MealTimes, MealType } from '../../../models/calendar.model';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { MEAL_LABEL_KEYS } from '../../../../core/i18n/labels';
 import type { TranslationKey } from '../../../../core/i18n';
+import { CheckboxComponent } from '../checkbox/checkbox.component';
 
 interface MealHourRow {
   type: MealType;
@@ -41,7 +42,7 @@ interface MealHourRow {
   standalone: true,
   imports: [
     TranslatePipe,
-    CommonModule, FormsModule],
+    CommonModule, FormsModule, CheckboxComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="meal-hours" role="group" [attr.aria-label]="groupLabel ?? ('ui.meal_hours' | t)">
@@ -68,6 +69,20 @@ interface MealHourRow {
           {{ 'ui.por_defecto' | t }}
         </button>
         <span class="meal-hours__state" *ngIf="!isDefault(row.type)">{{ defaults[row.type] }}</span>
+        <!--
+          «Que la IA la planifique» (12t-T). Se ofrece solo cuando el host trae permisos: el tour de
+          bienvenida pregunta las cuatro horas y punto, ahi no hay bloqueo que marcar. La hora de una
+          comida bloqueada sigue editandose: ese reloj manda en la rejilla y en el «+» manual, y
+          bloquear es quitarle la tarea a la IA, no quitarle la comida a la casa.
+        -->
+        <app-checkbox
+          *ngIf="plan"
+          class="meal-hours__plan"
+          [attr.data-test]="dataTest ? dataTest + '-plan-' + row.type : null"
+          [checked]="plan[row.type]"
+          [label]="'ui.que_la_ia_la_planifique' | t"
+          (onChange)="writePlan(row.type, $event)"
+        />
         <p class="meal-hours__hint" *ngIf="row.hint" [id]="row.id + '-hint'">
           {{ hints[row.type] }}
         </p>
@@ -88,7 +103,9 @@ interface MealHourRow {
 
       .meal-hours__row {
         display: grid;
-        grid-template-columns: 1fr auto auto;
+        /* Cuatro huecos: nombre, hora, «por defecto»/valor y la casilla. Con el input plan a null la
+           ultima columna no existe y el auto se encoge solo, asi que el tour se ve igual que antes. */
+        grid-template-columns: 1fr auto auto auto;
         align-items: center;
         column-gap: var(--space-3);
         row-gap: var(--space-1);
@@ -179,6 +196,14 @@ export class MealHoursComponent {
   @Input() dataTest: string | null = null;
   /** Tambien se resuelve al leer, no al construir: ver el comentario de `app-picker`. */
   @Input() groupLabel?: string;
+  /**
+   * Los permisos del planificador (12t-T), o `null` para no ofrecer la casilla.
+   *
+   * `null` no es «todo permitido» sino «esta pantalla no pinta de eso»: el tour pasa `null` y sus
+   * seis preguntas siguen siendo seis. Como `times`, se escribe dentro del objeto del host: el
+   * snapshot que decide si hay cambios es el suyo, no el de este componente.
+   */
+  @Input() plan: MealPlan | null = null;
   readonly defaults = MEAL_TIME_DEFAULTS;
   readonly hints: Partial<Record<MealType, string>> = {};
 
@@ -232,5 +257,10 @@ export class MealHoursComponent {
 
   reset(type: MealType): void {
     this.times[type] = MEAL_TIME_DEFAULTS[type];
+  }
+
+  /** Idem con la casilla: el host es dueno del objeto, aqui solo se escribe en el. */
+  writePlan(type: MealType, value: boolean): void {
+    if (this.plan) this.plan[type] = value;
   }
 }

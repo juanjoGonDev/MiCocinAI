@@ -1,12 +1,14 @@
 import {
   MEAL_ORDER,
+  MEAL_PLAN_DEFAULTS,
   MEAL_TIME_DEFAULTS,
+  MealPlan,
   MealTimes,
   MealType
 } from '../shared/models/calendar.model';
 import { MEAL_ANCHOR_MINUTES, minutesFromTime } from './calendar-grid';
 
-export { MEAL_TIME_DEFAULTS, MealTimes };
+export { MEAL_PLAN_DEFAULTS, MEAL_TIME_DEFAULTS, MealPlan, MealTimes };
 
 /**
  * Las horas a las que come esta casa, convertidas en lo que consume la app.
@@ -106,4 +108,49 @@ export function mealTimesPatch(
 /** `HH:MM` -> minutos del dia, para comparar o para el `title` de un bloque. `null` si no es una hora. */
 export function mealTimeToMinutes(time: string | null | undefined): number | null {
   return minutesFromTime(time);
+}
+
+/**
+ * Los cuatro permisos de 12t-T, leidos de un JSON que puede ser viejo, estar a medias o escrito a mano.
+ *
+ * Mismo criterio que `resolveMealTimes`: lo que no es un booleano vale «sin decir», y «sin decir» es
+ * `true`. Cae hacia el lado en el que la app ya funcionaba, que es el unico lado que no rompe a nadie.
+ */
+export function resolveMealPlan(stored: unknown): MealPlan {
+  const raw = stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : {};
+  const plan: MealPlan = { ...MEAL_PLAN_DEFAULTS };
+  for (const type of MEAL_ORDER) {
+    if (typeof raw[type] === 'boolean') plan[type] = raw[type] as boolean;
+  }
+  return plan;
+}
+
+/** Que comidas puede escribir el planificador, en el orden del dia. Vaciarlo entero no es «todas». */
+export function plannedMealTypes(plan: MealPlan | null | undefined): MealType[] {
+  return MEAL_ORDER.filter((type) => plan?.[type] !== false);
+}
+
+/**
+ * El parche de permisos, con el mismo acuerdo de tres estados que `mealTimesPatch` (12t-T).
+ *
+ * `undefined` cuando no se toco ninguna casilla: un «Guardar preferencias» que mandara siempre las
+ * cuatro acabaria escribiendo los permisos de fabrica en el perfil de una casa que no dijo nunca nada,
+ * y manana cambiar el fabrica de producto dejaria de afectarles. Un checkbox no se vacia —se marca o se
+ * desmarca—, asi que de aqui no sale `null`: ese estado existe en el contrato del server (borrar la
+ * clave y volver al fabrica) y lo usan las pantallas que escriben el JSON a mano, no este formulario.
+ */
+export function mealPlanPatch(
+  draft: Partial<MealPlan> | null | undefined,
+  saved: MealPlan
+): Partial<Record<MealType, boolean | null>> | undefined {
+  const patch: Partial<Record<MealType, boolean | null>> = {};
+  let touched = false;
+  for (const type of MEAL_ORDER) {
+    const value = draft?.[type];
+    if (value === undefined) continue; // todavia no ha llegado el estado guardado: no se toca
+    if (value === saved[type]) continue;
+    touched = true;
+    patch[type] = value;
+  }
+  return touched ? patch : undefined;
 }

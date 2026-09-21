@@ -26,7 +26,7 @@ import {
   emptyTasteProfile
 } from '../../shared/models/taste-profile';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
-import { MealTimes, mealTimesPatch, resolveMealTimes } from '../../core/meal-times';
+import { MealPlan, MealTimes, mealPlanPatch, mealTimesPatch, resolveMealPlan, resolveMealTimes } from '../../core/meal-times';
 import { MealHoursComponent } from '../../shared/components/ui/meal-hours/meal-hours.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
@@ -174,7 +174,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
             {{ 'preferences.no_es_un_adorno' | t }}
           </p>
 
-          <app-meal-hours [times]="mealTimes" dataTest="preferences-meal-time" />
+          <app-meal-hours [times]="mealTimes" [plan]="mealPlan" dataTest="preferences-meal-time" />
 
           <p class="preferences__footnote">
             {{ 'preferences.al_lado_de_cada' | t }}
@@ -473,6 +473,9 @@ export class PreferencesComponent implements OnInit {
   /** Copia editable de las horas de la casa; lo guardado se compara contra `savedMealTimes`. */
   mealTimes: MealTimes = resolveMealTimes(null);
   private savedMealTimes: MealTimes = resolveMealTimes(null);
+  /** Y lo mismo con quien rellena cada comida (12t-T): el bloqueo es una preferencia de la casa. */
+  mealPlan: MealPlan = resolveMealPlan(null);
+  private savedMealPlan: MealPlan = resolveMealPlan(null);
 
   allergenOptions = COMMON_ALLERGENS;
   likeOptions = COMMON_LIKES;
@@ -508,9 +511,10 @@ export class PreferencesComponent implements OnInit {
         // El servicio ya ha normalizado (y la API contesta siempre las cuatro): aqui no se vuelve a
         // resolver el JSON, se copia lo que hay para poder editarlo.
         this.mealTimes = this.tasteService.mealTimes();
+        this.mealPlan = this.tasteService.mealPlan();
         this.markSaved();
       },
-      error: () => this.toastService.error('Error', 'No se pudieron cargar tus preferencias')
+      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('profile.no_se_pudieron_cargar'))
     });
   }
 
@@ -550,15 +554,16 @@ export class PreferencesComponent implements OnInit {
         { cookingLevel: this.profile.cookingLevel },
         // Solo lo que ha cambiado: «no he tocado la cena» no puede reescribir la cena (ver
         // `mealTimesPatch`, que es lo mismo que usa el onboarding).
-        mealTimesPatch(this.mealTimes, this.savedMealTimes)
+        mealTimesPatch(this.mealTimes, this.savedMealTimes),
+        mealPlanPatch(this.mealPlan, this.savedMealPlan)
       )
       .subscribe({
       next: () => {
         this.markSaved();
         this.saved.set(true);
-        this.toastService.success('Guardado', 'La IA tendrá en cuenta tus preferencias.');
+        this.toastService.success(this.i18n.t('ui.guardado'), this.i18n.t('profile.la_ia_tendra_en'));
       },
-      error: () => this.toastService.error('Error', 'No se pudo guardar')
+      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('profile.no_se_pudo_guardar'))
     });
   }
 
@@ -568,19 +573,27 @@ export class PreferencesComponent implements OnInit {
       taste: TasteProfile;
       profile: HomeProfile;
       mealTimes: MealTimes;
+      mealPlan: MealPlan;
     };
     this.taste = snapshot.taste;
     this.profile = snapshot.profile;
     this.mealTimes = { ...snapshot.mealTimes };
+    this.mealPlan = { ...snapshot.mealPlan };
     this.saved.set(false);
   }
 
   private snapshot(): string {
-    return JSON.stringify({ taste: this.taste, profile: this.profile, mealTimes: this.mealTimes });
+    return JSON.stringify({
+      taste: this.taste,
+      profile: this.profile,
+      mealTimes: this.mealTimes,
+      mealPlan: this.mealPlan
+    });
   }
 
   private markSaved(): void {
     this.savedSnapshot = this.snapshot();
     this.savedMealTimes = { ...this.mealTimes };
+    this.savedMealPlan = { ...this.mealPlan };
   }
 }
