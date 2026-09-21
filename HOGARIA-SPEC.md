@@ -2833,6 +2833,64 @@ del spec de `pantry-section` no se ha quitado porque no hay forma honesta de eje
 que si lo hace esta montado para los modulos puros y sus tests (12 ficheros) y el resto se queda para una
 maquina con Chrome.
 
+## 12v. Tanda 23 — la clave que se ve en pantalla, y el sufijo que la regla 14 no leía
+
+> «Hay traducciones rotas y sitios donde aun quedan textos fijos como en setting y placeholders etc, revisa de nuevo» (con captura: la pestana
+> «Perfil» de Preferencias pone `profile.cooking.none` debajo del titulo).
+
+**Que significa «traduccion rota» aqui, y que no significa.** La clave existía en los dos idiomas, el diccionario estaba
+completo y simétrico (una sonda sobre los 21 pares `Es`/`En` devuelve 0 asimetrías y 0 calcos). Lo roto es lo último que
+recorre la app: `profileLabel()` devolvía **la clave** y el hueco de texto la pintaba. Un `{{ }}` de Angular acepta
+cualquier `string`, así que ni el compilador, ni la regla 15 (que busca literales dentro de un `t(` o de un `| t`), ni
+los 592 tests del server tenían forma de quejarse. De ahí la regla nueva (20, `clave-pintada-desnuda`), que no
+persigue el traductor roto sino el **contrato del miembro**: lo que se pinta sale traducido o se llama `*Key`.
+
+**Y «placeholders etc» era un agujero del propio gate, no una lista de sitios.** La regla 14 comparaba el nombre del
+atributo contra una lista cerrada (`placeholder`, `label`, `title`, `aria-label`…), y el texto se guardaba en atributos
+que la lista no tenía: `customPlaceholder`, `searchPlaceholder`, `emptyText`, `hint`, `levelLabel`, `data-label`. La
+lista se ha sustituido por un **sufijo**: si el nombre del atributo, pasado a kebab, acaba en `label|title|heading|
+message|hint|placeholder|text|subtitle|description|question|tooltip|alt`, es texto y alguien lo lee. `data-label` se
+queda dentro a propósito: en la bandeja de listas lo consume CSS con `content: attr(data-label)` y se ve en la fila
+de móvil.
+
+**Censo medido con las dos reglas ya escritas, antes de tocar nada: 25 incidencias** (21 de atributo, 4 de clave
+desnuda) en 7 ficheros: `onboarding` (4), `preferences` (6: 5 atributos + `profileLabel`), `shopping-list-detail` (4),
+`shopping-lists` (6 `data-label` de la bandeja), `unit-picker` (2), `account` (2: `passwordStrengthLabel` con sus
+cinco palabras y `cookingLevel` devolviendo clave + `'Sin marcar'`), `household` (`getLevelLabel`).
+
+### Checklist
+
+- [ ] La regla 20 existe y está afinada con un fichero de prueba dentro del árbol (`features/tmp-fixture/`), creado,
+      medido y borrado en la misma tanda: las tres formas malas (atributo estático con sufijo de texto, `{{ 'clave' }}`
+      sin `| t`, getter `*Label` que devuelve prosa o clave) salen, y las cuatro buenas (`[hint]="'k' | t"`, getter que
+      traduce dentro, objeto con `labelKey`, miembro acabado en `Key`) no. Sin esto la regla es un chiste: una regla que
+      no sabe callarse se quita, y una que no sabe hablar no guarda nada.
+- [ ] 20 tiene tres brazos escritos, no uno: **a)** plantilla con clave literal sin traductor; **b)** miembro con nombre
+      de texto (`*Label`, `*Title`, `*Message`, `*Hint`, `*Placeholder`, `*Subtitle`, `*Description`, `*Question`) que
+      devuelve la clave de un catálogo o la prosa en español; **c)** el mismo defecto en un miembro que no se llama como
+      texto, que es como se coló `readonly cookingLevel = computed(...)` en Mi cuenta. El brazo **c)** exonera la
+      propiedad `labelKey: MAPA[type]` (construir la clave es el patrón correcto: quien pinta traduce) y exonera al
+      miembro acabado en `Key` (es lo que su nombre promete).
+- [ ] La regla 14 deja de llevar una lista cerrada de atributos, y la lista vieja se queda comentada como documentación
+      de los casos que la empujaron, no como filtro.
+- [ ] Las 25 incidencias traducidas, con la cadena en español **byte a byte** la que estaba escrita (aserciones e2e e
+      historia de la app: cambiar el texto no es trabajo de esta tanda), y reutilizando claves que ya existían cuando
+      existían: los `data-label` de la bandeja pintan las mismas `shopping_lists.columna_*` que la cabecera de la tabla
+      —un dato, una clave—; `levelLabel` en Preferencias se **borra** en vez de traducirse, porque `home-profile-picker`
+      ya tiene ese valor por defecto traducido y lo que hacía la pantalla era pisarlo con literal.
+- [ ] `account` y `household`/`preferences` resueltos por el mismo camino: `cookingLevel` pasa a llamarse a lo que
+      devuelve (`cookingLevelLabel`), traduce dentro, y el `'Sin marcar'` se acuña (`account.sin_nivel`);
+      `passwordStrengthLabel` deja de ser un array de cinco palabras escritas y pasa a un array de cinco claves.
+- [ ] Un detalle de ortografía **no** arreglado, y escrito aquí para que no se pierda: los literales que salen de
+      `shopping-list-detail` y `unit-picker` están sin tildes en el código desde antes de esta tanda («Buscar
+      seccion», «Nada aun: en cuanto anotes un precio aparecera aqui»). Traducir es mover la cadena al diccionario;
+      corregirle la ortografía a una frase que la gente ya lee es otra decisión, con su e2e y su captura, y no cabe
+      en una tanda de i18n. El diccionario guarda exactamente lo que se pintaba.
+- [ ] Gates: `check-ui` en 0 con 20 reglas, `tsc` de app y de spec, `typecheck:e2e`, puente vitest, suite del server y
+      build de producción sin avisos nuevos. Ninguno de los cinco se declara verde sin haberlo ejecutado en la tanda.
+- [ ] `DESIGN-SYSTEM.md` (quién lo vigila, y la fila del `{{ }}` que pinta una clave) y el parte del PR dicen lo mismo
+      que el spec, con el número medido.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - `ng test` (Karma/Chromium) y `playwright test` siguen sin ejecutarse en esta maquina: no hay navegador.
