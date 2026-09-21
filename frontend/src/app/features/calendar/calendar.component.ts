@@ -523,7 +523,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         <div class="meal-form">
           <div class="meal-form__when">
             <span class="meal-form__band" [attr.data-meal]="draft.mealType" aria-hidden="true"></span>
-            <strong>{{ MEAL_TYPE_META[draft.mealType].label }}</strong>
+            <strong>{{ mealLabel(draft.mealType) }}</strong>
             <span class="meal-form__date">{{ draftDateLabel() }}</span>
             <div class="meal-form__tabs" role="tablist" [attr.aria-label]="'calendar.origen_de_la_comida' | t">
               <button
@@ -1688,12 +1688,12 @@ export class CalendarComponent implements OnInit {
   readonly blockedMeals = computed(() => MEAL_ORDER.filter((type) => !this.allowedMeals().includes(type)));
   /** Lo que recorre la plantilla del dialogo de IA: el orden del dia, sin las bloqueadas. */
   readonly mealTypesForPicker = this.allowedMeals;
-  /** Nombre de cada comida (la plantilla no puede importar el modelo por su cuenta). */
+  /** Color y demas meta de cada comida (la plantilla no puede importar el modelo por su cuenta). */
   readonly mealMeta = MEAL_TYPE_META;
 
   /**
-   * Lo que se ensena de una comida. `mealMeta[...].label` es la cadena del contrato con la IA y se queda
-   * en espanol; esta es la version que lee la persona, en su idioma.
+   * Lo que se ensena de una comida, en el idioma de quien mira. La plantilla la llama por nombre porque
+   * `MEAL_LABEL_KEYS[...] | t` dentro de un `@for` no tipa tanto como este getter.
    */
   mealLabel(meal: MealType): string {
     return this.i18n.t(MEAL_LABEL_KEYS[meal]);

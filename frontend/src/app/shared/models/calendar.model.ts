@@ -70,22 +70,10 @@ export interface CustomGoal {
 
 export type GoalFrequency = 'daily' | 'weekly';
 
-export const DAY_OF_WEEK_LABELS: Record<DayOfWeek, string> = {
-  monday: 'Lunes',
-  tuesday: 'Martes',
-  wednesday: 'Miércoles',
-  thursday: 'Jueves',
-  friday: 'Viernes',
-  saturday: 'Sábado',
-  sunday: 'Domingo'
-};
-
-export const MEAL_TYPE_LABELS: Record<MealType, string> = {
-  breakfast: 'Desayuno',
-  lunch: 'Almuerzo',
-  dinner: 'Cena',
-  snack: 'Merienda'
-};
+// Los nombres de los dias y de las comidas ya no viven aqui. Un catalogo con la frase dentro se pinta tal
+// cual y no hay idioma que lo alcance: los dias salen de `Intl` con `dateLocale()` (`core/time.ts`) y las
+// comidas, de `MEAL_LABEL_KEYS` (`core/i18n/labels.ts`). `DAY_OF_WEEK_LABELS` y `MEAL_TYPE_LABELS` estaban
+// exportados y no los leia nadie, que es la forma mas barata de tener texto sin traducir (## 12u).
 
 /**
  * La etiqueta de cada objetivo. Son **claves del diccionario**, no texto: lo mismo que se guarda es el
@@ -202,27 +190,24 @@ export interface CalendarDay {
 
 /** Cómo se pinta cada tipo de comida: color por tipo, como en Google Calendar. */
 export interface MealTypeMeta {
-  label: string;
   /**
    * El acento del tipo. Es un `var()` y no un hex, y por eso puede vivir en el modelo: lo que hace
    * legible una rejilla de 40 celdas es que «desayuno» sea siempre el mismo color, y ese color tiene
    * que cambiar con el tema. Un hex aqui seria un segundo tema que la hoja de estilos no alcanza.
    */
   color: string;
-  /** Texto del hueco vacío, para no escribir «Agregar» cuatro veces. */
-  addAction: string;
 }
 
 /**
- * Meta de cada comida. `label` y `addAction` son **texto del contrato con la IA** (el planificador busca
- * la comida por esas cadenas), por eso no se traducen aqui. Para pintar, `MEAL_LABEL_KEYS` en
- * `core/i18n/labels.ts`.
+ * Meta de cada comida. Solo el color: la etiqueta se ensena con `MEAL_LABEL_KEYS`
+ * (`core/i18n/labels.ts`) y el prompt de la IA arma sus propias cadenas en el server, asi que aqui no
+ * hay texto de interfaz que traducir ni contrato que romper (HOGARIA-SPEC ## 12u).
  */
 export const MEAL_TYPE_META: Record<MealType, MealTypeMeta> = {
-  breakfast: { label: 'Desayuno', addAction: 'Desayuno', color: 'var(--warning)' },
-  lunch: { label: 'Almuerzo', addAction: 'Almuerzo', color: 'var(--primary)' },
-  snack: { label: 'Merienda', addAction: 'Merienda', color: 'var(--secondary)' },
-  dinner: { label: 'Cena', addAction: 'Cena', color: 'var(--info)' }
+  breakfast: { color: 'var(--warning)' },
+  lunch: { color: 'var(--primary)' },
+  snack: { color: 'var(--secondary)' },
+  dinner: { color: 'var(--info)' }
 };
 
 
