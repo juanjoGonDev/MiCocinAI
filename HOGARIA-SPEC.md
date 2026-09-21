@@ -3003,7 +3003,7 @@ semillero (68 alimentos + 54 utensilios, ninguno repetido) con sus 244 claves en
 pintura traducidos y dos que se dejan crudos a proposito (las lineas del ticket fotografiado) · tres que nunca
 fueron catalogo (titulos de receta en `dashboard` y `recipes`) · 3 de las 19 claves de `ListEventAction`
 coincidian con el server antes de tocar nada. Gates: `check-ui` 179 ficheros / 20 reglas en 0 · `tsc` de app y de
-spec · `typecheck:e2e` · puente de vitest 16 ficheros / 140 pruebas · suite del server 25 ficheros / 609 pruebas
+spec · `typecheck:e2e` · puente de vitest 16 ficheros / 139 pruebas · suite del server 25 ficheros / 611 pruebas
 (14 del espejo del catalogo y 5 del del historial) · `ng build --configuration production` sin errores.
 
 ## 13. Coming soon (deliberately not in this program)
@@ -3018,7 +3018,7 @@ spec · `typecheck:e2e` · puente de vitest 16 ficheros / 140 pruebas · suite d
   lectura, un mapa de 29 pares y un spec: la proxima tanda pequena.
 
 - `ng test` (Karma/Chromium) y `playwright test` siguen sin ejecutarse en esta maquina: no hay navegador.
-  Los specs que necesitan `TestBed` se validan a traves del puente de vitest (16 ficheros / 140 pruebas),
+  Los specs que necesitan `TestBed` se validan a traves del puente de vitest (16 ficheros / 139 pruebas),
   que es estrictamente menor que la suite real: 21 de los 37 ficheros `*.spec.ts` del frontend estan excluidos
   del puente por necesidad, y esa lista es la deuda. El config del puente y su generador
   (`server/tmp-frontend*.ts`, `server/tmp-frontend-stubs/`) son rueda de taller y estan en `.gitignore`: el
