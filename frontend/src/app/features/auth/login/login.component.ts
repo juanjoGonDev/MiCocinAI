@@ -8,6 +8,7 @@ import { HouseholdService } from '../../../core/services/household.service';
 import { ButtonComponent } from '../../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../../shared/components/ui/input/input.component';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
+import { I18nService } from '../../../core/services/i18n.service';
 
 @Component({
   selector: 'app-login',
@@ -111,6 +112,7 @@ import { TranslatePipe } from '../../../core/pipes/translate.pipe';
   `]
 })
 export class LoginComponent {
+  private readonly i18n = inject(I18nService);
   private authService = inject(AuthService);
   private toastService = inject(ToastService);
   private router = inject(Router);
@@ -128,7 +130,7 @@ export class LoginComponent {
     if (code) {
       this.householdService.joinByCode(code).subscribe({
         next: () => {
-          this.toastService.success('¡Unido!', 'Te has unido al hogar');
+          this.toastService.success(this.i18n.t('auth.unido'), this.i18n.t('auth.te_has_unido_al'));
           this.router.navigate(['/household']);
         },
         error: () => this.router.navigate(['/dashboard'])
@@ -143,12 +145,12 @@ export class LoginComponent {
     this.passwordError.set('');
 
     if (!this.email) {
-      this.emailError.set('El email es requerido');
+      this.emailError.set(this.i18n.t('auth.el_email_es_requerido'));
       return;
     }
 
     if (!this.password) {
-      this.passwordError.set('La contraseña es requerida');
+      this.passwordError.set(this.i18n.t('auth.la_contrasena_es_requerida'));
       return;
     }
 
@@ -156,13 +158,13 @@ export class LoginComponent {
 
     this.authService.login({ email: this.email, password: this.password }).subscribe({
       next: () => {
-        this.toastService.success('¡Bienvenido!', 'Has iniciado sesión correctamente');
+        this.toastService.success(this.i18n.t('auth.bienvenido'), this.i18n.t('auth.has_iniciado_sesion_correctamente'));
         this.householdService.loadHousehold();
         this.redirectAfterAuth();
       },
       error: (error) => {
         this.isLoading.set(false);
-        this.toastService.error('Error', error.message || 'Credenciales incorrectas');
+        this.toastService.error(this.i18n.t('ui.error'), error.message || this.i18n.t('auth.credenciales_incorrectas'));
       }
     });
   }

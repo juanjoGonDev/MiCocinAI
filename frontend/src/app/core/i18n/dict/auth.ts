@@ -7,6 +7,20 @@
  * de compilacion** en lugar de una pantalla medio en espanol.
  */
 export const authEs = {
+  'auth.la_contrasena_debe_tener': 'La contraseña debe tener al menos 6 caracteres',
+  'auth.el_nombre_es_requerido': 'El nombre es requerido',
+  'auth.la_contrasena_es_requerida': 'La contraseña es requerida',
+  'auth.el_email_es_requerido': 'El email es requerido',
+  'auth.error_al_crear_la': 'Error al crear la cuenta',
+  'auth.tu_cuenta_ha_sido': 'Tu cuenta ha sido creada correctamente',
+  'auth.cuenta_creada': '¡Cuenta creada!',
+  'auth.credenciales_incorrectas': 'Credenciales incorrectas',
+  'auth.has_iniciado_sesion_correctamente': 'Has iniciado sesión correctamente',
+  'auth.bienvenido': '¡Bienvenido!',
+  'auth.te_has_unido_al': 'Te has unido al hogar',
+  'auth.unido': '¡Unido!',
+  'auth.si_el_email_existe': 'Si el email existe, recibirás un enlace para restablecer tu contraseña',
+  'auth.email_enviado': 'Email enviado',
   'auth.al_entrar_te_preguntamos': 'Al entrar te preguntamos cinco cosas cortas: cuánto cocinas, qué quieres llevar desde la app y qué no puedes comer. Se pueden saltar y cambiar luego en Preferencias.',
   'auth.already': '¿Ya tienes cuenta?',
   'auth.beginner': 'Principiante',
@@ -33,6 +47,20 @@ export const authEs = {
 } as const;
 
 export const authEn: Record<keyof typeof authEs, string> = {
+  'auth.la_contrasena_debe_tener': 'Password must be at least 6 characters',
+  'auth.el_nombre_es_requerido': 'Name is required',
+  'auth.la_contrasena_es_requerida': 'Password is required',
+  'auth.el_email_es_requerido': 'Email is required',
+  'auth.error_al_crear_la': 'Could not create the account',
+  'auth.tu_cuenta_ha_sido': 'Your account has been created correctly',
+  'auth.cuenta_creada': 'Account created!',
+  'auth.credenciales_incorrectas': 'Wrong credentials',
+  'auth.has_iniciado_sesion_correctamente': 'You are signed in',
+  'auth.bienvenido': 'Welcome!',
+  'auth.te_has_unido_al': 'You have joined the household',
+  'auth.unido': 'Joined!',
+  'auth.si_el_email_existe': 'If the email exists, you will get a link to reset your password',
+  'auth.email_enviado': 'Email sent',
   'auth.al_entrar_te_preguntamos': 'Once you are in we ask five short things: how much you cook, what you want out of the app and what you cannot eat. You can skip them and change everything later in Preferences.',
   'auth.already': 'Already have an account?',
   'auth.beginner': 'Beginner',

@@ -12,6 +12,7 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 @Component({
   selector: 'app-household',
@@ -491,6 +492,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
   `]
 })
 export class HouseholdComponent implements OnInit {
+  private readonly i18n = inject(I18nService);
   householdService = inject(HouseholdService);
   private toastService = inject(ToastService);
   private confirmService = inject(ConfirmService);
@@ -532,13 +534,13 @@ export class HouseholdComponent implements OnInit {
 
   copyLink(): void {
     navigator.clipboard.writeText(this.inviteLink());
-    this.toastService.success('Copiado', 'Enlace de invitación copiado');
+    this.toastService.success(this.i18n.t('household.copiado'), this.i18n.t('household.enlace_de_invitacion_copiado'));
   }
 
   toggleSetting(key: 'sharedPantry' | 'shareRecipes' | 'shareCalendar', value: boolean): void {
     this.householdService.updateSettings({ [key]: value }).subscribe({
-      next: () => this.toastService.success('Actualizado', 'Ajustes del hogar guardados'),
-      error: () => this.toastService.error('Error', 'No se pudo actualizar')
+      next: () => this.toastService.success(this.i18n.t('ai_config.actualizado'), this.i18n.t('household.ajustes_del_hogar_guardados')),
+      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('household.no_se_pudo_actualizar'))
     });
   }
 
@@ -578,12 +580,12 @@ export class HouseholdComponent implements OnInit {
     this.isSaving.set(true);
     this.householdService.createHousehold(this.createForm.name, this.createForm.sharedPantry).subscribe({
       next: () => {
-        this.toastService.success('¡Creado!', 'Tu hogar ha sido creado');
+        this.toastService.success(this.i18n.t('household.creado'), this.i18n.t('household.tu_hogar_ha_sido'));
         this.closeCreateModal();
         this.isSaving.set(false);
       },
       error: () => {
-        this.toastService.error('Error', 'No se pudo crear el hogar');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('household.no_se_pudo_crear'));
         this.isSaving.set(false);
       }
     });
@@ -595,12 +597,12 @@ export class HouseholdComponent implements OnInit {
     this.isSaving.set(true);
     this.householdService.joinHousehold(this.joinForm.inviteCode).subscribe({
       next: () => {
-        this.toastService.success('¡Te has unido!', 'Ahora eres miembro del hogar');
+        this.toastService.success(this.i18n.t('household.te_has_unido'), this.i18n.t('household.ahora_eres_miembro_del'));
         this.closeJoinModal();
         this.isSaving.set(false);
       },
       error: () => {
-        this.toastService.error('Error', 'Código inválido o ya eres miembro');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('household.codigo_invalido_o_ya'));
         this.isSaving.set(false);
       }
     });
@@ -613,22 +615,22 @@ export class HouseholdComponent implements OnInit {
   regenerateCode(): void {
     this.householdService.regenerateInviteCode().subscribe({
       next: () => {
-        this.toastService.success('Regenerado', 'Nuevo código de invitación generado');
+        this.toastService.success(this.i18n.t('household.regenerado'), this.i18n.t('household.nuevo_codigo_de_invitacion'));
       }
     });
   }
 
   async leaveHousehold(): Promise<void> {
     const accepted = await this.confirmService.confirm({
-      title: 'Salir del hogar',
-      message: '¿Estás seguro de salir del hogar?',
-      confirmText: 'Salir'
+      title: this.i18n.t('household.salir_del_hogar'),
+      message: this.i18n.t('household.estas_seguro_de_salir'),
+      confirmText: this.i18n.t('household.salir')
     });
     if (!accepted) return;
 
     this.householdService.leaveHousehold().subscribe({
       next: () => {
-        this.toastService.success('Saliste', 'Has salido del hogar');
+        this.toastService.success(this.i18n.t('household.saliste'), this.i18n.t('household.has_salido_del_hogar'));
       }
     });
   }

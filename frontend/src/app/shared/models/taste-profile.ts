@@ -40,6 +40,12 @@ export interface TasteResponse {
    * normaliza, y el formulario manda el bloque incompleto cuando solo se ha cambiado una comida.
    */
   mealTimes?: Partial<Record<import('./calendar.model').MealType, string | null>>;
+  /**
+   * Que la IA planifique cada comida (12t-T). `Partial` y con `null` por el mismo motivo que `mealTimes`:
+   * esto es la forma del cable. La respuesta trae siempre los cuatro; el formulario manda solo los que
+   * cambio, y `null` (que aqui no escribe ningun boton) significa «quita la clave y vuelve al fabrica».
+   */
+  mealPlan?: Partial<Record<import('./calendar.model').MealType, boolean | null>>;
 }
 
 /** Opción de un selector de chips: lo que se guarda es el propio texto. */

@@ -7,6 +7,17 @@
  * de compilacion** en lugar de una pantalla medio en espanol.
  */
 export const recipesEs = {
+  'recipes.disfruta_preparando_tu_receta': 'Disfruta preparando tu receta',
+  'recipes.a_cocinar': '¡A cocinar!',
+  'recipes.no_se_pudo_guardar': 'No se pudo guardar la receta',
+  'recipes.la_receta_se_ha': 'La receta se ha guardado correctamente',
+  'recipes.guardada': '¡Guardada!',
+  'recipes.no_se_pudieron_generar': 'No se pudieron generar las recetas',
+  'recipes.selecciona_tu_favorita': 'Selecciona tu favorita',
+  'recipes.recetas_generadas': '¡Recetas generadas!',
+  'recipes.no_se_pudo_generar': 'No se pudo generar la receta',
+  'recipes.la_ia_ha_creado': 'La IA ha creado tu receta',
+  'recipes.receta_generada': '¡Receta generada!',
   'recipes.timer_paso': 'Timer paso {n}',
   'recipes.recalentar': 'Recalentar: {text}',
   'recipes.min': '⏱️ {n}min',
@@ -41,6 +52,17 @@ export const recipesEs = {
 } as const;
 
 export const recipesEn: Record<keyof typeof recipesEs, string> = {
+  'recipes.disfruta_preparando_tu_receta': 'Enjoy making your recipe',
+  'recipes.a_cocinar': 'Time to cook!',
+  'recipes.no_se_pudo_guardar': 'Could not save the recipe',
+  'recipes.la_receta_se_ha': 'The recipe has been saved correctly',
+  'recipes.guardada': 'Saved!',
+  'recipes.no_se_pudieron_generar': 'Could not generate the recipes',
+  'recipes.selecciona_tu_favorita': 'Pick your favourite',
+  'recipes.recetas_generadas': 'Recipes generated!',
+  'recipes.no_se_pudo_generar': 'Could not generate the recipe',
+  'recipes.la_ia_ha_creado': 'The AI has written your recipe',
+  'recipes.receta_generada': 'Recipe generated!',
   'recipes.timer_paso': 'Timer step {n}',
   'recipes.recalentar': 'Reheating: {text}',
   'recipes.min': '⏱️ {n}min',

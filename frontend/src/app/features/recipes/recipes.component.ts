@@ -15,6 +15,7 @@ import { TimerComponent } from '../../shared/components/ui/timer/timer.component
 import { Recipe, Difficulty } from '../../shared/models/recipe.model';
 import { AIRecipeResponse } from '../../shared/models/ai-config.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 @Component({
   selector: 'app-recipes',
@@ -772,6 +773,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
   `]
 })
 export class RecipesComponent implements OnInit {
+  private readonly i18n = inject(I18nService);
   recipeService = inject(RecipeService);
   aiService = inject(AiService);
   pantryService = inject(PantryService);
@@ -876,10 +878,10 @@ export class RecipesComponent implements OnInit {
 
     this.aiService.generateRecipe(request).subscribe({
       next: () => {
-        this.toastService.success('¡Receta generada!', 'La IA ha creado tu receta');
+        this.toastService.success(this.i18n.t('recipes.receta_generada'), this.i18n.t('recipes.la_ia_ha_creado'));
       },
       error: () => {
-        this.toastService.error('Error', 'No se pudo generar la receta');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('recipes.no_se_pudo_generar'));
       }
     });
   }
@@ -904,10 +906,10 @@ export class RecipesComponent implements OnInit {
 
     this.aiService.generateMultipleRecipes(request).subscribe({
       next: () => {
-        this.toastService.success('¡Recetas generadas!', 'Selecciona tu favorita');
+        this.toastService.success(this.i18n.t('recipes.recetas_generadas'), this.i18n.t('recipes.selecciona_tu_favorita'));
       },
       error: () => {
-        this.toastService.error('Error', 'No se pudieron generar las recetas');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('recipes.no_se_pudieron_generar'));
       }
     });
   }
@@ -958,11 +960,11 @@ export class RecipesComponent implements OnInit {
       tags: []
     }).subscribe({
       next: () => {
-        this.toastService.success('¡Guardada!', 'La receta se ha guardado correctamente');
+        this.toastService.success(this.i18n.t('recipes.guardada'), this.i18n.t('recipes.la_receta_se_ha'));
         this.closeAiModal();
       },
       error: () => {
-        this.toastService.error('Error', 'No se pudo guardar la receta');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('recipes.no_se_pudo_guardar'));
       }
     });
   }
@@ -973,7 +975,7 @@ export class RecipesComponent implements OnInit {
 
   cookRecipe(recipe: Recipe): void {
     this.recipeService.recordCooking(recipe.id);
-    this.toastService.success('¡A cocinar!', 'Disfruta preparando tu receta');
+    this.toastService.success(this.i18n.t('recipes.a_cocinar'), this.i18n.t('recipes.disfruta_preparando_tu_receta'));
     this.closeDetailModal();
   }
 

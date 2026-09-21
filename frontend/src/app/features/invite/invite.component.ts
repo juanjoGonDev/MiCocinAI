@@ -145,7 +145,7 @@ export class InviteComponent implements OnInit {
     const code = this.route.snapshot.paramMap.get('code') || '';
     this.inviteCode.set(code);
     if (!code) {
-      this.error.set('Código de invitación no presente en la URL');
+      this.error.set(this.i18n.t('ui.codigo_de_invitacion_no'));
       this.loading.set(false);
       return;
     }
@@ -154,12 +154,12 @@ export class InviteComponent implements OnInit {
         if (res?.success) {
           this.preview.set(res.data);
         } else {
-          this.error.set(res?.message || 'Código de invitación inválido o caducado');
+          this.error.set(res?.message || this.i18n.t('ui.codigo_de_invitacion_invalido'));
         }
         this.loading.set(false);
       },
       error: () => {
-        this.error.set('Código de invitación inválido o caducado');
+        this.error.set(this.i18n.t('ui.codigo_de_invitacion_invalido'));
         this.loading.set(false);
       }
     });
@@ -169,12 +169,12 @@ export class InviteComponent implements OnInit {
     this.joining.set(true);
     this.householdService.joinByCode(this.inviteCode()).subscribe({
       next: () => {
-        this.toastService.success('¡Unido!', 'Ahora eres miembro del hogar');
+        this.toastService.success(this.i18n.t('auth.unido'), this.i18n.t('household.ahora_eres_miembro_del'));
         this.joining.set(false);
         this.router.navigate(['/household']);
       },
       error: () => {
-        this.toastService.error('Error', 'No se pudo unir al hogar');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('ui.no_se_pudo_unir'));
         this.joining.set(false);
       }
     });

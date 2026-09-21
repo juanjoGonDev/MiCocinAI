@@ -33,7 +33,7 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
           size="sm"
           (onClick)="start()"
         >
-          {{ state === 'paused' ? 'Reanudar' : 'Iniciar' }}
+          {{ (state === 'paused' ? 'ui.reanudar' : 'ui.iniciar') | t }}
         </app-button>
         
         <app-button

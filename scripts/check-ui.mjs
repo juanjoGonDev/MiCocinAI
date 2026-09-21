@@ -22,7 +22,7 @@ const E2E_DIR = 'tests/e2e';
 // Cuantas reglas hay dentro. Se cuenta aqui y no a mano porque la ultima vez que se anadio una (la de
 // los selectores huerfanos) el mensaje de «sin incidencias» seguia diciendo siete, que es exactamente
 // el tipo de mentira que este fichero existe para evitar.
-const RULES = 17;
+const RULES = 18;
 
 // ---------------------------------------------------------------------------
 // Deuda heredada, declarada en voz alta.
@@ -675,7 +675,7 @@ const VISIBLE_ATTRS = [
 ];
 // Unidades, simbolos y tokens tecnicos: se escriben igual en los dos idiomas. Anadir aqui es una
 // decision de producto, no la forma de callar a la regla.
-const NOT_TEXT = new Set(['g', 'kg', 'mg', 'lb', 'ml', 'l', 'cl', 'dl', 'ud', 'u', 'un', 'x', '%', '€']);
+const NOT_TEXT = new Set(['g', 'kg', 'mg', 'lb', 'ml', 'l', 'cl', 'dl', 'ud', 'u', 'un', 'x', '%', '€', 'kcal', 'kj']);
 
 const isProse = (raw) => {
   const s = raw.replace(/\s+/g, ' ').trim();
@@ -741,6 +741,66 @@ for (const file of sourceFiles) {
       'texto-sin-traducir',
       `literal dentro de la expresion de la plantilla: «${value.slice(0, 60)}» — la frase va al diccionario con {parametros} y se concatena ahi, no aqui`
     );
+  }
+
+  // 17b) Literales en la POSICION de valor de una expresion: `{{ cond ? 'Guardar' : 'Crear' }}` y
+  // `[title]="x?.title || 'Confirmar'"`. Este era el hueco por el que se quedaba texto en espanol al
+  // cambiar a ingles: el bucle de literales de arriba exige un espacio o una tilde (lo pone para
+  // perdonar `HH:mm`, los nombres de clase y `gpt-4o-mini`), y una sola palabra («Guardar») no lo
+  // pasaba. Y emparejar comillas se descoloca con `? '' : 'x'` —con comillas impares el `matchAll`
+  // empieza a leerse el codigo como si fuera cadena, que es como escapo «Leyendo la foto...». Aqui se
+  // parte la expresion por comillas y se decide por POSICION: despues de `?`, de `:` o de `||` se
+  // pinta; despues de una comparacion, de una prueba (`x.includes('y')`) o del `:` de una pipe es codigo.
+  const esTextoPintable = (partes, i) => {
+    const valor = partes[i];
+    if (!LETTER_RUN.test(valor)) return false; // «[SRV]», «·», «OK»
+    if (valor.trim().length < 4) return false; // `'es'`, `'en'`, una abreviatura suelta
+    if (TECNICO.test(valor.trim())) return false; // una clave del diccionario, una url, un codigo
+    if (NOT_TEXT.has(valor.trim().toLowerCase())) return false; // 'kcal', 'kg', '€'
+    const antes = valorAntes(partes, i);
+    const despues = valorDespues(partes, i);
+    if (VA_TRADUCIDA.test(despues)) return false; // ya pasa por el diccionario
+    if (COMPARACION.test(antes)) return false; // `x === 'server'`: es la condicion, no el texto
+    if (ARGUMENTO_DE_PIPE.test(antes)) return false; // `date:'longDate'`, `currency:'EUR'`
+    if (PRUEBA.test(antes)) return false; // `list.includes('basura')`
+    if (ES_CONDITION.test(despues)) return false; // `'server' ? ... : ...`
+    return true;
+  };
+  const LETTER_RUN = /[a-záéíóúüñ]{2,}/;
+  const TECNICO = /^[a-z0-9_.:/#\\-]+$/;
+  const VA_TRADUCIDA = /^\|\s*t\b/;
+  const COMPARACION = /[=!]==?$/;
+  const ARGUMENTO_DE_PIPE = /[A-Za-z0-9_]:$/;
+  const PRUEBA = /\.(?:includes|indexOf|startsWith|endsWith|has|test|find|filter|some|every)\($/;
+  const ES_CONDITION = /^\?/;
+  const valorAntes = (partes, i) => (partes[i - 1] ?? '').replace(/\s+$/, '');
+  const valorDespues = (partes, i) => (partes[i + 1] ?? '').replace(/^\s+/, '');
+
+  const marcaRegion = (region, linea) => {
+    const partes = region.split("'");
+    for (let i = 1; i < partes.length; i += 2) {
+      if (!esTextoPintable(partes, i)) continue;
+      fail(
+        file,
+        linea,
+        'texto-sin-traducir',
+        `literal en la expresion de la plantilla: «${partes[i].replace(/\s+/g, ' ').trim().slice(0, 60)}» — en un ternario se traduce la eleccion entera: {{ (cond ? 'dom.uno' : 'dom.varios') | t }}`
+      );
+    }
+  };
+
+  for (const interp of tpl.matchAll(/\{\{([\s\S]*?)\}\}/g)) {
+    marcaRegion(interp[1], lineOf(text, base + interp.index));
+  }
+  for (const attr of VISIBLE_ATTRS) {
+    for (const match of tpl.matchAll(new RegExp(`\\[(?:attr\\.)?${attr}\\]="([^"]*)"`, 'g'))) {
+      const value = match[1];
+      if (value.includes('{{')) continue;
+      // Solo se miran los enlaces con ternario, `||` o suma: `[label]="'clave' | t"` ya lo cubre el
+      // bucle de atributos estaticos de arriba, y `[title]="persona.name"` no tiene texto dentro.
+      if (!/[?+]|\|\|/.test(value)) continue;
+      marcaRegion(value, lineOf(text, base + match.index));
+    }
   }
 
   for (const match of text.matchAll(/@Input\(\)\s+\w+(?:!)??\s*(?::\s*[^=]+)?=\s*'([^']*)'/g)) {
@@ -873,6 +933,238 @@ for (const file of sourceFiles) {
       if (literales.has(nombre)) continue;
       if (prefijos.some((prefijo) => nombre.startsWith(prefijo))) continue;
       fail(file, lineOf(text, match.index), 'data-test-huerfano', `el e2e pregunta por «${nombre}» y ese atributo no lo pinta ningun componente: Playwright espera 30s y falla, aqui se ve al instante`);
+    }
+  }
+}
+
+// --------------------------------------------------------------------------------
+// 18) Un aviso o un cuadro de confirmacion se escribe en el diccionario, no en el codigo.
+//
+// De donde sale: la regla 14 barría las plantillas y se quedaba en la puerta del `template:`. Los
+// `toast.success('Guardado')`, los `confirm({ title: '¿Borrar?' })` y los `formError.set('...')`
+// vivian en TypeScript, que ningun gate miraba: al cambiar a ingles seguian en español 202 avisos.
+//
+// Que se caza: toda llamada a un sink (recinto por sufijo —`toast`, `confirm`, `dialog`, `snack`—
+// porque cada componente bautiza sus inyecciones como quiere) y todo `*Error.set(...)`. Dentro de sus
+// argumentos se exige que cada literal con prosa este dentro de una llamada a `t()`: el texto puede
+// venir por `t('clave')`, por `t(cond ? 'a' : 'b')` o por `clave | t` en la plantilla, y las tres
+// formas se perdonan porque el traductor real es `t()`.
+//
+// Que se salta: los codigos en mayusculas (`MODULE_SAVE_FAILED`), los valores de campo que son dato
+// (`variant: 'danger'`, `position: 'bottom'`) porque no se leen, y los `.spec.ts`, donde el literal es
+// el oraculo del test.
+// --------------------------------------------------------------------------------
+const SINK_CALL =
+  /(?:this\s*\.\s*)?\b\w*(?:[Tt]oast|[Ss]nack[Bb]ar|[Nn]otification|[Cc]onfirm|[Dd]ialog|[Ee]rror|[Mm]ensaje)\w*\s*\.\s*(?:success|error|warning|warn|info|open|confirm|show|set|push)\s*\(/g;
+const CAMPOS_DE_TEXTO = new Set([
+  'title',
+  'message',
+  'description',
+  'detail',
+  'confirmText',
+  'cancelText',
+  'actionLabel',
+  'label',
+  'error',
+  'hint',
+  'placeholder',
+  'heading',
+  'texto',
+  'nombre'
+]);
+
+// Cierra el literal que empieza en `i` (comillas y backticks), o -1. Respeta `\` y, dentro de `${}`,
+// lo que haya que respetar: sin esto un acento o una comilla en un comentario despista a todo el escaneo.
+function cierraLiteral(texto, i) {
+  const q = texto[i];
+  let j = i + 1;
+  if (q === '`') {
+    let nivel = 0;
+    while (j < texto.length) {
+      const c = texto[j];
+      if (c === '\\') {
+        j += 2;
+        continue;
+      }
+      if (nivel === 0 && c === '`') return j + 1;
+      if (c === '$' && texto[j + 1] === '{') {
+        nivel++;
+        j += 2;
+        continue;
+      }
+      if (nivel > 0) {
+        if (c === "'" || c === '"' || c === '`') {
+          const k = cierraLiteral(texto, j);
+          j = k > 0 ? k : j + 1;
+          continue;
+        }
+        if (c === '}') nivel--;
+      }
+      j++;
+    }
+    return -1;
+  }
+  while (j < texto.length) {
+    const c = texto[j];
+    if (c === '\\') {
+      j += 2;
+      continue;
+    }
+    if (c === q) return j + 1;
+    if (c === '\n') return -1;
+    j++;
+  }
+  return -1;
+}
+
+// Contenido entre el `(` de `paren` y su cierre, o null si el fichero esta cortado.
+function argumentosDe(texto, paren) {
+  let nivel = 0;
+  let i = paren;
+  while (i < texto.length) {
+    const c = texto[i];
+    if (c === "'" || c === '"' || c === '`') {
+      const k = cierraLiteral(texto, i);
+      if (k < 0) return null;
+      i = k;
+      continue;
+    }
+    if (c === '(') nivel++;
+    else if (c === ')') {
+      nivel--;
+      if (nivel === 0) return texto.slice(paren + 1, i);
+    }
+    i++;
+  }
+  return null;
+}
+
+// Literales de nivel superficial en [ini, fin) de una cadena: los que hay dentro de un `t(...)` se
+// saltan, que es justo lo que se perdona. Devuelve [inicio, fin, texto].
+function literalesDe(texto, ini, fin, saltarTraducidas = true) {
+  const out = [];
+  let j = ini;
+  while (j < fin) {
+    const c = texto[j];
+    if (c === "'" || c === '"' || c === '`') {
+      const k = cierraLiteral(texto, j);
+      if (k < 0) {
+        j++;
+        continue;
+      }
+      const antes = texto.slice(Math.max(ini, j - 30), j);
+      if (!(saltarTraducidas && /(?:i18n\s*\.\s*)?\bt\s*\(\s*$/.test(antes))) out.push([j, k, texto.slice(j, k)]);
+      j = k;
+      continue;
+    }
+    // `t(cond ? 'a' : 'b')` es la forma del plural: la llamada entera se salta, no solo el literal.
+    const mm = /(?:^|[^\w$.])((?:this\s*\.\s*)?i18n\s*\.\s*)?t\s*\(/y;
+    mm.lastIndex = j;
+    const mmm = mm.exec(texto);
+    if (mmm && mmm.index + mmm[0].length - 1 >= j && mmm[0].endsWith('(')) {
+      const paren = mmm.index + mmm[0].length - 1;
+      let nivel = 0;
+      let k = paren;
+      while (k < fin) {
+        const cc = texto[k];
+        if (cc === "'" || cc === '"' || cc === '`') {
+          const z = cierraLiteral(texto, k);
+          k = z > 0 ? z - 1 : k;
+        } else if (cc === '(') nivel++;
+        else if (cc === ')') {
+          nivel--;
+          if (nivel === 0) break;
+        }
+        k++;
+      }
+      j = Math.min(fin, k + 1);
+      continue;
+    }
+    j++;
+  }
+  return out;
+}
+
+{
+  const esProsa = (raw) => {
+    const s = raw.replace(/\s+/g, ' ').trim();
+    if (!s || s.length < 3) return false;
+    if (/^[A-Z0-9_]+$/.test(s)) return false; // un codigo, no un mensaje
+    return isProse(s);
+  };
+  for (const file of sourceFiles) {
+    if (file.endsWith('.spec.ts') || file.includes('core/i18n')) continue;
+    const text = readFileSync(file, 'utf8');
+    if (!/toast|confirm|snackbar|notification|Error/.test(text)) continue;
+    for (const match of text.matchAll(SINK_CALL)) {
+      const cuerpo = argumentosDe(text, match.index + match[0].length - 1);
+      if (cuerpo === null) continue;
+      const base = match.index + match[0].length; // donde empieza `cuerpo` en el fichero
+      const esObjeto = /^\s*\{/.test(cuerpo);
+      const candidatas = [];
+      if (esObjeto) {
+        // Solo los campos que son texto, y solo en los dos primeros niveles: `action: { label: ... }`
+        // del boton Deshacer tambien se lee en pantalla.
+        let nivel = 0;
+        let j = 0;
+        while (j < cuerpo.length) {
+          const c = cuerpo[j];
+          if (c === "'" || c === '"' || c === '`') {
+            const k = cierraLiteral(cuerpo, j);
+            j = k > 0 ? k : j + 1;
+            continue;
+          }
+          if (c === '{' || c === '[' || c === '(') nivel++;
+          else if (c === '}' || c === ']' || c === ')') nivel--;
+          else if (nivel <= 1) {
+            for (const campo of CAMPOS_DE_TEXTO) {
+              if (cuerpo.startsWith(campo, j) && /[\s,{]/.test(cuerpo[j - 1] ?? ' ') && /^\s*:/.test(cuerpo.slice(j + campo.length))) {
+                const valor = /^\s*:\s*/.exec(cuerpo.slice(j + campo.length));
+                const desde = j + campo.length + (valor ? valor[0].length : 0);
+                let fin = desde;
+                let nl = 0;
+                while (fin < cuerpo.length) {
+                  const cc = cuerpo[fin];
+                  if (cc === "'" || cc === '"' || cc === '`') {
+                    const k = cierraLiteral(cuerpo, fin);
+                    fin = k > 0 ? k : fin + 1;
+                    continue;
+                  }
+                  if (cc === '{' || cc === '[' || cc === '(') nl++;
+                  else if (cc === '}' || cc === ']' || cc === ')') {
+                    if (nl === 0) break;
+                    nl--;
+                  } else if (cc === ',' && nl === 0) break;
+                  fin++;
+                }
+                candidatas.push(...literalesDe(cuerpo, desde, fin));
+                break;
+              }
+            }
+          }
+          j++;
+        }
+      } else {
+        candidatas.push(...literalesDe(cuerpo, 0, cuerpo.length));
+      }
+      for (const [ini, fin, raw] of candidatas) {
+        const trozo = raw.slice(1, -1);
+        let sucio = false;
+        if (raw[0] === '`') {
+          // En una plantilla se mira todo lo que NO es interpolacion, y adentro: `t()` ya perdonado.
+          const fijas = trozo.replace(/\$\{[\s\S]*?\}/g, ' ');
+          sucio = esProsa(fijas) || literalesDe(trozo, 0, trozo.length).some(([, , r]) => esProsa(r.slice(1, -1)));
+        } else {
+          sucio = esProsa(trozo);
+        }
+        if (!sucio) continue;
+        fail(
+          file,
+          lineOf(text, base + ini),
+          'texto-sin-traducir-codigo',
+          `el aviso sale en español pase lo que pase con el idioma: ponlo en el diccionario y pídelo con t() (${trozo.replace(/\s+/g, ' ').slice(0, 60)})`
+        );
+      }
     }
   }
 }

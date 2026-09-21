@@ -75,3 +75,5 @@ blob-report/
 # acordarse de excluirlo al hacer `git add`.
 server/tmp-frontend*
 server/.vitest/
+server/tmp-frontend.vitest.config.ts
+server/tmp-frontend-stubs/

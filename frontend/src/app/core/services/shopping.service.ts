@@ -32,6 +32,7 @@ import {
   ShoppingListStatus,
   StoreCount
 } from '../../shared/models/shopping.model';
+import { I18nService } from '../../core/services/i18n.service';
 
 /** Operacion de escritura en espera: la misma observable, reintentable tal cual. */
 interface QueuedWrite {
@@ -54,6 +55,7 @@ interface QueuedWrite {
  */
 @Injectable({ providedIn: 'root' })
 export class ShoppingService {
+  private readonly i18n = inject(I18nService);
   private readonly http = inject(HttpClient);
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
@@ -293,12 +295,15 @@ export class ShoppingService {
           // Desde la bandeja no hay hoja de precios a la que llevar a la persona: se le dice
           // lo que falta, y el detalle de la lista si que tiene donde escribirlo.
           this.toast.warning(
-            'Faltan precios',
-            `${result.missing.length} ${result.missing.length === 1 ? 'linea comprada sin precio' : 'lineas compradas sin precio'}. Abre la lista para anotarlos.`
+            this.i18n.t('ui.faltan_precios'),
+            this.i18n.t(
+              result.missing.length === 1 ? 'ui.linea_sin_precio_uno' : 'ui.linea_sin_precio_varios',
+              { n: result.missing.length }
+            )
           );
         }
         if (!result.ok && result.code === 'STORE_REQUIRED') {
-          this.toast.warning('Falta el establecimiento', 'El precio se guarda por tienda: di donde has comprado.');
+          this.toast.warning(this.i18n.t('ui.falta_el_establecimiento'), this.i18n.t('ui.el_precio_se_guarda'));
         }
         return null;
       });
@@ -668,7 +673,7 @@ export class ShoppingService {
         // Error de negocio (4xx): reintentar no lo arregla, se descarta y se avisa.
         if (isConflict(error)) {
           this.queue.shift();
-          this.toast.warning('La lista cambio en otro aparato', 'Se han vuelto a cargar los datos.');
+          this.toast.warning(this.i18n.t('ui.la_lista_cambio_en'), this.i18n.t('ui.se_han_vuelto_a'));
           const listId = this.list()?.id;
           if (listId) this.loadList(listId);
           continue;
@@ -688,12 +693,12 @@ export class ShoppingService {
     } catch (error) {
       if (isConflict(error)) {
         const listId = this.list()?.id;
-        this.toast.warning('La lista cambio en otro aparato', listId ? 'Se han vuelto a cargar los datos.' : undefined);
+        this.toast.warning(this.i18n.t('ui.la_lista_cambio_en'), listId ? this.i18n.t('ui.se_han_vuelto_a') : undefined);
         if (listId) this.loadList(listId);
       } else if (isNetworkError(error)) {
-        this.toast.warning('Sin conexion', 'El cambio se reintentara automaticamente.');
+        this.toast.warning(this.i18n.t('ui.sin_conexion'), this.i18n.t('ui.el_cambio_se_reintentara'));
       } else if (error instanceof HttpErrorResponse && error.status !== 0) {
-        this.toast.error('No se ha podido guardar', errorMessage(error));
+        this.toast.error(this.i18n.t('ui.no_se_ha_podido'), errorMessage(error));
       }
       return null;
     }

@@ -8,6 +8,7 @@ import { HouseholdService } from '../../../core/services/household.service';
 import { ButtonComponent } from '../../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../../shared/components/ui/input/input.component';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
+import { I18nService } from '../../../core/services/i18n.service';
 
 @Component({
   selector: 'app-register',
@@ -129,6 +130,7 @@ import { TranslatePipe } from '../../../core/pipes/translate.pipe';
   `]
 })
 export class RegisterComponent {
+  private readonly i18n = inject(I18nService);
   private authService = inject(AuthService);
   private toastService = inject(ToastService);
   private router = inject(Router);
@@ -148,7 +150,7 @@ export class RegisterComponent {
     if (code) {
       this.householdService.joinByCode(code).subscribe({
         next: () => {
-          this.toastService.success('¡Unido!', 'Te has unido al hogar');
+          this.toastService.success(this.i18n.t('auth.unido'), this.i18n.t('auth.te_has_unido_al'));
           this.router.navigate(['/household']);
         },
         error: () => this.router.navigate(['/dashboard'])
@@ -166,17 +168,17 @@ export class RegisterComponent {
     this.passwordError.set('');
 
     if (!this.name) {
-      this.nameError.set('El nombre es requerido');
+      this.nameError.set(this.i18n.t('auth.el_nombre_es_requerido'));
       return;
     }
 
     if (!this.email) {
-      this.emailError.set('El email es requerido');
+      this.emailError.set(this.i18n.t('auth.el_email_es_requerido'));
       return;
     }
 
     if (!this.password || this.password.length < 6) {
-      this.passwordError.set('La contraseña debe tener al menos 6 caracteres');
+      this.passwordError.set(this.i18n.t('auth.la_contrasena_debe_tener'));
       return;
     }
 
@@ -190,13 +192,13 @@ export class RegisterComponent {
       password: this.password
     }).subscribe({
       next: () => {
-        this.toastService.success('¡Cuenta creada!', 'Tu cuenta ha sido creada correctamente');
+        this.toastService.success(this.i18n.t('auth.cuenta_creada'), this.i18n.t('auth.tu_cuenta_ha_sido'));
         this.householdService.loadHousehold();
         this.redirectAfterAuth();
       },
       error: (error) => {
         this.isLoading.set(false);
-        this.toastService.error('Error', error.message || 'Error al crear la cuenta');
+        this.toastService.error(this.i18n.t('ui.error'), error.message || this.i18n.t('auth.error_al_crear_la'));
       }
     });
   }

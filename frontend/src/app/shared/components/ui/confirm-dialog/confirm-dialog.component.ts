@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ConfirmService } from '../../../../core/services/confirm.service';
 import { ModalComponent } from '../modal/modal.component';
 import { ButtonComponent } from '../button/button.component';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 
 /**
  * Diálogo de confirmación de la aplicación (en lugar del `confirm()` del
@@ -12,11 +13,11 @@ import { ButtonComponent } from '../button/button.component';
 @Component({
   selector: 'app-confirm-dialog',
   standalone: true,
-  imports: [CommonModule, ModalComponent, ButtonComponent],
+  imports: [CommonModule, ModalComponent, ButtonComponent, TranslatePipe],
   template: `
     <app-modal
       [isOpen]="!!confirmService.request()"
-      [title]="confirmService.request()?.title || 'Confirmar'"
+      [title]="confirmService.request()?.title || ('common.confirmar' | t)"
       size="sm"
       (onClose)="confirmService.cancel()"
     >
@@ -25,13 +26,13 @@ import { ButtonComponent } from '../button/button.component';
 
         <div class="confirm__actions">
           <app-button variant="ghost" (onClick)="confirmService.cancel()">
-            {{ request.cancelText || 'Cancelar' }}
+            {{ request.cancelText || ('common.cancel' | t) }}
           </app-button>
           <app-button
             [variant]="request.variant || 'danger'"
             (onClick)="confirmService.accept()"
           >
-            {{ request.confirmText || 'Confirmar' }}
+            {{ request.confirmText || ('common.confirmar' | t) }}
           </app-button>
         </div>
       </div>

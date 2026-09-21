@@ -8,6 +8,7 @@ import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 interface FilterOption<T extends string> {
   value: T;
@@ -74,7 +75,7 @@ interface FilterOption<T extends string> {
             (onClick)="logService.togglePause()"
           >
             <app-icon [name]="logService.paused() ? 'play_arrow' : 'pause'" [size]="16" [label]="null" />
-            {{ logService.paused() ? 'Reanudar' : 'Pausar' }}
+            {{ (logService.paused() ? 'ui.reanudar' : 'ui.pausar') | t }}
           </app-button>
 
           <app-button
@@ -435,6 +436,7 @@ interface FilterOption<T extends string> {
   `]
 })
 export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
+  private readonly i18n = inject(I18nService);
   logService = inject(LogService);
   private toastService = inject(ToastService);
   private confirmService = inject(ConfirmService);
@@ -546,17 +548,20 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   copyVisible(): void {
     const entries = this.hasSelection() ? this.selectedEntries() : this.filtered();
     if (entries.length === 0) {
-      this.toastService.info('Nada que copiar', 'No hay líneas visibles');
+      this.toastService.info(this.i18n.t('logs.nada_que_copiar'), this.i18n.t('logs.no_hay_lineas_visibles'));
       return;
     }
 
     const text = entries.map(e => this.formatEntry(e)).join('\n');
     this.copyToClipboard(text).then(
       () => this.toastService.success(
-        'Copiado',
-        `${entries.length} línea${entries.length === 1 ? '' : 's'} en el portapapeles`
+        this.i18n.t('household.copiado'),
+        this.i18n.t(
+          entries.length === 1 ? 'logs.lineas_copiadas_uno' : 'logs.lineas_copiadas_varios',
+          { n: entries.length }
+        )
       ),
-      () => this.toastService.error('Error', 'No se pudo copiar al portapapeles')
+      () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('logs.no_se_pudo_copiar'))
     );
   }
 
@@ -633,9 +638,9 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   async clearLogs(): Promise<void> {
     const accepted = await this.confirmService.confirm({
-      title: 'Borrar logs',
-      message: '¿Borrar todos los logs? Esta acción no se puede deshacer.',
-      confirmText: 'Borrar'
+      title: this.i18n.t('logs.borrar_logs'),
+      message: this.i18n.t('logs.borrar_todos_los_logs'),
+      confirmText: this.i18n.t('calendar.borrar')
     });
     if (!accepted) return;
 

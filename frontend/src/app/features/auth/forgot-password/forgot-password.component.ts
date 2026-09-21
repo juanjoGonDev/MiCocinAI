@@ -7,6 +7,7 @@ import { ToastService } from '../../../core/services/toast.service';
 import { ButtonComponent } from '../../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../../shared/components/ui/input/input.component';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
+import { I18nService } from '../../../core/services/i18n.service';
 
 @Component({
   selector: 'app-forgot-password',
@@ -87,6 +88,7 @@ import { TranslatePipe } from '../../../core/pipes/translate.pipe';
   `]
 })
 export class ForgotPasswordComponent {
+  private readonly i18n = inject(I18nService);
   private authService = inject(AuthService);
   private toastService = inject(ToastService);
 
@@ -98,7 +100,7 @@ export class ForgotPasswordComponent {
     this.emailError.set('');
 
     if (!this.email) {
-      this.emailError.set('El email es requerido');
+      this.emailError.set(this.i18n.t('auth.el_email_es_requerido'));
       return;
     }
 
@@ -108,15 +110,15 @@ export class ForgotPasswordComponent {
       next: () => {
         this.isLoading.set(false);
         this.toastService.success(
-          'Email enviado',
-          'Si el email existe, recibirás un enlace para restablecer tu contraseña'
+          this.i18n.t('auth.email_enviado'),
+          this.i18n.t('auth.si_el_email_existe')
         );
       },
       error: () => {
         this.isLoading.set(false);
         this.toastService.success(
-          'Email enviado',
-          'Si el email existe, recibirás un enlace para restablecer tu contraseña'
+          this.i18n.t('auth.email_enviado'),
+          this.i18n.t('auth.si_el_email_existe')
         );
       }
     });

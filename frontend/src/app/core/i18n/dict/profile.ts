@@ -11,6 +11,9 @@
  * server; lo traduisible es la etiqueta, y por eso `labelKey`/`hintKey` sustituyen a `label`/`hint`.
  */
 export const profileEs = {
+  'profile.no_se_pudo_guardar': 'No se pudo guardar',
+  'profile.la_ia_tendra_en': 'La IA tendrá en cuenta tus preferencias.',
+  'profile.no_se_pudieron_cargar': 'No se pudieron cargar tus preferencias',
   'profile.cookingEffect.none': 'La IA escribirá pasos cortos y explicará cada término.',
   'profile.cookingEffect.beginner': 'La IA explicará cómo se hace cada paso, no solo qué poner.',
   'profile.cookingEffect.intermediate': 'La IA irá al grano y añadirá consejos cuando aporten.',
@@ -37,6 +40,9 @@ export const profileEs = {
 } as const;
 
 export const profileEn: Record<keyof typeof profileEs, string> = {
+  'profile.no_se_pudo_guardar': 'Could not save',
+  'profile.la_ia_tendra_en': 'The AI will take your preferences into account.',
+  'profile.no_se_pudieron_cargar': 'Could not load your preferences',
   'profile.cookingEffect.none': 'The AI will write short steps and explain every term.',
   'profile.cookingEffect.beginner': 'The AI will explain how each step is done, not only what to add.',
   'profile.cookingEffect.intermediate': 'The AI will get to the point and add tips when they help.',

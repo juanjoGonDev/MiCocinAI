@@ -7,6 +7,13 @@
  * de compilacion** en lugar de una pantalla medio en espanol.
  */
 export const logsEs = {
+  'logs.lineas_copiadas_varios': '{n} líneas en el portapapeles',
+  'logs.lineas_copiadas_uno': '{n} línea en el portapapeles',
+  'logs.borrar_todos_los_logs': '¿Borrar todos los logs? Esta acción no se puede deshacer.',
+  'logs.borrar_logs': 'Borrar logs',
+  'logs.no_se_pudo_copiar': 'No se pudo copiar al portapapeles',
+  'logs.no_hay_lineas_visibles': 'No hay líneas visibles',
+  'logs.nada_que_copiar': 'Nada que copiar',
   'logs.zona_detectada': 'Zona detectada: {zone}',
   'logs.terminal_de': 'HogarIA — terminal',
   'logs.seleccion_en_el_terminal': '{n} línea(s) seleccionadas · Ctrl/Cmd o Mayús + clic para ajustar',
@@ -22,6 +29,13 @@ export const logsEs = {
 } as const;
 
 export const logsEn: Record<keyof typeof logsEs, string> = {
+  'logs.lineas_copiadas_varios': '{n} lines on the clipboard',
+  'logs.lineas_copiadas_uno': '{n} line on the clipboard',
+  'logs.borrar_todos_los_logs': 'Delete every log entry? This action cannot be undone.',
+  'logs.borrar_logs': 'Delete logs',
+  'logs.no_se_pudo_copiar': 'Could not copy to the clipboard',
+  'logs.no_hay_lineas_visibles': 'There are no visible lines',
+  'logs.nada_que_copiar': 'Nothing to copy',
   'logs.zona_detectada': 'Detected time zone: {zone}',
   'logs.terminal_de': 'HogarIA — terminal',
   'logs.seleccion_en_el_terminal': '{n} line(s) selected · Ctrl/Cmd or Shift+click to extend',

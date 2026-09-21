@@ -1,10 +1,11 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-rating',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslatePipe],
   template: `
     <div class="rating" [class.rating--disabled]="disabled">
       <button
@@ -15,7 +16,7 @@ import { CommonModule } from '@angular/common';
         (click)="onStarClick(i)"
         (mouseenter)="onStarHover(i)"
         (mouseleave)="onStarLeave()"
-        [attr.aria-label]="'Rate ' + (i + 1) + ' stars'"
+        [attr.aria-label]="(i + 1) === 1 ? ('common.rating_uno' | t) : ('common.rating_varios' | t:{n: i + 1})"
       >
         {{ getStarIcon(i) }}
       </button>
