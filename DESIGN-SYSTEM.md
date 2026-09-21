@@ -1616,6 +1616,14 @@ Reglas que se siguen de ahí, y que no son estilo sino física del framework:
   texto necesita a otro dentro, sale un getter al `.ts`.
 - **Una frase, una clave.** Antes de acuñar, el extractor busca el texto en todos los dominios; `common.*` y
   `ui.*` ganan. `scripts/i18n-merge-dupes.mjs` vuelve a juntar lo que se duplicó.
+- **Un módulo sin inyección no tiene idioma, así que no lo inventa.** Los helpers puros (`core/avatar-image.ts`,
+  `core/onboarding-steps.ts`, `features/account/account-info.ts`, `shared/models/*`) devuelven **clave**
+  (`TranslationKey`, a veces con `params`), nunca la frase: quien la traduce es la pantalla, que es donde vive
+  `i18n`. Un `return 'Nada pendiente de enviar'` en un módulo puro se pinta en castellano con la app en inglés.
+- **Lo que formatea `Intl` también sigue el idioma.** El locale de formato vive en `core/time.ts`
+  (`dateLocale()`) y lo fija el `I18nService` (`en` → `en-GB`, lo demás → `es-ES`) en su `effect` y en
+  `languagechange`. Nada de `'es-ES'` literal dentro de un componente: separadores de miles, días de la semana
+  y «septiembre de 2026» salen de ahí, y los memoizadores guardan el idioma dentro de la clave de caché.
 - **Traducible es lo que la app dice, no lo que la casa guarda.** Los nombres de alimentos, las categorías de
   la cesta y los alérgenos escritos por una persona se muestran tal cual: traducirlos haría que la pantalla
   mintiera sobre la base de datos. Y `MEAL_TYPE_LABELS` sigue en español porque es la cadena que entiende el
@@ -1624,7 +1632,9 @@ Reglas que se siguen de ahí, y que no son estilo sino física del framework:
 ### Quién lo vigila
 
 `scripts/check-ui.mjs`, reglas 14 (`texto-sin-traducir`), 15 (`clave-sin-traduccion`: la clave existe en `es`
-**y** en `en`, y se usa en algún sitio), 16 (`pipe-sin-importar`) y 17 (`data-test-huerfano`). Además el tipo:
+**y** en `en`, y se usa en algún sitio), 16 (`pipe-sin-importar`), 17 (`data-test-huerfano`) y 18
+(`prosa-en-un-sink`: literal con pinta de frase que acaba en `toast.*`, `*Error.set`, `note`, `title` o un
+`return`, dentro o fuera de `t()` —incluidos el `cond ? 'prosa' : 'prosa'` y las variables `t(clave)`). Además el tipo:
 `TranslationKey` es la unión de claves reales, así que una errata en una plantilla es error de compilación con
 `strictTemplates`. Contrato y deudas en `HOGARIA-SPEC.md` §12s.
 

@@ -2454,7 +2454,8 @@ donde sale texto a la pantalla, y dejar una regla que no permita volver a escrib
 
 ### Gates (medidos al cerrar la tanda)
 
-- [x] `check-ui`: **177 ficheros, 17 reglas, sin incidencias**, con la lista de deuda de la 14 vacía.
+- [x] `check-ui`: **177 ficheros, 17 reglas, sin incidencias**, con la lista de deuda de la 14 vacía
+      (hoy son 18: la regla que faltaba se ve en §12t-R).
 - [x] `tsc` de app y de spec limpios; `typecheck:e2e` limpio; vitest del server **22 ficheros / 559 tests**;
       puente del frontend **16 ficheros / 155 tests**; `ng build --configuration production` **0 errores** (es
       el único gate que ve las plantillas: NG8004, NG8113 y NG5 de los que hablan arriba salen todos aquí).
@@ -2467,6 +2468,177 @@ donde sale texto a la pantalla, y dejar una regla que no permita volver a escrib
 - [ ] Fechas, números y dinero con el idioma activo (`Intl`): hoy el `DatePipe` de Angular usa la local
       del navegador, que no tiene por qué ser la del `language` de la app.
 - [ ] Un tercer idioma: la estructura (`dict/<dominio>.ts` + `Pair`) lo permite sin tocar las pantallas.
+
+## 12t. Tanda 21 — bloquear comidas del planificador, y eventos que se repiten
+
+Pedidos por la persona que usa la app, los dos con su caso detras:
+
+1. «Puedes hacer que la IA no te planifique parte del horario; por ejemplo, si solo quiero que planifique la
+   cena, pues bloqueas las demas.» Hoy la eleccion de comidas es **por generacion** (el dialog de «Generar con
+   IA» tiene cuatro checkboxes que vuelven a estar marcados la proxima vez). Lo que se pide es una
+   preferencia de la casa: la cena se planifica, lo demas no, y asi se queda.
+2. «En la creacion de eventos pueda repetirse: semanal, diario.» Un recado recurrente («sacar la basura los
+   lunes») hoy se escribe a mano cada semana.
+
+### T. Bloquear comidas del planificador (`mealPlan`)
+
+- [ ] **El dato**: `users.preferences.mealPlan: { breakfast, lunch, snack, dinner }` de booleanos, con
+      `true` de fabrica (que es exactamente lo que hace la app hoy: una clave ausente no cambia el
+      comportamiento). Se guarda en `preferences` y NO en `users` —misma decision que `mealTimes` (12q).
+- [ ] **El contrato del PATCH, el mismo de `mealTimes`**: `undefined` = no tocar, `null` = borrar la clave
+      (volver al fabrica), `true`/`false` = escribir. Ningun `required` se afloja, y un valor que no es un
+      booleano se rechaza con 400 (`INVALID_FORM`) en lugar de guardarse como verdad rara.
+- [ ] **Quien lo lee**: `plan-week`. Los cuatro checkboxes del dialog pasan a arrancar del bloqueo, y las
+      comidas bloqueadas **no se ofrecen** —una linea dice cuales estan bloqueadas y donde se cambia—. Si estan
+      las cuatro bloqueadas, «Generar» no esta disponible y el motivo se lee al lado del boton.
+- [ ] **Quien lo respeta al escribir**: `persistWeeklyPlan` ignora las comidas bloqueadas aunque el modelo se
+      las invente. Es la diferencia entre «no las pidas» y «no las escribas»: el prompt es una peticion, la
+      persistencia es la garantia.
+- [ ] **Donde se cambia**: en `app-meal-hours`, fila a fila —«Que la IA la planifique» con su `app-checkbox`
+      en la misma linea de la hora—, porque el horario y quien lo rellena son la misma decision. El tour de
+      bienvenida NO lo toca: pregunta las cuatro horas, y ahi bloquear seria una pregunta mas de las seis
+      prometidas (queda en §13).
+- [ ] **Lo que NO cambia**: un bloqueo no borra nada. Ni las comidas ya planificadas de esa semana, ni las
+      siguientes semanas escritas, ni el «+» manual del calendario: bloquear es quitarle la tarea a la IA, no
+      quitarle la comida a la casa. Y los anclajes de la rejilla siguen usando la hora de esa comida,
+      bloqueada o no.
+
+### R. Recurrencia de los eventos de la casa
+
+- [ ] **El dato, dos columnas**: `calendar_events.recurrence` (`'none' | 'daily' | 'weekly'`, `NOT NULL DEFAULT
+      'none'`) y `calendar_events.exceptions` (JSON de fechas `YYYY-MM-DD`, `DEFAULT '[]'`). Se anaden con el
+      helper de `config/database.ts` que ya existe (`addColumnIfMissing`), sin tabla nueva y sin rebuild: una
+      fila vieja es `'none'`, que es lo que era.
+- [ ] **Una fila, no una fila por dia**. La serie vive en una fila y las ocurrencias se materializan al leer.
+      El motivo es el mismo de «las comidas no se copian a `calendar_events`» (8f): dos verdades se
+      desincronizan. Y hay un efecto secundario bueno —editar el titulo de la serie cambia los lunes de
+      verdad, y borrar la serie no deja 30 filas huerfanas—.
+- [ ] **Diario y semanal, y nada mas por ahora**: `daily` = cada dia desde `date`; `weekly` = el mismo dia de
+      la semana de `date` (`getUTCDay` de la fecha ISO, nunca `new Date()` local, que en un navegador con otra
+      zona corria los lunes). Mensual y «hasta el dia X» se van a §13 con su motivo: sin `until`, una serie es
+      para siempre, y eso es honesto para un recado de la casa y mentira para una cita medica.
+- [ ] **`exceptions` es el «solo este dia no»**: al borrar una ocurrencia concreta se anade SU fecha a la
+      lista, y la serie sigue viva. Borrar la serie entera es lo que hace `DELETE /events/:id`, y el dialog lo
+      dice con las letras: «Se quitan todas las repeticiones». Un evento que no se repite no tiene este
+      dialogo: borra como sempre.
+- [ ] **Se expande en un sitio**: `core/calendar-recurrence.ts` (nuevo, puro, con sus specs) y llamado desde
+      el service al leer, de modo que mes, timeline, dia y el contador «+N» ven exactamente la misma lista. Un
+      `computed` por vista que expandiera seria cuatro calendarios de la verdad.
+- [ ] **El editor**: un `app-picker` «Repetir» con tres opciones. `PATCH` de una serie cambia la serie, no la
+      ocurrencia pulsada, y el dialog lo avisa en una linea («Editas todos los lunes»); el «solo este dia»
+      existe para quitar, no para renombrar. Renombrar un dia suelto habria exigido un modelo de ocurrencias
+      propias, y eso es otra tanda.
+- [ ] **La ventana**: se piden `from`/`to` al server y la serie se expande contra esa ventana, asi que el
+      `LIMIT` de la consulta no corta ocurrencias (cuenta filas, no dias). Un `limit` de 200 filas con 40
+      series diarias sigue siendo 40 filas.
+- [ ] **Visibilidad e invitados sin cambios**: una ocurrencia es la fila de su serie, con su `editable` (solo
+      el autor), sus `attendees` y su `source`. No se introduce «responder a una invitacion repetida».
+
+### Idioma (12s, aplicado a lo nuevo)
+
+- [ ] Todo texto nuevo sale de `dict/calendar.ts` y `dict/preferences.ts` con sus claves: «Que la IA la
+      planifique», «bloqueadas en Preferencias», «Repetir», «No se repite», «Cada dia», «Cada semana»,
+      «Editas todos los lunes», «Se quitan todas las repeticiones», «Quitar solo este dia». Nada de
+      concatenar en la plantilla: lo que lleva una fecha o un numero dentro, lleva `{param}`.
+- [ ] Un `@Input` nuevo, sin literal de fabrica; una lista de opciones, con `labelKey` o resuelta en un getter
+      que llame a `t()` (las dos valen, lo que no vale es un `readonly` con el texto ya traducido).
+
+### Gates
+
+- [x] `node scripts/check-ui.mjs` en verde (18 reglas) —incluida la 14 sobre las plantillas nuevas y la 15
+      sobre las claves nuevas.
+- [ ] `tsc -p tsconfig.app.json` y `-p tsconfig.spec.json`, `npm run typecheck:e2e`.
+- [ ] `vitest run` en `server/` (schema, POST/PATCH/DELETE de recurrencia, `mealPlan` en el PATCH de
+      preferencias y en `persistWeeklyPlan`) y el puente del frontend (`calendar-recurrence`,
+      `app-meal-hours` con el bloqueo).
+- [ ] `ng build --configuration production` sin errores: es el unico que ve las plantillas.
+- [ ] e2e: crear un evento semanal, ver los cuatro lunes, quitar uno, volver a entrar y que siga sin ese
+      lunes; y bloquear la merienda, generar, y que la merienda no aparezca. Corre en CI (aqui no hay
+      Chromium) y su resultado va en el PR.
+
+### Fuera de aqui, con su motivo
+
+- [ ] `until`/「cada N semanas»/mensual en la recurrencia: hacen falta, pero piden UI de calendario y una
+      decision de que pasa con las ocurrencias pasadas. §13.
+- [ ] El bloqueo en el tour de bienvenida (añadiria una pregunta a las seis prometidas) y un «silenciar este
+      dia» que no sea borrar la ocurrencia. §13.
+
+
+## 12t-R. Como ha quedado la tanda (recurrencia) y el cierre de i18n
+
+Entregado sobre lo pedido en §12t. Lo que sigue es lo que esta en el codigo, con las decisiones que no se
+ven desde la pantalla.
+
+### Recurrencia de eventos (lo pedido: «que se pueda repetir, semanal, diario»)
+
+- [x] Modelo: `HouseholdEvent.recurrence: 'none' | 'daily' | 'weekly'` y `seriesDate` (la fecha de la que
+      arranca la serie). `HOUSEHOLD_RECURRENCES` + `HOUSEHOLD_RECURRENCE_META` (con `labelKey`, regla 15) en
+      el modelo compartido, que es de donde salen a la vez las opciones del selector y el glifo de la pastilla.
+- [x] BD: `recurrence TEXT NOT NULL DEFAULT 'none' CHECK (recurrence IN (...))` y
+      `exceptions TEXT NOT NULL DEFAULT '[]'`, en el `CREATE` y via `addColumnIfMissing` para las bases ya
+      creadas. Las excepciones se guardan como ISOs ordenadas, no como indices: un cambio de cadencia no
+      descoloca las que ya existen.
+- [x] Lectura: el GET pide el rango visible y expande **despues** del `LIMIT` (`expandOccurrences`), con
+      `truncated: true` si se ha cortado. La fila de la serie es UNA fila en la BD: siete burbujas en la
+      rejilla, no siete eventos.
+- [x] Edicion: el modal abierto desde una burbuja muestra la fecha de ESA ocurrencia (`occurrenceDate`) y la
+      de la serie (`seriesDate`); «Quitar solo este dia» llama a
+      `DELETE /api/calendar/events/:id/occurrences/:date` (400 de formato, 404, 403 si no eres quien lo
+      escribio, 400 `EVENTO_SIN_REPETICION`, idempotente). Mover la fecha de una serie quita esa fecha de las
+      excepciones; pasar a `none` las borra todas.
+- [x] El autor no es invitado, y `editable` sigue siendo solo del autor: una serie la cambia quien la apunto,
+      el resto la ve y puede faltar a un dia.
+- [x] e2e en `tests/e2e/calendar.spec.ts` (`Calendario — repeticiones`): serie semanal que aparece en la
+      semana vista habiendola apuntado hace siete dias, serie diaria que llena los siete huecos con un solo
+      evento, «quitar solo este dia» (con la confirmacion de la app, no con `confirm()`), y una suelta normal
+      que no repite ni lleva glifo. Playwright no corre aqui (no hay Chromium); el job corre en CI.
+
+### Cierre del i18n (lo pedido en la ronda 20: «usa siempre el sistema de traducciones»)
+
+- [x] Regla 18 del gate: todo literal con pinta de frase que acabe en un sink (`toast.*`, `*Error.set`,
+      `note`, `title`, ...) tiene que salir de `t()`. Ademas de los setters, cubre `return 'prosa'`, el
+      `cond ? 'prosa' : 'prosa'` dentro de `t()` y las variables `t(clave)` - no el «solo literales» que
+      dejaba fuera los helpers.
+- [x] Locale de formato en un unico sitio: `core/time.ts` guarda `dateLocale()` y el `I18nService` la fija
+      (`en` → `en-GB`, lo demas → `es-ES`) en su `effect` y en `languagechange`. Se acabaron los 15 `'es-ES'`
+      repartidos: fechas, dias de la semana, kcal, «X personas», tamaños de almacen y los memoizadores de
+      `calendar.util` (la clave de cache lleva el idioma dentro, si no, cambiar de idioma no se notaba).
+- [x] Lo que devolvian los helpers puros es clave, no frase: `AvatarIssue {clave, params}` (viaja por los
+      `catch` como un `Error` normal), `pendingLabelKey`, `stepLabel()` → descriptor
+      `{numero, total, tituloKey, skipped}` que la pantalla arma con `onboarding.paso_de` y
+      `onboarding.sin_responder`, `describeLineDiscount(discount, {unidad, unidades})`, `facesOf`/
+      `periodShortLabel`/`sourceLabel` por clave. Un modulo sin inyeccion no puede saber de idioma: ahora
+      tampoco lo finge.
+- [x] Prosa que se quedaba fuera del gate y ya no esta: etiquetas del boton «+ Agregar» de despensa, errores
+      de `formErrors.name/quantity`, los dos estados vacios de las listas de la compra, la nota en vivo del
+      SSE, `linkVariants` («sin tienda»), el mapa de errores de la foto del ticket y los avisos del tour al
+      guardar/saltar. Las claves nuevas mantienen el texto en español identico al anterior: los e2e que
+      asertan texto en suelto siguen valiendo.
+
+### Deuda i18n que se queda, escrita para que la proxima tanda no la re-descubra
+
+- [ ] Catalogos de `features/pantry/pantry.component.ts` (`utensilCategoryOptions` y el de electrodomesticos,
+      ~20 `label:` en castellano dentro de un campo): se arreglan pasando a `labelKey` + un `computed` que
+      mappea con `t()`, igual que `kindOptions` en el calendario. No los ve la regla 18 porque un campo con
+      objetos no es un sink.
+- [ ] `shopping-list-detail.component.ts`: `discountKinds`/`discountScopes` tienen `label:`/`hint:` en prosa
+      y, encima, las etiquetas se guardan como dato en `data.targets`. Cambiar la frase sin migrar los
+      objetivos ya guardados rompería los descuentos existentes: hace falta clave + migracion, no un `t()`.
+- [ ] Catálogos de `shared/models/taste-profile.ts`: son datos persistidos que viajan al prompt del modelo
+      (`preferences.tastes`), no etiquetas de UI. Traducirlos exige migrar el perfil; se deja para su tanda.
+- [ ] `shopping.model.ts` (`hint:` de las promos de ejemplo) y `pantry.model.ts:105` («Utensilios de cocina»):
+      texto de siembra/dato, no de interfaz.
+
+### Gates (como han salido)
+
+- [x] `node scripts/check-ui.mjs`: 177 ficheros, 18 reglas, sin incidencias (tambien con `--sin-deuda`).
+- [x] `tsc -p tsconfig.app.json` y `-p tsconfig.spec.json`, `npm run typecheck:e2e`.
+- [x] `vitest run` en `server/`: 23 ficheros, 590 pruebas (expansion, excepciones, permisos, `mealPlan`,
+      `persistWeeklyPlan`).
+- [x] Puente del frontend (`tmp-frontend.vitest.config.ts`): 16 ficheros, 144 pruebas, con las firmas nuevas
+      de `stepLabel`, `pendingLabelKey` y `AvatarIssue`.
+- [x] `ng build --configuration production` sin errores.
+
 
 ## 13. Coming soon (deliberately not in this program)
 - **Las etiquetas de catálogo sin uso de `shared/models/household.model.ts`.** `*_LABELS` en español que no
