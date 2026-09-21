@@ -6,6 +6,7 @@ import { DecodedAvatar, decodeAvatarFile, renderAvatarDataUrl } from '../../core
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 /**
  * El encuadre de la foto de perfil: la imagen se arrastra con el dedo (o con el raton, o con las
@@ -20,7 +21,9 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 @Component({
   selector: 'app-avatar-editor',
   standalone: true,
-  imports: [CommonModule, IconComponent, ButtonComponent, IconButtonComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, IconComponent, ButtonComponent, IconButtonComponent],
   template: `
     <div class="crop">
       <div
@@ -29,7 +32,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
         [class.crop__stage--dragging]="dragging()"
         tabindex="0"
         role="application"
-        aria-label="Mueve la foto con el dedo o con las flechas para encuadrar; la rueda o el slider la acercan"
+        [attr.aria-label]="'avatar_editor.mueve_la_foto_con' | t"
         data-test="avatar-stage"
         (pointerdown)="onDown($event)"
         (pointermove)="onMove($event)"
@@ -57,13 +60,13 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 
       <p class="crop__hint">
         <app-icon name="drag_indicator" [size]="14" />
-        Arrastra para encuadrar. El circulo es lo que se ver; fuera de el, se recorta.
+        {{ 'avatar_editor.arrastra_para_encuadrar_el' | t }}
       </p>
 
       <div class="crop__controls">
         <app-icon-button
           icon="remove"
-          label="Alejar"
+          [label]="'avatar_editor.alejar' | t"
           size="sm"
           variant="ghost"
           data-test="avatar-zoom-out"
@@ -71,7 +74,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
           (onClick)="bump(-0.25)"
         />
         <label class="crop__zoom">
-          <span class="crop__zoom-label">Zoom</span>
+          <span class="crop__zoom-label">{{ 'avatar_editor.zoom' | t }}</span>
           <input
             type="range"
             min="1"
@@ -85,7 +88,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
         </label>
         <app-icon-button
           icon="add"
-          label="Acercar"
+          [label]="'avatar_editor.acercar' | t"
           size="sm"
           variant="ghost"
           data-test="avatar-zoom-in"
@@ -94,7 +97,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
         />
         <app-icon-button
           icon="refresh"
-          label="Volver al centro"
+          [label]="'avatar_editor.volver_al_centro' | t"
           size="sm"
           variant="ghost"
           data-test="avatar-recenter"
@@ -107,7 +110,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 
     <div class="crop__footer">
       <app-button variant="ghost" size="md" data-test="avatar-editor-cancel" (onClick)="cancelled.emit()">
-        Cancelar
+        {{ 'common.cancel' | t }}
       </app-button>
       <app-button
         variant="primary"
@@ -117,7 +120,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
         data-test="avatar-editor-use"
         (onClick)="use()"
       >
-        Usar imagen
+        {{ 'avatar_editor.usar_imagen' | t }}
       </app-button>
     </div>
   `,

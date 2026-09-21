@@ -6,24 +6,27 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ToastService } from '../../../core/services/toast.service';
 import { ButtonComponent } from '../../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../../shared/components/ui/input/input.component';
+import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-forgot-password',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
   template: `
     <form (ngSubmit)="onSubmit()" class="forgot-form">
-      <h2 class="forgot-form__title">Recuperar Contraseña</h2>
+      <h2 class="forgot-form__title">{{ 'auth.recuperar_contrasena' | t }}</h2>
       <p class="forgot-form__description">
-        Introduce tu email y te enviaremos un enlace para restablecer tu contraseña.
+        {{ 'auth.introduce_tu_email_y' | t }}
       </p>
       
       <app-input
         id="email"
         name="email"
         type="email"
-        label="Email"
-        placeholder="tu@email.com"
+        [label]="'auth.email' | t"
+        [placeholder]="'auth.tu_email_com' | t"
         [(ngModel)]="email"
         [required]="true"
         [error]="emailError()"
@@ -36,12 +39,12 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
         [fullWidth]="true"
         [loading]="isLoading()"
       >
-        Enviar enlace
+        {{ 'auth.enviar_enlace' | t }}
       </app-button>
 
       <div class="forgot-form__footer">
         <a routerLink="/auth/login" class="forgot-form__link">
-          ← Volver al login
+          {{ 'auth.volver_al_login' | t }}
         </a>
       </div>
     </form>

@@ -6,7 +6,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ToastService } from '../../core/services/toast.service';
 import { timeZoneLabel } from '../../core/time';
-import { COOKING_LEVEL_LABELS } from '../../shared/models/home-profile';
+import { COOKING_LEVEL_LABEL_KEYS } from '../../shared/models/home-profile';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
 import { avatarFileError } from '../../core/avatar-image';
 import { AvatarEditorComponent } from './avatar-editor.component';
@@ -17,6 +17,8 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { environment } from '../../../environments/environment';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 /**
  * La cuenta de la persona, en su propia pagina (HOGARIA-SPEC §12l).
@@ -35,18 +37,19 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
 @Component({
   selector: 'app-account',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, AvatarComponent, ButtonComponent, IconComponent, ModalComponent, AvatarEditorComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, FormsModule, RouterLink, AvatarComponent, ButtonComponent, IconComponent, ModalComponent, AvatarEditorComponent],
   template: `
     <div class="account-page">
       <header class="account__head">
         <div>
-          <p class="account__eyebrow">Hogar</p>
-          <h1 class="account__title">Mi cuenta</h1>
+          <p class="account__eyebrow">{{ 'nav.household' | t }}</p>
+          <h1 class="account__title">{{ 'account.mi_cuenta' | t }}</h1>
           <p class="account__subtitle">
-            Tu nombre, tu foto y tu acceso. Lo de comer —alergias, gustos y objetivo— se edita en
-            <a routerLink="/preferences" class="account__inline-link">Preferencias</a>, y lo de la
-            casa (las personas y lo que ve cada una) en
-            <a routerLink="/household" class="account__inline-link">Hogar</a>.
+            {{ 'account.tu_nombre_tu_foto' | t }}
+            <a routerLink="/preferences" class="account__inline-link">{{ 'nav.preferences' | t }}</a>{{ 'account.y_lo_de_la' | t }}
+            <a routerLink="/household" class="account__inline-link">{{ 'nav.household' | t }}</a>.
           </p>
         </div>
       </header>
@@ -75,7 +78,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               type="button"
               class="account__face"
               data-test="account-avatar-button"
-              [attr.aria-label]="(avatarUrl() ? 'Cambiar la foto de ' : 'Subir una foto para ') + (auth.userName() || 'tu cuenta')"
+              [attr.aria-label]="avatarUrl() ? ('account.cambiar_la_foto_de' | t:{name: displayName()}) : ('account.subir_una_foto_para' | t:{name: displayName()})"
               (click)="openAvatarModal()"
             >
               <app-avatar
@@ -92,28 +95,26 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
             <div class="account__identity-text">
               <p class="account__identity-name">{{ auth.userName() }}</p>
               <p class="account__identity-hint">
-                Pulsa tu cara para cambiar la foto: se puede encuadrar y acercar antes de subirla.
-                Sin foto se ve tu inicial sobre un color, y con foto un anillo alrededor.
+                {{ 'account.pulsa_tu_cara_para' | t }}
               </p>
             </div>
           </div>
 
           <div class="account__field">
-            <label class="account__label" for="account-name">Nombre</label>
+            <label class="account__label" for="account-name">{{ 'auth.name' | t }}</label>
             <input
               id="account-name"
               class="account__input"
               type="text"
               maxlength="100"
               autocomplete="name"
-              placeholder="Como te llamas en casa"
+              [placeholder]="'account.como_te_llamas_en' | t"
               data-test="account-name"
               [(ngModel)]="nameDraft"
               (ngModelChange)="onNameInput()"
             />
             <p class="account__hint">
-              Aparece en el historial de cada lista y en los apuntes de la agenda. Cambiarlo no toca
-              lo que ya paso: se veran tus lineas antiguas con tu nombre de hoy.
+              {{ 'account.aparece_en_el_historial' | t }}
             </p>
             <p class="account__error" *ngIf="nameError()" data-test="account-name-error">{{ nameError() }}</p>
             <div class="account__field-actions">
@@ -125,7 +126,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
                 data-test="account-name-save"
                 (onClick)="saveName()"
               >
-                Guardar el nombre
+                {{ 'account.guardar_el_nombre' | t }}
               </app-button>
               <app-button
                 *ngIf="nameDirty()"
@@ -134,7 +135,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
                 data-test="account-name-cancel"
                 (onClick)="cancelName()"
               >
-                Cancelar
+                {{ 'common.cancel' | t }}
               </app-button>
             </div>
           </div>
@@ -143,13 +144,13 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
         <!-- ── La contrasena y la sesion ── -->
         <ng-container *ngSwitchCase="'security'">
           <div class="account__field">
-            <span class="account__label">Contrasena</span>
-            <p class="account__hint">Seis caracteres como minimo, con una mayuscula y un numero.</p>
+            <span class="account__label">{{ 'account.contrasena' | t }}</span>
+            <p class="account__hint">{{ 'account.seis_caracteres_como_minimo' | t }}</p>
             <input
               class="account__input"
               type="password"
               autocomplete="current-password"
-              placeholder="Contrasena actual"
+              [placeholder]="'account.contrasena_actual' | t"
               data-test="account-password-current"
               [(ngModel)]="passwordDraft.current"
             />
@@ -157,7 +158,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               class="account__input"
               type="password"
               autocomplete="new-password"
-              placeholder="Nueva contrasena"
+              [placeholder]="'account.nueva_contrasena' | t"
               data-test="account-password-new"
               [(ngModel)]="passwordDraft.fresh"
             />
@@ -165,7 +166,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               class="account__input"
               type="password"
               autocomplete="new-password"
-              placeholder="Repite la nueva contrasena"
+              [placeholder]="'account.repite_la_nueva_contrasena' | t"
               data-test="account-password-repeat"
               [(ngModel)]="passwordDraft.repeat"
             />
@@ -187,7 +188,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
                 data-test="account-password-save"
                 (onClick)="savePassword()"
               >
-                Cambiar la contrasena
+                {{ 'account.cambiar_la_contrasena' | t }}
               </app-button>
               <app-button
                 *ngIf="passwordDirty()"
@@ -196,21 +197,20 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
                 data-test="account-password-cancel"
                 (onClick)="cancelPassword()"
               >
-                Cancelar
+                {{ 'common.cancel' | t }}
               </app-button>
             </div>
           </div>
 
           <div class="account__field">
-            <span class="account__label">Esta sesion</span>
+            <span class="account__label">{{ 'account.esta_sesion' | t }}</span>
             <p class="account__hint">
-              La contrasena se guarda con hash: nadie puede leerla, ni esta app. El acceso vive en
-              este navegador, y cerrar aqui no borra nada de la casa.
+              {{ 'account.la_contrasena_se_guarda' | t }}
             </p>
             <div class="account__field-actions">
               <app-button variant="ghost" size="sm" data-test="account-logout" (onClick)="endSession()">
                 <app-icon name="logout" [size]="16" />
-                Cerrar sesion en este dispositivo
+                {{ 'account.cerrar_sesion_en_este' | t }}
               </app-button>
             </div>
           </div>
@@ -220,49 +220,45 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
         <ng-container *ngSwitchCase="'info'">
           <dl class="account__facts">
             <div class="account__fact">
-              <dt>Correo</dt>
+              <dt>{{ 'account.correo' | t }}</dt>
               <dd data-test="account-email">{{ email() }}</dd>
               <p class="account__fact-note">
-                Con el que entras. No se cambia desde aqui: si se te va, se crea la cuenta con el
-                correo nuevo y se vuelve a invitar a la casa.
+                {{ 'account.con_el_que_entras' | t }}
               </p>
             </div>
             <div class="account__fact">
-              <dt>Nivel de cocina</dt>
+              <dt>{{ 'auth.cookingLevel' | t }}</dt>
               <dd>
                 <a routerLink="/preferences?tab=profile" class="account__inline-link" data-test="account-level-link">
                   {{ cookingLevel() }}
                 </a>
               </dd>
-              <p class="account__fact-note">Cuan larga o cuan al grano escribe la IA.</p>
+              <p class="account__fact-note">{{ 'account.cuan_larga_o_cuan' | t }}</p>
             </div>
             <div class="account__fact">
-              <dt>Casa</dt>
+              <dt>{{ 'household_event.home' | t }}</dt>
               <dd>
                 <a *ngIf="householdId(); else noHousehold" routerLink="/household" class="account__inline-link"
-                  >Personas de la casa</a
+                  >{{ 'account.personas_de_la_casa' | t }}</a
                 >
-                <ng-template #noHousehold>Sin casa, solo lo tuyo</ng-template>
+                <ng-template #noHousehold>{{ 'account.sin_casa_solo_lo' | t }}</ng-template>
               </dd>
-              <p class="account__fact-note">Las listas y la agenda compartidas viven ahi.</p>
+              <p class="account__fact-note">{{ 'account.las_listas_y_la' | t }}</p>
             </div>
             <div class="account__fact">
-              <dt>En este navegador</dt>
+              <dt>{{ 'account.en_este_navegador' | t }}</dt>
               <dd data-test="account-storage">{{ storageText() }}</dd>
               <p class="account__fact-note" data-test="account-pending">{{ pendingText() }}</p>
             </div>
             <div class="account__fact">
-              <dt>Version</dt>
+              <dt>{{ 'account.version' | t }}</dt>
               <dd data-test="account-version">{{ version() }}</dd>
-              <p class="account__fact-note">
-                La hora se muestra en {{ timezone() }}; es la del dispositivo, no hay que
-                configurarla.
-              </p>
+              <p class="account__fact-note">{{ 'account.la_hora_se_muestra_en' | t:{tz: timezone()} }}</p>
             </div>
             <div class="account__fact">
-              <dt>Identificador</dt>
+              <dt>{{ 'account.identificador' | t }}</dt>
               <dd class="account__mono" [title]="accountId()">{{ shortAccountId() }}</dd>
-              <p class="account__fact-note">Para nombrar un problema en el registro de la app.</p>
+              <p class="account__fact-note">{{ 'account.para_nombrar_un_problema' | t }}</p>
             </div>
           </dl>
         </ng-container>
@@ -273,7 +269,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
       <app-modal
         [isOpen]="avatarModalOpen()"
         (isOpenChange)="onAvatarModalOpenChange($event)"
-        [title]="avatarStep() === 'crop' ? 'Encuadrar la foto' : 'Tu foto'"
+        [title]="avatarStep() === 'crop' ? ('account.encuadrar_la_foto' | t) : ('account.tu_foto' | t)"
         size="sm"
       >
         @if (avatarStep() === 'crop') {
@@ -289,17 +285,15 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               />
             </div>
             <p class="avatar-choose__hint" *ngIf="!avatarUrl()">
-              Todavia no tienes foto. Sube una y recortala donde quieras: se guarda un cuadrado
-              pequeno, no la foto entera del movil.
+              {{ 'account.todavia_no_tienes_foto' | t }}
             </p>
             <p class="avatar-choose__broken" *ngIf="photoBroken()" data-test="avatar-broken">
-              La foto guardada ya no esta en el servidor, y por eso se ve tu inicial en su lugar.
-              Sube otra o quitala.
+              {{ 'account.la_foto_guardada_ya' | t }}
             </p>
             <div class="avatar-choose__actions">
               <label class="account__file" for="account-photo" data-test="account-photo-label">
                 <app-icon name="add_a_photo" [size]="16" />
-                {{ avatarUrl() ? 'Sustituir la foto' : 'Subir una foto' }}
+                {{ avatarUrl() ? ('account.sustituir_la_foto' | t) : ('account.subir_una_foto' | t) }}
                 <input
                   id="account-photo"
                   type="file"
@@ -317,11 +311,11 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
                 data-test="account-photo-remove"
                 (onClick)="removePhoto()"
               >
-                Quitar la foto
+                {{ 'account.quitar_la_foto' | t }}
               </app-button>
             </div>
             <p class="account__error" *ngIf="photoError()" data-test="account-photo-error">{{ photoError() }}</p>
-            <p class="avatar-choose__busy" *ngIf="uploading()">Subiendo la foto...</p>
+            <p class="avatar-choose__busy" *ngIf="uploading()">{{ 'account.subiendo_la_foto' | t }}</p>
           </div>
         }
       </app-modal>
@@ -650,6 +644,17 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
   ]
 })
 export class AccountComponent {
+
+  /**
+   * Como se llama aqui dentro, con el «tu cuenta» de relleno ya traducido: en la plantilla no se puede
+   * encadenar una pipe dentro del argumento de otra pipe, y ese limite es lo que empuja este metodo a
+   * existir (y lo que hace que el texto se re-traduce solo, porque `t()` lee la senal de idioma).
+   */
+  displayName(): string {
+    return this.auth.userName() || this.i18n.t('account.tu_cuenta');
+  }
+  private readonly i18n = inject(I18nService);
+
   /** Publico: la plantilla lee el usuario de la misma senal que el menu, no una copia. */
   readonly auth = inject(AuthService);
   private readonly shopping = inject(ShoppingService);
@@ -912,7 +917,7 @@ export class AccountComponent {
   /** El nivel, con su nombre: la pantalla no imprime valores internos. */
   readonly cookingLevel = computed(() => {
     const level = this.auth.currentUser()?.cookingLevel;
-    return (level && COOKING_LEVEL_LABELS[level]) || 'Sin marcar';
+    return (level && COOKING_LEVEL_LABEL_KEYS[level]) || 'Sin marcar';
   });
   readonly version = computed(() => `${environment.appName} ${environment.version}`);
   readonly timezone = computed(() => timeZoneLabel());

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Observable } from 'rxjs';
 import { DEFAULT_HOME_PROFILE, HOME_MODULE_OPTIONS, HomeModule, HomeProfile } from '../../shared/models/home-profile';
 import { TasteProfileService } from './taste-profile.service';
+import { DICTS } from '../i18n';
 import { MODULE_REGISTRY, ModulesService, moduleOwningPath } from './modules.service';
 
 /**
@@ -230,7 +231,14 @@ describe('ModulesService', () => {
     expect(MODULE_REGISTRY.length).toBe(HOME_MODULE_OPTIONS.length);
     expect(ids.sort()).toEqual(HOME_MODULE_OPTIONS.map((option) => option.value).sort());
     expect(new Set(paths).size).toBe(paths.length);
-    expect(MODULE_REGISTRY.every((definition) => definition.hint.length > 0)).toBeTrue();
+    expect(MODULE_REGISTRY.every((definition) => definition.hintKey.length > 0)).toBeTrue();
+    // Y la clave no puede estar de adorno: si no resuelve en los dos idiomas, la pantalla sale a medias.
+    for (const definition of MODULE_REGISTRY) {
+      for (const idioma of ['es', 'en'] as const) {
+        expect(DICTS[idioma][definition.labelKey]).withContext(`${definition.id} en ${idioma}`).toBeTruthy();
+        expect(DICTS[idioma][definition.hintKey]).withContext(`${definition.id} (pista) en ${idioma}`).toBeTruthy();
+      }
+    }
     expect(MODULE_REGISTRY.filter((definition) => definition.available).length).toBe(3);
     // El registro de rutas y las opciones del perfil tienen que decir lo mismo de
     // cada modulo: el picker usa las segundas y la navegacion el primero. Cuando

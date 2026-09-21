@@ -5,11 +5,13 @@
  * con un test —«quitar la cocina no borra la agenda de la casa» es una linea, no una opinion—.
  */
 import type { HomeModule } from '../shared/models/home-profile';
+import type { TranslationKey } from './i18n';
 
 export interface ModuleDefinition {
   id: HomeModule;
-  label: string;
-  hint: string;
+  /** Clave del diccionario: lo que se ensena. El identificador (`id`) es lo que se guarda. */
+  labelKey: TranslationKey;
+  hintKey: TranslationKey;
   /** Si este build trae ya la sección. */
   available: boolean;
   /** Rutas de primer nivel que gobierna este módulo. */
@@ -31,36 +33,36 @@ export interface ModuleDefinition {
 export const MODULE_REGISTRY: readonly ModuleDefinition[] = [
   {
     id: 'meals',
-    label: 'Comidas y recetas',
-    hint: 'Recetas, planificador de comidas y generador con IA. La agenda de la casa sigue visible',
+    labelKey: 'profile.module.meals',
+    hintKey: 'profile.registryHint.meals',
     available: true,
     paths: ['/recipes']
   },
   {
     id: 'pantry',
-    label: 'Despensa y caducidades',
-    hint: 'Qué queda, qué caduca y el catálogo de utensilios',
+    labelKey: 'profile.module.pantry',
+    hintKey: 'profile.registryHint.pantry',
     available: true,
     paths: ['/pantry']
   },
   {
     id: 'shopping',
-    label: 'Lista de la compra y precios',
-    hint: 'Cesta por tienda, histórico de precios y coste estimado',
+    labelKey: 'profile.module.shopping',
+    hintKey: 'profile.registryHint.shopping',
     available: true,
     paths: ['/shopping']
   },
   {
     id: 'receipts',
-    label: 'Tickets con OCR',
-    hint: 'Foto al ticket: líneas, precios y caducidades a la despensa',
+    labelKey: 'profile.module.receipts',
+    hintKey: 'profile.registryHint.receipts',
     available: false,
     paths: ['/receipts']
   },
   {
     id: 'home',
-    label: 'Tareas del hogar',
-    hint: 'Reparto de tareas y calendario conjunto',
+    labelKey: 'profile.module.tasks',
+    hintKey: 'profile.moduleHint.tasks',
     available: false,
     paths: ['/tasks']
   }

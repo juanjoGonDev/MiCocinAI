@@ -79,7 +79,7 @@ export const MEMBER_ROLE_LABELS: Record<MemberRole, string> = {
   child: 'Niño'
 };
 
-export { COOKING_LEVEL_LABELS } from './home-profile';
+export { COOKING_LEVEL_LABEL_KEYS } from './home-profile';
 
 export const DIET_TYPE_LABELS: Record<DietType, string> = {
   omnivore: 'Omnívoro',

@@ -11,6 +11,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 type StatusFilter = 'active' | 'done' | 'all';
 
@@ -50,19 +51,21 @@ const PAGE_SIZES: PickerOption[] = [
 @Component({
   selector: 'app-shopping-lists',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, IconButtonComponent, PickerComponent, AvatarComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, FormsModule, IconComponent, IconButtonComponent, PickerComponent, AvatarComponent],
   template: `
     <div class="tray">
       <header class="tray__head">
         <div>
-          <h1 class="tray__title">Lista de la compra</h1>
-          <p class="tray__subtitle">Cesta por tienda, precio por linea y coste estimado. Se guarda sola.</p>
+          <h1 class="tray__title">{{ 'shopping_lists.lista_de_la_compra' | t }}</h1>
+          <p class="tray__subtitle">{{ 'shopping_lists.cesta_por_tienda_precio' | t }}</p>
         </div>
         <div class="tray__head-actions">
-          <app-icon-button icon="refresh" label="Actualizar" size="sm" variant="ghost" [spin]="refreshing()" (onClick)="refresh()" />
+          <app-icon-button icon="refresh" [label]="'shopping_lists.actualizar' | t" size="sm" variant="ghost" [spin]="refreshing()" (onClick)="refresh()" />
           <app-icon-button
             [icon]="creating() ? 'close' : 'add'"
-            [label]="creating() ? 'Cancelar' : 'Nueva lista'"
+            [label]="creating() ? ('common.cancel' | t) : ('shopping_lists.nueva_lista' | t)"
             size="sm"
             variant="soft"
             (onClick)="creating.set(!creating())"
@@ -70,7 +73,7 @@ const PAGE_SIZES: PickerOption[] = [
           />
           <button type="button" class="tray__new" (click)="creating.set(!creating())" data-test="new-list-text">
             <app-icon [name]="creating() ? 'close' : 'add'" [size]="18" [label]="null" />
-            <span>{{ creating() ? 'Cancelar' : 'Nueva lista' }}</span>
+            <span>{{ creating() ? ('common.cancel' | t) : ('shopping_lists.nueva_lista' | t) }}</span>
           </button>
         </div>
       </header>
@@ -78,24 +81,24 @@ const PAGE_SIZES: PickerOption[] = [
       @if (creating()) {
         <form class="tray__create" (ngSubmit)="create()">
           <label class="tray__field">
-            <span>Nombre</span>
+            <span>{{ 'auth.name' | t }}</span>
             <input
               data-test="list-name"
               name="listName"
               [(ngModel)]="draftName"
-              placeholder="Compra semana 38"
+              [placeholder]="'shopping_lists.compra_semana_38' | t"
               autocomplete="off"
               maxlength="80"
               (keydown.escape)="cancelCreate()"
             />
           </label>
           <label class="tray__field">
-            <span>Tienda (opcional)</span>
+            <span>{{ 'shopping_lists.tienda_opcional' | t }}</span>
             <input
               name="listStore"
               data-test="list-store"
               [(ngModel)]="draftStore"
-              placeholder="Mercadona"
+              [placeholder]="'shopping_list_detail.mercadona' | t"
               autocomplete="off"
               maxlength="60"
               list="tray-known-stores"
@@ -108,15 +111,15 @@ const PAGE_SIZES: PickerOption[] = [
             }
           </datalist>
           <div class="tray__create-actions">
-            <button type="button" class="tray__ghost" (click)="cancelCreate()">Cancelar</button>
+            <button type="button" class="tray__ghost" (click)="cancelCreate()">{{ 'common.cancel' | t }}</button>
             <button type="submit" class="tray__primary" data-test="create-submit" [disabled]="!draftName.trim() || busy()">
-              {{ busy() ? 'Creando…' : 'Crear y abrir' }}
+              {{ busy() ? ('shopping_lists.creando' | t) : ('shopping_lists.crear_y_abrir' | t) }}
             </button>
           </div>
         </form>
       }
 
-      <nav class="tray__tabs" aria-label="Estado de las listas">
+      <nav class="tray__tabs" [attr.aria-label]="'shopping_lists.estado_de_las_listas' | t">
         @for (option of statusOptions; track option.value) {
           <button
             type="button"
@@ -132,7 +135,7 @@ const PAGE_SIZES: PickerOption[] = [
         <span class="tray__tabs-spacer"></span>
         <button type="button" class="tray__filter-toggle" [class.tray__filter-toggle--on]="filtersOpen() || activeFilters() > 0" (click)="filtersOpen.set(!filtersOpen())" aria-controls="tray-filters">
           <app-icon name="filter_list" [size]="18" [label]="null" />
-          <span>Filtros</span>
+          <span>{{ 'shopping_lists.filtros' | t }}</span>
           @if (activeFilters() > 0) {
             <span class="tray__filter-count">{{ activeFilters() }}</span>
           }
@@ -147,52 +150,52 @@ const PAGE_SIZES: PickerOption[] = [
               name="trayQuery"
               [(ngModel)]="queryDraft"
               (ngModelChange)="applySearch()"
-              placeholder="Buscar en listas y productos"
+              [placeholder]="'shopping_lists.buscar_en_listas_y' | t"
               autocomplete="off"
               data-test="tray-search"
             />
             @if (queryDraft) {
-              <button type="button" class="tray__clear" (click)="clearSearch()" aria-label="Quitar la busqueda">
+              <button type="button" class="tray__clear" (click)="clearSearch()" [attr.aria-label]="'shopping_lists.quitar_la_busqueda' | t">
                 <app-icon name="close" [size]="16" [label]="null" />
               </button>
             }
           </label>
           <div class="tray__filters-grid">
             <app-picker
-              label="Tienda"
+              [label]="'shopping_lists.tienda' | t"
               [options]="storeOptions()"
               [value]="store()"
-              placeholder="Todas las tiendas"
+              [placeholder]="'shopping_lists.todas_las_tiendas' | t"
               [filterFrom]="5"
               (valueChange)="setStore($event)"
             />
             <app-picker
-              label="Total minimo"
+              [label]="'shopping_lists.total_minimo' | t"
               [options]="minTotalOptions"
               [value]="minTotal()"
-              placeholder="Cualquier total"
+              [placeholder]="'shopping_lists.cualquier_total' | t"
               (valueChange)="setMinTotal($event)"
             />
             <label class="tray__field">
-              <span>Desde</span>
+              <span>{{ 'calendar.desde' | t }}</span>
               <input type="date" name="trayFrom" [ngModel]="from()" (ngModelChange)="setFrom($event)" max="{{ to() || '' }}" />
             </label>
             <label class="tray__field">
-              <span>Hasta</span>
+              <span>{{ 'calendar.hasta' | t }}</span>
               <input type="date" name="trayTo" [ngModel]="to()" (ngModelChange)="setTo($event)" min="{{ from() || '' }}" />
             </label>
           </div>
           @if (activeFilters() > 0) {
             <button type="button" class="tray__ghost" (click)="clearFilters()">
               <app-icon name="delete_sweep" [size]="16" [label]="null" />
-              Quitar los {{ activeFilters() }} filtros
+              {{ 'shopping_lists.quitar_los_filtros' | t:{n: activeFilters()} }}
             </button>
           }
         </section>
       }
 
       @if (saving()) {
-        <p class="tray__saving" role="status">Guardando…</p>
+        <p class="tray__saving" role="status">{{ 'shopping_lists.guardando' | t }}</p>
       }
       @if (liveNote()) {
         <p class="tray__live" role="status" data-test="tray-live">
@@ -202,20 +205,20 @@ const PAGE_SIZES: PickerOption[] = [
       }
 
       @if (loading()) {
-        <p class="tray__empty">Cargando listas…</p>
+        <p class="tray__empty">{{ 'shopping_lists.cargando_listas' | t }}</p>
       } @else if (lists().length === 0) {
         <section class="tray__empty-card">
           <app-icon name="shopping_basket" [size]="36" [label]="null" />
           <h2 class="tray__empty-title">{{ emptyTitle() }}</h2>
           <p class="tray__empty-text">{{ emptyText() }}</p>
           @if (activeFilters() > 0) {
-            <button type="button" class="tray__ghost" (click)="clearFilters()">Quitar los filtros</button>
+            <button type="button" class="tray__ghost" (click)="clearFilters()">{{ 'shopping_lists.quitar_los_filtros_2' | t }}</button>
           } @else if (status() === 'active') {
-            <button type="button" class="tray__primary" (click)="creating.set(true)">Empezar una lista</button>
+            <button type="button" class="tray__primary" (click)="creating.set(true)">{{ 'shopping_lists.empezar_una_lista' | t }}</button>
           }
         </section>
       } @else {
-        <div class="tray__table" role="table" [attr.aria-label]="'Listas ' + statusLabel()">
+        <div class="tray__table" role="table" [attr.aria-label]="'shopping_lists.listas_de_estado' | t:{label: statusLabel()}">
           <div class="tray__row tray__row--head" role="row">
             @for (column of columns; track $index) {
               <button
@@ -256,11 +259,11 @@ const PAGE_SIZES: PickerOption[] = [
                       (blur)="onRenameBlur(list)"
                       data-test="rename-input"
                     />
-                    <app-icon-button icon="check" label="Guardar el nombre" size="sm" variant="primary" (onClick)="commitRename(list)" />
-                    <app-icon-button icon="close" label="Cancelar" size="sm" variant="ghost" (onClick)="cancelRename()" />
+                    <app-icon-button icon="check" [label]="'account.guardar_el_nombre' | t" size="sm" variant="primary" (onClick)="commitRename(list)" />
+                    <app-icon-button icon="close" [label]="'common.cancel' | t" size="sm" variant="ghost" (onClick)="cancelRename()" />
                   </div>
                 } @else {
-                  <a class="tray__name" [href]="hrefOf(list)" (click)="open(list, $event)" [attr.aria-label]="'Abrir ' + list.name">
+                  <a class="tray__name" [href]="hrefOf(list)" (click)="open(list, $event)" [attr.aria-label]="'shopping_lists.abrir_lista' | t:{name: list.name}">
                     <span>{{ list.name }}</span>
                     @if (list.ownerName) {
                       <app-avatar
@@ -268,14 +271,14 @@ const PAGE_SIZES: PickerOption[] = [
                         [name]="list.ownerName"
                         [src]="list.ownerAvatar ?? undefined"
                         size="xs"
-                        [attr.title]="'Lista de ' + list.ownerName"
+                        [attr.title]="'shopping_lists.lista_de' | t:{name: list.ownerName}"
                         data-test="row-owner"
                       />
                     }
                   </a>
                   <div class="tray__name-tools">
-                    <app-icon-button icon="edit" label="Renombrar" size="sm" (onClick)="startRename(list)" />
-                    <app-icon-button icon="chevron_right" label="Abrir" size="sm" (onClick)="open(list, $event)" />
+                    <app-icon-button icon="edit" [label]="'shopping_lists.renombrar' | t" size="sm" (onClick)="startRename(list)" />
+                    <app-icon-button icon="chevron_right" [label]="'shopping_lists.abrir' | t" size="sm" (onClick)="open(list, $event)" />
                   </div>
                 }
               </div>
@@ -306,23 +309,23 @@ const PAGE_SIZES: PickerOption[] = [
               <div class="tray__cell tray__cell--actions" role="cell" data-label="Acciones">
                 <app-icon-button
                   [icon]="list.status === 'done' ? 'undo' : 'check_circle'"
-                  [label]="list.status === 'done' ? 'Reabrir' : 'Terminar lista'"
+                  [label]="list.status === 'done' ? ('shopping_lists.reabrir' | t) : ('shopping_lists.terminar_lista' | t)"
                   size="sm"
                   [attr.data-test]="'row-done-' + list.id"
                   (onClick)="archive(list)"
                 />
-                <app-icon-button icon="delete" label="Borrar lista" size="sm" variant="danger" (onClick)="remove(list)" />
+                <app-icon-button icon="delete" [label]="'shopping_lists.borrar_lista' | t" size="sm" variant="danger" (onClick)="remove(list)" />
               </div>
             </div>
           }
         </div>
 
-        <nav class="tray__pager" aria-label="Paginas de listas">
-          <app-icon-button icon="chevron_left" label="Pagina anterior" size="md" variant="soft" [disabled]="!canGoPrev()" (onClick)="go(-1)" />
+        <nav class="tray__pager" [attr.aria-label]="'shopping_lists.paginas_de_listas' | t">
+          <app-icon-button icon="chevron_left" [label]="'shopping_lists.pagina_anterior' | t" size="md" variant="soft" [disabled]="!canGoPrev()" (onClick)="go(-1)" />
           <span class="tray__pager-text">{{ rangeLabel() }} de {{ total() }}</span>
-          <app-icon-button icon="chevron_right" label="Pagina siguiente" size="md" variant="soft" [disabled]="!canGoNext()" (onClick)="go(1)" />
+          <app-icon-button icon="chevron_right" [label]="'shopping_lists.pagina_siguiente' | t" size="md" variant="soft" [disabled]="!canGoNext()" (onClick)="go(1)" />
           <span class="tray__pager-spacer"></span>
-          <app-picker label="Tamano de pagina" [options]="pageSizes" [value]="pageSizeValue()" [filterFrom]="99" (valueChange)="setSize($event)" />
+          <app-picker [label]="'shopping_lists.tamano_de_pagina' | t" [options]="pageSizes" [value]="pageSizeValue()" [filterFrom]="99" (valueChange)="setSize($event)" />
         </nav>
       }
     </div>

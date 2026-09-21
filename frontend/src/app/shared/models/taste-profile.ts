@@ -1,3 +1,5 @@
+import type { TranslationKey } from '../../core/i18n';
+
 /**
  * Perfil de gustos, alergias y objetivo del comensal.
  *
@@ -70,23 +72,22 @@ export function hasTasteProfile(taste: TasteProfile | null): boolean {
   );
 }
 
-export const GOAL_OPTIONS: { value: TasteGoal; label: string; icon: string; hint: string }[] = [
-  { value: 'balanced', label: 'Equilibrada', icon: '⚖️', hint: 'De todo, sin obsesionarse' },
-  {
-    value: 'weight-loss',
-    label: 'Perder peso',
-    icon: '📉',
-    hint: 'Raciones contenidas, poco frito'
-  },
-  { value: 'weight-gain', label: 'Ganar peso', icon: '📈', hint: 'Más calorías, platos densos' },
-  { value: 'muscle-gain', label: 'Ganar músculo', icon: '💪', hint: 'Proteína en cada comida' },
-  { value: 'variety', label: 'Variada', icon: '🌈', hint: 'Que no se repita la carta' },
-  { value: 'custom', label: 'Personalizada', icon: '✏️', hint: 'Te leemos el texto libre' }
+/**
+ * Las opciones del objetivo. `value` es lo que se guarda; `labelKey`/`hintKey` son claves del
+ * diccionario, porque lo que se ensena tiene que cambiar de idioma y lo que se guarda, no.
+ */
+export const GOAL_OPTIONS: { value: TasteGoal; labelKey: TranslationKey; icon: string; hintKey: TranslationKey }[] = [
+  { value: 'balanced', labelKey: 'taste.goal.balanced', icon: '⚖️', hintKey: 'taste.goalHint.balanced' },
+  { value: 'weight-loss', labelKey: 'taste.goal.weight-loss', icon: '📉', hintKey: 'taste.goalHint.weight-loss' },
+  { value: 'weight-gain', labelKey: 'taste.goal.weight-gain', icon: '📈', hintKey: 'taste.goalHint.weight-gain' },
+  { value: 'muscle-gain', labelKey: 'taste.goal.muscle-gain', icon: '💪', hintKey: 'taste.goalHint.muscle-gain' },
+  { value: 'variety', labelKey: 'taste.goal.variety', icon: '🌈', hintKey: 'taste.goalHint.variety' },
+  { value: 'custom', labelKey: 'taste.goal.custom', icon: '✏️', hintKey: 'taste.goalHint.custom' }
 ];
 
-export const GOAL_LABELS: Record<TasteGoal, string> = GOAL_OPTIONS.reduce(
-  (acc, option) => ({ ...acc, [option.value]: option.label }),
-  {} as Record<TasteGoal, string>
+export const GOAL_LABEL_KEYS: Record<TasteGoal, TranslationKey> = GOAL_OPTIONS.reduce(
+  (acc, option) => ({ ...acc, [option.value]: option.labelKey }),
+  {} as Record<TasteGoal, TranslationKey>
 );
 
 /** Los 14 alérgenos de la UE, que es lo que viene en las etiquetas. */

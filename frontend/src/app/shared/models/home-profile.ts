@@ -8,41 +8,31 @@
  * `users.preferences.profile.modules`), no en el hogar: cada comensal tiene el suyo.
  */
 
+import type { TranslationKey } from '../../core/i18n';
+
 export type CookingLevel = 'none' | 'beginner' | 'intermediate' | 'expert';
 
-/** Lo que muestra la UI en casa del miembro, también en el listado del hogar. */
-export const COOKING_LEVEL_LABELS: Record<CookingLevel, string> = {
-  none: 'Apenas cocino',
-  beginner: 'Principiante',
-  intermediate: 'Intermedio',
-  expert: 'Experto'
+/**
+ * Como se ensena cada nivel en la interfaz. Son claves del diccionario, no texto: lo que se guarda y se
+ * envia es `CookingLevel` (`'beginner'`), y el texto depende del idioma de quien mira la pantalla.
+ * El tipo `TranslationKey` es el que impide escribir una clave que no exista.
+ */
+export const COOKING_LEVEL_LABEL_KEYS: Record<CookingLevel, TranslationKey> = {
+  none: 'profile.cooking.none',
+  beginner: 'auth.beginner',
+  intermediate: 'auth.intermediate',
+  expert: 'auth.expert'
 };
 
 export const COOKING_LEVEL_OPTIONS: {
   value: CookingLevel;
-  label: string;
-  hint: string;
+  labelKey: TranslationKey;
+  hintKey: TranslationKey;
 }[] = [
-  {
-    value: 'none',
-    label: COOKING_LEVEL_LABELS.none,
-    hint: 'Platos de cuatro pasos o menos, sin tecnicismos'
-  },
-  {
-    value: 'beginner',
-    label: COOKING_LEVEL_LABELS.beginner,
-    hint: 'Explica el cómo, no solo el qué'
-  },
-  {
-    value: 'intermediate',
-    label: COOKING_LEVEL_LABELS.intermediate,
-    hint: 'Lo normal, con algún consejo suelto'
-  },
-  {
-    value: 'expert',
-    label: COOKING_LEVEL_LABELS.expert,
-    hint: 'Al grano: técnica, tiempos y temperaturas'
-  }
+  { value: 'none', labelKey: COOKING_LEVEL_LABEL_KEYS.none, hintKey: 'profile.cookingHint.none' },
+  { value: 'beginner', labelKey: COOKING_LEVEL_LABEL_KEYS.beginner, hintKey: 'profile.cookingHint.beginner' },
+  { value: 'intermediate', labelKey: COOKING_LEVEL_LABEL_KEYS.intermediate, hintKey: 'profile.cookingHint.intermediate' },
+  { value: 'expert', labelKey: COOKING_LEVEL_LABEL_KEYS.expert, hintKey: 'profile.cookingHint.expert' }
 ];
 
 /** Secciones de HogarIA. `available: false` es lo que aún está por construir. */
@@ -50,42 +40,17 @@ export type HomeModule = 'meals' | 'pantry' | 'shopping' | 'receipts' | 'home';
 
 export interface HomeModuleOption {
   value: HomeModule;
-  label: string;
-  hint: string;
+  labelKey: TranslationKey;
+  hintKey: TranslationKey;
   available: boolean;
 }
 
 export const HOME_MODULE_OPTIONS: HomeModuleOption[] = [
-  {
-    value: 'meals',
-    label: 'Comidas y recetas',
-    hint: 'Planificador semanal y recetas con IA',
-    available: true
-  },
-  {
-    value: 'pantry',
-    label: 'Despensa y caducidades',
-    hint: 'Qué queda, qué caduca, qué aprovechar',
-    available: true
-  },
-  {
-    value: 'shopping',
-    label: 'Lista de la compra y precios',
-    hint: 'Cesta por tienda y cuánto costará',
-    available: true
-  },
-  {
-    value: 'receipts',
-    label: 'Tickets con OCR',
-    hint: 'Foto al ticket → despensa con caducidad y precios',
-    available: false
-  },
-  {
-    value: 'home',
-    label: 'Tareas del hogar',
-    hint: 'Reparto de tareas y calendario conjunto',
-    available: false
-  }
+  { value: 'meals', labelKey: 'profile.module.meals', hintKey: 'profile.moduleHint.meals', available: true },
+  { value: 'pantry', labelKey: 'profile.module.pantry', hintKey: 'profile.moduleHint.pantry', available: true },
+  { value: 'shopping', labelKey: 'profile.module.shopping', hintKey: 'profile.moduleHint.shopping', available: true },
+  { value: 'receipts', labelKey: 'profile.module.receipts', hintKey: 'profile.moduleHint.receipts', available: false },
+  { value: 'home', labelKey: 'profile.module.tasks', hintKey: 'profile.moduleHint.tasks', available: false }
 ];
 
 export const HOME_MODULES = HOME_MODULE_OPTIONS.map((option) => option.value);
@@ -132,16 +97,19 @@ export function toggleHomeModule(modules: HomeModule[], module: HomeModule): Hom
   return modules.includes(module) ? modules.filter((m) => m !== module) : [...modules, module];
 }
 
-/** Frase para «así te afecta», en el propio selector. */
-export function detailLevelHint(level: CookingLevel): string {
+/**
+ * Frase para «así te afecta», en el propio selector. Devuelve la CLAVE del diccionario: el texto se pide
+ * en la plantilla, que es el unico sitio donde el idioma se re-evalua (12s-B).
+ */
+export function detailLevelHintKey(level: CookingLevel): TranslationKey {
   switch (level) {
     case 'none':
-      return 'La IA escribirá pasos cortos y explicará cada término.';
+      return 'profile.cookingEffect.none';
     case 'beginner':
-      return 'La IA explicará cómo se hace cada paso, no solo qué poner.';
+      return 'profile.cookingEffect.beginner';
     case 'intermediate':
-      return 'La IA irá al grano y añadirá consejos cuando aporten.';
+      return 'profile.cookingEffect.intermediate';
     case 'expert':
-      return 'La IA dará por supuesto lo básico: técnica, tiempos y temperaturas.';
+      return 'profile.cookingEffect.expert';
   }
 }

@@ -23,6 +23,7 @@ import {
 import { Utensil } from '../../shared/models/pantry.model';
 import { MealTimes, mealTimesPatch, resolveMealTimes } from '../../core/meal-times';
 import { MealHoursComponent } from '../../shared/components/ui/meal-hours/meal-hours.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import {
   isLastIndex,
   nextIndex,
@@ -42,6 +43,7 @@ import {
   selector: 'app-onboarding',
   standalone: true,
   imports: [
+    TranslatePipe,
     CommonModule,
     FormsModule,
     RouterLink,
@@ -56,11 +58,9 @@ import {
       <div class="onboarding__card" (keydown)="onCardKeydown($event)">
         <header class="onboarding__header">
           <span class="onboarding__logo">🏠</span>
-          <h1 class="onboarding__title">Configura tu HogarIA</h1>
+          <h1 class="onboarding__title">{{ 'onboarding.configura_tu_hogaria' | t }}</h1>
           <p class="onboarding__subtitle">
-            {{ steps.length }} preguntas cortas. Con esto la IA te propone recetas que de verdad
-            puedes comer y la app sabe qué quieres llevar desde aquí; podrás cambiarlo cuando
-            quieras en Preferencias.
+            {{ 'onboarding.preguntas_cortas' | t:{n: steps.length} }}
           </p>
         </header>
 
@@ -71,15 +71,15 @@ import {
           <span class="onboarding__bar" aria-hidden="true">
             <span class="onboarding__bar-fill" [style.width.%]="progress()"></span>
           </span>
-          <button type="button" class="onboarding__skip" (click)="skip()">Saltar por ahora</button>
+          <button type="button" class="onboarding__skip" (click)="skip()">{{ 'onboarding.saltar_por_ahora' | t }}</button>
         </div>
 
         <section class="onboarding__step" [ngSwitch]="steps[stepIndex()]">
           <!-- 1 · Alergias e intolerancias -->
           <ng-container *ngSwitchCase="'profile'">
-            <h2 class="onboarding__step-title">Tu perfil</h2>
+            <h2 class="onboarding__step-title">{{ 'preferences.tu_perfil' | t }}</h2>
             <p class="onboarding__step-hint">
-              HogarIA es cocina y casa: dinos cómo andas de cocina y qué quieres llevar desde la app.
+              {{ 'onboarding.hogaria_es_cocina_y' | t }}
             </p>
             <app-home-profile-picker
               [(profile)]="profile"
@@ -88,13 +88,12 @@ import {
           </ng-container>
 
           <ng-container *ngSwitchCase="'allergies'">
-            <h2 class="onboarding__step-title">¿Alergias o intolerancias?</h2>
+            <h2 class="onboarding__step-title">{{ 'preferences.alergias_o_intolerancias' | t }}</h2>
             <p class="onboarding__step-hint">
-              Marca todo lo que no puedas comer. La IA lo descarta de raíz, también como ingrediente
-              escondido en un caldo o una salsa.
+              {{ 'preferences.marca_todo_lo_que' | t }}
             </p>
             <app-chip-select
-              label="Alergias e intolerancias"
+              [label]="'preferences.alergias_e_intolerancias' | t"
               [options]="allergenOptions"
               [(value)]="taste.allergies"
               customPlaceholder="Otra alergia o intolerancia"
@@ -104,15 +103,15 @@ import {
 
           <!-- 2 · Gustos -->
           <ng-container *ngSwitchCase="'tastes'">
-            <h2 class="onboarding__step-title">¿Qué te gusta y qué no?</h2>
+            <h2 class="onboarding__step-title">{{ 'preferences.que_te_gusta_y' | t }}</h2>
             <p class="onboarding__step-hint">
-              Sirve para priorizar unos platos sobre otros. No hay respuesta mala.
+              {{ 'preferences.sirve_para_priorizar_unos' | t }}
             </p>
 
             <div class="onboarding__field">
-              <h3 class="onboarding__field-title">Me gusta 👍</h3>
+              <h3 class="onboarding__field-title">{{ 'onboarding.me_gusta' | t }}</h3>
               <app-chip-select
-                label="Lo que más te gusta"
+                [label]="'preferences.lo_que_mas_te' | t"
                 [options]="likeOptions"
                 [(value)]="taste.likes"
                 customPlaceholder="Otro alimento o tipo de cocina"
@@ -120,9 +119,9 @@ import {
             </div>
 
             <div class="onboarding__field">
-              <h3 class="onboarding__field-title">Mejor no 👎</h3>
+              <h3 class="onboarding__field-title">{{ 'onboarding.mejor_no' | t }}</h3>
               <app-chip-select
-                label="Lo que prefieres evitar"
+                [label]="'preferences.lo_que_prefieres_evitar' | t"
                 [options]="dislikeOptions"
                 [(value)]="taste.dislikes"
                 customPlaceholder="Otro alimento que no te gusta"
@@ -131,7 +130,7 @@ import {
 
             <div class="onboarding__field">
               <label class="onboarding__field-title" for="tasteNotes">
-                Y lo que quieras contarnos
+                {{ 'onboarding.y_lo_que_quieras' | t }}
               </label>
               <textarea
                 id="tasteNotes"
@@ -139,7 +138,7 @@ import {
                 class="onboarding__textarea"
                 rows="3"
                 maxlength="1000"
-                placeholder="Ej: ceno pronto, nada de fritos, me va bien el tupper para comer en el trabajo, con dos niños en casa…"
+                [placeholder]="'preferences.ej_ceno_pronto_nada' | t"
                 [(ngModel)]="taste.notes"
               ></textarea>
             </div>
@@ -147,9 +146,9 @@ import {
 
           <!-- 3 · Objetivo -->
           <ng-container *ngSwitchCase="'goal'">
-            <h2 class="onboarding__step-title">¿Cuál es tu objetivo?</h2>
+            <h2 class="onboarding__step-title">{{ 'preferences.cual_es_tu_objetivo' | t }}</h2>
             <p class="onboarding__step-hint">
-              Marca el plato, no la dieta. Se lo pasamos al planificador de la semana.
+              {{ 'onboarding.marca_el_plato_no' | t }}
             </p>
 
             <div class="onboarding__goals">
@@ -162,8 +161,8 @@ import {
                 (click)="selectGoal(goal.value)"
               >
                 <span class="onboarding__goal-icon">{{ goal.icon }}</span>
-                <span class="onboarding__goal-label">{{ goal.label }}</span>
-                <span class="onboarding__goal-hint">{{ goal.hint }}</span>
+                <span class="onboarding__goal-label">{{ goal.labelKey | t }}</span>
+                <span class="onboarding__goal-hint">{{ goal.hintKey | t }}</span>
               </button>
             </div>
 
@@ -171,8 +170,8 @@ import {
               <label class="onboarding__field-title" for="goalNotes">
                 {{
                   taste.goal === 'custom'
-                    ? 'Describe tu objetivo'
-                    : '¿Algo más sobre el objetivo? (opcional)'
+                    ? ('calendar.describe_tu_objetivo' | t)
+                    : ('onboarding.mas_sobre_el_objetivo' | t)
                 }}
               </label>
               <textarea
@@ -183,8 +182,8 @@ import {
                 maxlength="500"
                 [placeholder]="
                   taste.goal === 'custom'
-                    ? 'Ej: sin carne los lunes, cenas de una olla y algo de pasta dos veces por semana'
-                    : 'Ej: prioriza proteína en la cena y poco pan'
+                    ? ('onboarding.ej_sin_carne_los_lunes' | t)
+                    : ('onboarding.ej_prioriza_proteina_en_la_cena' | t)
                 "
                 [(ngModel)]="taste.goalNotes"
               ></textarea>
@@ -193,11 +192,9 @@ import {
 
           <!-- 4 · Horarios de las comidas -->
           <ng-container *ngSwitchCase="'meals'">
-            <h2 class="onboarding__step-title">¿A qué hora coméis en casa?</h2>
+            <h2 class="onboarding__step-title">{{ 'onboarding.a_que_hora_comeis' | t }}</h2>
             <p class="onboarding__step-hint">
-              No es un adorno: con estas cuatro horas el calendario sabe dónde sentar cada comida, el
-              botón «añadir» te propone esa hora y la IA planifica el día a tu reloj. Cambiarlas más
-              adelante es igual de fácil: Preferencias → Horarios.
+              {{ 'onboarding.no_es_un_adorno' | t }}
             </p>
 
             <app-meal-hours
@@ -207,21 +204,18 @@ import {
             />
 
             <p class="onboarding__step-hint">
-              Cada hora que cambies saca un botón «Por defecto» para volver a la de siempre. Si prefieres
-              no pensar en esto ahora, Esc o «Saltar este paso»: se puede terminar el tour y venir mañana.
+              {{ 'onboarding.cada_hora_que_cambies' | t }}
             </p>
           </ng-container>
 
           <!-- 5 · Utensilios -->
           <ng-container *ngSwitchCase="'kitchen'">
-            <h2 class="onboarding__step-title">¿Con qué cuentas en la cocina?</h2>
+            <h2 class="onboarding__step-title">{{ 'onboarding.con_que_cuentas_en' | t }}</h2>
             <p class="onboarding__step-hint">
-              Lo que no marques no se usa: si no tienes horno, no te proponemos nada al horno. El
-              resto del catálogo (ollas, herramientas, tus utensilios propios) lo dejas marcado en
-              la despensa.
+              {{ 'onboarding.lo_que_no_marques' | t }}
             </p>
 
-            <app-loading *ngIf="isLoadingUtensils()" message="Cargando utensilios..."></app-loading>
+            <app-loading *ngIf="isLoadingUtensils()" [message]="'onboarding.cargando_utensilios' | t"></app-loading>
 
             <div class="utensil-grid" *ngIf="!isLoadingUtensils()">
               <label
@@ -245,14 +239,14 @@ import {
                 [queryParams]="{ tab: 'utensils' }"
                 (click)="persistProgress()"
               >
-                Marcar el resto de utensilios →
+                {{ 'onboarding.marcar_el_resto_de' | t }}
               </a>
               <a
                 routerLink="/pantry"
                 [queryParams]="{ tab: 'ingredients' }"
                 (click)="persistProgress()"
               >
-                Revisar la despensa →
+                {{ 'onboarding.revisar_la_despensa' | t }}
               </a>
             </p>
           </ng-container>
@@ -264,7 +258,7 @@ import {
             [disabled]="stepIndex() === 0 || isSaving()"
             (onClick)="back()"
           >
-            ← Atrás
+            {{ 'onboarding.atras' | t }}
           </app-button>
           <!-- Saltar UN paso: hasta aqui «no quiero hablar de esto ahora» cerraba el tour entero, que
                es lo contrario de lo que la persona acaba de pedir. -->
@@ -274,10 +268,10 @@ import {
             data-test="onboarding-skip-step"
             (click)="skipStep()"
           >
-            Saltar este paso
+            {{ 'onboarding.saltar_este_paso' | t }}
           </button>
           <app-button *ngIf="!isLastStep()" variant="primary" (onClick)="next()">
-            Siguiente →
+            {{ 'onboarding.siguiente' | t }}
           </app-button>
           <app-button
             *ngIf="isLastStep()"
@@ -285,14 +279,13 @@ import {
             [loading]="isSaving()"
             (onClick)="finish()"
           >
-            Guardar y empezar
+            {{ 'onboarding.guardar_y_empezar' | t }}
           </app-button>
         </footer>
       </div>
 
       <p class="onboarding__footnote">
-        Se guarda en tu cuenta, no en el hogar: cada comensal puede tener lo suyo. Con el teclado: Esc
-        salta este paso, Enter pasa al siguiente.
+        {{ 'onboarding.se_guarda_en_tu' | t }}
       </p>
     </div>
   `,

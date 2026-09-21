@@ -1,7 +1,10 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { I18nService } from '../../core/services/i18n.service';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { MEAL_LABEL_KEYS } from '../../core/i18n/labels';
 
 /**
  * Una comida dentro de la rejilla.
@@ -21,7 +24,9 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
 @Component({
   selector: 'app-calendar-event',
   standalone: true,
-  imports: [CommonModule, IconComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, IconComponent],
   host: {
     class: 'cal-event',
     '[attr.data-meal]': 'meal?.mealType',
@@ -45,8 +50,8 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
       <button
         type="button"
         class="cal-event__action"
-        [attr.aria-label]="meal?.completed ? 'Quitar de hechas' : 'Marcar como hecha'"
-        [title]="meal?.completed ? 'Quitar de hechas' : 'Marcar como hecha'"
+        [attr.aria-label]="meal?.completed ? ('calendar.unmark_done' | t) : ('calendar.mark_done' | t)"
+        [title]="meal?.completed ? ('calendar.unmark_done' | t) : ('calendar.mark_done' | t)"
         (click)="$event.stopPropagation(); toggle.emit()"
       >
         <app-icon [name]="meal?.completed ? 'check_circle' : 'check'" [size]="16" [label]="null" />
@@ -54,8 +59,8 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
       <button
         type="button"
         class="cal-event__action cal-event__action--danger"
-        aria-label="Quitar comida"
-        title="Quitar comida"
+        [attr.aria-label]="'calendar.quitar_comida' | t"
+        [attr.title]="'calendar.quitar_comida' | t"
         (click)="$event.stopPropagation(); remove.emit()"
       >
         <app-icon name="close" [size]="16" [label]="null" />
@@ -263,6 +268,8 @@ import { CalendarMeal, MEAL_TYPE_META } from '../../shared/models/calendar.model
   `]
 })
 export class CalendarEventComponent {
+  private readonly i18n = inject(I18nService);
+
   @Input() meal: CalendarMeal | null = null;
   /** `chip` (semana) · `row` (mes) · `full` (día). */
   @Input() mode: 'chip' | 'row' | 'full' = 'chip';
@@ -281,10 +288,10 @@ export class CalendarEventComponent {
   tooltip(): string {
     const meal = this.meal;
     if (!meal) return '';
-    const parts = [MEAL_TYPE_META[meal.mealType]?.label ?? '', meal.title];
+    const parts = [this.i18n.t(MEAL_LABEL_KEYS[meal.mealType]), meal.title];
     if (meal.time) parts.push(meal.time);
     if (meal.calories) parts.push(this.kcalLabel());
-    if (meal.completed) parts.push('hecha');
+    if (meal.completed) parts.push(this.i18n.t('calendar.hecha'));
     return parts.filter(Boolean).join(' · ');
   }
 }

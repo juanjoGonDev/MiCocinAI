@@ -40,6 +40,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 /** Una linea de la foto con lo que la persona toco: `keep` no existe en el contrato. */
 export type KeptPhotoLine = PhotoLine & { keep: boolean };
@@ -93,6 +94,8 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
   selector: 'app-shopping-list-detail',
   standalone: true,
   imports: [
+    TranslatePipe,
+    
     CommonModule,
     FormsModule,
     RouterLink,
@@ -107,7 +110,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
   template: `
     <div class="detail">
       <header class="detail__head">
-        <a class="detail__back" routerLink="/shopping" aria-label="Volver a las listas" data-test="back">
+        <a class="detail__back" routerLink="/shopping" [attr.aria-label]="'shopping_list_detail.volver_a_las_listas' | t" data-test="back">
           <app-icon name="chevron_left" [size]="22" [label]="null" />
         </a>
         <div class="detail__heading">
@@ -125,23 +128,23 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 data-test="rename-input"
                 autofocus
               />
-              <app-icon-button icon="check" label="Guardar el nombre" size="sm" variant="primary" (onClick)="commitRename()" />
-              <app-icon-button icon="close" label="Cancelar" size="sm" variant="ghost" (onClick)="cancelRename()" />
+              <app-icon-button icon="check" [label]="'account.guardar_el_nombre' | t" size="sm" variant="primary" (onClick)="commitRename()" />
+              <app-icon-button icon="close" [label]="'common.cancel' | t" size="sm" variant="ghost" (onClick)="cancelRename()" />
             </div>
           } @else {
-            <h1 class="detail__title" (click)="startRename()" [attr.title]="'Renombrar la lista'">
-              {{ list()?.name ?? 'Lista' }}
+            <h1 class="detail__title" (click)="startRename()" [attr.title]="'shopping_list_detail.renombrar_la_lista' | t">
+              {{ list()?.name ?? ('shopping_list_detail.lista' | t) }}
               <app-icon class="detail__pencil" name="edit" [size]="14" [label]="null" />
             </h1>
           }
           <p class="detail__meta">
-            <span>{{ checkedCount() }}/{{ totalCount() }} compradas</span>
+            <span>{{ 'shopping_list_detail.compradas_de' | t:{checked: checkedCount(), total: totalCount()} }}</span>
             @if (list()?.store) {
               <span class="detail__chip">{{ list()?.store }}</span>
             }
             <span class="detail__chip detail__chip--money">{{ money(estimate()?.totalMinor ?? 0) }}</span>
             @if (unpricedCount() > 0) {
-              <span class="detail__chip detail__chip--warn">{{ unpricedCount() }} sin precio</span>
+              <span class="detail__chip detail__chip--warn">{{ 'shopping_list_detail.sin_precio' | t:{n: unpricedCount()} }}</span>
             }
           </p>
         </div>
@@ -156,17 +159,17 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           data-test="add-input"
           name="newItem"
           [(ngModel)]="draftItem"
-          placeholder="Añadir: 2 Leche, 1kg Tomates…"
+          [placeholder]="'shopping_list_detail.anadir_2_leche_1kg' | t"
           autocomplete="off"
           enterkeyhint="done"
         />
         <button type="submit" class="detail__add-btn" data-test="add-submit" [disabled]="!draftItem.trim()">
           <app-icon name="add" [size]="18" [label]="null" />
-          <span>Añadir</span>
+          <span>{{ 'ui.anadir' | t }}</span>
         </button>
         <app-icon-button
           icon="content_paste"
-          label="Pegar la lista de otra app"
+          [label]="'shopping_list_detail.pegar_la_lista_de' | t"
           size="md"
           variant="soft"
           data-test="paste-open"
@@ -175,7 +178,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         />
         <app-icon-button
           icon="add_a_photo"
-          label="Añadir desde una foto"
+          [label]="'shopping_list_detail.anadir_desde_una_foto' | t"
           size="md"
           variant="soft"
           data-test="photo-open"
@@ -183,7 +186,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         />
         <app-icon-button
           icon="history"
-          label="Quien ha tocado que"
+          [label]="'shopping_list_detail.quien_ha_tocado_que' | t"
           size="md"
           variant="soft"
           [attr.aria-expanded]="auditOpen()"
@@ -198,18 +201,18 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             name="pasteText"
             rows="4"
             [(ngModel)]="draftPaste"
-            placeholder="- 2 Leche&#10;- 1kg Tomates&#10;Pan de molde"
+            [placeholder]="'shopping_list_detail.2_leche_1kg_tomates' | t"
           ></textarea>
           <div class="detail__paste-actions">
-            <span class="detail__hint">Una linea por producto; admite «2 Leche» o «1kg Tomates».</span>
+            <span class="detail__hint">{{ 'shopping_list_detail.una_linea_por_producto' | t }}</span>
             <button type="button" class="detail__primary" data-test="paste-submit" (click)="paste()" [disabled]="!draftPaste.trim()">
-              Añadir a la lista
+              {{ 'shopping_list_detail.anadir_a_la_lista' | t }}
             </button>
           </div>
         </div>
       }
 
-      <nav class="detail__tabs" aria-label="Filtro de lineas">
+      <nav class="detail__tabs" [attr.aria-label]="'shopping_list_detail.filtro_de_lineas' | t">
         <button
           type="button"
           class="detail__tab"
@@ -218,7 +221,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           (click)="selectTab('todo')"
         >
           <app-icon name="radio_button_unchecked" [size]="16" [label]="null" />
-          <span>Pendientes ({{ pendingCount() }})</span>
+          <span>{{ 'shopping_list_detail.pendientes_n' | t:{n: pendingCount()} }}</span>
         </button>
         <button
           type="button"
@@ -228,12 +231,12 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           (click)="selectTab('checked')"
         >
           <app-icon name="shopping_cart" [size]="16" [label]="null" />
-          <span>En el carro ({{ checkedCount() }})</span>
+          <span>{{ 'shopping_list_detail.en_el_carro_n' | t:{n: checkedCount()} }}</span>
         </button>
         <span class="detail__tabs-spacer"></span>
         <app-icon-button
           [icon]="selection().length > 0 ? 'close' : 'select_all'"
-          [label]="selection().length > 0 ? 'Quitar la seleccion' : 'Seleccionar todo'"
+          [label]="selection().length > 0 ? ('shopping_list_detail.quitar_la_seleccion' | t) : ('shopping_list_detail.seleccionar_todo' | t)"
           size="sm"
           variant="soft"
           data-test="select-all"
@@ -242,13 +245,13 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       </nav>
 
       @if (loading()) {
-        <p class="detail__empty">Cargando la lista…</p>
+        <p class="detail__empty">{{ 'shopping_list_detail.cargando_la_lista' | t }}</p>
       } @else if (visibleItems().length === 0) {
         <p class="detail__empty">
           {{
             tab() === 'todo'
-              ? 'Nada pendiente. Si has pegado la lista de la semana, ya esta todo en el carro.'
-              : 'Aun no has marcado nada como comprado.'
+              ? ('shopping_list_detail.nada_pendiente' | t)
+              : ('shopping_list_detail.nada_comprado_aun' | t)
           }}
         </p>
       } @else {
@@ -274,7 +277,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     <div class="detail__rail" aria-hidden="true">
                       <button type="button" class="detail__rail-btn" data-test="rail-edit" (click)="openEdit(item)">
                         <app-icon name="edit" [size]="18" [label]="null" />
-                        <span>Editar</span>
+                        <span>{{ 'common.edit' | t }}</span>
                       </button>
                       <button
                         type="button"
@@ -283,7 +286,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                         (click)="remove(item)"
                       >
                         <app-icon name="delete" [size]="18" [label]="null" />
-                        <span>Quitar</span>
+                        <span>{{ 'shopping_list_detail.quitar' | t }}</span>
                       </button>
                     </div>
                     <div
@@ -300,7 +303,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                         data-gesture-stop
                         role="checkbox"
                         [attr.aria-checked]="item.checked === 1"
-                        [attr.aria-label]="'Marcar ' + item.name"
+                        [attr.aria-label]="'shopping_list_detail.marcar_nombre' | t:{name: item.name}"
                         (click)="toggle(item); $event.stopPropagation()"
                       >
                         <app-icon
@@ -318,7 +321,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                           type="button"
                           class="detail__offer"
                           data-test="offer-chip"
-                          [attr.title]="'Oferta ' + describeOffer(offer) + ': toca para quitarla'"
+                          [attr.title]="'shopping_list_detail.oferta_detalle' | t:{desc: describeOffer(offer)}"
                           (click)="setOffer(item, null); $event.stopPropagation()"
                         >
                           {{ describeOffer(offer) }}
@@ -332,7 +335,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                           type="button"
                           class="detail__offer detail__offer--discount"
                           data-test="line-discount-chip"
-                          [attr.title]="'Descuento de esta linea: ' + describeLineDiscount(lineDiscount) + ' · toca para cambiarlo'"
+                          [attr.title]="'shopping_list_detail.descuento_linea_detalle' | t:{desc: describeLineDiscount(lineDiscount)}"
                           (click)="openEdit(item); $event.stopPropagation()"
                         >
                           <app-icon name="discount" [size]="12" [label]="null" />
@@ -347,14 +350,14 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                              sueltas que cada cual interpretaba como queria. Es el mismo icono
                              que en la auditoria y en la agenda —la foto de la persona, y su
                              inicial dentro del circulo si no tiene foto. -->
-                        <span class="detail__who" [attr.title]="'Ultimo cambio: ' + whoName(item)">
+                        <span class="detail__who" [attr.title]="'shopping_list_detail.ultimo_cambio' | t:{name: whoName(item)}">
                           <app-avatar [name]="whoName(item)" [src]="whoAvatar(item)" size="xs" />
                         </span>
                       }
                       <button
                         type="button"
                         class="detail__more"
-                        aria-label="Acciones de la linea"
+                        [attr.aria-label]="'shopping_list_detail.acciones_de_la_linea' | t"
                         (click)="openEdit(item); $event.stopPropagation()"
                       >
                         <app-icon name="more_vert" [size]="20" [label]="null" />
@@ -372,7 +375,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         <div class="detail__totals">
           <span class="detail__totals-money" data-test="total">{{ money(estimate()?.totalMinor ?? 0) }}</span>
           <button type="button" class="detail__link" (click)="estimateOpen.set(!estimateOpen())">
-            {{ estimateOpen() ? 'Ocultar desglose' : 'Ver desglose' }}
+            {{ estimateOpen() ? ('shopping_list_detail.ocultar_desglose' | t) : ('shopping_list_detail.ver_desglose' | t) }}
           </button>
         </div>
         <!-- Un boton con texto, no un icono suelto: «el porcentaje» es el ultimo sitio donde
@@ -391,16 +394,16 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           </button>
           <app-icon-button
             icon="delete_sweep"
-            label="Vaciar el carro"
+            [label]="'shopping_list_detail.vaciar_el_carro' | t"
             size="md"
             variant="soft"
             [disabled]="checkedCount() === 0"
             (onClick)="clearChecked()"
           />
           <button type="button" class="detail__ghost detail__ghost--text" (click)="clearChecked()" [disabled]="checkedCount() === 0">
-            Vaciar carro
+            {{ 'shopping_list_detail.vaciar_carro' | t }}
           </button>
-          <button type="button" class="detail__primary" data-test="complete" (click)="complete()">Terminar compra</button>
+          <button type="button" class="detail__primary" data-test="complete" (click)="complete()">{{ 'shopping_list_detail.terminar_compra' | t }}</button>
         </div>
       </footer>
 
@@ -425,8 +428,8 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           }
           @if (data.lineDiscountMinor) {
             <li class="detail__estimate-row detail__estimate-row--sum">
-              <span>Descuentos de linea</span>
-              <span class="detail__estimate-src">{{ discountedLineCount() }} lineas, antes del cupon</span>
+              <span>{{ 'shopping_list_detail.descuentos_de_linea' | t }}</span>
+              <span class="detail__estimate-src">{{ 'shopping_list_detail.lineas_antes_del_cupon' | t:{n: discountedLineCount()} }}</span>
               <span class="detail__estimate-money">-{{ money(data.lineDiscountMinor ?? 0) }}</span>
             </li>
           }
@@ -434,28 +437,28 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       }
 
       @if (selection().length > 0) {
-        <div class="detail__selection" data-test="selection-toolbar" role="toolbar" aria-label="Acciones de la seleccion">
+        <div class="detail__selection" data-test="selection-toolbar" role="toolbar" [attr.aria-label]="'shopping_list_detail.acciones_de_la_seleccion' | t">
           <span class="detail__selection-count">{{ selection().length }} seleccionadas</span>
-          <button type="button" class="detail__ghost" data-test="bulk-check" (click)="bulkCheck(true)">Marcar comprado</button>
-          <button type="button" class="detail__ghost" data-test="bulk-remove" (click)="bulkRemove()">Quitar</button>
+          <button type="button" class="detail__ghost" data-test="bulk-check" (click)="bulkCheck(true)">{{ 'shopping_list_detail.marcar_comprado' | t }}</button>
+          <button type="button" class="detail__ghost" data-test="bulk-remove" (click)="bulkRemove()">{{ 'shopping_list_detail.quitar' | t }}</button>
           <button type="button" class="detail__ghost" data-test="bulk-discount" (click)="openDiscountForSelection()">
             <app-icon name="percent" [size]="16" [label]="null" />
-            Descuento
+            {{ 'shopping_list_detail.descuento' | t }}
           </button>
-          <button type="button" class="detail__ghost" (click)="selection.set([])">Cancelar</button>
+          <button type="button" class="detail__ghost" (click)="selection.set([])">{{ 'common.cancel' | t }}</button>
         </div>
       }
 
       @if (editing(); as item) {
         <div class="detail__sheet-backdrop" (click)="closeEdit()">
-          <section class="detail__sheet" data-test="edit-sheet" (click)="$event.stopPropagation()" aria-label="Editar linea">
+          <section class="detail__sheet" data-test="edit-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.editar_linea' | t">
             <h2 class="detail__sheet-title">{{ item.name }}</h2>
             <!-- No dice «Cancelar», y no es un olvido: aqui todo se guarda al tocar, asi que el
                  boton cierra y punto. Prometer que deshace seria mentir. -->
             <app-icon-button
               class="detail__sheet-x"
               icon="close"
-              label="Cerrar la hoja (los cambios ya estan guardados)"
+              [label]="'shopping_list_detail.cerrar_la_hoja_los' | t"
               size="sm"
               variant="ghost"
               data-test="edit-close"
@@ -463,7 +466,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             />
             <div class="detail__sheet-grid">
               <label class="detail__field">
-                <span>Cantidad</span>
+                <span>{{ 'pantry.cantidad' | t }}</span>
                 <input
                   name="qty"
                   type="number"
@@ -474,7 +477,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 />
               </label>
               <label class="detail__field">
-                <span>Precio por unidad</span>
+                <span>{{ 'shopping_list_detail.precio_por_unidad' | t }}</span>
                 <input
                   name="price"
                   data-test="price-input"
@@ -488,7 +491,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             </div>
             <div class="detail__sheet-grid">
               <div class="detail__field">
-                <span class="detail__field-label">Unidad</span>
+                <span class="detail__field-label">{{ 'pantry.unidad' | t }}</span>
                 <!-- UN control para UNA decision. Estaba el chip y el desplegable debajo, y al
                      tocar el chip el desplegable seguia diciendo «Otra unidad…». -->
                 <app-unit-picker
@@ -497,12 +500,12 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 />
               </div>
               <div class="detail__field">
-                <span class="detail__field-label">Seccion de la tienda</span>
+                <span class="detail__field-label">{{ 'shopping_list_detail.seccion_de_la_tienda' | t }}</span>
                 <app-picker
-                  label="Seccion"
+                  [label]="'shopping_list_detail.seccion' | t"
                   [options]="categoryOptions()"
                   [value]="draft.category"
-                  placeholder="Sin seccion"
+                  [placeholder]="'shopping_list_detail.sin_seccion_2' | t"
                   searchPlaceholder="Buscar seccion"
                   emptyText="No existe: se creara con ese nombre"
                   [allowCustom]="true"
@@ -512,8 +515,8 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               </div>
             </div>
             <div class="detail__field">
-              <span class="detail__field-label">Oferta de la tienda</span>
-              <div class="detail__chips" role="group" aria-label="Ofertas">
+              <span class="detail__field-label">{{ 'shopping_list_detail.oferta_de_la_tienda' | t }}</span>
+              <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.ofertas' | t">
                 @for (preset of offerPresets; track preset.label) {
                   <button
                     type="button"
@@ -531,20 +534,20 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 @if (draftOffer()) {
                   <button type="button" class="detail__chip-btn detail__chip-btn--clear" data-test="offer-clear" (click)="setDraftOffer(null)">
                     <app-icon name="close" [size]="14" [label]="null" />
-                    Sin oferta
+                    {{ 'shopping_list_detail.sin_oferta' | t }}
                   </button>
                 }
               </div>
               <p class="detail__hint">
-                {{ draftOffer() ? 'Se pagan ' + (draftOffer()!.buy - draftOffer()!.take) + ' de cada ' + draftOffer()!.buy + ': el desglose ya lo descuenta.' : 'Sin oferta: se paga cada unidad.' }}
+                {{ draftOffer() ? ('shopping_list_detail.se_pagan_de_cada' | t:{paid: draftOffer()!.buy - draftOffer()!.take, buy: draftOffer()!.buy}) : ('shopping_list_detail.sin_oferta_pago_unitario' | t) }}
               </p>
             </div>
             <div class="detail__field" data-test="line-discount">
               <span class="detail__field-label">
                 <app-icon name="discount" [size]="14" [label]="null" />
-                Descuento en esta linea
+                {{ 'shopping_list_detail.descuento_en_esta_linea' | t }}
               </span>
-              <div class="detail__chips" role="group" [attr.aria-label]="'Tipo de descuento de ' + item.name">
+              <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.tipo_de_descuento_de' | t:{name: item.name}">
                 @for (kind of lineKinds; track kind.value) {
                   <button
                     type="button"
@@ -564,7 +567,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 <div class="detail__sheet-grid">
                   @if (lineKind() === 'percent') {
                     <label class="detail__field">
-                      <span>Porcentaje</span>
+                      <span>{{ 'shopping_list_detail.porcentaje' | t }}</span>
                       <input
                         name="lineDiscountPercent"
                         inputmode="decimal"
@@ -577,7 +580,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   }
                   @if (lineKind() === 'amount') {
                     <label class="detail__field">
-                      <span>Importe que baja</span>
+                      <span>{{ 'shopping_list_detail.importe_que_baja' | t }}</span>
                       <input
                         name="lineDiscountAmount"
                         inputmode="decimal"
@@ -589,7 +592,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     </label>
                   }
                   <label class="detail__field">
-                    <span>Sobre cuantas unidades</span>
+                    <span>{{ 'shopping_list_detail.sobre_cuantas_unidades' | t }}</span>
                     <input
                       name="lineDiscountUnits"
                       inputmode="decimal"
@@ -603,21 +606,19 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 <p class="detail__hint" data-test="line-discount-preview">{{ lineDiscountHint() }}</p>
                 <button type="button" class="detail__link" data-test="line-discount-clear" (click)="setLineKind('none')">
                   <app-icon name="close" [size]="14" [label]="null" />
-                  Quitar el descuento de esta linea
+                  {{ 'shopping_list_detail.quitar_el_descuento_de' | t }}
                 </button>
               } @else {
                 <p class="detail__hint">
-                  Es el cartel del pasillo que habla SOLO de este producto: «2x1», «-10 % en dos
-                  unidades» o «2 € en este jamon». El cupon de la lista entera va arriba, en
-                  «Descuento de la lista», y se aplica despues de este.
+                  {{ 'shopping_list_detail.es_el_cartel_del' | t }}
                 </p>
               }
             </div>
             <label class="detail__field">
-              <span>Nota</span>
+              <span>{{ 'shopping_list_detail.nota' | t }}</span>
               <input
                 name="note"
-                placeholder="Semidesnatada, la de siempre"
+                [placeholder]="'shopping_list_detail.semidesnatada_la_de_siempre' | t"
                 [ngModel]="draft.note"
                 (ngModelChange)="patch({ note: $event })"
                 maxlength="120"
@@ -626,22 +627,22 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             <div class="detail__field" data-test="product-link">
               <span class="detail__field-label">
                 <app-icon name="link" [size]="14" [label]="null" />
-                Es el mismo producto que
+                {{ 'shopping_list_detail.es_el_mismo_producto' | t }}
               </span>
               @if (item.product_key && item.product_key !== keyOf(item.name)) {
                 <div class="detail__chips">
                   <span class="detail__chip detail__chip--linked" data-test="product-link-current">{{ item.product_key }}</span>
                   <button type="button" class="detail__link" data-test="product-link-clear" (click)="unlinkProduct(item)">
                     <app-icon name="link_off" [size]="14" [label]="null" />
-                    Quitar el enlace
+                    {{ 'shopping_list_detail.quitar_el_enlace' | t }}
                   </button>
                 </div>
               }
               <app-picker
-                label="Productos con precio anotado"
+                [label]="'shopping_list_detail.productos_con_precio_anotado' | t"
                 [options]="productLinkOptions()"
                 [value]="item.product_key"
-                placeholder="Busca entre lo que ya has pagado"
+                [placeholder]="'shopping_list_detail.busca_entre_lo_que' | t"
                 searchPlaceholder="Buscar producto"
                 emptyText="Nada aun: en cuanto anotes un precio aparecera aqui"
                 leadingIcon="local_offer"
@@ -653,26 +654,23 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               }
             </div>
             <div class="detail__sheet-actions">
-              <button type="button" class="detail__ghost detail__ghost--danger" (click)="remove(item)">Quitar linea</button>
-              <button type="button" class="detail__primary" (click)="closeEdit()">Hecho</button>
+              <button type="button" class="detail__ghost detail__ghost--danger" (click)="remove(item)">{{ 'shopping_list_detail.quitar_linea' | t }}</button>
+              <button type="button" class="detail__primary" (click)="closeEdit()">{{ 'shopping_list_detail.hecho' | t }}</button>
             </div>
-            <p class="detail__hint">Los cambios se guardan solos, sin boton de guardar.</p>
+            <p class="detail__hint">{{ 'shopping_list_detail.los_cambios_se_guardan' | t }}</p>
           </section>
         </div>
       }
 
       @if (discountOpen()) {
         <div class="detail__sheet-backdrop" (click)="discountOpen.set(false)">
-          <section class="detail__sheet" data-test="discount-sheet" (click)="$event.stopPropagation()" aria-label="Descuento de la lista">
-            <h2 class="detail__sheet-title">Descuento de la lista</h2>
-<app-icon-button class="detail__sheet-x" icon="close" label="Cerrar sin cambiar el descuento" size="sm" variant="ghost" data-test="discount-close" (onClick)="discountOpen.set(false)" />
+          <section class="detail__sheet" data-test="discount-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.descuento_de_la_lista' | t">
+            <h2 class="detail__sheet-title">{{ 'shopping_list_detail.descuento_de_la_lista' | t }}</h2>
+<app-icon-button class="detail__sheet-x" icon="close" [label]="'shopping_list_detail.cerrar_sin_cambiar_el' | t" size="sm" variant="ghost" data-test="discount-close" (onClick)="discountOpen.set(false)" />
             <p class="detail__hint">
-              El importe o el porcentaje se aplica a la cesta; con «primeras unidades» o
-              «productos concretos», solo a lo que entre, y se reparte en proporcion a lo que
-              pesa cada linea. Lo que no cuadra se dice: un descuento mayor que lo que cubre se
-              recorta, no devuelve dinero.
+              {{ 'shopping_list_detail.el_importe_o_el' | t }}
             </p>
-            <div class="detail__chips" role="group" aria-label="Tipo de descuento">
+            <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.tipo_de_descuento' | t">
               @for (kind of discountKinds; track kind.value) {
                 <button
                   type="button"
@@ -688,13 +686,13 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             </div>
             <div class="detail__sheet-grid">
               <label class="detail__field">
-                <span>{{ discountDraft().kind === 'percent' ? 'Porcentaje' : 'Importe (€)' }}</span>
+                <span>{{ discountDraft().kind === 'percent' ? ('shopping_list_detail.porcentaje' | t) : ('shopping_list_detail.importe_euros' | t) }}</span>
                 @if (discountDraft().kind === 'percent') {
                   <app-picker
-                    label="Porcentaje"
+                    [label]="'shopping_list_detail.porcentaje' | t"
                     [options]="percentOptions"
                     [value]="percentDraft()"
-                    placeholder="Escribe el porcentaje"
+                    [placeholder]="'shopping_list_detail.escribe_el_porcentaje' | t"
                     [allowCustom]="true"
                     [filterFrom]="99"
                     (valueChange)="setPercent($event)"
@@ -713,10 +711,10 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 }
               </label>
               <label class="detail__field">
-                <span>Etiqueta (opcional)</span>
+                <span>{{ 'shopping_list_detail.etiqueta_opcional' | t }}</span>
                 <input
                   name="discountLabel"
-                  placeholder="Fidelidad -5 %"
+                  [placeholder]="'shopping_list_detail.fidelidad_5' | t"
                   maxlength="60"
                   [ngModel]="discountDraft().label"
                   (ngModelChange)="patchDiscount({ label: $event || null })"
@@ -724,8 +722,8 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               </label>
             </div>
             <div class="detail__field">
-              <span class="detail__field-label">A que se aplica</span>
-              <div class="detail__chips" role="group" aria-label="Alcance del descuento">
+              <span class="detail__field-label">{{ 'shopping_list_detail.a_que_se_aplica' | t }}</span>
+              <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.alcance_del_descuento' | t">
                 @for (scope of discountScopes; track scope.value) {
                   <button
                     type="button"
@@ -742,20 +740,20 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               @if (discountDraft().scope === 'product' || discountDraft().scope === 'category') {
                 <div class="detail__targets" data-test="discount-targets">
                   <div class="detail__targets-head">
-                    <span>{{ discountDraft().scope === 'category' ? 'Que pasillos entran' : 'Que lineas entran' }}</span>
+                    <span>{{ discountDraft().scope === 'category' ? ('shopping_list_detail.que_pasillos_entran' | t) : ('shopping_list_detail.que_lineas_entran' | t) }}</span>
                     <button type="button" class="detail__link" data-test="discount-targets-all" (click)="toggleAllTargets()">
-                      {{ allTargetsSelected() ? 'Quitar todas' : 'Elegir todas' }}
+                      {{ allTargetsSelected() ? ('shopping_list_detail.quitar_todas' | t) : ('shopping_list_detail.elegir_todas' | t) }}
                     </button>
                   </div>
 
                   @if (discountDraft().targets.length) {
-                    <div class="detail__chips" role="list" aria-label="Elegidas">
+                    <div class="detail__chips" role="list" [attr.aria-label]="'shopping_list_detail.elegidas' | t">
                       @for (target of discountDraft().targets; track target) {
                         <button
                           type="button"
                           class="detail__chip-btn detail__chip-btn--active"
                           role="listitem"
-                          [attr.aria-label]="'Quitar ' + target + ' del descuento'"
+                          [attr.aria-label]="'shopping_list_detail.quitar_del_descuento' | t:{name: target}"
                           [attr.data-test]="'discount-target-chip-' + target"
                           (click)="toggleTarget(target)"
                         >
@@ -767,7 +765,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   }
 
                   @if (discountDraft().scope === 'category') {
-                    <div class="detail__chips" role="group" aria-label="Secciones de la lista">
+                    <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.secciones_de_la_lista' | t">
                       @for (option of discountTargetOptions(); track option.value) {
                         <button
                           type="button"
@@ -808,7 +806,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                         </li>
                       }
                       @if (!discountTargetOptions().length) {
-                        <li class="detail__target-empty">La lista esta vacia: anade las lineas primero, o escribe el nombre abajo.</li>
+                        <li class="detail__target-empty">{{ 'shopping_list_detail.la_lista_esta_vacia' | t }}</li>
                       }
                     </ul>
                   }
@@ -819,7 +817,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       [ngModel]="targetDraft()"
                       (ngModelChange)="targetDraft.set($event)"
                       (keyup.enter)="addTarget()"
-                      placeholder="Otro nombre (p. ej. jamon cocido)"
+                      [placeholder]="'shopping_list_detail.otro_nombre_p_ej' | t"
                       maxlength="80"
                       data-test="discount-target-input"
                     />
@@ -831,20 +829,19 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       (click)="addTarget()"
                     >
                       <app-icon name="add" [size]="16" [label]="null" />
-                      Anadir
+                      {{ 'shopping_list_detail.anadir' | t }}
                     </button>
                   </div>
                   <p class="detail__hint">
-                    Se compara el nombre normalizado: «Jamon» no arrastra a «jamon curado», para
-                    que un descuento no se aplique a lineas que nadie eligio.
+                    {{ 'shopping_list_detail.se_compara_el_nombre' | t }}
                   </p>
                 </div>
               }
               @if (discountDraft().scope === 'firstUnits') {
                 <div class="detail__first-units">
-                  <span>Primeras unidades</span>
+                  <span>{{ 'shopping_list_detail.primeras_unidades' | t }}</span>
                   <div class="detail__stepper">
-                    <app-icon-button icon="remove" label="Quitar una unidad" size="sm" variant="soft" (onClick)="bumpFirstUnits(-1)" />
+                    <app-icon-button icon="remove" [label]="'shopping_list_detail.quitar_una_unidad' | t" size="sm" variant="soft" (onClick)="bumpFirstUnits(-1)" />
                     <input
                       name="firstUnits"
                       type="number"
@@ -854,7 +851,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       (ngModelChange)="setFirstUnits($event)"
                       data-test="discount-first-units"
                     />
-                    <app-icon-button icon="add" label="Anadir una unidad" size="sm" variant="soft" (onClick)="bumpFirstUnits(1)" />
+                    <app-icon-button icon="add" [label]="'shopping_list_detail.anadir_una_unidad' | t" size="sm" variant="soft" (onClick)="bumpFirstUnits(1)" />
                   </div>
                 </div>
               }
@@ -863,10 +860,10 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               @if (list()?.discount) {
                 <button type="button" class="detail__ghost detail__ghost--danger" data-test="discount-remove" (click)="removeDiscount()">
                   <app-icon name="delete" [size]="16" [label]="null" />
-                  Quitar descuento
+                  {{ 'shopping_list_detail.quitar_descuento' | t }}
                 </button>
               }
-              <button type="button" class="detail__primary" data-test="discount-save" (click)="saveDiscount()">Guardar</button>
+              <button type="button" class="detail__primary" data-test="discount-save" (click)="saveDiscount()">{{ 'common.save' | t }}</button>
             </div>
           </section>
         </div>
@@ -874,30 +871,28 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
       @if (payOpen()) {
         <div class="detail__sheet-backdrop" (click)="closePay()">
-          <section class="detail__sheet detail__sheet--wide" data-test="pay-sheet" (click)="$event.stopPropagation()" aria-label="Precios pagados por tienda">
-            <h2 class="detail__sheet-title">Cuanto has pagado</h2>
+          <section class="detail__sheet detail__sheet--wide" data-test="pay-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.precios_pagados_por_tienda' | t">
+            <h2 class="detail__sheet-title">{{ 'shopping_list_detail.cuanto_has_pagado' | t }}</h2>
             <app-icon-button
               class="detail__sheet-x"
               icon="close"
-              label="Cerrar sin terminar la compra"
+              [label]="'shopping_list_detail.cerrar_sin_terminar_la' | t"
               size="sm"
               variant="ghost"
               data-test="pay-close"
               (onClick)="closePay()"
             />
             <p class="detail__hint">
-              Se guarda por establecimiento y con el nombre que usa esa tienda: es lo que hace
-              que la proxima lista en Mercadona sepa cuanto cuesta ahi el pan, en vez de
-              recordar lo que valia en Lidl en marzo.
+              {{ 'shopping_list_detail.se_guarda_por_establecimiento' | t }}
             </p>
 
             <div class="detail__field">
               <span class="detail__field-label">
                 <app-icon name="storefront" [size]="14" [label]="null" />
-                Establecimiento
+                {{ 'shopping_list_detail.establecimiento' | t }}
               </span>
               @if (storeChips().length) {
-                <div class="detail__chips" role="group" aria-label="Tiendas de esta casa">
+                <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.tiendas_de_esta_casa' | t">
                   @for (store of storeChips(); track store) {
                     <button
                       type="button"
@@ -915,13 +910,13 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 name="payStore"
                 [ngModel]="payStore()"
                 (ngModelChange)="setPayStore($event)"
-                placeholder="Mercadona"
+                [placeholder]="'shopping_list_detail.mercadona' | t"
                 maxlength="80"
                 data-test="pay-store"
               />
               @if (payStoreError()) {
                 <p class="detail__hint detail__hint--warn" data-test="pay-store-error">
-                  Sin tienda no se guarda: un precio sin establecimiento no se puede volver a usar.
+                  {{ 'shopping_list_detail.sin_tienda_no_se' | t }}
                 </p>
               }
             </div>
@@ -947,13 +942,13 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   <div class="detail__pay-money">
                     <input
                       inputmode="decimal"
-                      [placeholder]="payMode(line.itemId) === 'unit' ? '1,95 por unidad' : '3,90 en total'"
+                      [placeholder]="payMode(line.itemId) === 'unit' ? ('shopping_list_detail.pago_por_unidad' | t) : ('shopping_list_detail.pago_en_total' | t)"
                       [ngModel]="payValue(line.itemId)"
                       (ngModelChange)="setPayValue(line.itemId, $event)"
                       [attr.data-test]="'pay-price-' + line.itemId"
                     />
                     <button type="button" class="detail__link" [attr.data-test]="'pay-mode-' + line.itemId" (click)="togglePayMode(line.itemId)">
-                      {{ payMode(line.itemId) === 'unit' ? '€/unidad' : 'total pagado' }}
+                      {{ payMode(line.itemId) === 'unit' ? ('shopping_list_detail.eur_por_unidad' | t) : ('shopping_list_detail.total_pagado' | t) }}
                     </button>
                   </div>
                   <input
@@ -961,7 +956,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     [name]="'payAlias' + line.itemId"
                     [ngModel]="payAlias(line.itemId)"
                     (ngModelChange)="setPayAlias(line.itemId, $event)"
-                    placeholder="Como se llama aqui (opcional)"
+                    [placeholder]="'shopping_list_detail.como_se_llama_aqui' | t"
                     maxlength="120"
                     [attr.data-test]="'pay-alias-' + line.itemId"
                   />
@@ -970,7 +965,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             </ul>
 
             <div class="detail__sheet-actions">
-              <button type="button" class="detail__ghost" data-test="pay-cancel" (click)="closePay()">Cancelar</button>
+              <button type="button" class="detail__ghost" data-test="pay-cancel" (click)="closePay()">{{ 'common.cancel' | t }}</button>
               <button
                 type="button"
                 class="detail__primary"
@@ -979,7 +974,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 (click)="finishPurchase()"
               >
                 <app-icon name="done_all" [size]="16" [label]="null" />
-                Guardar y terminar
+                {{ 'shopping_list_detail.guardar_y_terminar' | t }}
               </button>
             </div>
             <p class="detail__hint" data-test="pay-foot">
@@ -994,34 +989,33 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
       @if (photoOpen()) {
         <div class="detail__sheet-backdrop" (click)="closePhoto()">
-          <section class="detail__sheet detail__sheet--wide" data-test="photo-sheet" (click)="$event.stopPropagation()" aria-label="Anadir desde una foto">
-            <h2 class="detail__sheet-title">Desde una foto</h2>
-<app-icon-button class="detail__sheet-x" icon="close" label="Cerrar la foto" size="sm" variant="ghost" data-test="photo-close" (onClick)="closePhoto()" />
+          <section class="detail__sheet detail__sheet--wide" data-test="photo-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.anadir_desde_una_foto_2' | t">
+            <h2 class="detail__sheet-title">{{ 'shopping_list_detail.desde_una_foto' | t }}</h2>
+<app-icon-button class="detail__sheet-x" icon="close" [label]="'shopping_list_detail.cerrar_la_foto' | t" size="sm" variant="ghost" data-test="photo-close" (onClick)="closePhoto()" />
             <p class="detail__hint">
-              La foto la mira el modelo de IA configurado; aqui se repasa antes de escribir nada.
-              Puedes cancelar cuantas veces quieras: la lista no cambia hasta que digas «Anadir».
+              {{ 'shopping_list_detail.la_foto_la_mira' | t }}
             </p>
 
             <label class="detail__photo-drop" [class.detail__photo-drop--ready]="photoPreview()" data-test="photo-drop">
               <input type="file" accept="image/png,image/jpeg,image/webp" capture="environment" name="photoFile" (change)="onPhotoFile($event)" />
               @if (photoPreview()) {
-                <img [src]="photoPreview()" alt="Foto que se va a analizar" />
+                <img [src]="photoPreview()" [alt]="'shopping_list_detail.foto_que_se_va' | t" />
               } @else {
                 <app-icon name="add_a_photo" [size]="28" [label]="null" />
-                <span>Foto del ticket o de la estanteria</span>
+                <span>{{ 'shopping_list_detail.foto_del_ticket_o' | t }}</span>
               }
             </label>
 
             <div class="detail__sheet-grid">
               <div class="detail__field">
-                <span class="detail__field-label">Que es la foto</span>
-                <app-picker label="Modo" [options]="photoModes" [value]="photoMode()" (valueChange)="setPhotoMode($event)" data-test="photo-mode" />
+                <span class="detail__field-label">{{ 'shopping_list_detail.que_es_la_foto' | t }}</span>
+                <app-picker [label]="'shopping_list_detail.modo' | t" [options]="photoModes" [value]="photoMode()" (valueChange)="setPhotoMode($event)" data-test="photo-mode" />
               </div>
               <label class="detail__field">
-                <span>Nota para el modelo (opcional)</span>
+                <span>{{ 'shopping_list_detail.nota_para_el_modelo' | t }}</span>
                 <input
                   name="photoNote"
-                  placeholder="Es del chino, los precios son por pack"
+                  [placeholder]="'shopping_list_detail.es_del_chino_los' | t"
                   maxlength="280"
                   [ngModel]="photoNote()"
                   (ngModelChange)="photoNote.set($event)"
@@ -1034,13 +1028,13 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 <app-icon name="error_outline" [size]="18" [label]="null" />
                 <span>{{ photoError() }}</span>
                 @if (photoRedirect()) {
-                  <a class="detail__link" [routerLink]="photoRedirect()">Configurar la IA</a>
+                  <a class="detail__link" [routerLink]="photoRedirect()">{{ 'shopping_list_detail.configurar_la_ia' | t }}</a>
                 }
               </p>
             }
 
             @if (photoBusy()) {
-              <p class="detail__photo-busy" role="status"><app-icon name="refresh" [size]="16" [label]="null" /> Mirando la foto…</p>
+              <p class="detail__photo-busy" role="status"><app-icon name="refresh" [size]="16" [label]="null" />{{ 'shopping_list_detail.mirando_la_foto' | t }}</p>
             }
 
             @if (photoResult(); as result) {
@@ -1052,7 +1046,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       class="detail__photo-keep"
                       role="checkbox"
                       [attr.aria-checked]="line.keep"
-                      [attr.aria-label]="'Anadir ' + line.name"
+                      [attr.aria-label]="'shopping_list_detail.anadir_nombre' | t:{name: line.name}"
                       (click)="line.keep = !line.keep"
                     >
                       <app-icon [name]="line.keep ? 'check_circle' : 'radio_button_unchecked'" [size]="20" [label]="null" />
@@ -1068,13 +1062,13 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       (ngModelChange)="setLinePrice(line, $event)"
                     />
                     <span class="detail__photo-cat" [style.color]="colorOf(line.category)">
-                      {{ line.category ?? 'sin seccion' }}
+                      {{ line.category ?? ('shopping_list_detail.sin_seccion' | t) }}
                       @if (line.createCategory) {
-                        <span class="detail__photo-new">nueva</span>
+                        <span class="detail__photo-new">{{ 'shopping_list_detail.nueva_2' | t }}</span>
                       }
                     </span>
                     @if (line.confidence !== undefined && line.confidence < 0.6) {
-                      <span class="detail__photo-doubt" title="La IA no esta segura">baja confianza</span>
+                      <span class="detail__photo-doubt" [attr.title]="'shopping_list_detail.la_ia_no_esta' | t">{{ 'shopping_list_detail.baja_confianza' | t }}</span>
                     }
                   </li>
                 }
@@ -1087,7 +1081,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 </ul>
               }
               <div class="detail__sheet-actions">
-                <button type="button" class="detail__ghost" (click)="analyzePhoto()">Otro intento</button>
+                <button type="button" class="detail__ghost" (click)="analyzePhoto()">{{ 'shopping_list_detail.otro_intento' | t }}</button>
                 <button
                   type="button"
                   class="detail__primary"
@@ -1095,13 +1089,13 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   [disabled]="keptPhotoLines().length === 0 || photoApplying()"
                   (click)="applyPhoto()"
                 >
-                  {{ photoApplying() ? 'Anadiendo…' : 'Anadir ' + keptPhotoLines().length + ' lineas' }}
+                  {{ photoApplying() ? ('shopping_list_detail.anadiendo' | t) : ('shopping_list_detail.anadir_lineas' | t:{n: keptPhotoLines().length}) }}
                 </button>
               </div>
             } @else {
               <div class="detail__sheet-actions">
                 <button type="button" class="detail__primary" data-test="photo-analyze" [disabled]="!photoData() || photoBusy()" (click)="analyzePhoto()">
-                  {{ photoData() ? 'Analizar la foto' : 'Elige una foto' }}
+                  {{ photoData() ? ('shopping_list_detail.analizar_la_foto' | t) : ('shopping_list_detail.elige_una_foto' | t) }}
                 </button>
               </div>
             }
@@ -1111,11 +1105,11 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
       @if (auditOpen()) {
         <div class="detail__sheet-backdrop" (click)="auditOpen.set(false)">
-          <section class="detail__sheet" data-test="audit-sheet" (click)="$event.stopPropagation()" aria-label="Quien ha tocado que">
-            <h2 class="detail__sheet-title">Quien ha tocado que</h2>
-<app-icon-button class="detail__sheet-x" icon="close" label="Cerrar el historial" size="sm" variant="ghost" data-test="audit-close" (onClick)="auditOpen.set(false)" />
+          <section class="detail__sheet" data-test="audit-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.quien_ha_tocado_que' | t">
+            <h2 class="detail__sheet-title">{{ 'shopping_list_detail.quien_ha_tocado_que' | t }}</h2>
+<app-icon-button class="detail__sheet-x" icon="close" [label]="'shopping_list_detail.cerrar_el_historial' | t" size="sm" variant="ghost" data-test="audit-close" (onClick)="auditOpen.set(false)" />
             @if (events().length === 0) {
-              <p class="detail__hint">Todavia no hay nada anotado en esta lista.</p>
+              <p class="detail__hint">{{ 'shopping_list_detail.todavia_no_hay_nada' | t }}</p>
             } @else {
               <ul class="detail__audit">
                 @for (event of events(); track event.id) {
@@ -1129,7 +1123,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 }
               </ul>
             }
-            <p class="detail__hint">Se actualiza solo mientras la pantalla esta abierta.</p>
+            <p class="detail__hint">{{ 'shopping_list_detail.se_actualiza_solo_mientras' | t }}</p>
           </section>
         </div>
       }

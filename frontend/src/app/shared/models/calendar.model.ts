@@ -1,3 +1,5 @@
+import type { TranslationKey } from '../../core/i18n';
+
 export interface WeeklyCalendar {
   id: string;
   householdId: string;
@@ -85,14 +87,18 @@ export const MEAL_TYPE_LABELS: Record<MealType, string> = {
   snack: 'Merienda'
 };
 
-export const GOAL_TYPE_LABELS: Record<GoalType, string> = {
-  balanced: 'Dieta equilibrada',
-  'weight-loss': 'Perder peso',
-  'weight-gain': 'Ganar peso',
-  'muscle-gain': 'Ganar músculo',
-  maintenance: 'Mantenimiento',
-  variety: 'Comida variada',
-  custom: 'Personalizado'
+/**
+ * La etiqueta de cada objetivo. Son **claves del diccionario**, no texto: lo mismo que se guarda es el
+ * `GoalType`, y lo que se ensena depende del idioma de quien mira (HOGARIA-SPEC 12s-A).
+ */
+export const GOAL_TYPE_LABELS: Record<GoalType, TranslationKey> = {
+  balanced: 'calendar.goal.balanced',
+  'weight-loss': 'taste.goal.weight-loss',
+  'weight-gain': 'taste.goal.weight-gain',
+  'muscle-gain': 'taste.goal.muscle-gain',
+  maintenance: 'calendar.goal.maintenance',
+  variety: 'calendar.goal.variety',
+  custom: 'calendar.goal.custom'
 };
 
 export const DAY_ORDER: DayOfWeek[] = [
@@ -131,10 +137,11 @@ export const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'snack', 'dinner'];
 export type CalendarView = 'day' | 'week' | 'month';
 
 export const CALENDAR_VIEWS = ['day', 'week', 'month'] as const;
-export const CALENDAR_VIEW_LABELS: Record<CalendarView, string> = {
-  day: 'Día',
-  week: 'Semana',
-  month: 'Mes'
+/** Claves del diccionario, como `GOAL_TYPE_LABELS`. */
+export const CALENDAR_VIEW_LABELS: Record<CalendarView, TranslationKey> = {
+  day: 'calendar.view.day',
+  week: 'calendar.view.week',
+  month: 'calendar.view.month'
 };
 
 /** Query params que definen lo que se está viendo. */
@@ -187,6 +194,11 @@ export interface MealTypeMeta {
   addAction: string;
 }
 
+/**
+ * Meta de cada comida. `label` y `addAction` son **texto del contrato con la IA** (el planificador busca
+ * la comida por esas cadenas), por eso no se traducen aqui. Para pintar, `MEAL_LABEL_KEYS` en
+ * `core/i18n/labels.ts`.
+ */
 export const MEAL_TYPE_META: Record<MealType, MealTypeMeta> = {
   breakfast: { label: 'Desayuno', addAction: 'Desayuno', color: 'var(--warning)' },
   lunch: { label: 'Almuerzo', addAction: 'Almuerzo', color: 'var(--primary)' },
@@ -251,13 +263,13 @@ export interface HouseholdEvent {
 
 export const HOUSEHOLD_EVENT_META: Record<
   HouseholdEventKind,
-  { label: string; color: string; icon: 'shopping_cart' | 'home' | 'event_available' | 'person' | 'flag' }
+  { labelKey: TranslationKey; color: string; icon: 'shopping_cart' | 'home' | 'event_available' | 'person' | 'flag' }
 > = {
-  shopping: { label: 'Compra', color: '#4FA3D1', icon: 'shopping_cart' },
-  home: { label: 'Casa', color: '#4CAF50', icon: 'home' },
-  appointment: { label: 'Citas', color: '#E05A5A', icon: 'event_available' },
-  personal: { label: 'Personal', color: '#8E5AC8', icon: 'person' },
-  other: { label: 'Otros', color: '#8A8F98', icon: 'flag' }
+  shopping: { labelKey: 'nav.shopping', color: '#4FA3D1', icon: 'shopping_cart' },
+  home: { labelKey: 'household_event.home', color: '#4CAF50', icon: 'home' },
+  appointment: { labelKey: 'household_event.appointment', color: '#E05A5A', icon: 'event_available' },
+  personal: { labelKey: 'household_event.personal', color: '#8E5AC8', icon: 'person' },
+  other: { labelKey: 'household_event.other', color: '#8A8F98', icon: 'flag' }
 };
 
 export const HOUSEHOLD_EVENT_COLORS = ['#4FA3D1', '#4CAF50', '#E05A5A', '#8E5AC8', '#C99A2E', '#2FA79B'];

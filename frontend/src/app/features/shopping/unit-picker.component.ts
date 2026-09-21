@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, computed } from '@angular/core';
+import { Component, EventEmitter, Input, Output, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { PickerComponent, type PickerOption } from '../../shared/components/ui/picker/picker.component';
@@ -26,6 +26,7 @@ export { UNIT_FAMILIES, canonicalUnit, familyOf, type UnitFamily } from './unit-
  * MISMA regla: dos criterios de «esto es un kg» son dos unidades guardadas para el mismo bote.
  */
 import { canonicalUnit, familyOf, unitPickerOptions } from './unit-families';
+import { I18nService } from '../../core/services/i18n.service';
 
 @Component({
   selector: 'app-unit-picker',
@@ -34,10 +35,10 @@ import { canonicalUnit, familyOf, unitPickerOptions } from './unit-families';
   template: `
     <div class="unit-picker">
       <app-picker
-        [label]="label"
+        [label]="labelText"
         [options]="options()"
         [value]="value"
-        [placeholder]="placeholder"
+        [placeholder]="placeholderText"
         searchPlaceholder="Buscar unidad o escribir la que quieras"
         emptyText="Nada parecido: usa el texto que has escrito"
         [allowCustom]="true"
@@ -61,9 +62,25 @@ import { canonicalUnit, familyOf, unitPickerOptions } from './unit-families';
   ]
 })
 export class UnitPickerComponent {
+
+  /* Los dos textos de fabrica viven en el diccionario y se resuelven al leer: un campo fijado al
+     construir no se entera del idioma (12s-B). */
+  get labelText(): string {
+    return this.label ?? this.i18n.t('ui.unidad_o_formato');
+  }
+
+  get placeholderText(): string {
+    return this.placeholder ?? this.i18n.t('ui.sin_unidad');
+  }
+  private readonly i18n = inject(I18nService);
+
   @Input() value: string | null = null;
-  @Input() label = 'Unidad o formato';
-  @Input() placeholder = 'Sin unidad';
+  /**
+   * Sin literal en la declaracion: un campo se fija al construir el componente y no se entera del idioma
+   * (12s-B). El valor de fabrica vive en el diccionario y se resuelve al leer.
+   */
+  @Input() label?: string;
+  @Input() placeholder?: string;
   @Output() valueChange = new EventEmitter<string | null>();
 
   /**

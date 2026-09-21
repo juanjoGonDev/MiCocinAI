@@ -1,8 +1,9 @@
+import { DICTS } from '../../core/i18n';
 import {
-  COOKING_LEVEL_LABELS,
+  COOKING_LEVEL_LABEL_KEYS,
   COOKING_LEVEL_OPTIONS,
   DEFAULT_HOME_PROFILE,
-  detailLevelHint,
+  detailLevelHintKey,
   HOME_MODULES,
   HOME_MODULE_OPTIONS,
   isCookingLevel,
@@ -26,16 +27,17 @@ describe('home-profile model', () => {
       'expert'
     ]);
     for (const option of COOKING_LEVEL_OPTIONS) {
-      expect(option.label).toBe(COOKING_LEVEL_LABELS[option.value]);
-      expect(option.hint.length).toBeGreaterThan(10);
+      expect(option.labelKey).toBe(COOKING_LEVEL_LABEL_KEYS[option.value]);
+      expect(DICTS.es[option.hintKey].length).toBeGreaterThan(10);
+      expect(DICTS.en[option.hintKey]).toBeTruthy();
     }
   });
 
   it('dice a cada nivel cuanto explica la IA', () => {
-    expect(detailLevelHint('none')).toContain('pasos cortos');
-    expect(detailLevelHint('beginner')).toContain('cada paso');
-    expect(detailLevelHint('intermediate')).toContain('al grano');
-    expect(detailLevelHint('expert')).toContain('técnica');
+    expect(DICTS.es[detailLevelHintKey('none')]).toContain('pasos cortos');
+    expect(DICTS.es[detailLevelHintKey('beginner')]).toContain('cada paso');
+    expect(DICTS.es[detailLevelHintKey('intermediate')]).toContain('al grano');
+    expect(DICTS.es[detailLevelHintKey('expert')]).toContain('técnica');
   });
 
   it('lista las cinco secciones, dos de ellas como pendientes', () => {
@@ -47,8 +49,9 @@ describe('home-profile model', () => {
       'home'
     ]);
     for (const option of HOME_MODULE_OPTIONS) {
-      expect(option.label.length).toBeGreaterThan(3);
-      expect(option.hint.length).toBeGreaterThan(3);
+      expect(DICTS.es[option.labelKey].length).toBeGreaterThan(3);
+      expect(DICTS.es[option.hintKey].length).toBeGreaterThan(3);
+      expect(DICTS.en[option.labelKey]).toBeTruthy();
     }
   });
 

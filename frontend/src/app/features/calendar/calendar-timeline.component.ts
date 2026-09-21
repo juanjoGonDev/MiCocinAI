@@ -1,5 +1,6 @@
-import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild, computed, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { I18nService } from '../../core/services/i18n.service';
 import {
   CalendarDayView,
   CalendarMeal,
@@ -39,6 +40,8 @@ interface TimelineItem extends GridItem {
 }
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
+import { MEAL_LABEL_KEYS } from '../../core/i18n/labels';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 /**
  * La rejilla de horas del día y de la semana —el sustituto de las cuatro franjas de comida.
@@ -58,7 +61,8 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
 @Component({
   selector: 'app-calendar-timeline',
   standalone: true,
-  imports: [CommonModule, IconButtonComponent, AvatarComponent],
+  imports: [
+    TranslatePipe,CommonModule, IconButtonComponent, AvatarComponent],
   template: `
     <div class="tl" [class.tl--single]="single()" [style.--hour-px]="hourPx">
       <!-- Cabecera: el hueco de las horas + una columna por dia. -->
@@ -70,7 +74,7 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
               type="button"
               class="tl__daynum"
               [attr.aria-current]="day.isToday ? 'date' : null"
-              [title]="'Ver el día ' + day.iso"
+              [title]="'calendar.view_day_date' | t:{date: day.iso}"
               (click)="openDay.emit(day.iso)"
             >
               <span class="tl__dow">{{ dayLabel(day) }}</span>
@@ -85,11 +89,11 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
             @if (kitchen) {
               <app-icon-button
                 icon="add"
-                label="Añadir comida"
+                [label]="'calendar.anadir_comida' | t"
                 size="sm"
                 variant="ghost"
                 data-test="timeline-add-meal"
-                [attr.title]="'Añadir comida el ' + day.iso"
+                [attr.title]="'calendar.add_meal_on' | t:{date: day.iso}"
                 (onClick)="onAddMeal(day)"
               />
             }
@@ -99,7 +103,7 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
 
       <!-- Banda de «todo el dia»: lo que no tiene hora no se inventa una. -->
       <div class="tl__band" [style.grid-template-columns]="columns()">
-        <span class="tl__gutter tl__gutter--band">Todo el día</span>
+        <span class="tl__gutter tl__gutter--band">{{ 'calendar.todo_el_dia' | t }}</span>
         @for (day of days; track day.iso) {
           <div
             class="tl__bandcol"
@@ -483,6 +487,8 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
   ]
 })
 export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
+  private readonly i18n = inject(I18nService);
+
   @Input() days: CalendarDayView[] = [];
   /** Con la cocina apagada no hay comidas que pintar: la rejilla es solo agenda. */
   @Input() kitchen = true;
@@ -633,20 +639,20 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
     // imprimirla seria ensenar un reloj que nadie puso. Lo que si cabe es el nombre del tipo, que es
     // el dato real (una comida generada por la IA tiene tipo, no tiene hora).
     if (item.timed && item.meal?.time) return item.meal.time;
-    return item.mealType ? MEAL_TYPE_META[item.mealType].label : '';
+    return item.mealType ? this.i18n.t(MEAL_LABEL_KEYS[item.mealType]) : '';
   }
 
   protected tipOf(item: TimelineItem): string {
     const parts = [this.titleOf(item)];
     const when = this.whenOf(item);
     if (when) parts.push(when);
-    if (item.allDay) parts.push('todo el día');
+    if (item.allDay) parts.push(this.i18n.t('calendar.todo_el_dia'));
     if (item.kind === 'event' && item.event) {
-      if (item.event.authorName) parts.push(`de ${item.event.authorName}`);
+      if (item.event.authorName) parts.push(this.i18n.t('calendar.de_persona', { name: item.event.authorName }));
       const invited = (item.event.attendees ?? []).map((person) => person.name);
-      if (invited.length) parts.push(`con ${invited.join(', ')}`);
+      if (invited.length) parts.push(this.i18n.t('calendar.con_personas', { names: invited.join(', ') }));
     }
-    if (item.kind === 'meal' && item.mealType) parts.push(MEAL_TYPE_META[item.mealType].label);
+    if (item.kind === 'meal' && item.mealType) parts.push(this.i18n.t(MEAL_LABEL_KEYS[item.mealType]));
     return parts.filter(Boolean).join(' · ');
   }
 

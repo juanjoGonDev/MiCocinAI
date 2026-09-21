@@ -57,6 +57,9 @@ import {
   HouseholdEventKind,
   eventTimeLabel
 } from '../../shared/models/calendar.model';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
+import { MEAL_LABEL_KEYS } from '../../core/i18n/labels';
 
 /** Días por fila de la vista de mes. */
 const WEEK_LENGTH = 7;
@@ -102,6 +105,8 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
   selector: 'app-calendar',
   standalone: true,
   imports: [
+    TranslatePipe,
+    
     IconComponent,
     AvatarComponent,
     PickerComponent,
@@ -123,7 +128,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         <!-- ══ Cabecera ══ -->
         <header class="cal-top">
           <div class="cal-top__title">
-            <span class="cal-top__eyebrow">Planificación</span>
+            <span class="cal-top__eyebrow">{{ 'calendar.planificacion' | t }}</span>
             <h1 class="calendar__title">{{ periodLabel() }}</h1>
           </div>
 
@@ -131,24 +136,24 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             <button
               type="button"
               class="cal-icon-btn"
-              aria-label="Periodo anterior"
-              title="Periodo anterior (←)"
+              [attr.aria-label]="'calendar.periodo_anterior' | t"
+              [attr.title]="'calendar.periodo_anterior_2' | t"
               (click)="shift(-1)"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
             </button>
-            <button type="button" class="cal-pill" title="Ir a hoy (T)" (click)="goToToday()">Hoy</button>
+            <button type="button" class="cal-pill" [attr.title]="'calendar.ir_a_hoy_t' | t" (click)="goToToday()">{{ 'calendar.hoy' | t }}</button>
             <button
               type="button"
               class="cal-icon-btn"
-              aria-label="Periodo siguiente"
-              title="Periodo siguiente (→)"
+              [attr.aria-label]="'calendar.periodo_siguiente' | t"
+              [attr.title]="'calendar.periodo_siguiente_2' | t"
               (click)="shift(1)"
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
             </button>
 
-            <label class="cal-jump" title="Ir a una fecha concreta">
+            <label class="cal-jump" [attr.title]="'calendar.ir_a_una_fecha_2' | t">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M7 3v2M17 3v2M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
               </svg>
@@ -157,13 +162,13 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
                 [value]="anchorIso()"
                 (change)="jumpTo(input.value)"
                 #input
-                aria-label="Ir a una fecha"
+                [attr.aria-label]="'calendar.ir_a_una_fecha' | t"
               />
             </label>
           </div>
 
           <div class="cal-top__right">
-            <div class="cal-segment" role="tablist" aria-label="Vista del calendario">
+            <div class="cal-segment" role="tablist" [attr.aria-label]="'calendar.vista_del_calendario' | t">
               <button
                 *ngFor="let option of viewOptions"
                 type="button"
@@ -174,27 +179,27 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
                 [class.is-active]="view() === option"
                 (click)="setView(option)"
               >
-                {{ CALENDAR_VIEW_LABELS[option] }}
+                {{ CALENDAR_VIEW_LABELS[option] | t }}
               </button>
             </div>
 
             @if (kitchen()) {
               <button type="button" class="cal-pill" (click)="openGoalsModal()">
-                Objetivo<span *ngIf="goalLabel()"> · {{ goalLabel() }}</span>
+                {{ 'calendar.objetivo' | t }}<span *ngIf="goalLabel()"> · {{ goalLabel() }}</span>
               </button>
               <button type="button" class="cal-btn cal-btn--primary" (click)="openGenerateModal()">
-                Planificar IA
+                {{ 'calendar.planificar_ia' | t }}
               </button>
             }
             <button type="button" class="cal-pill cal-pill--add" data-test="event-add" (click)="openEventModal()">
               <app-icon name="add" [size]="16" [label]="null" />
-              <span>Evento</span>
+              <span>{{ 'calendar.evento' | t }}</span>
             </button>
           </div>
         </header>
 
         <!-- ══ Capas: que se pinta hoy en la rejilla ══ -->
-        <div class="cal-layers" role="group" aria-label="Que se muestra en el calendario" data-test="calendar-layers">
+        <div class="cal-layers" role="group" [attr.aria-label]="'calendar.que_se_muestra_en' | t" data-test="calendar-layers">
           @if (kitchen()) {
             <button
               type="button"
@@ -205,7 +210,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (click)="showMeals.set(!showMeals())"
             >
               <span class="cal-layer__dot" style="background: var(--primary)"></span>
-              Comidas
+              {{ 'calendar.comidas' | t }}
             </button>
           }
           @for (kind of eventKinds; track kind) {
@@ -218,7 +223,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (click)="toggleKind(kind)"
             >
               <span class="cal-layer__dot" [style.background]="metaOf(kind).color"></span>
-              {{ metaOf(kind).label }}
+              {{ metaOf(kind).labelKey | t }}
               @if (countOf(kind) > 0) {
                 <span class="cal-layer__count">{{ countOf(kind) }}</span>
               }
@@ -230,19 +235,19 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         <div class="cal-strip" [class.cal-strip--bare]="!kitchen()">
           @if (kitchen()) {
           <div class="cal-strip__item">
-            <span class="cal-strip__label">Comidas</span>
+            <span class="cal-strip__label">{{ 'calendar.comidas' | t }}</span>
             <span class="cal-strip__value">
               {{ plannedCount() }}<small> / {{ expectedMeals() }}</small>
             </span>
           </div>
-          <div class="cal-strip__track" [title]="'Comidas planificadas en ' + periodLabel()">
+          <div class="cal-strip__track" [title]="'calendar.planned_in' | t:{period: periodLabel()}">
             <span class="cal-strip__fill" [style.width.%]="plannedPercent()"></span>
           </div>
 
           <div class="cal-strip__item" *ngIf="hasNutrition()">
-            <span class="cal-strip__label">Energía</span>
+            <span class="cal-strip__label">{{ 'calendar.energia' | t }}</span>
             <span class="cal-strip__value">
-              {{ fmt(calories()) }}<small> / {{ fmt(calendarService.targetCalories()) }} kcal</small>
+              {{ fmt(calories()) }}<small>{{ 'calendar.kcal_of_target' | t:{target: fmt(calendarService.targetCalories())} }}</small>
             </span>
           </div>
           <div class="cal-strip__track" *ngIf="hasNutrition()">
@@ -256,18 +261,18 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           <span class="cal-strip__spacer"></span>
 
           <span class="cal-strip__hint" *ngIf="plannedCount() === 0 && !isLoading()">
-            Nada planificado en {{ periodShortLabel() }}.
-            <button type="button" class="cal-link" (click)="openGenerateModal()">Que lo haga la IA</button>
+            {{ 'calendar.nothing_planned' | t:{period: periodShortLabel()} }}
+            <button type="button" class="cal-link" (click)="openGenerateModal()">{{ 'calendar.que_lo_haga_la' | t }}</button>
             <span aria-hidden="true">·</span>
             <button type="button" class="cal-link" (click)="openAddModal(anchorIso(), 'lunch')">
-              Empezar por el almuerzo
+              {{ 'calendar.empezar_por_el_almuerzo' | t }}
             </button>
           </span>
           }
 
           <span class="cal-strip__hint" *ngIf="calendarService.error()">
             {{ calendarService.error() }}
-            <button type="button" class="cal-link" (click)="reload()">Reintentar</button>
+            <button type="button" class="cal-link" (click)="reload()">{{ 'calendar.reintentar' | t }}</button>
           </span>
         </div>
 
@@ -315,14 +320,14 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
            «anadir» a seis lineas de distancia son dos formas de preguntar lo mismo, y la
            de abajo se comia el encabezado de una seccion que va de lista en lista.
            OJO: dentro de este literal no pueden aparecer backticks, cierran el string. -->
-        <section class="cal-agenda" data-test="agenda" aria-label="Agenda del día">
+        <section class="cal-agenda" data-test="agenda" [attr.aria-label]="'calendar.agenda_del_dia' | t">
           <header class="cal-agenda__head">
             <div class="cal-agenda__who">
-              <p class="cal-agenda__eyebrow">Agenda</p>
+              <p class="cal-agenda__eyebrow">{{ 'calendar.agenda' | t }}</p>
               <h3 class="cal-agenda__title">{{ anchorLabel() }}</h3>
             </div>
             @if (agendaDay().isToday) {
-              <span class="cal-agenda__today" data-test="agenda-today">Hoy</span>
+              <span class="cal-agenda__today" data-test="agenda-today">{{ 'calendar.hoy' | t }}</span>
             }
             @if (agendaDay().events.length) {
               <span class="cal-agenda__count">{{ agendaDay().events.length }} {{ agendaDay().events.length === 1 ? 'plan' : 'planes' }}</span>
@@ -340,8 +345,8 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           } @else {
             <p class="cal-agenda__empty">
               <app-icon name="event_note" [size]="18" [label]="null" />
-              <span>Nada mas apuntado ese dia.</span>
-              <small>«+ Evento», arriba, lo anade directamente aqui.</small>
+              <span>{{ 'calendar.nada_mas_apuntado_ese' | t }}</span>
+              <small>{{ 'calendar.evento_arriba_lo_anade' | t }}</small>
             </p>
           }
         </section>
@@ -350,21 +355,21 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       <!-- ══ Suelta de la casa ══ -->
       <app-modal
         [isOpen]="isEventModalOpen()"
-        [title]="eventDraft.id ? 'Editar evento' : 'Apuntar un evento'"
+        [title]="eventDraft.id ? ('calendar.edit_event' | t) : ('calendar.new_event' | t)"
         size="md"
         (onClose)="closeEventModal()"
       >
         <div class="meal-form">
           <div class="meal-form__field">
-            <label for="event-title">Que es</label>
-            <input id="event-title" name="eventTitle" class="cal-input" maxlength="120" [(ngModel)]="eventDraft.title" data-test="event-title" placeholder="Carpinteria: medir el pasillo" />
+            <label for="event-title">{{ 'calendar.que_es' | t }}</label>
+            <input id="event-title" name="eventTitle" class="cal-input" maxlength="120" [(ngModel)]="eventDraft.title" data-test="event-title" [placeholder]="'calendar.carpinteria_medir_el_pasillo' | t" />
           </div>
 
           <div class="meal-form__row">
             <div class="meal-form__field meal-form__field--sm">
-              <span class="cal-field-label">Tipo</span>
+              <span class="cal-field-label">{{ 'calendar.tipo' | t }}</span>
               <app-picker
-                label="Tipo de evento"
+                [label]="'calendar.tipo_de_evento' | t"
                 [options]="kindOptions()"
                 [value]="eventDraft.kind"
                 [filterFrom]="99"
@@ -373,40 +378,40 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               />
             </div>
             <div class="meal-form__field meal-form__field--sm">
-              <label for="event-date">Dia</label>
+              <label for="event-date">{{ 'calendar.dia' | t }}</label>
               <input id="event-date" name="eventDate" type="date" class="cal-input" [(ngModel)]="eventDraft.date" />
             </div>
           </div>
 
           <div class="meal-form__row">
             <app-checkbox
-              label="Todo el día"
+              [label]="'calendar.todo_el_dia' | t"
               name="eventAllDay"
               [checked]="eventDraft.allDay"
               (checkedChange)="setAllDay($event)"
             />
             @if (!eventDraft.allDay) {
               <div class="meal-form__field meal-form__field--sm">
-                <label for="event-start">Desde</label>
+                <label for="event-start">{{ 'calendar.desde' | t }}</label>
                 <input id="event-start" name="eventStart" type="time" class="cal-input" [(ngModel)]="eventDraft.startTime" />
               </div>
               <div class="meal-form__field meal-form__field--sm">
-                <label for="event-end">Hasta</label>
+                <label for="event-end">{{ 'calendar.hasta' | t }}</label>
                 <input id="event-end" name="eventEnd" type="time" class="cal-input" [(ngModel)]="eventDraft.endTime" />
               </div>
             }
           </div>
 
           <div class="meal-form__field">
-            <label>Color</label>
-            <div class="cal-swatches" role="group" aria-label="Color del evento">
+            <label>{{ 'calendar.color' | t }}</label>
+            <div class="cal-swatches" role="group" [attr.aria-label]="'calendar.color_del_evento' | t">
               @for (color of eventColors; track color) {
                 <button
                   type="button"
                   class="cal-swatch"
                   [class.is-active]="(eventDraft.color ?? metaOf(eventDraft.kind).color) === color"
                   [style.background]="color"
-                  [attr.aria-label]="'Color ' + color"
+                  [attr.aria-label]="'calendar.color_value' | t:{color: color}"
                   (click)="eventDraft.color = color; eventDraft.colorTouched = true"
                 ></button>
               }
@@ -414,25 +419,25 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           </div>
 
           <div class="meal-form__field">
-            <label for="event-place">Sitio (opcional)</label>
-            <input id="event-place" name="eventPlace" class="cal-input" maxlength="120" [(ngModel)]="eventDraft.location" placeholder="Tienda de la calle Acera" />
+            <label for="event-place">{{ 'calendar.sitio_opcional' | t }}</label>
+            <input id="event-place" name="eventPlace" class="cal-input" maxlength="120" [(ngModel)]="eventDraft.location" [placeholder]="'calendar.tienda_de_la_calle' | t" />
           </div>
 
           <div class="meal-form__field">
-            <label for="event-notes">Notas (opcional)</label>
+            <label for="event-notes">{{ 'calendar.notas_opcional' | t }}</label>
             <textarea id="event-notes" name="eventNotes" class="cal-input" rows="2" maxlength="500" [(ngModel)]="eventDraft.notes"></textarea>
           </div>
 
           @if (hasHousehold()) {
             <app-checkbox
-              label="Que lo vea mi casa"
+              [label]="'calendar.que_lo_vea_mi' | t"
               name="eventShared"
               [checked]="eventDraft.sharedWithHousehold"
               (checkedChange)="eventDraft.sharedWithHousehold = $event"
             />
 
             <div class="meal-form__field">
-              <label id="event-people-label">Quién viene (opcional)</label>
+              <label id="event-people-label">{{ 'calendar.quien_viene_opcional' | t }}</label>
               <div class="cal-people" role="group" aria-labelledby="event-people-label" data-test="event-attendees">
                 @for (person of householdPeople(); track person.userId) {
                   <button
@@ -452,11 +457,11 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               </div>
               @if (!householdPeople().length) {
                 <p class="cal-note" data-test="event-no-people">
-                  Eres la única persona de la casa.
-                  <button type="button" class="cal-link" (click)="openHouseholdPage()">Invitar a alguien</button>
+                  {{ 'calendar.eres_la_unica_persona' | t }}
+                  <button type="button" class="cal-link" (click)="openHouseholdPage()">{{ 'calendar.invitar_a_alguien' | t }}</button>
                 </p>
               } @else {
-                <p class="cal-note">Solo cambia tu visibilidad: la casa ya comparte la agenda.</p>
+                <p class="cal-note">{{ 'calendar.solo_cambia_tu_visibilidad' | t }}</p>
               }
             </div>
           }
@@ -464,10 +469,10 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
           <div class="meal-form__actions">
             @if (eventDraft.id) {
-              <button type="button" class="cal-btn cal-btn--ghost cal-btn--danger" (click)="removeEvent()">Borrar</button>
+              <button type="button" class="cal-btn cal-btn--ghost cal-btn--danger" (click)="removeEvent()">{{ 'calendar.borrar' | t }}</button>
             }
             <span class="meal-form__grow"></span>
-            <button type="button" class="cal-btn cal-btn--ghost" (click)="closeEventModal()">Cancelar</button>
+            <button type="button" class="cal-btn cal-btn--ghost" (click)="closeEventModal()">{{ 'common.cancel' | t }}</button>
             <button
               type="button"
               class="cal-btn cal-btn--primary"
@@ -484,7 +489,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       <!-- ══ Añadir / editar comida ══ -->
       <app-modal
         [isOpen]="isMealModalOpen()"
-        [title]="draft.id ? 'Editar Comida' : 'Agregar Comida'"
+        [title]="draft.id ? ('calendar.edit_meal' | t) : ('calendar.add_meal_title' | t)"
         size="md"
         (onClose)="closeMealModal()"
       >
@@ -493,7 +498,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             <span class="meal-form__band" [attr.data-meal]="draft.mealType" aria-hidden="true"></span>
             <strong>{{ MEAL_TYPE_META[draft.mealType].label }}</strong>
             <span class="meal-form__date">{{ draftDateLabel() }}</span>
-            <div class="meal-form__tabs" role="tablist" aria-label="Origen de la comida">
+            <div class="meal-form__tabs" role="tablist" [attr.aria-label]="'calendar.origen_de_la_comida' | t">
               <button
                 type="button"
                 role="tab"
@@ -502,7 +507,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
                 [attr.aria-selected]="mealTab() === 'custom'"
                 (click)="switchAddMealTab('custom')"
               >
-                Escribir
+                {{ 'calendar.escribir' | t }}
               </button>
               <button
                 type="button"
@@ -512,43 +517,43 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
                 [attr.aria-selected]="mealTab() === 'recipe'"
                 (click)="switchAddMealTab('recipe')"
               >
-                Receta
+                {{ 'calendar.receta' | t }}
               </button>
             </div>
           </div>
 
           <div class="meal-form__field" *ngIf="mealTab() === 'custom'">
-            <label for="meal-custom">¿Qué vas a comer?</label>
+            <label for="meal-custom">{{ 'calendar.que_vas_a_comer' | t }}</label>
             <input
               id="meal-custom"
               type="text"
               maxlength="200"
               [(ngModel)]="draft.customMeal"
-              placeholder="Ej: Pasta con tomate y albahaca"
+              [placeholder]="'calendar.ej_pasta_con_tomate' | t"
               class="cal-input"
             />
           </div>
 
           <div class="meal-form__field" *ngIf="mealTab() === 'recipe'">
-            <label for="meal-recipe">Selecciona una receta</label>
+            <label for="meal-recipe">{{ 'calendar.selecciona_una_receta' | t }}</label>
             <select id="meal-recipe" [(ngModel)]="draft.recipeId" class="cal-input">
-              <option value="">Seleccionar…</option>
+              <option value="">{{ 'calendar.seleccionar' | t }}</option>
               <option *ngFor="let recipe of recipeService.recipes()" [value]="recipe.id">
                 {{ recipe.name }}{{ recipe.calories ? ' · ' + recipe.calories + ' kcal' : '' }}
               </option>
             </select>
             <span class="cal-hint" *ngIf="recipeService.recipes().length === 0">
-              Todavía no hay recetas en tu recetario.
+              {{ 'calendar.todavia_no_hay_recetas' | t }}
             </span>
           </div>
 
           <div class="meal-form__row">
             <div class="meal-form__field meal-form__field--sm">
-              <label for="meal-time">Hora (opcional)</label>
+              <label for="meal-time">{{ 'calendar.hora_opcional' | t }}</label>
               <input id="meal-time" type="time" [(ngModel)]="draft.time" class="cal-input" />
             </div>
             <div class="meal-form__field meal-form__field--sm">
-              <label for="meal-servings">Raciones</label>
+              <label for="meal-servings">{{ 'calendar.raciones' | t }}</label>
               <input
                 id="meal-servings"
                 type="number"
@@ -561,13 +566,13 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           </div>
 
           <div class="meal-form__field">
-            <label for="meal-notes">Notas (opcional)</label>
+            <label for="meal-notes">{{ 'calendar.notas_opcional' | t }}</label>
             <textarea
               id="meal-notes"
               rows="2"
               maxlength="500"
               [(ngModel)]="draft.notes"
-              placeholder="Ej: sobras del día anterior, sin gluten…"
+              [placeholder]="'calendar.ej_sobras_del_dia' | t"
               class="cal-input cal-input--area"
             ></textarea>
           </div>
@@ -579,17 +584,17 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               class="cal-btn cal-btn--danger"
               (click)="removeMealById(draft.id)"
             >
-              Eliminar
+              {{ 'common.delete' | t }}
             </button>
             <span class="meal-form__grow"></span>
-            <button type="button" class="cal-btn" (click)="closeMealModal()">Cancelar</button>
+            <button type="button" class="cal-btn" (click)="closeMealModal()">{{ 'common.cancel' | t }}</button>
             <button
               type="button"
               class="cal-btn cal-btn--primary"
               [disabled]="!draftValid()"
               (click)="saveMeal()"
             >
-              {{ draft.id ? 'Guardar cambios' : 'Añadir' }}
+              {{ draft.id ? ('calendar.save_changes' | t) : ('ui.anadir' | t) }}
             </button>
           </div>
         </div>
@@ -598,14 +603,13 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       <!-- ══ Objetivos ══ -->
       <app-modal
         [isOpen]="isGoalsModalOpen()"
-        title="Objetivos Nutricionales"
+        [attr.title]="'calendar.objetivos_nutricionales' | t"
         size="md"
         (onClose)="closeGoalsModal()"
       >
         <div class="goals-form">
           <p class="cal-muted">
-            Sirven de punto de partida al planificar con IA. El objetivo fino de alergias y
-            gustos se edita en Preferencias.
+            {{ 'calendar.sirven_de_punto_de' | t }}
           </p>
           <div class="goals-form__options">
             <button
@@ -617,12 +621,12 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (click)="goalsDraft.type = goal.value"
             >
               <span class="goal-option__icon" aria-hidden="true">{{ goal.icon }}</span>
-              <span class="goal-option__label">{{ goal.label }}</span>
+              <span class="goal-option__label">{{ goal.labelKey | t }}</span>
             </button>
           </div>
 
           <div class="meal-form__field meal-form__field--sm">
-            <label for="goals-calories">Calorías diarias objetivo</label>
+            <label for="goals-calories">{{ 'calendar.calorias_diarias_objetivo' | t }}</label>
             <input
               id="goals-calories"
               type="number"
@@ -636,8 +640,8 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
           <div class="meal-form__actions">
             <span class="meal-form__grow"></span>
-            <button type="button" class="cal-btn" (click)="closeGoalsModal()">Cancelar</button>
-            <button type="button" class="cal-btn cal-btn--primary" (click)="saveGoals()">Guardar</button>
+            <button type="button" class="cal-btn" (click)="closeGoalsModal()">{{ 'common.cancel' | t }}</button>
+            <button type="button" class="cal-btn cal-btn--primary" (click)="saveGoals()">{{ 'common.save' | t }}</button>
           </div>
         </div>
       </app-modal>
@@ -645,27 +649,26 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       <!-- ══ Planificar con IA ══ -->
       <app-modal
         [isOpen]="isGenerateModalOpen()"
-        title="Planificar con IA"
+        [attr.title]="'calendar.planificar_con_ia' | t"
         size="md"
         (onClose)="closeGenerateModal()"
       >
         <div class="generate-form">
           <p class="cal-muted">
-            La IA prepara la <strong>{{ planWeekLabel() }}</strong>. Rellena los huecos: lo que ya
-            tengas puesto ese día y a esa hora se queda como está.
+            {{ 'calendar.gen_intro' | t:{period: planWeekLabel()} }}
           </p>
 
           <div class="meal-form__field">
-            <label for="gen-goal">Objetivo</label>
+            <label for="gen-goal">{{ 'calendar.objetivo' | t }}</label>
             <select id="gen-goal" [(ngModel)]="generateOptions.goalType" class="cal-input" (change)="onGoalTypeChange()">
               <option *ngFor="let goal of goalOptions" [value]="goal.value">
-                {{ goal.label }}
+                {{ goal.labelKey | t }}
               </option>
             </select>
           </div>
 
           <fieldset class="meal-form__field" data-test="gen-meals">
-            <legend class="meal-form__label">¿Qué comidas quieres en el calendario?</legend>
+            <legend class="meal-form__label">{{ 'calendar.que_comidas_quieres_en' | t }}</legend>
             <!-- Cuatro casillas, no un desplegable de multi-seleccion: «quitar la merienda» es un click,
                  y ver las cuatro con lo que esta marcado es lo que evita pedir un dia a medias sin
                  querer. Ninguna marcada = el dia entero, y eso se dice aqui, no en un 400. -->
@@ -673,34 +676,33 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               <app-checkbox
                 *ngFor="let meal of mealTypesForPicker"
                 [attr.data-test]="'gen-meal-' + meal"
-                [label]="mealMeta[meal].label"
+                [label]="mealLabel(meal)"
                 [checked]="generateOptions.mealTypes[meal]"
                 (checkedChange)="toggleGenerateMeal(meal, $event)"
               />
             </div>
             <span class="cal-hint">
-              Solo se pediran y se guardaran esas comidas. Si no marcas ninguna, se planifica el dia
-              completo.
+              {{ 'calendar.solo_se_pediran_y' | t }}
             </span>
           </fieldset>
 
           <div class="meal-form__field" *ngIf="generateOptions.goalType === 'custom'">
-            <label for="gen-custom">Describe tu objetivo</label>
+            <label for="gen-custom">{{ 'calendar.describe_tu_objetivo' | t }}</label>
             <textarea
               id="gen-custom"
               name="customDescription"
               rows="4"
               [(ngModel)]="generateOptions.customDescription"
-              placeholder="Ej: cenas ligeras y sin carne los lunes y miércoles, mucha verdura, poco frito y algo de pasta o arroz dos veces por semana. Sin gluten."
+              [placeholder]="'calendar.ej_cenas_ligeras_y' | t"
               class="cal-input cal-input--area"
             ></textarea>
             <span class="cal-hint">
-              Cuanto más concreto, mejor: intolerancias, horarios, recetas que te gusten…
+              {{ 'calendar.cuanto_mas_concreto_mejor' | t }}
             </span>
           </div>
 
           <div class="meal-form__field meal-form__field--sm">
-            <label for="gen-calories">Calorías diarias (opcional)</label>
+            <label for="gen-calories">{{ 'calendar.calorias_diarias_opcional' | t }}</label>
             <input
               id="gen-calories"
               type="number"
@@ -714,7 +716,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
           <div class="meal-form__actions">
             <span class="meal-form__grow"></span>
-            <button type="button" class="cal-btn" (click)="closeGenerateModal()">Cancelar</button>
+            <button type="button" class="cal-btn" (click)="closeGenerateModal()">{{ 'common.cancel' | t }}</button>
             <button
               type="button"
               class="cal-btn cal-btn--primary"
@@ -722,7 +724,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (click)="generateWeeklyPlan()"
             >
               <span class="cal-spinner" *ngIf="isGenerating()" aria-hidden="true"></span>
-              {{ isGenerating() ? 'Planificando…' : 'Generar plan' }}
+              {{ isGenerating() ? ('calendar.generating' | t) : ('calendar.generate_plan' | t) }}
             </button>
           </div>
         </div>
@@ -1577,6 +1579,8 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
   `]
 })
 export class CalendarComponent implements OnInit {
+  private readonly i18n = inject(I18nService);
+
   calendarService = inject(CalendarService);
   recipeService = inject(RecipeService);
 
@@ -1640,6 +1644,14 @@ export class CalendarComponent implements OnInit {
   readonly mealTypesForPicker = MEAL_ORDER;
   /** Nombre de cada comida (la plantilla no puede importar el modelo por su cuenta). */
   readonly mealMeta = MEAL_TYPE_META;
+
+  /**
+   * Lo que se ensena de una comida. `mealMeta[...].label` es la cadena del contrato con la IA y se queda
+   * en espanol; esta es la version que lee la persona, en su idioma.
+   */
+  mealLabel(meal: MealType): string {
+    return this.i18n.t(MEAL_LABEL_KEYS[meal]);
+  }
 
   /**
    * Las horas de la casa convertidas en minutos del dia: lo que usa la rejilla para sentar una comida
@@ -1839,7 +1851,7 @@ export class CalendarComponent implements OnInit {
 
   goalLabel(): string {
     const type = this.selectedGoal() ?? this.calendarService.goalType();
-    return type ? (GOAL_TYPE_LABELS[type] ?? type) : '';
+    return type ? this.i18n.t(GOAL_TYPE_LABELS[type] ?? ('calendar.goal.custom' as never)) : '';
   }
 
   plannedPercent(): number {
@@ -2037,7 +2049,7 @@ export class CalendarComponent implements OnInit {
         const when = parseISODate(this.draft.date);
         this.toastService.success(
           this.draft.id ? 'Comida actualizada' : 'Comida añadida',
-          `${MEAL_TYPE_META[this.draft.mealType].label}${when ? ' · ' + labels.longDay(when) : ''}`
+          `${this.i18n.t(MEAL_LABEL_KEYS[this.draft.mealType])}${when ? ' · ' + labels.longDay(when) : ''}`
         );
         this.closeMealModal();
       },
@@ -2264,7 +2276,8 @@ export class CalendarComponent implements OnInit {
   readonly kindOptions = computed<PickerOption[]>(() =>
     HOUSEHOLD_EVENT_KINDS.map((kind) => ({
       value: kind,
-      label: HOUSEHOLD_EVENT_META[kind].label,
+      // El picker pinta `label`: aqui si que hay que traducir, porque es texto de la interfaz y no dato.
+      label: this.i18n.t(HOUSEHOLD_EVENT_META[kind].labelKey),
       color: HOUSEHOLD_EVENT_META[kind].color
     }))
   );

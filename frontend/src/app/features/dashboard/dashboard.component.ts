@@ -10,10 +10,11 @@ import { CardComponent } from '../../shared/components/ui/card/card.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { ProgressComponent } from '../../shared/components/ui/progress/progress.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 
 interface QuickStat {
   icon: string;
-  labelKey: string;
+  labelKey: TranslationKey;
   value: string | number;
   color: string;
 }
@@ -130,7 +131,7 @@ interface SuggestedRecipe {
           <div *ngIf="suggestedRecipes().length === 0 && !isLoading()" class="empty-state">
             <span class="empty-state__icon">📖</span>
             <p class="empty-state__text">{{ 'dashboard.noSuggested' | t }}</p>
-            <a routerLink="/recipes" fragment="ai" class="empty-state__link">{{ 'dashboard.genAIRecipes' | t }}</a>
+            <a routerLink="/recipes" fragment="ai" class="empty-state__link">{{ 'dashboard.genAI' | t }}</a>
           </div>
         </div>
       </section>
@@ -376,7 +377,7 @@ export class DashboardComponent implements OnInit {
     },
     {
       icon: '📖',
-      labelKey: 'dashboard.recipes',
+      labelKey: 'nav.recipes',
       value: this.recipeService.total(),
       color: 'var(--secondary)'
     },

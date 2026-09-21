@@ -7,21 +7,24 @@ import { ToastService } from '../../../core/services/toast.service';
 import { HouseholdService } from '../../../core/services/household.service';
 import { ButtonComponent } from '../../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../../shared/components/ui/input/input.component';
+import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
   template: `
     <form (ngSubmit)="onSubmit()" class="register-form">
-      <h2 class="register-form__title">Crear Cuenta</h2>
+      <h2 class="register-form__title">{{ 'auth.register.cta' | t }}</h2>
       
       <app-input
         id="name"
         name="name"
         type="text"
-        label="Nombre"
-        placeholder="Tu nombre"
+        [label]="'auth.name' | t"
+        [placeholder]="'auth.tu_nombre' | t"
         [(ngModel)]="name"
         [required]="true"
         [error]="nameError()"
@@ -31,8 +34,8 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
         id="email"
         name="email"
         type="email"
-        label="Email"
-        placeholder="tu@email.com"
+        [label]="'auth.email' | t"
+        [placeholder]="'auth.tu_email_com' | t"
         [(ngModel)]="email"
         [required]="true"
         [error]="emailError()"
@@ -42,7 +45,7 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
         id="password"
         name="password"
         type="password"
-        label="Contraseña"
+        [label]="'auth.password' | t"
         placeholder="••••••••"
         [(ngModel)]="password"
         [required]="true"
@@ -51,8 +54,7 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
       ></app-input>
 
       <p class="register-form__note">
-        Al entrar te preguntamos cinco cosas cortas: cuánto cocinas, qué quieres llevar desde la app
-        y qué no puedes comer. Se pueden saltar y cambiar luego en Preferencias.
+        {{ 'auth.al_entrar_te_preguntamos' | t }}
       </p>
 
       <app-button
@@ -62,13 +64,13 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
         [fullWidth]="true"
         [loading]="isLoading()"
       >
-        Crear Cuenta
+        {{ 'auth.register.cta' | t }}
       </app-button>
 
       <div class="register-form__footer">
-        <span>¿Ya tienes cuenta?</span>
+        <span>{{ 'auth.already' | t }}</span>
         <a routerLink="/auth/login" class="register-form__link">
-          Inicia sesión
+          {{ 'auth.inicia_sesion' | t }}
         </a>
       </div>
     </form>

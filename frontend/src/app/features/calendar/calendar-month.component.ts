@@ -10,6 +10,7 @@ import { formatNumber, labels } from './calendar.util';
 import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
 import { HouseholdEvent } from '../../shared/models/calendar.model';
 import { CalendarEventComponent } from './calendar-event.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 /**
  * Vista de mes: la rejilla clásica de 7 columnas con filas justas (4–6).
@@ -21,7 +22,9 @@ import { CalendarEventComponent } from './calendar-event.component';
 @Component({
   selector: 'app-calendar-month',
   standalone: true,
-  imports: [CommonModule, CalendarHouseholdEventsComponent, CalendarEventComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, CalendarHouseholdEventsComponent, CalendarEventComponent],
   template: `
     <div class="cal-month">
       <div class="cal-month__head" role="row">
@@ -44,7 +47,7 @@ import { CalendarEventComponent } from './calendar-event.component';
               <button
                 type="button"
                 class="cal-cell__num"
-                [attr.aria-label]="'Ver el ' + dayLabel(day)"
+                [attr.aria-label]="'calendar.view_day_of' | t:{day: dayLabel(day)}"
                 (click)="$event.stopPropagation(); openDay.emit(day.iso)"
               >
                 {{ day.date.getDate() }}
@@ -69,7 +72,7 @@ import { CalendarEventComponent } from './calendar-event.component';
                 class="cal-cell__more"
                 (click)="$event.stopPropagation(); openDay.emit(day.iso)"
               >
-                +{{ day.planned - maxVisible }} más
+                {{ 'calendar.month_more' | t:{n: day.planned - maxVisible} }}
               </button>
             </div>
 
@@ -77,8 +80,8 @@ import { CalendarEventComponent } from './calendar-event.component';
               *ngIf="kitchen"
               type="button"
               class="cal-cell__plus"
-              aria-label="Añadir comida"
-              title="Añadir comida"
+              [attr.aria-label]="'calendar.anadir_comida' | t"
+              [attr.title]="'calendar.anadir_comida' | t"
               (click)="$event.stopPropagation(); addMeal.emit({ date: day.iso, mealType: firstFreeMealType(day) })"
             >
               +

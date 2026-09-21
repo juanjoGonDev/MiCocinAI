@@ -12,35 +12,74 @@
 // impide escribir una clave que no existe; lo que el tipo no puede ver es el `en`, y ahi mira el check-ui
 // (regla `clave-sin-traduccion`).
 // =============================================================================
+import { homeProfilePickerEs, homeProfilePickerEn } from './dict/home_profile_picker';
+import { shoppingListsEs, shoppingListsEn } from './dict/shopping_lists';
+import { shoppingListDetailEs, shoppingListDetailEn } from './dict/shopping_list_detail';
+import { onboardingEs, onboardingEn } from './dict/onboarding';
+import { inviteEs, inviteEn } from './dict/invite';
+import { householdEs, householdEn } from './dict/household';
+import { aiConfigEs, aiConfigEn } from './dict/ai_config';
+import { avatarEditorEs, avatarEditorEn } from './dict/avatar_editor';
+import { accountEs, accountEn } from './dict/account';
 import { uiEs, uiEn } from './dict/ui';
 import { authEs, authEn } from './dict/auth';
+import { calendarEs, calendarEn } from './dict/calendar';
 import { dashboardEs, dashboardEn } from './dict/dashboard';
 import { logsEs, logsEn } from './dict/logs';
 import { navEs, navEn } from './dict/nav';
 import { pantryEs, pantryEn } from './dict/pantry';
+import { preferencesEs, preferencesEn } from './dict/preferences';
+import { profileEs, profileEn } from './dict/profile';
 import { recipesEs, recipesEn } from './dict/recipes';
 import { settingsEs, settingsEn } from './dict/settings';
+import { tasteEs, tasteEn } from './dict/taste';
 
 const es = {
-  ...uiEs,
+  ...homeProfilePickerEs,
+  ...shoppingListsEs,
+  ...shoppingListDetailEs,
+  ...onboardingEs,
+  ...inviteEs,
+  ...householdEs,
+  ...aiConfigEs,
+  ...avatarEditorEs,
+  ...accountEs,
   ...authEs,
+  ...calendarEs,
   ...dashboardEs,
   ...logsEs,
   ...navEs,
   ...pantryEs,
+  ...preferencesEs,
+  ...profileEs,
   ...recipesEs,
   ...settingsEs,
+  ...tasteEs,
+  ...uiEs,
 };
 
 const en: Record<keyof typeof es, string> = {
+  ...homeProfilePickerEn,
+  ...shoppingListsEn,
+  ...shoppingListDetailEn,
+  ...onboardingEn,
+  ...inviteEn,
+  ...householdEn,
+  ...aiConfigEn,
+  ...avatarEditorEn,
+  ...accountEn,
+  ...authEn,
+  ...calendarEn,
+  ...dashboardEn,
+  ...logsEn,
+  ...navEn,
+  ...pantryEn,
+  ...preferencesEn,
+  ...profileEn,
+  ...recipesEn,
+  ...settingsEn,
+  ...tasteEn,
   ...uiEn,
-  ...authEs,
-  ...dashboardEs,
-  ...logsEs,
-  ...navEs,
-  ...pantryEs,
-  ...recipesEs,
-  ...settingsEs,
 };
 
 export const DICTS = { es, en };
@@ -49,4 +88,9 @@ export const DICTS = { es, en };
 export type TranslationKey = keyof typeof es;
 
 /** Lo que hay que traducir, por si manana el diccionario viene de un JSON y no de un literal. */
-export type TranslationParams = Record<string, string | number>;
+/**
+ * Los valores admitidos dentro de `t:{...}`. En la plantilla un `preview()?.householdName` o un
+ * `describeOffer(offer)` llegan null o undefined segun el estado, y partir la frase en dos para
+ * garantias de tipo era peor: el nullish se sustituye por cadena vacia.
+ */
+export type TranslationParams = Record<string, string | number | null | undefined>;

@@ -1,9 +1,11 @@
-import { Component, Input, Output, EventEmitter, computed } from '@angular/core';
+import { Component, EventEmitter, Input, Output, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
+import { I18nService } from '../../../../core/services/i18n.service';
 import {
   COOKING_LEVEL_OPTIONS,
   CookingLevel,
-  detailLevelHint,
+  detailLevelHintKey,
   HOME_MODULE_OPTIONS,
   HomeModule,
   HomeProfile,
@@ -21,14 +23,15 @@ import {
 @Component({
   selector: 'app-home-profile-picker',
   standalone: true,
-  imports: [CommonModule],
+  imports: [
+    TranslatePipe,CommonModule],
   template: `
     <fieldset class="profile-picker">
       <legend class="profile-picker__legend">
-        {{ levelLabel }}
+        {{ levelLabelText }}
         <span class="profile-picker__required" *ngIf="askForLevel">*</span>
       </legend>
-      <p class="profile-picker__hint" *ngIf="levelHint">{{ levelHint }}</p>
+      <p class="profile-picker__hint" *ngIf="levelHint">{{ levelHintText }}</p>
 
       <div class="profile-picker__levels" *ngIf="askForLevel">
         <button
@@ -40,8 +43,8 @@ import {
           [attr.data-level]="option.value"
           (click)="setLevel(option.value)"
         >
-          <span class="profile-picker__level-label">{{ option.label }}</span>
-          <span class="profile-picker__level-hint">{{ option.hint }}</span>
+          <span class="profile-picker__level-label">{{ option.labelKey | t }}</span>
+          <span class="profile-picker__level-hint">{{ option.hintKey | t }}</span>
           <svg
             class="profile-picker__check"
             viewBox="0 0 20 20"
@@ -61,13 +64,13 @@ import {
       </div>
 
       <p class="profile-picker__effect" *ngIf="askForLevel">
-        {{ effectHint() }}
+        {{ effectHintKey() | t }}
       </p>
     </fieldset>
 
     <fieldset class="profile-picker" *ngIf="askForModules">
-      <legend class="profile-picker__legend">{{ modulesLabel }}</legend>
-      <p class="profile-picker__hint">{{ modulesHint }}</p>
+      <legend class="profile-picker__legend">{{ modulesLabelText }}</legend>
+      <p class="profile-picker__hint">{{ modulesHintText }}</p>
       <div class="profile-picker__modules">
         <label
           *ngFor="let option of modules"
@@ -96,15 +99,15 @@ import {
           </span>
           <span class="profile-picker__module-text">
             <span class="profile-picker__module-label">
-              {{ option.label }}
+              {{ option.labelKey | t }}
               <span class="profile-picker__soon" *ngIf="!option.available">pronto</span>
             </span>
-            <span class="profile-picker__module-hint">{{ option.hint }}</span>
+            <span class="profile-picker__module-hint">{{ option.hintKey | t }}</span>
           </span>
         </label>
       </div>
       <p class="profile-picker__footnote">
-        Lo que marques con «pronto» está en el plan: se activará solo cuando exista.
+        {{ 'home_profile_picker.lo_que_marques_con' | t }}
       </p>
     </fieldset>
   `,
@@ -303,15 +306,36 @@ import {
   ]
 })
 export class HomeProfilePickerComponent {
+  private readonly i18n = inject(I18nService);
+
   @Input({ required: true }) profile!: HomeProfile;
   @Output() profileChange = new EventEmitter<HomeProfile>();
 
-  @Input() levelLabel = '¿Cómo andas de cocina?';
-  @Input() levelHint =
-    'No es una etiqueta: decide cuánto te explica la IA cada receta y qué tan al grano va el planificador.';
-  @Input() modulesLabel = '¿Qué quieres llevar desde HogarIA?';
-  @Input() modulesHint =
-    'Marca lo que vas a usar. Lo que no marques sigue existiendo, solo que no te lo recordamos.';
+  /**
+   * Cuatro textos que eran literales en la declaracion del Input: se escribian una vez, al nacer el
+   * componente, y ahi se quedaban para siempre. Ahora el `@Input` es un `override` opcional y el valor
+   * de fabrica se resuelve al leer, en el idioma de ese momento (12s-B).
+   */
+  @Input() levelLabel?: string;
+  @Input() levelHint?: string;
+  @Input() modulesLabel?: string;
+  @Input() modulesHint?: string;
+
+  get levelLabelText(): string {
+    return this.levelLabel ?? this.i18n.t('home_profile_picker.como_andas_de_cocina');
+  }
+
+  get levelHintText(): string {
+    return this.levelHint ?? this.i18n.t('home_profile_picker.no_es_una_etiqueta');
+  }
+
+  get modulesLabelText(): string {
+    return this.modulesLabel ?? this.i18n.t('home_profile_picker.que_quieres_llevar');
+  }
+
+  get modulesHintText(): string {
+    return this.modulesHint ?? this.i18n.t('home_profile_picker.marca_lo_que_vas_a_usar');
+  }
   /** El tour pregunta las dos cosas; cada seccion solo la suya. */
   @Input() askForLevel = true;
   /** Los modulos son un flag de la app: se editan en Configuracion, no aqui. */
@@ -320,7 +344,7 @@ export class HomeProfilePickerComponent {
   readonly levels = COOKING_LEVEL_OPTIONS;
   readonly modules = HOME_MODULE_OPTIONS;
 
-  readonly effectHint = computed(() => detailLevelHint(this.profile?.cookingLevel ?? 'beginner'));
+  readonly effectHintKey = computed(() => detailLevelHintKey(this.profile?.cookingLevel ?? 'beginner'));
 
   isSelected(module: HomeModule): boolean {
     return (this.profile?.modules ?? []).includes(module);

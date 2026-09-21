@@ -6,11 +6,13 @@ import { TasteProfileService } from '../../core/services/taste-profile.service';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { ToastService } from '../../core/services/toast.service';
+import { I18nService } from '../../core/services/i18n.service';
+import type { TranslationKey } from '../../core/i18n';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { ChipSelectComponent } from '../../shared/components/ui/chip-select/chip-select.component';
 import { HomeProfilePickerComponent } from '../../shared/components/ui/home-profile-picker/home-profile-picker.component';
 import {
-  COOKING_LEVEL_LABELS,
+  COOKING_LEVEL_LABEL_KEYS,
   DEFAULT_HOME_PROFILE,
   HomeProfile,
   toHomeProfile
@@ -26,6 +28,7 @@ import {
 import { syncTabWithUrl } from '../../core/utils/tab-url';
 import { MealTimes, mealTimesPatch, resolveMealTimes } from '../../core/meal-times';
 import { MealHoursComponent } from '../../shared/components/ui/meal-hours/meal-hours.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 /**
  * Preferencias del comensal: lo que la IA tiene en cuenta al cocinar.
@@ -43,6 +46,8 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
   selector: 'app-preferences',
   standalone: true,
   imports: [
+    TranslatePipe,
+    
     CommonModule,
     FormsModule,
     RouterLink,
@@ -56,13 +61,12 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
     <div class="preferences-page">
       <header class="preferences__head">
         <div>
-          <h1 class="preferences__title">Preferencias</h1>
+          <h1 class="preferences__title">{{ 'nav.preferences' | t }}</h1>
           <p class="preferences__subtitle">
-            Tu perfil, alergias, gustos y objetivo: lo que respondiste al registrarte y lo que lee la
-            IA antes de proponerte un plato.
+            {{ 'preferences.tu_perfil_alergias_gustos' | t }}
           </p>
         </div>
-        <a class="preferences__redo" routerLink="/onboarding">Rehacer la configuración inicial</a>
+        <a class="preferences__redo" routerLink="/onboarding">{{ 'preferences.rehacer_la_configuracion_inicial' | t }}</a>
       </header>
 
       <div class="preferences__tabs" role="tablist">
@@ -77,25 +81,22 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
           (click)="switchTab(tab.id)"
         >
           <app-icon [name]="tab.icon" [size]="16" />
-          {{ tab.label }}
+          {{ tab.labelKey | t }}
           <span class="tab__count" *ngIf="tab.count() as count">{{ count }}</span>
         </button>
       </div>
 
       <p class="preferences__notice" *ngIf="!tasteService.hasProfile() && !profile.modules.length">
-        Todavía no has marcado nada: la IA propone sin saber qué puedes comer.
+        {{ 'preferences.todavia_no_has_marcado' | t }}
       </p>
 
       <section class="preferences__panel" [ngSwitch]="activeTab()">
         <!-- ── Perfil del hogar: nivel y qué se quiere usar ── -->
         <ng-container *ngSwitchCase="'profile'">
-          <h2 class="preferences__panel-title">Tu perfil</h2>
+          <h2 class="preferences__panel-title">{{ 'preferences.tu_perfil' | t }}</h2>
           <p class="preferences__panel-hint">
-            Lo que contestaste al registrarte. El nivel no es una etiqueta: decide cuánto te explica la
-            IA cada receta y qué tan al grano va el planificador. Las secciones de la app (lista de la
-            compra, tickets, tareas) se activan en
-            <a routerLink="/settings" class="preferences__inline-link">Configuración</a>: son de la
-            app, no del comensal.
+            {{ 'preferences.lo_que_contestaste_al' | t }}
+            <a routerLink="/settings" class="preferences__inline-link">{{ 'nav.settings' | t }}</a>{{ 'preferences.son_de_la_app' | t }}
           </p>
           <app-home-profile-picker
             [(profile)]="profile"
@@ -106,13 +107,12 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
 
         <!-- ── Alergias e intolerancias ── -->
         <ng-container *ngSwitchCase="'allergies'">
-          <h2 class="preferences__panel-title">¿Alergias o intolerancias?</h2>
+          <h2 class="preferences__panel-title">{{ 'preferences.alergias_o_intolerancias' | t }}</h2>
           <p class="preferences__panel-hint">
-            Marca todo lo que no puedas comer. La IA lo descarta de raíz, también como ingrediente
-            escondido en un caldo o una salsa.
+            {{ 'preferences.marca_todo_lo_que' | t }}
           </p>
           <app-chip-select
-            label="Alergias e intolerancias"
+            [label]="'preferences.alergias_e_intolerancias' | t"
             [options]="allergenOptions"
             [(value)]="taste.allergies"
             customPlaceholder="Otra alergia o intolerancia"
@@ -122,17 +122,17 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
 
         <!-- ── Gustos ── -->
         <ng-container *ngSwitchCase="'tastes'">
-          <h2 class="preferences__panel-title">¿Qué te gusta y qué no?</h2>
+          <h2 class="preferences__panel-title">{{ 'preferences.que_te_gusta_y' | t }}</h2>
           <p class="preferences__panel-hint">
-            Sirve para priorizar unos platos sobre otros. No hay respuesta mala.
+            {{ 'preferences.sirve_para_priorizar_unos' | t }}
           </p>
 
           <div class="preferences__field">
             <h3 class="preferences__field-title">
-              <app-icon name="favorite" [size]="16" /> Me gusta
+              <app-icon name="favorite" [size]="16" /> {{ 'preferences.me_gusta' | t }}
             </h3>
             <app-chip-select
-              label="Lo que más te gusta"
+              [label]="'preferences.lo_que_mas_te' | t"
               [options]="likeOptions"
               [(value)]="taste.likes"
               customPlaceholder="Otro alimento o tipo de cocina"
@@ -141,10 +141,10 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
 
           <div class="preferences__field">
             <h3 class="preferences__field-title">
-              <app-icon name="remove_circle" [size]="16" /> Mejor no
+              <app-icon name="remove_circle" [size]="16" /> {{ 'preferences.mejor_no' | t }}
             </h3>
             <app-chip-select
-              label="Lo que prefieres evitar"
+              [label]="'preferences.lo_que_prefieres_evitar' | t"
               [options]="dislikeOptions"
               [(value)]="taste.dislikes"
               customPlaceholder="Otro alimento que no te gusta"
@@ -153,7 +153,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
 
           <div class="preferences__field">
             <label class="preferences__field-title" for="tasteNotes">
-              Otras notas para la IA
+              {{ 'preferences.otras_notas_para_la' | t }}
             </label>
             <textarea
               id="tasteNotes"
@@ -161,7 +161,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
               class="preferences__textarea"
               rows="3"
               maxlength="1000"
-              placeholder="Ej: ceno pronto, nada de fritos, me va bien el tupper para comer en el trabajo, con dos niños en casa…"
+              [placeholder]="'preferences.ej_ceno_pronto_nada' | t"
               [(ngModel)]="taste.notes"
             ></textarea>
           </div>
@@ -169,26 +169,23 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
 
         <!-- ── Horarios de las comidas ── -->
         <ng-container *ngSwitchCase="'meals'">
-          <h2 class="preferences__panel-title">¿A qué hora comes?</h2>
+          <h2 class="preferences__panel-title">{{ 'preferences.a_que_hora_comes' | t }}</h2>
           <p class="preferences__panel-hint">
-            No es un adorno: estas horas deciden dónde se sienta cada comida en el calendario, con qué hora
-            nace un «añadir comida» y a qué hora te propone comer la IA. Si mañana cenan tarde, cambiarlo
-            aquí lo cambia en los tres sitios.
+            {{ 'preferences.no_es_un_adorno' | t }}
           </p>
 
           <app-meal-hours [times]="mealTimes" dataTest="preferences-meal-time" />
 
           <p class="preferences__footnote">
-            Al lado de cada hora que hayas cambiado aparece «Por defecto», que la devuelve a la de siempre:
-            09:00, 14:00, 17:00 y 20:30. Guardar no inventa un horario que no has tocado.
+            {{ 'preferences.al_lado_de_cada' | t }}
           </p>
         </ng-container>
 
         <!-- ── Objetivo ── -->
         <ng-container *ngSwitchCase="'goal'">
-          <h2 class="preferences__panel-title">¿Cuál es tu objetivo?</h2>
+          <h2 class="preferences__panel-title">{{ 'preferences.cual_es_tu_objetivo' | t }}</h2>
           <p class="preferences__panel-hint">
-            Marca el plato, no la dieta. Es el punto de partida del planificador de la semana.
+            {{ 'preferences.marca_el_plato_no' | t }}
           </p>
 
           <div class="preferences__goals">
@@ -200,8 +197,8 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
               (click)="taste.goal = goal.value"
             >
               <span class="preferences__goal-icon">{{ goal.icon }}</span>
-              <span class="preferences__goal-label">{{ goal.label }}</span>
-              <span class="preferences__goal-hint">{{ goal.hint }}</span>
+              <span class="preferences__goal-label">{{ goal.labelKey | t }}</span>
+              <span class="preferences__goal-hint">{{ goal.hintKey | t }}</span>
             </button>
           </div>
 
@@ -209,8 +206,8 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
             <label class="preferences__field-title" for="goalNotes">
               {{
                 taste.goal === 'custom'
-                  ? 'Describe tu objetivo'
-                  : '¿Algo más sobre el objetivo? (opcional)'
+                  ? ('calendar.describe_tu_objetivo' | t)
+                  : ('onboarding.mas_sobre_el_objetivo' | t)
               }}
             </label>
             <textarea
@@ -221,32 +218,31 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
               maxlength="500"
               [placeholder]="
                 taste.goal === 'custom'
-                  ? 'Ej: sin carne los lunes, cenas de una olla y algo de pasta dos veces por semana'
-                  : 'Ej: prioriza proteína en la cena y poco pan'
+                  ? ('onboarding.ej_sin_carne_los_lunes' | t)
+                  : ('onboarding.ej_prioriza_proteina_en_la_cena' | t)
               "
               [(ngModel)]="taste.goalNotes"
             ></textarea>
           </div>
 
           <p class="preferences__footnote">
-            ¿Falta cacharro? Los utensilios se marcan en
-            <a routerLink="/pantry" [queryParams]="{ tab: 'utensils' }">la despensa</a>: si no
-            tienes horno, no te proponemos nada al horno.
+            {{ 'preferences.falta_cacharro_los_utensilios' | t }}
+            <a routerLink="/pantry" [queryParams]="{ tab: 'utensils' }">{{ 'preferences.la_despensa' | t }}</a>{{ 'preferences.si_no_tienes_horno' | t }}
           </p>
         </ng-container>
       </section>
 
       <footer class="preferences__actions">
         <app-button variant="primary" [loading]="tasteService.isLoading()" (onClick)="save()">
-          Guardar preferencias
+          {{ 'preferences.guardar_preferencias' | t }}
         </app-button>
         <app-button *ngIf="hasUnsavedChanges()" variant="ghost" (onClick)="discard()">
-          Descartar cambios
+          {{ 'preferences.descartar_cambios' | t }}
         </app-button>
         <span class="preferences__state preferences__state--ok" *ngIf="saved() && !hasUnsavedChanges()">
-          <app-icon name="check_circle" [size]="16" /> Todo guardado
+          <app-icon name="check_circle" [size]="16" /> {{ 'preferences.todo_guardado' | t }}
         </span>
-        <span class="preferences__state" *ngIf="hasUnsavedChanges()">Hay cambios sin guardar</span>
+        <span class="preferences__state" *ngIf="hasUnsavedChanges()">{{ 'preferences.hay_cambios_sin_guardar' | t }}</span>
       </footer>
     </div>
   `,
@@ -449,6 +445,7 @@ export class PreferencesComponent implements OnInit {
   /** Publico: la plantilla lee el estado de guardado del servicio. */
   readonly tasteService = inject(TasteProfileService);
   private readonly toastService = inject(ToastService);
+  private readonly i18n = inject(I18nService);
 
   readonly activeTab = signal<PreferencesTab>('profile');
 
@@ -457,12 +454,20 @@ export class PreferencesComponent implements OnInit {
    * El contador es una funcion porque lee senales: si no, se quedaria con el valor de la primera
    * pasada y la pestana dejaria de contar lo que se marca.
    */
-  readonly tabs: Array<{ id: PreferencesTab; label: string; icon: IconName; count: () => string | number }> = [
-    { id: 'profile', label: 'Perfil', icon: 'person', count: () => this.profileLabel() },
-    { id: 'allergies', label: 'Alergias', icon: 'error_outline', count: () => this.taste.allergies.length },
-    { id: 'tastes', label: 'Gustos', icon: 'favorite', count: () => this.taste.likes.length + this.taste.dislikes.length },
-    { id: 'meals', label: 'Horarios', icon: 'schedule', count: () => this.mealTimesLabel() },
-    { id: 'goal', label: 'Objetivo', icon: 'flag', count: () => this.goalLabel() }
+  /**
+   * Las pestanas, en una lista: anadir una seccion no es copiar y pegar un boton con su emoji.
+   * El contador es una funcion porque lee senales: si no, se quedaria con el valor de la primera
+   * pasada y la pestana dejaria de contar lo que se marca.
+   *
+   * `labelKey` en lugar de `label`: la lista se construye una vez al crear el componente, y un texto que
+   * se guarda ahi ya no se entera del idioma (12s-B). La traduccion se hace al pintar.
+   */
+  readonly tabs: Array<{ id: PreferencesTab; labelKey: TranslationKey; icon: IconName; count: () => string | number }> = [
+    { id: 'profile', labelKey: 'preferences.tab_profile', icon: 'person', count: () => this.profileLabel() },
+    { id: 'allergies', labelKey: 'preferences.tab_allergies', icon: 'error_outline', count: () => this.taste.allergies.length },
+    { id: 'tastes', labelKey: 'preferences.tab_tastes', icon: 'favorite', count: () => this.taste.likes.length + this.taste.dislikes.length },
+    { id: 'meals', labelKey: 'preferences.tab_meals', icon: 'schedule', count: () => this.mealTimesLabel() },
+    { id: 'goal', labelKey: 'calendar.objetivo', icon: 'flag', count: () => this.goalLabel() }
   ];
 
   /** Copia editable de las horas de la casa; lo guardado se compara contra `savedMealTimes`. */
@@ -515,7 +520,8 @@ export class PreferencesComponent implements OnInit {
 
   /** El objetivo en palabras, para que la pestaña no muestre el valor interno. */
   goalLabel(): string {
-    return this.goalOptions.find((goal) => goal.value === this.taste.goal)?.label ?? '—';
+    const goal = this.goalOptions.find((option) => option.value === this.taste.goal);
+    return goal ? this.i18n.t(goal.labelKey) : '—';
   }
 
   /**
@@ -532,7 +538,7 @@ export class PreferencesComponent implements OnInit {
 
   /** En la pestaña no se muestra el valor interno ('none'), sino su nombre. */
   profileLabel(): string {
-    return COOKING_LEVEL_LABELS[this.profile.cookingLevel] ?? '—';
+    return COOKING_LEVEL_LABEL_KEYS[this.profile.cookingLevel] ?? '—';
   }
 
   save(): void {

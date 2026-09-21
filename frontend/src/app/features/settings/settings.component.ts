@@ -4,10 +4,11 @@ import { ThemeService, Theme } from '../../core/services/theme.service';
 import { I18nService, Language } from '../../core/services/i18n.service';
 import { ModulesService } from '../../core/services/modules.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 
 interface Option<T extends string> {
   value: T;
-  labelKey: string;
+  labelKey: TranslationKey;
 }
 
 @Component({
@@ -61,12 +62,12 @@ interface Option<T extends string> {
           <li *ngFor="let def of modules.registry" class="settings-module" [attr.data-module]="def.id">
             <span class="settings-module__text">
               <span class="settings-module__label">
-                {{ def.label }}
+                {{ def.labelKey | t }}
                 <span class="settings-module__soon" *ngIf="!def.available">
                   {{ 'settings.modulesSoon' | t }}
                 </span>
               </span>
-              <span class="settings-module__hint">{{ def.hint }}</span>
+              <span class="settings-module__hint">{{ def.hintKey | t }}</span>
             </span>
             <button
               type="button"
@@ -74,7 +75,7 @@ interface Option<T extends string> {
               role="switch"
               [attr.data-module-switch]="def.id"
               [attr.aria-checked]="modules.isEnabled(def.id)"
-              [attr.aria-label]="def.label"
+              [attr.aria-label]="def.labelKey | t"
               [disabled]="modules.isSaving() || !modules.canSwitchOff(def.id)"
               [attr.data-on]="modules.isEnabled(def.id)"
               (click)="modules.toggle(def.id)"

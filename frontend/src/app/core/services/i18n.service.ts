@@ -66,7 +66,7 @@ export class I18nService {
     let str: string = dict[key] ?? DICTS.es[key] ?? key;
     if (params) {
       for (const [k, v] of Object.entries(params)) {
-        str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+        str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), v == null ? '' : String(v));
       }
     }
     return str;

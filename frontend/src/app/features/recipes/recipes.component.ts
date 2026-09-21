@@ -14,11 +14,14 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
 import { TimerComponent } from '../../shared/components/ui/timer/timer.component';
 import { Recipe, Difficulty } from '../../shared/models/recipe.model';
 import { AIRecipeResponse } from '../../shared/models/ai-config.model';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-recipes',
   standalone: true,
   imports: [
+    TranslatePipe,
+    
     CommonModule, FormsModule,
     ButtonComponent, InputComponent, BadgeComponent, TagComponent,
     ModalComponent, LoadingComponent, TimerComponent
@@ -28,15 +31,15 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
       <!-- Header -->
       <div class="recipes__header">
         <div class="recipes__title-section">
-          <h1 class="recipes__title">📖 Recetas</h1>
+          <h1 class="recipes__title">{{ 'recipes.title' | t }}</h1>
           <span class="recipes__count">{{ recipeService.total() }} recetas</span>
         </div>
         <div class="recipes__actions">
           <app-button variant="outline" (onClick)="openFilterModal()">
-            🔍 Filtros
+            {{ 'recipes.filters' | t }}
           </app-button>
           <app-button variant="primary" (onClick)="openAiModal()">
-            🤖 Generar IA
+            {{ 'recipes.genAI' | t }}
           </app-button>
         </div>
       </div>
@@ -53,7 +56,7 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
       </div>
 
       <!-- Loading -->
-      <app-loading *ngIf="recipeService.isLoading()" message="Cargando recetas..."></app-loading>
+      <app-loading *ngIf="recipeService.isLoading()" [message]="'recipes.loading' | t"></app-loading>
 
       <!-- Recipes Grid -->
       <div class="recipes__grid" *ngIf="!recipeService.isLoading()">
@@ -79,7 +82,7 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
             <p class="recipe-card__description">{{ recipe.description }}</p>
             
             <div class="recipe-card__meta">
-              <span class="recipe-card__time">⏱️ {{ recipe.totalTime }}min</span>
+              <span class="recipe-card__time">{{ 'recipes.min' | t:{n: recipe.totalTime} }}</span>
               <app-badge [variant]="getDifficultyVariant(recipe.difficulty)" size="sm">
                 {{ recipe.difficulty }}
               </app-badge>
@@ -91,10 +94,10 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
         <!-- Empty State -->
         <div *ngIf="recipeService.recipes().length === 0" class="empty-state">
           <span class="empty-state__icon">📖</span>
-          <h3 class="empty-state__title">No hay recetas</h3>
-          <p class="empty-state__text">Genera tu primera receta con IA</p>
+          <h3 class="empty-state__title">{{ 'recipes.none' | t }}</h3>
+          <p class="empty-state__text">{{ 'recipes.none.desc' | t }}</p>
           <app-button variant="primary" (onClick)="openAiModal()">
-            🤖 Generar con IA
+            {{ 'recipes.generar_con_ia' | t }}
           </app-button>
         </div>
       </div>
@@ -102,18 +105,18 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
       <!-- AI Generation Modal -->
       <app-modal
         [isOpen]="isAiModalOpen()"
-        title="🤖 Generar Receta con IA"
+        [attr.title]="'recipes.generar_receta_con_ia' | t"
         size="lg"
         (onClose)="closeAiModal()"
       >
         <div class="ai-form">
           <p class="ai-form__description">
-            Selecciona los ingredientes que tienes y la IA generará una receta personalizada.
+            {{ 'recipes.selecciona_los_ingredientes_que' | t }}
           </p>
 
           <!-- Selected Ingredients -->
           <div class="ai-form__section">
-            <label class="ai-form__label">Ingredientes seleccionados</label>
+            <label class="ai-form__label">{{ 'recipes.ingredientes_seleccionados' | t }}</label>
             <div class="ai-form__ingredients">
               <app-tag
                 *ngFor="let ing of selectedIngredients()"
@@ -123,14 +126,14 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
                 {{ ing.name }}
               </app-tag>
               <span *ngIf="selectedIngredients().length === 0" class="ai-form__hint">
-                Selecciona ingredientes de abajo
+                {{ 'recipes.selecciona_ingredientes_de_abajo' | t }}
               </span>
             </div>
           </div>
 
           <!-- Available Ingredients -->
           <div class="ai-form__section">
-            <label class="ai-form__label">Tu despensa</label>
+            <label class="ai-form__label">{{ 'recipes.tu_despensa' | t }}</label>
             <div class="ai-form__pantry">
               <app-tag
                 *ngFor="let ing of pantryService.ingredients()"
@@ -145,25 +148,25 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
           <!-- Options -->
           <div class="ai-form__row">
             <div class="ai-form__field">
-              <label class="ai-form__label">Dificultad</label>
+              <label class="ai-form__label">{{ 'recipes.dificultad' | t }}</label>
               <select [(ngModel)]="aiOptions.difficulty" class="form-select">
-                <option value="easy">Fácil</option>
-                <option value="medium">Medio</option>
-                <option value="hard">Difícil</option>
+                <option value="easy">{{ 'recipes.facil' | t }}</option>
+                <option value="medium">{{ 'recipes.medio' | t }}</option>
+                <option value="hard">{{ 'recipes.dificil' | t }}</option>
               </select>
             </div>
 
             <div class="ai-form__field">
-              <label class="ai-form__label">Porciones</label>
+              <label class="ai-form__label">{{ 'recipes.porciones' | t }}</label>
               <input type="number" [(ngModel)]="aiOptions.servings" min="1" max="20" class="form-input" />
             </div>
 
             <div class="ai-form__field">
-              <label class="ai-form__label">Detalle</label>
+              <label class="ai-form__label">{{ 'recipes.detalle' | t }}</label>
               <select [(ngModel)]="aiOptions.detailLevel" class="form-select">
-                <option value="basic">Básico</option>
-                <option value="intermediate">Intermedio</option>
-                <option value="expert">Experto</option>
+                <option value="basic">{{ 'recipes.basico' | t }}</option>
+                <option value="intermediate">{{ 'auth.intermediate' | t }}</option>
+                <option value="expert">{{ 'auth.expert' | t }}</option>
               </select>
             </div>
           </div>
@@ -176,7 +179,7 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
               [disabled]="selectedIngredients().length === 0"
               (onClick)="generateSingle()"
             >
-              Generar 1 receta
+              {{ 'recipes.generar_1_receta' | t }}
             </app-button>
             <app-button
               variant="outline"
@@ -184,7 +187,7 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
               [disabled]="selectedIngredients().length === 0"
               (onClick)="generateMultiple()"
             >
-              Generar 3 opciones
+              {{ 'recipes.generar_3_opciones' | t }}
             </app-button>
           </div>
         </div>
@@ -194,9 +197,9 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
           <div class="generated-recipe__header">
             <h3 class="generated-recipe__title">{{ recipe.name }}</h3>
             <div class="generated-recipe__meta">
-              <app-badge variant="primary">⏱️ {{ recipe.totalTime }}min</app-badge>
-              <app-badge variant="secondary">👥 {{ recipe.servings }} porciones</app-badge>
-              <app-badge *ngIf="recipe.calories">🔥 {{ recipe.calories }}kcal</app-badge>
+              <app-badge variant="primary">{{ 'recipes.min' | t:{n: recipe.totalTime} }}</app-badge>
+              <app-badge variant="secondary">{{ 'recipes.porciones' | t:{n: recipe.servings} }}</app-badge>
+              <app-badge *ngIf="recipe.calories">{{ 'recipes.kcal' | t:{n: recipe.calories} }}</app-badge>
             </div>
           </div>
 
@@ -204,7 +207,7 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
 
           <!-- Ingredients -->
           <div class="generated-recipe__section">
-            <h4>Ingredientes</h4>
+            <h4>{{ 'dashboard.ingredients' | t }}</h4>
             <ul class="generated-recipe__list">
               <li *ngFor="let ing of recipe.ingredients">
                 {{ ing.quantity }} {{ ing.unit }} de {{ ing.name }}
@@ -215,14 +218,14 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
 
           <!-- Steps -->
           <div class="generated-recipe__section">
-            <h4>Preparación</h4>
+            <h4>{{ 'recipes.preparacion' | t }}</h4>
             <div class="generated-recipe__steps">
               <div *ngFor="let step of recipe.steps" class="step">
                 <span class="step__number">{{ step.stepNumber }}</span>
                 <div class="step__content">
                   <p class="step__instruction">{{ step.instruction }}</p>
                   <div class="step__meta" *ngIf="step.duration || step.tips">
-                    <span *ngIf="step.duration" class="step__duration">⏱️ {{ step.duration }}min</span>
+                    <span *ngIf="step.duration" class="step__duration">{{ 'recipes.min' | t:{n: step.duration} }}</span>
                     <span *ngIf="step.tips" class="step__tips">💡 {{ step.tips }}</span>
                   </div>
                 </div>
@@ -233,10 +236,10 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
           <!-- Save Button -->
           <div class="generated-recipe__actions">
             <app-button variant="primary" (onClick)="saveGeneratedRecipe(recipe)">
-              💾 Guardar receta
+              {{ 'recipes.guardar_receta' | t }}
             </app-button>
             <app-button variant="ghost" (onClick)="aiService.clearGenerated()">
-              Descartar
+              {{ 'ui.dismiss' | t }}
             </app-button>
           </div>
         </div>
@@ -255,16 +258,16 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
               <app-badge [variant]="getDifficultyVariant(recipe.difficulty)">
                 {{ recipe.difficulty }}
               </app-badge>
-              <span>⏱️ {{ recipe.totalTime }}min</span>
-              <span>👥 {{ recipe.servings }} porciones</span>
-              <span *ngIf="recipe.calories">🔥 {{ recipe.calories }}kcal</span>
+              <span>{{ 'recipes.min' | t:{n: recipe.totalTime} }}</span>
+              <span>{{ 'recipes.porciones' | t:{n: recipe.servings} }}</span>
+              <span *ngIf="recipe.calories">{{ 'recipes.kcal' | t:{n: recipe.calories} }}</span>
             </div>
             <p class="recipe-detail__description">{{ recipe.description }}</p>
           </div>
 
           <!-- Ingredients -->
           <div class="recipe-detail__section">
-            <h3>Ingredientes</h3>
+            <h3>{{ 'dashboard.ingredients' | t }}</h3>
             <ul>
               <li *ngFor="let ing of recipe.ingredients">
                 {{ ing.quantity }} {{ ing.unit }} de {{ ing.name }}
@@ -274,19 +277,19 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
 
           <!-- Steps with Timers -->
           <div class="recipe-detail__section">
-            <h3>Preparación</h3>
+            <h3>{{ 'recipes.preparacion' | t }}</h3>
             <div class="recipe-detail__steps">
               <div *ngFor="let step of recipe.steps" class="step-card">
                 <div class="step-card__header">
                   <span class="step-card__number">Paso {{ step.stepNumber }}</span>
-                  <span *ngIf="step.duration" class="step-card__time">⏱️ {{ step.duration }}min</span>
+                  <span *ngIf="step.duration" class="step-card__time">{{ 'recipes.min' | t:{n: step.duration} }}</span>
                 </div>
                 <p class="step-card__instruction">{{ step.instruction }}</p>
                 
                 <app-timer
                   *ngIf="step.timerRequired && step.timerDuration"
                   [duration]="step.timerDuration * 60"
-                  [label]="'Timer paso ' + step.stepNumber"
+                  [label]="'recipes.timer_paso' | t:{n: step.stepNumber}"
                 ></app-timer>
 
                 <div *ngIf="step.tips" class="step-card__tip">
@@ -301,20 +304,20 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
 
           <!-- Storage -->
           <div *ngIf="recipe.storage" class="recipe-detail__section">
-            <h3>Conservación</h3>
+            <h3>{{ 'recipes.conservacion' | t }}</h3>
             <p>{{ recipe.storage.method }} - {{ recipe.storage.duration }}</p>
             <p *ngIf="recipe.storage.reheatingInstructions">
-              Recalentar: {{ recipe.storage.reheatingInstructions }}
+              {{ 'recipes.recalentar' | t:{text: recipe.storage.reheatingInstructions} }}
             </p>
           </div>
 
           <!-- Actions -->
           <div class="recipe-detail__actions">
             <app-button variant="primary" (onClick)="cookRecipe(recipe)">
-              👨‍🍳 ¡Cocinar ahora!
+              {{ 'recipes.cocinar_ahora' | t }}
             </app-button>
             <app-button variant="outline" (onClick)="toggleFavorite(recipe)">
-              {{ recipe.isFavorite ? '❤️ Favorito' : '🤍 Añadir a favoritos' }}
+              {{ recipe.isFavorite ? ('recipes.favorito' | t) : ('recipes.anadir_a_favoritos' | t) }}
             </app-button>
           </div>
         </div>

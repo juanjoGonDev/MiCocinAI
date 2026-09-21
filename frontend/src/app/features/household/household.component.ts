@@ -1,4 +1,4 @@
-import { COOKING_LEVEL_LABELS, CookingLevel } from '../../shared/models';
+import { COOKING_LEVEL_LABEL_KEYS, CookingLevel } from '../../shared/models';
 import { Component, inject, OnInit, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -11,11 +11,14 @@ import { BadgeComponent } from '../../shared/components/ui/badge/badge.component
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-household',
   standalone: true,
   imports: [
+    TranslatePipe,
+    
     CommonModule, FormsModule,
     ButtonComponent, InputComponent, BadgeComponent,
     AvatarComponent, ModalComponent, LoadingComponent
@@ -24,27 +27,27 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
     <div class="household">
       <!-- Header -->
       <div class="household__header">
-        <h1 class="household__title">👨‍👩‍👧‍👦 Hogar</h1>
+        <h1 class="household__title">{{ 'household.hogar' | t }}</h1>
       </div>
 
       <!-- Loading -->
-      <app-loading *ngIf="householdService.isLoading()" message="Cargando..."></app-loading>
+      <app-loading *ngIf="householdService.isLoading()" [message]="'common.loading' | t"></app-loading>
 
       <!-- No Household -->
       <div *ngIf="!householdService.isLoading() && !householdService.household()" class="no-household">
         <div class="no-household__content">
           <span class="no-household__icon">🏠</span>
-          <h2 class="no-household__title">No tienes un hogar</h2>
+          <h2 class="no-household__title">{{ 'household.no_tienes_un_hogar' | t }}</h2>
           <p class="no-household__text">
-            Crea un hogar o únete a uno existente para compartir despensa y recetas.
+            {{ 'household.crea_un_hogar_o' | t }}
           </p>
           
           <div class="no-household__actions">
             <app-button variant="primary" (onClick)="openCreateModal()">
-              Crear hogar
+              {{ 'household.crear_hogar_2' | t }}
             </app-button>
             <app-button variant="outline" (onClick)="openJoinModal()">
-              Unirse con código
+              {{ 'household.unirse_con_codigo' | t }}
             </app-button>
           </div>
         </div>
@@ -60,22 +63,22 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
               <span class="household-info__members">{{ household.members?.length || 0 }} miembros</span>
             </div>
             <app-badge variant="primary">
-              {{ household.sharedPantry ? 'Despensa compartida' : 'Despensa individual' }}
+              {{ household.sharedPantry ? ('household.despensa_compartida' | t) : ('household.despensa_individual' | t) }}
             </app-badge>
           </div>
 
           <!-- Invite Code -->
           <div class="invite-card">
             <div class="invite-card__content">
-              <span class="invite-card__label">Enlace de invitación</span>
+              <span class="invite-card__label">{{ 'household.enlace_de_invitacion' | t }}</span>
               <span class="invite-card__code">{{ inviteLink() }}</span>
             </div>
             <div class="invite-card__actions">
               <app-button variant="outline" size="sm" (onClick)="copyLink()">
-                📋 Copiar enlace
+                {{ 'household.copiar_enlace' | t }}
               </app-button>
               <app-button variant="ghost" size="sm" (onClick)="regenerateCode()" *ngIf="canInvite()">
-                🔄 Regenerar
+                {{ 'household.regenerar' | t }}
               </app-button>
             </div>
           </div>
@@ -84,9 +87,9 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
         <!-- Members -->
         <div class="members-section">
           <div class="members-section__header">
-            <h3>Miembros</h3>
+            <h3>{{ 'dashboard.members' | t }}</h3>
             <app-button variant="outline" size="sm" (onClick)="openInviteModal()">
-              + Invitar
+              {{ 'household.invitar' | t }}
             </app-button>
           </div>
 
@@ -113,19 +116,19 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
 
         <!-- Sharing & Settings (admins only) -->
         <section class="settings-section" *ngIf="isAdmin()">
-          <h3 class="settings-section__title">🔗 Compartir en el hogar</h3>
+          <h3 class="settings-section__title">{{ 'household.compartir_en_el_hogar' | t }}</h3>
           <div class="settings-section__options">
             <label class="setting-toggle">
               <input type="checkbox" [checked]="household.sharedPantry" (change)="toggleSetting('sharedPantry', $any($event.target).checked)" />
-              <span>Despensa compartida</span>
+              <span>{{ 'household.despensa_compartida' | t }}</span>
             </label>
             <label class="setting-toggle">
               <input type="checkbox" [checked]="household.shareRecipes" (change)="toggleSetting('shareRecipes', $any($event.target).checked)" />
-              <span>Recetas compartidas</span>
+              <span>{{ 'household.recetas_compartidas' | t }}</span>
             </label>
             <label class="setting-toggle">
               <input type="checkbox" [checked]="household.shareCalendar" (change)="toggleSetting('shareCalendar', $any($event.target).checked)" />
-              <span>Calendario compartido</span>
+              <span>{{ 'household.calendario_compartido' | t }}</span>
             </label>
           </div>
         </section>
@@ -133,7 +136,7 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
         <!-- Actions -->
         <div class="household__actions">
           <app-button variant="danger" (onClick)="leaveHousehold()">
-            🚪 Salir del hogar
+            {{ 'household.salir_del_hogar' | t }}
           </app-button>
         </div>
       </div>
@@ -141,7 +144,7 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
       <!-- Create Modal -->
       <app-modal
         [isOpen]="isCreateModalOpen()"
-        title="Crear Hogar"
+        [attr.title]="'household.crear_hogar' | t"
         size="md"
         (onClose)="closeCreateModal()"
       >
@@ -149,8 +152,8 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
           <app-input
             id="householdName"
             name="householdName"
-            label="Nombre del hogar"
-            placeholder="Ej: Mi hogar"
+            [label]="'household.nombre_del_hogar' | t"
+            [placeholder]="'household.ej_mi_hogar' | t"
             [(ngModel)]="createForm.name"
             [required]="true"
           ></app-input>
@@ -158,13 +161,13 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
           <div class="form-field">
             <label class="form-checkbox">
               <input type="checkbox" [(ngModel)]="createForm.sharedPantry" name="sharedPantry" />
-              <span>Compartir despensa entre miembros</span>
+              <span>{{ 'household.compartir_despensa_entre_miembros' | t }}</span>
             </label>
           </div>
 
           <div class="form-actions">
-            <app-button variant="ghost" type="button" (onClick)="closeCreateModal()">Cancelar</app-button>
-            <app-button variant="primary" type="submit" [loading]="isSaving()">Crear</app-button>
+            <app-button variant="ghost" type="button" (onClick)="closeCreateModal()">{{ 'common.cancel' | t }}</app-button>
+            <app-button variant="primary" type="submit" [loading]="isSaving()">{{ 'common.create' | t }}</app-button>
           </div>
         </form>
       </app-modal>
@@ -172,27 +175,27 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
       <!-- Join Modal -->
       <app-modal
         [isOpen]="isJoinModalOpen()"
-        title="Unirse a un Hogar"
+        [attr.title]="'household.unirse_a_un_hogar' | t"
         size="md"
         (onClose)="closeJoinModal()"
       >
         <form (ngSubmit)="joinHousehold()" class="join-form">
           <p class="join-form__description">
-            Introduce el código de invitación que te ha compartido el administrador del hogar.
+            {{ 'household.introduce_el_codigo_de' | t }}
           </p>
 
           <app-input
             id="inviteCode"
             name="inviteCode"
-            label="Código de invitación"
-            placeholder="Ej: ABC12345"
+            [label]="'household.codigo_de_invitacion' | t"
+            [placeholder]="'household.ej_abc12345' | t"
             [(ngModel)]="joinForm.inviteCode"
             [required]="true"
           ></app-input>
 
           <div class="form-actions">
-            <app-button variant="ghost" type="button" (onClick)="closeJoinModal()">Cancelar</app-button>
-            <app-button variant="primary" type="submit" [loading]="isSaving()">Unirse</app-button>
+            <app-button variant="ghost" type="button" (onClick)="closeJoinModal()">{{ 'common.cancel' | t }}</app-button>
+            <app-button variant="primary" type="submit" [loading]="isSaving()">{{ 'household.unirse' | t }}</app-button>
           </div>
         </form>
       </app-modal>
@@ -200,17 +203,17 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
       <!-- Invite Modal -->
       <app-modal
         [isOpen]="isInviteModalOpen()"
-        title="Invitar Miembro"
+        [attr.title]="'household.invitar_miembro' | t"
         size="md"
         (onClose)="closeInviteModal()"
       >
         <div class="invite-modal">
-          <p>Comparte este código con la persona que quieres invitar:</p>
+          <p>{{ 'household.comparte_este_codigo_con' | t }}</p>
           
           <div class="invite-code-display">
             <span class="invite-code-display__code">{{ householdService.household()?.inviteCode }}</span>
             <app-button variant="primary" (onClick)="copyCode()">
-              📋 Copiar
+              {{ 'household.copiar' | t }}
             </app-button>
           </div>
         </div>
@@ -648,6 +651,6 @@ export class HouseholdComponent implements OnInit {
   }
 
   getLevelLabel(level: string): string {
-    return COOKING_LEVEL_LABELS[level as CookingLevel] ?? level;
+    return COOKING_LEVEL_LABEL_KEYS[level as CookingLevel] ?? level;
   }
 }

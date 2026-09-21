@@ -9,64 +9,68 @@ import { ButtonComponent } from '../../shared/components/ui/button/button.compon
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { environment } from '../../../environments/environment';
 import { InvitePreview } from '../../shared/models/household.model';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 @Component({
   selector: 'app-invite',
   standalone: true,
-  imports: [CommonModule, RouterLink, ButtonComponent, LoadingComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, RouterLink, ButtonComponent, LoadingComponent],
   template: `
     <div class="invite-page">
       <div class="invite-card">
         <span class="invite-card__icon">🏠</span>
 
         <ng-container *ngIf="loading(); else loaded">
-          <app-loading message="Comprobando invitación..."></app-loading>
+          <app-loading [message]="'invite.comprobando_invitacion' | t"></app-loading>
         </ng-container>
 
         <ng-template #loaded>
           <ng-container *ngIf="error(); else valid">
-            <h1 class="invite-card__title">Invitación no válida</h1>
+            <h1 class="invite-card__title">{{ 'invite.invitacion_no_valida' | t }}</h1>
             <p class="invite-card__text">{{ error() }}</p>
             <a routerLink="/" class="invite-card__link">
-              <app-button variant="primary">Ir al inicio</app-button>
+              <app-button variant="primary">{{ 'invite.ir_al_inicio' | t }}</app-button>
             </a>
           </ng-container>
 
           <ng-template #valid>
-            <h1 class="invite-card__title">Invitación a {{ preview()?.householdName }}</h1>
+            <h1 class="invite-card__title">{{ 'invite.invitacion_a' | t:{household: preview()?.householdName} }}</h1>
             <p class="invite-card__text">
-              Te han invitado a unirte al hogar
+              {{ 'invite.te_han_invitado_a' | t }}
               <strong>{{ preview()?.householdName }}</strong>
-              ({{ preview()?.memberCount }} miembro{{ preview()!.memberCount! !== 1 ? 's' : '' }}).
+              ({{ memberLabel() }}).
             </p>
 
             <ng-container *ngIf="preview()?.alreadyMember; else joinActions">
-              <p class="invite-card__info">Ya eres miembro de este hogar 👍</p>
+              <p class="invite-card__info">{{ 'invite.ya_eres_miembro_de' | t }}</p>
               <a routerLink="/household" class="invite-card__link">
-                <app-button variant="primary">Ir a mi hogar</app-button>
+                <app-button variant="primary">{{ 'invite.ir_a_mi_hogar' | t }}</app-button>
               </a>
             </ng-container>
 
             <ng-template #joinActions>
               <ng-container *ngIf="authService.isAuthenticated(); else loginCta">
                 <div class="invite-card__actions">
-                  <app-button variant="ghost" (onClick)="decline()">Cancelar</app-button>
+                  <app-button variant="ghost" (onClick)="decline()">{{ 'common.cancel' | t }}</app-button>
                   <app-button variant="primary" [loading]="joining()" (onClick)="accept()">
-                    Unirme al hogar
+                    {{ 'invite.unirme_al_hogar' | t }}
                   </app-button>
                 </div>
               </ng-container>
 
               <ng-template #loginCta>
                 <p class="invite-card__info">
-                  Inicia sesión o crea una cuenta para unirte. Tras registrarte entrarás automáticamente en este hogar.
+                  {{ 'invite.inicia_sesion_o_crea' | t }}
                 </p>
                 <div class="invite-card__actions">
                   <a [routerLink]="['/auth/login']" [queryParams]="{ code: inviteCode() }">
-                    <app-button variant="primary">Iniciar sesión</app-button>
+                    <app-button variant="primary">{{ 'auth.login' | t }}</app-button>
                   </a>
                   <a [routerLink]="['/auth/register']" [queryParams]="{ code: inviteCode() }">
-                    <app-button variant="outline">Crear cuenta</app-button>
+                    <app-button variant="outline">{{ 'auth.register' | t }}</app-button>
                   </a>
                 </div>
               </ng-template>
@@ -116,6 +120,14 @@ import { InvitePreview } from '../../shared/models/household.model';
   `]
 })
 export class InviteComponent implements OnInit {
+
+  /** El plural es del idioma, no de la frase: dos claves y la eleccion aqui, en el texto de la app. */
+  memberLabel(): string {
+    const n = this.preview()?.memberCount ?? 0;
+    return this.i18n.t(n === 1 ? 'invite.miembro_uno' : 'invite.miembros', { n });
+  }
+  private readonly i18n = inject(I18nService);
+
   private route = inject(ActivatedRoute);
   private router = inject(Router);
   private http = inject(HttpClient);

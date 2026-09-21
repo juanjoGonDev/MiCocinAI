@@ -8,10 +8,8 @@
  */
 export const dashboardEs = {
   'dashboard.minutes_short': '{time} min',
-  'dashboard.calories': 'Calorías',
   'dashboard.cooked': 'Cocinadas',
   'dashboard.genAI': 'Generar con IA',
-  'dashboard.genAIRecipes': 'Generar con IA',
   'dashboard.greeting': '¡Hola, {name}! 👋',
   'dashboard.ingredients': 'Ingredientes',
   'dashboard.members': 'Miembros',
@@ -20,21 +18,16 @@ export const dashboardEs = {
   'dashboard.pantry': 'Mi Despensa',
   'dashboard.plan': 'Planificar',
   'dashboard.planNow': 'Planificar ahora',
-  'dashboard.protein': 'Proteínas',
-  'dashboard.recipes': 'Recetas',
   'dashboard.subtitle': '¿Qué vamos a cocinar hoy?',
   'dashboard.suggested': 'Recetas sugeridas',
   'dashboard.todayMeals': 'Comidas de hoy',
   'dashboard.viewAll': 'Ver todo →',
-  'dashboard.weeklyProgress': 'Progreso semanal',
 } as const;
 
 export const dashboardEn: Record<keyof typeof dashboardEs, string> = {
   'dashboard.minutes_short': '{time} min',
-  'dashboard.calories': 'Calories',
   'dashboard.cooked': 'Cooked',
   'dashboard.genAI': 'Generate with AI',
-  'dashboard.genAIRecipes': 'Generate with AI',
   'dashboard.greeting': 'Hi, {name}! 👋',
   'dashboard.ingredients': 'Ingredients',
   'dashboard.members': 'Members',
@@ -43,11 +36,8 @@ export const dashboardEn: Record<keyof typeof dashboardEs, string> = {
   'dashboard.pantry': 'My Pantry',
   'dashboard.plan': 'Plan',
   'dashboard.planNow': 'Plan now',
-  'dashboard.protein': 'Protein',
-  'dashboard.recipes': 'Recipes',
   'dashboard.subtitle': 'What are we cooking today?',
   'dashboard.suggested': 'Suggested recipes',
   'dashboard.todayMeals': 'Today\'s meals',
   'dashboard.viewAll': 'See all →',
-  'dashboard.weeklyProgress': 'Weekly progress',
 };

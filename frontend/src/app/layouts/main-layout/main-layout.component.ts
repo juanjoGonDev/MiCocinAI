@@ -11,10 +11,11 @@ import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
+import type { TranslationKey } from '../../core/i18n';
 
 interface NavItem {
   path: string;
-  labelKey: string;
+  labelKey: TranslationKey;
   /**
    * Nombre del set de iconos (`assets/icons` / `icon-paths.ts`), nunca un emoji: los glifos
    * del sistema salen distintos en cada SO y cada fabrica —en el movil de la captura el de la
@@ -32,7 +33,7 @@ interface NavItem {
       <!-- Mobile Header -->
       <header class="header">
         <button type="button" class="header__menu" (click)="toggleSidebar()">
-          <app-icon [name]="isSidebarOpen() ? 'close' : 'menu'" [size]="24" [label]="isSidebarOpen() ? 'Cerrar el menú' : 'Abrir el menú'" />
+          <app-icon [name]="isSidebarOpen() ? 'close' : 'menu'" [size]="24" [label]="isSidebarOpen() ? ('ui.close_menu' | t) : ('ui.open_menu' | t)" />
         </button>
         <span class="header__title">
           <app-icon name="home" [size]="20" [label]="null" />
@@ -58,7 +59,7 @@ interface NavItem {
             <span>{{ 'app.name' | t }}</span>
           </span>
           <button type="button" class="sidebar__close" (click)="closeSidebar()">
-            <app-icon name="close" [size]="20" [label]="'Cerrar el menú'" />
+            <app-icon name="close" [size]="20" [label]="'ui.close_menu' | t" />
           </button>
         </div>
         

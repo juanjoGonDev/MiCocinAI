@@ -1,3 +1,4 @@
+import { DICTS } from '../../../../core/i18n';
 import { MealHoursComponent } from './meal-hours.component';
 
 /**
@@ -25,7 +26,16 @@ describe('app-meal-hours', () => {
       'meal-snack',
       'meal-dinner'
     ]);
-    expect(component.rows.map((row) => row.label)).toEqual(['Desayuno', 'Almuerzo', 'Merienda', 'Cena']);
+    expect(component.rows.map((row) => row.labelKey)).toEqual([
+      'meal.breakfast',
+      'meal.lunch',
+      'meal.snack',
+      'meal.dinner'
+    ]);
+    // Y las claves llevan a lo que se ensena, en los dos idiomas: si una se queda sin traduccion, la
+    // fila sale en espanol para quien puso ingles.
+    expect(DICTS.es[component.rows[0].labelKey]).toBe('Desayuno');
+    expect(DICTS.en[component.rows[3].labelKey]).toBe('Dinner');
   });
 
   it('el prefijo del tour deja intactos los ids que buscan los e2e', () => {

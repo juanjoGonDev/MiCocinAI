@@ -25,6 +25,7 @@ import {
   STORAGE_LOCATION_LABELS,
   UTENSIL_CATEGORY_LABELS
 } from '../../shared/models/pantry.model';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 type PantryTab = 'ingredients' | 'utensils';
 
@@ -53,6 +54,8 @@ const PAGE_SIZE = 100;
   selector: 'app-pantry',
   standalone: true,
   imports: [
+    TranslatePipe,
+    
     CommonModule, FormsModule,
     ButtonComponent, InputComponent, CardComponent,
     BadgeComponent, TagComponent, ModalComponent, LoadingComponent
@@ -62,7 +65,7 @@ const PAGE_SIZE = 100;
       <!-- Header -->
       <div class="pantry__header">
         <div class="pantry__title-section">
-          <h1 class="pantry__title">📦 Despensa</h1>
+          <h1 class="pantry__title">{{ 'pantry.title' | t }}</h1>
         </div>
         <app-button variant="primary" (onClick)="openAddModal()">
           {{ addButtonLabel() }}
@@ -77,7 +80,7 @@ const PAGE_SIZE = 100;
           [class.tab--active]="activeTab() === 'ingredients'"
           (click)="switchTab('ingredients')"
         >
-          🥬 Ingredientes <span class="tab__count">{{ inPantryCount() }}</span>
+          {{ 'pantry.ingredientes' | t }} <span class="tab__count">{{ inPantryCount() }}</span>
         </button>
         <button
           type="button"
@@ -85,7 +88,7 @@ const PAGE_SIZE = 100;
           [class.tab--active]="activeTab() === 'utensils'"
           (click)="switchTab('utensils')"
         >
-          🍳 Utensilios <span class="tab__count">{{ ownedUtensilsCount() }}</span>
+          {{ 'pantry.utensilios' | t }} <span class="tab__count">{{ ownedUtensilsCount() }}</span>
         </button>
       </div>
 
@@ -98,21 +101,21 @@ const PAGE_SIZE = 100;
             <span class="stat-card__icon">📦</span>
             <div class="stat-card__content">
               <span class="stat-card__value">{{ inPantryCount() }}</span>
-              <span class="stat-card__label">En despensa</span>
+              <span class="stat-card__label">{{ 'pantry.en_despensa' | t }}</span>
             </div>
           </div>
           <div class="stat-card stat-card--warning">
             <span class="stat-card__icon">⚠️</span>
             <div class="stat-card__content">
               <span class="stat-card__value">{{ stats.expiringSoon }}</span>
-              <span class="stat-card__label">Por caducar</span>
+              <span class="stat-card__label">{{ 'pantry.por_caducar' | t }}</span>
             </div>
           </div>
           <div class="stat-card stat-card--danger">
             <span class="stat-card__icon">❌</span>
             <div class="stat-card__content">
               <span class="stat-card__value">{{ stats.expired }}</span>
-              <span class="stat-card__label">Caducados</span>
+              <span class="stat-card__label">{{ 'pantry.caducados' | t }}</span>
             </div>
           </div>
         </div>
@@ -123,7 +126,7 @@ const PAGE_SIZE = 100;
             id="search"
             name="search"
             type="search"
-            placeholder="Buscar ingredientes..."
+            [placeholder]="'pantry.buscar_ingredientes' | t"
             [(ngModel)]="searchTerm"
             (ngModelChange)="onSearch()"
           ></app-input>
@@ -139,14 +142,14 @@ const PAGE_SIZE = 100;
           </div>
         </div>
 
-        <app-loading *ngIf="pantryService.isLoading()" message="Cargando ingredientes..."></app-loading>
+        <app-loading *ngIf="pantryService.isLoading()" [message]="'pantry.cargando_ingredientes' | t"></app-loading>
 
         <div *ngIf="!pantryService.isLoading()">
           <!-- Suggestions chips (qty=0 items) -->
           <div class="suggestions" *ngIf="suggestions().length > 0">
             <div class="suggestions__header">
-              <span class="suggestions__title">💡 Sugerencias comunes</span>
-              <span class="suggestions__hint">Toca para añadirlas a tu despensa</span>
+              <span class="suggestions__title">{{ 'pantry.sugerencias_comunes' | t }}</span>
+              <span class="suggestions__hint">{{ 'pantry.toca_para_anadirlas_a' | t }}</span>
             </div>
             <div class="suggestions__chips">
               <button
@@ -192,9 +195,9 @@ const PAGE_SIZE = 100;
 
             <div *ngIf="inPantry().length === 0 && suggestions().length === 0" class="empty-state">
               <span class="empty-state__icon">📦</span>
-              <h3 class="empty-state__title">Tu despensa está vacía</h3>
-              <p class="empty-state__text">Agrega ingredientes para empezar a generar recetas</p>
-              <app-button variant="primary" (onClick)="openAddModal()">Agregar primer ingrediente</app-button>
+              <h3 class="empty-state__title">{{ 'pantry.empty' | t }}</h3>
+              <p class="empty-state__text">{{ 'pantry.agrega_ingredientes_para_empezar' | t }}</p>
+              <app-button variant="primary" (onClick)="openAddModal()">{{ 'pantry.agregar_primer_ingrediente' | t }}</app-button>
             </div>
           </div>
         </div>
@@ -203,10 +206,10 @@ const PAGE_SIZE = 100;
       <!-- ═══════════════ UTENSILS TAB ═══════════════ -->
       <ng-container *ngIf="activeTab() === 'utensils'">
         <div class="utensils-intro">
-          <p>Marca los utensilios y electrodomésticos que tienes en casa, sección a sección. La IA los tendrá en cuenta al sugerirte recetas.</p>
+          <p>{{ 'pantry.marca_los_utensilios_y' | t }}</p>
         </div>
 
-        <app-loading *ngIf="utensilsLoading()" message="Cargando utensilios..."></app-loading>
+        <app-loading *ngIf="utensilsLoading()" [message]="'onboarding.cargando_utensilios' | t"></app-loading>
 
         <div *ngIf="!utensilsLoading()" class="utensils" #utensilsTop>
           <!--
@@ -220,17 +223,16 @@ const PAGE_SIZE = 100;
               class="utensils-bar__step"
               *ngIf="!showAllUtensilGroups() && utensilSections().length > 1"
             >
-              Sección {{ activeUtensilSectionIndex() + 1 }} de {{ utensilSections().length }}
-              · {{ activeUtensilSectionLabel() }}
+              {{ 'pantry.seccion_de' | t:{index: activeUtensilSectionIndex() + 1, total: utensilSections().length, label: activeUtensilSectionLabel()} }}
             </span>
             <span class="utensils-bar__track" aria-hidden="true">
               <span class="utensils-bar__fill" [style.width.%]="utensilProgress()"></span>
             </span>
             <span class="utensils-bar__label">
-              {{ ownedUtensilsCount() }} de {{ utensilTotal() }} marcados
+              {{ 'pantry.de_marcados' | t:{owned: ownedUtensilsCount(), total: utensilTotal()} }}
             </span>
             <button type="button" class="utensils-bar__mode" (click)="toggleUtensilSections()">
-              {{ showAllUtensilGroups() ? 'Ver por secciones' : 'Ver todo de golpe' }}
+              {{ showAllUtensilGroups() ? ('pantry.ver_por_secciones' | t) : ('pantry.ver_todo_de_golpe' | t) }}
             </button>
           </div>
 
@@ -255,11 +257,11 @@ const PAGE_SIZE = 100;
 
           <div *ngIf="utensilTotal() === 0" class="empty-state">
             <span class="empty-state__icon">🍳</span>
-            <h3 class="empty-state__title">Todavía no hay utensilios que marcar</h3>
+            <h3 class="empty-state__title">{{ 'pantry.todavia_no_hay_utensilios' | t }}</h3>
             <p class="empty-state__text">
-              Añade los que uses en casa: con ellos la IA descarta recetas que no puedes preparar.
+              {{ 'pantry.anade_los_que_uses' | t }}
             </p>
-            <app-button variant="primary" (onClick)="openUtensilModal()">Añadir utensilio</app-button>
+            <app-button variant="primary" (onClick)="openUtensilModal()">{{ 'pantry.anadir_utensilio' | t }}</app-button>
           </div>
 
           <div
@@ -269,7 +271,7 @@ const PAGE_SIZE = 100;
             <div class="utensil-group__head">
               <h3 class="utensil-group__title">{{ group.icon }} {{ group.label }}</h3>
               <span class="utensil-group__meta">
-                {{ markedUtensilsIn(group) }}/{{ group.items.length }} marcados
+                {{ 'pantry.marcados_en_grupo' | t:{owned: markedUtensilsIn(group), total: group.items.length} }}
               </span>
             </div>
             <div class="utensil-grid">
@@ -288,7 +290,7 @@ const PAGE_SIZE = 100;
                 <button
                   type="button"
                   class="utensil-card__delete"
-                  title="Eliminar"
+                  [attr.title]="'common.delete' | t"
                   (click)="deleteUtensil(u); $event.preventDefault()"
                   *ngIf="isCustomUtensil(u)"
                 >🗑️</button>
@@ -312,20 +314,19 @@ const PAGE_SIZE = 100;
             >
               {{
                 isLastUtensilSection()
-                  ? 'Ver todo el catálogo'
-                  : 'Siguiente: ' + nextSectionName() + ' →'
+                  ? ('pantry.ver_todo_el_catalogo' | t)
+                  : ('pantry.siguiente_seccion' | t:{name: nextSectionName()})
               }}
             </app-button>
           </div>
 
           <div class="utensils-add">
-            <h3 class="utensils-add__title">➕ ¿No encuentras un utensilio?</h3>
+            <h3 class="utensils-add__title">{{ 'pantry.no_encuentras_un_utensilio' | t }}</h3>
             <p class="utensils-add__hint">
-              Añade los que no estén en el catálogo (sous vide, panificadora, gofrera...)
-              y la IA los tendrá en cuenta.
+              {{ 'pantry.anade_los_que_no' | t }}
             </p>
             <app-button variant="secondary" size="sm" (onClick)="openUtensilModal()">
-              Añadir utensilio personalizado
+              {{ 'pantry.anadir_utensilio_personalizado' | t }}
             </app-button>
           </div>
         </div>
@@ -334,7 +335,7 @@ const PAGE_SIZE = 100;
       <!-- Add/Edit Ingredient Modal -->
       <app-modal
         [isOpen]="isIngredientModalOpen()"
-        [title]="editingIngredient() ? 'Editar Ingrediente' : 'Agregar Ingrediente'"
+        [title]="editingIngredient() ? ('pantry.editar_ingrediente' | t) : ('pantry.agregar_ingrediente' | t)"
         size="md"
         (onClose)="closeIngredientModal()"
       >
@@ -342,8 +343,8 @@ const PAGE_SIZE = 100;
           <app-input
             id="ingredientName"
             name="ingredientName"
-            label="Nombre"
-            placeholder="Ej: Tomate"
+            [label]="'auth.name' | t"
+            [placeholder]="'pantry.ej_tomate' | t"
             [(ngModel)]="formData.name"
             [required]="true"
             [error]="formErrors.name()"
@@ -354,30 +355,30 @@ const PAGE_SIZE = 100;
               id="quantity"
               name="quantity"
               type="number"
-              label="Cantidad"
+              [label]="'pantry.cantidad' | t"
               placeholder="0"
               [(ngModel)]="formData.quantity"
               [required]="true"
             ></app-input>
 
             <div class="form-field">
-              <label class="form-label">Unidad</label>
+              <label class="form-label">{{ 'pantry.unidad' | t }}</label>
               <select [(ngModel)]="formData.unit" name="unit" class="form-select">
-                <option value="g">Gramos (g)</option>
-                <option value="kg">Kilogramos (kg)</option>
-                <option value="ml">Mililitros (ml)</option>
-                <option value="l">Litros (l)</option>
-                <option value="unit">Unidades</option>
-                <option value="cup">Tazas</option>
-                <option value="tbsp">Cucharadas</option>
-                <option value="tsp">Cucharaditas</option>
+                <option value="g">{{ 'pantry.gramos_g' | t }}</option>
+                <option value="kg">{{ 'pantry.kilogramos_kg' | t }}</option>
+                <option value="ml">{{ 'pantry.mililitros_ml' | t }}</option>
+                <option value="l">{{ 'pantry.litros_l' | t }}</option>
+                <option value="unit">{{ 'pantry.unidades' | t }}</option>
+                <option value="cup">{{ 'pantry.tazas' | t }}</option>
+                <option value="tbsp">{{ 'pantry.cucharadas' | t }}</option>
+                <option value="tsp">{{ 'pantry.cucharaditas' | t }}</option>
               </select>
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-field">
-              <label class="form-label">Categoría</label>
+              <label class="form-label">{{ 'pantry.categoria' | t }}</label>
               <select [(ngModel)]="formData.category" name="category" class="form-select">
                 <option *ngFor="let cat of ingredientCategoriesNoAll" [value]="cat.value">
                   {{ cat.icon }} {{ cat.label }}
@@ -386,12 +387,12 @@ const PAGE_SIZE = 100;
             </div>
 
             <div class="form-field">
-              <label class="form-label">Ubicación</label>
+              <label class="form-label">{{ 'pantry.ubicacion' | t }}</label>
               <select [(ngModel)]="formData.location" name="location" class="form-select">
-                <option value="fridge">🧊 Nevera</option>
-                <option value="freezer">❄️ Congelador</option>
-                <option value="pantry">📦 Despensa</option>
-                <option value="counter">🍳 Encimera</option>
+                <option value="fridge">{{ 'pantry.nevera' | t }}</option>
+                <option value="freezer">{{ 'pantry.congelador' | t }}</option>
+                <option value="pantry">{{ 'pantry.title' | t }}</option>
+                <option value="counter">{{ 'pantry.encimera' | t }}</option>
               </select>
             </div>
           </div>
@@ -400,20 +401,20 @@ const PAGE_SIZE = 100;
             id="expiration"
             name="expiration"
             type="date"
-            label="Fecha de caducidad (opcional)"
+            [label]="'pantry.fecha_de_caducidad_opcional' | t"
             [(ngModel)]="formData.expirationDate"
           ></app-input>
 
           <app-input
             id="notes"
             name="notes"
-            label="Notas (opcional)"
-            placeholder="Ej: Comprado ayer"
+            [label]="'calendar.notas_opcional' | t"
+            [placeholder]="'pantry.ej_comprado_ayer' | t"
             [(ngModel)]="formData.notes"
           ></app-input>
 
       <div class="form-actions">
-        <app-button variant="ghost" type="button" (onClick)="closeIngredientModal()">Cancelar</app-button>
+        <app-button variant="ghost" type="button" (onClick)="closeIngredientModal()">{{ 'common.cancel' | t }}</app-button>
         <app-button variant="primary" type="submit" [loading]="isSaving()">
           {{ editingIngredient() ? 'Guardar' : 'Agregar' }}
         </app-button>
@@ -424,7 +425,7 @@ const PAGE_SIZE = 100;
       <!-- Add Custom Utensil Modal -->
       <app-modal
         [isOpen]="isUtensilModalOpen()"
-        title="Agregar Utensilio"
+        [attr.title]="'pantry.agregar_utensilio' | t"
         size="md"
         (onClose)="closeUtensilModal()"
       >
@@ -432,15 +433,15 @@ const PAGE_SIZE = 100;
           <app-input
             id="utensilName"
             name="utensilName"
-            label="Nombre"
-            placeholder="Ej: Sous vide, Panificadora..."
+            [label]="'auth.name' | t"
+            [placeholder]="'pantry.ej_sous_vide_panificadora' | t"
             [(ngModel)]="utensilForm.name"
             [required]="true"
             [error]="utensilFormError()"
           ></app-input>
 
           <div class="form-field">
-            <label class="form-label" for="utensilCategory">Categoría</label>
+            <label class="form-label" for="utensilCategory">{{ 'pantry.categoria' | t }}</label>
             <select
               id="utensilCategory"
               name="utensilCategory"
@@ -460,12 +461,12 @@ const PAGE_SIZE = 100;
               name="utensilAvailable"
               [(ngModel)]="utensilForm.available"
             />
-            <span>Lo tengo en casa (se marcará en el catálogo)</span>
+            <span>{{ 'pantry.lo_tengo_en_casa' | t }}</span>
           </label>
 
           <div class="form-actions">
-            <app-button variant="ghost" type="button" (onClick)="closeUtensilModal()">Cancelar</app-button>
-            <app-button variant="primary" type="submit" [loading]="isSavingUtensil()">Agregar</app-button>
+            <app-button variant="ghost" type="button" (onClick)="closeUtensilModal()">{{ 'common.cancel' | t }}</app-button>
+            <app-button variant="primary" type="submit" [loading]="isSavingUtensil()">{{ 'pantry.agregar' | t }}</app-button>
           </div>
         </form>
       </app-modal>

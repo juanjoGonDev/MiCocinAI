@@ -22,7 +22,7 @@
 // veces no anade treinta claves).
 // =============================================================================
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, dirname, relative, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -81,7 +81,59 @@ function templateBlock(src) {
   return { start, close, inner };
 }
 
-const quote = (s) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+// Una cadena de la plantilla esta en el DOM, y ahi `&#10;` es un salto de linea; dentro del diccionario es
+// el literal `&#10;` (una property binding no decodifica entidades). Se decodifican al copiar, si no la
+// traduccion sale con la entidad a la vista. Los acentos que el proyecto escribe sin entidad NO se tocan:
+// «conexion» se queda como esta, porque cambiar ortografia rompe los e2e que assertan ese texto.
+const ENTITIES = {
+  '&nbsp;': ' ',
+  '&#10;': '\n',
+  '&#13;': '',
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"'
+};
+const decodeEntities = (s) =>
+  s.replace(/&(?:#(\d+)|#x([0-9a-f]+)|([a-z]+));/gi, (whole, dec, hex, named) => {
+    if (dec) return String.fromCodePoint(Number(dec));
+    if (hex) return String.fromCodePoint(parseInt(hex, 16));
+    const direct = ENTITIES[whole.toLowerCase()];
+    return direct === undefined ? whole : direct;
+  });
+
+const quote = (s) =>
+  `'${s
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    // Una entidad decodificada puede traer un salto de linea (`&#10;` de un placeholder multilinea): dentro
+    // del literal del diccionario tiene que quedar escapado, si no el fichero no compila.
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '')
+    .replace(/\t/g, ' ')}'`;
+
+/**
+ * Index global de texto -> clave, sobre TODOS los diccionarios. Sin esto, cada dominio acunaba su clave
+ * para la misma frase («Guardar» en cuatro pantallas = cuatro claves = cuatro traducciones que se
+ * separan manana). Reutilizar la existente es lo que mantiene el diccionario como un vocabulario y no
+ * como un almacen. `scripts/i18n-merge-dupes.mjs` es la version de despues, para lo que ya estaba
+ * duplicado cuando esto empezo.
+ */
+const globalIndex = () => {
+  const map = new Map();
+  if (!existsSync(DICT_DIR)) return map;
+  for (const file of readdirSync(DICT_DIR)) {
+    if (!file.endsWith('.ts') || file === 'types.ts') continue;
+    const text = readFileSync(join(DICT_DIR, file), 'utf8');
+    const es = text.match(/export const \w+Es[^{]*\{([\s\S]*?)\n\}/);
+    if (!es) continue;
+    for (const kv of es[1].matchAll(/'([^']+)':\s*(?:'((?:[^'\\]|\\.)*)'|"((?:[^"\\]|\\.)*)")/g)) {
+      const value = (kv[2] ?? kv[3] ?? '').replace(/\\'/g, "'");
+      if (value && !map.has(value)) map.set(value, kv[1]);
+    }
+  }
+  return map;
+};
 
 function loadDict(domain) {
   const path = join(DICT_DIR, `${domain}.ts`);
@@ -124,21 +176,22 @@ for (const file of files) {
 
   const domain = domainOf(file);
   const dict = loadDict(domain);
-  const keyOfText = new Map();
-  for (const [k, v] of dict.es) if (!keyOfText.has(v)) keyOfText.set(v, k);
+  const keyOfText = globalIndex();
 
   const added = [];
   const manual = [];
+  const reuse = new Set();
   const lineAt = (i) => tpl.inner.slice(0, i).split('\n').length;
   let out = tpl.inner;
 
   const useKey = (text) => {
-    const clean = text.replace(/\s+/g, ' ').trim();
+    let clean = text.replace(/\s+/g, ' ').trim();
     if (!clean || SKIP.has(clean.toLowerCase())) return null;
     if (!/[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{2,}/.test(clean)) return null;
     // Un token tecnico en minusculas (una url, `sk-...`, el id de un modelo) se escribe igual en todos los
     // idiomas: es un ejemplo, no prosa. Si manana hay que traducirlo, se quita de aqui con un motivo.
     if (/^[a-z0-9][a-z0-9.+:/_-]*$/.test(clean)) return null;
+    clean = decodeEntities(clean);
     let key = keyOfText.get(clean);
     if (!key) {
       const base = `${domain}.${slugify(clean) || 'text'}`;
@@ -149,6 +202,7 @@ for (const file of files) {
       dict.en.set(key, '');
       added.push([key, clean]);
       keyOfText.set(clean, key);
+      reuse.add(key);
     }
     return key;
   };

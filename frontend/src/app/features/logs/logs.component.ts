@@ -7,6 +7,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 interface FilterOption<T extends string> {
   value: T;
@@ -16,7 +17,9 @@ interface FilterOption<T extends string> {
 @Component({
   selector: 'app-logs',
   standalone: true,
-  imports: [CommonModule, FormsModule, ButtonComponent, IconComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, FormsModule, ButtonComponent, IconComponent],
   template: `
     <div class="logs-page">
       <!-- Toolbar -->
@@ -24,7 +27,7 @@ interface FilterOption<T extends string> {
         <div class="logs-toolbar__title">
           <h1>
             <app-icon name="description" [size]="18" [label]="null" />
-            Logs
+            {{ 'nav.logs' | t }}
           </h1>
           <span
             class="logs-status"
@@ -37,14 +40,14 @@ interface FilterOption<T extends string> {
             {{ statusLabel() }}
           </span>
           @if (logService.streamStatus() === 'closed') {
-            <button type="button" class="logs-reconnect" data-test="logs-reconnect" (click)="reconnect()">Reintentar la conexion</button>
+            <button type="button" class="logs-reconnect" data-test="logs-reconnect" (click)="reconnect()">{{ 'logs.reintentar_la_conexion' | t }}</button>
           }
           <span class="logs-count">{{ visibleCount() }} / {{ logService.logs().length }}</span>
           <!-- Se ensena LA ZONA porque el server habla UTC: sin esta linea, dudar de si la hora
                del log es la tuya o la del Raspberry es la pregunta obligada. -->
-          <span class="logs-timezone" data-test="logs-timezone" [attr.title]="'Zona detectada: ' + clientZone()">
+          <span class="logs-timezone" data-test="logs-timezone" [attr.title]="'logs.zona_detectada' | t:{zone: clientZone()}">
             <app-icon name="schedule" [size]="14" [label]="null" />
-            hora de {{ timeZoneName() }}
+            {{ 'logs.hora_de' | t:{zone: timeZoneName()} }}
           </span>
         </div>
 
@@ -79,7 +82,7 @@ interface FilterOption<T extends string> {
             size="sm"
             (onClick)="logService.toggleAutoScroll()"
           >
-            Auto-scroll: {{ logService.autoScroll() ? 'ON' : 'OFF' }}
+            {{ 'logs.autoscroll_estado' | t:{state: logService.autoScroll() ? 'ON' : 'OFF'} }}
           </app-button>
 
           <app-button
@@ -88,7 +91,7 @@ interface FilterOption<T extends string> {
             (onClick)="copyVisible()"
           >
             <app-icon name="content_copy" [size]="16" [label]="null" />
-            {{ hasSelection() ? 'Copiar seleccionado (' + selectedCount() + ')' : 'Copiar todo' }}
+            {{ hasSelection() ? ('logs.copiar_seleccionado' | t:{n: selectedCount()}) : ('logs.copiar_todo' | t) }}
           </app-button>
 
           <app-button
@@ -98,7 +101,7 @@ interface FilterOption<T extends string> {
             (onClick)="clearSelection()"
           >
             <app-icon name="close" [size]="16" [label]="null" />
-            Limpiar selección
+            {{ 'logs.limpiar_seleccion' | t }}
           </app-button>
 
           <app-button
@@ -107,7 +110,7 @@ interface FilterOption<T extends string> {
             (onClick)="clearLogs()"
           >
             <app-icon name="delete_sweep" [size]="16" [label]="null" />
-            Limpiar
+            {{ 'logs.limpiar' | t }}
           </app-button>
         </div>
       </div>
@@ -123,8 +126,8 @@ interface FilterOption<T extends string> {
           <div class="terminal__title">
             {{
               hasSelection()
-                ? selectedCount() + ' línea(s) seleccionadas · Ctrl/Cmd o Mayús + clic para ajustar'
-                : 'HogarIA — terminal'
+                ? ('logs.seleccion_en_el_terminal' | t:{n: selectedCount()})
+                : ('logs.terminal_de' | t)
             }}
           </div>
           <div class="terminal__spacer"></div>
@@ -138,7 +141,7 @@ interface FilterOption<T extends string> {
             [class.terminal__line--selected]="isSelected(entry)"
             (mousedown)="onLineMouseDown($event)"
             (click)="onLineClick($event, entry, i)"
-            title="Clic: seleccionar · Ctrl/Cmd: añadir o quitar · Mayús: seleccionar rango"
+            [attr.title]="'logs.clic_seleccionar_ctrl_cmd' | t"
           >
             <span class="terminal__time" [title]="formatTime(entry.timestamp) + ' · ' + timeZoneName()">{{
               formatTime(entry.timestamp)
@@ -149,7 +152,7 @@ interface FilterOption<T extends string> {
             <pre *ngIf="entry.stack" class="terminal__stack">{{ entry.stack }}</pre>
           </div>
           <div *ngIf="filtered().length === 0" class="terminal__empty">
-            Esperando logs…
+            {{ 'logs.waiting' | t }}
           </div>
         </div>
       </div>

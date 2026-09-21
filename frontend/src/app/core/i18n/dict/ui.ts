@@ -12,14 +12,16 @@
  * planificador al leer la respuesta del modelo (HOGARIA-SPEC §12s-A).
  */
 export const uiEs = {
+  'ui.unidad_o_formato': 'Unidad o formato',
+  'ui.sin_unidad': 'Sin unidad',
+  'ui.open_menu': 'Abrir el menú',
+  'ui.close_menu': 'Cerrar el menú',
   'common.cancel': 'Cancelar',
   'common.create': 'Crear',
   'common.delete': 'Eliminar',
   'common.edit': 'Editar',
-  'common.error': 'Error',
   'common.loading': 'Cargando...',
   'common.save': 'Guardar',
-  'common.success': 'Éxito',
   'meal.breakfast': 'Desayuno',
   'meal.dinner': 'Cena',
   'meal.lunch': 'Almuerzo',
@@ -42,14 +44,16 @@ export const uiEs = {
 } as const;
 
 export const uiEn: Record<keyof typeof uiEs, string> = {
+  'ui.unidad_o_formato': 'Unit or format',
+  'ui.sin_unidad': 'No unit',
+  'ui.open_menu': 'Open the menu',
+  'ui.close_menu': 'Close the menu',
   'common.cancel': 'Cancel',
   'common.create': 'Create',
   'common.delete': 'Delete',
   'common.edit': 'Edit',
-  'common.error': 'Error',
   'common.loading': 'Loading...',
   'common.save': 'Save',
-  'common.success': 'Success',
   'meal.breakfast': 'Breakfast',
   'meal.dinner': 'Dinner',
   'meal.lunch': 'Lunch',

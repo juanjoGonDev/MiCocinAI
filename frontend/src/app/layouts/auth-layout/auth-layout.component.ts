@@ -3,11 +3,14 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { ToastComponent } from '../../shared/components/ui/toast/toast.component';
 import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-auth-layout',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, ToastComponent, ConfirmDialogComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, RouterOutlet, ToastComponent, ConfirmDialogComponent],
   template: `
     <div class="auth-layout">
       <div class="auth-layout__background"></div>
@@ -15,8 +18,8 @@ import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialo
       <div class="auth-layout__container">
         <div class="auth-layout__header">
           <span class="auth-layout__logo">🏠</span>
-          <h1 class="auth-layout__title">HogarIA</h1>
-          <p class="auth-layout__subtitle">Tu asistente de cocina inteligente</p>
+          <h1 class="auth-layout__title">{{ 'app.name' | t }}</h1>
+          <p class="auth-layout__subtitle">{{ 'auth.tu_asistente_de_cocina' | t }}</p>
         </div>
         
         <div class="auth-layout__content">

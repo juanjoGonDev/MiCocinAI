@@ -1,5 +1,6 @@
-import { Component, EventEmitter, HostBinding, Input, Output } from '@angular/core';
+import { Component, EventEmitter, HostBinding, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { I18nService } from '../../core/services/i18n.service';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import {
@@ -130,6 +131,8 @@ import {
   ]
 })
 export class CalendarHouseholdEventsComponent {
+  private readonly i18n = inject(I18nService);
+
 
   @Input() events: HouseholdEvent[] = [];
   @Input() dense = false;
@@ -152,8 +155,8 @@ export class CalendarHouseholdEventsComponent {
 
   tip(event: HouseholdEvent): string {
     const when = eventTimeLabel(event);
-    const who = event.authorName ? ` · de ${event.authorName}` : '';
-    return `${event.title}${when ? ' · ' + when : ''}${this.metaOf(event).label ? ' · ' + this.metaOf(event).label : ''}${who}`;
+    const who = event.authorName ? ` · ${this.i18n.t('calendar.de_persona', { name: event.authorName })}` : '';
+    return `${event.title}${when ? ' · ' + when : ''}${this.i18n.t(this.metaOf(event).labelKey) ? ' · ' + this.i18n.t(this.metaOf(event).labelKey) : ''}${who}`;
   }
 
 }
