@@ -41,7 +41,7 @@ interface MealHourRow {
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="meal-hours" role="group" [attr.aria-label]="groupLabel">
-      <div class="meal-hours__row" *ngFor="let row of rows">
+      <div class="meal-hours__row" *ngFor="let row of rows; trackBy: trackRow">
         <label class="meal-hours__label" [attr.for]="row.id">{{ row.label }}</label>
         <input
           type="time"
@@ -177,13 +177,36 @@ export class MealHoursComponent {
   readonly defaults = MEAL_TIME_DEFAULTS;
   readonly hints: Partial<Record<MealType, string>> = {};
 
+  /**
+   * Las cuatro filas, y **la misma array** mientras `idPrefix` y `hints` no cambien.
+   *
+   * No puede ser un getter que construya: `*ngFor` compara identidad, y con un array nuevo en cada
+   * ciclo de deteccion de cambios las cuatro filas se destruyen y se vuelven a crear —con su
+   * `ngModel`, que al nacer escribe el valor otra vez en el modelo, lo que marca el arbol de nuevo,
+   * lo que vuelve a construir el array. El bucle no se para nunca y la pantalla se congela: eso fue
+   * exactamente lo que se vio al abrir «Horarios» en la tanda 19. Un getter con cache es la version
+   * aburrida y correcta; `trackRow` es la red por si alguien vuelve a quitarla.
+   */
   get rows(): MealHourRow[] {
-    return MEAL_ORDER.map((type) => ({
-      type,
-      id: `${this.idPrefix}-${type}`,
-      label: MEAL_TYPE_LABELS[type],
-      hint: this.hints[type]
-    }));
+    const key = `${this.idPrefix}|${MEAL_ORDER.map((type) => this.hints[type] ?? '').join('|')}`;
+    if (key !== this.rowsKey) {
+      this.rowsKey = key;
+      this.rowsCache = MEAL_ORDER.map((type) => ({
+        type,
+        id: `${this.idPrefix}-${type}`,
+        label: MEAL_TYPE_LABELS[type],
+        hint: this.hints[type]
+      }));
+    }
+    return this.rowsCache;
+  }
+
+  private rowsKey = '';
+  private rowsCache: MealHourRow[] = [];
+
+  /** Estable por definicion: el id de la fila es su clave y no cambia nunca. */
+  trackRow(_index: number, row: MealHourRow): string {
+    return row.id;
   }
 
   /** `true` cuando la hora **no** es la de siempre: ahi es donde «Por defecto» tiene algo que hacer. */

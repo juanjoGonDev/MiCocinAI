@@ -66,6 +66,26 @@ describe('app-meal-hours', () => {
     expect(times['dinner']).toBe('');
   });
 
+  it('devuelve LA MISMA array mientras no cambian las entradas', () => {
+    // Esta es la prueba que congelo la pantalla: `*ngFor` compara identidad, y un getter que
+    // construye un array nuevo en cada ciclo destruye las filas, el ngModel reescribe el valor, el
+    // arbol se marca de nuevo, y el bucle no acaba. `toBe` (identidad), no `toEqual`.
+    const component = withTimes({ dinner: '20:30' });
+    const first = component.rows;
+    expect(component.rows).toBe(first);
+    expect(component.rows).toBe(first);
+    component.write('dinner', '22:15');
+    expect(component.rows).toBe(first);
+  });
+
+  it('y si cambia el prefijo, cambia el id de la fila', () => {
+    const component = withTimes({});
+    const before = component.rows;
+    component.idPrefix = 'ob-meal';
+    expect(component.rows).not.toBe(before);
+    expect(component.rows.map((row) => row.id)).toContain('ob-meal-lunch');
+  });
+
   it('el boton solo existe donde hay algo que deshacer, y eso es lo que pinta la plantilla', () => {
     // El contrato con la pantalla es este par de funciones: `*ngIf="isDefault(...)"` decide si el boton
     // existe. Si un refactor las juntaba en una sola, aqui se nota.

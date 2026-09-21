@@ -20,7 +20,7 @@ import { ChipOption } from '../../../models/taste-profile';
     <div class="chip-select" role="group" [attr.aria-label]="label">
       <div class="chip-select__list">
         <button
-          *ngFor="let option of choices"
+          *ngFor="let option of choices; trackBy: trackOption"
           type="button"
           class="chip-select__chip"
           [class.chip-select__chip--on]="isSelected(option.value)"
@@ -137,14 +137,44 @@ export class ChipSelectComponent {
   customText = '';
 
   /** Predefinidas + las que haya escrito el usuario. */
+  /**
+   * Opciones deduplicadas + las escritas a mano, con **identidad estable** mientras `options` y
+   * `value` sean los mismos objetos.
+   *
+   * Un getter que devuelve una array nueva en cada ciclo hace que `*ngFor` tire y vuelva a montar
+   * todas las chips: se pierden el hover, el foco y las animaciones, y si dentro de la fila hubiera
+   * un `ngModel` el bucle no para (es lo que congelo `app-meal-hours` en la ronda 19 —aqui no hay
+   * inputs dentro del bucle, asi que el daño era el parpadeo). La cache por identidad es la version
+   * aburrida: se invalida sola cuando el host cambia la seleccion.
+   */
   get choices(): ChipOption[] {
+    // La clave es el contenido de la seleccion (strings, corta) y la identidad del catalogo: con las
+    // dos, un `join` es mas barato que el deduplicado de abajo y no puede quedarse viejo. Contar la
+    // longitud no vale —quitar una opcion y anadir otra deja el mismo numero, y las chips serian un
+    // recuerdo de lo que habia.
+    const values = this.value.join('|');
+    if (this.choicesCache && this.choicesOptions === this.options && this.choicesValues === values) {
+      return this.choicesCache;
+    }
     const base = this.options.filter(
       (option, index) => this.options.findIndex((other) => other.value === option.value) === index
     );
     const extras = this.value
       .filter((item) => !base.some((option) => option.value === item))
       .map((value) => ({ value, icon: '✏️' }));
-    return [...base, ...extras];
+    this.choicesOptions = this.options;
+    this.choicesValues = values;
+    this.choicesCache = [...base, ...extras];
+    return this.choicesCache;
+  }
+
+  private choicesOptions: ChipOption[] | null = null;
+  private choicesValues = '';
+  private choicesCache: ChipOption[] | null = null;
+
+  /** La clave de una opcion es su valor: con esto `*ngFor` reutiliza la chip en vez de rehacerla. */
+  trackOption(_index: number, option: ChipOption): string {
+    return option.value;
   }
 
   isSelected(value: string): boolean {

@@ -22,7 +22,7 @@ const E2E_DIR = 'tests/e2e';
 // Cuantas reglas hay dentro. Se cuenta aqui y no a mano porque la ultima vez que se anadio una (la de
 // los selectores huerfanos) el mensaje de «sin incidencias» seguia diciendo siete, que es exactamente
 // el tipo de mentira que este fichero existe para evitar.
-const RULES = 12;
+const RULES = 13;
 
 // ---------------------------------------------------------------------------
 // Deuda heredada, declarada en voz alta.
@@ -597,6 +597,34 @@ for (const file of styleFiles) {
       guess
         ? `${token} no lo define nadie; quiza ${guess[0]} (se define en ${definedTokens.get(guess[0])})`
         : `${token} no lo define nadie y no se parece a ningun token del proyecto`
+    );
+  }
+}
+
+// --------------------------------------------------------------------------------
+// 13) Un `*ngFor` que itera un getter del propio componente necesita `trackBy`.
+//
+// El motivo esta medido, no teorizado: `app-meal-hours` hizo `*ngFor="let row of rows"` sobre un getter
+// que construa la array. `*ngFor` compara identidad, asi que cada ciclo de deteccion de cambios destrua
+// y volva a montar las cuatro filas; con un `ngModel` dentro, el input recien creado escribe su valor en
+// el modelo, el arbol se marca de nuevo, y el bucle no acaba —la pantalla de «Horarios» se congelaba. En
+// un sandbox sin navegador nada de eso se ve: por eso la regla pide la clave de seguimiento, que si se
+// puede comprobar leyendo el fichero, en lugar de «no uses getters» (mas bonito, menos comprobable).
+// --------------------------------------------------------------------------------
+const NGFOR_GETTER = /\*ngFor\s*=\s*"let\s+\w+\s+of\s+([A-Za-z_$][\w$]*)([^"]*)"/g;
+for (const file of sourceFiles) {
+  if (!file.endsWith('.component.ts')) continue;
+  const text = readFileSync(file, 'utf8');
+  for (const match of text.matchAll(NGFOR_GETTER)) {
+    const [, name, rest] = match;
+    if (/trackBy/.test(rest)) continue;
+    const getter = new RegExp(`get\\s+${name}\\s*\\(\\s*\\)\\s*[:{]`);
+    if (!getter.test(text)) continue;
+    fail(
+      file,
+      lineOf(text, match.index),
+      'ngfor-getter-sin-trackby',
+      `*ngFor itera el getter '${name}', que devuelve una array nueva en cada ciclo: anade trackBy (o el campo, si el getter no aporta nada)`
     );
   }
 }

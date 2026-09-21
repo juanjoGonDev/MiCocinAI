@@ -2212,9 +2212,32 @@ background and inherited colour. Which is exactly the screen the user is complai
       Hecho: Sin renombrar nada, como decia el punto: 160 definiciones y todas las pantallas. La regla 12 es
       lo que evita que la pila crezca.
 
+### E. Lo que la ronda no podia ver: el `*ngFor` sobre un getter congelaba la pantalla
+
+Cerrada la tanda y probada en una maquina de verdad (Windows, el usuario), **la pantalla de Horarios se
+colgaba**. Era de la ronda 19 y ningun gate la vio, asi que va aqui con su mecanismo:
+
+- `app-meal-hours` itera `*ngFor="let row of rows"`, y `rows` era un getter que construa la array.
+- `*ngFor` compara **identidad**: con una array nueva en cada ciclo, las cuatro filas se destruian y se
+  volvian a montar; cada `input` nuevo con su `ngModel` escribia el valor en el modelo, el arbol se
+  marcaba de nuevo, y el ciclo volvia. Zona.js no se queda nunca vacia: la pantalla deja de responder.
+- Sin Chromium en el sandbox, ni el build, ni `tsc`, ni el puente de vitest, ni los 28 e2e de CI lo decian:
+  el sintoma vive en el navegador. La preview de Arena tampoco lo reprodujo porque alli la pantalla se abria
+  y se cerraba sin escribir en el campo, que es lo que dispara el bucle largo.
+
+Arreglado con identidad estable (`rows` cacheada por `idPrefix` + `hints`) y `trackBy`, y con un test de
+identidad en `meal-hours.component.spec.ts` —`toBe`, no `toEqual`, que es lo que comprueba el bucle. El mismo
+hueco estaba en `app-chip-select` (`choices`); ahi no habia `ngModel` dentro del bucle, asi que no congelaba
+pero si hacia parpadear chips y perder hover y foco: se memoiza por identidad del catalogo y contenido de la
+seleccion, y se anade `trackBy` tambien.
+
+Y la regla que lo impide, **13 en `check-ui`** (`ngfor-getter-sin-trackby`): un `*ngFor` que itera un getter
+del propio componente lleva `trackBy`. Es mecanica y comprueba lo que se puede comprobar leyendo el fichero —
+la clave de reutilizacion— en lugar de prohibir getters, que es una preferencia.
+
 ### Gates
 
-- [x] `check-ui` with 12 rules and no findings, `tsc` (server, app, spec), `typecheck:e2e`, server
+- [x] `check-ui` with 12 rules (13 desde 12q-E) and no findings, `tsc` (server, app, spec), `typecheck:e2e`, server
       vitest, the bridge suite (including any pure module this round extracts), production build with no
       new budget warning beyond the two pre-existing ones.
       Hecho: Medido: «153 ficheros, 12 reglas, sin incidencias». `tsc` de app y spec limpios; 559/559 del
@@ -2287,9 +2310,9 @@ dejaba la capa e2e entera sin verificar durante ocho tandas.
       dia uno. Es una linea en `.github/workflows/ci.yml`, no un proyecto.
 - [ ] `tools/reporters/hogaria-e2e-reporter.js` se escribe o se olvida para siempre. Mientras el fichero no
       este, la configuracion apunta a la nada, y esto es la segunda ronda que lo descubre.
-- [ ] Un gate nuevo en `scripts/check-ui.mjs`, regla 13: **toda cadena de `data-test` escrita en un spec e2e
+- [ ] Un gate nuevo en `scripts/check-ui.mjs`, regla 14 (la 13 se la quedo `ngfor-getter-sin-trackby` en la 12q-E): **toda cadena de `data-test` escrita en un spec e2e
       existe en alguna plantilla del frontend**. Es mecanica, es barata, y habria pillado 12 de los 28 antes
-      de que nadie abriera el navegador. Los textos, no: esos cambian y el test debe poder discutirlos.
+      de que nadie abriera el navegador (la regla 14, que sigue sin escribirse; la 13 nacio de 12q-E). Los textos, no: esos cambian y el test debe poder discutirlos.
 
 ### Gates
 
