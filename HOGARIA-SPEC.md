@@ -2310,9 +2310,14 @@ dejaba la capa e2e entera sin verificar durante ocho tandas.
       dia uno. Es una linea en `.github/workflows/ci.yml`, no un proyecto.
 - [ ] `tools/reporters/hogaria-e2e-reporter.js` se escribe o se olvida para siempre. Mientras el fichero no
       este, la configuracion apunta a la nada, y esto es la segunda ronda que lo descubre.
-- [ ] Un gate nuevo en `scripts/check-ui.mjs`, regla 14 (la 13 se la quedo `ngfor-getter-sin-trackby` en la 12q-E): **toda cadena de `data-test` escrita en un spec e2e
-      existe en alguna plantilla del frontend**. Es mecanica, es barata, y habria pillado 12 de los 28 antes
-      de que nadie abriera el navegador (la regla 14, que sigue sin escribirse; la 13 nacio de 12q-E). Los textos, no: esos cambian y el test debe poder discutirlos.
+- [x] Un gate nuevo en `scripts/check-ui.mjs`: **toda cadena de `data-test` escrita en un spec e2e existe en
+      alguna plantilla del frontend**. Es mecanica, es barata, y habria pillado 12 de los 28 antes de que nadie
+      abriera el navegador. Los textos, no: esos cambian y el test debe poder discutirlos.
+      Hecho en la tanda 20, y es la regla **17** (`data-test-huerfano`), no la 14: en medio se quedaron
+      `texto-sin-traducir` (14), `clave-sin-traduccion` (15) y `pipe-sin-importar` (16). Vale tambien un
+      literal que acabe en `-` y sea prefijo del nombre, porque `[attr.data-test]="'layer-' + kind"` nunca
+      contiene el nombre entero y los e2e si lo conocen. Con la regla escrita: 104 nombres en los specs, 0
+      huerfanos.
 
 ### Gates
 
@@ -2347,7 +2352,7 @@ donde sale texto a la pantalla, y dejar una regla que no permita volver a escrib
       tal cual en el toast) y el contenido generado por la IA. Traducir eso es `Accept-Language` en el
       server y un prompt bilingüe: es otra tanda, y está en Coming soon.
 
-### B. Arquitectura del diccionario
+### B. Arquitectura del diccionario (como quedo)
 
 - [ ] `core/i18n/dict/<dominio>.ts`, uno por pantalla (nav, auth, ui, dashboard, recipes, pantry, shopping,
       calendar, account, preferences, onboarding, ai-config, household, logs, settings). Cada fichero exporta
@@ -2360,38 +2365,99 @@ donde sale texto a la pantalla, y dejar una regla que no permita volver a escrib
 - [ ] Interpolación con `{param}` como hasta ahora (`{n} recetas`). Los textos que mezclaban contenido y
       `{{ }}` en la plantilla pasan a ser una clave con parámetro: `shopping.tab.pending = 'Pendientes ({n})'`,
       y no dos cadenas pegadas en la plantilla —juntar palabras en la plantilla es lo que impide traducir.
-- [ ] La etiqueta se calcula al renderizar (getter o método), nunca en un campo `readonly` de la clase: un
+- [x] La etiqueta se calcula al renderizar (getter o método), nunca en un campo `readonly` de la clase: un
       campo se evalúa una vez al construir y no se entera del cambio de idioma. Donde el getter construye
-      arrays para un `*ngFor`, se memoiza por `resolved()` (misma lección que 12q-E: identidad estable).
+      arrays para un `*ngFor`, se memoiza (misma lección que 12q-E: identidad estable).
+      **Y la memoización no lleva el idioma en su clave**: `app-meal-hours` lo hacía y ya no. Lo que se guarda
+      en el array es la `labelKey`, así que el cache vale para los dos idiomas y la pipe impura lo traduce al
+      pintar. Efecto secundario deseado: el componente deja de inyectar `I18nService`, y sin `inject()` en el
+      constructor sus specs vuelven a poder instanciarlo sin TestBed (el puente de vitest lo agradece).
 
-### C. Reglas de guardia (14 y 15 en `scripts/check-ui.mjs`)
+### C. Reglas de guardia (14, 15 y 16 en `scripts/check-ui.mjs`)
 
 - [ ] `texto-sin-traducir` (14): en `template:` no queda ningún literal con palabras fuera de una pipe `| t`
       —texto entre etiquetas y los atributos `placeholder`, `aria-label`, `title`, `label`, `alt`—. Se saltan
       comentarios, atributos técnicos (`class`, `id`, rutas, nombres de icono) y lo que ya está dentro de una
       expresión. Empieza con la lista de deuda en `LEGACY` por fichero (29) y **la lista solo puede encoger**;
       el objetivo de la tanda es dejarla a cero, así que la regla queda sin excepciones.
+      Hecho: la lista de deuda de la 14 está **vacía** (los 111 casos que quedaban se cerraron en esta tanda,
+      y `--sin-deuda` deja de tener sentido para esta regla). La cuenta entera: 502 literales al empezar, 0 al
+      cerrar, en 177 ficheros.
 - [ ] `clave-sin-traduccion` (15): toda clave referenciada (plantilla o `t(`) existe en `es` **y** en `en`, y
       toda clave de los diccionarios se usa en algún sitio. Los dos sentidos: si falta la clave, la pantalla
       sale en el idioma viejo o con la clave en crudo; si sobra, es texto muerto que alguien jurará vivo.
+      Hecho: 0 claves sin inglés en los 22 diccionarios y 0 claves muertas (25 que había se borraron, y las
+      cuatro de `common.*` que no usaba nadie también).
+- [x] `pipe-sin-importar` (16): si la plantilla usa `| t`, el componente importa `TranslatePipe`. Nace
+      porque NG8004 solo lo ve `ng build`, que es el único gate que mira plantillas: 40 segundos contra 15
+      minutos de compilación. Y la 17 (`data-test-huerfano`) cierra la cuenta que quedó de 12r.
 
-### D. CI con dos idiomas, y el test que faltaba
+### D. CI con dos idiomas, y el test que faltaba (hecho)
 
-- [ ] `playwright.config.ts` fija `locale: 'es-ES'` en `use`. No es un capricho: con `language: 'auto'` y el
+- [x] `playwright.config.ts` fija `locale: 'es-ES'` en `use`. No es un capricho: con `language: 'auto'` y el
       Chromium de CI (`en-US`), el día que los textos pasen por el diccionario **toda la suite e2e escrita en
       español empieza a fallar contra una app que no está rota**. Un test cuyo idioma depende de la máquina
-      no es un test; se ancla el locale y se dice.
-- [ ] e2e nuevo: en cada pantalla principal, cambiar a inglés y exigir que **no quede español** (se comprueba
+      no es un test; se ancla el locale y se dice. Y se ancla también la preferencia guardada
+      (`hogar:v1:language = 'es'`) desde `tests/e2e/fixtures.ts` con un `addInitScript`: el `localStorage`
+      sobrevive entre specs dentro del mismo worker, y quien corría después de una prueba de idioma probaba
+      otra app.
+- [x] e2e nuevo: en cada pantalla principal, cambiar a inglés y exigir que **no quede español** (se comprueba
       el texto visible contra una lista de palabras que solo existen en español: `Guardar`, `Añadir`,
       `Cancelar`, `Despensa`, `recetas`…), y volver a español y exigir lo mismo con las inglesas. Es el test
       que habria evitado esta tanda entera, y es barato porque el diccionario ya da el oráculo.
+      Escrito en `tests/e2e/i18n-idioma.spec.ts`: 7 pantallas × 2 direcciones, y el oráculo es una lista de
+      frases que solo existen en un idioma. Comprueba además `placeholder`, `title` y `aria-label`, que es
+      donde el español se escondía (no salen en `innerText`) y tiene un test extra de la pipe impura: pulsar
+      el idioma en Configuracion cambia 'Recipes' a 'Recetas' **sin navegar ni recargar**. Aquí no hay
+      Chromium, así que corre en CI y su resultado va en el PR, como en 12r.
 - [ ] `tests/e2e/settings-theme-i18n.spec.ts` pasa de «`/Claro|Light/`» a afirmar los dos textos por separado:
       la tolerancia a ambos idiomas era una coartada mientras la mitad de la app no se traducía.
 
-### Gates
+### E. Convención de claves: una frase, una clave
 
-- [ ] `check-ui` con 15 reglas y cero incidencias, con la lista de deuda de la regla 14 vacía.
-- [ ] `tsc` de app y spec, `typecheck:e2e`, vitest del server, puente del frontend, build de producción.
+- [x] **Un diccionario por pantalla** (`dict/<dominio>.ts`), y el dominio es el nombre de la carpeta del
+      componente: `home-profile-picker` → `home_profile_picker`. No hay un `dict/comun.ts` donde acaban los
+      restos: lo que se repite está en `ui.*` y `common.*` **a propósito**, y es lo primero que consulta el
+      extractor antes de acuñar una clave nueva.
+- [x] **El texto generado se copia, no se inventa**: una frase que sale de un `@Input` o de un placeholder
+      larga se convierte en una clave con el propio texto (`account.tu_nombre_tu_foto`), y si lleva un número
+      o un nombre dentro, el hueco es `{param}` (`calendar.month_more`, `logs.zona_detectada`). Las ~96 claves
+      que ya existían conservan su `camelCase`; las nuevas van en `snake_case` porque es lo que produce el
+      extractor y un refactor no se pone a renombrar lo que funciona.
+- [x] **Los plurales se resuelven con dos claves**, no con una `s` pegada en la plantilla:
+      `invite.miembro_uno` / `invite.miembros`, elegidos en un getter. `{{ n !== 1 ? 's' : '' }}` es
+      gramática española escrita en el template, y en inglés no significa nada.
+- [x] **Dentro del objeto de parámetros no puede haber una pipe**: `'k' | t:{name: x || ('otro' | t)}` no
+      compila (los pipes van en la raíz del binding o en una rama de un ternario, no dentro de un objeto de
+      argumentos). Cuando hizo falta un texto dentro de otro texto, salió un getter al `.ts` — `tu cuenta`
+      en `account.displayName()`.
+- [x] **Un `@Input` no lleva literal de fábrica**: `@Input() label = 'Unidad o formato'` se escribe al
+      construir y se queda en español para siempre. Se deja el Input sin valor y el defecto se resuelve en un
+      getter con `t()` (`app-unit-picker`, `app-home-profile-picker`). Eso es lo que denuncia la 14 en su
+      última variante.
+- [x] **Herramientas**: `scripts/i18n-extract.mjs` (repasa plantillas, reutiliza cualquier `texto → clave`
+      que ya exista antes de acuñar, decodifica entidades porque un property binding no las decodifica, y
+      escapa saltos de línea al escribir el diccionario) y `scripts/i18n-merge-dupes.mjs` (una frase, una
+      clave: reescribe las comillas por toda la app y borra la línea duplicada; canónica
+      `common.* > ui.* > nav.* > la más corta`). Reescribieron 40 referencias y dejaron 19 frases duplicadas
+      en una sola clave.
+- [x] **Lo que NO entra en el diccionario**, y no es una excusa sino el criterio: el dato que se guarda
+      (`COMMON_ALLERGENS`, `COMMON_LIKES`, las categorías y alimentos que escribe la casa) porque traducirlo
+      haría que la pantalla mienta sobre la base de datos; el contrato con la IA (`MEAL_TYPE_LABELS`,
+      `MEAL_TIME_META.label`) porque esas cadenas las parsea el server; y las etiquetas de catálogo **sin
+      consumidor** (`*_LABELS` de `shared/models/household.model.ts`), que se dejan y se anotan en §13 para
+      que no se confundan con deuda de esta tanda.
+- [x] **La deuda de emoji viaja con la clave**: `⏱️ {n}min`, `🤖 Configuración IA` o `📦 Despensa` seguían en
+      el template cuando `check-ui` los perdonaba por fichero; al migrarlos se fueron dentro del diccionario,
+      así que los `dict/*.ts` correspondientes entran en la lista de deuda de `sin-emoji` (cinco, y la lista
+      solo puede encoger). Quitar el emoji de la clave es el paso que queda, y es el que ya estaba pedido.
+
+### Gates (medidos al cerrar la tanda)
+
+- [x] `check-ui`: **177 ficheros, 17 reglas, sin incidencias**, con la lista de deuda de la 14 vacía.
+- [x] `tsc` de app y de spec limpios; `typecheck:e2e` limpio; vitest del server **22 ficheros / 559 tests**;
+      puente del frontend **16 ficheros / 155 tests**; `ng build --configuration production` **0 errores** (es
+      el único gate que ve las plantillas: NG8004, NG8113 y NG5 de los que hablan arriba salen todos aquí).
 - [ ] Los e2e: en CI, con el locale anclado. Aquí no hay navegador, así que la comprobación del cambio de
       idioma se trae a CI y se reporta el resultado en el PR, como en 12r.
 
@@ -2403,6 +2469,13 @@ donde sale texto a la pantalla, y dejar una regla que no permita volver a escrib
 - [ ] Un tercer idioma: la estructura (`dict/<dominio>.ts` + `Pair`) lo permite sin tocar las pantallas.
 
 ## 13. Coming soon (deliberately not in this program)
+- **Las etiquetas de catálogo sin uso de `shared/models/household.model.ts`.** `*_LABELS` en español que no
+  lee ningún componente: no son texto visible, son un residuo. O se enganchan a una pantalla con su `labelKey`
+  o se borran; mientras no cuelguen de la regla 15 (que solo exige que lo que se usa esté en los dos idiomas),
+  se quedan ahí declarados para que la próxima tanda los borre con conocimiento.
+- **Quitar los emoji de las claves del diccionario.** La regla `sin-emoji` perdona cinco `dict/*.ts` porque
+  los pictogramas venían perdonados en sus plantillas. Convertirlo es decidir si el glifo es decoración (se
+  quita) o es información (pasa a `app-icon` con su nombre), y toca 5 pantallas con sus capturas.
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
   (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
   «los iconos nunca son emojis» solo se cumple en lo que `check-ui` mira, y la despensa esta en su

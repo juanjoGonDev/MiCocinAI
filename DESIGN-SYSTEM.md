@@ -1590,6 +1590,50 @@ export class ThemeService {
 
 ---
 
+## 🌐 Idioma y textos (i18n)
+
+**Ningún texto de la interfaz se escribe en el componente.** Lo que la app dice sale de
+`frontend/src/app/core/i18n/dict/<dominio>.ts`, un fichero por pantalla, y se pide con la pipe `| t` en la
+plantilla o con `i18n.t(clave)` en el código. El motivo es de lo más prosaico: al cambiar a inglés quedaban
+etiquetas, placeholders y `title` en español repartidos por 29 pantallas, y ningún compilador se queja de eso.
+
+### Cómo se pide un texto
+
+| Caso | Se escribe | No se escribe |
+|---|---|---|
+| Texto fijo | `{{ 'nav.recipes' \| t }}` | `>Recetas<` |
+| Con un dato dentro | `{{ 'recipes.porciones' \| t:{n: recipe.servings} }}` con `'👥 {n} porciones'` | `👥 {{ n }} porciones` |
+| Un plural | dos claves (`…miembro_uno` / `…miembros`) elegidas en un getter | `{{ n !== 1 ? 's' : '' }}` |
+| Etiqueta de un catálogo | `labelKey: TranslationKey` en el modelo y `\| t` al pintar | `label: 'Desayuno'` en un `readonly` de la clase |
+| Valor de fábrica de un `@Input` | Input sin valor + getter con `t()` | `@Input() label = 'Unidad o formato'` |
+
+Reglas que se siguen de ahí, y que no son estilo sino física del framework:
+
+- **Un texto que se guarda en un campo de clase se congela en el idioma en el que se creó el componente.** La
+  pipe `t` es impura a propósito: se re-evalúa al cambiar de idioma. Por eso se resuelve al renderizar (getter
+  o template) y nunca al construir.
+- **Dentro del objeto de parámetros no puede haber otra pipe** (`t:{name: x || ('k' | t)}` no compila). Si un
+  texto necesita a otro dentro, sale un getter al `.ts`.
+- **Una frase, una clave.** Antes de acuñar, el extractor busca el texto en todos los dominios; `common.*` y
+  `ui.*` ganan. `scripts/i18n-merge-dupes.mjs` vuelve a juntar lo que se duplicó.
+- **Traducible es lo que la app dice, no lo que la casa guarda.** Los nombres de alimentos, las categorías de
+  la cesta y los alérgenos escritos por una persona se muestran tal cual: traducirlos haría que la pantalla
+  mintiera sobre la base de datos. Y `MEAL_TYPE_LABELS` sigue en español porque es la cadena que entiende el
+  planificador; donde se enseña, se pinta `t('meal.<tipo>')`.
+
+### Quién lo vigila
+
+`scripts/check-ui.mjs`, reglas 14 (`texto-sin-traducir`), 15 (`clave-sin-traduccion`: la clave existe en `es`
+**y** en `en`, y se usa en algún sitio), 16 (`pipe-sin-importar`) y 17 (`data-test-huerfano`). Además el tipo:
+`TranslationKey` es la unión de claves reales, así que una errata en una plantilla es error de compilación con
+`strictTemplates`. Contrato y deudas en `HOGARIA-SPEC.md` §12s.
+
+- [ ] **Pendiente**: los pictogramas dentro de las claves (`📦 Despensa`, `⏱️ {n}min`) están perdonados por
+      `sin-emoji` en cinco diccionarios. Decidir si son decoración (se quitan) o información (pasan a
+      `app-icon`) es una tanda con sus capturas, no un retoque.
+
+---
+
 ## ✅ Checklist de Implementación UI
 
 ### Componentes Base
@@ -1641,5 +1685,7 @@ export class ThemeService {
 
 ---
 
-**Última actualización:** 2026-09-13  
-**Versión:** 1.0.0
+**Última actualización:** 2026-09-21  
+**Versión:** 1.1.0  
+**Qué cambió:** la sección de idioma y textos (tanda 20): todo texto de la interfaz sale del diccionario, y
+hay cuatro reglas de `check-ui` que lo exigen.
