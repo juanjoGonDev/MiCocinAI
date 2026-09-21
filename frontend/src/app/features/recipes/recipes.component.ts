@@ -15,6 +15,7 @@ import { TimerComponent } from '../../shared/components/ui/timer/timer.component
 import { Recipe, Difficulty } from '../../shared/models/recipe.model';
 import { AIRecipeResponse } from '../../shared/models/ai-config.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
@@ -27,7 +28,7 @@ import { I18nService } from '../../core/services/i18n.service';
     CommonModule, FormsModule,
     ButtonComponent, InputComponent, BadgeComponent, TagComponent,
     ModalComponent, LoadingComponent, TimerComponent
-  ],
+  , CatalogLabelPipe],
   template: `
     <div class="recipes">
       <!-- Header -->
@@ -125,7 +126,7 @@ import { I18nService } from '../../core/services/i18n.service';
                 [removable]="true"
                 (onRemove)="removeIngredient(ing)"
               >
-                {{ ing.name }}
+                {{ ing.name | catalog }}
               </app-tag>
               <span *ngIf="selectedIngredients().length === 0" class="ai-form__hint">
                 {{ 'recipes.selecciona_ingredientes_de_abajo' | t }}
@@ -142,7 +143,7 @@ import { I18nService } from '../../core/services/i18n.service';
                 [selected]="isIngredientSelected(ing.id)"
                 (onClick)="toggleIngredientSelection(ing)"
               >
-                {{ getCategoryIcon(ing.category) }} {{ ing.name }}
+                {{ getCategoryIcon(ing.category) }} {{ ing.name | catalog }}
               </app-tag>
             </div>
           </div>

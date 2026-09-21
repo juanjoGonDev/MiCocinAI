@@ -42,6 +42,8 @@ import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { catalogLabel } from '../../shared/pipes/catalog-label.pipe';
+import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
@@ -109,7 +111,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
     PickerComponent,
     UnitPickerComponent,
     AvatarComponent
-  ],
+  , CatalogLabelPipe],
   template: `
     <div class="detail">
       <header class="detail__head">
@@ -315,7 +317,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                           [label]="null"
                         />
                       </button>
-                      <span class="detail__name">{{ item.name }}</span>
+                      <span class="detail__name">{{ item.name | catalog }}</span>
                       @if (qtyOf(item)) {
                         <span class="detail__qty">{{ qtyOf(item) }}</span>
                       }
@@ -455,7 +457,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       @if (editing(); as item) {
         <div class="detail__sheet-backdrop" (click)="closeEdit()">
           <section class="detail__sheet" data-test="edit-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.editar_linea' | t">
-            <h2 class="detail__sheet-title">{{ item.name }}</h2>
+            <h2 class="detail__sheet-title">{{ item.name | catalog }}</h2>
             <!-- No dice «Cancelar», y no es un olvido: aqui todo se guarda al tocar, asi que el
                  boton cierra y punto. Prometer que deshace seria mentir. -->
             <app-icon-button
@@ -2968,7 +2970,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
   });
 
   face(event: ListEvent): { name: string; avatar?: string; text: string } {
-    return auditFace(event, this.auditMe(), { t: (key, params) => this.i18n.t(key, params) });
+    return auditFace(event, this.auditMe(), {
+      t: (key, params) => this.i18n.t(key, params),
+      // El articulo del historial es el mismo nombre que la fila de la lista: si la fila se lee «Milk», la
+      // frase no puede decir «Leche» (HOGARIA-SPEC ## 12w).
+      item: (nombre) => catalogLabel(nombre, (key) => this.i18n.t(key))
+    });
   }
 
   /** El descuento propio de una fila, y su frase, para pintarlos en la lista. */

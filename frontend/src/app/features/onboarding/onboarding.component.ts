@@ -25,6 +25,7 @@ import { Utensil } from '../../shared/models/pantry.model';
 import { MealTimes, mealTimesPatch, resolveMealTimes } from '../../core/meal-times';
 import { MealHoursComponent } from '../../shared/components/ui/meal-hours/meal-hours.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
 import {
   isLastIndex,
   nextIndex,
@@ -54,7 +55,7 @@ import { I18nService } from '../../core/services/i18n.service';
     MealHoursComponent,
     HomeProfilePickerComponent,
     LoadingComponent
-  ],
+  , CatalogLabelPipe],
   template: `
     <div class="onboarding">
       <div class="onboarding__card" (keydown)="onCardKeydown($event)">
@@ -231,7 +232,7 @@ import { I18nService } from '../../core/services/i18n.service';
                   [checked]="utensil.available"
                   (change)="toggleUtensil(utensil)"
                 />
-                <span class="utensil-card__name">{{ utensil.name }}</span>
+                <span class="utensil-card__name">{{ utensil.name | catalog }}</span>
               </label>
             </div>
 

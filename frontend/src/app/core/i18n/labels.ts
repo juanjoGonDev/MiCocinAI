@@ -157,3 +157,160 @@ export const LIST_EVENT_LABEL_KEYS: Record<ListEventAction, TranslationKey> = {
   'items.bulk': 'list_event.lista_pegada',
   'items.apply': 'list_event.lineas_desde_una_foto'
 };
+
+/**
+ * Los alimentos que la app siembra en la despensa de una casa nueva (68).
+ *
+ * La clave es el nombre en castellano que guarda `server/src/utils/seed-data.ts` —lo que hay en la base de datos
+ * NO se traduce nunca, porque viaja al prompt de la IA y lo reescribe la propia app al releer la lista— y el
+ * valor es la etiqueta que se pinta. Lo que no esta aqui es un nombre que escribio la persona: se pinta tal cual, porque es su texto.
+ */
+export const FOOD_LABEL_KEYS: Record<string, TranslationKey> = {
+  'Patatas': 'pantry.comida.patatas',
+  'Cebolla': 'pantry.comida.cebolla',
+  'Ajo': 'pantry.comida.ajo',
+  'Tomate': 'pantry.comida.tomate',
+  'Zanahoria': 'pantry.comida.zanahoria',
+  'Pimiento': 'pantry.comida.pimiento',
+  'Lechuga': 'pantry.comida.lechuga',
+  'Pepino': 'pantry.comida.pepino',
+  'Calabacín': 'pantry.comida.calabacin',
+  'Berenjena': 'pantry.comida.berenjena',
+  'Brócoli': 'pantry.comida.brocoli',
+  'Espinacas': 'pantry.comida.espinacas',
+  'Plátano': 'pantry.comida.platano',
+  'Manzana': 'pantry.comida.manzana',
+  'Naranja': 'pantry.comida.naranja',
+  'Limón': 'pantry.comida.limon',
+  'Fresas': 'pantry.comida.fresas',
+  'Uvas': 'pantry.comida.uvas',
+  'Aguacate': 'pantry.comida.aguacate',
+  'Piña': 'pantry.comida.pina',
+  'Melocotón': 'pantry.comida.melocoton',
+  'Pera': 'pantry.comida.pera',
+  'Huevos': 'pantry.comida.huevos',
+  'Pollo': 'pantry.comida.pollo',
+  'Carne picada': 'pantry.comida.carne_picada',
+  'Ternera': 'pantry.comida.ternera',
+  'Cerdo': 'pantry.comida.cerdo',
+  'Bacón': 'pantry.comida.bacon',
+  'Salmón': 'pantry.comida.salmon',
+  'Merluza': 'pantry.comida.merluza',
+  'Atún en lata': 'pantry.comida.atun_en_lata',
+  'Gambas': 'pantry.comida.gambas',
+  'Leche': 'pantry.comida.leche',
+  'Queso': 'pantry.comida.queso',
+  'Queso rallado': 'pantry.comida.queso_rallado',
+  'Yogur': 'pantry.comida.yogur',
+  'Mantequilla': 'pantry.comida.mantequilla',
+  'Nata': 'pantry.comida.nata',
+  'Arroz': 'pantry.comida.arroz',
+  'Pasta': 'pantry.comida.pasta',
+  'Pan de molde': 'pantry.comida.pan_de_molde',
+  'Pan': 'pantry.comida.pan',
+  'Harina': 'pantry.comida.harina',
+  'Azúcar': 'pantry.comida.azucar',
+  'Sal': 'pantry.comida.sal',
+  'Pimienta': 'pantry.comida.pimienta',
+  'Aceite de oliva': 'pantry.comida.aceite_de_oliva',
+  'Vinagre': 'pantry.comida.vinagre',
+  'Salsa de tomate': 'pantry.comida.salsa_de_tomate',
+  'Mayonesa': 'pantry.comida.mayonesa',
+  'Ketchup': 'pantry.comida.ketchup',
+  'Mostaza': 'pantry.comida.mostaza',
+  'Salsa de soja': 'pantry.comida.salsa_de_soja',
+  'Miel': 'pantry.comida.miel',
+  'Café': 'pantry.comida.cafe',
+  'Té': 'pantry.comida.te',
+  'Chocolate': 'pantry.comida.chocolate',
+  'Pan rallado': 'pantry.comida.pan_rallado',
+  'Levadura': 'pantry.comida.levadura',
+  'Garbanzos': 'pantry.comida.garbanzos',
+  'Lentejas': 'pantry.comida.lentejas',
+  'Alubias': 'pantry.comida.alubias',
+  'Guisantes congelados': 'pantry.comida.guisantes_congelados',
+  'Helado': 'pantry.comida.helado',
+  'Agua': 'pantry.comida.agua',
+  'Zumo': 'pantry.comida.zumo',
+  'Cerveza': 'pantry.comida.cerveza',
+  'Vino tinto': 'pantry.comida.vino_tinto',
+};
+
+/**
+ * Los utensilios que la app siembra en la casa nueva (54).
+ *
+ * La clave es el nombre en castellano que guarda `server/src/utils/seed-data.ts` —lo que hay en la base de datos
+ * NO se traduce nunca, porque viaja al prompt de la IA y lo reescribe la propia app al releer la lista— y el
+ * valor es la etiqueta que se pinta. Lo que no esta aqui es un nombre que escribio la persona: se pinta tal cual, porque es su texto.
+ */
+export const UTENSIL_LABEL_KEYS: Record<string, TranslationKey> = {
+  'Sartén': 'pantry.utensilio.sarten',
+  'Sartén antiadherente': 'pantry.utensilio.sarten_antiadherente',
+  'Sartén pequeña': 'pantry.utensilio.sarten_pequena',
+  'Olla': 'pantry.utensilio.olla',
+  'Olla a presión': 'pantry.utensilio.olla_a_presion',
+  'Cazuela': 'pantry.utensilio.cazuela',
+  'Cacerola': 'pantry.utensilio.cacerola',
+  'Batería de cocina': 'pantry.utensilio.bateria_de_cocina',
+  'Freidora de aire (Airfryer)': 'pantry.utensilio.freidora_de_aire_airfryer',
+  'Microondas': 'pantry.utensilio.microondas',
+  'Horno': 'pantry.utensilio.horno',
+  'Vitrocerámica / Placa inducción': 'pantry.utensilio.vitroceramica_placa_induccion',
+  'Batidora de mano': 'pantry.utensilio.batidora_de_mano',
+  'Batidora de vaso / Blender': 'pantry.utensilio.batidora_de_vaso_blender',
+  'Procesador de alimentos': 'pantry.utensilio.procesador_de_alimentos',
+  'Tostadora': 'pantry.utensilio.tostadora',
+  'Cafetera': 'pantry.utensilio.cafetera',
+  'Hervidor de agua': 'pantry.utensilio.hervidor_de_agua',
+  'Exprimidor': 'pantry.utensilio.exprimidor',
+  'Robot de cocina': 'pantry.utensilio.robot_de_cocina',
+  'Lavavajillas': 'pantry.utensilio.lavavajillas',
+  'Frigorífico': 'pantry.utensilio.frigorifico',
+  'Congelador': 'pantry.utensilio.congelador',
+  'Tabla de cortar': 'pantry.utensilio.tabla_de_cortar',
+  'Cuchillo de chef': 'pantry.utensilio.cuchillo_de_chef',
+  'Cuchillo de pelar': 'pantry.utensilio.cuchillo_de_pelar',
+  'Cuchillo de sierra (pan)': 'pantry.utensilio.cuchillo_de_sierra_pan',
+  'Pelador': 'pantry.utensilio.pelador',
+  'Rallador': 'pantry.utensilio.rallador',
+  'Tijeras de cocina': 'pantry.utensilio.tijeras_de_cocina',
+  'Abrelatas': 'pantry.utensilio.abrelatas',
+  'Descorchador': 'pantry.utensilio.descorchador',
+  'Rodillo de cocina': 'pantry.utensilio.rodillo_de_cocina',
+  'Colador': 'pantry.utensilio.colador',
+  'Escurridor': 'pantry.utensilio.escurridor',
+  'Bol / Cuenco': 'pantry.utensilio.bol_cuenco',
+  'Báscula de cocina': 'pantry.utensilio.bascula_de_cocina',
+  'Vaso medidor': 'pantry.utensilio.vaso_medidor',
+  'Cucharas medidoras': 'pantry.utensilio.cucharas_medidoras',
+  'Espátula de silicona': 'pantry.utensilio.espatula_de_silicona',
+  'Cuchara de madera': 'pantry.utensilio.cuchara_de_madera',
+  'Pinzas de cocina': 'pantry.utensilio.pinzas_de_cocina',
+  'Batidor de varillas': 'pantry.utensilio.batidor_de_varillas',
+  'Bandeja de horno': 'pantry.utensilio.bandeja_de_horno',
+  'Molde para bizcocho': 'pantry.utensilio.molde_para_bizcocho',
+  'Fuente de cristal': 'pantry.utensilio.fuente_de_cristal',
+  'Papel de horno': 'pantry.utensilio.papel_de_horno',
+  'Paños de cocina': 'pantry.utensilio.panos_de_cocina',
+  'Papel de cocina': 'pantry.utensilio.papel_de_cocina',
+  'Delantal': 'pantry.utensilio.delantal',
+  'Guantes de horno': 'pantry.utensilio.guantes_de_horno',
+  'Tupperware / Recipientes': 'pantry.utensilio.tupperware_recipientes',
+  'Papel film': 'pantry.utensilio.papel_film',
+  'Papel de aluminio': 'pantry.utensilio.papel_de_aluminio',
+};
+
+/**
+ * La etiqueta de un nombre del catalogo, en el idioma activo; `null` si la palabra no es del catalogo.
+ *
+ * Se mira primero la despensa y luego los utensilios: los dos conjuntos son disjuntos —lo comprueba el spec
+ * espejo `server/src/utils/pantry-catalog-i18n.spec.ts`—, y asi la pantalla no tiene que decir de que catalogo es
+ * cada nombre, que es exactamente el tipo de parametro que se pasa cruzado.
+ */
+export function catalogLabelKey(value: string | null | undefined): TranslationKey | null {
+  if (!value) return null;
+  return FOOD_LABEL_KEYS[value] ?? UTENSIL_LABEL_KEYS[value] ?? null;
+}
+
+/** Los dos catalogos juntos, para quien solo necesita saber si una palabra es del semillero (y pruebas). */
+export const CATALOG_LABEL_KEYS: Record<string, TranslationKey> = { ...FOOD_LABEL_KEYS, ...UTENSIL_LABEL_KEYS };

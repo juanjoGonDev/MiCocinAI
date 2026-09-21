@@ -23,6 +23,7 @@ import {
   UtensilCategory,
 } from '../../shared/models/pantry.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
@@ -58,7 +59,7 @@ const PAGE_SIZE = 100;
     CommonModule, FormsModule,
     ButtonComponent, InputComponent, CardComponent,
     BadgeComponent, TagComponent, ModalComponent, LoadingComponent
-  ],
+  , CatalogLabelPipe],
   template: `
     <div class="pantry">
       <!-- Header -->
@@ -156,10 +157,10 @@ const PAGE_SIZE = 100;
                 class="chip"
                 *ngFor="let s of suggestions()"
                 (click)="quickAddSuggestion(s)"
-                [title]="s.name"
+                [title]="s.name | catalog"
               >
                 <span class="chip__icon">{{ getCategoryIcon(s.category) }}</span>
-                <span class="chip__name">{{ s.name }}</span>
+                <span class="chip__name">{{ s.name | catalog }}</span>
                 <span class="chip__plus">+</span>
               </button>
             </div>
@@ -173,7 +174,7 @@ const PAGE_SIZE = 100;
             >
               <div class="ingredient-item__icon">{{ getCategoryIcon(ingredient.category) }}</div>
               <div class="ingredient-item__info">
-                <span class="ingredient-item__name">{{ ingredient.name }}</span>
+                <span class="ingredient-item__name">{{ ingredient.name | catalog }}</span>
                 <span class="ingredient-item__quantity">{{ ingredient.quantity }} {{ ingredient.unit }}</span>
               </div>
               <div class="ingredient-item__meta">
@@ -285,7 +286,7 @@ const PAGE_SIZE = 100;
                   (change)="toggleUtensil(u)"
                   class="utensil-card__check"
                 />
-                <span class="utensil-card__name">{{ u.name }}</span>
+                <span class="utensil-card__name">{{ u.name | catalog }}</span>
                 <button
                   type="button"
                   class="utensil-card__delete"
