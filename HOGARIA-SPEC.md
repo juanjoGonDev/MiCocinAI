@@ -2588,10 +2588,12 @@ ven desde la pantalla.
       excepciones; pasar a `none` las borra todas.
 - [x] El autor no es invitado, y `editable` sigue siendo solo del autor: una serie la cambia quien la apunto,
       el resto la ve y puede faltar a un dia.
-- [x] e2e en `tests/e2e/calendar.spec.ts` (`Calendario — repeticiones`): serie semanal que aparece en la
-      semana vista habiendola apuntado hace siete dias, serie diaria que llena los siete huecos con un solo
-      evento, «quitar solo este dia» (con la confirmacion de la app, no con `confirm()`), y una suelta normal
-      que no repite ni lleva glifo. Playwright no corre aqui (no hay Chromium); el job corre en CI.
+- [x] e2e en `tests/e2e/calendar.spec.ts` (`Calendario — repeticiones`), medidos en la agenda del dia que es
+      donde la app pinta las sueltas: la serie semanal aparece hoy y no ayer (habia que cambiar de dia con la
+      flecha: contar la semana entera hubiera dependido de que la rejilla pinte cada dia, y eso es otra
+      pantalla), la diaria se sostiene tambien el dia anterior, «quitar solo este dia» deja el hueco vacia y
+      el dia de al lado en pie, y una suelta normal no repite ni lleva glifo. Playwright no corre aqui (no hay
+      Chromium); el job corre en CI.
 
 ### Cierre del i18n (lo pedido en la ronda 20: «usa siempre el sistema de traducciones»)
 
