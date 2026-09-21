@@ -1,10 +1,13 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-tag',
   standalone: true,
-  imports: [CommonModule],
+  imports: [
+    TranslatePipe,
+    CommonModule],
   template: `
     <span [class]="getClasses()" (click)="onClick.emit()">
       <ng-content></ng-content>
@@ -13,7 +16,7 @@ import { CommonModule } from '@angular/common';
         type="button"
         class="tag__remove"
         (click)="onRemove.emit($event); $event.stopPropagation()"
-        aria-label="Remove tag"
+        [attr.aria-label]="'ui.remove_tag' | t"
       >
         ×
       </button>

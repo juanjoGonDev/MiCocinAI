@@ -1,8 +1,10 @@
-import { Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild, computed, signal } from '@angular/core';
+import { Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../icon/icon.component';
 import type { IconName } from '../icon/icon-paths';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
+import { I18nService } from '../../../../core/services/i18n.service';
 
 export type PickerOption = {
   value: string;
@@ -42,7 +44,9 @@ export type PickerRow =
 @Component({
   selector: 'app-picker',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, FormsModule, IconComponent],
   template: `
     <div class="picker" #root [class.picker--up]="flipped()">
       <button
@@ -60,7 +64,7 @@ export type PickerRow =
         @if (leadingIcon) {
           <app-icon [name]="leadingIcon" [size]="18" [label]="null" />
         }
-        <span class="picker__value">{{ selectedLabel || placeholder }}</span>
+        <span class="picker__value">{{ selectedLabel || placeholderText }}</span>
         @if (selectedOption()?.color) {
           <span class="picker__dot" [style.background]="selectedOption()?.color" aria-hidden="true"></span>
         }
@@ -68,7 +72,7 @@ export type PickerRow =
       </button>
 
       @if (open()) {
-        <div class="picker__panel" [id]="listId()" role="listbox" [attr.aria-label]="label" (keydown)="onListKeys($event, false)">
+        <div class="picker__panel" [id]="listId()" role="listbox" [attr.aria-label]="labelText" (keydown)="onListKeys($event, false)">
           @if (options.length > filterFrom) {
             <div class="picker__search">
               <app-icon name="search" [size]="16" [label]="null" />
@@ -77,7 +81,7 @@ export type PickerRow =
                 type="text"
                 name="pickerQuery"
                 [(ngModel)]="query"
-                [placeholder]="searchPlaceholder"
+                [placeholder]="searchPlaceholderText"
                 autocomplete="off"
                 (keydown)="onSearchKeys($event)"
               />
@@ -88,7 +92,7 @@ export type PickerRow =
               <li class="picker__option picker__option--custom" role="option" [attr.aria-selected]="active() === -1" (click)="useCustom()">
                 <app-icon name="add" [size]="18" [label]="null" />
                 <span>{{ query.trim() }}</span>
-                <span class="picker__tag">usar este texto</span>
+                <span class="picker__tag">{{ 'ui.usar_este_texto' | t }}</span>
               </li>
             }
             @for (row of rows(); track row.key) {
@@ -114,7 +118,7 @@ export type PickerRow =
                     <span class="picker__hint">{{ row.option.hint }}</span>
                   }
                   @if (isSelected(row.option)) {
-                    <app-icon class="picker__check" name="check" [size]="18" [label]="'seleccionado: ' + row.option.label" />
+                    <app-icon class="picker__check" name="check" [size]="18" [label]="'ui.selected_option' | t:{option: row.option.label}" />
                   }
                 </li>
               }
@@ -300,12 +304,31 @@ export type PickerRow =
   ]
 })
 export class PickerComponent implements OnInit, OnDestroy {
+  private readonly i18n = inject(I18nService);
+
   @Input({ required: true }) options: PickerOption[] = [];
   @Input() value: string | null = null;
-  @Input() placeholder = 'Elegir…';
-  @Input() label = 'Opciones';
-  @Input() searchPlaceholder = 'Buscar';
-  @Input() emptyText = 'Nada que elegir';
+  /**
+   * Cuatro textos de fabrica que eran literales en la declaracion. Un campo del componente se evalua al
+   * construirlo, asi que «Buscar» se quedaba en espanol para siempre aunque se cambiara de idioma; ahora
+   * el valor por defecto se resuelve al leerlo y el idioma entra por la senal del servicio (12s-B).
+   */
+  @Input() placeholder?: string;
+  @Input() label?: string;
+  @Input() searchPlaceholder?: string;
+
+  get placeholderText(): string {
+    return this.placeholder ?? this.i18n.t('ui.choose');
+  }
+
+  get labelText(): string {
+    return this.label ?? this.i18n.t('ui.options');
+  }
+
+  get searchPlaceholderText(): string {
+    return this.searchPlaceholder ?? this.i18n.t('ui.buscar');
+  }
+
   @Input() leadingIcon: IconName | null = null;
   @Input() allowCustom = false;
   @Input() disabled = false;

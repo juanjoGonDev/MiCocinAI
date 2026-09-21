@@ -1,11 +1,14 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ToastService, Toast } from '../../../../core/services/toast.service';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-toast',
   standalone: true,
-  imports: [CommonModule],
+  imports: [
+    TranslatePipe,
+    CommonModule],
   template: `
     <div class="toast-container toast-container--top">
       <div
@@ -31,7 +34,7 @@ import { ToastService, Toast } from '../../../../core/services/toast.service';
           type="button"
           class="toast__close"
           (click)="toastService.dismiss(toast.id)"
-          aria-label="Dismiss"
+          [attr.aria-label]="'ui.dismiss' | t"
         >
           ✕
         </button>
@@ -69,7 +72,7 @@ import { ToastService, Toast } from '../../../../core/services/toast.service';
           type="button"
           class="toast__close"
           (click)="toastService.dismiss(toast.id)"
-          aria-label="Dismiss"
+          [attr.aria-label]="'ui.dismiss' | t"
         >
           ✕
         </button>

@@ -1,13 +1,16 @@
 import { Component, Input, Output, EventEmitter, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ButtonComponent } from '../button/button.component';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
 @Component({
   selector: 'app-modal',
   standalone: true,
-  imports: [CommonModule, ButtonComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, ButtonComponent],
   template: `
     <div *ngIf="isOpen" class="modal-overlay" (click)="onOverlayClick($event)">
       <div [class]="getModalClasses()" role="dialog" [attr.aria-label]="title">
@@ -18,7 +21,7 @@ export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
             type="button"
             class="modal__close"
             (click)="close()"
-            aria-label="Close modal"
+            [attr.aria-label]="'ui.close' | t"
           >
             ✕
           </button>

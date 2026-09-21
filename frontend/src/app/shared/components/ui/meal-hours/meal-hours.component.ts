@@ -1,13 +1,10 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import {
-  MEAL_ORDER,
-  MEAL_TIME_DEFAULTS,
-  MEAL_TYPE_LABELS,
-  MealTimes,
-  MealType
-} from '../../../models/calendar.model';
+import { MEAL_ORDER, MEAL_TIME_DEFAULTS, MealTimes, MealType } from '../../../models/calendar.model';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
+import { I18nService } from '../../../../core/services/i18n.service';
+import { MEAL_LABEL_KEYS } from '../../../../core/i18n/labels';
 
 interface MealHourRow {
   type: MealType;
@@ -37,10 +34,12 @@ interface MealHourRow {
 @Component({
   selector: 'app-meal-hours',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    TranslatePipe,
+    CommonModule, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="meal-hours" role="group" [attr.aria-label]="groupLabel">
+    <div class="meal-hours" role="group" [attr.aria-label]="groupLabelText">
       <div class="meal-hours__row" *ngFor="let row of rows; trackBy: trackRow">
         <label class="meal-hours__label" [attr.for]="row.id">{{ row.label }}</label>
         <input
@@ -61,7 +60,7 @@ interface MealHourRow {
           [attr.data-test]="dataTest ? dataTest + '-reset-' + row.type : null"
           (click)="reset(row.type)"
         >
-          Por defecto
+          {{ 'ui.por_defecto' | t }}
         </button>
         <span class="meal-hours__state" *ngIf="!isDefault(row.type)">{{ defaults[row.type] }}</span>
         <p class="meal-hours__hint" *ngIf="row.hint" [id]="row.id + '-hint'">
@@ -168,12 +167,19 @@ interface MealHourRow {
   ],
 })
 export class MealHoursComponent {
+  private readonly i18n = inject(I18nService);
+
   @Input({required: true}) times!: MealTimes;
   /** Prefijo de los ids: `meal` en Preferencias, `ob-meal` en el tour. */
   @Input() idPrefix = 'meal';
   /** Un `data-test` por fila (`...-<tipo>`), para los e2e que ya existen. */
   @Input() dataTest: string | null = null;
-  @Input() groupLabel = 'Horarios de las comidas';
+  /** Tambien se resuelve al leer, no al construir: ver el comentario de `app-picker`. */
+  @Input() groupLabel?: string;
+
+  get groupLabelText(): string {
+    return this.groupLabel ?? this.i18n.t('ui.meal_hours');
+  }
   readonly defaults = MEAL_TIME_DEFAULTS;
   readonly hints: Partial<Record<MealType, string>> = {};
 
@@ -188,13 +194,16 @@ export class MealHoursComponent {
    * aburrida y correcta; `trackRow` es la red por si alguien vuelve a quitarla.
    */
   get rows(): MealHourRow[] {
-    const key = `${this.idPrefix}|${MEAL_ORDER.map((type) => this.hints[type] ?? '').join('|')}`;
+    // El idioma entra en la clave del cache: sin eso, cambiar a ingles dejaba las cuatro etiquetas en
+    // espanol hasta recargar, que es justo el defecto que se esta arreglando en esta tanda.
+    const key = `${this.idPrefix}|${this.i18n.resolved()}|${MEAL_ORDER.map((type) => this.hints[type] ?? '').join('|')}`;
     if (key !== this.rowsKey) {
       this.rowsKey = key;
       this.rowsCache = MEAL_ORDER.map((type) => ({
         type,
         id: `${this.idPrefix}-${type}`,
-        label: MEAL_TYPE_LABELS[type],
+        // `MEAL_TYPE_LABELS` es el dato que entiende la IA; lo que se ensena sale del diccionario.
+        label: this.i18n.t(MEAL_LABEL_KEYS[type]),
         hint: this.hints[type]
       }));
     }

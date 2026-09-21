@@ -22,7 +22,7 @@ const E2E_DIR = 'tests/e2e';
 // Cuantas reglas hay dentro. Se cuenta aqui y no a mano porque la ultima vez que se anadio una (la de
 // los selectores huerfanos) el mensaje de «sin incidencias» seguia diciendo siete, que es exactamente
 // el tipo de mentira que este fichero existe para evitar.
-const RULES = 13;
+const RULES = 15;
 
 // ---------------------------------------------------------------------------
 // Deuda heredada, declarada en voz alta.
@@ -42,7 +42,9 @@ const LEGACY = {
     'frontend/src/app/features/account/account.component.ts'
   ],
   'sin-emoji': [
-    'frontend/src/app/core/services/i18n.service.ts',
+    // Los emoji de Configuracion viajaban dentro del diccionario del service; al mover el diccionario a
+    // su fichero se muda tambien la deuda, que sigue siendo la misma cuenta (regla 1, tanda aparte).
+    'frontend/src/app/core/i18n/dict/settings.ts',
     'frontend/src/app/features/ai-config/ai-config.component.ts',
     'frontend/src/app/features/dashboard/dashboard.component.ts',
     'frontend/src/app/features/household/household.component.ts',
@@ -50,7 +52,6 @@ const LEGACY = {
     'frontend/src/app/features/onboarding/onboarding.component.ts',
     'frontend/src/app/features/pantry/pantry.component.ts',
     'frontend/src/app/features/recipes/recipes.component.ts',
-    'frontend/src/app/features/settings/settings.component.ts',
     'frontend/src/app/layouts/auth-layout/auth-layout.component.ts',
     'frontend/src/app/shared/components/ui/chip-select/chip-select.component.ts',
     'frontend/src/app/shared/components/ui/input/input.component.ts',
@@ -68,6 +69,33 @@ const LEGACY = {
     'frontend/src/app/shared/components/ui/progress/progress.component.ts',
     'frontend/src/app/shared/components/ui/rating/rating.component.ts',
     'frontend/src/app/shared/components/ui/tooltip/tooltip.component.ts'
+  ],
+  // Tanda 20: el diccionario aun no es el unico camino para el texto en estas 22 pantallas. La lista es la
+  // cuenta de lo que queda de esta tanda, NO un «ya llegara»: cada commit la acorta, y el objetivo es
+  // borrarla entera (HOGARIA-SPEC 12s). Si un fichero se va y se queda aqui, check-ui lo dice.
+  'texto-sin-traducir': [
+    'frontend/src/app/features/account/account.component.ts',
+    'frontend/src/app/features/account/avatar-editor.component.ts',
+    'frontend/src/app/features/ai-config/ai-config.component.ts',
+    'frontend/src/app/features/auth/forgot-password/forgot-password.component.ts',
+    'frontend/src/app/features/auth/login/login.component.ts',
+    'frontend/src/app/features/auth/register/register.component.ts',
+    'frontend/src/app/features/calendar/calendar-event.component.ts',
+    'frontend/src/app/features/calendar/calendar-month.component.ts',
+    'frontend/src/app/features/calendar/calendar-timeline.component.ts',
+    'frontend/src/app/features/calendar/calendar.component.ts',
+    'frontend/src/app/features/household/household.component.ts',
+    'frontend/src/app/features/invite/invite.component.ts',
+    'frontend/src/app/features/logs/logs.component.ts',
+    'frontend/src/app/features/onboarding/onboarding.component.ts',
+    'frontend/src/app/features/pantry/pantry.component.ts',
+    'frontend/src/app/features/preferences/preferences.component.ts',
+    'frontend/src/app/features/recipes/recipes.component.ts',
+    'frontend/src/app/features/shopping/shopping-list-detail.component.ts',
+    'frontend/src/app/features/shopping/shopping-lists.component.ts',
+    'frontend/src/app/features/shopping/unit-picker.component.ts',
+    'frontend/src/app/layouts/auth-layout/auth-layout.component.ts',
+    'frontend/src/app/shared/components/ui/home-profile-picker/home-profile-picker.component.ts',
   ],
   'sin-select-nativo': [
     'frontend/src/app/features/ai-config/ai-config.component.ts',
@@ -626,6 +654,167 @@ for (const file of sourceFiles) {
       'ngfor-getter-sin-trackby',
       `*ngFor itera el getter '${name}', que devuelve una array nueva en cada ciclo: anade trackBy (o el campo, si el getter no aporta nada)`
     );
+  }
+}
+
+// --------------------------------------------------------------------------------
+// 14) Ningun texto de la interfaz se escribe a mano: todo pasa por el diccionario.
+//
+// La regla que faltaba. `I18nService` existia desde el principio, `check-ui` no miraba ni una sola
+// vez si el texto lo atravesaba, y el resultado medido fue este: 502 literales en 29 plantillas
+// contra 96 claves de diccionario. Cambiar a ingles dejaba media app en espanol y ningun gate se
+// enteraba —ni el compilador, ni los tests, ni la build— porque un literal escrito en la plantilla
+// es codigo perfectamente valido.
+//
+// Que se caza: un nodo de texto con prosa y los atributos que se leen (`placeholder`, `aria-label`,
+// `title`...) sin su `| t`, y los `@Input()` con un literal de texto por defecto (un campo se evalua
+// al construir el componente y no se entera despues del cambio de idioma). Que se salta a proposito:
+// lo puramente tecnico (`class`, rutas, ids de icono, `g`/`ml`, `sk-...`, una url) y lo que lleva
+// `{{ }}` en medio, que tambien tiene que traducirse pero convertido en una clave con {parametros}
+// —eso lo decide una persona, y la lista de pendientes la imprime el propio extractor.
+// --------------------------------------------------------------------------------
+const VISIBLE_ATTRS = [
+  'placeholder',
+  'label',
+  'alt',
+  'heading',
+  'message',
+  'confirmText',
+  'cancelText',
+  'app-tooltip',
+  'aria-label',
+  'title'
+];
+// Unidades, simbolos y tokens tecnicos: se escriben igual en los dos idiomas. Anadir aqui es una
+// decision de producto, no la forma de callar a la regla.
+const NOT_TEXT = new Set(['g', 'kg', 'mg', 'lb', 'ml', 'l', 'cl', 'dl', 'ud', 'u', 'un', 'x', '%', '€']);
+
+const isProse = (raw) => {
+  const s = raw.replace(/\s+/g, ' ').trim();
+  if (!s || NOT_TEXT.has(s.toLowerCase())) return false;
+  if (!/[a-záéíóúüñ]{2,}/.test(s)) return false; // «ON», «[SRV]», «×» no son frases
+  if (/^[a-z0-9_.:/#\\-]+$/.test(s)) return false; // una url, un id, «sk-...», «gpt-4o-mini»
+  return /[ ,.;:!?»—]/.test(s) || s.length > 4;
+};
+
+for (const file of sourceFiles) {
+  if (!file.endsWith('.component.ts')) continue;
+  const text = readFileSync(file, 'utf8');
+  const block = text.match(/template:\s*`([\s\S]*?)\n\s*`/);
+  if (!block) continue;
+  const tpl = block[1];
+  const base = text.indexOf(tpl, block.index);
+
+  for (const attr of VISIBLE_ATTRS) {
+    for (const match of tpl.matchAll(new RegExp(`[\\s]${attr}="([^"]*)"`, 'g'))) {
+      const value = match[1];
+      if (value.includes('{{') || !isProse(value)) continue;
+      fail(
+        file,
+        lineOf(text, base + match.index),
+        'texto-sin-traducir',
+        `${attr}="${value}" sale tal cual a pantalla: pon ${attr.startsWith('aria') || attr === 'title' ? `[attr.${attr}]` : `[${attr}]`}="'clave' | t" y la clave en core/i18n/dict/`
+      );
+    }
+  }
+
+  for (const match of tpl.matchAll(/>([^<>]+)</g)) {
+    const raw = match[1];
+    if (/^\s*\}?\s*@/.test(raw) || /;\s*track\s/.test(raw)) continue; // control de flujo, no prosa
+    // Comillas o llaves sueltas = el «nodo de texto» es en realidad un trozo de atributo multineado o
+    // una linea de control (`@if (a > b) {`): la `>` de una comparacion abre un falso nodo de texto.
+    if (/["'`{}]/.test(raw.replace(/\{\{[\s\S]*?\}\}/g, ''))) continue;
+    const visible = raw.replace(/\{\{[\s\S]*?\}\}/g, ' ');
+    if (!isProse(visible)) continue;
+    if (/\|\s*t\b/.test(visible) && !isProse(visible.replace(/'[\w.-]+'\s*\|\s*t/g, ''))) continue;
+    fail(
+      file,
+      lineOf(text, base + match.index),
+      'texto-sin-traducir',
+      `texto en la plantilla sin pasar por el diccionario: «${visible.replace(/\s+/g, ' ').trim().slice(0, 60)}» — si lleva {{ }} dentro, la clave va con {parametros}`
+    );
+  }
+
+  for (const match of text.matchAll(/@Input\(\)\s+\w+(?:!)??\s*(?::\s*[^=]+)?=\s*'([^']*)'/g)) {
+    if (!isProse(match[1])) continue;
+    fail(
+      file,
+      lineOf(text, match.index),
+      'texto-sin-traducir',
+      `un @Input con «${match[1]}» de fabrica se escribe una vez y no se re-traduce al cambiar de idioma: deja el Input sin valor y resuelve el defecto con t('clave') en un getter`
+    );
+  }
+}
+
+// --------------------------------------------------------------------------------
+// 15) Toda clave usada existe en los dos idiomas, y toda clave que existe se usa.
+//
+// El tipo `TranslationKey` ya impide invocar una clave que no esta en el espanol, pero no puede ver
+// dos cosas que si importan: que el ingles este (un `''` traduce la pantalla a espacios en blanco), y
+// que el diccionario no se este llenando de cadenas que nadie pinta —texto muerto que en la proxima
+// tanda alguien «actualiza» y nadie nota que no hacia falta.
+// --------------------------------------------------------------------------------
+const DICT_DIR = 'frontend/src/app/core/i18n/dict';
+const dictPairs = (text, ident) => {
+  const match = text.match(new RegExp(`const ${ident}[^{]*\\{([\\s\\S]*?)\\n\\}`));
+  if (!match) return new Map();
+  const out = new Map();
+  for (const kv of match[1].matchAll(/'([^']+)':\s*'((?:[^'\\]|\\.)*)'/g)) out.set(kv[1], kv[2]);
+  return out;
+};
+
+const dictFiles = walk(DICT_DIR, (path) => path.endsWith('.ts') && !path.endsWith('types.ts'));
+const esKeys = new Set();
+for (const file of dictFiles) {
+  const text = readFileSync(file, 'utf8');
+  const stems = [...text.matchAll(/export const (\w+)Es = \{/g)].map((m) => m[1]);
+  for (const stem of stems) {
+    const es = dictPairs(text, `${stem}Es`);
+    const en = dictPairs(text, `${stem}En`);
+    for (const [key, value] of es) {
+      esKeys.add(key);
+      if (!en.has(key)) {
+        fail(file, lineOf(text, 0), 'clave-sin-traduccion', `${key} esta en espanol y no en ingles (el tipo lo pilla, pero el mensaje utile es este)`);
+      } else if (en.get(key).trim() === '') {
+        fail(file, lineOf(text, 0), 'clave-sin-traduccion', `${key} tiene el ingles vacio: la pantalla sale en blanco en ese idioma`);
+      }
+    }
+    for (const key of en.keys()) {
+      if (!es.has(key)) fail(file, lineOf(text, 0), 'clave-sin-traduccion', `${key} solo existe en ingles: sobra, o falta en el espanol`);
+    }
+  }
+}
+
+// Las claves admiten guion (`nav.ai-config`), que es justo lo que hizo la regla cuando «no la invocaba
+      // nadie» siendo obvia: un patrón de claves que no coincide con las claves reales no detecta nada.
+const KEY_LITERAL = /'([a-z][a-z0-9_.-]*\.[a-z0-9_.-]+)'/gi;
+const usedKeys = new Set();
+for (const file of sourceFiles) {
+  const text = readFileSync(file, 'utf8');
+  for (const match of text.matchAll(KEY_LITERAL)) {
+    const key = match[1];
+    if (!esKeys.has(key)) continue;
+    usedKeys.add(key);
+  }
+  // Y al reves: una cadena con pinta de clave invocada que no esta en ningun diccionario.
+  for (const match of text.matchAll(/\|\s*t\b/g)) {
+    const alPrincipio = text.lastIndexOf('\n', match.index);
+    if (/^\s*(\/\/|\*)/.test(text.slice(alPrincipio, match.index))) continue; // un ejemplo en un comentario
+    const antes = text.slice(Math.max(0, match.index - 60), match.index);
+    const key = antes.match(/'([a-z][\w.-]*)'\s*$/i)?.[1];
+    if (key && !esKeys.has(key) && key.includes('.')) {
+      fail(file, lineOf(text, match.index), 'clave-sin-traduccion', `«${key}» no existe en core/i18n/dict: cae al fallback y se ve la clave en pantalla`);
+    }
+  }
+}
+for (const file of dictFiles) {
+  const text = readFileSync(file, 'utf8');
+  for (const match of text.matchAll(/'([^']+)':\s*'((?:[^'\\]|\\.)*)'/g)) {
+    if (esKeys.has(match[1]) && !usedKeys.has(match[1])) {
+      const enBlock = /En:/.test(text.slice(0, match.index));
+      if (enBlock) continue;
+      fail(file, lineOf(text, match.index), 'clave-sin-traduccion', `«${match[1]}» no la invoca nadie: o se usa o se borra`);
+    }
   }
 }
 

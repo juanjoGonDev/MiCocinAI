@@ -1,232 +1,23 @@
-import { Injectable, signal, computed, effect } from '@angular/core';
+import { Injectable, signal, effect } from '@angular/core';
 import { STORAGE_KEYS } from './storage.service';
+import { DICTS, type TranslationKey, type TranslationParams } from '../i18n';
+
+/**
+ * El idioma de la aplicacion, y donde se busca un texto.
+ *
+ * Lo que ha cambiado en la ronda 20: los diccionarios ya no viven aqui. Con 600 y pico cadenas en el mismo
+ * fichero, el service era a la vez el registro de textos y el mecanismo, y cada pantalla nueva ponia su
+ * literal en la plantilla porque anadir una clave costaba mas que escribirla a mano —asi se colaron 502
+ * textos en espanol fijo. Ahora `core/i18n/dict/<dominio>.ts` es el sitio de cada pantalla, y el tipo
+ * `TranslationKey` (la union de claves, en `core/i18n/index.ts`) hace que inventarse una clave no compile.
+ *
+ * El idioma por defecto es el del navegador, y eso tiene una consecuencia que no es obvia: los e2e
+ * assertan texto en espanol, asi que `playwright.config.ts` ancla `locale: 'es-ES'`. Sin ese ancla, la
+ * suite entera dependeria del idioma de la maquina que la ejecuta, que no es un test.
+ */
 
 export type Language = 'es' | 'en' | 'auto';
 export type ResolvedLanguage = 'es' | 'en';
-
-type Dict = Record<string, string>;
-
-const es: Dict = {
-  // Layout / nav
-  'nav.dashboard': 'Inicio',
-  'nav.pantry': 'Despensa',
-  'nav.shopping': 'Compra',
-  'nav.recipes': 'Recetas',
-  'nav.calendar': 'Calendario',
-  'nav.household': 'Hogar',
-  'nav.ai-config': 'IA Config',
-  'nav.logs': 'Logs',
-  'nav.settings': 'Configuración',
-  'nav.preferences': 'Preferencias',
-  'nav.logout': 'Cerrar sesión',
-  'nav.guest': 'Tu cuenta',
-  'app.name': 'HogarIA',
-
-  // Auth
-  'auth.login': 'Iniciar sesión',
-  'auth.register': 'Crear cuenta',
-  'auth.email': 'Email',
-  'auth.password': 'Contraseña',
-  'auth.name': 'Nombre',
-  'auth.forgot': '¿Olvidaste la contraseña?',
-  'auth.login.cta': 'Entrar',
-  'auth.register.cta': 'Crear Cuenta',
-  'auth.already': '¿Ya tienes cuenta?',
-  'auth.noaccount': '¿No tienes cuenta?',
-  'auth.cookingLevel': 'Nivel de cocina',
-  'auth.beginner': 'Principiante',
-  'auth.intermediate': 'Intermedio',
-  'auth.expert': 'Experto',
-
-  // Dashboard
-  'dashboard.greeting': '¡Hola, {name}! 👋',
-  'dashboard.subtitle': '¿Qué vamos a cocinar hoy?',
-  'dashboard.ingredients': 'Ingredientes',
-  'dashboard.recipes': 'Recetas',
-  'dashboard.members': 'Miembros',
-  'dashboard.cooked': 'Cocinadas',
-  'dashboard.genAI': 'Generar con IA',
-  'dashboard.pantry': 'Mi Despensa',
-  'dashboard.plan': 'Planificar',
-  'dashboard.todayMeals': 'Comidas de hoy',
-  'dashboard.viewAll': 'Ver todo →',
-  'dashboard.noMeals': 'No hay comidas planificadas para hoy',
-  'dashboard.planNow': 'Planificar ahora',
-  'dashboard.suggested': 'Recetas sugeridas',
-  'dashboard.noSuggested': 'No hay recetas sugeridas',
-  'dashboard.genAIRecipes': 'Generar con IA',
-  'dashboard.weeklyProgress': 'Progreso semanal',
-  'dashboard.calories': 'Calorías',
-  'dashboard.protein': 'Proteínas',
-
-  // Recipes
-  'recipes.title': '📖 Recetas',
-  'recipes.count': '{n} recetas',
-  'recipes.filters': '🔍 Filtros',
-  'recipes.genAI': '🤖 Generar IA',
-  'recipes.all': 'Todas',
-  'recipes.favs': 'Favoritas',
-  'recipes.quick': 'Rápidas (<30m)',
-  'recipes.none': 'No hay recetas',
-  'recipes.none.desc': 'Genera tu primera receta con IA',
-  'recipes.loading': 'Cargando recetas...',
-
-  // Pantry
-  'pantry.title': '📦 Despensa',
-  'pantry.empty': 'Tu despensa está vacía',
-  'pantry.empty.desc': 'Añade ingredientes para empezar',
-  'pantry.add': '+ Añadir ingrediente',
-
-  // Logs
-  'logs.title': '📋 Logs',
-  'logs.live': 'En vivo',
-  'logs.disconnected': 'Desconectado',
-  'logs.pause': '⏸ Pausar',
-  'logs.resume': '▶ Reanudar',
-  'logs.autoscroll': 'Auto-scroll',
-  'logs.clear': '🗑 Limpiar',
-  'logs.all': 'Todos',
-  'logs.server': 'Servidor',
-  'logs.browser': 'Cliente',
-  'logs.levels.all': 'Todos los niveles',
-  'logs.waiting': 'Esperando logs…',
-  'logs.clearConfirm': '¿Borrar todos los logs?',
-
-  // Settings
-  'settings.title': '⚙️ Configuración',
-  'settings.modules': '🧭 Módulos',
-  'settings.modulesHint': 'Qué secciones de HogarIA tienes encendidas. Se aplican al momento, sin recargar.',
-  'settings.modulesSoon': 'pronto',
-  'settings.modulesAllOn': 'Sin marcar: se enseñan todas las secciones que trae esta version.',
-  'settings.modulesFailed': 'No se pudo guardar el cambio; se ha vuelto al estado anterior.',
-  'settings.modulesReset': 'Volver a ver todas las secciones disponibles',
-  'settings.theme': 'Tema',
-  'settings.theme.light': '☀️ Claro',
-  'settings.theme.dark': '🌙 Oscuro',
-  'settings.theme.system': '💻 Sistema',
-  'settings.language': 'Idioma',
-  'settings.lang.es': '🇪🇸 Español',
-  'settings.lang.en': '🇬🇧 English',
-  'settings.lang.auto': '🖥️ Detectar automáticamente',
-
-  // Common
-  'common.save': 'Guardar',
-  'common.cancel': 'Cancelar',
-  'common.delete': 'Eliminar',
-  'common.edit': 'Editar',
-  'common.create': 'Crear',
-  'common.loading': 'Cargando...',
-  'common.error': 'Error',
-  'common.success': 'Éxito',
-};
-
-const en: Dict = {
-  'nav.dashboard': 'Home',
-  'nav.pantry': 'Pantry',
-  'nav.shopping': 'Shopping',
-  'nav.recipes': 'Recipes',
-  'nav.calendar': 'Calendar',
-  'nav.household': 'Household',
-  'nav.ai-config': 'AI Config',
-  'nav.logs': 'Logs',
-  'nav.settings': 'Settings',
-  'nav.preferences': 'Preferences',
-  'nav.logout': 'Log out',
-  'nav.guest': 'Your account',
-  'app.name': 'HogarIA',
-
-  'auth.login': 'Log in',
-  'auth.register': 'Sign up',
-  'auth.email': 'Email',
-  'auth.password': 'Password',
-  'auth.name': 'Name',
-  'auth.forgot': 'Forgot password?',
-  'auth.login.cta': 'Sign in',
-  'auth.register.cta': 'Create account',
-  'auth.already': 'Already have an account?',
-  'auth.noaccount': "Don't have an account?",
-  'auth.cookingLevel': 'Cooking level',
-  'auth.beginner': 'Beginner',
-  'auth.intermediate': 'Intermediate',
-  'auth.expert': 'Expert',
-
-  'dashboard.greeting': 'Hi, {name}! 👋',
-  'dashboard.subtitle': "What are we cooking today?",
-  'dashboard.ingredients': 'Ingredients',
-  'dashboard.recipes': 'Recipes',
-  'dashboard.members': 'Members',
-  'dashboard.cooked': 'Cooked',
-  'dashboard.genAI': 'Generate with AI',
-  'dashboard.pantry': 'My Pantry',
-  'dashboard.plan': 'Plan',
-  'dashboard.todayMeals': "Today's meals",
-  'dashboard.viewAll': 'See all →',
-  'dashboard.noMeals': 'No meals planned for today',
-  'dashboard.planNow': 'Plan now',
-  'dashboard.suggested': 'Suggested recipes',
-  'dashboard.noSuggested': 'No suggested recipes',
-  'dashboard.genAIRecipes': 'Generate with AI',
-  'dashboard.weeklyProgress': 'Weekly progress',
-  'dashboard.calories': 'Calories',
-  'dashboard.protein': 'Protein',
-
-  'recipes.title': '📖 Recipes',
-  'recipes.count': '{n} recipes',
-  'recipes.filters': '🔍 Filters',
-  'recipes.genAI': '🤖 Generate AI',
-  'recipes.all': 'All',
-  'recipes.favs': 'Favorites',
-  'recipes.quick': 'Quick (<30m)',
-  'recipes.none': 'No recipes',
-  'recipes.none.desc': 'Generate your first recipe with AI',
-  'recipes.loading': 'Loading recipes...',
-
-  'pantry.title': '📦 Pantry',
-  'pantry.empty': 'Your pantry is empty',
-  'pantry.empty.desc': 'Add ingredients to get started',
-  'pantry.add': '+ Add ingredient',
-
-  'logs.title': '📋 Logs',
-  'logs.live': 'Live',
-  'logs.disconnected': 'Disconnected',
-  'logs.pause': '⏸ Pause',
-  'logs.resume': '▶ Resume',
-  'logs.autoscroll': 'Auto-scroll',
-  'logs.clear': '🗑 Clear',
-  'logs.all': 'All',
-  'logs.server': 'Server',
-  'logs.browser': 'Client',
-  'logs.levels.all': 'All levels',
-  'logs.waiting': 'Waiting for logs…',
-  'logs.clearConfirm': 'Clear all logs?',
-
-  'settings.title': '⚙️ Settings',
-  'settings.modules': '🧭 Modules',
-  'settings.modulesHint': 'Which HogarIA sections you have switched on. Applied right away, no reload.',
-  'settings.modulesSoon': 'soon',
-  'settings.modulesAllOn': 'Nothing selected: every section this build ships is shown.',
-  'settings.modulesFailed': 'Could not save the change; reverted to the previous state.',
-  'settings.modulesReset': 'Show every available section again',
-  'settings.theme': 'Theme',
-  'settings.theme.light': '☀️ Light',
-  'settings.theme.dark': '🌙 Dark',
-  'settings.theme.system': '💻 System',
-  'settings.language': 'Language',
-  'settings.lang.es': '🇪🇸 Spanish',
-  'settings.lang.en': '🇬🇧 English',
-  'settings.lang.auto': '🖥️ Auto-detect',
-
-  'common.save': 'Save',
-  'common.cancel': 'Cancel',
-  'common.delete': 'Delete',
-  'common.edit': 'Edit',
-  'common.create': 'Create',
-  'common.loading': 'Loading...',
-  'common.error': 'Error',
-  'common.success': 'Success',
-};
-
-const DICTS: Record<ResolvedLanguage, Dict> = { es, en };
 
 @Injectable({ providedIn: 'root' })
 export class I18nService {
@@ -263,10 +54,16 @@ export class I18nService {
     localStorage.setItem(this.LANG_KEY, lang);
   }
 
-  /** Translate a key with simple {placeholder} substitution. */
-  t(key: string, params?: Record<string, string | number>): string {
+  /**
+   * El texto de una clave, con sustitucion simple de {placeholder}.
+   *
+   * `key` es `TranslationKey`, no `string`: es lo que hace que un `t('shoping.title')` con una errata se
+   * pare en el compilador en lugar de enseiar la clave en crudo en la pantalla. El fallback sigue siendo
+   * el espanol y, si tampoco esta, la clave —por si el diccionario llega a medias de una rama larga.
+   */
+  t(key: TranslationKey, params?: TranslationParams): string {
     const dict = DICTS[this.resolvedSignal()];
-    let str = dict[key] ?? DICTS.es[key] ?? key;
+    let str: string = dict[key] ?? DICTS.es[key] ?? key;
     if (params) {
       for (const [k, v] of Object.entries(params)) {
         str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));

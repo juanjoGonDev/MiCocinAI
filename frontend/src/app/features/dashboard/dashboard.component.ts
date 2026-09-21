@@ -119,7 +119,7 @@ interface SuggestedRecipe {
             <div class="recipe-card__content">
               <span class="recipe-card__name">{{ recipe.name }}</span>
               <div class="recipe-card__meta">
-                <span class="recipe-card__time">⏱️ {{ recipe.time }}min</span>
+                <span class="recipe-card__time">{{ 'dashboard.minutes_short' | t:{time: recipe.time} }}</span>
                 <app-badge [variant]="getDifficultyVariant(recipe.difficulty)" size="sm">
                   {{ recipe.difficulty }}
                 </app-badge>

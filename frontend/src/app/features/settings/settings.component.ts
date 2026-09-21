@@ -32,7 +32,9 @@ interface Option<T extends string> {
           </button>
         </div>
         <p class="settings-hint" *ngIf="themeService.theme() === 'system'">
-          Detectado: {{ themeService.isDark() ? '🌙 Oscuro' : '☀️ Claro' }}
+          {{
+            'settings.themeDetected' | t:{theme: themeService.isDark() ? ('settings.theme.dark' | t) : ('settings.theme.light' | t)}
+          }}
         </p>
       </section>
 

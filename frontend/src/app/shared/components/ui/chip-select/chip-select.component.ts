@@ -1,8 +1,10 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ButtonComponent } from '../button/button.component';
 import { ChipOption } from '../../../models/taste-profile';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
+import { I18nService } from '../../../../core/services/i18n.service';
 
 /**
  * Lista de opciones en formato chip, de una o varias selecciones, con hueco
@@ -15,7 +17,9 @@ import { ChipOption } from '../../../models/taste-profile';
 @Component({
   selector: 'app-chip-select',
   standalone: true,
-  imports: [CommonModule, FormsModule, ButtonComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, FormsModule, ButtonComponent],
   template: `
     <div class="chip-select" role="group" [attr.aria-label]="label">
       <div class="chip-select__list">
@@ -38,12 +42,12 @@ import { ChipOption } from '../../../models/taste-profile';
           type="text"
           class="chip-select__input"
           name="chip-select-custom"
-          [placeholder]="customPlaceholder"
-          [attr.aria-label]="customLabel"
+          [placeholder]="placeholderText"
+          [attr.aria-label]="labelText"
           [(ngModel)]="customText"
           (keyup.enter)="$event.preventDefault(); addCustom()"
         />
-        <app-button variant="ghost" size="sm" (onClick)="addCustom()">Añadir</app-button>
+        <app-button variant="ghost" size="sm" (onClick)="addCustom()">{{ 'ui.anadir' | t }}</app-button>
       </div>
 
       <p class="chip-select__hint" *ngIf="hint">{{ hint }}</p>
@@ -123,6 +127,8 @@ import { ChipOption } from '../../../models/taste-profile';
   ]
 })
 export class ChipSelectComponent {
+  private readonly i18n = inject(I18nService);
+
   /** Opciones propuestas (las ya elegidas se muestran aunque no estén aquí). */
   @Input() options: ChipOption[] = [];
   @Input() value: string[] = [];
@@ -131,8 +137,21 @@ export class ChipSelectComponent {
   @Input() label = '';
   @Input() hint = '';
   @Input() allowCustom = true;
-  @Input() customPlaceholder = 'Escribe el tuyo';
-  @Input() customLabel = 'Añadir opción propia';
+  /**
+   * Sin literal por defecto en la declaracion: un campo se evalua una vez al construir el componente y no
+   * se entera de que cambio el idioma. El valor de fabrica vive en el diccionario y se resuelve al
+   * renderizar (HOGARIA-SPEC 12s-B).
+   */
+  @Input() customPlaceholder?: string;
+  @Input() customLabel?: string;
+
+  get placeholderText(): string {
+    return this.customPlaceholder ?? this.i18n.t('ui.escribe_el_tuyo');
+  }
+
+  get labelText(): string {
+    return this.customLabel ?? this.i18n.t('ui.add_custom_option');
+  }
 
   customText = '';
 
