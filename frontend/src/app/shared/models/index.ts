@@ -113,3 +113,17 @@ export {
 } from './user.model';
 
 export type { CookingLevel as UserCookingLevel } from './user.model';
+
+// Home profile model (nivel de cocina + secciones que se quieren usar)
+export {
+  COOKING_LEVEL_OPTIONS,
+  DEFAULT_HOME_PROFILE,
+  HOME_MODULE_OPTIONS,
+  HOME_MODULES,
+  detailLevelHint,
+  isCookingLevel,
+  isHomeModule,
+  toHomeProfile,
+  toggleHomeModule
+} from './home-profile';
+export type { HomeModule, HomeProfile } from './home-profile';

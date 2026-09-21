@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { registerUser } from './helpers/auth';
 
 test.describe('Settings — theme & i18n', () => {

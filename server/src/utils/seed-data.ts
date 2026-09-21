@@ -160,12 +160,20 @@ const COMMON_UTENSILS: SeedUtensil[] = [
 /** Ingredientes comunes (cantidad 0: son sugerencias, no inventario). */
 export function seedCommonIngredients(
   db: Database.Database,
-  householdId: string,
+  householdId: string | null,
   userId: string
 ): number {
-  const existing = db
-    .prepare('SELECT COUNT(*) as c FROM ingredients WHERE household_id = ?')
-    .get(householdId) as any;
+  // Sin hogar el catalogo es personal (household_id IS NULL): se siembra y
+  // se consulta por user_id, no por household_id.
+  const existing = householdId
+    ? db
+        .prepare('SELECT COUNT(*) as c FROM ingredients WHERE household_id = ?')
+        .get(householdId) as any
+    : db
+        .prepare(
+          'SELECT COUNT(*) as c FROM ingredients WHERE user_id = ? AND household_id IS NULL'
+        )
+        .get(userId) as any;
   if (existing && existing.c > 0) return 0;
 
   const insertIngredient = db.prepare(`
@@ -185,12 +193,18 @@ export function seedCommonIngredients(
 /** Catalogo de utensilios (available = 0: el usuario marca los que tiene). */
 export function seedCommonUtensils(
   db: Database.Database,
-  householdId: string,
+  householdId: string | null,
   userId: string
 ): number {
-  const existing = db
-    .prepare('SELECT COUNT(*) as c FROM utensils WHERE household_id = ?')
-    .get(householdId) as any;
+  const existing = householdId
+    ? db
+        .prepare('SELECT COUNT(*) as c FROM utensils WHERE household_id = ?')
+        .get(householdId) as any
+    : db
+        .prepare(
+          'SELECT COUNT(*) as c FROM utensils WHERE user_id = ? AND household_id IS NULL'
+        )
+        .get(userId) as any;
   if (existing && existing.c > 0) return 0;
 
   const insertUtensil = db.prepare(`
@@ -205,6 +219,103 @@ export function seedCommonUtensils(
   });
   seed();
   return COMMON_UTENSILS.length;
+}
+
+/**
+ * Siembra el catalogo personal de un usuario que NO tiene hogar.
+ *
+ * El catalogo de utensilios y las sugerencias de ingredientes existian solo
+ * "dentro" de un hogar, asi que registrarse y no crear uno dejaba ambas
+ * pestaanas vacias: sin la lista de la que marcar lo que hay en tu cocina,
+ * la IA no tiene con que filtrar recetas.
+ */
+export function seedDefaultsForUser(db: Database.Database, userId: string): void {
+  const user = db
+    .prepare('SELECT household_id FROM users WHERE id = ?')
+    .get(userId) as { household_id: string | null } | undefined;
+  if (user?.household_id) return; // con hogar, el catalogo es del hogar
+
+  seedCommonIngredients(db, null, userId);
+  seedCommonUtensils(db, null, userId);
+}
+
+/**
+ * Backfill para cuentas sin hogar (las creadas antes de que el catalogo
+ * tambien existiera a nivel personal). Idempotente: cada seed comprueba si ya
+ * hay filas y no duplica nada.
+ */
+export function backfillUserSeeds(db: Database.Database): void {
+  const users = db
+    .prepare('SELECT id FROM users WHERE household_id IS NULL')
+    .all() as { id: string }[];
+
+  let withIngredients = 0;
+  let withUtensils = 0;
+  for (const user of users) {
+    withIngredients += seedCommonIngredients(db, null, user.id);
+    withUtensils += seedCommonUtensils(db, null, user.id);
+  }
+
+  if (withIngredients > 0 || withUtensils > 0) {
+    console.log(
+      `[DB] Seed backfill usuarios sin hogar: ${withIngredients} ingredientes, ${withUtensils} utensilios`
+    );
+  }
+}
+
+/**
+ * Al entrar en un hogar, lo que el usuario tenia a nivel personal pasa a ser
+ * del hogar en vez de duplicarse:
+ *   - los utensilios que ya estuvieran marcados marcan tambien su homonimo del
+ *     hogar (lo marcado es compartido);
+ *   - lo que no exista en el hogar (por ejemplo utensilios personalizados) se
+ *     reubica con el household_id nuevo;
+ *   - y se borran las filas personales que quedan, que son las que el hogar ya
+ *     tiene.
+ */
+export function adoptPersonalRowsIntoHousehold(
+  db: Database.Database,
+  householdId: string,
+  userId: string
+): void {
+  const personal = 'user_id = ? AND household_id IS NULL';
+
+  db.prepare(`
+    UPDATE utensils SET available = 1
+    WHERE household_id = ? AND available = 0
+      AND name IN (SELECT name FROM utensils WHERE ${personal} AND available = 1)
+  `).run(householdId, userId);
+
+  db.prepare(`
+    UPDATE utensils SET household_id = ?
+    WHERE ${personal}
+      AND name NOT IN (SELECT name FROM utensils WHERE household_id = ?)
+  `).run(householdId, userId, householdId);
+
+  db.prepare(`DELETE FROM utensils WHERE ${personal}`).run(userId);
+
+  // Ingredientes: si el hogar no lo tiene, su fila pasa al hogar.
+  db.prepare(`
+    UPDATE ingredients SET household_id = ?
+    WHERE ${personal}
+      AND name NOT IN (SELECT name FROM ingredients WHERE household_id = ?)
+  `).run(householdId, userId, householdId);
+
+  // Si el hogar ya lo tiene, el stock personal se suma al del hogar: entrar en
+  // un hogar no debe dejar a nadie sin lo que tenia en su despensa.
+  db.prepare(`
+    UPDATE ingredients SET quantity = quantity + (
+        SELECT COALESCE(SUM(p.quantity), 0) FROM ingredients p
+        WHERE p.user_id = ? AND p.household_id IS NULL AND p.name = ingredients.name
+      )
+    WHERE household_id = ?
+      AND name IN (
+        SELECT name FROM ingredients
+        WHERE user_id = ? AND household_id IS NULL AND quantity > 0
+      )
+  `).run(userId, householdId, userId);
+
+  db.prepare(`DELETE FROM ingredients WHERE ${personal}`).run(userId);
 }
 
 /** Siembra ingredientes + utensilios al crear un hogar. */

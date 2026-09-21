@@ -98,14 +98,16 @@ describe('InputComponent', () => {
     expect(input.className).toContain('input--error');
   });
 
-  it('should emit value changes', () => {
-    spyOn(component, 'onChange');
+  it('propaga el cambio al modelo (ControlValueAccessor)', () => {
+    const propagate = jasmine.createSpy('registerOnChange');
+    component.registerOnChange(propagate);
 
     const input = fixture.nativeElement.querySelector('input');
     input.value = 'test';
     input.dispatchEvent(new Event('input'));
 
     expect(component.value).toBe('test');
+    expect(propagate).toHaveBeenCalledWith('test');
   });
 
   it('should toggle password visibility', () => {

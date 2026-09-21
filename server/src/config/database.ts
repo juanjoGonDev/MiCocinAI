@@ -2,9 +2,9 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { config } from './app.config.js';
 import * as schema from '../models/schema.js';
-import { mkdirSync } from 'fs';
-import { dirname } from 'path';
-import { backfillHouseholdSeeds } from '../utils/seed-data.js';
+import { existsSync, mkdirSync, renameSync } from 'fs';
+import { dirname, join } from 'path';
+import { backfillHouseholdSeeds, backfillUserSeeds } from '../utils/seed-data.js';
 
 let db: Database.Database;
 let drizzleDb: ReturnType<typeof drizzle>;
@@ -23,10 +23,51 @@ export function getDrizzle() {
   return drizzleDb;
 }
 
+/**
+ * Los nombres bajo los que esta BD existio en instalaciones desplegadas. Se
+ * prueban en este orden: el primero es el que dejo la ultima version publicada.
+ */
+export const LEGACY_DB_FILENAMES = ['recipeapp.db', 'mi-cocinai.db'];
+
+/**
+ * HogarIA nace del renombre de la app y la BD se llama ahora `hogaria.sqlite`.
+ * Aqui no se documenta «borra tus datos y vuelve a empezar»: se renombra el
+ * fichero antes de abrirlo, asi que una Raspberry con dos anos de hogares
+ * actualiza y sigue funcionando.
+ *
+ * Reglas duras: nunca se pisa un fichero que ya existe (si alguien creo la BD
+ * nueva, se deja la nueva y no se toca nada) y se mueven juntos `-wal`/`-shm`,
+ * porque un WAL huerfano corromperia el arranque. Devuelve la ruta de la que se
+ * vino, o null si no habia nada que adoptar.
+ */
+export function adoptLegacyDatabase(target: string): string | null {
+  // Una BD en RAM o una URI de better-sqlite3 no tienen directorio del que heredar.
+  if (target === ':memory:' || target.startsWith('file:')) return null;
+  if (existsSync(target)) return null;
+
+  const dir = dirname(target);
+  for (const legacy of LEGACY_DB_FILENAMES) {
+    const source = join(dir, legacy);
+    if (source === target || !existsSync(source)) continue;
+
+    renameSync(source, target);
+    for (const suffix of ['-wal', '-shm']) {
+      if (existsSync(source + suffix)) renameSync(source + suffix, target + suffix);
+    }
+    return source;
+  }
+  return null;
+}
+
 export async function initializeDatabase(): Promise<void> {
   // Ensure data directory exists
   const dbDir = dirname(config.database.path);
   mkdirSync(dbDir, { recursive: true });
+
+  const adoptedFrom = adoptLegacyDatabase(config.database.path);
+  if (adoptedFrom) {
+    console.log(`[DB] Base de datos heredada adoptada: ${adoptedFrom} -> ${config.database.path}`);
+  }
 
   // Create SQLite database
   db = new Database(config.database.path, {
@@ -180,7 +221,10 @@ async function runMigrations(db: Database.Database): Promise<void> {
     -- Weekly calendar table
     CREATE TABLE IF NOT EXISTS weekly_calendars (
       id TEXT PRIMARY KEY,
-      household_id TEXT NOT NULL,
+      /* El calendario es de la persona; el hogar se apunta cuando lo hay. No
+         puede ser NOT NULL con FK a households: quien se registra sin crear un
+         hogar no podría tener ni una sola comida guardada. */
+      household_id TEXT,
       user_id TEXT NOT NULL,
       week_start DATE NOT NULL,
       week_end DATE NOT NULL,
@@ -245,6 +289,176 @@ async function runMigrations(db: Database.Database): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_meals_date ON meals(date);
     CREATE INDEX IF NOT EXISTS idx_user_recipes_user_id ON user_recipes(user_id);
     CREATE INDEX IF NOT EXISTS idx_ai_configs_user_id ON ai_configs(user_id);
+
+    -- ═══ Lista de la compra y precios (esqueleto de P2/P3, spec §9) ═══
+    -- Dinero en centimos enteros con CHECK >= 0 y cantidades reales > 0: las dos
+    -- restricciones que evitan las cestas imposibles. product_key es el nombre
+    -- normalizado (ver utils/product-key.ts): cuando llegue el catalogo canónico
+    -- se migra a product_aliases sin tocar ninguna observacion.
+    -- (Ojo: dentro de este template literal no se pueden usar backticks.)
+    CREATE TABLE IF NOT EXISTS shopping_lists (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      name TEXT NOT NULL,
+      store TEXT,
+      status TEXT NOT NULL DEFAULT 'active'
+        CHECK (status IN ('active', 'archived', 'done')),
+      version INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS shopping_list_items (
+      id TEXT PRIMARY KEY,
+      list_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      product_key TEXT NOT NULL,
+      quantity REAL NOT NULL DEFAULT 1 CHECK (quantity > 0),
+      unit TEXT,
+      category TEXT,
+      -- precio POR UNIDAD en centimos; null = todavia sin dato
+      price_minor INTEGER CHECK (price_minor IS NULL OR price_minor >= 0),
+      note TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+      checked INTEGER NOT NULL DEFAULT 0 CHECK (checked IN (0, 1)),
+      -- borrado logico: el «Deshacer» del movil necesita que la fila siga ahi
+      deleted_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+    );
+
+    -- Lo pagado por quantity unidades (un ticket dice eso, no el precio unitario)
+    CREATE TABLE IF NOT EXISTS price_observations (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      product_key TEXT NOT NULL,
+      product_name TEXT NOT NULL,
+      store_name TEXT,
+      price_minor INTEGER NOT NULL CHECK (price_minor >= 0),
+      quantity REAL NOT NULL DEFAULT 1 CHECK (quantity > 0),
+      currency TEXT NOT NULL DEFAULT 'EUR',
+      source TEXT NOT NULL DEFAULT 'manual'
+        CHECK (source IN ('manual', 'receipt', 'estimate')),
+      observed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_shopping_lists_user ON shopping_lists(user_id);
+    CREATE INDEX IF NOT EXISTS idx_shopping_lists_household ON shopping_lists(household_id);
+    CREATE INDEX IF NOT EXISTS idx_shopping_lists_status ON shopping_lists(status, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_list_items_list ON shopping_list_items(list_id, position);
+    CREATE INDEX IF NOT EXISTS idx_list_items_key ON shopping_list_items(product_key);
+    CREATE INDEX IF NOT EXISTS idx_price_obs_key ON price_observations(product_key, observed_at);
+    CREATE INDEX IF NOT EXISTS idx_price_obs_user ON price_observations(user_id);
+    CREATE INDEX IF NOT EXISTS idx_price_obs_household ON price_observations(household_id);
+    -- El calendario de la casa, no solo el de las comidas (HOGARIA-SPEC 8f). Las
+    -- comidas NO se copian aqui: se proyectan desde la tabla meals al leer, para que el
+    -- plan generado siga siendo el dueno de lo que se come y no existan dos verdades.
+    -- OJO: sin backticks en este literal (comentan el SQL, y un backtick lo cierra).
+    CREATE TABLE IF NOT EXISTS calendar_events (
+      id TEXT PRIMARY KEY,
+      household_id TEXT,
+      user_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'other'
+        CHECK (kind IN ('meal', 'shopping', 'home', 'appointment', 'personal', 'other')),
+      date DATE NOT NULL,
+      start_time TEXT,
+      end_time TEXT,
+      all_day INTEGER NOT NULL DEFAULT 0,
+      color TEXT,
+      notes TEXT,
+      location TEXT,
+      source TEXT NOT NULL DEFAULT 'user',
+      source_id TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_date ON calendar_events(date, kind);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_household ON calendar_events(household_id, date);
+    CREATE INDEX IF NOT EXISTS idx_calendar_events_user ON calendar_events(user_id, date);
+    -- Quien mas esta en la suelta (HOGARIA-SPEC 12o). El autor NO se guarda aqui: es el autor, y
+    -- mezclar los dos papeles haria que «salirme del evento» pudiera borrarlo.
+    CREATE TABLE IF NOT EXISTS calendar_event_attendees (
+      event_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      added_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (event_id, user_id),
+      FOREIGN KEY (event_id) REFERENCES calendar_events(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    -- «Mis eventos, incluidos los que me invitaron» se resuelve con este indice: sin el, la
+    -- subconsulta de visibilidad seria un escaneo de toda la tabla en cada carga del calendario.
+    CREATE INDEX IF NOT EXISTS idx_calendar_attendees_user ON calendar_event_attendees(user_id, event_id);
+
+
+    -- Secciones de la lista. Son dato y no constante del frontend porque el que tiene
+    -- que clasificar una foto es el modelo, y el modelo no puede leer una pantalla
+    -- (HOGARIA-SPEC 8f). El color viaja con la fila: se elige, no lo pinta la hoja
+    -- de estilos, y «Frutas y verduras» en verde se reconoce en el pasillo sin leer.
+    CREATE TABLE IF NOT EXISTS shopping_categories (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      key TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#8A8F98',
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
+    );
+    -- La oferta (3x2, 2x1) es de la LINEA porque cambia cuantas unidades se pagan.
+    -- Un promo_take >= promo_buy no tiene sentido (pagarias todo), y se ignora en
+    -- lugar de guardarse: es un dato de origen, no una decision del usuario.
+    -- OJO: dentro de este template literal no pueden aparecer backticks — rompen el
+    -- string de SQL (lección ya anotada arriba, y vuelta a caer).
+    CREATE INDEX IF NOT EXISTS idx_shopping_categories_user ON shopping_categories(user_id, position);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_shopping_categories_key ON shopping_categories(user_id, key);
+
+    -- El descuento es de la LISTA porque cambia cuanto se paga del subtotal, y solo
+    -- puede haber uno por lista: dos cupones apilados es una conversacion con la
+    -- caja, no un dato que la app pueda resolver por su cuenta.
+    -- Auditoria de la cesta: quien ha anadido o tocado que. El nombre va COPIADO en
+    -- la fila (no es un JOIN), porque «de quien fue» no cambia si esa persona se
+    -- renombra manana.
+    CREATE TABLE IF NOT EXISTS shopping_list_events (
+      id TEXT PRIMARY KEY,
+      list_id TEXT NOT NULL,
+      user_id TEXT,
+      user_name TEXT,
+      action TEXT NOT NULL,
+      item_name TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_shopping_events_list ON shopping_list_events(list_id, created_at);
+
+    CREATE TABLE IF NOT EXISTS shopping_list_discounts (
+      list_id TEXT PRIMARY KEY,
+      kind TEXT NOT NULL CHECK (kind IN ('amount', 'percent')),
+      value_minor INTEGER CHECK (value_minor IS NULL OR value_minor >= 0),
+      percent_bps INTEGER CHECK (percent_bps IS NULL OR (percent_bps >= 0 AND percent_bps <= 10000)),
+      scope TEXT NOT NULL DEFAULT 'all' CHECK (scope IN ('all', 'firstUnits', 'product', 'category')),
+      first_units REAL CHECK (first_units IS NULL OR first_units > 0),
+      -- Que linea entra con scope 'product' (clave de producto) o 'category' (seccion).
+      target TEXT,
+      label TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+    );
   `);
 
   // Auto-migrations: add columns that may be missing in older databases
@@ -255,13 +469,106 @@ async function runMigrations(db: Database.Database): Promise<void> {
       console.log(`[DB] Added ${table}.${column}`);
     }
   };
+  // El CHECK de `scope` vive dentro de la tabla: una base creada antes de los descuentos
+  // por producto rechazaria 'product' con un error de constraint, y ese fallo no se ve
+  // hasta que alguien intenta guardarlo. Se reconstruye la tabla si el CHECK es viejo.
+  const discountTable = db
+    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'shopping_list_discounts'`)
+    .get() as { sql: string | null } | undefined;
+  if (discountTable?.sql && !discountTable.sql.includes("'product'")) {
+    db.exec(`
+      CREATE TABLE shopping_list_discounts_new (
+        list_id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('amount', 'percent')),
+        value_minor INTEGER CHECK (value_minor IS NULL OR value_minor >= 0),
+        percent_bps INTEGER CHECK (percent_bps IS NULL OR (percent_bps >= 0 AND percent_bps <= 10000)),
+        scope TEXT NOT NULL DEFAULT 'all' CHECK (scope IN ('all', 'firstUnits', 'product', 'category')),
+        first_units REAL CHECK (first_units IS NULL OR first_units > 0),
+        target TEXT,
+        label TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+      );
+      INSERT INTO shopping_list_discounts_new
+        (list_id, kind, value_minor, percent_bps, scope, first_units, label, created_at, updated_at)
+      SELECT list_id, kind, value_minor, percent_bps, scope, first_units, label, created_at, updated_at
+      FROM shopping_list_discounts;
+      DROP TABLE shopping_list_discounts;
+      ALTER TABLE shopping_list_discounts_new RENAME TO shopping_list_discounts;
+    `);
+  }
+
   addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
   addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
   addColumnIfMissing('household_members', 'permissions', 'TEXT DEFAULT \'{}\'');
+  // Las dianas del descuento: `target` se queda para las filas ya escritas (una sola
+  // diana) y `targets` es el JSON con las demas. Reconstruir la tabla para migrar el
+  // formato antiguo habria sido una forma cara de perder datos si algo iba mal.
+  addColumnIfMissing('shopping_list_discounts', 'targets', 'TEXT');
+  addColumnIfMissing('shopping_list_items', 'promo_buy', 'INTEGER');
+  addColumnIfMissing('shopping_list_items', 'promo_take', 'INTEGER');
+  addColumnIfMissing('shopping_list_items', 'added_by', 'TEXT');
+  addColumnIfMissing('shopping_list_items', 'updated_by', 'TEXT');
+  addColumnIfMissing('shopping_lists', 'updated_by', 'TEXT');
+  // El descuento propio de la linea (§12h). Cuatro columnas y no un JSON: `estimate` las
+  // suma todas en una pasada y un JSON tendria que parsearse por fila para calcular dinero.
+  addColumnIfMissing('shopping_list_items', 'disc_kind', 'TEXT');
+  addColumnIfMissing('shopping_list_items', 'disc_value_minor', 'INTEGER');
+  addColumnIfMissing('shopping_list_items', 'disc_percent_bps', 'INTEGER');
+  addColumnIfMissing('shopping_list_items', 'disc_units', 'REAL');
+
+  // weekly_calendars.household_id nacio NOT NULL con FK a households, y las rutas
+  // metían '' para las cuentas sin hogar: la FK lo rechaza (foreign_keys = ON),
+  // así que la primera comida de la semana devolvía 500. Se reconstruye la tabla
+  // para admitir NULL, que es lo que significa «calendario personal».
+  const householdColumn = (
+    db.prepare('PRAGMA table_info(weekly_calendars)').all() as { name: string; notnull: number }[]
+  ).find((column) => column.name === 'household_id');
+  if (householdColumn?.notnull) {
+    // PRAGMA foreign_keys no se puede tocar dentro de una transaccion.
+    db.pragma('foreign_keys = OFF');
+    try {
+      db.transaction(() => {
+        db.exec(`
+          CREATE TABLE weekly_calendars_personal (
+            id TEXT PRIMARY KEY,
+            household_id TEXT,
+            user_id TEXT NOT NULL,
+            week_start DATE NOT NULL,
+            week_end DATE NOT NULL,
+            goals TEXT DEFAULT '{}',
+            generated_by TEXT DEFAULT 'user',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (household_id) REFERENCES households(id),
+            FOREIGN KEY (user_id) REFERENCES users(id)
+          );
+
+          INSERT INTO weekly_calendars_personal
+            SELECT id, NULLIF(household_id, ''), user_id, week_start, week_end, goals,
+                   generated_by, created_at, updated_at
+            FROM weekly_calendars;
+
+          DROP TABLE weekly_calendars;
+          ALTER TABLE weekly_calendars_personal RENAME TO weekly_calendars;
+        `);
+      })();
+      console.log('[DB] weekly_calendars.household_id admite NULL (calendarios personales)');
+    } catch (error) {
+      console.error('[DB] No se pudo relajar weekly_calendars.household_id:', error);
+    } finally {
+      db.pragma('foreign_keys = ON');
+    }
+  }
 
   // Backfill: los hogares creados antes del catalogo no tienen ni
   // ingredientes sugeridos ni utensilios que marcar.
   backfillHouseholdSeeds(db);
+
+  // ... y las cuentas SIN hogar tampoco: para ellas el catalogo es personal
+  // (household_id NULL), que es lo que se siembra al registrarse.
+  backfillUserSeeds(db);
 
   console.log('Database tables and indexes created');
 }

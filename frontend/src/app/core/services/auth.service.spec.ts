@@ -120,7 +120,7 @@ describe('AuthService', () => {
       // Setup logged in state
       localStorage.setItem('auth_token', 'token');
       localStorage.setItem('refresh_token', 'refresh');
-      localStorage.setItem('current_user', JSON.stringify({ id: '1' }));
+      localStorage.setItem('hogar:v1:current_user', JSON.stringify({ id: '1' }));
 
       service.logout();
 
@@ -153,7 +153,7 @@ describe('AuthService', () => {
       const token = 'header.' + btoa(JSON.stringify(payload)).replace(/=/g, '') + '.signature';
 
       localStorage.setItem('auth_token', token);
-      localStorage.setItem('current_user', JSON.stringify({ id: '1', email: 'test@test.com' }));
+      localStorage.setItem('hogar:v1:current_user', JSON.stringify({ id: '1', email: 'test@test.com' }));
 
       // Reinitialize to pick up stored values
       service = TestBed.inject(AuthService);

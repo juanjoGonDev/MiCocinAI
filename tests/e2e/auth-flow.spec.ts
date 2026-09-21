@@ -1,4 +1,5 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
+import { skipOnboarding } from './helpers/auth';
 
 test.describe('Authentication flow', () => {
   test('register redirects to dashboard and keeps user logged in across navigation', async ({ page }) => {
@@ -8,6 +9,7 @@ test.describe('Authentication flow', () => {
     await page.fill('input#email', email);
     await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
+    await skipOnboarding(page);
     // Should land on dashboard (no more 429 / logout loop)
     await page.waitForURL(/.*dashboard/, { timeout: 20000 });
     await expect(page.locator('h1.dashboard__title')).toContainText(/Hola|Hi/);
@@ -40,6 +42,7 @@ test.describe('Authentication flow', () => {
     await page.fill('input#email', email);
     await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
+    await skipOnboarding(page);
     await page.waitForURL(/.*dashboard/);
 
     // Log out

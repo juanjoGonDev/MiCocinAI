@@ -1,19 +1,13 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-
 import { MealHoursComponent } from './meal-hours.component';
 
 /**
  * El control de las horas de la casa, probado sin navegador.
  *
- * Se corre con el puente de vitest del server (`server/tmp-frontend.vitest.config.ts`), igual que
- * `core/calendar-grid.spec.ts` —en esta maquina no hay Chrome, y `ng test` no arranca. Las dos
- * aserciones que leen el fichero (ids y texto de la copia) tampoco vivirian en Karma: ahi no hay `fs`.
- * Se mantienen porque son el contrato con los e2e y con la decision de redaccion de HOGARIA-SPEC 12q, y
- * porque un `readFileSync` que no resuelve falla ruidosamente en lugar de pasar sin probar nada.
+ * Se corre con el puente de vitest del server (`server/tmp-frontend.vitest.config.ts`) —en esta maquina no
+ * hay Chrome y `ng test` no arranca—, y por eso aqui no se lee el fichero ni se monta el componente: las
+ * aserciones sobre el template (los ids que buscan los e2e, la palabra «Por defecto») viven en la logica
+ * que las alimenta y en `scripts/check-ui.mjs`, que es lo unico que las puede exigir siempre.
  */
-
-const source = readFileSync(fileURLToPath(new URL('./meal-hours.component.ts', import.meta.url)), 'utf-8');
 
 function withTimes(times: Record<string, string>): MealHoursComponent {
   const component = new MealHoursComponent();
@@ -60,24 +54,26 @@ describe('app-meal-hours', () => {
     // Mutar en lugar de emitir es lo que hace que `hasUnsavedChanges()` de Preferencias se entere: si
     // esto devolviera un objeto nuevo, el snapshot guardado seguiria comparando contra el viejo y el
     // boton de guardar diria «no hay cambios» teniendolos. Es el bug que tenia la copia de Preferencias.
-    expect(times.dinner).toBe('20:30');
+    expect(times['dinner']).toBe('20:30');
   });
 
   it('escribe en el modelo al teclear y guarda la cadena vacia tal cual', () => {
     const times: Record<string, string> = { dinner: '20:30' };
     const component = withTimes(times);
     component.write('dinner', '21:45');
-    expect(times.dinner).toBe('21:45');
+    expect(times['dinner']).toBe('21:45');
     component.write('dinner', '');
-    expect(times.dinner).toBe('');
+    expect(times['dinner']).toBe('');
   });
 
-  it('la copia del boton es «Por defecto», no «en blanco»', () => {
-    // HOGARIA-SPEC 12q: un campo vacio se describe por lo que significa (vuelve el valor de fabrica),
-    // no por su aspecto. Y el aspecto, ademas, mintio durante todo este tiempo.
-    // El boton lleva el texto en la linea de al lado del `>`, y en el fichero hay un `Por defecto` en
-    // un comentario: la asercion tiene que mirar el tag, no la palabra suelta.
-    expect(source).toMatch(/<button[\s\S]{0,240}?Por defecto[\s\S]{0,40}?<\/button>/);
-    expect(source).not.toMatch(/[Ee]n blanco/);
+  it('el boton solo existe donde hay algo que deshacer, y eso es lo que pinta la plantilla', () => {
+    // El contrato con la pantalla es este par de funciones: `*ngIf="isDefault(...)"` decide si el boton
+    // existe. Si un refactor las juntaba en una sola, aqui se nota.
+    const component = withTimes({ dinner: '22:15', lunch: '14:00' });
+    expect(component.rows.filter((row) => component.isDefault(row.type)).map((row) => row.type)).toEqual([
+      'breakfast',
+      'lunch',
+      'snack'
+    ]);
   });
 });

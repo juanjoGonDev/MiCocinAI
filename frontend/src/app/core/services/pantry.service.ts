@@ -155,7 +155,13 @@ export class PantryService {
 
   loadStats(): void {
     this.http.get<any>(`${this.apiUrl}/ingredients/stats`).pipe(
-      tap(response => this.statsSignal.set(response.data)),
+      tap(response => {
+        // El backend cuenta los ingredientes reales de la despensa en
+        // `data.total` (solo los que tienen quantity > 0); el modelo lo
+        // expone como `totalItems`, asi que se mapea aqui en lugar de
+        // guardar el payload tal cual.
+        this.statsSignal.set({ ...response.data, totalItems: response.data.total });
+      }),
       catchError(() => of(null))
     ).subscribe();
   }

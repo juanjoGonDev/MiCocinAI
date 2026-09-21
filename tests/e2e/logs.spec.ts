@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 
 test.describe('Logs page', () => {
@@ -9,8 +9,10 @@ test.describe('Logs page', () => {
 
   test('should render the logs terminal', async ({ page }) => {
     await expect(page.locator('h1')).toContainText('Logs');
-    // Live/disconnected indicator
-    await expect(page.locator('.logs-toolbar')).toContainText(/En vivo|Desconectado/);
+    // El indicador dice en que estado esta el stream, y ahora hay cuatro estados: un
+    // booleano «conectado/no» esconda el «reintentando en 5 s», que es el unico que
+    // permite distinguir un servidor reiniciandose de uno que no contesta.
+    await expect(page.locator('[data-test="logs-status"]')).toContainText(/En vivo|Conectando|Reintentando|Sin conexion/);
     // Source/level filters
     await expect(page.locator('select.logs-select').first()).toBeVisible();
     // Pause / autoscroll / clear buttons exist
@@ -92,23 +94,45 @@ test.describe('Logs page', () => {
 
     const lines = page.locator('.terminal__line', { hasText: tag });
     await expect(lines).toHaveCount(3);
+    const selected = page.locator('.terminal__line--selected');
+    const countBtn = page.getByRole('button', { name: /Copiar seleccionado/ });
+    /** El (N) del boton; NaN mientras la seleccion aun no esta pintada. */
+    const readCount = () =>
+      countBtn.textContent().then((t) => Number(t?.match(/\((\d+)\)/)?.[1] ?? NaN));
 
     // Clic normal: una línea
     await lines.nth(0).click();
     await expect(lines.nth(0)).toHaveClass(/terminal__line--selected/);
-    await expect(page.getByRole('button', { name: /Copiar seleccionado/ })).toContainText('(1)');
+    await expect(countBtn).toContainText('(1)');
     await expect(page.getByRole('button', { name: /Limpiar selección/ })).toBeVisible();
 
-    // Mayús + clic: rango completo
+    // Mayús + clic: selecciona el rango completo entre las dos. No se puede
+    // esperar un (3) exacto: entre nuestra primera y nuestra tercera linea el
+    // servidor puede haber escrito otras ([SRV] de las propias peticiones de la
+    // app) y esas tambien entran en el rango. Lo que si tiene que cumplirse es
+    // que las tres nuestras quedan seleccionadas y que el contador refleja el
+    // rango real.
     await lines.nth(2).click({ modifiers: ['Shift'] });
-    await expect(page.getByRole('button', { name: /Copiar seleccionado/ })).toContainText('(3)');
+    let range = 0;
+    await expect
+      .poll(async () => {
+        range = await readCount();
+        return range;
+      })
+      .toBeGreaterThanOrEqual(3);
+    await expect(selected).toHaveCount(range);
+    for (const i of [0, 1, 2]) {
+      await expect(lines.nth(i)).toHaveClass(/terminal__line--selected/);
+    }
 
-    // Ctrl + clic: quita una del medio
+    // Ctrl + clic: quita una del medio y el contador baja justo uno
     await lines.nth(1).click({ modifiers: ['Control'] });
-    await expect(page.getByRole('button', { name: /Copiar seleccionado/ })).toContainText('(2)');
+    await expect.poll(readCount).toBe(range - 1);
+    await expect(lines.nth(1)).not.toHaveClass(/terminal__line--selected/);
+    await expect(selected).toHaveCount(range - 1);
 
     // Copiar solo lo seleccionado
-    await page.getByRole('button', { name: /Copiar seleccionado/ }).click();
+    await countBtn.click();
     await page.bringToFront();
     const clipboard = await page.evaluate(() => navigator.clipboard.readText());
     expect(clipboard).toContain(`${tag} alpha`);

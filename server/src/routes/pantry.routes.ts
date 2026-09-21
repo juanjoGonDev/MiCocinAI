@@ -79,15 +79,18 @@ pantryRoutes.get('/ingredients', async (c) => {
   }
 
   if (filter.expiringSoon) {
-    const threeDaysFromNow = new Date();
-    threeDaysFromNow.setDate(threeDaysFromNow.getDate() + 3);
-    conditions.push('expiration_date IS NOT NULL AND expiration_date <= ?');
-    conditions.push('expiration_date >= datetime("now")');
-    params.push(threeDaysFromNow.toISOString());
+    // Se compara DE DIA, no de instante. `expiration_date` guarda un dia suelto
+    // («2026-12-31»), y en la comparacion lexicografica ese dia es MENOR que
+    // «2026-12-31 10:50:08» que devuelve `datetime('now')`: lo que caduca hoy contaba como
+    // caducado desde la primera hora de la manana. Con `date()` las dos cosas se dicen en el
+    // mismo idioma. El reloj es el del server (UTC) a proposito: no hay zona configurada, y
+    // lo que se ve en la pantalla lo decide el dia local del dispositivo.
+    conditions.push("expiration_date IS NOT NULL AND date(expiration_date) >= date('now')");
+    conditions.push("expiration_date IS NOT NULL AND date(expiration_date) <= date('now', '+3 days')");
   }
 
   if (filter.expired) {
-    conditions.push('expiration_date IS NOT NULL AND expiration_date < datetime("now")');
+    conditions.push("expiration_date IS NOT NULL AND date(expiration_date) < date('now')");
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -135,8 +138,8 @@ pantryRoutes.get('/ingredients/stats', async (c) => {
     SELECT COUNT(*) as total FROM ingredients
     WHERE ${inPantryClause}
     AND expiration_date IS NOT NULL
-    AND expiration_date >= datetime('now')
-    AND expiration_date <= datetime('now', '+3 days')
+    AND date(expiration_date) >= date('now')
+    AND date(expiration_date) <= date('now', '+3 days')
   `).get(...inPantryParams) as any;
 
   // Get expired
@@ -144,7 +147,7 @@ pantryRoutes.get('/ingredients/stats', async (c) => {
     SELECT COUNT(*) as total FROM ingredients
     WHERE ${inPantryClause}
     AND expiration_date IS NOT NULL
-    AND expiration_date < datetime('now')
+    AND date(expiration_date) < date('now')
   `).get(...inPantryParams) as any;
 
   // Get by category

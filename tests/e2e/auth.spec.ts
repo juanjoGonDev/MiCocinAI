@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { registerUser, logout } from './helpers/auth';
 
 test.describe('Authentication', () => {
@@ -40,18 +40,17 @@ test.describe('Authentication', () => {
     await expect(page.locator('h2')).toContainText('Recuperar Contraseña');
   });
 
-  test('should show register form with cooking level selection', async ({ page }) => {
+  test('should show the register form without the profile questions', async ({ page }) => {
     await page.goto('/auth/register');
 
     await expect(page.locator('input#name')).toBeVisible();
     await expect(page.locator('input#email')).toBeVisible();
     await expect(page.locator('input#password')).toBeVisible();
 
-    const levels = page.locator('.register-form__option');
-    await expect(levels).toHaveCount(3);
-    await expect(levels.nth(0)).toContainText('Principiante');
-    await expect(levels.nth(1)).toContainText('Intermedio');
-    await expect(levels.nth(2)).toContainText('Experto');
+    // El nivel de cocina se fue del alta: es perfil, se responde en el tour y se
+    // edita en Preferencias > Perfil. Aqui solo se crea la cuenta.
+    await expect(page.locator('.register-form__option')).toHaveCount(0);
+    await expect(page.locator('.register-form__note')).toContainText('cinco cosas cortas');
   });
 
   test('should login with the credentials used at registration', async ({ page }) => {

@@ -1,6 +1,7 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { openResilientStream, type StreamHandle, type StreamStatus } from '../sse';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'log';
 export type LogSource = 'server' | 'browser';
@@ -30,13 +31,19 @@ export class LogService {
   private filterLevel = signal<LogLevel | 'all'>('all');
   private pausedSignal = signal(false);
 
-  private eventSource?: EventSource;
+  private stream?: StreamHandle;
   private buffer: LogEntry[] = [];
   private flushTimer?: number;
   private seq = 0;
 
   readonly logs = this.logsSignal.asReadonly();
   readonly connected = this.connectedSignal.asReadonly();
+  /**
+   * `retrying`/`closed` con `retryIn` es lo que la pantalla enseña en vez de un silencio:
+   * «no veo logs» sin causa era lo que obligaba a abrir la terminal del contenedor.
+   */
+  readonly streamStatus = signal<StreamStatus>('closed');
+  readonly retryIn = signal<number | null>(null);
   readonly autoScroll = this.autoScrollSignal.asReadonly();
   readonly paused = this.pausedSignal.asReadonly();
   readonly sourceFilter = this.filterSource.asReadonly();
@@ -55,28 +62,31 @@ export class LogService {
       error: () => { /* ignore, SSE will still try */ }
     });
 
-    // Then open an SSE stream for live updates
-    try {
-      this.eventSource = new EventSource(`${this.apiUrl}/stream`);
-      this.eventSource.onopen = () => this.connectedSignal.set(true);
-      this.eventSource.onerror = () => this.connectedSignal.set(false);
-      this.eventSource.onmessage = (ev) => {
+    // Then open an SSE stream for live updates. Con backoff propio: el `EventSource`
+    // desnudo reconecta cada segundo para siempre, y eso es lo que reventaba el cupo de
+    // peticiones de TODA la casa mientras el visor seguia sin enseñar nada.
+    this.stream = openResilientStream(`${this.apiUrl}/stream`, {
+      onMessage: (data) => {
         try {
-          const entry: LogEntry = JSON.parse(ev.data);
+          const entry: LogEntry = JSON.parse(data);
           if (this.pausedSignal()) return;
           this.pushEntry(entry);
         } catch { /* ignore bad JSON */ }
-      };
-    } catch {
-      this.connectedSignal.set(false);
-    }
+      },
+      onStatus: (status, detail) => {
+        this.connectedSignal.set(status === 'live');
+        this.streamStatus.set(status);
+        this.retryIn.set(status === 'retrying' ? detail.retryInMs : null);
+      }
+    });
   }
 
   disconnect(): void {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = undefined;
+    if (this.stream) {
+      this.stream.close();
+      this.stream = undefined;
     }
+    this.retryIn.set(null);
     this.connectedSignal.set(false);
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);

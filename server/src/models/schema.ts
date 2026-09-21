@@ -177,7 +177,8 @@ export const userRecipesRelations = relations(userRecipes, ({ one }) => ({
 
 export const weeklyCalendars = sqliteTable('weekly_calendars', {
   id: text('id').primaryKey(),
-  householdId: text('household_id').notNull(),
+  // NULL = calendario personal (sin hogar). Ver la migración en config/database.ts.
+  householdId: text('household_id'),
   userId: text('user_id').notNull(),
   weekStart: text('week_start').notNull(),
   weekEnd: text('week_end').notNull(),

@@ -1,24 +1,26 @@
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 import type { AppEnv } from '../types/hono-env.js';
-import { addLog, getLogs, totalLogs, clearLogs, LogEntry } from '../utils/log-store.js';
+import { addLog, getLogs, totalLogs, clearLogs, onLogEntry, LogEntry } from '../utils/log-store.js';
 
 const logRoutes = new Hono<AppEnv>();
 
 // Clients subscribed to live logs via SSE
 const sseClients = new Set<(entry: LogEntry) => void>();
 
-function broadcast(entry: LogEntry): void {
+// La cola de logs es la que avisa: ASI lo que se escribe por `console`, lo que manda el
+// navegador y lo que anade el servidor llegan todos al stream. Antes el aviso vivia en un
+// `record()` local, y todo lo que no pasaba por el (practicamente todo el servidor) se
+// quedaba fuera de la pantalla: el visor parecia muerto y habia que recargar.
+onLogEntry((entry) => {
   for (const send of sseClients) {
-    try { send(entry); } catch { /* ignore */ }
+    try {
+      send(entry);
+    } catch {
+      /* el cliente se fue a media escritura: el resto sigue */
+    }
   }
-}
-
-// Wrap addLog to also broadcast
-function record(entry: LogEntry): void {
-  addLog(entry);
-  broadcast(entry);
-}
+});
 
 // GET /api/logs/stream - Server-Sent Events stream of live logs
 logRoutes.get('/stream', (c) => {
@@ -80,7 +82,7 @@ logRoutes.post('/', async (c) => {
       url: body.url,
     };
 
-    record(entry);
+    addLog(entry);
 
     return c.json({ success: true });
   } catch {
@@ -114,7 +116,7 @@ logRoutes.delete('/', (c) => {
 
 // Public helper for server code to add entries that are also broadcast.
 export function addServerLog(level: string, message: string, stack?: string): void {
-  record({
+  addLog({
     timestamp: new Date().toISOString(),
     level: (level as LogEntry['level']) || 'info',
     source: 'server',

@@ -1,4 +1,5 @@
 import { Injectable, signal, computed, effect } from '@angular/core';
+import { STORAGE_KEYS } from './storage.service';
 
 export type Language = 'es' | 'en' | 'auto';
 export type ResolvedLanguage = 'es' | 'en';
@@ -9,14 +10,17 @@ const es: Dict = {
   // Layout / nav
   'nav.dashboard': 'Inicio',
   'nav.pantry': 'Despensa',
+  'nav.shopping': 'Compra',
   'nav.recipes': 'Recetas',
   'nav.calendar': 'Calendario',
   'nav.household': 'Hogar',
   'nav.ai-config': 'IA Config',
   'nav.logs': 'Logs',
   'nav.settings': 'Configuración',
+  'nav.preferences': 'Preferencias',
   'nav.logout': 'Cerrar sesión',
-  'app.name': 'MiCocinAI',
+  'nav.guest': 'Tu cuenta',
+  'app.name': 'HogarIA',
 
   // Auth
   'auth.login': 'Iniciar sesión',
@@ -90,6 +94,12 @@ const es: Dict = {
 
   // Settings
   'settings.title': '⚙️ Configuración',
+  'settings.modules': '🧭 Módulos',
+  'settings.modulesHint': 'Qué secciones de HogarIA tienes encendidas. Se aplican al momento, sin recargar.',
+  'settings.modulesSoon': 'pronto',
+  'settings.modulesAllOn': 'Sin marcar: se enseñan todas las secciones que trae esta version.',
+  'settings.modulesFailed': 'No se pudo guardar el cambio; se ha vuelto al estado anterior.',
+  'settings.modulesReset': 'Volver a ver todas las secciones disponibles',
   'settings.theme': 'Tema',
   'settings.theme.light': '☀️ Claro',
   'settings.theme.dark': '🌙 Oscuro',
@@ -113,14 +123,17 @@ const es: Dict = {
 const en: Dict = {
   'nav.dashboard': 'Home',
   'nav.pantry': 'Pantry',
+  'nav.shopping': 'Shopping',
   'nav.recipes': 'Recipes',
   'nav.calendar': 'Calendar',
   'nav.household': 'Household',
   'nav.ai-config': 'AI Config',
   'nav.logs': 'Logs',
   'nav.settings': 'Settings',
+  'nav.preferences': 'Preferences',
   'nav.logout': 'Log out',
-  'app.name': 'MiCocinAI',
+  'nav.guest': 'Your account',
+  'app.name': 'HogarIA',
 
   'auth.login': 'Log in',
   'auth.register': 'Sign up',
@@ -188,6 +201,12 @@ const en: Dict = {
   'logs.clearConfirm': 'Clear all logs?',
 
   'settings.title': '⚙️ Settings',
+  'settings.modules': '🧭 Modules',
+  'settings.modulesHint': 'Which HogarIA sections you have switched on. Applied right away, no reload.',
+  'settings.modulesSoon': 'soon',
+  'settings.modulesAllOn': 'Nothing selected: every section this build ships is shown.',
+  'settings.modulesFailed': 'Could not save the change; reverted to the previous state.',
+  'settings.modulesReset': 'Show every available section again',
   'settings.theme': 'Theme',
   'settings.theme.light': '☀️ Light',
   'settings.theme.dark': '🌙 Dark',
@@ -211,7 +230,7 @@ const DICTS: Record<ResolvedLanguage, Dict> = { es, en };
 
 @Injectable({ providedIn: 'root' })
 export class I18nService {
-  private readonly LANG_KEY = 'language';
+  private readonly LANG_KEY = STORAGE_KEYS.language;
   private langSignal = signal<Language>(this.getStoredLang());
   private resolvedSignal = signal<ResolvedLanguage>(this.resolve(this.getStoredLang()));
 

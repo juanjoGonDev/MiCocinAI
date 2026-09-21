@@ -73,4 +73,5 @@ blob-report/
 # temporal que deja ejecutar los specs puros del frontend con el vitest del server, porque aqui no hay
 # Chromium y `ng test` no arranca. Esta listado aqui para que el arbol siga limpio sin tener que
 # acordarse de excluirlo al hacer `git add`.
-server/tmp-frontend.vitest.config.ts
+server/tmp-frontend*
+server/.vitest/

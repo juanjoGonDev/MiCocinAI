@@ -1,18 +1,123 @@
 import { Page, expect } from '@playwright/test';
 
+import { test as base } from '@playwright/test';
+import { dataSeed, seededEmail } from './seed';
+
+const TEST_PASSWORD = 'Test1234';
+
+/**
+ * Cada prueba registra su propio usuario para no pisarse entre si. El correo
+ * lleva la semilla del run: las filas de la base de datos se pueden atribuir a
+ * una ejecucion concreta, y el reporter lo muestra en la linea del test.
+ */
+function generatedEmail(): string {
+  const email = seededEmail();
+  const info = base.info();
+  if (info) info.annotations.push({ type: 'seed', description: dataSeed(email) });
+  return email;
+}
+
+/** El registro termina en el onboarding (o en el dashboard si ya se configuro). */
+function waitAfterRegister(page: Page, timeout: number): Promise<boolean> {
+  return page
+    .waitForURL(/.*(dashboard|onboarding)/, { timeout })
+    .then(() => true)
+    .catch(() => false);
+}
+
+/**
+ * Rellena y envia el alta, y espera a la redireccion.
+ *
+ * El alta contesta en milisegundos cuando va mal (409 de correo repetido, 429 de
+ * rate limit por IP - la suite entera comparte ventana). Esperar entonces a la
+ * redireccion era lo que convertia un problema de datos en dos minutos de nada:
+ * aqui se captura la respuesta y se devuelve su estado para que quien llama
+ * reintente con otra direccion o falle ya, con el codigo en el mensaje.
+ */
+async function submitRegister(
+  page: Page,
+  name: string,
+  email: string
+): Promise<{ ok: boolean; status?: number }> {
+  await page.goto('/auth/register');
+
+  // El formulario hay que ESPERARLO: en el runner de CI el SPA aun se esta
+  // pintando cuando termina el 'load', y mirar una sola vez (isVisible) perdia
+  // el envio entero: la prueba no registraba a nadie y se comia sus 45s de
+  // espera, uno detras de otro, hasta convertir 5 fallos reales en 69.
+  const form = page.locator('input#name');
+  const hasForm = await form
+    .waitFor({ state: 'visible', timeout: 15000 })
+    .then(() => true)
+    .catch(() => false);
+
+  if (!hasForm) return { ok: await waitAfterRegister(page, 15000) };
+
+  const pending = page
+    .waitForResponse((response) => response.url().includes('/api/auth/register'), { timeout: 20000 })
+    .catch(() => null);
+
+  await form.fill(name);
+  await page.fill('input#email', email);
+  await page.fill('input#password', TEST_PASSWORD);
+  await page.click('button[type="submit"]');
+
+  const response = await pending;
+  if (response && !response.ok()) return { ok: false, status: response.status() };
+
+  // 2xx: como mucho la navegacion llega tarde, y eso se espera una vez.
+  return { ok: await waitAfterRegister(page, 45000), status: response?.status() };
+}
+
+/**
+ * El registro pasa por la configuración inicial (alergias, gustos, objetivo y
+ * utensilios). La mayoría de tests no quieren ese formulario: lo saltan y se
+ * quedan en el dashboard.
+ */
+export async function skipOnboarding(page: Page): Promise<void> {
+  await page.waitForURL(/.*(dashboard|onboarding)/, { timeout: 45000 });
+  if (!page.url().includes('/onboarding')) return;
+
+  await page.getByRole('button', { name: /Saltar por ahora/i }).click();
+  await page.waitForURL(/.*dashboard/, { timeout: 45000 });
+}
+
+/** Registra un usuario nuevo y lo deja en el onboarding (sin saltarlo). */
+export async function registerToOnboarding(
+  page: Page,
+  name = 'E2E',
+  email?: string
+): Promise<string> {
+  const tried: string[] = [];
+  let target = email ?? generatedEmail();
+  let outcome = await submitRegister(page, name, target);
+
+  if (!outcome.ok && !email) {
+    // Con otra direccion: la anterior puede no haberse registrado nunca (o estar
+    // registrada por un reintento anterior del mismo test).
+    tried.push(`${target} -> ${outcome.status ?? 'sin respuesta'}`);
+    target = generatedEmail();
+    outcome = await submitRegister(page, name, target);
+  }
+  if (!outcome.ok) {
+    tried.push(`${target} -> ${outcome.status ?? 'sin respuesta'}`);
+    throw new Error(
+      `El registro de la prueba no ha llegado al onboarding (${page.url()}). Intentos: ${tried.join(', ')}`
+    );
+  }
+
+  await expect(page).toHaveURL(/.*(dashboard|onboarding)/);
+  return target;
+}
+
 /**
  * Registra un usuario nuevo (email unico) y lo deja autenticado en el
  * dashboard. Los tests no comparten usuario para no pisarse entre si.
  */
-export async function registerUser(page: Page, name = 'E2E'): Promise<string> {
-  const email = `e2e-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
-  await page.goto('/auth/register');
-  await page.fill('input#name', name);
-  await page.fill('input#email', email);
-  await page.fill('input#password', 'Test1234');
-  await page.click('button[type="submit"]');
-  await page.waitForURL(/.*dashboard/, { timeout: 45000 });
-  return email;
+export async function registerUser(page: Page, name = 'E2E', email?: string): Promise<string> {
+  const created = await registerToOnboarding(page, name, email);
+  await skipOnboarding(page);
+  return created;
 }
 
 /**
