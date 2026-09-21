@@ -2325,6 +2325,83 @@ dejaba la capa e2e entera sin verificar durante ocho tandas.
 - [ ] Ejecutar los e2e en local: no hay Chromium en esta maquina y no se va a instalar uno de 300 MB para
       una tanda. El navegador es CI, y eso obliga a que el gate de CI sea el bueno.
 
+## 12s. Tanda 20 — todo texto de la interfaz pasa por el diccionario
+
+Lo que reportó el usuario: al cambiar a inglés **quedan cosas en español**. Medido antes de tocar nada: 502
+literales visibles en 29 plantillas y otras tantas cadenas en el código (avisos, confirmaciones, etiquetas de
+opcionarios). El diccionario tenía 87 claves y las usaban tres componentes; el resto de la app estaba escrita a
+mano en español. Así que esto no es «arreglar dos etiquetas»: es convertir el diccionario en el único sitio de
+donde sale texto a la pantalla, y dejar una regla que no permita volver a escribir fuera.
+
+### A. Qué es texto de la interfaz y qué es dato
+
+- [ ] **Traducible**: lo que la app dice —títulos, botones, pistas, placeholders, `aria-label`, `title`,
+      estados vacíos, avisos (`toast`), confirmaciones, nombres de comidas y de secciones cuando se *enseñan*.
+- [ ] **Dato, no se toca**: lo que el usuario escribe o guarda (nombre de una categoría de la cesta, un
+      alimento propio, una receta generada por la IA) y lo que viaja en un contrato: `MEAL_TYPE_LABELS` y
+      `MEAL_TIME_META` siguen en español porque el server parsea la respuesta del modelo por esas cadenas
+      (`taste-profile.ts` hace `formTime('Desayuno')`). Donde esas constantes se *pintan*, la pantalla usa
+      `t('meal.<tipo>')`; donde se *envían*, siguen mandando el literal del contrato. Un refactor que
+      tradujera el dato cambiaría el prompt de la IA.
+- [ ] **Se queda como está, declarado**: lo que contesta el server (`error.message` del API, que se muestra
+      tal cual en el toast) y el contenido generado por la IA. Traducir eso es `Accept-Language` en el
+      server y un prompt bilingüe: es otra tanda, y está en Coming soon.
+
+### B. Arquitectura del diccionario
+
+- [ ] `core/i18n/dict/<dominio>.ts`, uno por pantalla (nav, auth, ui, dashboard, recipes, pantry, shopping,
+      calendar, account, preferences, onboarding, ai-config, household, logs, settings). Cada fichero exporta
+      `Pair = { es, en }`; `core/i18n/index.ts` los mezcla. Motivo: con 600 claves en un solo fichero el
+      service sería ilegible y cualquier retoque generaría conflictos en todas las tandas a la vez.
+- [ ] `type TranslationKey = keyof typeof DICTS.es`, y `t()`/la pipe la aceptan con ESOS valores. Con
+      `strictTemplates` encendido, una clave mal escrita en una plantilla es **error de compilación**, no una
+      clave visible en pantalla. Es la garantía real; la regla 15 del check-ui es la que además exige que
+      exista en los dos idiomas (el compilador no ve `en`).
+- [ ] Interpolación con `{param}` como hasta ahora (`{n} recetas`). Los textos que mezclaban contenido y
+      `{{ }}` en la plantilla pasan a ser una clave con parámetro: `shopping.tab.pending = 'Pendientes ({n})'`,
+      y no dos cadenas pegadas en la plantilla —juntar palabras en la plantilla es lo que impide traducir.
+- [ ] La etiqueta se calcula al renderizar (getter o método), nunca en un campo `readonly` de la clase: un
+      campo se evalúa una vez al construir y no se entera del cambio de idioma. Donde el getter construye
+      arrays para un `*ngFor`, se memoiza por `resolved()` (misma lección que 12q-E: identidad estable).
+
+### C. Reglas de guardia (14 y 15 en `scripts/check-ui.mjs`)
+
+- [ ] `texto-sin-traducir` (14): en `template:` no queda ningún literal con palabras fuera de una pipe `| t`
+      —texto entre etiquetas y los atributos `placeholder`, `aria-label`, `title`, `label`, `alt`—. Se saltan
+      comentarios, atributos técnicos (`class`, `id`, rutas, nombres de icono) y lo que ya está dentro de una
+      expresión. Empieza con la lista de deuda en `LEGACY` por fichero (29) y **la lista solo puede encoger**;
+      el objetivo de la tanda es dejarla a cero, así que la regla queda sin excepciones.
+- [ ] `clave-sin-traduccion` (15): toda clave referenciada (plantilla o `t(`) existe en `es` **y** en `en`, y
+      toda clave de los diccionarios se usa en algún sitio. Los dos sentidos: si falta la clave, la pantalla
+      sale en el idioma viejo o con la clave en crudo; si sobra, es texto muerto que alguien jurará vivo.
+
+### D. CI con dos idiomas, y el test que faltaba
+
+- [ ] `playwright.config.ts` fija `locale: 'es-ES'` en `use`. No es un capricho: con `language: 'auto'` y el
+      Chromium de CI (`en-US`), el día que los textos pasen por el diccionario **toda la suite e2e escrita en
+      español empieza a fallar contra una app que no está rota**. Un test cuyo idioma depende de la máquina
+      no es un test; se ancla el locale y se dice.
+- [ ] e2e nuevo: en cada pantalla principal, cambiar a inglés y exigir que **no quede español** (se comprueba
+      el texto visible contra una lista de palabras que solo existen en español: `Guardar`, `Añadir`,
+      `Cancelar`, `Despensa`, `recetas`…), y volver a español y exigir lo mismo con las inglesas. Es el test
+      que habria evitado esta tanda entera, y es barato porque el diccionario ya da el oráculo.
+- [ ] `tests/e2e/settings-theme-i18n.spec.ts` pasa de «`/Claro|Light/`» a afirmar los dos textos por separado:
+      la tolerancia a ambos idiomas era una coartada mientras la mitad de la app no se traducía.
+
+### Gates
+
+- [ ] `check-ui` con 15 reglas y cero incidencias, con la lista de deuda de la regla 14 vacía.
+- [ ] `tsc` de app y spec, `typecheck:e2e`, vitest del server, puente del frontend, build de producción.
+- [ ] Los e2e: en CI, con el locale anclado. Aquí no hay navegador, así que la comprobación del cambio de
+      idioma se trae a CI y se reporta el resultado en el PR, como en 12r.
+
+### Coming soon, deliberadamente fuera de aquí
+
+- [ ] `Accept-Language` en el server para los mensajes de error y los nombres que genera la IA.
+- [ ] Fechas, números y dinero con el idioma activo (`Intl`): hoy el `DatePipe` de Angular usa la local
+      del navegador, que no tiene por qué ser la del `language` de la app.
+- [ ] Un tercer idioma: la estructura (`dict/<dominio>.ts` + `Pair`) lo permite sin tocar las pantallas.
+
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
   (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
