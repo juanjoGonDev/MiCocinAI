@@ -1117,7 +1117,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 @for (event of events(); track event.id) {
                   <li class="detail__audit-row" data-test="audit-row">
                     <app-avatar [name]="face(event).name" [src]="face(event).avatar" size="sm" />
-                    <span class="detail__audit-text">{{ face(event).description }}</span>
+                    <span class="detail__audit-text">{{ face(event).text }}</span>
                     <span class="detail__audit-when" [title]="when(event.created_at)">{{
                       since(event.created_at)
                     }}</span>
@@ -2967,8 +2967,8 @@ export class ShoppingListDetailComponent implements OnDestroy {
     return user ? { id: user.id, name: user.name, avatar: user.avatar ?? null } : null;
   });
 
-  face(event: ListEvent): { name: string; avatar?: string; description: string } {
-    return auditFace(event, this.auditMe());
+  face(event: ListEvent): { name: string; avatar?: string; text: string } {
+    return auditFace(event, this.auditMe(), { t: (key, params) => this.i18n.t(key, params) });
   }
 
   /** El descuento propio de una fila, y su frase, para pintarlos en la lista. */

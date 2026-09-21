@@ -9,6 +9,7 @@
  */
 
 import type { TranslationKey } from '../../core/i18n';
+import { LIST_EVENT_LABEL_KEYS } from '../../core/i18n/labels';
 
 import { dateLocale } from '../../core/time';
 
@@ -343,12 +344,35 @@ export interface ShoppingCategory {
   key: string;
 }
 
+/**
+ * Las acciones que escribe la auditoria del server: `server/src/utils/shopping-events.ts`, `EVENT_ACTIONS`, palabra
+ * por palabra y sin inventar ninguna (HOGARIA-SPEC ## 12w). Antes este tipo describia acciones que el server no
+ * manda (`items.add`, `list.rename`, `list.clear_checked`…): nueve de diecinueve. Nadie las usaba mal porque nadie
+ * las podia usar, y eso es lo que hace que un tipo asi sea un bug silencioso —el espejo del server lo impide.
+ */
 export type ListEventAction =
-  | 'list.create' | 'list.rename' | 'list.store' | 'list.status' | 'list.delete' | 'list.clear_checked'
-  | 'items.add' | 'items.merge' | 'items.update' | 'items.check' | 'items.uncheck' | 'items.remove'
-  | 'items.bulk_check' | 'items.bulk_remove' | 'items.reorder' | 'items.restore' | 'items.discount' | 'items.apply';
+  | 'list.create'
+  | 'list.update'
+  | 'list.complete'
+  | 'list.reopen'
+  | 'list.delete'
+  | 'list.discount'
+  | 'list.discount-remove'
+  | 'list.clear-checked'
+  | 'list.order'
+  | 'item.add'
+  | 'item.merge'
+  | 'item.update'
+  | 'item.discount'
+  | 'item.offer'
+  | 'item.check'
+  | 'item.uncheck'
+  | 'item.remove'
+  | 'item.restore'
+  | 'items.bulk'
+  | 'items.apply';
 
-/** Lo que escribio la propia auditoria del server: `description` ya es la frase en castellano. */
+/** Lo que escribio la auditoria del server: `description` es la frase en castellano, la reserva de siempre. */
 export interface ListEvent {
   id: string;
   list_id: string;
@@ -362,31 +386,63 @@ export interface ListEvent {
 }
 
 /**
+ * La voz con la que se compone una frase del historial. `t` es el traductor de la pantalla, que es el unico que
+ * sabe en que idioma se esta leyendo; `item`, opcional, traduce el nombre del articulo por su etiqueta de
+ * catalogo (el articulo es dato del semillero, no texto de la app: ## 12w). Sin voz, la fila se pinta como la
+ * escribe el server.
+ */
+export interface AuditVoice {
+  t: (key: TranslationKey, params?: Record<string, string>) => string;
+  item?: (name: string) => string;
+}
+
+/** La frase de una fila del historial, en el idioma activo. */
+export function listEventText(
+  // `action` es `string` a proposito: la busqueda sobre el mapa tipado no puede prometer que la accion que
+  // mando el server exista en el diccionario del cliente —si no existe, abajo se ve la frase del server.
+  event: Pick<ListEvent, 'item_name' | 'description'> & { action: string },
+  who: string,
+  voz: AuditVoice
+): string {
+  const key = (LIST_EVENT_LABEL_KEYS as Partial<Record<string, TranslationKey>>)[event.action];
+  if (!key) {
+    // Accion que el diccionario todavia no cubre: mejor la frase del server que un codigo en pantalla.
+    const reserva = (event.description ?? '').trim();
+    return reserva || voz.t('list_event.lista_tocada', { who, item: '' });
+  }
+  // Las comias las escribe cada idioma (el castellano las lleva, el ingles no); aqui solo se quita el grupo
+  // cuando la accion promete un articulo que la fila no tiene, que es lo que hoy hace el server al omitir `item`.
+  const nombre = event.item_name ? (voz.item ? voz.item(event.item_name) : event.item_name) : '';
+  return voz
+    .t(key, { who, item: nombre })
+    .replace(/«\s*»/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/**
  * La cara de una fila del historial, resuelta contra la sesion viva.
  *
- * El servidor manda ya el nombre y la foto de hoy (la instantanea de la fila es la reserva para
- * cuando la cuenta no existe), pero entre que se sube una foto o se cambia el nombre y se vuelve a
- * pedir la lista pueden pasar minutos de uso —y el aviso dice «foto actualizada», que se tiene que
- * notar en la pantalla y no en la proxima visita. Por eso las filas PROPIAS se pintan con lo que
- * hay en la senal de sesion; las de las demas personas se dejan tal cual las contesto el servidor.
+ * El servidor manda ya el nombre y la foto de hoy (la instantanea de la fila es la reserva para cuando la cuenta
+ * no existe), pero entre que se sube una foto o se cambia el nombre y se vuelve a pedir la lista pueden pasar
+ * minutos de uso —y el aviso dice «foto actualizada», que se tiene que notar en la pantalla y no en la proxima
+ * visita. Por eso las filas PROPIAS se pintan con lo que hay en la senal de sesion; las de las demas personas se
+ * dejan tal cual las contesto el servidor. La frase, en cambio, siempre la compone el cliente: recortar la del
+ * server para cambiarle el sujeto era un apaño que dejaba el verbo en el otro idioma.
  */
 export function auditFace(
-  event: Pick<ListEvent, 'user_id' | 'user_name' | 'user_avatar' | 'description'>,
-  me: { id: string; name: string; avatar?: string | null } | null
-): { name: string; avatar?: string; description: string } {
-  const fetched = event.user_name?.trim() || 'Alguien';
+  event: Pick<ListEvent, 'user_id' | 'user_name' | 'user_avatar' | 'description' | 'item_name'> & {
+    action: string;
+  },
+  me: { id: string; name: string; avatar?: string | null } | null,
+  voz?: AuditVoice
+): { name: string; avatar?: string; text: string } {
+  const guardado = event.user_name?.trim() ?? '';
   const mine = Boolean(me?.id) && me?.id === event.user_id;
-  if (!mine) {
-    return { name: fetched, avatar: event.user_avatar ?? undefined, description: event.description };
-  }
-  const current = me?.name?.trim() || fetched;
-  // La frase del server empieza con el nombre: si se ha cambiado, se cambia tambien en la frase,
-  // y nada mas. No se reescribe el resto del texto, que es lo que la persona leyo.
-  const description =
-    fetched !== 'Alguien' && event.description.startsWith(fetched)
-      ? current + event.description.slice(fetched.length)
-      : event.description;
-  return { name: current, avatar: me?.avatar ?? event.user_avatar ?? undefined, description };
+  const nombre = (mine ? me?.name?.trim() || guardado : guardado) || (voz ? voz.t('list_event.alguien') : 'Alguien');
+  const avatar = (mine ? me?.avatar ?? event.user_avatar : event.user_avatar) ?? undefined;
+  const text = voz ? listEventText(event, nombre, voz) : (event.description ?? '').trim();
+  return { name: nombre, avatar, text };
 }
 
 export type DiscountKind = 'amount' | 'percent';

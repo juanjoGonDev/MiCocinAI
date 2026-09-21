@@ -1,5 +1,6 @@
 import type { MealType } from '../../shared/models/calendar.model';
 import type { TranslationKey } from './index';
+import type { ListEventAction } from '../../shared/models/shopping.model';
 
 // =============================================================================
 // De un dato guardado a la clave que lo ensena.
@@ -123,3 +124,36 @@ export const LIST_CATEGORY_LABEL_KEYS: Record<string, TranslationKey> = {
 export function listCategoryLabelKey(value: string): TranslationKey | null {
   return LIST_CATEGORY_LABEL_KEYS[value] ?? null;
 }
+
+/**
+ * El historial de la lista de la compra, accion por accion (HOGARIA-SPEC ## 12w).
+ *
+ * El server guarda `action` e `item_name`, y en castellano ademas manda la frase ya escrita (`description`) para
+ * que un cliente que no la traduzca no se quede en blanco. Aqui no se pinta esa frase: se compone la del idioma
+ * activo, con el nombre de la persona y el del articulo como parametros. `Record<ListEventAction, ...>` es parte
+ * del arreglo: si el server anade una accion, el diccionario del cliente no compila hasta que alguien la escriba,
+ * y el espejo `server/src/utils/shopping-list-event-i18n.spec.ts` es el que obliga a que la union diga las
+ * acciones de verdad y no las nueve inventadas que decia antes.
+ */
+export const LIST_EVENT_LABEL_KEYS: Record<ListEventAction, TranslationKey> = {
+  'list.create': 'list_event.lista_creada',
+  'list.update': 'list_event.lista_cambiada',
+  'list.complete': 'list_event.compra_terminada',
+  'list.reopen': 'list_event.lista_reabierta',
+  'list.delete': 'list_event.lista_borrada',
+  'list.discount': 'list_event.descuento_cambiado',
+  'list.discount-remove': 'list_event.descuento_quitado',
+  'list.clear-checked': 'list_event.carro_vaciado',
+  'list.order': 'list_event.lista_reordenada',
+  'item.add': 'list_event.item_anadido',
+  'item.merge': 'list_event.item_sumado',
+  'item.update': 'list_event.item_editado',
+  'item.discount': 'list_event.item_descuento',
+  'item.offer': 'list_event.item_oferta',
+  'item.check': 'list_event.item_marcada',
+  'item.uncheck': 'list_event.item_desmarcada',
+  'item.remove': 'list_event.item_quitado',
+  'item.restore': 'list_event.item_recuperado',
+  'items.bulk': 'list_event.lista_pegada',
+  'items.apply': 'list_event.lineas_desde_una_foto'
+};

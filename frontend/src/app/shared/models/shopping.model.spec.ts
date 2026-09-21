@@ -122,36 +122,64 @@ describe('productKeyOf (la clave con la que se enlaza un producto)', () => {
   });
 
 describe('auditFace — la cara en el historial', () => {
-  const base = { user_id: 'u-ana', user_name: 'Ana', user_avatar: '/api/uploads/avatars/ana-old.png', description: 'Ana ha añadido «Leche»' };
+  const base = {
+    user_id: 'u-ana',
+    user_name: 'Ana',
+    user_avatar: '/api/uploads/avatars/ana-old.png',
+    action: 'item.add',
+    item_name: 'Leche',
+    description: 'Ana ha añadido «Leche»'
+  } as const;
+
+  // La voz de la pantalla: el diccionario justo para no arrancar Angular. Sin acentos a proposito: la frase
+  // coincide con la que escribe el server, y eso es lo que se esta probando aqui.
+  const voz = (t: (key: string, params?: Record<string, string>) => string) => ({ t });
+  const es = (key: string, params?: Record<string, string>): string => {
+    const plantillas: Record<string, string> = {
+      'list_event.item_anadido': '{who} ha añadido «{item}»',
+      'list_event.alguien': 'Alguien'
+    };
+    let texto = plantillas[key] ?? key;
+    for (const [nombre, valor] of Object.entries(params ?? {})) texto = texto.split(`{${nombre}}`).join(valor);
+    return texto.replace(/\s{2,}/g, ' ').trim();
+  };
 
   it('las filas de otra persona se dejan como las contesto el servidor', () => {
-    const face = auditFace(base, { id: 'u-bea', name: 'Bea', avatar: null });
+    const face = auditFace(base, { id: 'u-bea', name: 'Bea', avatar: null }, voz(es));
     expect(face.name).toBe('Ana');
     expect(face.avatar).toBe('/api/uploads/avatars/ana-old.png');
-    expect(face.description).toBe('Ana ha añadido «Leche»');
+    expect(face.text).toBe('Ana ha añadido «Leche»');
   });
 
   it('una fila propia se pinta con el nombre y la foto de ahora', () => {
-    const face = auditFace(base, { id: 'u-ana', name: 'Ana Belén', avatar: '/api/uploads/avatars/ana-new.png' });
+    const face = auditFace(
+      base,
+      { id: 'u-ana', name: 'Ana Belén', avatar: '/api/uploads/avatars/ana-new.png' },
+      voz(es)
+    );
     expect(face.name).toBe('Ana Belén');
     expect(face.avatar).toBe('/api/uploads/avatars/ana-new.png');
-    // Y la frase sigue siendo legible: solo cambia quien la empieza.
-    expect(face.description).toBe('Ana Belén ha añadido «Leche»');
+    // El sujeto es un parametro desde el principio: la frase ya no se recorta para cambiarle quien la empieza.
+    expect(face.text).toBe('Ana Belén ha añadido «Leche»');
+  });
+
+  it('sin voz se pinta la frase del server, tal cual (cliente viejo, fila vieja)', () => {
+    expect(auditFace(base, { id: 'u-ana', name: 'Ana Belén', avatar: null }).text).toBe('Ana ha añadido «Leche»');
   });
 
   it('sin foto nueva no se inventa: se conserva la que vino', () => {
-    expect(auditFace(base, { id: 'u-ana', name: 'Ana' }).avatar).toBe('/api/uploads/avatars/ana-old.png');
+    expect(auditFace(base, { id: 'u-ana', name: 'Ana' }, voz(es)).avatar).toBe('/api/uploads/avatars/ana-old.png');
     // Una cuenta sin nombre no borra el de la fila.
-    expect(auditFace(base, { id: 'u-ana', name: '  ' }).name).toBe('Ana');
+    expect(auditFace(base, { id: 'u-ana', name: '  ' }, voz(es)).name).toBe('Ana');
   });
 
   it('un suceso anonimo no se le asigna a quien lo mira', () => {
-    const face = auditFace({ ...base, user_name: null, user_avatar: null }, { id: 'u-ana', name: 'Ana' });
+    const face = auditFace({ ...base, user_name: null, user_avatar: null }, { id: 'u-ana', name: 'Ana' }, voz(es));
     expect(face.name).toBe('Ana');
-    expect(face.description).toBe('Ana ha añadido «Leche»');
-    // Y si no es tuyo, se queda «Alguien».
+    expect(face.text).toBe('Ana ha añadido «Leche»');
+    // Y si no es tuyo y no hay nombre, «Alguien» —en el idioma activo, que es de donde salia el churro.
+    expect(auditFace({ ...base, user_name: null }, { id: 'u-bea', name: 'Bea' }, voz(es)).name).toBe('Alguien');
     expect(auditFace({ ...base, user_name: null }, { id: 'u-bea', name: 'Bea' }).name).toBe('Alguien');
-    expect(auditFace(base, null).name).toBe('Ana');
   });
 });
 });
