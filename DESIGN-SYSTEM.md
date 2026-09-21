@@ -1,4 +1,4 @@
-# 🎨 Sistema de Diseño - RecipeApp
+# 🎨 Sistema de Diseño - HogarIA
 
 ## Filosofía de Diseño
 
@@ -636,6 +636,32 @@
 }
 ```
 
+#### Estados de interacción: no son un detalle, son la asequibilidad
+
+Un control que no cambia cuando el cursor pasa por encima no se distingue de un texto, y eso no lo decide
+el gusto de nadie: lo decide que el ratón ya está ahí. Los tres estados de la tabla son obligatorios en
+toda la app y los vigila `node scripts/check-ui.mjs` (regla `boton-sin-afecto`):
+
+| Estado | Qué se escribe | Para qué |
+| --- | --- | --- |
+| `:hover` | `background`, `border-color` o `color` —una o dos, nunca un `transform` suelto— | «esto se puede pulsar», antes de pulsarlo |
+| `:focus-visible` | lo pone el anillo global de `styles.scss`; solo se declara si el control lo personaliza | teclado sin ratón |
+| `:disabled` | la opacidad la pone el componente; `cursor: not-allowed` lo pone el global | «aquí no, y hay una razón» |
+
+Tres notas que salen de haberlo hecho mal:
+
+- **El hover no se pone en los deshabilitados.** Un botón apagado que se ilumina al pasar por encima enseña
+  en dos segundos a desconfiar de la pantalla entera. Se escribe `:hover:not(:disabled)`.
+- **Los `<a>` no necesitan regla propia** —`styles.scss` ya la pone—, pero los `<button>` con clase sí: el
+  reset global (`border: none; background: none`) existe para que `app-button` se pinte solo, y arrastra el
+  efecto de que un botón con una clase tímida se vea como texto. El botón *sin* clase recibe un skin global
+  (`button:not([class])`), así que lo que queda sin respuesta es siempre una decisión del CSS de la pantalla.
+- **Un `label` con su `input` dentro es un control**, y el cursor lo dice: `label:has(input)` ya pone
+  `pointer` en el global. No se repite por componente.
+
+Y la parte que no es de CSS: si algo se pulsa, tiene que parecer pulsable. Un icono suelto sin `padding` y
+sin `border-radius` es decoración, aunque tenga `cursor: pointer`.
+
 ### Inputs
 
 ```scss
@@ -720,6 +746,23 @@
   }
 }
 ```
+
+#### Vaciar un campo no es dejarlo «en blanco»
+
+Dos cosas se parecen en la pantalla y no se parecen en el modelo: **no hay valor** y **usa el valor de
+siempre**. La segunda no se describe por su aspecto —«en blanco: 09:00» no dice lo que hace el campo—, sino
+por un botón que la ejecuta: **«Por defecto»**.
+
+- En la API, `null` en el `PATCH` significa borrar la preferencia (vuelve el valor de fábrica) y la clave
+  ausente significa no tocarla. Clave a clave, además: cambiar la cena no borra el desayuno.
+- El campo del formulario se pinta siempre con un valor resuelto, nunca con un hueco: si no hay nada
+  guardado se ve `09:00`, y ese es el valor que se guarda si no se toca.
+- «Por defecto» solo aparece en la fila que se ha tocado. En la que ya vale lo de siempre no hay nada que
+  deshacer, y un botón que no hace nada es ruido —ver `app-meal-hours`, que es el mismo control en el tour y
+  en Preferencias.
+
+`check-ui` (regla `texto-sin-en-blanco`) no deja escribir «en blanco» en una cadena visible: un comentario
+de código puede hablar del lienzo; una pantalla, no.
 
 ### Cards
 

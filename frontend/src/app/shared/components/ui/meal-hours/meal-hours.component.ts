@@ -99,7 +99,12 @@ interface MealHourRow {
       /* La misma receta que la de app-input: si el control se ve distinto, se comporta distinto en la
          cabeza de quien lo mira. Y dentro de un literal de plantilla no pueden aparecer backticks. */
       .meal-hours__input {
+        /* Un input de hora sin dimension propia se encoje hasta el glifo del reloj del navegador (y en
+           Safari, hasta cero): un campo que no se ve no se rellena. Los comentarios de dentro de styles
+           no llevan acentos graves —cierran el literal—, y eso lo pilla antes la regla
+           backtick-cierra-el-literal del check-ui que el compilador.*/
         min-width: 8.5rem;
+        min-height: 40px;
         padding: var(--space-2) var(--space-3);
         font-family: var(--font-sans);
         font-size: var(--text-base);

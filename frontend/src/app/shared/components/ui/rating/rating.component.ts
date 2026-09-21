@@ -55,8 +55,12 @@ import { CommonModule } from '@angular/common';
       color: var(--color-warning-500);
     }
 
+    /* 400 no existe en la escala (va 50, 100, 500, 600, 700), y como una declaracion con un color
+       inexistente se descarta en silencio, aqui no pasaba nada: la estrella a punto de elegirse se
+       quedaba en el gris del borde. Un tono por debajo del relleno, para que «voy a pulsar aqui» se vea
+       como eso. */
     .rating__star--hovered {
-      color: var(--color-warning-400);
+      color: var(--color-warning-600);
     }
 
     .rating__value {

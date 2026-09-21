@@ -368,18 +368,34 @@ import {
         border-radius: var(--radius-full);
         transition: width var(--duration-300) var(--ease-out);
       }
+      /* «Saltar por ahora» y «Saltar este paso» siguen siendo la accion secundaria —de ahi el color
+         apagado—, pero un texto subrayado no tiene forma de nada: la ronda 19 pidio que todo lo pulsable
+         lo pareciera, y esto era lo ultimo de la app que se hacia el distraido. Pastilla con borde suave,
+         y el mismo hover que el resto de los contornos. */
       .onboarding__skip {
-        background: none;
-        border: none;
+        background: transparent;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-full);
         cursor: pointer;
         font-family: var(--font-sans);
         font-size: var(--text-xs);
         color: var(--text-tertiary);
-        text-decoration: underline;
-        padding: 0;
-        &:hover {
+        padding: var(--space-1) var(--space-3);
+        min-height: 32px;
+        transition: var(--transition-fast);
+        &:hover:not(:disabled) {
           color: var(--text-primary);
+          border-color: var(--border-strong);
+          background: var(--bg-tertiary);
         }
+      }
+
+      /* El del pie de paso es el boton que la gente va a buscar cuando se pierde: un pelin mas de caja
+         que el de la cabecera, sin subirse de color. */
+      .onboarding__skip--step {
+        font-size: var(--text-sm);
+        padding: var(--space-2) var(--space-4);
+        min-height: 40px;
       }
 
       .onboarding__step {

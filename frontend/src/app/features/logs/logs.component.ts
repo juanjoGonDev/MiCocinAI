@@ -1,10 +1,12 @@
 import { Component, inject, signal, OnInit, OnDestroy, AfterViewChecked, ElementRef, ViewChild, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { clientTimeZone, formatTimePrecise, timeZoneLabel } from '../../core/time';
 import { LogService, LogEntry, LogLevel, LogSource } from '../../core/services/log.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 
 interface FilterOption<T extends string> {
   value: T;
@@ -14,22 +16,36 @@ interface FilterOption<T extends string> {
 @Component({
   selector: 'app-logs',
   standalone: true,
-  imports: [CommonModule, FormsModule, ButtonComponent],
+  imports: [CommonModule, FormsModule, ButtonComponent, IconComponent],
   template: `
     <div class="logs-page">
       <!-- Toolbar -->
       <div class="logs-toolbar">
         <div class="logs-toolbar__title">
-          <h1>📋 Logs</h1>
+          <h1>
+            <app-icon name="description" [size]="18" [label]="null" />
+            Logs
+          </h1>
           <span
             class="logs-status"
             [class.logs-status--connected]="logService.connected()"
-            [class.logs-status--disconnected]="!logService.connected()"
+            [class.logs-status--retrying]="logService.streamStatus() === 'retrying'"
+            [class.logs-status--disconnected]="logService.streamStatus() === 'closed'"
+            data-test="logs-status"
           >
             <span class="logs-status__dot"></span>
-            {{ logService.connected() ? 'En vivo' : 'Desconectado' }}
+            {{ statusLabel() }}
           </span>
+          @if (logService.streamStatus() === 'closed') {
+            <button type="button" class="logs-reconnect" data-test="logs-reconnect" (click)="reconnect()">Reintentar la conexion</button>
+          }
           <span class="logs-count">{{ visibleCount() }} / {{ logService.logs().length }}</span>
+          <!-- Se ensena LA ZONA porque el server habla UTC: sin esta linea, dudar de si la hora
+               del log es la tuya o la del Raspberry es la pregunta obligada. -->
+          <span class="logs-timezone" data-test="logs-timezone" [attr.title]="'Zona detectada: ' + clientZone()">
+            <app-icon name="schedule" [size]="14" [label]="null" />
+            hora de {{ timeZoneName() }}
+          </span>
         </div>
 
         <div class="logs-toolbar__filters">
@@ -54,7 +70,8 @@ interface FilterOption<T extends string> {
             size="sm"
             (onClick)="logService.togglePause()"
           >
-            {{ logService.paused() ? '▶ Reanudar' : '⏸ Pausar' }}
+            <app-icon [name]="logService.paused() ? 'play_arrow' : 'pause'" [size]="16" [label]="null" />
+            {{ logService.paused() ? 'Reanudar' : 'Pausar' }}
           </app-button>
 
           <app-button
@@ -70,7 +87,8 @@ interface FilterOption<T extends string> {
             size="sm"
             (onClick)="copyVisible()"
           >
-            {{ hasSelection() ? '📋 Copiar seleccionado (' + selectedCount() + ')' : '📋 Copiar todo' }}
+            <app-icon name="content_copy" [size]="16" [label]="null" />
+            {{ hasSelection() ? 'Copiar seleccionado (' + selectedCount() + ')' : 'Copiar todo' }}
           </app-button>
 
           <app-button
@@ -79,7 +97,8 @@ interface FilterOption<T extends string> {
             size="sm"
             (onClick)="clearSelection()"
           >
-            ✕ Limpiar selección
+            <app-icon name="close" [size]="16" [label]="null" />
+            Limpiar selección
           </app-button>
 
           <app-button
@@ -87,7 +106,8 @@ interface FilterOption<T extends string> {
             size="sm"
             (onClick)="clearLogs()"
           >
-            🗑 Limpiar
+            <app-icon name="delete_sweep" [size]="16" [label]="null" />
+            Limpiar
           </app-button>
         </div>
       </div>
@@ -104,7 +124,7 @@ interface FilterOption<T extends string> {
             {{
               hasSelection()
                 ? selectedCount() + ' línea(s) seleccionadas · Ctrl/Cmd o Mayús + clic para ajustar'
-                : 'MiCocinAI — terminal'
+                : 'HogarIA — terminal'
             }}
           </div>
           <div class="terminal__spacer"></div>
@@ -113,13 +133,16 @@ interface FilterOption<T extends string> {
           <div
             *ngFor="let entry of filtered(); trackBy: trackByEntry; let i = index"
             class="terminal__line"
+            data-test="logs-line"
             [class]="'terminal__line--' + entry.level + ' terminal__line--source-' + entry.source"
             [class.terminal__line--selected]="isSelected(entry)"
             (mousedown)="onLineMouseDown($event)"
             (click)="onLineClick($event, entry, i)"
             title="Clic: seleccionar · Ctrl/Cmd: añadir o quitar · Mayús: seleccionar rango"
           >
-            <span class="terminal__time">{{ formatTime(entry.timestamp) }}</span>
+            <span class="terminal__time" [title]="formatTime(entry.timestamp) + ' · ' + timeZoneName()">{{
+              formatTime(entry.timestamp)
+            }}</span>
             <span class="terminal__source">{{ entry.source === 'server' ? '[SRV]' : '[CLI]' }}</span>
             <span class="terminal__level">{{ levelTag(entry.level) }}</span>
             <span class="terminal__msg">{{ entry.message }}</span>
@@ -132,7 +155,21 @@ interface FilterOption<T extends string> {
       </div>
     </div>
   `,
-  styles: [`
+  styles: [`  /*
+     * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
+     *
+     * Todo lo que se pulsa avisa antes de que se pulse. Va aqui arriba, junto, en lugar de repartido por
+     * las reglas de cada control: asi la proxima clase que se anada se compara con esta lista, y el
+     * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
+     * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
+     */
+    .logs-reconnect:hover:not(:disabled) {
+      background: var(--primary-subtle);
+      border-color: var(--primary);
+      color: var(--primary-dark);
+    }
+  
+
     .logs-page {
       padding: var(--space-4);
       display: flex;
@@ -177,6 +214,29 @@ interface FilterOption<T extends string> {
       align-items: center;
     }
 
+    /* Tres estados, no dos: «reintentando en 5 s» es accionable y «desconectado» a
+       secas era el que hacia abrir la terminal del contenedor. */
+    .logs-status--retrying .logs-status__dot {
+      background: var(--warning);
+      animation: logs-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes logs-pulse {
+      from {
+        opacity: 0.35;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+    .logs-reconnect {
+      border: 1px solid var(--border-default);
+      background: transparent;
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: var(--text-xs);
+      padding: var(--space-1) var(--space-2);
+      cursor: pointer;
+    }
     .logs-status {
       display: inline-flex;
       align-items: center;
@@ -207,6 +267,20 @@ interface FilterOption<T extends string> {
       50% { opacity: 0.5; }
     }
 
+    /* La zona detectada, a la vista: «la hora esta bien» se comprueba mirando, no preguntando. */
+    .logs-timezone {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: var(--text-xs);
+      color: var(--text-tertiary);
+      cursor: help;
+    }
+    .logs-toolbar__title h1 {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
     .logs-count {
       font-size: var(--text-xs);
       color: var(--text-secondary);
@@ -510,6 +584,22 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
     document.body.removeChild(textarea);
   }
 
+  /** 'En vivo' · 'Reintentando en 5 s' · 'Sin conexion (lo intentaba cada X s)'. */
+  statusLabel(): string {
+    const status = this.logService.streamStatus();
+    if (status === 'live') return 'En vivo';
+    if (status === 'connecting') return 'Conectando';
+    if (status === 'retrying') {
+      const ms = this.logService.retryIn();
+      return ms ? `Reintentando en ${Math.round(ms / 1000)} s` : 'Reintentando';
+    }
+    return 'Sin conexion';
+  }
+
+  reconnect(): void {
+    this.logService.connect();
+  }
+
   ngOnInit(): void {
     this.logService.connect();
   }
@@ -550,15 +640,19 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.clearSelection();
   }
 
+  /**
+   * La hora del log se formatea en la zona del dispositivo y se ve en el encabezado cual es:
+   * si no, contrastar el log del movil con el del server (que habla UTC) es un pasatiempo.
+   */
   formatTime(iso: string): string {
-    try {
-      const d = new Date(iso);
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
-      const ss = String(d.getSeconds()).padStart(2, '0');
-      const ms = String(d.getMilliseconds()).padStart(3, '0');
-      return `${hh}:${mm}:${ss}.${ms}`;
-    } catch { return iso; }
+    return formatTimePrecise(iso);
+  }
+
+  readonly timeZoneName = timeZoneLabel;
+
+  /** El nombre IANA completo, para el `title` de quien lo quiera exacto. */
+  clientZone(): string {
+    return clientTimeZone();
   }
 
   levelTag(level: string): string {

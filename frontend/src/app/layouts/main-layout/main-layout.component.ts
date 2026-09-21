@@ -1,33 +1,50 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
+import { ModulesService } from '../../core/services/modules.service';
+import { TasteProfileService } from '../../core/services/taste-profile.service';
 import { ToastComponent } from '../../shared/components/ui/toast/toast.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import type { IconName } from '../../shared/components/ui/icon/icon-paths';
+import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
 
 interface NavItem {
   path: string;
   labelKey: string;
-  icon: string;
+  /**
+   * Nombre del set de iconos (`assets/icons` / `icon-paths.ts`), nunca un emoji: los glifos
+   * del sistema salen distintos en cada SO y cada fabrica —en el movil de la captura el de la
+   * IA se veia como una cajita—.
+   */
+  icon: IconName;
 }
 
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, TranslatePipe, ConfirmDialogComponent],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, IconComponent, IconButtonComponent, TranslatePipe, ConfirmDialogComponent],
   template: `
     <div class="layout">
       <!-- Mobile Header -->
       <header class="header">
         <button type="button" class="header__menu" (click)="toggleSidebar()">
-          ☰
+          <app-icon [name]="isSidebarOpen() ? 'close' : 'menu'" [size]="24" [label]="isSidebarOpen() ? 'Cerrar el menú' : 'Abrir el menú'" />
         </button>
-        <span class="header__title">🍳 {{ 'app.name' | t }}</span>
+        <span class="header__title">
+          <app-icon name="home" [size]="20" [label]="null" />
+          <span class="header__title-text">{{ 'app.name' | t }}</span>
+        </span>
         <button type="button" class="header__profile" (click)="navigateToProfile()">
-          <app-avatar 
-            [name]="authService.userName()" 
+          <!-- La foto tambien aqui: era el unico avatar de la app que ignoraba la
+               URL del usuario, asi que en el movil se veia la inicial aunque la
+               persona tuviera foto en el sidebar. -->
+          <app-avatar
+            [name]="authService.userName()"
+            [src]="userAvatar()"
             size="sm"
           ></app-avatar>
         </button>
@@ -36,32 +53,52 @@ interface NavItem {
       <!-- Sidebar (Desktop) -->
       <aside class="sidebar" [class.sidebar--open]="isSidebarOpen()">
         <div class="sidebar__header">
-          <span class="sidebar__logo">🍳 {{ 'app.name' | t }}</span>
-          <button type="button" class="sidebar__close" (click)="closeSidebar()">✕</button>
+          <span class="sidebar__logo">
+            <app-icon name="home" [size]="20" [label]="null" />
+            <span>{{ 'app.name' | t }}</span>
+          </span>
+          <button type="button" class="sidebar__close" (click)="closeSidebar()">
+            <app-icon name="close" [size]="20" [label]="'Cerrar el menú'" />
+          </button>
         </div>
         
         <nav class="sidebar__nav">
           <a
-            *ngFor="let item of navItems"
+            *ngFor="let item of visibleNavItems()"
             [routerLink]="item.path"
             routerLinkActive="sidebar__item--active"
             class="sidebar__item"
             (click)="closeSidebar()"
           >
-            <span class="sidebar__icon">{{ item.icon }}</span>
+            <app-icon class="sidebar__icon" [name]="item.icon" [size]="20" [label]="null" />
             <span class="sidebar__label">{{ item.labelKey | t }}</span>
           </a>
         </nav>
 
         <div class="sidebar__footer">
           <a routerLink="/settings" class="sidebar__item" (click)="closeSidebar()">
-            <span class="sidebar__icon">⚙️</span>
+            <app-icon class="sidebar__icon" name="settings" [size]="20" [label]="null" />
             <span class="sidebar__label">{{ 'nav.settings' | t }}</span>
           </a>
-          <button type="button" class="sidebar__item sidebar__item--logout" (click)="logout()">
-            <span class="sidebar__icon">🚪</span>
-            <span class="sidebar__label">{{ 'nav.logout' | t }}</span>
-          </button>
+
+          <!-- Abajo a la izquierda, la PERSONA y no una fila de «Cerrar sesion»: su foto (o su
+               inicial, si aun no la tiene) y su nombre, con el boton de salir aparte y pequeno.
+               Cerrar sesion era una fila mas del menu, del mismo tamano que «Inicio», y se
+               tocaba solo; y quien usa la app no veia con que cuenta estaba. -->
+          <div class="sidebar__account" data-test="account-chip">
+            <button type="button" class="sidebar__account-main" (click)="navigateToProfile()">
+              <app-avatar [name]="authService.userName()" [src]="userAvatar()" size="sm" />
+              <span class="sidebar__account-name">{{ authService.userName() || ('nav.guest' | t) }}</span>
+            </button>
+            <app-icon-button
+              icon="logout"
+              size="sm"
+              variant="ghost"
+              [label]="'nav.logout' | t"
+              data-test="logout"
+              (onClick)="logout()"
+            />
+          </div>
         </div>
       </aside>
 
@@ -80,12 +117,12 @@ interface NavItem {
       <!-- Mobile Bottom Navigation -->
       <nav class="bottom-nav">
         <a
-          *ngFor="let item of mobileNavItems"
+          *ngFor="let item of visibleMobileNavItems()"
           [routerLink]="item.path"
           routerLinkActive="bottom-nav__item--active"
           class="bottom-nav__item"
         >
-          <span class="bottom-nav__icon">{{ item.icon }}</span>
+          <app-icon class="bottom-nav__icon" [name]="item.icon" [size]="22" [label]="null" />
           <span class="bottom-nav__label">{{ item.labelKey | t }}</span>
         </a>
       </nav>
@@ -94,7 +131,26 @@ interface NavItem {
     <app-toast></app-toast>
     <app-confirm-dialog></app-confirm-dialog>
   `,
-  styles: [`
+  styles: [`  /*
+     * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
+     *
+     * Todo lo que se pulsa avisa antes de que se pulse. Va aqui arriba, junto, en lugar de repartido por
+     * las reglas de cada control: asi la proxima clase que se anada se compara con esta lista, y el
+     * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
+     * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
+     */
+    /* LaX de cerrar el cajon y la fila de la cuenta: las dos estan sobre fondo de panel, asi que su
+       respuesta es un circulo mas claro, no un color de accion. */
+    .sidebar__close:hover {
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+    }
+  
+    .sidebar__account-main:hover {
+      background: var(--bg-tertiary);
+    }
+  
+
     .layout {
       min-height: 100vh;
       background: var(--bg-primary);
@@ -141,10 +197,22 @@ interface NavItem {
     }
 
     .header__title {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      /* La marca del layout va en la cabecera de arriba: el nombre, y el icono de la casa. */
       font-family: var(--font-display);
       font-size: var(--text-lg);
       font-weight: var(--font-bold);
       color: var(--primary);
+      min-width: 0;
+    }
+
+    .header__title-text {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
 
     /* Sidebar */
@@ -180,6 +248,9 @@ interface NavItem {
     }
 
     .sidebar__logo {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
       font-family: var(--font-display);
       font-size: var(--text-xl);
       font-weight: var(--font-bold);
@@ -258,6 +329,53 @@ interface NavItem {
       border-top: 1px solid var(--border-default);
     }
 
+    /* El chip de cuenta: la persona a la izquierda, y el cerrar sesion pequeno a su lado. */
+    .sidebar__account {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      margin-top: var(--space-2);
+      padding: var(--space-1) var(--space-2);
+      border-radius: var(--radius-lg);
+      transition: var(--transition-fast);
+
+      &:hover {
+        background: var(--bg-tertiary);
+      }
+    }
+
+    .sidebar__account-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: 0;
+      border: none;
+      background: none;
+      font: inherit;
+      color: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .sidebar__account-name {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: var(--text-sm);
+      font-weight: var(--font-medium);
+      color: var(--text-primary);
+    }
+
+    /* En el drawer del movil el nombre no cabe y no hace falta: el avatar ya es la persona. */
+    @media (max-width: 1023px) {
+      .sidebar__account-name {
+        display: none;
+      }
+    }
+
     /* Sidebar Overlay */
     .sidebar-overlay {
       position: fixed;
@@ -332,27 +450,52 @@ interface NavItem {
     }
   `]
 })
-export class MainLayoutComponent {
+export class MainLayoutComponent implements OnInit {
   authService = inject(AuthService);
+  private readonly router = inject(Router);
+  private readonly tasteService = inject(TasteProfileService);
+  private readonly modules = inject(ModulesService);
   isSidebarOpen = signal(false);
 
+  ngOnInit(): void {
+    // Gustos/alergias/objetivo se leen en varias vistas (planificador semanal,
+    // Preferencias): se cargan al montar el layout para que estén listos al abrir
+    // cualquiera de ellas, sin esperas ni dobles peticiones.
+    this.tasteService.ensureLoaded();
+  }
+
   navItems: NavItem[] = [
-    { path: '/dashboard', labelKey: 'nav.dashboard', icon: '🏠' },
-    { path: '/pantry', labelKey: 'nav.pantry', icon: '📦' },
-    { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
-    { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
-    { path: '/household', labelKey: 'nav.household', icon: '👨‍👩‍👧‍👦' },
-    { path: '/ai-config', labelKey: 'nav.ai-config', icon: '🤖' },
-    { path: '/logs', labelKey: 'nav.logs', icon: '📋' }
+    { path: '/dashboard', labelKey: 'nav.dashboard', icon: 'home' },
+    { path: '/pantry', labelKey: 'nav.pantry', icon: 'inventory_2' },
+    { path: '/recipes', labelKey: 'nav.recipes', icon: 'menu_book' },
+    { path: '/calendar', labelKey: 'nav.calendar', icon: 'calendar_today' },
+    { path: '/shopping', labelKey: 'nav.shopping', icon: 'shopping_cart' },
+    { path: '/household', labelKey: 'nav.household', icon: 'group' },
+    { path: '/preferences', labelKey: 'nav.preferences', icon: 'person' },
+    { path: '/ai-config', labelKey: 'nav.ai-config', icon: 'smart_toy' },
+    { path: '/logs', labelKey: 'nav.logs', icon: 'description' }
   ];
 
   mobileNavItems: NavItem[] = [
-    { path: '/dashboard', labelKey: 'nav.dashboard', icon: '🏠' },
-    { path: '/pantry', labelKey: 'nav.pantry', icon: '📦' },
-    { path: '/recipes', labelKey: 'nav.recipes', icon: '📖' },
-    { path: '/calendar', labelKey: 'nav.calendar', icon: '📅' },
-    { path: '/settings', labelKey: 'nav.settings', icon: '⚙️' }
+    { path: '/dashboard', labelKey: 'nav.dashboard', icon: 'home' },
+    { path: '/pantry', labelKey: 'nav.pantry', icon: 'inventory_2' },
+    { path: '/recipes', labelKey: 'nav.recipes', icon: 'menu_book' },
+    { path: '/calendar', labelKey: 'nav.calendar', icon: 'calendar_today' },
+    { path: '/shopping', labelKey: 'nav.shopping', icon: 'shopping_cart' },
+    { path: '/settings', labelKey: 'nav.settings', icon: 'settings' }
   ];
+
+  /** La foto de la persona, si la tiene; si no, `app-avatar` saca la inicial del nombre. */
+  readonly userAvatar = computed(() => this.authService.currentUser()?.avatar || undefined);
+
+  /**
+   * La navegacion deriva de los modulos: al activar o apagar uno en
+   * Configuracion se repinta sola, sin recargar la pagina.
+   */
+  readonly visibleNavItems = computed(() => this.navItems.filter((item) => this.modules.isPathVisible(item.path)));
+  readonly visibleMobileNavItems = computed(() =>
+    this.mobileNavItems.filter((item) => this.modules.isPathVisible(item.path))
+  );
 
   toggleSidebar(): void {
     this.isSidebarOpen.update(v => !v);
@@ -363,7 +506,10 @@ export class MainLayoutComponent {
   }
 
   navigateToProfile(): void {
-    // Navigate to profile
+    // El avatar habla de la persona, y desde la ronda 13 tiene pagina propia: /account (nombre,
+    // foto, contrasena). Preferencias es del comensal —gustos, alergias, objetivo— y Configuracion
+    // de la app (tema, idioma, modulos): tres preguntas distintas, tres sitios.
+    this.router.navigate(['/account']);
   }
 
   logout(): void {

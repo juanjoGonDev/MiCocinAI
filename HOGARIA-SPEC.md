@@ -2098,64 +2098,90 @@ something needs either a button or a sentence, and here it had a sentence that u
 
 ### A. «En blanco» is a pixel, not a meaning
 
-- [ ] `En blanco: 09:00` becomes `Por defecto: 09:00` in both places that show it (the tour's hours step
+- [x] `En blanco: 09:00` becomes `Por defecto: 09:00` in both places that show it (the tour's hours step
       and the Preferences tab). The sentence under the fields gets rewritten for the same reason: leaving
       a box empty here does not mean «this house has no lunch time», it means «use the one the app
       ships», and the copy has to say the consequence, not the colour of the input.
-- [ ] Where empty really does mean *nothing* — the hour of a single meal in the meal dialog, which round
+      Hecho: Sobrecumplido: la frase ya no existe en ninguna de las dos pantallas. El control hace lo que la
+      frase explicaba (un boton «Por defecto» por fila tocada), y la cadena que quedaba se la llevo
+      `app-meal-hours`.
+- [x] Where empty really does mean *nothing* — the hour of a single meal in the meal dialog, which round
       14 made clearable — the control and its copy say «quitar la hora». «En blanco» is not used for
       either case anywhere in the UI.
-- [ ] `texto-sin-en-blanco`, rule 10 in `scripts/check-ui.mjs`: no user-visible string in the frontend
+      Hecho: El dialog de la comida habla de «sin hora» y esa es la otra acepcion: no hay valor. Cero cadenas
+      «en blanco» visibles en `frontend/src` (lo vigila la regla 10).
+- [x] `texto-sin-en-blanco`, rule 10 in `scripts/check-ui.mjs`: no user-visible string in the frontend
       says «en blanco». Comments keep the phrase (a developer may talk about the canvas; a user is being
       told about a value), so the rule reads code lines and skips comment lines. It is written before the
       fix, and it fails on exactly the three strings this round is about.
-- [ ] `DESIGN-SYSTEM.md` gets the two words and when they are allowed, so the next empty-state copy is
+      Hecho: Escrita, con la maquina de estados que se salta comentarios, y con los `.spec.ts` exentos: un
+      test puede escribir la palabra para prohibirla.
+- [x] `DESIGN-SYSTEM.md` gets the two words and when they are allowed, so the next empty-state copy is
       not a coin flip: *vacío / sin valor* for «no value», *por defecto* for «the value the app ships».
+      Hecho: Dos subapartados: «Estados de interaccion» (tabla hover/focus/disabled) y «Vaciar un campo no es
+      dejarlo en blanco».
 
 ### B. Everything you can press looks pressable
 
-- [ ] Global baseline in `styles.scss`: `button { border: none; background: none }` is a *reset*, and it
+- [x] Global baseline in `styles.scss`: `button { border: none; background: none }` is a *reset*, and it
       was also the whole story for any button that did not opt into a component skin — the origin of «esto
       no parece un botón». From now on: a bare `<button>` (no class of its own) gets the design-system
       skin (border, background, padding, radius, hover, focus ring); every `label:has(input)` is
       `cursor: pointer` (the app's checkbox-as-card pattern was a clickable rectangle with an arrow);
       `:disabled` answers `not-allowed`, which explains itself, and every interactive element shares one
       `:focus-visible` ring instead of eight half-remembered ones.
-- [ ] `boton-sin-afecto`, rule 11: any `<button>`/`<a>` in a component template that carries its own class
+      Hecho: Piel para `button:not([class])`, `label:has(input){cursor:pointer}` y
+      `button:disabled{not-allowed}`. La opacidad del deshabilitado sigue siendo de cada componente: dos
+      opacidades multiplicadas desaparecen.
+- [x] `boton-sin-afecto`, rule 11: any `<button>`/`<a>` in a component template that carries its own class
       must have a hover or focus state in that component's styles — BEM modifiers count through their
       base (`.cal-btn--ghost` is covered by `.cal-btn:hover`), and any element that is clickable without
       being a button or a link (`label`, `div`, `tr`, `td` with `(click)`) must set `cursor: pointer`.
       Exemptions live in `LEGACY['boton-sin-afecto']` with a reason, same as the delete rule, and the
       list can only shrink.
-- [ ] The 41 classes the rule found on its first run are fixed in this round, not forgiven: 20 in the
+      Hecho: Escrita: solo `<button>` (los `a` heredan del global), familia BEM resuelta por la base, bloques
+      de `styles:` contados por llaves, un aviso por fichero+clase, mas el `cursor:pointer` de los
+      `label|div|span|li|tr|td` con `(click)`. Y un guard que exige que el baseline global siga ahi: si
+      alguien lo borra, la regla no se calla, protesta.
+- [x] The 41 classes the rule found on its first run are fixed in this round, not forgiven: 20 in the
       shopping-line sheet, 9 in the shopping lists, and the rest in the calendar grid, the layout
       (sidebar, header), toast, password toggle, invite page, account/preferences inline links, recipe
       favourite, pantry appliance delete, settings reset and the log reconnect. They are grouped by
       screen into shared selector lists (`.detail__ghost:hover, .detail__more:hover { … }`) so the fix
       costs a few hundred bytes per file and not one block per class.
-- [ ] The controls this program actually shipped last round get real treatment, not just a rule: the
+      Hecho: 36 arregladas en esta ronda (las otras 5 eran `<a>` o ya tenian su hover). Sin excepciones en
+      `LEGACY`: perdonarlas era volver a tenerlas en seis meses.
+- [x] The controls this program actually shipped last round get real treatment, not just a rule: the
       invited faces (`.cal-person`) have a border, a hover background and a pressed state that is not
       only a colour swap; «Saltar este paso» and «Saltar por ahora» in the tour stop being underlined
       text floating next to real buttons; and the links inside dialogs (`cal-link`,
       `preferences__inline-link`, `account__inline-link`, `invite-card__link`) keep looking like links —
       underline plus colour, no fake border — but react when hovered.
-- [ ] `app-icon-button`/`app-button` are not touched: they already own their hover and focus, which is
+      Hecho: El campo de hora tiene la receta de `app-input` (borde, fondo, anillo) y los `onboarding__skip`
+      han dejado de ser texto subrayado: pastilla con borde y hover.
+- [x] `app-icon-button`/`app-button` are not touched: they already own their hover and focus, which is
       why the rule only inspects raw `class=` on `button`/`a` elements.
+      Hecho: Intactos.
 
 ### C. The hours row, once, as a component
 
-- [ ] `app-meal-hours` (`shared/components/ui/meal-hours/`): the four rows the tour and Preferences were
+- [x] `app-meal-hours` (`shared/components/ui/meal-hours/`): the four rows the tour and Preferences were
       about to copy-paste, with `[(times)]`, an `idPrefix` so `#ob-meal-dinner` and `#meal-dinner` stay
       the ids the e2e specs already use, one `Por defecto` button per row, and the hint text next to the
       label instead of under it. Two rows of hand-copied CSS is how one of them ends up without a hover
       state, so there is one.
-- [ ] The reset is an action, not a sentence: «Por defecto» writes the shipped hour into the form (which
+      Hecho: Creado, con `[(times)]`-es-mutar-en-sitio, `idPrefix` (los `#meal-dinner`/`#ob-meal-dinner` que
+      buscan los e2e) y `dataTest`. Ocho tests en el puente; `MEAL_TIME_DEFAULTS` y `MealTimes` se han ido al
+      modelo compartido porque un componente del design system no importa de `core/`.
+- [x] The reset is an action, not a sentence: «Por defecto» writes the shipped hour into the form (which
       is the same thing as emptying it, but visible and reversible before saving), and it does not mark
       the row as changed when the value already *is* the default — the dirty state and `mealTimesPatch`
       stay the single source of what gets sent.
-- [ ] The hour input has a minimum width and height of its own. A bare `type="time"` shrinks to the width
+      Hecho: El boton existe solo en la fila tocada; en la que vale lo de siempre no hay nada que deshacer.
+- [x] The hour input has a minimum width and height of its own. A bare `type="time"` shrinks to the width
       of «20:3» on narrow columns, and its native spinner is 12 px on desktop: it is a field, it gets
       `--control-height`.
+      Hecho: `min-width: 8.5rem` y `min-height: 40px` en el input, con su motivo escrito al lado.
 
 ### D. The `var(--token)` that does not exist (found while writing rule 11)
 
@@ -2165,27 +2191,43 @@ were styled with `var(--surface)`, `var(--border)`, `var(--text)`, and **no such
 an unknown custom property: the declaration is dropped, and the field arrives with no border, no
 background and inherited colour. Which is exactly the screen the user is complaining about.
 
-- [ ] Rule 12, `token-inexistente`: every `var(--x)` used anywhere in `frontend/src` must be defined in
+- [x] Rule 12, `token-inexistente`: every `var(--x)` used anywhere in `frontend/src` must be defined in
       some file of the frontend, or be a property that the same code sets at runtime —
       `[style.--hour-px]` counts, because that is how the grid passes geometry down. The three runtime
       ones (`--event-color`, `--hour-px`, `--swipe-x`) are the proof the rule can tell the difference.
-- [ ] The nine that were missing get fixed to their real token: the four of the hours inputs (this
+      Hecho: Escrita, con exencion para los que se definen en tiempo de ejecucion (`[style.--x]`,
+      `style="--x:"`, `setProperty`) y con sugerencia por familia del nombre. Ha pillado cuatro tokens mios y
+      cinco que venian de antes.
+- [x] The nine that were missing get fixed to their real token: the four of the hours inputs (this
       program's own bug, two files) and five pre-existing (`--color-warning` in the log viewer,
       `--duration-fast` in settings and the home-profile picker, `--primary-alpha` in the same picker,
       `--primary-soft` in `app-picker`, `--color-warning-400` in `app-rating`). Each is a style that was
       silently not being applied, not a cosmetic preference.
-- [ ] The tokens the app *should* have and does not: `--surface` and friends were invented because the
+      Hecho: Nueve arreglados: cuatro del campo de hora (borrados con el bloque duplicado), `--color-warning`
+      en logs (que tenia un fallback tapandolo), dos `--duration-fast`, `--primary-alpha`, `--primary-soft`,
+      `--color-warning-400`.
+- [x] The tokens the app *should* have and does not: `--surface` and friends were invented because the
       names in use (`--bg-secondary`, `--text-primary`) do not say which is on top of which. Renaming is
       not this round (160 definitions, every screen); the rule is what stops the pile growing.
+      Hecho: Sin renombrar nada, como decia el punto: 160 definiciones y todas las pantallas. La regla 12 es
+      lo que evita que la pila crezca.
 
 ### Gates
 
-- [ ] `check-ui` with 12 rules and no findings, `tsc` (server, app, spec), `typecheck:e2e`, server
+- [x] `check-ui` with 12 rules and no findings, `tsc` (server, app, spec), `typecheck:e2e`, server
       vitest, the bridge suite (including any pure module this round extracts), production build with no
       new budget warning beyond the two pre-existing ones.
-- [ ] The e2e written last round is re-read against the new ids (nothing renamed), and no claim is made
+      Hecho: Medido: «153 ficheros, 12 reglas, sin incidencias». `tsc` de app y spec limpios; 559/559 del
+      server y 153/153 del puente (16 ficheros); `typecheck:e2e` limpio; build de produccion OK — las dos
+      unicas warnings de budget son las dos de siempre (`shopping-list-detail` 19,52 kB y `calendar` 13,63 kB
+      sobre 10), que han subido 1,7 kB con los estados de interaccion. No es una nueva.
+- [x] The e2e written last round is re-read against the new ids (nothing renamed), and no claim is made
       about how any of this looks: still no Chromium here. Hover, focus ring and the width of a time
       input are the preview's judgement, and that is said in the PR instead of measured.
+      Hecho: Revisado contra los ids y ampliado: el tour y Preferencias ahora comprueban que «Por defecto»
+      aparece, actua y desaparece. Nada de esto se ha ejecutado: sigue sin haber Chromium, asi que como se ve
+      (el hover, el anillo, el ancho del campo) es cosa de la preview, y se dice en el PR en vez de medirse
+      aqui.
 
 ### Coming soon, deliberately not here
 

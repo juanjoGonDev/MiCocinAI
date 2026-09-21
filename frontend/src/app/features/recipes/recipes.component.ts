@@ -321,7 +321,22 @@ import { AIRecipeResponse } from '../../shared/models/ai-config.model';
       </app-modal>
     </div>
   `,
-  styles: [`
+  styles: [`  /*
+     * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
+     *
+     * Todo lo que se pulsa avisa antes de que se pulse. Va aqui arriba, junto, en lugar de repartido por
+     * las reglas de cada control: asi la proxima clase que se anada se compara con esta lista, y el
+     * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
+     * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
+     */
+    /* El corazon de la tarjeta esta encima de una tarjeta que ya es un enlace: su hover tiene que marcar
+       el icono, no la tarjeta, y por eso se pinta el circulo en lugar de cambiar el color del trazo. */
+    .recipe-card__favorite:hover {
+      background: var(--error-subtle);
+      transform: scale(1.1);
+    }
+  
+
     .recipes {
       padding: var(--space-4);
       max-width: 1000px;

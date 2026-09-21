@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   RecipeApp - Global Styles
+   HogarIA - Global Styles
    Sistema de Diseño Minimalista con Paleta Cálida
    ═══════════════════════════════════════════════════════════════════ */
 
@@ -266,11 +266,52 @@ img {
   display: block;
 }
 
+/*
+ * El reset de los botones, y las tres cosas que le faltaban.
+ *
+ * `border: none; background: none` es lo que deja que `app-button` se pinte solo. El efecto secundario
+ * era menos visible: cualquier `<button>` con una clase cuyo CSS no dijera nada de fondo no se parecia a
+ * nada —texto suelto, con puntero—, y la sensacion de «esto se puede pulsar» se iba con ella. Por eso el
+ * boton *sin clase propia* recibe aqui un skin minimo (el de los controles del design system, en
+ * miniatura), y por eso `check-ui` exige un estado `:hover` a todo boton que si traiga clase: que algo
+ * responda no puede depender de que alguien se acuerde de escribirlo.
+ */
 button {
   font-family: inherit;
   cursor: pointer;
   border: none;
   background: none;
+}
+
+button:not([class]) {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  line-height: var(--leading-tight);
+  transition: var(--transition-fast);
+
+  &:hover {
+    border-color: var(--primary);
+    background: var(--primary-subtle);
+    color: var(--primary-dark);
+  }
+}
+
+/* Un boton apagado no es un boton: el cursor lo dice, y `not-allowed` explica por que (`default`, no).
+   El oscurecido lo sigue poniendo cada componente —opacidad global y propia se multiplicarian. */
+button:disabled,
+[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+/* Las tarjetas-check de la app (utensilios, «todo el dia», filtros) son un `label` con su input dentro:
+   sin esto el puntero dice «no toques» justo encima de lo unico que se puede tocar. */
+label:has(input) {
+  cursor: pointer;
 }
 
 input,

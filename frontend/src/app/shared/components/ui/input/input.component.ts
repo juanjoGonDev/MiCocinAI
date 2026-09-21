@@ -57,7 +57,23 @@ export type InputSize = 'sm' | 'md' | 'lg';
       <span *ngIf="helper && !error" class="input__helper">{{ helper }}</span>
     </div>
   `,
-  styles: [`
+  styles: [`  /*
+     * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
+     *
+     * Todo lo que se pulsa avisa antes de que se pulse. Va aqui arriba, junto, en lugar de repartido por
+     * las reglas de cada control: asi la proxima clase que se anada se compara con esta lista, y el
+     * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
+     * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
+     */
+    /* El ojito que ensena la contrasena: es un boton diminuto pegado al borde del campo y hoy no dice
+       nada. Un anillo de foco aparte no hace falta —el del campo ya lo cubre—, pero el puntero y el
+       tintado si, que es lo que separa «icono decorativo» de «esto se pulsa». */
+    .input__toggle:hover {
+      color: var(--primary);
+      background: var(--primary-subtle);
+    }
+  
+
     .input-group {
       display: flex;
       flex-direction: column;
