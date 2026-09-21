@@ -2595,6 +2595,15 @@ ven desde la pantalla.
       el dia de al lado en pie, y una suelta normal no repite ni lleva glifo. Playwright no corre aqui (no hay
       Chromium); el job corre en CI.
 
+### Un arreglo que la prueba en vivo se nego a callar
+
+- [x] `PATCH /auth/taste` con `mealPlan: null` (y el mismo caso en `mealTimes`) no borraba nada: la rama era
+      `if (patch.mealPlan)` y `null` es falsy, asi que el tri-estado prometido se quedaba en dos estados.
+      Verificado contra el servidor en marcha con la BD real, escrito el test primero (rojo: 2 pruebas) y
+      arreglado con la rama `=== null` antes del `if` ✓ 592 pruebas en el server. El flujo de la pantalla no
+      estaba roto (`mealPlanPatch()` nunca manda un `null` de nivel superior: manda las comidas cambiadas, y
+      `null` por clave ya borraba esa clave), pero la garantia escrita en el contrato mentia.
+
 ### Cierre del i18n (lo pedido en la ronda 20: «usa siempre el sistema de traducciones»)
 
 - [x] Regla 18 del gate: todo literal con pinta de frase que acabe en un sink (`toast.*`, `*Error.set`,

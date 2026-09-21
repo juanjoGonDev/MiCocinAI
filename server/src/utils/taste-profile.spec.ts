@@ -289,6 +289,28 @@ describe('horarios de las comidas', () => {
     expect(readPreferencesColumn(user).mealPlan).toEqual({ dinner: false });
   });
 
+  it('`mealPlan: null` quita el permiso entero, que es volver a dejarlo todo en manos de la IA', () => {
+    // El tri-estado prometido: clave ausente no se toca, booleano escribe, `null` BORRA. Sin esto, quien
+    // llama por API con `mealPlan: null` se queda con los bloqueos anteriores para siempre.
+    const user = createUser();
+    taste.saveTasteProfile(db, user, { mealPlan: { snack: false, dinner: false } });
+
+    const response = taste.saveTasteProfile(db, user, { mealPlan: null });
+
+    expect(response.mealPlan).toEqual(taste.MEAL_PLAN_DEFAULTS);
+    expect(readPreferencesColumn(user).mealPlan).toBeUndefined();
+  });
+
+  it('lo mismo con las horas: `mealTimes: null` limpia la clave, no borra el desayuno a medias', () => {
+    const user = createUser();
+    taste.saveTasteProfile(db, user, { mealTimes: { lunch: '13:15' } });
+
+    const response = taste.saveTasteProfile(db, user, { mealTimes: null });
+
+    expect(response.mealTimes).toEqual(taste.MEAL_TIME_DEFAULTS);
+    expect(readPreferencesColumn(user).mealTimes).toBeUndefined();
+  });
+
   it('un permiso imposible en el JSON no rompe la lectura', () => {
     const user = createUser(JSON.stringify({ mealPlan: { lunch: 'a comer', dinner: 0, snack: false } }));
 

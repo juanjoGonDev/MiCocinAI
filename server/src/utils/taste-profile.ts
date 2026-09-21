@@ -368,7 +368,12 @@ export function saveTasteProfile(
     };
   }
 
-  if (patch.mealTimes) {
+  if (patch.mealTimes === null) {
+    // `null` es «quita la preferencia», y hay que decirlo antes del `if (patch.mealTimes)`: null es falsy y
+    // sin esta rama el tri-estado se quedaba en dos (ausente no toca, booleano escribe, y el borrado no
+    // existia). Se borra la clave, no se rellena de defectos: la lectura ya los pone.
+    delete prefs.mealTimes;
+  } else if (patch.mealTimes) {
     // Clave que no viene = clave que no se toca (un «solo he cambiado la cena» no puede borrar el
     // desayuno). Clave que viene vacia o null = se ELIMINA, que es lo que hace que la proxima lectura
     // conteste el defecto: «quitar mi horario raro» no necesita boton de restablecer.
@@ -384,7 +389,9 @@ export function saveTasteProfile(
     prefs.mealTimes = next;
   }
 
-  if (patch.mealPlan) {
+  if (patch.mealPlan === null) {
+    delete prefs.mealPlan; // lo mismo que arriba: «devolverlo a que la IA lo planifique todo»
+  } else if (patch.mealPlan) {
     // Tres estados, los mismos de arriba: clave ausente no se toca, `null` vuelve al fabrica (que para un
     // permiso es «dejarla planificar»), y un booleano escribe. `''` no es un estado valido aqui: un
     // checkbox no se vacia, se marca o se desmarca.
