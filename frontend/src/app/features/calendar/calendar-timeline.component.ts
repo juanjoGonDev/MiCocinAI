@@ -1,3 +1,4 @@
+import { dateLocale } from '../../core/time';
 import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { I18nService } from '../../core/services/i18n.service';
@@ -571,7 +572,7 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   }
 
   protected dayLabel(day: CalendarDayView): string {
-    return new Intl.DateTimeFormat('es-ES', { weekday: 'short' })
+    return new Intl.DateTimeFormat(dateLocale(), { weekday: 'short' })
       .format(day.date)
       .replace('.', '')
       .toUpperCase();
@@ -592,10 +593,20 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
     // `userId` es quien escribio el evento; `editable` ya lo dice el servidor, y es lo que separa
     // «esto es mio, se edita» de «esto es de otra persona, me puedo salir».
     if (event.editable === false && event.userId) {
-      faces.push({ id: event.userId, name: event.authorName ?? 'Alguien', avatar: event.authorAvatar, who: `Lo apunto ${event.authorName ?? 'otra persona'}` });
+      faces.push({
+        id: event.userId,
+        name: event.authorName ?? this.i18n.t('calendar.alguien'),
+        avatar: event.authorAvatar,
+        who: this.i18n.t('calendar.lo_apunto_de', { name: event.authorName ?? this.i18n.t('calendar.alguien') })
+      });
     }
     for (const person of event.attendees ?? []) {
-      faces.push({ id: person.id, name: person.name, avatar: person.avatar, who: `Invitado: ${person.name}` });
+      faces.push({
+        id: person.id,
+        name: person.name,
+        avatar: person.avatar,
+        who: this.i18n.t('calendar.invitado_de', { name: person.name })
+      });
     }
     return faces;
   }
@@ -617,7 +628,7 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   }
 
   protected fmt(value: number): string {
-    return new Intl.NumberFormat('es-ES').format(Math.round(value ?? 0));
+    return new Intl.NumberFormat(dateLocale()).format(Math.round(value ?? 0));
   }
 
   protected hourLabel(hour: number): string {

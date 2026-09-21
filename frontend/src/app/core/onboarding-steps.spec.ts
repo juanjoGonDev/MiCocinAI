@@ -1,6 +1,6 @@
 import {
   ONBOARDING_STEPS,
-  STEP_TITLES,
+  STEP_TITLE_KEYS,
   isLastIndex,
   nextIndex,
   stepLabel,
@@ -26,32 +26,33 @@ describe('la lista de pasos', () => {
     // Si alguien anade un id a `ONBOARDING_STEPS` y se olvida del mapa, la cabecera cae al fallback y
     // el usuario ve «Paso» a secas: esto es lo que lo pilla.
     for (const step of ONBOARDING_STEPS) {
-      expect(stepLabel(ONBOARDING_STEPS.indexOf(step))).toBe(
-        `Paso ${ONBOARDING_STEPS.indexOf(step) + 1} de ${ONBOARDING_STEPS.length} · ${STEP_TITLES[step]}`
-      );
+      expect(stepLabel(ONBOARDING_STEPS.indexOf(step)).tituloKey).toBe(STEP_TITLE_KEYS[step]);
+      expect(STEP_TITLE_KEYS[step]).toContain('onboarding.'); // clave, no prosa: lo traduce la pantalla
     }
   });
 });
 
 describe('stepLabel', () => {
   it('numera desde uno y cuenta la lista entera', () => {
-    expect(stepLabel(0)).toBe('Paso 1 de 6 · Perfil');
-    expect(stepLabel(4)).toBe('Paso 5 de 6 · Horarios');
+    expect(stepLabel(0)).toEqual({ numero: 1, total: 6, tituloKey: 'onboarding.paso_perfil', skipped: false });
+    expect(stepLabel(4)).toEqual({ numero: 5, total: 6, tituloKey: 'onboarding.paso_horarios', skipped: false });
   });
 
   it('el numero se deriva de la lista: anadir un paso no obliga a tocar la plantilla', () => {
     const short = ['goal', 'meals', 'kitchen'] as const;
 
-    expect(stepLabel(1, short)).toBe('Paso 2 de 3 · Horarios');
+    expect(stepLabel(1, short)).toEqual({ numero: 2, total: 3, tituloKey: 'onboarding.paso_horarios', skipped: false });
   });
 
   it('un indice fuera de rango no pinta «Paso 7 de 6» ni «undefined»', () => {
-    expect(stepLabel(99)).toBe('Paso 6 de 6 · Cocina');
-    expect(stepLabel(-3)).toBe('Paso 1 de 6 · Perfil');
+    expect(stepLabel(99).numero).toBe(6);
+    expect(stepLabel(99).tituloKey).toBe('onboarding.paso_cocina');
+    expect(stepLabel(-3).numero).toBe(1);
+    expect(stepLabel(-3).tituloKey).toBe('onboarding.paso_perfil');
   });
 
   it('un paso saltado lo dice en la cabecera', () => {
-    expect(stepLabel(1, ONBOARDING_STEPS, true)).toBe('Paso 2 de 6 · Alergias · sin responder');
+    expect(stepLabel(1, ONBOARDING_STEPS, true).skipped).toBe(true);
   });
 });
 

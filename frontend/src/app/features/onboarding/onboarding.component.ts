@@ -1,3 +1,4 @@
+import type { TranslationKey } from '../../core/i18n';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -32,6 +33,7 @@ import {
   stepLabel,
   tourStatus
 } from '../../core/onboarding-steps';
+import { I18nService } from '../../core/services/i18n.service';
 
 /**
  * Configuración inicial, nada más registrarse: alergias, gustos, objetivo y
@@ -543,6 +545,7 @@ import {
   ]
 })
 export class OnboardingComponent implements OnInit {
+  private readonly i18n = inject(I18nService);
   private readonly tasteService = inject(TasteProfileService);
   private readonly pantryService = inject(PantryService);
   private readonly toastService = inject(ToastService);
@@ -572,9 +575,22 @@ export class OnboardingComponent implements OnInit {
   readonly goalOptions = GOAL_OPTIONS;
 
   /** «Paso 4 de 6 · Horarios · sin responder»: numero y titulo derivados de la misma lista. */
-  readonly stepLabel = computed(() =>
-    stepLabel(this.stepIndex(), this.steps, this.skippedSteps().has(this.steps[this.stepIndex()]))
-  );
+  readonly stepLabel = computed(() => {
+    const partes = stepLabel(
+      this.stepIndex(),
+      this.steps,
+      this.skippedSteps().has(this.steps[this.stepIndex()])
+    );
+    // El numero y el titulo los arma aqui, con el diccionario a mano; el modulo de pasos solo sabe de
+    // listas y claves, y asi la cabecera cambia de idioma con la app (HOGARIA-SPEC 12t-i18n).
+    return (
+      this.i18n.t('onboarding.paso_de', {
+        n: partes.numero,
+        total: partes.total,
+        titulo: this.i18n.t(partes.tituloKey)
+      }) + (partes.skipped ? this.i18n.t('onboarding.sin_responder') : '')
+    );
+  });
 
   readonly progress = computed(() => ((this.stepIndex() + 1) / this.steps.length) * 100);
   readonly isLastStep = computed(() => isLastIndex(this.stepIndex(), this.steps.length));
@@ -642,7 +658,7 @@ export class OnboardingComponent implements OnInit {
 
   toggleUtensil(utensil: Utensil): void {
     this.pantryService.updateUtensil(utensil.id, { available: !utensil.available }).subscribe({
-      error: () => this.toastService.error('Error', 'No se pudo guardar el utensilio')
+      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('onboarding.no_se_pudo_guardar'))
     });
   }
 
@@ -712,21 +728,20 @@ export class OnboardingComponent implements OnInit {
 
   finish(): void {
     const status = tourStatus([...this.skippedSteps()]);
+    // Las dos frases van en clave; `save` las traduce al pintarlas, que es donde vive `i18n` (12t-i18n).
     this.save(
       status,
-      status === 'done' ? 'Listo' : 'Guardado',
-      status === 'done'
-        ? 'Tu perfil y tus preferencias ya están: la IA lo tendrá en cuenta.'
-        : 'Sin problema: te lo preguntamos cuando quieras desde Preferencias.'
+      status === 'done' ? 'onboarding.listo' : 'onboarding.guardado',
+      status === 'done' ? 'onboarding.perfil_y_preferencias' : 'onboarding.te_lo_preguntamos'
     );
   }
 
   /** Se salta, pero lo que haya escrito se guarda igualmente. */
   skip(): void {
-    this.save('skipped', 'Guardado', 'Puedes completarlo cuando quieras en Preferencias.');
+    this.save('skipped', 'onboarding.guardado', 'onboarding.puedes_completarlo');
   }
 
-  private save(status: 'done' | 'skipped', title: string, body: string): void {
+  private save(status: 'done' | 'skipped', title: TranslationKey, body: TranslationKey): void {
     this.isSaving.set(true);
 
     this.tasteService
@@ -739,7 +754,7 @@ export class OnboardingComponent implements OnInit {
       },
       error: () => {
         this.isSaving.set(false);
-        this.toastService.error('Error', 'No se pudo guardar la configuración');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('ai_config.no_se_pudo_guardar'));
       }
     });
   }

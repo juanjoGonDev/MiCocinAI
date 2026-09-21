@@ -16,17 +16,21 @@ describe('avatar-image — el archivo antes de salir del dispositivo', () => {
 
   it('rechaza el SVG, el HEIC y lo que no es una imagen', () => {
     // SVG es texto con script dentro, y admitirlo aqui es meterlo en un `img`.
-    expect(avatarFileError({ type: 'image/svg+xml', size: 10 })).toContain('JPEG');
-    expect(avatarFileError({ type: 'image/heic', size: 10 })).toContain('JPEG');
-    expect(avatarFileError({ type: 'application/pdf', size: 10 })).toMatch(/JPEG|PNG|WebP/);
+    // Lo que se compara es la CLAVE: la frase la decide el diccionario, y un modulo puro no tiene idioma.
+    expect(avatarFileError({ type: 'image/svg+xml', size: 10 })?.clave).toBe('avatar_editor.puede_ser_jpeg');
+    expect(avatarFileError({ type: 'image/heic', size: 10 })?.clave).toBe('avatar_editor.puede_ser_jpeg');
+    expect(avatarFileError({ type: 'application/pdf', size: 10 })?.clave).toBe('avatar_editor.puede_ser_jpeg');
     expect(avatarFileError({ type: '', size: 10 })).not.toBeNull();
   });
 
-  it('el vacio y el demasiado grande se dicen con un mensaje accionable', () => {
-    expect(avatarFileError({ type: 'image/jpeg', size: 0 })).toContain('vacio');
+  it('el vacio y el demasiado grande se dicen con un aviso accionable', () => {
+    expect(avatarFileError({ type: 'image/jpeg', size: 0 })?.clave).toBe('avatar_editor.el_archivo_esta');
     const huge = avatarFileError({ type: 'image/jpeg', size: AVATAR_MAX_FILE_BYTES + 1 });
-    expect(huge).toContain('demasiado');
-    expect(huge).toContain('MB'); // un numero, no "413"
+    expect(huge?.clave).toBe('avatar_editor.la_foto_pesa');
+    // El tamano viaja como parametro: lo que se pinta es un numero, no «413».
+    expect(typeof huge?.params?.['n']).toBe('number'); // un numero, no «413»
+    // Y sigue siendo un `Error`, que es como entra por los `catch` de la carga y el recorte.
+    expect(huge).toBeInstanceOf(Error);
   });
 
   it('el recorte es un cuadrado por el centro, y nunca de tamano 0', () => {

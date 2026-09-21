@@ -8,6 +8,7 @@
  * día anterior y la comida se guardaba un día antes de donde se había pulsado.
  * En CI (UTC) el bug es invisible, por eso llegó tan lejos.
  */
+import { dateLocale } from '../../core/time';
 
 /** `YYYY-MM-DD` en hora local. */
 export function toISODate(date: Date): string {
@@ -87,13 +88,15 @@ export function diffInDays(a: Date, b: Date): number {
   return Math.round((startOfDay(a).getTime() - startOfDay(b).getTime()) / 86_400_000);
 }
 
-/* ─────────────────────────── Etiquetado en español ─────────────────────── */
+/* ────────────────────── Etiquetado en el idioma de la app ────────────────────── */
 /*
  * Intl en vez de listas propias: da «septiembre de 2026», «14–20 de sept» y
- * «martes, 16 de septiembre» con las reglas del idioma, sin maintainir arrays.
+ * «martes, 16 de septiembre» con las reglas del idioma, sin maintainir arrays. El idioma lo dice
+ * core/time.ts (12t-i18n), y entra en la clave de la cache: formateadores memorizados por opciones
+ * eran un motivo de mas para que cambiar de idioma no se notara hasta recargar.
  */
 const fmt = (opts: Intl.DateTimeFormatOptions) =>
-  memoize(`${JSON.stringify(opts)}`, () => new Intl.DateTimeFormat('es-ES', opts));
+  memoize(`${dateLocale()}|${JSON.stringify(opts)}`, () => new Intl.DateTimeFormat(dateLocale(), opts));
 
 const memo = new Map<string, Intl.DateTimeFormat>();
 function memoize(key: string, make: () => Intl.DateTimeFormat): Intl.DateTimeFormat {
@@ -125,7 +128,7 @@ export const labels = {
 /** 1450 -> «1.450»: separador de miles de `es-ES`. El pipe `number` de Angular
  * iría por el LOCALE_ID del módulo (en-US -> «1,450»), que no encaja con el
  * resto de etiquetas en español, así que se formatea aquí. */
-const numberFmt = new Intl.NumberFormat('es-ES');
+const numberFmt = new Intl.NumberFormat(dateLocale());
 export function formatNumber(value: number): string {
   return numberFmt.format(Math.round(value || 0));
 }

@@ -1,3 +1,5 @@
+import { dateLocale } from '../../core/time';
+import type { TranslationKey } from '../../core/i18n';
 /**
  * Lo que la cuenta puede decirse a sí misma sin preguntarle a nadie.
  *
@@ -47,16 +49,20 @@ export function formatBytes(bytes: number): string {
   return `${trim(kb / 1024)} MB`;
 }
 
-/** Una cifra decimal y coma, como el resto de la app en castellano. */
+/** Una cifra decimal con la coma o el punto del idioma de la app (HOGARIA-SPEC 12t-i18n). */
 function trim(value: number): string {
   const rounded = Math.round(value * 10) / 10;
-  return rounded.toFixed(1).replace(/\.0$/, '').replace('.', ',');
+  return rounded.toLocaleString(dateLocale(), { minimumFractionDigits: 0, maximumFractionDigits: 1 });
 }
 
-/** La frase de la cola: «nada pendiente» y «dos cosas esperando» se leen distinto. */
-export function pendingLabel(pending: number): string {
-  if (pending <= 0) return 'Nada pendiente de enviar';
-  return pending === 1 ? '1 escritura esperando la red' : `${pending} escrituras esperando la red`;
+/**
+ * La clave de la frase de la cola. «Nada pendiente», «una escritura» y «siete escrituras» se leen
+ * distinto, y elegir como suena es cosa del diccionario: escrita en castellano dentro de un modulo puro,
+ * esa frase se quedaba en español con la app en ingles.
+ */
+export function pendingLabelKey(pending: number): TranslationKey {
+  if (pending <= 0) return 'account.nada_pendiente_de';
+  return pending === 1 ? 'account.una_escritura_esperando' : 'account.n_escrituras_esperando';
 }
 
 /** El id de la cuenta, recortado por los dos lados: entero no cabe en una línea. */

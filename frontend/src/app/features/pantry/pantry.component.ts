@@ -26,6 +26,7 @@ import {
   UTENSIL_CATEGORY_LABELS
 } from '../../shared/models/pantry.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 type PantryTab = 'ingredients' | 'utensils';
 
@@ -305,7 +306,7 @@ const PAGE_SIZE = 100;
               [disabled]="activeUtensilSectionIndex() === 0"
               (onClick)="prevUtensilSection()"
             >
-              ← {{ previousSectionName() || 'Anterior' }}
+              ← {{ previousSectionName() || ('common.anterior' | t) }}
             </app-button>
             <app-button
               [variant]="isLastUtensilSection() ? 'secondary' : 'primary'"
@@ -416,7 +417,7 @@ const PAGE_SIZE = 100;
       <div class="form-actions">
         <app-button variant="ghost" type="button" (onClick)="closeIngredientModal()">{{ 'common.cancel' | t }}</app-button>
         <app-button variant="primary" type="submit" [loading]="isSaving()">
-          {{ editingIngredient() ? 'Guardar' : 'Agregar' }}
+          {{ (editingIngredient() ? 'common.save' : 'pantry.agregar') | t }}
         </app-button>
       </div>
     </form>
@@ -790,6 +791,7 @@ const PAGE_SIZE = 100;
   `]
 })
 export class PantryComponent implements OnInit {
+  private readonly i18n = inject(I18nService);
   pantryService = inject(PantryService);
   private toastService = inject(ToastService);
   private confirmService = inject(ConfirmService);
@@ -799,7 +801,8 @@ export class PantryComponent implements OnInit {
 
   /** El boton "+ Agregar" abre el modal de la pestaña activa. */
   addButtonLabel = computed(() =>
-    this.activeTab() === 'utensils' ? '+ Agregar utensilio' : '+ Agregar'
+    // Regla 18 (12t-i18n): la condicion decide la clave, el diccionario decide la frase.
+    this.i18n.t(this.activeTab() === 'utensils' ? 'pantry.mas_agregar_utensilio' : 'pantry.mas_agregar')
   );
 
   // Ingredients
@@ -1217,9 +1220,9 @@ export class PantryComponent implements OnInit {
   saveIngredient(): void {
     this.formErrors.name.set('');
     this.formErrors.quantity.set('');
-    if (!this.formData.name) { this.formErrors.name.set('El nombre es requerido'); return; }
+    if (!this.formData.name) { this.formErrors.name.set(this.i18n.t('pantry.el_nombre_es_requerido')); return; }
     if (!this.formData.quantity || this.formData.quantity <= 0) {
-      this.formErrors.quantity.set('La cantidad debe ser mayor a 0'); return;
+      this.formErrors.quantity.set(this.i18n.t('pantry.la_cantidad_debe_ser')); return;
     }
     this.isSaving.set(true);
     const data = { ...this.formData, expirationDate: this.formData.expirationDate || undefined };
@@ -1229,15 +1232,18 @@ export class PantryComponent implements OnInit {
     obs.subscribe({
       next: () => {
         this.toastService.success(
-          this.editingIngredient() ? 'Actualizado' : 'Agregado',
-          `${this.formData.name} ${this.editingIngredient() ? 'actualizado' : 'agregado'} correctamente`
+          this.editingIngredient() ? this.i18n.t('ai_config.actualizado') : this.i18n.t('pantry.agregado'),
+          this.i18n.t(
+            this.editingIngredient() ? 'pantry.ingrediente_actualizado' : 'pantry.ingrediente_agregado',
+            { name: this.formData.name }
+          )
         );
         this.closeIngredientModal();
         this.isSaving.set(false);
         this.reloadIngredients();
       },
       error: () => {
-        this.toastService.error('Error', 'No se pudo guardar el ingrediente');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_guardar'));
         this.isSaving.set(false);
       }
     });
@@ -1245,18 +1251,21 @@ export class PantryComponent implements OnInit {
 
   async deleteIngredient(ingredient: Ingredient): Promise<void> {
     const accepted = await this.confirmService.confirm({
-      title: 'Eliminar ingrediente',
-      message: `¿Eliminar ${ingredient.name} de la despensa?`,
-      confirmText: 'Eliminar'
+      title: this.i18n.t('pantry.eliminar_ingrediente'),
+      message: this.i18n.t('pantry.eliminar_de_la_despensa', { name: ingredient.name }),
+      confirmText: this.i18n.t('common.delete')
     });
     if (!accepted) return;
 
     this.pantryService.deleteIngredient(ingredient.id).subscribe({
       next: () => {
-        this.toastService.success('Eliminado', `${ingredient.name} eliminado`);
+        this.toastService.success(
+          this.i18n.t('pantry.eliminado'),
+          this.i18n.t('pantry.nombre_eliminado', { name: ingredient.name })
+        );
         this.reloadIngredients();
       },
-      error: () => this.toastService.error('Error', 'No se pudo eliminar')
+      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_eliminar'))
     });
   }
 
@@ -1264,24 +1273,29 @@ export class PantryComponent implements OnInit {
   toggleUtensil(u: Utensil): void {
     this.pantryService.updateUtensil(u.id, { available: !u.available }).subscribe({
       next: () => this.toastService.success(
-        u.available ? 'Quitado' : 'Añadido',
-        u.available ? `${u.name} quitado de tu cocina` : `${u.name} añadido a tu cocina`
+        u.available ? this.i18n.t('pantry.quitado') : this.i18n.t('pantry.anadido'),
+        u.available
+          ? this.i18n.t('pantry.utensilio_quitado', { name: u.name })
+          : this.i18n.t('pantry.utensilio_anadido', { name: u.name })
       ),
-      error: () => this.toastService.error('Error', 'No se pudo actualizar')
+      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('household.no_se_pudo_actualizar'))
     });
   }
 
   async deleteUtensil(u: Utensil): Promise<void> {
     const accepted = await this.confirmService.confirm({
-      title: 'Eliminar utensilio',
-      message: `¿Quitar ${u.name} del catálogo de tu cocina?`,
-      confirmText: 'Eliminar'
+      title: this.i18n.t('pantry.eliminar_utensilio'),
+      message: this.i18n.t('pantry.quitar_del_catalogo', { name: u.name }),
+      confirmText: this.i18n.t('common.delete')
     });
     if (!accepted) return;
 
     this.pantryService.deleteUtensil(u.id).subscribe({
-      next: () => this.toastService.success('Eliminado', `${u.name} eliminado`),
-      error: () => this.toastService.error('Error', 'No se pudo eliminar')
+      next: () => this.toastService.success(
+        this.i18n.t('pantry.eliminado'),
+        this.i18n.t('pantry.nombre_eliminado', { name: u.name })
+      ),
+      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_eliminar'))
     });
   }
 
@@ -1302,7 +1316,7 @@ export class PantryComponent implements OnInit {
   saveUtensil(): void {
     const name = this.utensilForm.name.trim();
     if (!name) {
-      this.utensilFormError.set('El nombre es requerido');
+      this.utensilFormError.set(this.i18n.t('auth.el_nombre_es_requerido'));
       return;
     }
 
@@ -1310,7 +1324,7 @@ export class PantryComponent implements OnInit {
       .utensils()
       .some(u => u.name.trim().toLowerCase() === name.toLowerCase());
     if (duplicated) {
-      this.utensilFormError.set('Ya existe un utensilio con ese nombre');
+      this.utensilFormError.set(this.i18n.t('pantry.ya_existe_un_utensilio'));
       return;
     }
 
@@ -1322,7 +1336,7 @@ export class PantryComponent implements OnInit {
       available: this.utensilForm.available
     }).subscribe({
       next: created => {
-        this.toastService.success('Añadido', `${name} añadido a tu cocina`);
+        this.toastService.success(this.i18n.t('pantry.anadido'), this.i18n.t('pantry.utensilio_anadido', { name }));
         this.closeUtensilModal();
         this.isSavingUtensil.set(false);
         // Se abre la sección donde ha caído: si no, parece que no se ha
@@ -1330,7 +1344,7 @@ export class PantryComponent implements OnInit {
         this.revealUtensil(created.id);
       },
       error: () => {
-        this.toastService.error('Error', 'No se pudo añadir el utensilio');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_anadir'));
         this.isSavingUtensil.set(false);
       }
     });

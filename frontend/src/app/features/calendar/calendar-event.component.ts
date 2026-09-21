@@ -1,3 +1,4 @@
+import { dateLocale } from '../../core/time';
 import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { I18nService } from '../../core/services/i18n.service';
@@ -281,7 +282,7 @@ export class CalendarEventComponent {
   kcalLabel(): string {
     const calories = this.meal?.calories ?? 0;
     const servings = this.meal?.servings ?? 1;
-    return `${Math.round(calories * servings).toLocaleString('es-ES')} kcal`;
+    return `${Math.round(calories * servings).toLocaleString(dateLocale())} kcal`;
   }
 
   /** El detalle que en el mes no cabe, por tooltip. */

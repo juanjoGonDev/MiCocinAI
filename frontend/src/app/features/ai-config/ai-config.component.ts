@@ -12,6 +12,7 @@ import { ModalComponent } from '../../shared/components/ui/modal/modal.component
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 @Component({
   selector: 'app-ai-config',
@@ -58,7 +59,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
                 [variant]="config.isActive ? 'success' : 'neutral'"
                 size="sm"
               >
-                {{ config.isActive ? 'Activo' : 'Inactivo' }}
+                {{ (config.isActive ? 'ai_config.activo' : 'ai_config.inactivo') | t }}
               </app-badge>
               <app-badge
                 *ngIf="config.testStatus"
@@ -222,7 +223,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
               {{ 'ai_config.probar_conexion' | t }}
             </app-button>
             <app-button variant="primary" type="submit" [loading]="isSaving()">
-              {{ editingConfig() ? 'Guardar' : 'Crear' }}
+              {{ (editingConfig() ? 'common.save' : 'common.create') | t }}
             </app-button>
           </div>
         </form>
@@ -517,6 +518,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
   `]
 })
 export class AiConfigComponent implements OnInit {
+  private readonly i18n = inject(I18nService);
   aiService = inject(AiService);
   private toastService = inject(ToastService);
   private confirmService = inject(ConfirmService);
@@ -586,21 +588,21 @@ export class AiConfigComponent implements OnInit {
     obs.subscribe({
       next: () => {
         this.toastService.success(
-          this.editingConfig() ? 'Actualizado' : 'Creado',
-          'Configuración guardada correctamente'
+          this.editingConfig() ? this.i18n.t('ai_config.actualizado') : this.i18n.t('ai_config.creado'),
+          this.i18n.t('ai_config.configuracion_guardada_correctamente')
         );
         this.closeModal();
         this.isSaving.set(false);
       },
       error: () => {
-        this.toastService.error('Error', 'No se pudo guardar la configuración');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('ai_config.no_se_pudo_guardar'));
         this.isSaving.set(false);
       }
     });
   }
 
   testConfig(config: AIProviderConfig): void {
-    this.toastService.info('Probando...', 'Conectando con el proveedor');
+    this.toastService.info(this.i18n.t('ai_config.probando'), this.i18n.t('ai_config.conectando_con_el_proveedor'));
 
     this.aiService.testConnection(config.id).subscribe({
       next: (result) => {
@@ -608,7 +610,7 @@ export class AiConfigComponent implements OnInit {
         this.isTestResultOpen.set(true);
       },
       error: () => {
-        this.testResult.set({ success: false, error: 'No se pudo conectar' });
+        this.testResult.set({ success: false, error: this.i18n.t('ai_config.no_se_pudo_conectar') });
         this.isTestResultOpen.set(true);
       }
     });
@@ -616,9 +618,9 @@ export class AiConfigComponent implements OnInit {
 
   testFromForm(): void {
     // Test with current form data
-    this.toastService.info('Probando...', 'Conectando con el proveedor');
+    this.toastService.info(this.i18n.t('ai_config.probando'), this.i18n.t('ai_config.conectando_con_el_proveedor'));
     // For now, just show a message
-    this.toastService.success('Test', 'Configuración válida');
+    this.toastService.success(this.i18n.t('ai_config.test'), this.i18n.t('ai_config.configuracion_valida'));
   }
 
   toggleActive(config: AIProviderConfig): void {
@@ -627,8 +629,8 @@ export class AiConfigComponent implements OnInit {
     } as any).subscribe({
       next: () => {
         this.toastService.success(
-          'Actualizado',
-          config.isActive ? 'Configuración desactivada' : 'Configuración activada'
+          this.i18n.t('ai_config.actualizado'),
+          config.isActive ? this.i18n.t('ai_config.configuracion_desactivada') : this.i18n.t('ai_config.configuracion_activada')
         );
       }
     });
@@ -636,15 +638,15 @@ export class AiConfigComponent implements OnInit {
 
   async deleteConfig(config: AIProviderConfig): Promise<void> {
     const accepted = await this.confirmService.confirm({
-      title: 'Eliminar configuración',
-      message: `¿Eliminar la configuración "${config.name}"?`,
-      confirmText: 'Eliminar'
+      title: this.i18n.t('ai_config.eliminar_configuracion'),
+      message: this.i18n.t('ai_config.eliminar_la_configuracion', { name: config.name }),
+      confirmText: this.i18n.t('common.delete')
     });
     if (!accepted) return;
 
     this.aiService.deleteConfig(config.id).subscribe({
       next: () => {
-        this.toastService.success('Eliminada', 'Configuración eliminada correctamente');
+        this.toastService.success(this.i18n.t('ai_config.eliminada'), this.i18n.t('ai_config.configuracion_eliminada_correctamente'));
       }
     });
   }

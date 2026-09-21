@@ -1,5 +1,6 @@
 import { Injectable, signal, effect } from '@angular/core';
 import { STORAGE_KEYS } from './storage.service';
+import { setDateLocale } from '../time';
 import { DICTS, type TranslationKey, type TranslationParams } from '../i18n';
 
 /**
@@ -37,6 +38,7 @@ export class I18nService {
         if (this.langSignal() === 'auto') {
           this.resolvedSignal.set(this.detectBrowserLang());
           this.changeTick.update(v => v + 1);
+          this.aplicaLocale();
         }
       });
     }
@@ -46,7 +48,17 @@ export class I18nService {
       this.resolvedSignal.set(this.resolve(this.langSignal()));
       this.changeTick.update(v => v + 1);
       document.documentElement.lang = this.resolvedSignal();
+      this.aplicaLocale();
     });
+  }
+
+  /**
+   * Las fechas y los numeros se escriben en el idioma de la app, no en el del sistema: es la unica
+   * manera de que «4 de mayo de 2026» se convierta en «4 May 2026» al cambiar de idioma, y de que la
+   * cifra de una caducidad no se quede en «12,5» con la app en ingles.
+   */
+  private aplicaLocale(): void {
+    setDateLocale(this.resolvedSignal() === 'en' ? 'en-GB' : 'es-ES');
   }
 
   setLang(lang: Language): void {

@@ -5,6 +5,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import {
   HOUSEHOLD_EVENT_META,
+  HOUSEHOLD_RECURRENCE_META,
   HouseholdEvent,
   eventTimeLabel
 } from '../../shared/models/calendar.model';
@@ -38,6 +39,10 @@ import {
         <span class="cal-evt__dot" aria-hidden="true"></span>
         @if (!dense) {
           <app-icon [name]="metaOf(event).icon" [size]="12" [label]="null" />
+        }
+        @if (event.recurrence && event.recurrence !== 'none') {
+          <!-- Marca de serie (12t-R): sin esto, «cada semana» y «el de la semana pasada» se pintan igual. -->
+          <app-icon class="cal-evt__repeat" name="repeat" [size]="12" [label]="null" />
         }
         <span class="cal-evt__title">{{ event.title }}</span>
         @if (timeOf(event)) {
@@ -74,6 +79,11 @@ import {
       }
       :host([appearance='agenda']) .cal-evt__when {
         font-size: var(--text-xs);
+      }
+      /* Marca de serie: pequena y apagada a proposito, porque lo que se lee es el titulo. */
+      .cal-evt__repeat {
+        flex: none;
+        opacity: 0.72;
       }
       .cal-evt {
         display: flex;
@@ -153,10 +163,14 @@ export class CalendarHouseholdEventsComponent {
     return this.dense ? '' : eventTimeLabel(event);
   }
 
+  /** Que es, cuando, cada cuanto, y de quien. Un `title` de verdad, no cuatro trozos pegados a mano. */
   tip(event: HouseholdEvent): string {
-    const when = eventTimeLabel(event);
-    const who = event.authorName ? ` · ${this.i18n.t('calendar.de_persona', { name: event.authorName })}` : '';
-    return `${event.title}${when ? ' · ' + when : ''}${this.i18n.t(this.metaOf(event).labelKey) ? ' · ' + this.i18n.t(this.metaOf(event).labelKey) : ''}${who}`;
+    const repetir =
+      event.recurrence && event.recurrence !== 'none'
+        ? this.i18n.t(HOUSEHOLD_RECURRENCE_META[event.recurrence].labelKey)
+        : '';
+    const quien = event.authorName ? this.i18n.t('calendar.de_persona', { name: event.authorName }) : '';
+    return [event.title, eventTimeLabel(event), repetir, quien].filter(Boolean).join(' · ');
   }
 
 }

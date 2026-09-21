@@ -1,6 +1,7 @@
 // Diccionario del dominio `onboarding`: texto de la interfaz, lo que la app dice. No va aqui lo que se
 // guarda ni lo que se envia a la IA (HOGARIA-SPEC §12s-A). El `en` lo escribe una persona.
 export const onboardingEs = {
+  'onboarding.no_se_pudo_guardar': 'No se pudo guardar el utensilio',
   'onboarding.preguntas_cortas': '{n} preguntas cortas. Con esto la IA te propone recetas que de verdad puedes comer y la app sabe qué quieres llevar desde aquí; podrás cambiarlo cuando quieras en Preferencias.',
   'onboarding.mas_sobre_el_objetivo': '¿Algo más sobre el objetivo? (opcional)',
   'onboarding.ej_sin_carne_los_lunes': 'Ej: sin carne los lunes, cenas de una olla y algo de pasta dos veces por semana',
@@ -25,9 +26,24 @@ export const onboardingEs = {
   'onboarding.se_guarda_en_tu': 'Se guarda en tu cuenta, no en el hogar: cada comensal puede tener lo suyo. Con el teclado: Esc salta este paso, Enter pasa al siguiente.',
   'onboarding.siguiente': 'Siguiente →',
   'onboarding.y_lo_que_quieras': 'Y lo que quieras contarnos',
+  'onboarding.paso_de': 'Step {n} of {total} · {title}',
+  'onboarding.sin_responder': ' · skipped',
+  'onboarding.paso_suelto': 'Step',
+  'onboarding.paso_perfil': 'Profile',
+  'onboarding.paso_alergias': 'Allergies',
+  'onboarding.paso_gustos': 'Tastes',
+  'onboarding.paso_objetivo': 'Goal',
+  'onboarding.paso_horarios': 'Meal times',
+  'onboarding.paso_cocina': 'Kitchen',
+  'onboarding.puedes_completarlo': "You can complete it whenever you like in Preferences.",
+  'onboarding.te_lo_preguntamos': "No problem: we will ask you again whenever you want, from Preferences.",
+  'onboarding.perfil_y_preferencias': "Your profile and preferences are in: the AI will take them into account.",
+  'onboarding.listo': 'Listo',
+  'onboarding.guardado': 'Guardado',
 } as const;
 
 export const onboardingEn: Record<keyof typeof onboardingEs, string> = {
+  'onboarding.no_se_pudo_guardar': 'Could not save the utensil',
   'onboarding.preguntas_cortas': '{n} short questions. With them the AI suggests recipes you can actually eat and the app knows what you want from it; you can change it whenever you like in Preferences.',
   'onboarding.mas_sobre_el_objetivo': 'Anything else about the goal? (optional)',
   'onboarding.ej_sin_carne_los_lunes': 'E.g. no meat on Mondays, one-pot dinners and some pasta twice a week',
@@ -52,4 +68,18 @@ export const onboardingEn: Record<keyof typeof onboardingEs, string> = {
   'onboarding.se_guarda_en_tu': 'It is saved in your account, not in the household: every diner can have their own. On the keyboard: Esc skips this step, Enter moves to the next one.',
   'onboarding.siguiente': 'Next →',
   'onboarding.y_lo_que_quieras': 'And whatever you want to tell us',
+  'onboarding.paso_de': 'Paso {n} de {total} · {titulo}',
+  'onboarding.sin_responder': ' · sin responder',
+  'onboarding.paso_suelto': 'Paso',
+  'onboarding.paso_perfil': 'Perfil',
+  'onboarding.paso_alergias': 'Alergias',
+  'onboarding.paso_gustos': 'Gustos',
+  'onboarding.paso_objetivo': 'Objetivo',
+  'onboarding.paso_horarios': 'Horarios',
+  'onboarding.paso_cocina': 'Cocina',
+  'onboarding.puedes_completarlo': "Puedes completarlo cuando quieras en Preferencias.",
+  'onboarding.te_lo_preguntamos': "Sin problema: te lo preguntamos cuando quieras desde Preferencias.",
+  'onboarding.perfil_y_preferencias': "Tu perfil y tus preferencias ya están: la IA lo tendrá en cuenta.",
+  'onboarding.listo': 'Done',
+  'onboarding.guardado': 'Saved',
 };

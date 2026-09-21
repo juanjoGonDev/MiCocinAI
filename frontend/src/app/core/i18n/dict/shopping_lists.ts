@@ -15,7 +15,6 @@ export const shoppingListsEs = {
   'shopping_lists.empezar_una_lista': 'Empezar una lista',
   'shopping_lists.estado_de_las_listas': 'Estado de las listas',
   'shopping_lists.filtros': 'Filtros',
-  'shopping_lists.guardando': 'Guardando…',
   'shopping_lists.lista_de_la_compra': 'Lista de la compra',
   'shopping_lists.lista_de': 'Lista de {name}',
   'shopping_lists.listas_de_estado': 'Listas {label}',
@@ -34,6 +33,14 @@ export const shoppingListsEs = {
   'shopping_lists.tienda': 'Tienda',
   'shopping_lists.todas_las_tiendas': 'Todas las tiendas',
   'shopping_lists.total_minimo': 'Total minimo',
+  'shopping_lists.las_listas_terminadas_se': "Las listas terminadas se guardan aqui con su gasto real.",
+  'shopping_lists.crea_la_primera_y': "Crea la primera y manana solo tendras que marcar lo que cae en el carro.",
+  'shopping_lists.prueba_a_quitar_la_busqueda': "Prueba a quitar la busqueda, la tienda o el rango de fechas.",
+  'shopping_lists.ni_activas_ni_terminadas': "Ni activas ni terminadas",
+  'shopping_lists.nada_en_el_historial': "Nada en el historial",
+  'shopping_lists.todavia_no_hay_listas': "Todavia no hay listas",
+  'shopping_lists.ninguna_lista_encaja_con': "Ninguna lista encaja con los filtros",
+  'shopping_lists.alguien_del_hogar_ha': "Alguien del hogar ha tocado las listas",
 } as const;
 
 export const shoppingListsEn: Record<keyof typeof shoppingListsEs, string> = {
@@ -51,7 +58,6 @@ export const shoppingListsEn: Record<keyof typeof shoppingListsEs, string> = {
   'shopping_lists.empezar_una_lista': 'Start a list',
   'shopping_lists.estado_de_las_listas': 'List status',
   'shopping_lists.filtros': 'Filters',
-  'shopping_lists.guardando': 'Saving…',
   'shopping_lists.lista_de_la_compra': 'Shopping list',
   'shopping_lists.lista_de': '{name}’s list',
   'shopping_lists.listas_de_estado': 'Lists {label}',
@@ -70,4 +76,12 @@ export const shoppingListsEn: Record<keyof typeof shoppingListsEs, string> = {
   'shopping_lists.tienda': 'Store',
   'shopping_lists.todas_las_tiendas': 'All stores',
   'shopping_lists.total_minimo': 'Minimum total',
+  'shopping_lists.las_listas_terminadas_se': "Finished lists are kept here with their actual spend.",
+  'shopping_lists.crea_la_primera_y': "Create the first one and tomorrow all you have to do is tick what goes in the trolley.",
+  'shopping_lists.prueba_a_quitar_la_busqueda': "Try clearing the search, the store or the date range.",
+  'shopping_lists.ni_activas_ni_terminadas': "Neither active nor finished",
+  'shopping_lists.nada_en_el_historial': "Nothing in the history",
+  'shopping_lists.todavia_no_hay_listas': "There are no lists yet",
+  'shopping_lists.ninguna_lista_encaja_con': "No list matches the filters",
+  'shopping_lists.alguien_del_hogar_ha': "Someone in the household touched the lists",
 };

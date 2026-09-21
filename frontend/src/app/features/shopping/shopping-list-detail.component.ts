@@ -41,6 +41,7 @@ import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 /** Una linea de la foto con lo que la persona toco: `keep` no existe en el contrato. */
 export type KeptPhotoLine = PhotoLine & { keep: boolean };
@@ -149,7 +150,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           </p>
         </div>
         <span class="detail__status" [class.detail__status--busy]="saving()" aria-live="polite">
-          {{ saving() ? 'Guardando…' : 'Guardado' }}
+          {{ (saving() ? 'ui.guardando' : 'ui.guardado') | t }}
         </span>
       </header>
 
@@ -335,11 +336,11 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                           type="button"
                           class="detail__offer detail__offer--discount"
                           data-test="line-discount-chip"
-                          [attr.title]="'shopping_list_detail.descuento_linea_detalle' | t:{desc: describeLineDiscount(lineDiscount)}"
+                          [attr.title]="'shopping_list_detail.descuento_linea_detalle' | t:{desc: describeDiscount(lineDiscount)}"
                           (click)="openEdit(item); $event.stopPropagation()"
                         >
                           <app-icon name="discount" [size]="12" [label]="null" />
-                          {{ describeLineDiscount(lineDiscount) }}
+                          {{ describeDiscount(lineDiscount) }}
                         </button>
                       }
                       <span class="detail__price" [class.detail__price--none]="item.price_minor === null">
@@ -979,7 +980,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             </div>
             <p class="detail__hint" data-test="pay-foot">
               @if (payMissing() > 0) {
-                Faltan {{ payMissing() }} {{ payMissing() === 1 ? 'linea' : 'lineas' }} por anotar ·
+                Faltan {{ payMissing() }} {{ (payMissing() === 1 ? 'shopping_list_detail.linea_uno' : 'shopping_list_detail.lineas_varios') | t }} por anotar ·
               }
               total {{ money(payTotal()) }} · lo que no se escribe aqui no entra en el historial.
             </p>
@@ -2233,6 +2234,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
   ]
 })
 export class ShoppingListDetailComponent implements OnDestroy {
+  private readonly i18n = inject(I18nService);
   private readonly shopping = inject(ShoppingService);
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(ConfirmService);
@@ -2386,8 +2388,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.pasteOpen.set(false);
     const skipped = result.skipped.length;
     this.toast.success(
-      `${result.added + result.merged} líneas añadidas`,
-      skipped > 0 ? `${skipped} repetidas o vacias se han ignorado.` : 'Revisa las cantidades y los precios.'
+      this.i18n.t('ui.n_lineas_anadidas', { n: result.added + result.merged }),
+      skipped > 0
+        ? this.i18n.t('ui.repetidas_ignoradas', { n: skipped })
+        : this.i18n.t('ui.revisa_las_cantidades_y')
     );
   }
 
@@ -2456,12 +2460,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.selection.set([]);
     this.toast.show({
       type: 'info',
-      title: `${ids.length} lineas quitadas`,
+      title: this.i18n.t('ui.n_lineas_quitadas', { n: ids.length }),
       duration: UNDO_MS,
       countdown: true,
       position: 'bottom',
       action: {
-        label: 'Deshacer',
+        label: this.i18n.t('ui.deshacer'),
         run: () => ids.forEach(id => void this.shopping.restoreItem(this.listId, id))
       }
     });
@@ -2478,9 +2482,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
    */
   async remove(item: ShoppingListItem): Promise<void> {
     const accepted = await this.confirm.confirm({
-      title: 'Quitar de la lista',
-      message: `¿Borrar «${item.name}» de la compra?`,
-      confirmText: 'Quitar',
+      title: this.i18n.t('ui.quitar_de_la_lista'),
+      message: this.i18n.t('ui.borrar_de_la_compra', { name: item.name }),
+      confirmText: this.i18n.t('shopping_list_detail.quitar'),
       variant: 'danger'
     });
     if (!accepted) return;
@@ -2492,13 +2496,13 @@ export class ShoppingListDetailComponent implements OnDestroy {
       // servicio lo cuenta; si se entero, Deshacer hace lo que promete.
       this.toast.show({
         type: 'info',
-        title: `${item.name} quitada`,
-        message: 'Tienes 6 segundos para cambiar de opinion.',
+        title: this.i18n.t('ui.item_quitada', { name: item.name }),
+        message: this.i18n.t('ui.tienes_6_segundos_para'),
         duration: UNDO_MS,
         countdown: true,
         position: 'bottom',
         action: {
-          label: 'Deshacer',
+          label: this.i18n.t('ui.deshacer'),
           run: () => {
             void this.shopping.restoreItem(listId, item.id);
           }
@@ -2513,21 +2517,24 @@ export class ShoppingListDetailComponent implements OnDestroy {
     // Es un borrado multiple, y un multiple es el unico sitio donde «le di a sin mirar» cuesta una
     // tarde de reescribir lineas: el aviso cuenta cuantas se van.
     const accepted = await this.confirm.confirm({
-      title: 'Vaciar lo comprado',
-      message: `Se quitaran ${items.length} ${items.length === 1 ? 'linea' : 'lineas'} marcadas como compradas.`,
-      confirmText: 'Vaciar',
+      title: this.i18n.t('ui.vaciar_lo_comprado'),
+      message: this.i18n.t(
+        items.length === 1 ? 'ui.vaciar_una_linea' : 'ui.vaciar_varias_lineas',
+        { n: items.length }
+      ),
+      confirmText: this.i18n.t('ui.vaciar'),
       variant: 'danger'
     });
     if (!accepted) return;
     await this.shopping.clearChecked(this.listId);
     this.toast.show({
       type: 'success',
-      title: `${items.length} lineas vaciadas`,
+      title: this.i18n.t('ui.n_lineas_vaciadas', { n: items.length }),
       duration: UNDO_MS,
       countdown: true,
       position: 'bottom',
       action: {
-        label: 'Deshacer',
+        label: this.i18n.t('ui.deshacer'),
         run: () => items.forEach(item => void this.shopping.restoreItem(this.listId, item.id))
       }
     });
@@ -2608,7 +2615,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const value = this.draft.price.trim();
     const minor = value === '' ? null : parseMoneyToMinor(value);
     if (value !== '' && minor === null) {
-      this.toast.warning('Precio no valido', 'Escribe algo como «1,95».');
+      this.toast.warning(this.i18n.t('ui.precio_no_valido'), this.i18n.t('ui.escribe_algo_como_1'));
       return;
     }
     this.flush(`item:${item.id}`);
@@ -2669,7 +2676,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
       return;
     }
     if (result.code === 'STALE_LIST') {
-      this.toast.show({ type: 'info', title: 'La lista habia cambiado', message: 'Se ha vuelto a cargar: vuelve a terminar la compra.' });
+      this.toast.show({ type: 'info', title: this.i18n.t('ui.la_lista_habia_cambiado'), message: this.i18n.t('ui.se_ha_vuelto_a') });
       this.shopping.loadList(list.id);
     }
   }
@@ -2677,12 +2684,24 @@ export class ShoppingListDetailComponent implements OnDestroy {
   private finishCompleteToast(paidMinor: number, recorded: number, store: string | null): void {
     const total = this.estimate()?.totalMinor ?? 0;
     const unpriced = this.unpricedCount();
-    this.toast.success(
-      'Compra terminada',
-      `${formatMoney(paidMinor || total)} pagados${store ? ' en ' + store : ''} · ${recorded} ${
-        recorded === 1 ? 'precio apuntado' : 'precios apuntados'
-      }${unpriced > 0 ? ` · ${unpriced} ${unpriced === 1 ? 'linea pendiente' : 'lineas pendientes'} sin precio` : ''}.`
-    );
+    const partes = [
+      store
+        ? this.i18n.t('ui.pagado_en_tienda', { importe: formatMoney(paidMinor || total), tienda: store })
+        : this.i18n.t('ui.pagado_sin_tienda', { importe: formatMoney(paidMinor || total) }),
+      this.i18n.t(
+        recorded === 1 ? 'ui.precio_apuntado_uno' : 'ui.precios_apuntados_varios',
+        { n: recorded }
+      ),
+    ];
+    if (unpriced > 0) {
+      partes.push(
+        this.i18n.t(
+          unpriced === 1 ? 'ui.linea_pendiente_una' : 'ui.lineas_pendientes_varias',
+          { n: unpriced }
+        )
+      );
+    }
+    this.toast.success(this.i18n.t('ui.compra_terminada'), partes.join(' · ') + '.');
     void this.router.navigate(['/shopping'], { queryParams: { tab: 'hechas' } });
   }
 
@@ -2834,7 +2853,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
   linkVariants(item: ShoppingListItem): string | null {
     const product = this.shopping.knownProducts().find(entry => entry.productKey === item.product_key);
     if (!product?.variants.length) return null;
-    return product.variants.map(variant => `${variant.store ?? 'sin tienda'} ${formatMoney(variant.unitMinor)}`).join(' · ');
+    return product.variants
+      .map((variant) => `${variant.store ?? this.i18n.t('shopping_list_detail.sin_tienda')} ${formatMoney(variant.unitMinor)}`)
+      .join(' · ');
   }
 
   async linkProduct(item: ShoppingListItem, key: string | null): Promise<void> {
@@ -2847,9 +2868,14 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   sourceLabel(source: 'manual' | 'observed' | 'unpriced'): string {
-    if (source === 'manual') return 'precio de esta lista';
-    if (source === 'observed') return 'ultimo precio pagado';
-    return 'sin precio';
+    // La condicion elige la clave y el diccionario pone la frase: asi se traduce y el gate lo ve.
+    const clave =
+      source === 'manual'
+        ? 'shopping_list_detail.precio_de_esta_lista'
+        : source === 'observed'
+          ? 'shopping_list_detail.ultimo_precio_pagado'
+          : 'shopping_list_detail.aun_sin_precio';
+    return this.i18n.t(clave);
   }
 
   // -------------------------------------------------- renombrar (con forma de salir)
@@ -2943,7 +2969,17 @@ export class ShoppingListDetailComponent implements OnDestroy {
     return lineDiscountOfItem(item);
   }
 
-  readonly describeLineDiscount = describeLineDiscount;
+  /**
+   * La oferta de la linea, con las palabras del idioma de la app (12t-i18n). El modelo formatea numeros;
+   * quien escribe «unidad» o «unit» es la pantalla, que es la que sabe en que idioma se esta leyendo.
+   */
+  describeDiscount(lineDiscount: Parameters<typeof describeLineDiscount>[0]): string | null {
+    if (!lineDiscount) return null;
+    return describeLineDiscount(lineDiscount, {
+      unidad: this.i18n.t('shopping_list_detail.unidad'),
+      unidades: this.i18n.t('shopping_list_detail.unidades')
+    });
+  }
 
   readonly discountedLineCount = computed(
     () => this.estimate()?.lines.filter((line) => (line.lineDiscountMinor ?? 0) > 0).length ?? 0
@@ -3048,7 +3084,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const base = Math.round(unitMinor * capped);
     const raw = discount.kind === 'percent' ? Math.round((base * (discount.percentBps ?? 0)) / 10_000) : (discount.valueMinor ?? 0);
     const off = Math.min(raw, base);
-    const label = describeLineDiscount(discount) ?? 'descuento';
+    const label = this.describeDiscount(discount) ?? this.i18n.t('shopping_list_detail.descuento');
     if (raw <= 0) return `${label}: todavia no hay valor que aplicar.`;
     if (discount.units && capped < paid) {
       return `${label} · en la cesta hay ${trimNumber(paid)} ${paid === 1 ? 'unidad' : 'unidades'} pagadas; no llegan a ${trimNumber(discount.units)}.`;
@@ -3227,14 +3263,14 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (draft.kind === 'percent') {
       const percent = Number(String(this.percentDraft() ?? '').replace(',', '.'));
       if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
-        this.toast.warning('El porcentaje no cuadra', 'Entre 1 % y 100 %.');
+        this.toast.warning(this.i18n.t('ui.el_porcentaje_no_cuadra'), this.i18n.t('ui.entre_1_y_100'));
         return;
       }
       input.percentBps = Math.round(percent * 100);
     } else {
       const minor = parseMoneyToMinor(this.amountDraft());
       if (!minor || minor <= 0) {
-        this.toast.warning('Falta el importe', 'Escribe cuanto descuentan, por ejemplo 3,50.');
+        this.toast.warning(this.i18n.t('ui.falta_el_importe'), this.i18n.t('ui.escribe_cuanto_descuentan_por'));
         return;
       }
       input.valueMinor = minor;
@@ -3245,7 +3281,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
       if (!targets.length) {
         // Sin diana el server responderia 400, y un 400 despues de pulsar «Guardar» sabe a
         // castigo: se lo decimos antes, con la lista de lineas marcada.
-        this.toast.warning('Dime donde', 'Elige al menos un producto o una sección a la que se aplica.');
+        this.toast.warning(this.i18n.t('ui.dime_donde'), this.i18n.t('ui.elige_al_menos_un'));
         return;
       }
       input.targets = targets;
@@ -3254,7 +3290,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
 
     const saved = await this.shopping.setDiscount(list.id, input);
     this.discountOpen.set(false);
-    if (saved) this.toast.success('Descuento aplicado', saved.description ?? undefined);
+    if (saved) this.toast.success(this.i18n.t('ui.descuento_aplicado'), saved.description ?? undefined);
   }
 
   async removeDiscount(): Promise<void> {
@@ -3265,12 +3301,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.discountOpen.set(false);
     this.toast.show({
       type: 'info',
-      title: 'Descuento quitado',
+      title: this.i18n.t('ui.descuento_quitado'),
       duration: 6000,
       countdown: true,
       position: 'bottom',
       action: {
-        label: 'Deshacer',
+        label: this.i18n.t('ui.deshacer'),
         run: () => {
           if (!previous) return;
           void this.shopping.setDiscount(list.id, {
@@ -3342,11 +3378,11 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const file = input.files?.[0];
     if (!file) return;
     if (!/^image\/(png|jpe?g|webp)$/.test(file.type)) {
-      this.photoError.set('Eso no es una foto (png, jpg o webp).');
+      this.photoError.set(this.i18n.t('ui.eso_no_es_una'));
       return;
     }
     if (file.size > 6 * 1024 * 1024) {
-      this.photoError.set('La foto pesa demasiado: hazla mas pequena o recortala.');
+      this.photoError.set(this.i18n.t('ui.la_foto_pesa_demasiado'));
       return;
     }
     this.photoError.set(null);
@@ -3357,7 +3393,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
       this.photoPreview.set(dataUrl);
       this.photoResult.set(null);
     };
-    reader.onerror = () => this.photoError.set('No se ha podido leer el archivo.');
+    reader.onerror = () => this.photoError.set(this.i18n.t('ui.no_se_ha_podido'));
     reader.readAsDataURL(file);
   }
 
@@ -3385,16 +3421,17 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.photoResult.set(null);
     if (outcome.message === 'AI_NOT_CONFIGURED') {
       this.photoRedirect.set('/settings/ai');
-      this.photoError.set('Falta configurar la IA para leer fotos.');
+      this.photoError.set(this.i18n.t('ui.falta_configurar_la_ia'));
       return;
     }
-    const labels: Record<string, string> = {
-      IMAGE_TOO_LARGE: 'La foto es demasiado grande para el modelo.',
-      AI_ANSWER_NOT_UNDERSTOOD: 'El modelo no ha contestado en el formato esperado.',
-      AI_TIMEOUT: 'El modelo ha tardado demasiado. Intentalo otra vez.',
-      INVALID_PHOTO: 'La imagen no se ha podido leer.'
-    };
-    this.photoError.set(labels[outcome.message] ?? 'El modelo no esta disponible ahora mismo.');
+    // Codigo de error -> CLAVE de diccionario: el mapa en prose era el unico que se quedaba en castellano.
+    const claves = {
+      IMAGE_TOO_LARGE: 'shopping_list_detail.la_foto_es_demasiado',
+      AI_ANSWER_NOT_UNDERSTOOD: 'shopping_list_detail.el_modelo_no_ha',
+      AI_TIMEOUT: 'shopping_list_detail.el_modelo_ha_tardado',
+      INVALID_PHOTO: 'shopping_list_detail.la_imagen_no_se'
+    } as const; // sin `as const` los valores se ensanchan a `string` y `t()` deja de compilar
+    this.photoError.set(this.i18n.t(claves[outcome.message as keyof typeof claves] ?? 'ui.el_modelo_no_esta'));
     if (outcome.message === 'AI_ANSWER_NOT_UNDERSTOOD') this.logSample(outcome.data);
   }
 
@@ -3425,10 +3462,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.photoResult.set(null);
     this.photoData.set(null);
     this.photoPreview.set(null);
-    const created = applied.createdCategories.length ? ', secciones nuevas: ' + applied.createdCategories.join(', ') : '';
+    const created = applied.createdCategories.length
+      ? ', ' + this.i18n.t('ui.secciones_nuevas') + ': ' + applied.createdCategories.join(', ')
+      : '';
     this.toast.success(
-      'Líneas añadidas',
-      `${applied.added} nuevas, ${applied.merged.length} sumadas a lo que ya estaba${created}.`
+      this.i18n.t('ui.lineas_anadidas'),
+      this.i18n.t('ui.nuevas_y_sumadas', { nuevas: applied.added, sumadas: applied.merged.length, resto: created })
     );
   }
 

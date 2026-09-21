@@ -1,4 +1,4 @@
-import { formatBytes, pendingLabel, shortId, storageUsage } from './account-info';
+import { formatBytes, pendingLabelKey, shortId, storageUsage } from './account-info';
 
 /**
  * El inventario de la cuenta es aritmética, y por eso se prueba aquí y no en una pantalla. Lo que
@@ -39,9 +39,10 @@ describe('account-info', () => {
   });
 
   it('la cola se dice en plural solo cuando toca', () => {
-    expect(pendingLabel(0)).toContain('Nada pendiente');
-    expect(pendingLabel(1)).toBe('1 escritura esperando la red');
-    expect(pendingLabel(7)).toBe('7 escrituras esperando la red');
+    // Se elige clave, no frase: el plural lo decide el diccionario, y aqui solo llega el numero.
+    expect(pendingLabelKey(0)).toBe('account.nada_pendiente_de');
+    expect(pendingLabelKey(1)).toBe('account.una_escritura_esperando');
+    expect(pendingLabelKey(7)).toBe('account.n_escrituras_esperando');
   });
 
   it('el id se recorta por los dos lados, y un id vacio no se inventa', () => {

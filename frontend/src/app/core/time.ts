@@ -18,6 +18,26 @@ const DAY_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
 /** Cadena de tipo `Date` de ISO, con o sin fraccion, y sin zona. */
 export type TimeInput = string | number | Date | null | undefined;
 
+/**
+ * El idioma con el que se escriben las fechas y las horas, y no es el del navegador: es el de la app.
+ * Vive aqui, junto a los formateadores, y quien lo cambia es `I18nService` al resolver el idioma —la
+ * direccion de la dependencia importa: `time.ts` es puro y lo llaman cuatro plantillas, y un servicio no
+ * puede estar detras de una funcion de formato.
+ *
+ * Sin esto, pasar la app a ingles dejaba «4 de mayo de 2026» y «lun» en castellano: el diccionario no
+ * puede traducir lo que no pasa por el diccionario, y una fecha no es una clave.
+ */
+let formatoLocale = 'es-ES';
+
+export function setDateLocale(tag: string | null | undefined): void {
+  formatoLocale = tag || 'es-ES';
+}
+
+/** Lo que esperan `Intl`: `es-ES` o `en-GB`. Se lee en cada formato, no se cachea por llamada. */
+export function dateLocale(): string {
+  return formatoLocale;
+}
+
 let zone: string | null = null;
 
 /**
@@ -104,7 +124,7 @@ function clock(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTi
 export function formatTime(value: TimeInput, timeZone?: string): string {
   const date = parseInstant(value);
   return date
-    ? clock('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timeZone ?? clientTimeZone() }).format(date)
+    ? clock(dateLocale(), { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timeZone ?? clientTimeZone() }).format(date)
     : '';
 }
 
@@ -112,7 +132,7 @@ export function formatTime(value: TimeInput, timeZone?: string): string {
 export function formatDateTime(value: TimeInput, timeZone?: string): string {
   const date = parseInstant(value);
   return date
-    ? clock('es-ES', {
+    ? clock(dateLocale(), {
         day: 'numeric',
         month: 'short',
         hour: '2-digit',
@@ -128,7 +148,7 @@ export function formatDay(value: TimeInput, timeZone?: string): string {
   // Un dia suelto se lee como dia; con un `Date` o un instante hay que mirar la zona.
   const text = typeof value === 'string' ? value : null;
   const date = text && DAY_ONLY.test(text) ? parseDay(text) : parseInstant(value);
-  return date ? clock('es-ES', { day: 'numeric', month: 'long', year: 'numeric', timeZone: timeZone ?? clientTimeZone() }).format(date) : '';
+  return date ? clock(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric', timeZone: timeZone ?? clientTimeZone() }).format(date) : '';
 }
 
 /**
@@ -138,7 +158,7 @@ export function formatDay(value: TimeInput, timeZone?: string): string {
 export function formatTimePrecise(value: TimeInput, timeZone?: string): string {
   const date = parseInstant(value);
   if (!date) return value ? String(value) : '';
-  const clock2 = clock('es-ES', {
+  const clock2 = clock(dateLocale(), {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
@@ -218,7 +238,7 @@ export function formatRelative(value: TimeInput, now: Date = new Date()): string
           : null;
   if (unit) return future ? `en ${unit}` : `hace ${unit}`;
   const sameYear = date.getFullYear() === now.getFullYear();
-  const day = clock('es-ES', { day: 'numeric', month: 'short', timeZone: clientTimeZone() }).format(date);
+  const day = clock(dateLocale(), { day: 'numeric', month: 'short', timeZone: clientTimeZone() }).format(date);
   return future ? `el ${day}` : `${day}${sameYear ? '' : ` ${String(date.getFullYear()).slice(2)}`}`;
 }
 

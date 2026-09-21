@@ -6,33 +6,53 @@
  * tour saltado por completo que se registra como terminado son fallos de estado, no de pintura.
  *
  * Los pasos son una lista de ids, en el orden en que se preguntan. El numero que ve el usuario se
- * deriva de la posicion y el titulo de `STEP_TITLES`: anadir una pregunta es una linea aqui y un
+ * deriva de la posicion y el titulo de `STEP_TITLE_KEYS`: anadir una pregunta es una linea aqui y un
  * bloque en la plantilla, no renumerar media pantalla a mano (que es como se queda un «Paso 4 de 6»
  * en la ultima).
  */
+import type { TranslationKey } from './i18n';
+
 export const ONBOARDING_STEPS = ['profile', 'allergies', 'tastes', 'goal', 'meals', 'kitchen'] as const;
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
-export const STEP_TITLES: Record<OnboardingStep, string> = {
-  profile: 'Perfil',
-  allergies: 'Alergias',
-  tastes: 'Gustos',
-  goal: 'Objetivo',
-  meals: 'Horarios',
-  kitchen: 'Cocina'
+/**
+ * El titulo de cada paso, en clave. Que no sea una cadena es el punto: «Horarios» escrito en un modulo
+ * puro se pinta en castellano con la app en ingles, y ese modulo no puede traducir (HOGARIA-SPEC 12t-i18n).
+ */
+export const STEP_TITLE_KEYS: Record<OnboardingStep, TranslationKey> = {
+  profile: 'onboarding.paso_perfil',
+  allergies: 'onboarding.paso_alergias',
+  tastes: 'onboarding.paso_gustos',
+  goal: 'onboarding.paso_objetivo',
+  meals: 'onboarding.paso_horarios',
+  kitchen: 'onboarding.paso_cocina'
 };
+
+/** Lo que la cabecera necesita saber; la frase la arma la pantalla con el diccionario. */
+export interface StepLabel {
+  /** Numerado desde uno, con el indice ya recortado al rango. */
+  numero: number;
+  total: number;
+  tituloKey: TranslationKey;
+  skipped: boolean;
+}
 
 /** La cabecera de encima de la barra: numero derivado, titulo del paso y, si se ha saltado, eso mismo. */
 export function stepLabel(
   index: number,
   steps: readonly OnboardingStep[] = ONBOARDING_STEPS,
   skipped = false
-): string {
+): StepLabel {
   const total = steps.length;
   const safe = Math.max(0, Math.min(total - 1, Math.trunc(index)));
-  const title = STEP_TITLES[steps[safe]] ?? 'Paso';
-  return `Paso ${safe + 1} de ${total} · ${title}${skipped ? ' · sin responder' : ''}`;
+  return {
+    numero: safe + 1,
+    total,
+    // El indice fuera de rango no pinta «undefined»: cae en la clave suelta, que al menos se traduce.
+    tituloKey: steps[safe] ? STEP_TITLE_KEYS[steps[safe]] : 'onboarding.paso_suelto',
+    skipped
+  };
 }
 
 /** Siguiente paso, sin pasarse del ultimo: `next()` en el ultimo no puede irse a undefined. */

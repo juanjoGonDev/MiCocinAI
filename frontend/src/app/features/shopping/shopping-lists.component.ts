@@ -12,6 +12,7 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 type StatusFilter = 'active' | 'done' | 'all';
 
@@ -195,7 +196,7 @@ const PAGE_SIZES: PickerOption[] = [
       }
 
       @if (saving()) {
-        <p class="tray__saving" role="status">{{ 'shopping_lists.guardando' | t }}</p>
+        <p class="tray__saving" role="status">{{ 'ui.guardando' | t }}</p>
       }
       @if (liveNote()) {
         <p class="tray__live" role="status" data-test="tray-live">
@@ -826,6 +827,7 @@ const PAGE_SIZES: PickerOption[] = [
   ]
 })
 export class ShoppingListsComponent {
+  private readonly i18n = inject(I18nService);
   private readonly shopping = inject(ShoppingService);
   private readonly confirm = inject(ConfirmService);
   private readonly toast = inject(ToastService);
@@ -892,7 +894,7 @@ export class ShoppingListsComponent {
     // SSE habria que adivinar cuando volver a mirar.
     const close = this.shopping.openStream('lists', () => {
       this.reload();
-      this.liveNote.set('Alguien del hogar ha tocado las listas');
+      this.liveNote.set(this.i18n.t('shopping_lists.alguien_del_hogar_ha'));
       setTimeout(() => this.liveNote.set(null), 6000);
     });
     this.destroyRef.onDestroy(close);
@@ -1101,15 +1103,24 @@ export class ShoppingListsComponent {
   }
 
   emptyTitle(): string {
-    if (this.activeFilters() > 0) return 'Ninguna lista encaja con los filtros';
-    return this.status() === 'active' ? 'Todavia no hay listas' : this.status() === 'done' ? 'Nada en el historial' : 'Ni activas ni terminadas';
+    // Un if y una clave; la frase la pone el diccionario (12t-i18n, regla 18).
+    if (this.activeFilters() > 0) return this.i18n.t('shopping_lists.ninguna_lista_encaja_con');
+    const clave =
+      this.status() === 'active'
+        ? 'shopping_lists.todavia_no_hay_listas'
+        : this.status() === 'done'
+          ? 'shopping_lists.nada_en_el_historial'
+          : 'shopping_lists.ni_activas_ni_terminadas';
+    return this.i18n.t(clave);
   }
 
   emptyText(): string {
-    if (this.activeFilters() > 0) return 'Prueba a quitar la busqueda, la tienda o el rango de fechas.';
-    return this.status() === 'active'
-      ? 'Crea la primera y manana solo tendras que marcar lo que cae en el carro.'
-      : 'Las listas terminadas se guardan aqui con su gasto real.';
+    if (this.activeFilters() > 0) return this.i18n.t('shopping_lists.prueba_a_quitar_la_busqueda');
+    const clave =
+      this.status() === 'active'
+        ? 'shopping_lists.crea_la_primera_y'
+        : 'shopping_lists.las_listas_terminadas_se';
+    return this.i18n.t(clave);
   }
 
   progressOf(list: ShoppingList): number {
@@ -1131,7 +1142,7 @@ export class ShoppingListsComponent {
     if (!name || name === list.name) return;
     void this.shopping.renameList(list.id, { name }, list.version).then((updated) => {
       if (updated) this.reload();
-      else this.toast.error('No se ha podido renombrar', 'Otra persona cambio la lista. Vuelve a intentarlo.');
+      else this.toast.error(this.i18n.t('ui.no_se_ha_podido'), this.i18n.t('ui.otra_persona_cambio_la'));
     });
   }
 
@@ -1187,26 +1198,29 @@ export class ShoppingListsComponent {
     await this.shopping.setStatus(list.id, wasDone ? 'active' : 'done');
     this.toast.show({
       type: 'success',
-      title: wasDone ? 'Lista reabierta' : 'Lista terminada',
-      message: `"${list.name}" ${wasDone ? 'vuelve a activas.' : 'pasa al historial.'}`,
+      title: wasDone ? this.i18n.t('ui.lista_reabierta') : this.i18n.t('ui.lista_terminada'),
+      message: this.i18n.t(
+        wasDone ? 'ui.lista_vuelve_a_activas' : 'ui.lista_pasa_al_historial',
+        { name: list.name }
+      ),
       duration: 6000,
       countdown: true,
       position: 'bottom',
-      action: { label: 'Deshacer', run: () => void this.shopping.setStatus(list.id, wasDone ? 'done' : 'active') }
+      action: { label: this.i18n.t('ui.deshacer'), run: () => void this.shopping.setStatus(list.id, wasDone ? 'done' : 'active') }
     });
   }
 
   /** Borrar una lista NO es deshacible (sus lineas se van): por eso pide confirmacion. */
   async remove(list: ShoppingList): Promise<void> {
     const accepted = await this.confirm.confirm({
-      title: '¿Borrar esta lista?',
-      message: `Se borran "${list.name}" y sus ${list.totalItems} lineas. Los precios guardados se conservan.`,
-      confirmText: 'Borrar',
+      title: this.i18n.t('ui.borrar_esta_lista'),
+      message: this.i18n.t('ui.se_borran_lista_y_lineas', { name: list.name, n: list.totalItems }),
+      confirmText: this.i18n.t('calendar.borrar'),
       variant: 'danger'
     });
     if (!accepted) return;
     await this.shopping.deleteList(list.id);
-    this.toast.info('Lista borrada', 'El historial de precios sigue intacto.');
+    this.toast.info(this.i18n.t('ui.lista_borrada'), this.i18n.t('ui.el_historial_de_precios'));
   }
 
   // La hora la pone `core/time`, en la zona detectada del navegador. Cada pantalla que hacıa

@@ -2,6 +2,8 @@
 // guarda ni lo que se envia a la IA (HOGARIA-SPEC §12s-A). El `en` lo escribe una persona.
 export const shoppingListDetailEs = {
   'shopping_list_detail.2_leche_1kg_tomates': '- 2 Leche\n- 1kg Tomates\nPan de molde',
+  'shopping_list_detail.linea_uno': 'linea',
+  'shopping_list_detail.lineas_varios': 'lineas',
   'shopping_list_detail.a_que_se_aplica': 'A que se aplica',
   'shopping_list_detail.acciones_de_la_linea': 'Acciones de la linea',
   'shopping_list_detail.acciones_de_la_seleccion': 'Acciones de la seleccion',
@@ -128,6 +130,16 @@ export const shoppingListDetailEs = {
   'shopping_list_detail.vaciar_el_carro': 'Vaciar el carro',
   'shopping_list_detail.ver_desglose': 'Ver desglose',
   'shopping_list_detail.volver_a_las_listas': 'Volver a las listas',
+  'shopping_list_detail.unidad': 'unit',
+  'shopping_list_detail.unidades': 'units',
+  'shopping_list_detail.aun_sin_precio': 'sin precio',
+  'shopping_list_detail.la_imagen_no_se': "La imagen no se ha podido leer.",
+  'shopping_list_detail.el_modelo_ha_tardado': "El modelo ha tardado demasiado. Intentalo otra vez.",
+  'shopping_list_detail.el_modelo_no_ha': "El modelo no ha contestado en el formato esperado.",
+  'shopping_list_detail.la_foto_es_demasiado': "La foto es demasiado grande para el modelo.",
+  'shopping_list_detail.ultimo_precio_pagado': "ultimo precio pagado",
+  'shopping_list_detail.precio_de_esta_lista': "precio de esta lista",
+  'shopping_list_detail.sin_tienda': "sin tienda",
 } as const;
 
 export const shoppingListDetailEn: Record<keyof typeof shoppingListDetailEs, string> = {
@@ -258,4 +270,16 @@ export const shoppingListDetailEn: Record<keyof typeof shoppingListDetailEs, str
   'shopping_list_detail.vaciar_el_carro': 'Empty the basket',
   'shopping_list_detail.ver_desglose': 'Show the breakdown',
   'shopping_list_detail.volver_a_las_listas': 'Back to the lists',
+  'shopping_list_detail.linea_uno': 'line',
+  'shopping_list_detail.lineas_varios': 'lines',
+  'shopping_list_detail.unidad': 'unidad',
+  'shopping_list_detail.unidades': 'unidades',
+  'shopping_list_detail.aun_sin_precio': 'no price',
+  'shopping_list_detail.la_imagen_no_se': "The image could not be read.",
+  'shopping_list_detail.el_modelo_ha_tardado': "The model took too long. Try again.",
+  'shopping_list_detail.el_modelo_no_ha': "The model did not answer in the expected format.",
+  'shopping_list_detail.la_foto_es_demasiado': "The photo is too large for the model.",
+  'shopping_list_detail.ultimo_precio_pagado': "last price paid",
+  'shopping_list_detail.precio_de_esta_lista': "price from this list",
+  'shopping_list_detail.sin_tienda': "no store",
 };

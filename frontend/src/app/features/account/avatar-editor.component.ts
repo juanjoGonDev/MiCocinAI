@@ -1,12 +1,13 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, Output, ViewChild, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, EventEmitter, HostListener, Input, OnDestroy, Output, ViewChild, signal, inject} from '@angular/core';
 
 import { CropOffset, MAX_ZOOM, MIN_ZOOM, ZERO_OFFSET, clampZoom, cropRegion, panFromDrag, previewLayout, zoomAround } from '../../core/avatar-crop';
-import { DecodedAvatar, decodeAvatarFile, renderAvatarDataUrl } from '../../core/avatar-image';
+import { AvatarIssue, DecodedAvatar, decodeAvatarFile, renderAvatarDataUrl } from '../../core/avatar-image';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 /**
  * El encuadre de la foto de perfil: la imagen se arrastra con el dedo (o con el raton, o con las
@@ -54,7 +55,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
           />
           <span class="crop__guide" aria-hidden="true"></span>
         } @else {
-          <span class="crop__loading">{{ error() ? '' : 'Leyendo la foto...' }}</span>
+          <span class="crop__loading">{{ error() ? '' : ('avatar_editor.leyendo_la_foto' | t) }}</span>
         }
       </div>
 
@@ -235,6 +236,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
   `]
 })
 export class AvatarEditorComponent implements AfterViewInit, OnDestroy {
+  private readonly i18n = inject(I18nService);
   /** El fichero elegido. Cambiarlo vuelve a decodificar: es el «elige otra foto» del modal. */
   @Input() set file(value: File | null) {
     void this.load(value);
@@ -310,7 +312,7 @@ export class AvatarEditorComponent implements AfterViewInit, OnDestroy {
     this.busy.set(true);
     try {
       const decoded = await decodeAvatarFile(file);
-      if (decoded.width < 1 || decoded.height < 1) throw new Error('La foto no tiene tamano legible.');
+      if (decoded.width < 1 || decoded.height < 1) throw new AvatarIssue('avatar_editor.la_foto_no_tiene');
       this.decoded = decoded;
       // La vista previa es un `img` de verdad (posicionable por px con la misma matematica del
       // recorte), asi que el fichero se sirve por objeto URL mientras el modal esta abierto.
@@ -321,7 +323,13 @@ export class AvatarEditorComponent implements AfterViewInit, OnDestroy {
       this.measure();
     } catch (caught) {
       this.decoded = null;
-      this.error.set(caught instanceof Error && !caught.message.includes('Http') ? caught.message : 'La foto no se pudo leer.');
+      // Un problema conocido se traduce por su clave; lo demas (un `fetch` roto, un `SecurityError`)
+      // se contesta con el aviso general, que es lo que se puede decir sin inventar.
+      this.error.set(
+        caught instanceof AvatarIssue
+          ? this.i18n.t(caught.clave, caught.params)
+          : this.i18n.t('account.la_foto_no_se')
+      );
     } finally {
       this.busy.set(false);
     }
@@ -433,7 +441,11 @@ export class AvatarEditorComponent implements AfterViewInit, OnDestroy {
     try {
       this.applied.emit(renderAvatarDataUrl(this.decoded, this.region));
     } catch (caught) {
-      this.error.set(caught instanceof Error ? caught.message : 'El navegador no pudo generar la imagen.');
+      this.error.set(
+        caught instanceof AvatarIssue
+          ? this.i18n.t(caught.clave, caught.params)
+          : this.i18n.t('account.el_navegador_no_pudo')
+      );
     } finally {
       this.busy.set(false);
     }

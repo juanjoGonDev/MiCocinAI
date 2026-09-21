@@ -1,3 +1,4 @@
+import type { TranslationKey, TranslationParams } from './i18n';
 import { CropRegion, cropRegion, ZERO_OFFSET } from './avatar-crop';
 
 /**
@@ -29,15 +30,32 @@ export const AVATAR_MAX_FILE_BYTES = 4 * 1024 * 1024;
 /** Lo que un `canvas.drawImage` sabe decodificar sin ayuda de un servidor. */
 export const AVATAR_ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'] as const;
 
-export function avatarFileError(file: { type: string; size: number; name?: string }): string | null {
-  if (!file || typeof file.size !== 'number') return 'Ese archivo no se puede leer.';
-  if (file.size === 0) return 'El archivo esta vacio.';
+/**
+ * Un problema con la foto, dicho con clave de diccionario (HOGARIA-SPEC 12t-i18n).
+ *
+ * Es un `Error` para poder viajar por los `catch` de la carga y el recorte sin cambiar de contrato, pero
+ * su `message` es un codigo: la prosa la escribe quien pinta el aviso, que es el unico que sabe en que
+ * idioma se esta leyendo. Un modulo puro que escribe «Elige otra o recortala antes.» es un texto que
+ * nunca se traduce.
+ */
+export class AvatarIssue extends Error {
+  constructor(
+    readonly clave: TranslationKey,
+    readonly params?: TranslationParams
+  ) {
+    super(`AVATAR_${clave.replace(/\./g, '_').toUpperCase()}`);
+  }
+}
+
+export function avatarFileError(file: { type: string; size: number; name?: string }): AvatarIssue | null {
+  if (!file || typeof file.size !== 'number') return new AvatarIssue('avatar_editor.el_archivo_no_se');
+  if (file.size === 0) return new AvatarIssue('avatar_editor.el_archivo_esta');
   if (file.size > AVATAR_MAX_FILE_BYTES) {
-    return `La foto pesa demasiado (${Math.round(file.size / 1024 / 1024)} MB). Elige otra o recortala antes.`;
+    return new AvatarIssue('avatar_editor.la_foto_pesa', { n: Math.round(file.size / 1024 / 1024) });
   }
   // El SVG es texto: admitirlo es admitir un `script` dentro de una imagen.
   if (!AVATAR_ALLOWED_TYPES.includes(file.type as (typeof AVATAR_ALLOWED_TYPES)[number])) {
-    return 'Puede ser JPEG, PNG o WebP.';
+    return new AvatarIssue('avatar_editor.puede_ser_jpeg');
   }
   return null;
 }
@@ -62,8 +80,10 @@ export interface DecodedAvatar {
  * fichero se leeria dos veces al navegador y la segunda podria fallar donde la no.
  */
 export async function decodeAvatarFile(file: File): Promise<DecodedAvatar> {
-  const error = avatarFileError(file);
-  if (error) throw new Error(error);
+  const problema = avatarFileError(file);
+  // Se lanza el problema tal cual: es un `Error` con su clave dentro, y traducirlo aqui seria decidir el
+  // idioma desde un modulo que no lo conoce.
+  if (problema) throw problema;
 
   if (typeof createImageBitmap === 'function') {
     try {
@@ -84,7 +104,7 @@ export async function decodeAvatarFile(file: File): Promise<DecodedAvatar> {
     const image = new Image();
     await new Promise<void>((resolve, reject) => {
       image.onload = () => resolve();
-      image.onerror = () => reject(new Error('La imagen no se pudo leer.'));
+      image.onerror = () => reject(new AvatarIssue('avatar_editor.la_imagen_no_se'));
       image.src = url;
     });
     return {
@@ -104,7 +124,7 @@ export function renderAvatarDataUrl(decoded: DecodedAvatar, region: CropRegion, 
   canvas.width = edge;
   canvas.height = edge;
   const context = canvas.getContext('2d');
-  if (!context) throw new Error('El navegador no puede procesar la imagen.');
+  if (!context) throw new AvatarIssue('avatar_editor.el_navegador_no');
   context.imageSmoothingQuality = 'high';
   context.drawImage(decoded.source, region.sx, region.sy, region.size, region.size, 0, 0, edge, edge);
   return canvas.toDataURL('image/jpeg', AVATAR_QUALITY);

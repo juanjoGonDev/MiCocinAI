@@ -7,6 +7,7 @@
  * mal contada, y eso es exactamente el tipo de bug que hace que nadie vuelva a anotar
  * un precio.
  */
+import { dateLocale } from '../../core/time';
 
 export type ShoppingListStatus = 'active' | 'archived' | 'done';
 
@@ -114,22 +115,27 @@ export function lineDiscountOfItem(
   };
 }
 
-export function describeLineDiscount(discount: LineDiscount | null | undefined): string | null {
+export function describeLineDiscount(
+  discount: LineDiscount | null | undefined,
+  // Las palabras las pone quien llama, y por el diccionario: un modelo que escribe «unidades» tiene el
+  // idioma metido en el sitio equivocado, y aqui no hay forma de preguntar cual es el de la app.
+  etiquetas: { unidad: string; unidades: string }
+): string | null {
   if (!discount) return null;
   const core =
     discount.kind === 'percent'
       ? `${formatPercentBps(discount.percentBps ?? 0)} %`
-      : `${((discount.valueMinor ?? 0) / 100).toLocaleString('es-ES', {
+      : `${((discount.valueMinor ?? 0) / 100).toLocaleString(dateLocale(), {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         })} €`;
   const units = Number(discount.units ?? 0);
-  const cap = units > 0 ? ` en ${units.toLocaleString('es-ES', { maximumFractionDigits: 2 })} ${units === 1 ? 'unidad' : 'unidades'}` : '';
+  const cap = units > 0 ? ` en ${units.toLocaleString(dateLocale(), { maximumFractionDigits: 2 })} ${units === 1 ? etiquetas.unidad : etiquetas.unidades}` : '';
   return `${core}${cap}`;
 }
 
 function formatPercentBps(bps: number): string {
-  return (bps / 100).toLocaleString('es-ES', { maximumFractionDigits: 2 });
+  return (bps / 100).toLocaleString(dateLocale(), { maximumFractionDigits: 2 });
 }
 
 /** La oferta como dato de UI: solo existe si es valida (take < buy y buy >= 2). */
@@ -253,7 +259,7 @@ export function groupItemsByCategory(items: ShoppingListItem[]): { category: str
 export function formatMoney(minor: number | null | undefined): string {
   if (minor === null || minor === undefined) return '—';
   const euros = (minor < 0 ? -minor : minor) / 100;
-  const text = euros.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const text = euros.toLocaleString(dateLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${minor < 0 ? '-' : ''}${text} €`;
 }
 
@@ -316,7 +322,7 @@ export function parseMoneyToMinor(input: string | null | undefined): number | nu
 
 /** `2` + `"kg"` -> `"2 kg"`, `1` + `null` -> `""` (una unidad suelta no se pinta). */
 export function formatQuantity(quantity: number, unit: string | null | undefined): string {
-  const amount = Number.isInteger(quantity) ? String(quantity) : quantity.toLocaleString('es-ES', { maximumFractionDigits: 2 });
+  const amount = Number.isInteger(quantity) ? String(quantity) : quantity.toLocaleString(dateLocale(), { maximumFractionDigits: 2 });
   if (!unit) return quantity === 1 ? '' : `${amount}×`;
   return `${amount} ${unit}`;
 }

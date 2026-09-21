@@ -11,7 +11,8 @@ import { syncTabWithUrl } from '../../core/utils/tab-url';
 import { avatarFileError } from '../../core/avatar-image';
 import { AvatarEditorComponent } from './avatar-editor.component';
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
-import { formatBytes, pendingLabel, shortId, storageUsage } from './account-info';
+import { formatBytes, pendingLabelKey, shortId, storageUsage } from './account-info';
+import { AvatarIssue } from '../../core/avatar-image';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
@@ -753,7 +754,8 @@ export class AccountComponent {
 
     const problem = avatarFileError(file);
     if (problem) {
-      this.photoError.set(problem);
+      // El modulo puro devuelve la clave, no la frase: quien la traduce es la pantalla (12t-i18n).
+      this.photoError.set(this.i18n.t(problem.clave, problem.params));
       return;
     }
     this.photoError.set('');
@@ -769,18 +771,21 @@ export class AccountComponent {
       const avatar = await this.auth.uploadAvatar(dataUrl).toPromise();
       this.avatarUrl.set(avatar ?? null);
       this.photoBroken.set(false);
-      this.toastService.success('Imagen cambiada');
+      this.toastService.success(this.i18n.t('account.imagen_cambiada'));
       this.closeAvatarModal();
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       // Se dice el fallo sin cerrar el modal: la foto ya esta encuadrada y perder el encuadre por
       // un reintentar seria obligar a recortar otra vez.
+      // El `message` del server esta escrito por el server, en su idioma, y un fallo de red no es un
+      // mensaje: es «Http failure response for ...». Con el heuristic de antes salia a pantalla texto sin
+      // traducir o ruido. Lo que se pinta es lo que la app sabe decir en los dos idiomas.
       if (message.includes('UPLOAD_WRITE_FAILED')) {
-        this.photoError.set(
-          'La imagen ha llegado al servidor, pero el servidor no ha podido escribirla en disco. La ruta donde intenta guardarla sale en sus logs.'
-        );
+        this.photoError.set(this.i18n.t('account.la_imagen_ha_llegado'));
+      } else if (error instanceof AvatarIssue) {
+        this.photoError.set(this.i18n.t(error.clave, error.params));
       } else {
-        this.photoError.set(message && !message.includes('Http') ? message : 'No se pudo subir la foto. Intentalo otra vez.');
+        this.photoError.set(this.i18n.t('account.no_se_pudo_subir'));
       }
     } finally {
       this.uploading.set(false);
@@ -794,10 +799,10 @@ export class AccountComponent {
       this.avatarUrl.set(null);
       this.photoError.set('');
       this.photoBroken.set(false);
-      this.toastService.success('Imagen quitada');
+      this.toastService.success(this.i18n.t('account.imagen_quitada'));
       this.closeAvatarModal();
     } catch {
-      this.photoError.set('No se pudo quitar la foto.');
+      this.photoError.set(this.i18n.t('account.no_se_pudo_quitar'));
     } finally {
       this.uploading.set(false);
     }
@@ -820,7 +825,7 @@ export class AccountComponent {
     const name = this.nameDraft.trim();
     // La regla minima es la del servidor (2 caracteres); decirla aqui ahorra un viaje en balde.
     if (name.length < 2) {
-      this.nameError.set('Escribe al menos dos caracteres.');
+      this.nameError.set(this.i18n.t('account.escribe_al_menos_dos'));
       return;
     }
     this.savingName.set(true);
@@ -831,11 +836,11 @@ export class AccountComponent {
         // Vuelta a sincronizar con lo que hay guardado: si el servidor recorto algo, eso es lo
         // que se ve a partir de ahora, y no lo que se escribio.
         this.nameTouched.set(false);
-        this.toastService.success('Nombre guardado');
+        this.toastService.success(this.i18n.t('account.nombre_guardado'));
       },
       error: () => {
         this.savingName.set(false);
-        this.nameError.set('No se pudo guardar el nombre. Intentalo otra vez.');
+        this.nameError.set(this.i18n.t('account.no_se_pudo_guardar'));
       }
     });
   }
@@ -870,15 +875,15 @@ export class AccountComponent {
   savePassword(): void {
     const { current, fresh, repeat } = this.passwordDraft;
     if (!current) {
-      this.passwordError.set('Falta la contrasena actual.');
+      this.passwordError.set(this.i18n.t('account.falta_la_contrasena_actual'));
       return;
     }
     if (!/[A-Z]/.test(fresh) || !/[0-9]/.test(fresh) || fresh.length < 6) {
-      this.passwordError.set('La nueva contrasena necesita seis caracteres, una mayuscula y un numero.');
+      this.passwordError.set(this.i18n.t('account.la_nueva_contrasena_necesita'));
       return;
     }
     if (fresh !== repeat) {
-      this.passwordError.set('Las dos contrasenas nuevas no coinciden.');
+      this.passwordError.set(this.i18n.t('account.las_dos_contrasenas_nuevas'));
       return;
     }
     this.savingPassword.set(true);
@@ -887,13 +892,13 @@ export class AccountComponent {
         this.savingPassword.set(false);
         this.passwordError.set('');
         this.cancelPassword();
-        this.toastService.success('Contrasena cambiada', 'La proxima vez entra con la nueva.');
+        this.toastService.success(this.i18n.t('account.contrasena_cambiada'), this.i18n.t('account.la_proxima_vez_entra'));
       },
       error: (error) => {
         this.savingPassword.set(false);
         const message = typeof error?.error?.message === 'string' ? error.error.message : '';
         this.passwordError.set(
-          message.includes('incorrect') ? 'La contrasena actual no es esa.' : 'No se pudo cambiar la contrasena.'
+          message.includes('incorrect') ? this.i18n.t('account.la_contrasena_actual_no') : this.i18n.t('account.no_se_pudo_cambiar')
         );
       }
     });
@@ -935,13 +940,15 @@ export class AccountComponent {
     return storageUsage(keys, (key) => localStorage.getItem(key) ?? '', this.shopping.pendingWrites());
   });
 
+  /** El inventario del almacenamiento, en el idioma de la app: la frase la arma el diccionario. */
   storageText(): string {
     const usage = this.usage();
-    if (!usage.entries) return 'Nada guardado en este navegador';
-    return `${formatBytes(usage.bytes)} en ${usage.entries} entradas`;
+    if (!usage.entries) return this.i18n.t('account.nada_guardado_en');
+    return this.i18n.t('account.bytes_en_entradas', { bytes: formatBytes(usage.bytes), n: usage.entries });
   }
 
   pendingText(): string {
-    return pendingLabel(this.shopping.pendingWrites());
+    const pendientes = this.shopping.pendingWrites();
+    return this.i18n.t(pendingLabelKey(pendientes), { n: pendientes });
   }
 }
