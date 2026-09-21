@@ -72,40 +72,9 @@ export interface PantryStats {
   byLocation: Record<StorageLocation, number>;
 }
 
-export const INGREDIENT_CATEGORY_LABELS: Record<IngredientCategory, string> = {
-  dairy: 'Lácteos',
-  meat: 'Carnes',
-  fish: 'Pescados',
-  vegetables: 'Verduras',
-  fruits: 'Frutas',
-  grains: 'Cereales',
-  spices: 'Especias',
-  condiments: 'Condimentos',
-  frozen: 'Congelados',
-  canned: 'Enlatados',
-  beverages: 'Bebidas',
-  other: 'Otros'
-};
-
-export const STORAGE_LOCATION_LABELS: Record<StorageLocation, string> = {
-  fridge: 'Nevera',
-  freezer: 'Congelador',
-  pantry: 'Despensa',
-  counter: 'Encimera'
-};
-
-export const UTENSIL_CATEGORY_LABELS: Record<UtensilCategory, string> = {
-  oven: 'Horno',
-  microwave: 'Microondas',
-  airfryer: 'Freidora de aire',
-  stovetop: 'Cocina',
-  blender: 'Batidora',
-  mixer: 'Batidora de mano',
-  'food-processor': 'Procesador',
-  cookware: 'Utensilios de cocina',
-  bakeware: 'Molde',
-  tools: 'Herramientas'
-};
+// Las etiquetas de categoria, ubicacion y utensilio ya no estan aqui: eran un `Record<..., string>` en
+// espanol que ningun componente leia, y el texto que si se ensena vive en los catalogos de la
+// pantalla con su `labelKey` (HOGARIA-SPEC ## 12u).
 
 // Input types for API operations
 export interface CreateIngredientInput {

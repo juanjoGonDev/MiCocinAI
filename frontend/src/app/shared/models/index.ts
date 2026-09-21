@@ -23,10 +23,7 @@ export {
   Utensil,
   UtensilCategory,
   PantryFilter,
-  PantryStats,
-  INGREDIENT_CATEGORY_LABELS,
-  STORAGE_LOCATION_LABELS,
-  UTENSIL_CATEGORY_LABELS
+  PantryStats
 } from './pantry.model';
 
 export type { MeasurementUnit } from './pantry.model';
@@ -63,8 +60,6 @@ export {
   GoalType,
   CustomGoal,
   GoalFrequency,
-  DAY_OF_WEEK_LABELS,
-  MEAL_TYPE_LABELS,
   GOAL_TYPE_LABELS,
   DAY_ORDER,
   MEAL_ORDER

@@ -21,11 +21,9 @@ import {
   StorageLocation,
   Utensil,
   UtensilCategory,
-  INGREDIENT_CATEGORY_LABELS,
-  STORAGE_LOCATION_LABELS,
-  UTENSIL_CATEGORY_LABELS
 } from '../../shared/models/pantry.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
 type PantryTab = 'ingredients' | 'utensils';
@@ -138,7 +136,7 @@ const PAGE_SIZE = 100;
               [selected]="selectedIngCategory() === cat.value"
               (onClick)="filterByCategory(cat.value)"
             >
-              {{ cat.icon }} {{ cat.label }}
+              {{ cat.icon }} {{ cat.labelKey | t }}
             </app-tag>
           </div>
         </div>
@@ -382,7 +380,7 @@ const PAGE_SIZE = 100;
               <label class="form-label">{{ 'pantry.categoria' | t }}</label>
               <select [(ngModel)]="formData.category" name="category" class="form-select">
                 <option *ngFor="let cat of ingredientCategoriesNoAll" [value]="cat.value">
-                  {{ cat.icon }} {{ cat.label }}
+                  {{ cat.icon }} {{ cat.labelKey | t }}
                 </option>
               </select>
             </div>
@@ -450,7 +448,7 @@ const PAGE_SIZE = 100;
               [(ngModel)]="utensilForm.category"
             >
               <option *ngFor="let cat of utensilCategoryOptions" [value]="cat.value">
-                {{ cat.icon }} {{ cat.label }}
+                {{ cat.icon }} {{ cat.labelKey | t }}
               </option>
             </select>
           </div>
@@ -836,10 +834,9 @@ export class PantryComponent implements OnInit {
   // Utensils grouped
   utensilGroups = computed(() => {
     const all = this.pantryService.utensils();
-    return this.utensilCategoryOptions.map(cat => ({
-      ...cat,
-      items: all.filter(u => u.category === cat.value)
-    })).filter(g => g.items.length > 0);
+    return this.utensilCategoryOptions
+      .map((cat) => ({ ...cat, label: this.i18n.t(cat.labelKey), items: all.filter((u) => u.category === cat.value) }))
+      .filter((g) => g.items.length > 0);
   });
 
   /**
@@ -1091,37 +1088,42 @@ export class PantryComponent implements OnInit {
     notes: ''
   };
 
-  ingredientCategoriesNoAll = [
-    { value: 'vegetables', label: 'Verduras', icon: '🥬' },
-    { value: 'fruits', label: 'Frutas', icon: '🍎' },
-    { value: 'meat', label: 'Carnes', icon: '🥩' },
-    { value: 'fish', label: 'Pescados', icon: '🐟' },
-    { value: 'dairy', label: 'Lácteos', icon: '🧀' },
-    { value: 'grains', label: 'Cereales', icon: '🌾' },
-    { value: 'spices', label: 'Especias', icon: '🧂' },
-    { value: 'condiments', label: 'Condimentos', icon: '🫙' },
-    { value: 'frozen', label: 'Congelados', icon: '❄️' },
-    { value: 'canned', label: 'Enlatados', icon: '🥫' },
-    { value: 'beverages', label: 'Bebidas', icon: '🥤' },
-    { value: 'other', label: 'Otros', icon: '📦' }
+  /**
+   * Las categorias de la despensa. `labelKey`, no `label`: el catalogo se pinta en tres sitios (los chips
+   * del filtro, el selector del alta y el grupo de utensilios) y escribir la frase aqui era tenerla en
+   * espanol en los tres, con el idioma cambiado (HOGARIA-SPEC ## 12u).
+   */
+  ingredientCategoriesNoAll: { value: IngredientCategory; labelKey: TranslationKey; icon: string }[] = [
+    { value: 'vegetables', labelKey: 'pantry.categoria_verduras', icon: '🥬' },
+    { value: 'fruits', labelKey: 'pantry.categoria_frutas', icon: '🍎' },
+    { value: 'meat', labelKey: 'pantry.categoria_carnes', icon: '🥩' },
+    { value: 'fish', labelKey: 'pantry.categoria_pescados', icon: '🐟' },
+    { value: 'dairy', labelKey: 'pantry.categoria_lacteos', icon: '🧀' },
+    { value: 'grains', labelKey: 'pantry.categoria_cereales', icon: '🌾' },
+    { value: 'spices', labelKey: 'pantry.categoria_especias', icon: '🧂' },
+    { value: 'condiments', labelKey: 'pantry.categoria_condimentos', icon: '🫙' },
+    { value: 'frozen', labelKey: 'pantry.categoria_congelados', icon: '❄️' },
+    { value: 'canned', labelKey: 'pantry.categoria_enlatados', icon: '🥫' },
+    { value: 'beverages', labelKey: 'pantry.categoria_bebidas', icon: '🥤' },
+    { value: 'other', labelKey: 'pantry.categoria_otros', icon: '📦' }
   ];
-  ingredientCategories = [
-    { value: '', label: 'Todos', icon: '📋' },
+  ingredientCategories: { value: IngredientCategory | ''; labelKey: TranslationKey; icon: string }[] = [
+    { value: '', labelKey: 'pantry.categoria_todos', icon: '📋' },
     ...this.ingredientCategoriesNoAll
   ];
 
   /** Opciones del catálogo de utensilios (orden de secciones incluido). */
-  utensilCategoryOptions: { value: UtensilCategory; label: string; icon: string }[] = [
-    { value: 'oven', label: 'Horno', icon: '🔥' },
-    { value: 'microwave', label: 'Microondas', icon: '📡' },
-    { value: 'airfryer', label: 'Freidora de aire', icon: '🌪️' },
-    { value: 'stovetop', label: 'Cocina / Placa', icon: '♨️' },
-    { value: 'blender', label: 'Batidora vaso', icon: '🥤' },
-    { value: 'mixer', label: 'Batidora mano', icon: '🌀' },
-    { value: 'food-processor', label: 'Procesador / Robot', icon: '🤖' },
-    { value: 'cookware', label: 'Ollas / Sartenes', icon: '🍳' },
-    { value: 'bakeware', label: 'Horneado', icon: '🧁' },
-    { value: 'tools', label: 'Herramientas', icon: '🔪' }
+  utensilCategoryOptions: { value: UtensilCategory; labelKey: TranslationKey; icon: string }[] = [
+    { value: 'oven', labelKey: 'pantry.utensilio_horno', icon: '🔥' },
+    { value: 'microwave', labelKey: 'pantry.utensilio_microondas', icon: '📡' },
+    { value: 'airfryer', labelKey: 'pantry.utensilio_freidora', icon: '🌪️' },
+    { value: 'stovetop', labelKey: 'pantry.utensilio_cocina', icon: '♨️' },
+    { value: 'blender', labelKey: 'pantry.utensilio_batidora_vaso', icon: '🥤' },
+    { value: 'mixer', labelKey: 'pantry.utensilio_batidora_mano', icon: '🌀' },
+    { value: 'food-processor', labelKey: 'pantry.utensilio_procesador', icon: '🤖' },
+    { value: 'cookware', labelKey: 'pantry.utensilio_ollas', icon: '🍳' },
+    { value: 'bakeware', labelKey: 'pantry.utensilio_horneado', icon: '🧁' },
+    { value: 'tools', labelKey: 'pantry.utensilio_herramientas', icon: '🔪' }
   ];
 
   ngOnInit(): void {
@@ -1368,12 +1370,16 @@ export class PantryComponent implements OnInit {
    * Dias de calendario, no milisegundos: con `Math.ceil` sobre el instante, a las 23:00 del dia
    * de la caducidad el yogur ya estaba «caducado» una noche antes de estarlo.
    */
+  /**
+   * La etiqueta del dia de caducidad, ya en el idioma de quien mira. Se resuelve aqui y no en la plantilla
+   * porque la frase lleva el numero dentro, y `'{days}d'` partido en dos trozos no se traduce en nadie.
+   */
   getExpirationStatus(ingredient: Ingredient): { variant: 'error' | 'warning' | 'success'; label: string } | null {
     const days = daysUntil(ingredient.expirationDate);
     if (days === null) return null;
-    if (days < 0) return { variant: 'error', label: 'Caducado' };
-    if (days === 0) return { variant: 'warning', label: 'Hoy' };
-    if (days <= 3) return { variant: 'warning', label: `${days}d` };
+    if (days < 0) return { variant: 'error', label: this.i18n.t('pantry.caducado') };
+    if (days === 0) return { variant: 'warning', label: this.i18n.t('pantry.caduca_hoy') };
+    if (days <= 3) return { variant: 'warning', label: this.i18n.t('pantry.caduca_en_dias', { days }) };
     return null;
   }
   trackById(_i: number, item: Ingredient | Utensil): string { return item.id; }
