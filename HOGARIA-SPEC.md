@@ -2655,6 +2655,111 @@ ven desde la pantalla.
       de `stepLabel`, `pendingLabelKey` y `AvatarIssue`.
 - [x] `ng build --configuration production` sin errores.
 
+## 12u. Tanda 21 — lo que sigue saliendo en español cuando el idioma es inglés
+
+La tanda 20 cerró los canales por los que yo había mirado: la clave sin traducir, la llamada de servicio, el
+`aria-label`, los módulos puros. El parte de esta sigue teniendo el mismo síntoma en **nueve sitios más**, y los
+nueve eran texto que ninguna de mis reglas leía. El inventario (151 candidatos en 18 ficheros) está en
+`/home/user/scratch-round22/censo.txt`; lo que sigue es la lectura de ese inventario, que es lo que hay que
+arreglar, no la lista.
+
+**La causa, en una frase: un catálogo pinta lo que lleva dentro.** `tabs = [{ label: 'Todas' }, …]` y en la
+plantilla `{{ tab.label }}`. Como el texto está en el `.ts` y el `{{ }}` no lleva ni clave ni `| t`, las tres
+pruebas de la ronda 20 pasan de largo: la 2 mira el argumento del `t()`, la 3 la llamada de servicio, la 14 el
+texto *plano* de la plantilla. Afecta a varias pantallas de golpe porque el catálogo es un `shared/models/*.ts`
+(`MEAL_TYPE_META`, `OFFER_PRESETS`, `unit-families`) o una lista de columnas, y eso lo pintan a la vez el
+calendario, la lista, el detalle y el modal.
+
+Los casos, con lo que hay que hacer en cada uno:
+
+- **Calendario — la etiqueta de la comida**: `calendar.component.ts:526` pinta
+  `{{ MEAL_TYPE_META[draft.mealType].label }}`. `MEAL_TYPE_META.label` y `addAction` son **dato del contrato con
+  la IA** (el planificador busca la comida por esas cadenas), así que no se traducen y no se tocan: se renombran
+  **`aiLabel`**, que es lo que son. Pintar pasa por `MEAL_LABEL_KEYS` (`core/i18n/labels.ts`) con `| t`, que ya
+  existía para eso. Renombrar en vez de «explicarlo con un comentario» obliga a que cada punto que pinta la
+  etiqueta salga del diccionario, y el compilador lleva la cuenta.
+- **Las pestañas**: `recipes.component.ts` (`Todas`/`Favoritas`/`Rápidas`/`IA`), `logs.component.ts` (fuentes y
+  niveles), `account.component.ts` (secciones), `pantry.component.ts` (`+ Agregar`, `Caducado`),
+  `shopping-lists.component.ts` (`Activas`/`Todas`/`Archivadas`). `label: 'X'` pasa a `labelKey: 'domain.x'` (un
+  `TranslationKey`), y la plantilla pinta `{{ tab.labelKey | t }}`. Donde el catálogo alimenta un `PickerOption[]`
+  (`{ value, label }`) la traducción se resuelve en el `computed`, que es lo que ya hacen
+  `meal-hours.component.ts` con `row.labelKey` y la ronda 20 con `STEP_TITLE_KEYS`.
+- **Catálogos de modelo**: `unit-families.ts` (familias de medida), `OFFER_PRESETS` de `shopping.model.ts` (los
+  `hint:` de 3x2/2x1/4x3/5x4), `shopping.model.ts:242/250` (`'Otros'` de secciones y targets). Mismo trato: la
+  clave viaja en el dato, la frase está en el diccionario.
+- **La tabla de listas**: columnas `{ key: 'lista', name: 'Lista' }` → `nameKey`, `Actualizado` igual. Y el
+  tiempo relativo: «hace 1 d» no es texto de plantilla, es una etiqueta compuesta, así que se compone con
+  `Intl.RelativeTimeFormat` sobre `dateLocale()` (la regla de la ronda 20: el locale de formato es uno solo) y
+  las unidades salen del diccionario, no del `'d'`/`'h'`/`'min'` escrito en el código.
+- **El modal de «añadir descuento»**: `discountKinds`/`discountScopes` (`Porcentaje`/`Importe`,
+  `Toda la cesta`/`Primeras unidades`/`En productos`/`En secciones`, y sus `hint:`). Aquí hay trampa de datos: el
+  valor que se persiste es la **etiqueta**. Se separan las dos cosas: `value` (lo que se guarda, inmutable) y
+  `labelKey` (lo que se enseña). Lo guardado con una etiqueta en español no se reescribe: se sigue leyendo tal
+  cual y se pinta traducida.
+- **La barra de selección**: `<span>{{ selection().length }} seleccionadas</span>` — texto pegado a una
+  interpolación. Va al diccionario con parámetro: `| t: { count }`.
+- **`logs.component.ts statusLabel()`**: un getter que devuelve `'En vivo'`/`'Sin conexion'`. Devuelve la clave y
+  la pantalla traduce; el texto ya está en `dict/logs.ts`.
+- **`time-format.pipe.ts`**: `'0 min'`, `'2 h 15 min'`. Un pipe **puede** inyectar `I18nService` (no es un modelo
+  puro), así que traduce sus unidades dentro, en vez de exportar claves para que las descifre quien lo usa, que
+  era la salida fácil y dejaba el formato repartido en cuatro sitios.
+- **Household**: `{ admin: 'Admin', member: 'Miembro', child: 'Niño' }` es un **record**, no un array con `label:`,
+  y por eso la regla nueva tampoco lo veía: se detecta por valor con inicial mayúscula.
+- **Preferencias**: las pestañas ya iban por `labelKey` ✓, y el diccionario está limpio (auditado: 891 claves, 24
+  con `Es == En`, y solo dos de ellas con motivo — `' / {target} kcal'` y `'HogarIA — terminal'`). Lo que quedaba
+  eran catálogos de `shared/models/taste-profile.ts`. **Excepción documentada y con motivo de datos**: esos
+  catálogos son lo que se **persiste** en `preferences.tastes` y lo que se manda al prompt
+  (`likes`/`dislikes`/`allergens`/`restrictions`). Traducir la etiqueta cambiaría lo que se guarda y lo que
+  entiende el modelo. Donde el dato es una clave conocida se muestra su traducción; donde es texto libre del
+  usuario, se pinta tal cual porque es su texto.
+
+**La regla que lo impide** — `check-ui.mjs`, regla 19 `texto-en-un-catalogo`, sobre todos los `.ts` (excepto
+`*.spec.ts` y `core/i18n`):
+
+- **(a)** un campo de presentación (`label`, `labels`, `name`, `title`, `subtitle`, `placeholder`, `hint`, `text`,
+  `description`, `emptyTitle`, `emptyText`, `legend`, `actionLabel`, `tooltip`, `caption`) cuyo valor es un
+  literal que `isProse` aprueba. El criterio que separa el texto del dato es la **caja**: `danger`, `bottom`,
+  `tray__row--head`, `repeat` no se leen; «Todas», «Importe», «Lista» sí. Todo en minúsculas se perdona; en
+  cuanto hay inicial mayúscula o tilde, es interfaz. Claves del diccionario (`ui.ok`), unidades y `NOT_TEXT`
+  también se perdonan.
+- **(b)** un getter o función `*Label`/`*Text`/`*Title`/`*Hint`/`describe*`/`labelFor`/`titleFor` que devuelve un
+  literal de prosa.
+
+Y en la plantilla (regla 14 ampliada) los dos huecos que la ronda 20 dejó abiertos:
+
+- **texto pegado a una interpolación**: `{{ a }} seleccionadas {{ b }}`. Al escanear, cada `{{ … }}` se sustituye
+  por un centinela del mismo largo (los desplazamientos siguen siendo los del fichero crudo, que es lo que se
+  imprime en el aviso) y el ancla del texto pasa a ser `>` **o** centinela.
+- **prosa en un atributo**: `aria-label="Añadir por foto"`, `title="Ver detalle"`. Un atributo de accesibilidad o
+  de ayuda con más de una palabra y sin punto de clave es texto de interfaz, y corre la misma suerte: `| t`.
+
+Lo que **no** es incidencia y no hay que «arreglar»:
+
+- los `data-test` (contrato del e2e), `theme.service.ts:159` (un `console.log`) y los mensajes internos del
+  cliente (`'respuesta vacia'` en `shopping.service.ts:731`): eso es un código que el cliente traduce, y el
+  contrato lo decide `## 14`, no esta tanda;
+- los nombres de idioma en el selector (`Español` / `English`): se enseñan **en su propio idioma a propósito**,
+  que es la única forma de que un hablante los reconozca.
+
+```text
+[ ] Catálogos con label/name/hint/text en shared/models y unit-families → labelKey, y todos sus puntos de pintura.
+[ ] MEAL_TYPE_META.label → aiLabel (contrato IA); el modal del calendario pinta MEAL_LABEL_KEYS | t.
+[ ] Recipes tabs · logs (fuentes, niveles, statusLabel) · account tabs · pantry (categorías, cacharros, filtros).
+[ ] shopping-lists (tabs, filtros, columnas, tiempo relativo) · shopping-list-detail (línea, descuento, foto,
+    historial, barra de selección), separando en discountKinds/Scopes el valor persistido de la etiqueta.
+[ ] time-format.pipe (unidades dentro del pipe, locale único) · household (roles).
+[ ] Regla 19 en check-ui.mjs (a) y (b) · regla 14 con centinela de interpolación y atributos.
+[ ] Claves nuevas en los diccionarios (Es e En, alineados), y el gate de paridad de claves.
+[ ] Gates: check-ui en 0 con 19 reglas · tsc app · typecheck:e2e · vitest del puente · server · ng build · lint.
+```
+
+**Dónde estoy (2026-09-21, cierre de la tanda).** Regla 19 escrita y afinada: las **89 incidencias reales en 10
+ficheros** son la lista de trabajo; las 18-22 del inventario original que no aparecen son o excepción
+documentada arriba (contrato con la IA, valor persistido, `data-test`, nombres de idioma) o se arreglan a la vez
+porque comparten catálogo. La salida en `es-ES` no cambia ni un byte: lo que el e2e asserta hoy sigue saliendo
+igual, así que el `| t` añade una vuelta, no una reescritura.
+
+
 
 ## 13. Coming soon (deliberately not in this program)
 - **Las etiquetas de catálogo sin uso de `shared/models/household.model.ts`.** `*_LABELS` en español que no
