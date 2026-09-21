@@ -66,14 +66,6 @@ export interface TokenPayload {
 
 
 
-export const THEME_LABELS: Record<Theme, string> = {
-  light: 'Claro',
-  dark: 'Oscuro',
-  system: 'Sistema'
-};
 
-export const DETAIL_LEVEL_LABELS: Record<DetailLevel, string> = {
-  basic: 'Básico',
-  intermediate: 'Intermedio',
-  expert: 'Experto'
-};
+
+

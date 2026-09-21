@@ -1,14 +1,19 @@
-import { Pipe, PipeTransform } from '@angular/core';
+import { Pipe, PipeTransform, inject } from '@angular/core';
+import { I18nService } from '../../core/services/i18n.service';
+import type { TranslationKey } from '../../core/i18n';
 
 @Pipe({
   name: 'difficulty',
   standalone: true
 })
 export class DifficultyPipe implements PipeTransform {
-  private readonly labels: Record<string, string> = {
-    easy: 'Fácil',
-    medium: 'Medio',
-    hard: 'Difícil'
+  private readonly i18n = inject(I18nService);
+
+  /** La clave, no la frase: un pipe se pinta en los dos idiomas y aqui no hay quien escriba el otro. */
+  private readonly labelKeys: Record<string, TranslationKey> = {
+    easy: 'recipes.facil',
+    medium: 'recipes.medio',
+    hard: 'recipes.dificil'
   };
 
   private readonly icons: Record<string, string> = {
@@ -20,7 +25,8 @@ export class DifficultyPipe implements PipeTransform {
   transform(value: string | null | undefined, showIcon = false): string {
     if (!value) return '';
 
-    const label = this.labels[value.toLowerCase()] || value;
+    const key = this.labelKeys[value.toLowerCase()];
+    const label = key ? this.i18n.t(key) : value;
     const icon = this.icons[value.toLowerCase()] || '';
 
     return showIcon ? `${icon} ${label}` : label;

@@ -13,6 +13,7 @@ import { ModalComponent } from '../../shared/components/ui/modal/modal.component
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { I18nService } from '../../core/services/i18n.service';
+import type { TranslationKey } from '../../core/i18n';
 
 @Component({
   selector: 'app-household',
@@ -644,12 +645,13 @@ export class HouseholdComponent implements OnInit {
   }
 
   getRoleLabel(role: string): string {
-    const labels: Record<string, string> = {
-      admin: 'Admin',
-      member: 'Miembro',
-      child: 'Niño'
+    const labelKeys: Record<string, TranslationKey> = {
+      admin: 'household.rol_admin',
+      member: 'household.rol_miembro',
+      child: 'household.rol_nino'
     };
-    return labels[role] || role;
+    const key = labelKeys[role];
+    return key ? this.i18n.t(key) : role;
   }
 
   getLevelLabel(level: string): string {

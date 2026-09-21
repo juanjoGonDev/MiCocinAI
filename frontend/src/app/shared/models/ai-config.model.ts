@@ -177,8 +177,4 @@ export const AI_PROVIDER_LABELS: Record<AIProvider, string> = {
   custom: 'Custom (OpenAI-like)'
 };
 
-export const DETAIL_LEVEL_LABELS: Record<DetailLevel, string> = {
-  basic: 'Básico',
-  intermediate: 'Intermedio',
-  expert: 'Experto'
-};
+

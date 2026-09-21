@@ -73,37 +73,17 @@ export interface Allergy {
 
 export type AllergySeverity = 'mild' | 'moderate' | 'severe';
 
-export const MEMBER_ROLE_LABELS: Record<MemberRole, string> = {
-  admin: 'Administrador',
-  member: 'Miembro',
-  child: 'Niño'
-};
 
+
+// Los cinco `Record<Rol, string>` que habia aqui (roles, dieta, tolerancia al picante, racion y severidad
+// de la alergia) estaban exportados y no los leia nadie: texto en espanol que ningun idioma alcanzaba y que
+// ninguna pantalla ensenaba. Lo que si se ensena lleva `LABEL_KEYS` y sale del diccionario (## 12u).
 export { COOKING_LEVEL_LABEL_KEYS } from './home-profile';
 
-export const DIET_TYPE_LABELS: Record<DietType, string> = {
-  omnivore: 'Omnívoro',
-  vegetarian: 'Vegetariano',
-  vegan: 'Vegano',
-  pescatarian: 'Pescetariano',
-  keto: 'Keto',
-  paleo: 'Paleo'
-};
 
-export const SPICE_TOLERANCE_LABELS: Record<SpiceTolerance, string> = {
-  low: 'Bajo',
-  medium: 'Medio',
-  high: 'Alto'
-};
 
-export const PORTION_SIZE_LABELS: Record<PortionSize, string> = {
-  small: 'Pequeña',
-  medium: 'Mediana',
-  large: 'Grande'
-};
 
-export const ALLERGY_SEVERITY_LABELS: Record<AllergySeverity, string> = {
-  mild: 'Leve',
-  moderate: 'Moderada',
-  severe: 'Severa'
-};
+
+
+
+

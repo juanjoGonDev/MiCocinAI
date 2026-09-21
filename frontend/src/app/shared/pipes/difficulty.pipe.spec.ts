@@ -1,10 +1,13 @@
 import { DifficultyPipe } from './difficulty.pipe';
+import { DICTS } from '../../core/i18n';
 
 describe('DifficultyPipe', () => {
   let pipe: DifficultyPipe;
 
   beforeEach(() => {
-    pipe = new DifficultyPipe();
+    // El pipe traduce por dentro y un spec de pipe no arranca el arbol de Angular: se le pone por delante el
+    // diccionario en espanol, que es lo que ve quien no cambia de idioma.
+    pipe = new DifficultyPipe({ t: (key: string) => (DICTS.es as Record<string, string>)[key] ?? key } as never);
   });
 
   it('should create an instance', () => {

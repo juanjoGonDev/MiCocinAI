@@ -40,12 +40,7 @@ export {
   PortionSize,
   Allergy,
   AllergySeverity,
-  MEMBER_ROLE_LABELS,
-  COOKING_LEVEL_LABEL_KEYS,
-  DIET_TYPE_LABELS,
-  SPICE_TOLERANCE_LABELS,
-  PORTION_SIZE_LABELS,
-  ALLERGY_SEVERITY_LABELS
+  COOKING_LEVEL_LABEL_KEYS
 } from './household.model';
 
 // Calendar model
@@ -88,8 +83,6 @@ export {
   AIRecommendationRequest,
   AIRecentMeal,
   AITestConnectionResponse,
-  AI_PROVIDER_LABELS,
-  DETAIL_LEVEL_LABELS,
   DetailLevel
 } from './ai-config.model';
 
@@ -103,8 +96,7 @@ export {
   AuthCredentials,
   RegisterData,
   AuthResponse,
-  TokenPayload,
-  THEME_LABELS
+  TokenPayload
 } from './user.model';
 
 export type { CookingLevel as UserCookingLevel } from './user.model';
