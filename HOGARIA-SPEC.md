@@ -2609,7 +2609,9 @@ ven desde la pantalla.
 - [x] Regla 18 del gate: todo literal con pinta de frase que acabe en un sink (`toast.*`, `*Error.set`,
       `note`, `title`, ...) tiene que salir de `t()`. Ademas de los setters, cubre `return 'prosa'`, el
       `cond ? 'prosa' : 'prosa'` dentro de `t()` y las variables `t(clave)` - no el «solo literales» que
-      dejaba fuera los helpers.
+      dejaba fuera los helpers. El receptor puede tener tramos intermedios (`this.formErrors.name.set('...')`
+      cuenta igual que `this.photoError.set('...')`), que era el hueco por donde se escurrian los dos errores
+      del formulario de despensa.
 - [x] Locale de formato en un unico sitio: `core/time.ts` guarda `dateLocale()` y el `I18nService` la fija
       (`en` → `en-GB`, lo demas → `es-ES`) en su `effect` y en `languagechange`. Se acabaron los 15 `'es-ES'`
       repartidos: fechas, dias de la semana, kcal, «X personas», tamaños de almacen y los memoizadores de
@@ -2642,7 +2644,10 @@ ven desde la pantalla.
 
 ### Gates (como han salido)
 
-- [x] `node scripts/check-ui.mjs`: 177 ficheros, 18 reglas, sin incidencias (tambien con `--sin-deuda`).
+- [x] `node scripts/check-ui.mjs`: 177 ficheros, 18 reglas, sin incidencias. Con `--sin-deuda` (el modo que
+      ignora las listas LEGACY para medir lo que queda de una migracion) salen 338 avisos y **ninguno** es de
+      las reglas 14-18: 321 son `sin-emoji` dentro de los diccionarios y 11 `sin-select-nativo`, deuda que ya
+      esta apuntada en `DESIGN-SYSTEM.md` con su decision pendiente.
 - [x] `tsc -p tsconfig.app.json` y `-p tsconfig.spec.json`, `npm run typecheck:e2e`.
 - [x] `vitest run` en `server/`: 23 ficheros, 590 pruebas (expansion, excepciones, permisos, `mealPlan`,
       `persistWeeklyPlan`).

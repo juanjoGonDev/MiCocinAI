@@ -950,12 +950,15 @@ for (const file of sourceFiles) {
 // venir por `t('clave')`, por `t(cond ? 'a' : 'b')` o por `clave | t` en la plantilla, y las tres
 // formas se perdonan porque el traductor real es `t()`.
 //
+// `*Errors.name.set(...)` cuenta igual que `*Error.set(...)`: el tramo intermedio es parte del nombre del
+// signal, no un sink distinto —ahí es donde se colaba «El nombre es requerido» en la despensa.
+//
 // Que se salta: los codigos en mayusculas (`MODULE_SAVE_FAILED`), los valores de campo que son dato
 // (`variant: 'danger'`, `position: 'bottom'`) porque no se leen, y los `.spec.ts`, donde el literal es
 // el oraculo del test.
 // --------------------------------------------------------------------------------
 const SINK_CALL =
-  /(?:this\s*\.\s*)?\b\w*(?:[Tt]oast|[Ss]nack[Bb]ar|[Nn]otification|[Cc]onfirm|[Dd]ialog|[Ee]rror|[Mm]ensaje)\w*\s*\.\s*(?:success|error|warning|warn|info|open|confirm|show|set|push)\s*\(/g;
+  /(?:this\s*\.\s*)?\b\w*(?:[Tt]oast|[Ss]nack[Bb]ar|[Nn]otification|[Cc]onfirm|[Dd]ialog|[Ee]rror|[Mm]ensaje)\w*(?:\s*\.\s*\w+)*\s*\.\s*(?:success|error|warning|warn|info|open|confirm|show|set|push)\s*\(/g;
 const CAMPOS_DE_TEXTO = new Set([
   'title',
   'message',
