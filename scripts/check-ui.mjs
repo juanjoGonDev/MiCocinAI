@@ -22,7 +22,7 @@ const E2E_DIR = 'tests/e2e';
 // Cuantas reglas hay dentro. Se cuenta aqui y no a mano porque la ultima vez que se anadio una (la de
 // los selectores huerfanos) el mensaje de «sin incidencias» seguia diciendo siete, que es exactamente
 // el tipo de mentira que este fichero existe para evitar.
-const RULES = 18;
+const RULES = 19;
 
 // ---------------------------------------------------------------------------
 // Deuda heredada, declarada en voz alta.
@@ -1167,6 +1167,120 @@ function literalesDe(texto, ini, fin, saltarTraducidas = true) {
           'texto-sin-traducir-codigo',
           `el aviso sale en español pase lo que pase con el idioma: ponlo en el diccionario y pídelo con t() (${trozo.replace(/\s+/g, ' ').slice(0, 60)})`
         );
+      }
+    }
+  }
+}
+
+// --------------------------------------------------------------------------------
+// 19) La etiqueta de un catalogo NO se escribe en el catalogo.
+//
+// De donde sale: el usuario abrio la app en ingles y siguio viendo «Todas», «Almuerzo», «Porcentaje»,
+// «hace 1 d» y las columnas de la cesta en castellano. Ni la regla 14 (plantillas) ni la 18 (sinks)
+// miraban esto: aqui el texto vive en un objeto de configuracion (`{ value: 'fav', label: 'Favoritas' }`)
+// o en el `return` de un getter, y desde ahi se pinta con `{{ opcion.label }}`, que es un literal
+// tecnico para el gate y una frase para quien mira la pantalla.
+//
+// Que se caza: campos de presentacion con literal de prosa (`label`, `title`, `placeholder`, `hint`,
+// `text`, `description`, `emptyTitle`, `emptyText`, `legend`, `option`...), y los `return` de prosa de
+// los metodos cuyo nombre promete texto (`*label*`, `*text*`, `*title*`, `*hint*`, `describe*`,
+// `*Name`). Lo que se perdona: una clave del diccionario (`meal.lunch`), un token tecnico (un id de
+// icono, `danger`, `bottom`), y lo que ya pasa por `t(` o por la pipe `| t`.
+//
+// Que hacer: `labelKey: TranslationKey` en el catalogo y `| t` al pintar (como `HOUSEHOLD_EVENT_META`),
+// o resolver en un getter con `t()` (como `recurrenceOptions`). Un campo de clase con la frase ya
+// traducida NO vale: se congela en el idioma con el que se construyo el componente.
+// --------------------------------------------------------------------------------
+const CAMPOS_DE_CATALOGO =
+  /(?:^|[{,(]\s*)(label|labels|name|title|subtitle|placeholder|hint|text|description|emptyTitle|emptyText|legend|actionLabel|tooltip|caption)\s*:\s*/g;
+const METODO_DE_TEXTO =
+  /\b(?:get\s+)?([A-Za-z_$][\w$]*(?:Label|Text|Title|Hint|Description|Message|Name|Note)[\w$]*|describe[A-Z]\w*|labelFor|titleFor)\s*\(\s*\)\s*(?::\s*[^{]+)?\{/g;
+const CLAVE_DE_DICC = /^[a-z][a-z0-9_]*(?:\.[A-Za-z0-9_-]+)+$/;
+
+/**
+ * El texto de un `.ts` sin lo que no es codigo: los comentarios y el interior de las plantillas (backticks con
+ * HTML dentro, y ahi manda la regla 14). Sin esto, la regla 19 denunciaba `name: '+ Agregar'` que estaba dentro
+ * de un comentario y `name: 'toggle(item); $event...'` que estaba dentro de una plantilla: dos formas de perder
+ * credibilidad. Se sustituye por espacios del mismo largo, asi que los desplazamientos siguen siendo los del
+ * fichero crudo y la linea que se imprime es la de verdad.
+ */
+const textoDesnudo = (text) => {
+  // Fuera comentarios de linea y de bloque, y fuera el interior de las plantillas entre backticks: ahi la
+  // prosa es asunto de la regla 14. Se cambian por espacios del mismo largo, asi que los desplazamientos
+  // siguen siendo los del fichero crudo y la linea que se imprime en el aviso es la de verdad.
+  const sinComentarios = text.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+  return sinComentarios.replace(/`(?:[^`\\]|\\[\s\S])*`/g, (m) => m.replace(/[^\n]/g, ' '));
+};
+
+  // Un valor se pinta: lleva la inicial en mayusculas (la convencion de la casa) o una tilde, y no es una
+  // clave tecnica. `danger`, `var(--primary)` y `tray__row--head` no se leen; «Miembro» y «Caducado» si.
+  const looksDisplayText = (v) =>
+    /^[A-ZÁÉÍÓÚÜÑ][\wÁÉÍÓÚÜÑáéíóúüñ'’ -]{2,}$/.test(v.trim()) ||
+    (/[áéíóúüñ]/.test(v) && /^[A-Za-záéíóúüñÁÉÍÓÚÜÑ0-9 .,'’()/-]{3,}$/.test(v.trim()));
+
+{
+  // Una clave del diccionario, una unidad o un token tecnico: no es texto que haya que traducir.
+  // Quedan fuera las claves del diccionario, las unidades y los tokens tecnicos. Que un token tecnico sea
+  // todo en minusculas es la distincion que sirve: `danger`, `bottom`, `tray__row--head` y `repeat` no se
+  // leen; «Todas», «Importe» o «Lista» si, y por eso la excepcion solo perdona minúsculas.
+  const exenta = (v) =>
+    CLAVE_DE_DICC.test(v) ||
+    NOT_TEXT.has(v.toLowerCase()) ||
+    (/^[a-z0-9_.:/#*+-]+([ ][a-z0-9_.:/#*+-]+)*$/.test(v) && !/[áéíóúüñ]/.test(v));
+  const avisado = new Set();
+  const avisa = (file, text, i, detalle) => {
+    const linea = lineOf(text, i);
+    const k = `${file}:${linea}:${detalle}`;
+    if (avisado.has(k)) return;
+    avisado.add(k);
+    fail(file, linea, 'texto-en-un-catalogo', detalle);
+  };
+
+  for (const file of sourceFiles) {
+    if (!file.endsWith('.ts') || file.endsWith('.spec.ts') || file.includes('core/i18n')) continue;
+    const text = textoDesnudo(readFileSync(file, 'utf8'));
+
+    // 19a) El campo de presentacion de un catalogo, escrito con la frase dentro.
+    for (const m of text.matchAll(CAMPOS_DE_CATALOGO)) {
+      const desde = m.index + m[0].length;
+      const lit = /^\s*'([^'\n]*)'|"([^"\n]*)"/.exec(text.slice(desde, desde + 220));
+      if (!lit) continue; // `label: t('x')` o `label: this.x`: no es un literal, se libra con razon
+      const valor = (lit[1] ?? lit[2]).replace(/\\'/g, "'");
+      if (!isProse(valor) || exenta(valor)) continue;
+      if (/\bt\s*\(\s*$/.test(text.slice(Math.max(0, desde - 16), desde))) continue;
+      avisa(file, text, desde + lit[0].indexOf(valor), `${m[1]}: '${valor}' — el catalogo lleva la frase dentro y se pinta tal cual; va en el diccionario (labelKey + | t, o t() en un getter)`);
+    }
+
+    // 19b) El getter que devuelve la frase en vez de la clave.
+    for (const m of text.matchAll(METODO_DE_TEXTO)) {
+      const cuerpoInicio = m.index + m[0].length;
+      const recorte = text.slice(cuerpoInicio, cuerpoInicio + 600);
+      const corte = recorte.indexOf('\n  }');
+      const cuerpo = corte > 0 ? recorte.slice(0, corte) : recorte;
+      for (const r of cuerpo.matchAll(/return\s+'([^'\n]+)'|return\s+"([^"\n]+)"/g)) {
+        const valor = (r[1] ?? r[2]).replace(/\\'/g, "'");
+        if (!isProse(valor) || exenta(valor)) continue;
+        if (/\bt\s*\(/.test(cuerpo.slice(0, r.index))) continue; // ya pasa por el diccionario
+        avisa(file, text, cuerpoInicio + r.index, `${m[1]}() devuelve '${valor}' — un modulo o un getter sin acceso al idioma devuelve CLAVE, y la pantalla traduce`);
+      }
+    }
+
+    // 19c) El record: `{ admin: 'Administrador', member: 'Miembro' }`. No lleva un campo de presentacion,
+    // lleva la etiqueta *por clave*, y un catalogo asi se pinta con `LABELS[role]` en medio de una celda.
+    // Solo se denuncia cuando el literal tiene dos o mas valores con pinta de texto: un `{ name: 'app' }`
+    // suelto es config, y un `color: 'var(--primary)'` ya lo perdona `exenta`.
+    for (const obj of text.matchAll(/=\s*\{([^{}]*)\}/g)) {
+      const cuerpo = obj[1];
+      const entradas = [...cuerpo.matchAll(
+        /^\s*'?([A-Za-z_$][\w$]*)'?\s*:\s*'([^'\n]+)'/gm
+      )].filter((e) => {
+        const v = e[2].replace(/\\'/g, "'");
+        return looksDisplayText(v) && !exenta(v) && isProse(v) && !CLAVE_DE_DICC.test(v);
+      });
+      const total = [...cuerpo.matchAll(/^\s*'?([A-Za-z_$][\w$]*)'?\s*:/gm)].length;
+      if (entradas.length < 2 || entradas.length * 2 < total) continue;
+      for (const e of entradas) {
+        avisa(file, text, obj.index + 4 + e.index, `record con '${e[2]}' en ${e[1]}: la etiqueta va por clave, y eso no lo alcanza ningun idioma; deja ${e[1]}Key y traduce en el punto de pintura`);
       }
     }
   }
