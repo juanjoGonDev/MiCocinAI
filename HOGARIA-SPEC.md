@@ -2814,10 +2814,10 @@ lo que se veia debajo no lo estaba, y ese era el parte del usuario.
 **Como ha quedado la tanda (2026-09-21, cierre).** Las dos reglas que miden esto son la 14 (ningun texto de
 la interfaz se escribe a mano: texto desnudo en plantilla, nodos con interpolacion delante, y atributos
 `aria-label`/`placeholder`/`title`/`alt`) y la 19 (la etiqueta de un catalogo no se escribe en el catalogo),
-ampliada la 14 con `esProsaDeNodo`. Gate: **0 incidencias en 175 ficheros, 19 reglas**. 141 candidatos → 86 → 59 → 0, mas las 9 de la 14. Once dominios
-del diccionario han ganado 96 claves en los tres commits previos de la tanda, y 76 mas en el cierre (65 de
-alergenos y gustos del perfil de gustos, 10 de categorias de la compra incluido «En el carro», y la del estado
-«Pendiente» de la prueba del proveedor de IA); `relativeTimeEscofina` ha muerto (seis llamadas y cero
+ampliada la 14 con `esProsaDeNodo`. Gate: **0 incidencias en 175 ficheros, 19 reglas**. 141 candidatos → 86 → 59 → 0, mas las 9 de la 14. Once dominios del diccionario han
+ganado **198 claves** en los siete commits de la tanda (122 en los cinco primeros y 76 en el ultimo: 65 de
+alergenos y gustos del perfil, 10 de categorias de la compra incluido «En el carro», y la del estado «Pendiente»
+de la prueba del proveedor de IA); `relativeTimeEscofina` ha muerto (seis llamadas y cero
 pruebas) en favor de `relativeTimeParts`, que devuelve piezas y deja la frase al diccionario, y
 `time-format.pipe.ts` ha muerto con su spec porque nadie lo importaba. El spec y `DESIGN-SYSTEM.md` dicen lo
 mismo, que es la prueba de que la regla esta en el sistema y no en mi memoria. Puente vitest 12 ficheros /
@@ -2837,7 +2837,8 @@ maquina con Chrome.
 
 - `ng test` (Karma/Chromium) y `playwright test` siguen sin ejecutarse en esta maquina: no hay navegador.
   Los specs que necesitan `TestBed` se validan a traves del puente de vitest (12 ficheros / 109 pruebas),
-  que es estrictamente menor que la suite real; los 34 ficheros excluidos del puente son la deuda, y con
+  que es estrictamente menor que la suite real: 22 de los 34 ficheros `*.spec.ts` del frontend estan excluidos
+  del puente por necesidad, y esa lista es la deuda; con
   Chrome encima hay que quitar el `describe.skip` de `pantry-section.spec.ts` y pasar la suite e2e de una
   vez por todas.
 
