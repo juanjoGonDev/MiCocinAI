@@ -2969,39 +2969,61 @@ que falten claves; es que no habia ninguna clave que poner.
 
 ### Checklist
 
-- [ ] `ListEventAction` pasa a ser **la lista del server**, y un spec espejo en `server/` (el patron de
+- [x] `ListEventAction` pasa a ser **la lista del server**, y un spec espejo en `server/` (el patron de
       `meal-times-mirror.spec.ts`) compara las dos: si alguien anade una accion al server y el cliente no la traduce,
       CI lo para. Sin este paso la traduccion del historial se cae a la primera accion nueva.
-- [ ] Cada accion tiene clave con sus parametros: `list_event.<slug>` con `{who}` siempre y `{item}` solo donde el
+- [x] Cada accion tiene clave con sus parametros: `list_event.<slug>` con `{who}` siempre y `{item}` solo donde el
       server manda nombre. El espejo comprueba el detalle que se olvida siempre: **las acciones con `item_name` llevan
       `{item}` en la frase y las que no, no** —si no, «ha vaciado el carro {item}» se queda con la llave pintada.
-- [ ] `auditFace` deja de reescribir la frase del server con `startsWith`/`slice` (el apaño para cambiar «Juanjo» por
+- [x] `auditFace` deja de reescribir la frase del server con `startsWith`/`slice` (el apaño para cambiar «Juanjo» por
       «Tú» dentro de una cadena ya compuesta): el sujeto pasa a ser un **parametro**, elegido al componer y no a
       posteriori. Y la prueba de que el apaño era frágil: en la captura del parte el historial se leía pegado
       («…comprada1 d agoJuanjo…») porque la fila pinta nombre y frase en dos nodos contiguos.
-- [ ] Dos mapas de catalogo (`FOOD_LABEL_KEYS`, `UTENSIL_LABEL_KEYS`) **generados desde el propio `seed-data.ts`**, no
+- [x] Dos mapas de catalogo (`FOOD_LABEL_KEYS`, `UTENSIL_LABEL_KEYS`) **generados desde el propio `seed-data.ts`**, no
       tecleados, con las 122 claves en los dos idiomas, y un espejo que exige que cada nombre sembrado tenga la suya.
       Un mapa escrito a mano se pudre la primera vez que alguien anade un alimento al semillero.
-- [ ] Un pipe `catalogLabel` (`shared/pipes/catalog-label.pipe.ts`), **impuro a propósito** como `t`: puro no se
+- [x] Un pipe `catalogLabel` (`shared/pipes/catalog-label.pipe.ts`), **impuro a propósito** como `t`: puro no se
       re-evalúa al cambiar de idioma, y ese es el bug congelado de la ronda 20. La logica vive al lado, pura
       (`catalogLabelKey(tipo, valor)`), con su spec en el puente: se prueba sin navegador.
-- [ ] Puntos de pintura: `pantry` (alimentos, «con esto puedo cocinar», utensilios), `onboarding` (paso de utensilios),
+- [x] Puntos de pintura: `pantry` (alimentos, «con esto puedo cocinar», utensilios), `onboarding` (paso de utensilios),
       `shopping-list-detail` (fila de la lista y titulo de su ficha), `recipes` (chips del modal de la IA e
       ingredientes de la receta). Los tickets fotografidos y el nombre de una receta **no** pasan por el pipe, por la
       regla 3 de arriba.
-- [ ] Censo y cierre: `check-ui` en 0 con las 20 reglas de la tanda 23, `tsc` de app **y de spec** (el de spec es el
+- [x] Censo y cierre: `check-ui` en 0 con las 20 reglas de la tanda 23, `tsc` de app **y de spec** (el de spec es el
       que corto el `expect(valor, mensaje)` de la ronda pasada; sigue siendo gate), `typecheck:e2e`, puente, suite del
       server y build de produccion.
-- [ ] `DESIGN-SYSTEM.md`: la regla «lectura traducida / edicion en crudo / texto ajeno intacto» y el aviso de que un
+- [x] `DESIGN-SYSTEM.md`: la regla «lectura traducida / edicion en crudo / texto ajeno intacto» y el aviso de que un
       tipo de cliente que no coincide con el contrato del server es un bug silencioso —nadie lo usa mal porque nadie
       lo usa.
 
+### Cierre de la tanda
+
+Medido al cerrar: 20 acciones de auditoria (las del server, por fin, en el tipo del cliente) · 122 nombres del
+semillero (68 alimentos + 54 utensilios, ninguno repetido) con sus 244 claves en los dos idiomas · ocho puntos de
+pintura traducidos y dos que se dejan crudos a proposito (las lineas del ticket fotografiado) · tres que nunca
+fueron catalogo (titulos de receta en `dashboard` y `recipes`) · 3 de las 19 claves de `ListEventAction`
+coincidian con el server antes de tocar nada. Gates: `check-ui` 179 ficheros / 20 reglas en 0 · `tsc` de app y de
+spec · `typecheck:e2e` · puente de vitest 16 ficheros / 140 pruebas · suite del server 25 ficheros / 609 pruebas
+(14 del espejo del catalogo y 5 del del historial) · `ng build --configuration production` sin errores.
+
 ## 13. Coming soon (deliberately not in this program)
 
+- **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
+  (`frontend/src/app/features/shopping/unit-families.ts`) guarda 29 unidades canonicas —`kg`, `ud`, `bote`,
+  `lata`, `cucharada`, `manojo`…— y la pantalla las pinta tal cual: la despensa (`{{ ingredient.unit }}`) y el
+  pago por linea de la lista. No es un descuido de la tanda 24, es otro catalogo con su propio contrato: la
+  etiqueta se traduce en el punto de pintura (`pantry.unidad.*` + la pipe `catalog`), el **picker** tiene que
+  seguir ofreciendo el dato crudo (lo que se elige es lo que se guarda, y `canonicalUnit`/el precio por unidad
+  comparan esa cadena) y el espejo se escribe contra `UNIT_FAMILIES`, no contra `seed-data.ts`. Dos puntos de
+  lectura, un mapa de 29 pares y un spec: la proxima tanda pequena.
+
 - `ng test` (Karma/Chromium) y `playwright test` siguen sin ejecutarse en esta maquina: no hay navegador.
-  Los specs que necesitan `TestBed` se validan a traves del puente de vitest (12 ficheros / 109 pruebas),
-  que es estrictamente menor que la suite real: 22 de los 34 ficheros `*.spec.ts` del frontend estan excluidos
-  del puente por necesidad, y esa lista es la deuda; con
+  Los specs que necesitan `TestBed` se validan a traves del puente de vitest (16 ficheros / 140 pruebas),
+  que es estrictamente menor que la suite real: 21 de los 37 ficheros `*.spec.ts` del frontend estan excluidos
+  del puente por necesidad, y esa lista es la deuda. El config del puente y su generador
+  (`server/tmp-frontend*.ts`, `server/tmp-frontend-stubs/`) son rueda de taller y estan en `.gitignore`: el
+  generador aplica una heuristica —`TestBed`, DOM, matchers de Jasmine— y no hay que curar la lista a mano al
+  anadir un spec, basta con volver a lanzarlo (`node server/tmp-frontend-round24/bridge.mjs`); con
   Chrome encima hay que quitar el `describe.skip` de `pantry-section.spec.ts` y pasar la suite e2e de una
   vez por todas.
 

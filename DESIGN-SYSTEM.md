@@ -1635,11 +1635,28 @@ Reglas que se siguen de ahí, y que no son estilo sino física del framework:
   en el punto de pintura con un mapa valor → clave —`tasteLabelKey`, `listCategoryLabelKey` en
   `core/i18n/labels.ts`—; lo que no está en el catálogo se pinta tal cual, porque es texto escrito por la
   persona y la pantalla no tiene derecho a corregirlo.
-- **Traducible es lo que la app dice, no lo que la casa guarda.** Los nombres de alimentos, las categorías de
-  la cesta y los alérgenos escritos por una persona se muestran tal cual: traducirlos haría que la pantalla
-  mintiera sobre la base de datos. Lo mismo aplica a lo que entiende el planificador: esas cadenas viven en el
-  server (`MEAL_TYPE_LABELS`) y la app las enseña con `t('meal.<tipo>')`, que en castellano dice lo mismo. Un
-  dato que a la vez es texto de interfaz se distingue por el nombre del campo —`value`/`aiLabel`, no `label`.
+- **Traducible es lo que la app dice, no lo que la casa guarda.** Los nombres que **escribió una persona**
+  (alimentos propios, categorías de la cesta, alérgenos, el nombre de una receta, las líneas de un ticket
+  fotografiado) se muestran tal cual: traducirlos haría que la pantalla mintiera sobre la base de datos. Lo
+  mismo aplica a lo que entiende el planificador: esas cadenas viven en el server (`MEAL_TYPE_LABELS`) y la app
+  las enseña con `t('meal.<tipo>')`, que en castellano dice lo mismo. Un dato que a la vez es texto de interfaz
+  se distingue por el nombre del campo —`value`/`aiLabel`, no `label`—.
+- **Lo que sembró la app no es texto de la persona: se traduce la lectura.** `server/src/utils/seed-data.ts` crea
+  la despensa (68 alimentos) y el juego de utensilios (54) con el nombre en castellano, y nadie los escribió:
+  dejarlos crudos no es respetar su texto, es enseñarle su propio semillero. Se resuelve en el punto de pintura
+  con `catalogLabelKey` / la pipe `catalog` (`shared/pipes/catalog-label.pipe.ts`), igual que gustos y
+  categorías, y la regla tiene tres tramos que no se pueden mezclar:
+  **lectura** de una palabra del catálogo → etiqueta traducida si está en el catálogo, crudo si no lo está;
+  **campo editable** (el input donde se escribe, el selector de unidades que guarda el dato) → el dato tal cual,
+  porque traducir lo que se edita es reescribir la base de datos con un golpe de idioma; **texto de una persona o
+  de la IA** → crudo siempre, aunque se parezca a una palabra del catálogo.
+- **Un tipo del cliente que describe otras cosas que el contrato del server es un bug silencioso.**
+  `ListEventAction` llevaba nueve acciones inventadas (`items.add`, `list.rename`, `list.clear_checked`…) que el
+  server nunca mandó, y nadie las usaba mal porque nadie las podía usar: el historial se componía en el server y
+  se pintaba `description`. Cuando un dato puede traducirse de dos formas —frase del server o clave del
+  diccionario— hay que mirar cuál es la fuente. Los `*.spec.ts` espejos en `server/src/utils/`
+  (`shopping-list-event-i18n`, `pantry-catalog-i18n`, `meal-times-mirror`) son la forma de que no se vuelva a
+  desincronizar: leen el fuente del server y el del cliente y comparan, y fallan en CI.
 - **Antes de traducir un atributo, comprobar que existe.** `app-picker` no declara `emptyText`, y durante
   media app había tres `emptyText="…"` que Angular trataba como atributo de DOM corriente: no se pintaban,
   no fallaban y la regla los veía como texto. Un literal que no llega a la pantalla se borra, con su clave
@@ -1658,7 +1675,7 @@ Reglas que se siguen de ahí, y que no son estilo sino física del framework:
 la clave y el `Record<clave, etiqueta>`) y 20 (`clave-pintada-desnuda`: una clave del
 diccionario que llega cruda a un `{{ }}`, o un `*Label` que devuelve la clave en vez del texto). Además el tipo:
 `TranslationKey` es la unión de claves reales, así que una errata en una plantilla es error de compilación con
-`strictTemplates`. Contrato y deudas en `HOGARIA-SPEC.md` §12s, §12u y §12v.
+`strictTemplates`. Contrato y deudas en `HOGARIA-SPEC.md` §12s, §12u, §12v y §12w.
 
 - [ ] **Pendiente**: los pictogramas dentro de las claves (`📦 Despensa`, `⏱️ {n}min`) están perdonados por
       `sin-emoji` en cinco diccionarios. Decidir si son decoración (se quitan) o información (pasan a
