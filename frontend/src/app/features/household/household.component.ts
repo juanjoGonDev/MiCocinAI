@@ -1,4 +1,4 @@
-import { COOKING_LEVEL_LABEL_KEYS, CookingLevel } from '../../shared/models';
+import { cookingLevelWord } from '../../shared/models';
 import { Component, inject, OnInit, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -666,6 +666,6 @@ export class HouseholdComponent implements OnInit {
   }
 
   getLevelLabel(level: string): string {
-    return COOKING_LEVEL_LABEL_KEYS[level as CookingLevel] ?? level;
+    return cookingLevelWord(level, (clave) => this.i18n.t(clave), level);
   }
 }

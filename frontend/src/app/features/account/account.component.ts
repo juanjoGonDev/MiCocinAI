@@ -6,7 +6,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ToastService } from '../../core/services/toast.service';
 import { timeZoneLabel } from '../../core/time';
-import { COOKING_LEVEL_LABEL_KEYS } from '../../shared/models/home-profile';
+import { cookingLevelWord } from '../../shared/models/home-profile';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
 import { avatarFileError } from '../../core/avatar-image';
 import { AvatarEditorComponent } from './avatar-editor.component';
@@ -232,7 +232,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               <dt>{{ 'auth.cookingLevel' | t }}</dt>
               <dd>
                 <a routerLink="/preferences?tab=profile" class="account__inline-link" data-test="account-level-link">
-                  {{ cookingLevel() }}
+                  {{ cookingLevelLabel() }}
                 </a>
               </dd>
               <p class="account__fact-note">{{ 'account.cuan_larga_o_cuan' | t }}</p>
@@ -871,7 +871,9 @@ export class AccountComponent {
   }
 
   passwordStrengthLabel(): string {
-    return ['muy corta', 'justa', 'razonable', 'buena', 'fuerte'][Math.min(this.passwordStrength(), 4)];
+    // Cinco claves, no cinco palabras escritas: quien pinta esto es la pantalla, y la pantalla tiene idioma.
+    const clave = PASSWORD_STRENGTH_KEYS[Math.min(this.passwordStrength(), PASSWORD_STRENGTH_KEYS.length - 1)];
+    return this.i18n.t(clave);
   }
 
   savePassword(): void {
@@ -921,11 +923,14 @@ export class AccountComponent {
   readonly email = computed(() => this.auth.currentUser()?.email ?? '—');
   readonly accountId = computed(() => this.auth.userId());
   readonly householdId = computed(() => this.auth.currentUser()?.householdId ?? '');
-  /** El nivel, con su nombre: la pantalla no imprime valores internos. */
-  readonly cookingLevel = computed(() => {
-    const level = this.auth.currentUser()?.cookingLevel;
-    return (level && COOKING_LEVEL_LABEL_KEYS[level]) || 'Sin marcar';
-  });
+  /** El nivel, con su nombre: la pantalla no imprime valores internos ni claves del diccionario. */
+  readonly cookingLevelLabel = computed(() =>
+    cookingLevelWord(
+      this.auth.currentUser()?.cookingLevel,
+      (clave) => this.i18n.t(clave),
+      this.i18n.t('account.sin_nivel')
+    )
+  );
   readonly version = computed(() => `${environment.appName} ${environment.version}`);
   readonly timezone = computed(() => timeZoneLabel());
 
@@ -954,3 +959,12 @@ export class AccountComponent {
     return this.i18n.t(pendingLabelKey(pendientes), { n: pendientes });
   }
 }
+
+/** Las cinco etiquetas del medidor de contrasena, por clave de diccionario (HOGARIA-SPEC ## 12v). */
+const PASSWORD_STRENGTH_KEYS: readonly TranslationKey[] = [
+  'account.pw_muy_corta',
+  'account.pw_justa',
+  'account.pw_razonable',
+  'account.pw_buena',
+  'account.pw_fuerte'
+];

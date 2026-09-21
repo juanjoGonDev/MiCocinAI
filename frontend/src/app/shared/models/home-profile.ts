@@ -93,6 +93,21 @@ export function toHomeProfile(stored: unknown): HomeProfile {
   };
 }
 
+/**
+ * El nivel de cocina en palabras. Tres pantallas lo resolvian cada una por su cuenta, y dos devolvian la
+ * CLAVE (la pestana de «Perfil» llego a decir `profile.cooking.none`): un `{{ }}` de Angular acepta cualquier
+ * `string`, asi que ni el compilador ni el diccionario se enteran. Aqui esta la unica version, con el
+ * traductor dentro —como `difficultyLabel`— porque el idioma solo lo tiene la pantalla que llama.
+ */
+export function cookingLevelWord(
+  level: string | undefined | null,
+  t: (key: TranslationKey) => string,
+  fallback = '—'
+): string {
+  const clave = level && isCookingLevel(level) ? COOKING_LEVEL_LABEL_KEYS[level] : undefined;
+  return clave ? t(clave) : fallback;
+}
+
 export function toggleHomeModule(modules: HomeModule[], module: HomeModule): HomeModule[] {
   return modules.includes(module) ? modules.filter((m) => m !== module) : [...modules, module];
 }

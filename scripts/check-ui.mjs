@@ -22,7 +22,7 @@ const E2E_DIR = 'tests/e2e';
 // Cuantas reglas hay dentro. Se cuenta aqui y no a mano porque la ultima vez que se anadio una (la de
 // los selectores huerfanos) el mensaje de «sin incidencias» seguia diciendo siete, que es exactamente
 // el tipo de mentira que este fichero existe para evitar.
-const RULES = 19;
+const RULES = 20;
 
 // ---------------------------------------------------------------------------
 // Deuda heredada, declarada en voz alta.
@@ -673,6 +673,14 @@ const VISIBLE_ATTRS = [
   'aria-label',
   'title'
 ];
+
+// Que «label» sea un atributo de texto no depende de que este en una lista: `levelLabel="¿Como andas de
+// cocina?"` (Preferencias) se salto la regla exacta porque la lista cerrada no tenia `levelLabel`, y el
+// usuario lo vio en castellano con la app en ingles. Un nombre de atributo se reconoce por el sufijo —
+// normalizado de camelCase a kebab, que es como se escriben los dos— y la lista de arriba se queda como
+// documentacion de los casos que empujaron la regla, no como filtro.
+const ATRIBUTO_DE_TEXTO = /(?:^|[-_.])(label|title|heading|message|hint|placeholder|text|subtitle|description|question|tooltip|alt)$/i;
+const esAtributoDeTexto = (nombre) => ATRIBUTO_DE_TEXTO.test(nombre.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase());
 // Unidades, simbolos y tokens tecnicos: se escriben igual en los dos idiomas. Anadir aqui es una
 // decision de producto, no la forma de callar a la regla.
 const NOT_TEXT = new Set(['g', 'kg', 'mg', 'lb', 'ml', 'l', 'cl', 'dl', 'ud', 'u', 'un', 'x', '%', '€', 'kcal', 'kj']);
@@ -702,9 +710,10 @@ for (const file of sourceFiles) {
   const tpl = block[1];
   const base = block.index + block[0].indexOf(tpl);
 
-  for (const attr of VISIBLE_ATTRS) {
-    for (const match of tpl.matchAll(new RegExp(`[\\s]${attr}="([^"]*)"`, 'g'))) {
-      const value = match[1];
+  for (const match of tpl.matchAll(/[\s]([A-Za-z][\w.-]*)="([^"]*)"/g)) {
+    if (esAtributoDeTexto(match[1])) {
+      const attr = match[1];
+      const value = match[2];
       if (value.includes('{{') || !isProse(value)) continue;
       fail(
         file,
@@ -1294,6 +1303,136 @@ const textoDesnudo = (text) => {
       if (entradas.length < 2 || entradas.length * 2 < total) continue;
       for (const e of entradas) {
         avisa(file, text, obj.index + 4 + e.index, `record con '${e[2]}' en ${e[1]}: la etiqueta va por clave, y eso no lo alcanza ningun idioma; deja ${e[1]}Key y traduce en el punto de pintura`);
+      }
+    }
+  }
+}
+
+// --------------------------------------------------------------------------------
+// 20) Una clave del diccionario no es texto, y un miembro de pintura no devuelve texto escrito a mano.
+//
+// De donde sale: la captura del usuario en la pestana de «Perfil» de Preferencias, que decia
+// `profile.cooking.none`. La clave existia en los dos idiomas, el diccionario estaba perfecto, y lo que
+// pasaba es que `profileLabel()` —el contador del boton— devolvia la clave en vez de la palabra: el hueco
+// de texto de Angular acepta cualquier string, asi que ni el compilador ni la regla 15 (que busca literales
+// dentro de un `t(` o de un `| t`) tenian forma de quejarse. Dos clases de bug, una regla:
+//
+//   a) un `{{ }}` o un `[prop]="..."` de pintura con una clave literal y sin `| t`  →  se ve la clave;
+//   b) un miembro del componente con nombre de texto (`*Label`, `*Title`, `*Message`, `*Hint`,
+//      `*Placeholder`, `*Subtitle`, `*Description`) que devuelve o guarda la clave de un mapa `*_KEYS` /
+//      un `.labelKey`, o la prosa en castellano escrita a mano  →  o traduce, o se llama `*Key`.
+//
+// El caso (b) con prosa es el que hacia falta para `account.component.ts`, que devolvia
+// `(level && COOKING_LEVEL_LABEL_KEYS[level]) || 'Sin marcar'`: clave sin traducir y frase sin diccionario
+// en la misma linea. Que el remedio sea cambiar el nombre del miembro a `*Key` es intencionado: deja de
+// mentir sobre lo que devuelve, y la regla 14 ya se ocupa de que quien pinte esa clave la traduzca.
+// --------------------------------------------------------------------------------
+{
+  const PALABRAS_DE_CODIGO = new Set(['if','for','while','switch','case','return','const','let','var','else','null','true','false','new','typeof','await','async','function','catch','try','do','throw','delete','in','of','this','super','break','continue','default','export','import','from','extends','as','void','yield']);
+
+  const TRADUCE = /(?:this\s*\.\s*i18n\s*\.\s*t|\bthis\s*\.\s*t|\bi18n\s*\.\s*t|\bthis\s*\.\s*i18n\s*\.\s*plural|\bplural)\s*\(/;
+  const NOMBRE_DE_TEXTO = /^(?:get\s+|set\s+)?[A-Za-z_$][\w$]*(?:[Ll]abel|[Tt]itle|[Mm]ensaje|[Mm]essage|[Hh]int|[Pp]laceholder|[Ss]ubtitle|[Dd]escription|[Qq]uestion|[Tt]exto)[A-Za-z_$0-9]*$/;
+  const ES_PROSA = (v) => isProse(v) && !NOT_TEXT.has(v.toLowerCase()) && !CLAVE_DE_DICC.test(v);
+
+  for (const file of sourceFiles) {
+    if (!file.endsWith('.component.ts')) continue;
+    const text = readFileSync(file, 'utf8');
+
+    // 20a) La clave literal que llega cruda a la plantilla.
+    const block = text.match(/template:\s*`([\s\S]*?)\n\s*`/);
+    if (block) {
+      const tpl = block[1];
+      const base = block.index + block[0].indexOf(tpl);
+      for (const m of tpl.matchAll(/\{\{([\s\S]*?)\}\}/g)) {
+        const expr = m[1];
+        if (/\|\s*t\b/.test(expr) || TRADUCE.test(expr)) continue;
+        for (const lit of expr.matchAll(/'([a-z][\w.-]*\.[\w.-]+)'/g)) {
+          if (!esKeys.has(lit[1])) continue;
+          fail(
+            file,
+            lineOf(text, base + m.index),
+            'clave-pintada-desnuda',
+            `{{ }} pinta la clave «${lit[1]}» sin pasar por el traductor: «${expr.trim().slice(0, 50)}» — la expresion lleva «| t» o se resuelve en el .ts con i18n.t()`
+          );
+        }
+      }
+      for (const m of tpl.matchAll(/\[(?:attr\.)?([\w.-]+)\]\s*=\s*"([^"]*)"/g)) {
+        if (!esAtributoDeTexto(m[1])) continue;
+        const solo = /^\s*'([a-z][\w.-]*\.[\w.-]+)'\s*$/.exec(m[2]);
+        if (!solo || !esKeys.has(solo[1])) continue;
+        fail(
+          file,
+          lineOf(text, base + m.index),
+          'clave-pintada-desnuda',
+          `[${m[1]}] recibe la clave «${solo[1]}» cruda: se pinta el nombre de la clave, no la frase — «'${solo[1]}' | t»`
+        );
+      }
+    }
+
+    // 20b) El miembro con nombre de texto que no traduce. Se escanea el fichero sin comentarios ni
+    // plantillas (`textoDesnudo`), que es lo que ya hace la 19 por las mismas razones.
+    const limpio = textoDesnudo(text);
+    // `textoDesnudo` vacia los comentarios; de la plantilla no se pinta nada aqui, asi que se marca su hueco
+    // y se salta: sus literales los ven 20a y la regla 14.
+    const tplInicio = block ? block.index : -1;
+    const tplFin = block ? block.index + block[0].length : -1;
+    const lineas = limpio.split('\n');
+    const offsetDe = (n) => lineas.slice(0, n).join('\n').length;
+
+    // Miembros del componente, recortados por su indentacion de dos espacios. Se mira el CUERPO entero y no
+    // la linea: `passwordStrengthLabel()` busca la clave en una linea y la traduce en la siguiente, y un
+    // escaneo linea a linea lo denunciaba por traducir tarde. Con el bloque por medio, lo que se exige es lo
+    // que de verdad importa: que en ese miembro alguien llama al traductor.
+    const declaraciones = [];
+    for (let n = 0; n < lineas.length; n++) {
+      const decl = /^  (?:(?:public|private|protected|readonly|static|get|set)\s+)*([A-Za-z_$][\w$]*)\s*(?:\(|=|:)/.exec(lineas[n]);
+      if (!decl || PALABRAS_DE_CODIGO.has(decl[1])) continue;
+      declaraciones.push({ nombre: decl[1], desde: n });
+    }
+    for (const [d, miembroDecl] of declaraciones.entries()) {
+      const fin = d + 1 < declaraciones.length ? declaraciones[d + 1].desde : lineas.length;
+      const cuerpoLineas = lineas.slice(miembroDecl.desde, fin).filter((l, k) => {
+        const off = offsetDe(miembroDecl.desde + k);
+        return !(tplInicio >= 0 && off > tplInicio && off < tplFin);
+      });
+      const cuerpo = cuerpoLineas.join('\n');
+      if (/^}/.test(cuerpoLineas[0] ?? '')) continue;
+      const traduce = TRADUCE.test(cuerpo) || /\|\s*t\b/.test(cuerpo);
+      const indexaClaves = /\b[A-Z][A-Z0-9_]*KEYS?\s*\[|\.labelKey\b/.test(cuerpo);
+      const display = NOMBRE_DE_TEXTO.test(miembroDecl.nombre);
+      for (let n = miembroDecl.desde; n < fin; n++) {
+        const off = offsetDe(n);
+        if (tplInicio >= 0 && off > tplInicio && off < tplFin) continue;
+        const linea = lineas[n];
+        const propiedadKey = /^\s*(?:readonly\s+)?'?(\w+)'?\s*:/.exec(linea);
+        if (indexaClaves && !traduce && /KEYS?\s*\[|\.labelKey\b/.test(linea)) {
+          if (propiedadKey && /Key$/.test(propiedadKey[1])) continue; // construir la clave es el patron correcto
+          if (display) {
+            fail(
+              file,
+              lineOf(text, off),
+              'clave-pintada-desnuda',
+              `«${miembroDecl.nombre}» devuelve la clave de un catalogo y quien la pinta espera texto: traduce con i18n.t() aqui o cambiale el nombre a ${miembroDecl.nombre}Key`
+            );
+          } else if (!/Key$/.test(miembroDecl.nombre)) {
+            fail(
+              file,
+              lineOf(text, off),
+              'clave-pintada-desnuda',
+              `«${miembroDecl.nombre}» (linea ${miembroDecl.desde + 1}) devuelve la clave de un catalogo: o la traduces en el miembro, o el miembro se llama ${miembroDecl.nombre}Key y quien la pinta pasa por t()`
+            );
+          }
+        }
+        if (!display) continue; // la prosa escrita a mano solo importa en un miembro de pintura (20b)
+        for (const lit of linea.matchAll(/'([^'\\\n]+)'/g)) {
+          if (!ES_PROSA(lit[1]) || esKeys.has(lit[1])) continue;
+          fail(
+            file,
+            lineOf(text, off),
+            'clave-pintada-desnuda',
+            `«${miembroDecl.nombre}» devuelve «${lit[1].slice(0, 40)}» escrito a mano: un miembro de pintura no compone frases, pide la clave al diccionario`
+          );
+        }
       }
     }
   }

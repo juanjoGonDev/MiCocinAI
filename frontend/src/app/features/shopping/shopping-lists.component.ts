@@ -248,7 +248,7 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
               [class.tray__row--muted]="list.status !== 'active'"
               [attr.data-test]="'list-row'"
             >
-              <div class="tray__cell tray__cell--name" role="cell" data-label="Lista">
+              <div class="tray__cell tray__cell--name" role="cell" [attr.data-label]="'shopping_lists.columna_lista' | t">
                 @if (editingId() === list.id) {
                   <div class="tray__edit">
                     <input
@@ -286,7 +286,7 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
                 }
               </div>
 
-              <div class="tray__cell tray__cell--store" role="cell" data-label="Tienda">
+              <div class="tray__cell tray__cell--store" role="cell" [attr.data-label]="'shopping_lists.columna_tienda' | t">
                 @if (list.store) {
                   <span class="tray__chip">{{ list.store }}</span>
                 } @else {
@@ -294,22 +294,22 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
                 }
               </div>
 
-              <div class="tray__cell tray__cell--progress" role="cell" data-label="Progreso">
+              <div class="tray__cell tray__cell--progress" role="cell" [attr.data-label]="'shopping_lists.columna_progreso' | t">
                 <span class="tray__bar" aria-hidden="true">
                   <span class="tray__bar-fill" [style.width.%]="progressOf(list)"></span>
                 </span>
                 <span class="tray__fraction">{{ list.checkedItems }}/{{ list.totalItems }}</span>
               </div>
 
-              <div class="tray__cell tray__cell--total" role="cell" data-label="Total">
+              <div class="tray__cell tray__cell--total" role="cell" [attr.data-label]="'shopping_lists.columna_total' | t">
                 <span class="tray__money">{{ money(list.pricedTotalMinor) }}</span>
               </div>
 
-              <div class="tray__cell tray__cell--when" role="cell" data-label="Actualizado">
+              <div class="tray__cell tray__cell--when" role="cell" [attr.data-label]="'shopping_lists.columna_actualizado' | t">
                 <span class="tray__since">{{ since(list.updated_at) }}</span>
               </div>
 
-              <div class="tray__cell tray__cell--actions" role="cell" data-label="Acciones">
+              <div class="tray__cell tray__cell--actions" role="cell" [attr.data-label]="'shopping_lists.columna_acciones' | t">
                 <app-icon-button
                   [icon]="list.status === 'done' ? 'undo' : 'check_circle'"
                   [label]="list.status === 'done' ? ('shopping_lists.reabrir' | t) : ('shopping_lists.terminar_lista' | t)"

@@ -111,6 +111,7 @@ export {
   isCookingLevel,
   isHomeModule,
   toHomeProfile,
-  toggleHomeModule
+  toggleHomeModule,
+  cookingLevelWord
 } from './home-profile';
 export type { HomeModule, HomeProfile } from './home-profile';

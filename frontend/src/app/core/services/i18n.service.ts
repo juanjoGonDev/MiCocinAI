@@ -2,6 +2,7 @@ import { Injectable, signal, effect } from '@angular/core';
 import { STORAGE_KEYS } from './storage.service';
 import { relativeTimeParts, setDateLocale, type TimeInput } from '../time';
 import { DICTS, type TranslationKey, type TranslationParams } from '../i18n';
+import { environment } from '../../../environments/environment';
 
 /**
  * El idioma de la aplicacion, y donde se busca un texto.
@@ -106,7 +107,15 @@ export class I18nService {
 
   t(key: TranslationKey, params?: TranslationParams): string {
     const dict = DICTS[this.resolvedSignal()];
-    let str: string = dict[key] ?? DICTS.es[key] ?? key;
+    const encontrada = dict[key] ?? DICTS.es[key];
+    let str: string = encontrada ?? key;
+    if (encontrada === undefined && !environment.production) {
+      // Un hueco de texto de Angular acepta cualquier `string`, asi que una clave que no existe NO falla: se
+      // pinta `profile.cooking.none` en la pestana y el unico que se entera es el usuario (HOGARIA-SPEC ## 12v).
+      // En desarrollo el diagnostico va a la consola, que es donde lo ve quien escribe; en produccion la
+      // pantalla no se rinde a un log.
+      console.warn(`[i18n] «${key}» no esta en el diccionario de ${this.resolvedSignal()}: se pinta la clave`);
+    }
     if (params) {
       for (const [k, v] of Object.entries(params)) {
         str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), v == null ? '' : String(v));

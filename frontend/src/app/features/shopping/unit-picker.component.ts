@@ -39,8 +39,7 @@ import { I18nService } from '../../core/services/i18n.service';
         [options]="options()"
         [value]="value"
         [placeholder]="placeholderText"
-        searchPlaceholder="Buscar unidad o escribir la que quieras"
-        emptyText="Nada parecido: usa el texto que has escrito"
+        [searchPlaceholder]="searchText"
         [allowCustom]="true"
         [filterFrom]="6"
         [leadingIcon]="familyIcon()"
@@ -73,6 +72,11 @@ export class UnitPickerComponent {
     return this.placeholder ?? this.i18n.t('ui.sin_unidad');
   }
   private readonly i18n = inject(I18nService);
+
+  /** La frase propia del picker de unidades, resuelta al pintar: un campo se congela (## 12v). */
+  protected get searchText(): string {
+    return this.i18n.t('shopping_lists.picker_buscar_unidad');
+  }
 
   @Input() value: string | null = null;
   /**

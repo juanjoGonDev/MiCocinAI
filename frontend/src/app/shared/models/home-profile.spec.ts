@@ -2,6 +2,7 @@ import { DICTS } from '../../core/i18n';
 import {
   COOKING_LEVEL_LABEL_KEYS,
   COOKING_LEVEL_OPTIONS,
+  cookingLevelWord,
   DEFAULT_HOME_PROFILE,
   detailLevelHintKey,
   HOME_MODULES,
@@ -56,13 +57,13 @@ describe('home-profile model', () => {
   });
 
   it('reconoce solo los valores suyos', () => {
-    expect(isCookingLevel('none')).toBeTrue();
-    expect(isCookingLevel('expert')).toBeTrue();
-    expect(isCookingLevel('chefa')).toBeFalse();
-    expect(isCookingLevel(undefined)).toBeFalse();
-    expect(isHomeModule('receipts')).toBeTrue();
-    expect(isHomeModule('gatos')).toBeFalse();
-    expect(isHomeModule(null)).toBeFalse();
+    expect(isCookingLevel('none')).toBe(true);
+    expect(isCookingLevel('expert')).toBe(true);
+    expect(isCookingLevel('chefa')).toBe(false);
+    expect(isCookingLevel(undefined)).toBe(false);
+    expect(isHomeModule('receipts')).toBe(true);
+    expect(isHomeModule('gatos')).toBe(false);
+    expect(isHomeModule(null)).toBe(false);
   });
 
   it('arranca sin secciones marcadas y con el nivel por defecto del alta', () => {
@@ -122,5 +123,32 @@ describe('home-profile model', () => {
       expect(twice).toEqual(['meals']);
       expect(before).toEqual(['meals']);
     });
+  });
+
+  /**
+   * El espejo de la captura del usuario: la pestana de «Perfil» decia `profile.cooking.none` porque el
+   * miembro que alimenta ese hueco devolvia la CLAVE. Un `{{ }}` de Angular no distingue una clave de una
+   * palabra —ambas son `string`—, asi que esto es lo unico que lo distingue sin navegador.
+   */
+  it('convierte el nivel en palabra, no en clave del diccionario', () => {
+    const t = (clave: string) => `[${clave}]`;
+    // El caso de la captura: `none` es la clave `profile.cooking.none`, y la pestana la pintaba cruda.
+    expect(cookingLevelWord('none', t)).toBe(`[${COOKING_LEVEL_LABEL_KEYS.none}]`);
+    for (const level of ['none', 'beginner', 'intermediate', 'expert'] as const) {
+      expect(cookingLevelWord(level, t)).toBe(`[${COOKING_LEVEL_LABEL_KEYS[level]}]`);
+    }
+    // Un valor que no es del catalogo no se inventa: se pinta el fallback, nunca una clave.
+    expect(cookingLevelWord('quien-sabe-que', t)).toBe('—');
+    expect(cookingLevelWord(undefined, t, 'Sin marcar')).toBe('Sin marcar');
+  });
+
+  it('los cuatro niveles tienen palabra en los dos idiomas', () => {
+    for (const level of COOKING_LEVEL_OPTIONS.map((option) => option.value)) {
+      for (const idioma of ['es', 'en'] as const) {
+        const palabra = cookingLevelWord(level, (clave) => DICTS[idioma][clave as keyof typeof DICTS['es']]);
+        expect(palabra.length).toBeGreaterThan(2);
+        expect(palabra).not.toContain('.'); // «profile.cooking.none» no es una respuesta, es un diagnostico
+      }
+    }
   });
 });

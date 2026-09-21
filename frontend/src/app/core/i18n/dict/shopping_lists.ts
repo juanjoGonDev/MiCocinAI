@@ -69,6 +69,10 @@ export const shoppingListsEs = {
   'shopping_lists.categoria_congelados': 'Congelados',
   'shopping_lists.categoria_otros': 'Otros',
   'shopping_list_detail.en_el_carro': 'En el carro',
+  'shopping_lists.columna_acciones': 'Acciones',
+  'shopping_lists.picker_buscar_unidad': 'Buscar unidad o escribir la que quieras',
+  'shopping_list_detail.buscar_seccion': 'Buscar seccion',
+  'shopping_list_detail.buscar_producto': 'Buscar producto',
 } as const;
 
 export const shoppingListsEn: Record<keyof typeof shoppingListsEs, string> = {
@@ -140,4 +144,8 @@ export const shoppingListsEn: Record<keyof typeof shoppingListsEs, string> = {
   'shopping_lists.categoria_congelados': 'Frozen',
   'shopping_lists.categoria_otros': 'Other',
   'shopping_list_detail.en_el_carro': 'In the cart',
+  'shopping_lists.columna_acciones': 'Actions',
+  'shopping_lists.picker_buscar_unidad': 'Search a unit, or type the one you want',
+  'shopping_list_detail.buscar_seccion': 'Find a section',
+  'shopping_list_detail.buscar_producto': 'Search a product',
 };

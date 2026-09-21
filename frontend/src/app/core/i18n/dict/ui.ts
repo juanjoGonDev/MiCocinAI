@@ -135,6 +135,10 @@ export const uiEs = {
   'ui.unidad_d': 'd',
   'ui.el_dia': 'el {day}',
   'ui.dia_y_ano': '{day} {year}',
+  'ui.otra_alergia_o_intolerancia': 'Otra alergia o intolerancia',
+  'ui.no_esta_escribelo': '¿No está? Escríbelo y se añade a la lista.',
+  'ui.otro_alimento_o_tipo_de_cocina': 'Otro alimento o tipo de cocina',
+  'ui.otro_alimento_que_no_te_gusta': 'Otro alimento que no te gusta',
 } as const;
 
 export const uiEn: Record<keyof typeof uiEs, string> = {
@@ -261,4 +265,8 @@ export const uiEn: Record<keyof typeof uiEs, string> = {
   'ui.unidad_d': 'd',
   'ui.el_dia': 'on {day}',
   'ui.dia_y_ano': '{day} {year}',
+  'ui.otra_alergia_o_intolerancia': 'Another allergy or intolerance',
+  'ui.no_esta_escribelo': 'Not there? Type it and it joins the list.',
+  'ui.otro_alimento_o_tipo_de_cocina': 'Another food or style of cooking',
+  'ui.otro_alimento_que_no_te_gusta': 'Another food you do not like',
 };

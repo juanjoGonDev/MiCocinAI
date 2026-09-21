@@ -64,6 +64,12 @@ export const accountEs = {
   'account.pestanja_cuenta': 'Cuenta',
   'account.pestanja_seguridad': 'Seguridad',
   'account.pestanja_informacion': 'Informacion',
+  'account.sin_nivel': 'Sin marcar',
+  'account.pw_muy_corta': 'muy corta',
+  'account.pw_justa': 'justa',
+  'account.pw_razonable': 'razonable',
+  'account.pw_buena': 'buena',
+  'account.pw_fuerte': 'fuerte',
 } as const;
 
 export const accountEn: Record<keyof typeof accountEs, string> = {
@@ -130,4 +136,10 @@ export const accountEn: Record<keyof typeof accountEs, string> = {
   'account.pestanja_cuenta': 'Account',
   'account.pestanja_seguridad': 'Security',
   'account.pestanja_informacion': 'About',
+  'account.sin_nivel': 'Not set',
+  'account.pw_muy_corta': 'very short',
+  'account.pw_justa': 'barely enough',
+  'account.pw_razonable': 'fair',
+  'account.pw_buena': 'good',
+  'account.pw_fuerte': 'strong',
 };

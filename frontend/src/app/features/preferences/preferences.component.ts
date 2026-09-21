@@ -13,6 +13,7 @@ import { ChipSelectComponent } from '../../shared/components/ui/chip-select/chip
 import { HomeProfilePickerComponent } from '../../shared/components/ui/home-profile-picker/home-profile-picker.component';
 import {
   COOKING_LEVEL_LABEL_KEYS,
+  cookingLevelWord,
   DEFAULT_HOME_PROFILE,
   HomeProfile,
   toHomeProfile
@@ -101,7 +102,6 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
           <app-home-profile-picker
             [(profile)]="profile"
             [askForModules]="false"
-            levelLabel="¿Cómo andas de cocina?"
           ></app-home-profile-picker>
         </ng-container>
 
@@ -115,8 +115,8 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
             [label]="'preferences.alergias_e_intolerancias' | t"
             [options]="allergenOptions"
             [(value)]="taste.allergies"
-            customPlaceholder="Otra alergia o intolerancia"
-            hint="¿No está? Escríbelo y se añade a la lista."
+            [customPlaceholder]="'ui.otra_alergia_o_intolerancia' | t"
+            [hint]="'ui.no_esta_escribelo' | t"
           ></app-chip-select>
         </ng-container>
 
@@ -135,7 +135,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
               [label]="'preferences.lo_que_mas_te' | t"
               [options]="likeOptions"
               [(value)]="taste.likes"
-              customPlaceholder="Otro alimento o tipo de cocina"
+              [customPlaceholder]="'ui.otro_alimento_o_tipo_de_cocina' | t"
             ></app-chip-select>
           </div>
 
@@ -147,7 +147,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
               [label]="'preferences.lo_que_prefieres_evitar' | t"
               [options]="dislikeOptions"
               [(value)]="taste.dislikes"
-              customPlaceholder="Otro alimento que no te gusta"
+              [customPlaceholder]="'ui.otro_alimento_que_no_te_gusta' | t"
             ></app-chip-select>
           </div>
 
@@ -540,9 +540,9 @@ export class PreferencesComponent implements OnInit {
     return this.snapshot() !== this.savedSnapshot;
   }
 
-  /** En la pestaña no se muestra el valor interno ('none'), sino su nombre. */
+  /** En la pestaña no se muestra el valor interno ('none'), sino su nombre: la palabra, no la clave. */
   profileLabel(): string {
-    return COOKING_LEVEL_LABEL_KEYS[this.profile.cookingLevel] ?? '—';
+    return cookingLevelWord(this.profile.cookingLevel, (clave) => this.i18n.t(clave));
   }
 
   save(): void {

@@ -98,8 +98,8 @@ import { I18nService } from '../../core/services/i18n.service';
               [label]="'preferences.alergias_e_intolerancias' | t"
               [options]="allergenOptions"
               [(value)]="taste.allergies"
-              customPlaceholder="Otra alergia o intolerancia"
-              hint="¿No está? Escríbelo y se añade a la lista."
+              [customPlaceholder]="'ui.otra_alergia_o_intolerancia' | t"
+              [hint]="'ui.no_esta_escribelo' | t"
             ></app-chip-select>
           </ng-container>
 
@@ -116,7 +116,7 @@ import { I18nService } from '../../core/services/i18n.service';
                 [label]="'preferences.lo_que_mas_te' | t"
                 [options]="likeOptions"
                 [(value)]="taste.likes"
-                customPlaceholder="Otro alimento o tipo de cocina"
+                [customPlaceholder]="'ui.otro_alimento_o_tipo_de_cocina' | t"
               ></app-chip-select>
             </div>
 
@@ -126,7 +126,7 @@ import { I18nService } from '../../core/services/i18n.service';
                 [label]="'preferences.lo_que_prefieres_evitar' | t"
                 [options]="dislikeOptions"
                 [(value)]="taste.dislikes"
-                customPlaceholder="Otro alimento que no te gusta"
+                [customPlaceholder]="'ui.otro_alimento_que_no_te_gusta' | t"
               ></app-chip-select>
             </div>
 
