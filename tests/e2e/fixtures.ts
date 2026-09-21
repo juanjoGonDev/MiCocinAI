@@ -17,6 +17,17 @@ export const test = base.extend<{ nativeDialogs: string[] }>({
     async ({ page }, use) => {
       const dialogs: string[] = [];
 
+      // Y el idioma, anclado en la preferencia guardada, no solo en el navegador: `language: 'es'` es lo
+      // que lee `I18nService` al arrancar. Sin esto, quien escriba un test despues de cambiar de idioma en
+      // otro (el `localStorage` sobrevive entre specs dentro del mismo worker) prueba otra app.
+      await page.addInitScript(() => {
+        try {
+          window.localStorage.setItem('hogaria.language', 'es');
+        } catch {
+          /* el test aun puede correr: la app cae a `auto`, y el locale del navegador es es-ES */
+        }
+      });
+
       page.on('dialog', async (dialog) => {
         dialogs.push(`${dialog.type()}: ${dialog.message()}`);
         await dialog.dismiss();

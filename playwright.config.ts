@@ -31,6 +31,10 @@ export default defineConfig({
   ],
   use: {
     baseURL: 'http://localhost:4200',
+    // El idioma del navegador, fijado: con `language: 'auto'` la app mira `navigator.language`, y en CI eso
+    // es `en-US`. Toda la suite esta escrita contra el espanol de la interfaz, asi que sin este ancla un
+    // test verde en mi maquina es rojo en la suya —y al reves— sin que nadie haya tocado la app.
+    locale: 'es-ES',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
