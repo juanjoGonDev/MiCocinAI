@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { RECURRENCES } from '../utils/calendar-recurrence.js';
 import { DATE_PATTERN, formArray, formBool, formColor, formDate, formDefault, formField, formList, formNumber, formPartial, formText, formTime, optionalDate, requiredText } from './form.js';
 
 /** Orden del dia en Espana: la merienda va antes que la cena (HOGARIA-SPEC 12o). */
@@ -87,6 +88,9 @@ export type UpdateGoalsInput = z.infer<typeof updateGoalsSchema>;
 export const CALENDAR_EVENT_KINDS = ['meal', 'shopping', 'home', 'appointment', 'personal', 'other'] as const;
 export type CalendarEventKind = (typeof CALENDAR_EVENT_KINDS)[number];
 const eventKindEnum = z.enum(CALENDAR_EVENT_KINDS);
+// Cada cuanto se repite una suelta (HOGARIA-SPEC 12t-R). La lista vive en el modulo que la expande,
+// para que «que cadencias existen» no pueda responder dos cosas distintas segun donde se pregunte.
+const recurrenceEnum = z.enum(RECURRENCES);
 const eventUserId = z.string().trim().min(1, 'Sin identificador').max(40);
 
 export const calendarEventFilterSchema = z.object({
@@ -115,6 +119,13 @@ export const calendarEventFilterSchema = z.object({
 const calendarEventFields = z.object({
   title: requiredText(120, 'Titulo'),
   kind: formDefault(eventKindEnum, 'other'),
+  /**
+   * Cada cuanto se repite (12t-R). Una fila, no una fila por dia: las ocurrencias se calculan al leer.
+   * Los dias quitados (`exceptions`) no se pueden escribir por aqui —los gestiona el server con
+   * «solo este dia no»—, porque aceptar la lista del cliente seria poder quitarle dias a la serie de
+   * otra persona a traicion.
+   */
+  recurrence: formDefault(recurrenceEnum, 'none'),
   date: formDate('Dia'),
   startTime: formTime('Desde'),
   endTime: formTime('Hasta'),

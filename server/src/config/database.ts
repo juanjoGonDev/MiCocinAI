@@ -377,6 +377,12 @@ async function runMigrations(db: Database.Database): Promise<void> {
       color TEXT,
       notes TEXT,
       location TEXT,
+      -- Cada cuanto se repite la suelta y que dias concretos se quitaron (HOGARIA-SPEC 12t-R). Las
+      -- ocurrencias NO se guardan: se materializan al leer, igual que las comidas se proyectan desde
+      -- la tabla meals —una fila por dia repetido serian dos verdades sobre el mismo lunes.
+      recurrence TEXT NOT NULL DEFAULT 'none'
+        CHECK (recurrence IN ('none', 'daily', 'weekly')),
+      exceptions TEXT NOT NULL DEFAULT '[]',
       source TEXT NOT NULL DEFAULT 'user',
       source_id TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -502,6 +508,11 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
   addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
   addColumnIfMissing('household_members', 'permissions', 'TEXT DEFAULT \'{}\'');
+  // Recurrencia de las sueltas (HOGARIA-SPEC 12t-R). En una base con filas no se puede anadir el CHECK
+  // —ALTER TABLE no puede restringir lo que ya existe—, asi que en las viejas la cadencia la sujeta
+  // el schema de entrada, y la expansion ignora un valor desconocido en vez de romper la lectura.
+  addColumnIfMissing('calendar_events', 'recurrence', "TEXT NOT NULL DEFAULT 'none'");
+  addColumnIfMissing('calendar_events', 'exceptions', "TEXT NOT NULL DEFAULT '[]'");
   // Las dianas del descuento: `target` se queda para las filas ya escritas (una sola
   // diana) y `targets` es el JSON con las demas. Reconstruir la tabla para migrar el
   // formato antiguo habria sido una forma cara de perder datos si algo iba mal.

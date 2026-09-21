@@ -373,4 +373,168 @@ describe('calendario de la casa (§8f)', () => {
     expect(after.find((event) => event.id === created.id)?.attendeeIds).toEqual([]);
     expect(await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);
   });
+
+  // ── recurrencia de las sueltas (HOGARIA-SPEC 12t-R) ─────────────────────────────
+  //
+  // Lo que se comprueba aqui no es el INSERT: es que una serie sea UNA fila y N dias leidos, que
+  // «quitar un dia» no sea «quitar la costumbre», y que la cadencia no se pueda ni inventar ni
+  // escribir por la puerta de atras (`exceptions`).
+  describe('una serie se guarda una vez y se ve los dias que le tocan', () => {
+    it('un «cada semana» son cuatro jueves y una sola fila', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      await call(alice, 'POST', '/events', { ...event, date: '2026-03-05', recurrence: 'weekly' });
+      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+      expect(lista.map((e) => e.date)).toEqual(['2026-03-05', '2026-03-12', '2026-03-19', '2026-03-26']);
+      // La misma fila en los cuatro dias: si el titulo cambia, cambian los jueves de verdad.
+      expect(new Set(lista.map((e) => e.id)).size).toBe(1);
+      expect(lista[0].seriesDate).toBe('2026-03-05');
+      expect(lista[0].recurrence).toBe('weekly');
+      expect((db.prepare('SELECT COUNT(*) AS n FROM calendar_events').get() as { n: number }).n).toBe(1);
+    });
+
+    it('un «todos los dias» empieza el dia de la serie, no el primero de la ventana', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      await call(alice, 'POST', '/events', { ...event, date: '2026-03-09', recurrence: 'daily' });
+      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+      expect(lista).toHaveLength(23);
+      expect(lista[0].date).toBe('2026-03-09');
+    });
+
+    it('una serie de enero se sigue viendo en octubre: la ventana no la corta por delante', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      await call(alice, 'POST', '/events', { ...event, date: '2026-01-01', recurrence: 'weekly' });
+      const lista = (await data(await call(alice, 'GET', '/events?from=2026-10-01&to=2026-10-31'))) as any[];
+      // 2026-01-01 era jueves, y octubre de 2026 tiene cinco jueves (1, 8, 15, 22, 29).
+      expect(lista.map((e) => e.date)).toEqual([
+        '2026-10-01',
+        '2026-10-08',
+        '2026-10-15',
+        '2026-10-22',
+        '2026-10-29'
+      ]);
+      expect(lista[0].date >= '2026-10-01').toBe(true);
+    });
+
+    it('sin recurrencia no hay multiplicacion, y la cadencia viaja en la lectura', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      await call(alice, 'POST', '/events', { ...event, date: '2026-03-11' });
+      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+      expect(lista).toHaveLength(1);
+      expect(lista[0].recurrence).toBe('none');
+      expect(lista[0].seriesDate).toBe('2026-03-11');
+    });
+
+    it('el LIMIT cuenta sueltas escritas, no dias pintados', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      await call(alice, 'POST', '/events', { ...event, date: '2026-03-01', recurrence: 'daily' });
+      await call(alice, 'POST', '/events', { ...event, title: 'Otra', date: '2026-03-02', recurrence: 'daily' });
+      const cuerpo = (await (await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31&limit=1')).json()) as any;
+      // Paso una fila y se expande entera: el corte es de escritura, no de pantalla.
+      expect(new Set(cuerpo.data.map((e: any) => e.id)).size).toBe(1);
+      expect(cuerpo.data.length).toBeGreaterThan(1);
+    });
+  });
+
+  describe('«solo este dia no» de una serie', () => {
+    async function serieSemanalDeMarzo() {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const created = (await data(
+        await call(alice, 'POST', '/events', { ...event, date: '2026-03-05', recurrence: 'weekly' })
+      )) as any;
+      return { alice, created };
+    }
+
+    it('quita el jueves marcado y deja los otros tres', async () => {
+      const { alice, created } = await serieSemanalDeMarzo();
+      expect((await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`)).status).toBe(200);
+      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+      expect(lista.map((e) => e.date)).toEqual(['2026-03-05', '2026-03-19', '2026-03-26']);
+    });
+
+    it('repetir el quite no es un error, y las excepciones no se inyectan por el alta', async () => {
+      const { alice, created } = await serieSemanalDeMarzo();
+      await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`);
+      // Doble clic, o reintento tras un pico de red: lo pedido ya esta, no hay nada que fallar.
+      expect((await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`)).status).toBe(200);
+      // `exceptions` no es un campo del formulario: el schema lo tira, y nadie puede nacer con dias
+      // quitados que no pidio.
+      const otro = (await data(await call(alice, 'POST', '/events', {
+        ...event,
+        date: '2026-03-05',
+        recurrence: 'weekly',
+        exceptions: ['2026-03-12']
+      }))) as any;
+      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-12&to=2026-03-12'))) as any[];
+      expect(lista.filter((e) => e.id === otro.id)).toHaveLength(1);
+    });
+
+    it('un dia que no se repite se borra, no se quita', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const created = (await data(await call(alice, 'POST', '/events', { ...event, date: '2026-03-11' }))) as any;
+      const respuesta = await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-11`);
+      expect(respuesta.status).toBe(400);
+      expect(((await respuesta.json()) as any).message).toBe('EVENTO_SIN_REPETICION');
+    });
+
+    it('rechaza una fecha con otra forma, un evento que no existe y el de otra persona', async () => {
+      const { alice, created } = await serieSemanalDeMarzo();
+      expect((await call(alice, 'DELETE', `/events/${created.id}/occurrences/12-03-2026`)).status).toBe(400);
+      expect((await call(alice, 'DELETE', '/events/no-existe/occurrences/2026-03-12')).status).toBe(404);
+      const bob = await makeUser('cal-bob', householdId, 'Bob');
+      // Que te inviten no te da potestad sobre la agenda de quien invita: lo mismo que en el PATCH.
+      expect((await call(bob, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`)).status).toBe(403);
+    });
+
+    it('borrar la serie se lleva todos los dias', async () => {
+      const { alice, created } = await serieSemanalDeMarzo();
+      await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`);
+      expect((await call(alice, 'DELETE', `/events/${created.id}`)).status).toBe(200);
+      expect(await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);
+    });
+  });
+
+  describe('cambiar la cadencia', () => {
+    it('deja de ser semanal cuando pasa a diaria, y no toca lo que no se mando', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const created = (await data(
+        await call(alice, 'POST', '/events', { ...event, date: '2026-03-05', recurrence: 'weekly' })
+      )) as any;
+      await call(alice, 'PATCH', `/events/${created.id}`, { recurrence: 'daily' });
+      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-05&to=2026-03-12'))) as any[];
+      expect(lista).toHaveLength(8);
+
+      await call(alice, 'PATCH', `/events/${created.id}`, { title: 'Carpinteria: cortar' });
+      const otra = (await data(await call(alice, 'GET', '/events?from=2026-03-05&to=2026-03-12'))) as any[];
+      expect(otra[0].recurrence).toBe('daily');
+      expect(otra[0].title).toBe('Carpinteria: cortar');
+    });
+
+    it('mover el inicio a un dia quitado lo devuelve, y quitar la cadencia limpia las excepciones', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const created = (await data(
+        await call(alice, 'POST', '/events', { ...event, date: '2026-03-05', recurrence: 'weekly' })
+      )) as any;
+      await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-19`);
+      await call(alice, 'PATCH', `/events/${created.id}`, { date: '2026-03-19' });
+      // El dia que uno elige a mano no puede venir ya excluido de fabrica.
+      expect(await data(await call(alice, 'GET', '/events?from=2026-03-19&to=2026-03-19'))).toHaveLength(1);
+
+      await call(alice, 'PATCH', `/events/${created.id}`, { recurrence: 'none' });
+      const fila = db
+        .prepare('SELECT recurrence, exceptions FROM calendar_events WHERE id = ?')
+        .get(created.id) as { recurrence: string; exceptions: string };
+      expect(fila.recurrence).toBe('none');
+      // Una excepcion sin serie no significa nada, y resucitaria el dia que la cosa vuelva a repetirse.
+      expect(fila.exceptions).toBe('[]');
+    });
+
+    it('una cadencia inventada no entra: 400 con el campo dicho', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const respuesta = await call(alice, 'POST', '/events', { ...event, recurrence: 'monthly' });
+      expect(respuesta.status).toBe(400);
+      const cuerpo = (await respuesta.json()) as any;
+      expect(cuerpo.code).toBe('INVALID_FORM');
+      expect(JSON.stringify(cuerpo)).toContain('recurrence');
+    });
+  });
 });

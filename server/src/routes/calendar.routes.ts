@@ -13,6 +13,12 @@ import {
   updateCalendarEventSchema
 } from '../schemas/calendar.schema.js';
 import { ensureWeekCalendar } from '../utils/week-calendar.js';
+import {
+  expandOccurrences,
+  isRecurrence,
+  parseExceptionDates,
+  type Recurrence
+} from '../utils/calendar-recurrence.js';
 import { readForm } from '../utils/form-body.js';
 import { describeIssues } from '../schemas/form.js';
 import type { AppEnv } from '../types/hono-env.js';
@@ -295,10 +301,14 @@ type CalendarEventRow = {
   notes: string | null;
   location: string | null;
   source: string;
+  /** Cadencia de la serie (HOGARIA-SPEC 12t-R). En una base antigua puede faltar: se lee como `none`. */
+  recurrence?: string;
+  /** Dias que esta serie, concretamente, no ocurre. JSON en una columna TEXT. */
+  exceptions?: string | null;
 };
 
 const EVENT_COLUMNS =
-  'id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, source';
+  'id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, recurrence, exceptions, source';
 
 /** Quien escribio la suelta: el nombre y su foto, resueltos de una vez para toda la lista. */
 type Author = { name: string; avatar: string | null };
@@ -332,7 +342,12 @@ function toEvent(row: CalendarEventRow, author: Author | null): Record<string, u
     source: row.source,
     userId: row.user_id,
     authorName: author?.name ?? null,
-    authorAvatar: author?.avatar ?? null
+    authorAvatar: author?.avatar ?? null,
+    // La cadencia viaja con la fila, y `seriesDate` es el dia que la fila define de verdad: quien abre
+    // el dialog sobre un martes concreto necesita poder cambiar el titulo sin moverle el ancla a la
+    // serie (12t-R).
+    recurrence: isRecurrence(row.recurrence) ? row.recurrence : 'none',
+    seriesDate: row.date
   };
 }
 
@@ -446,11 +461,15 @@ calendarRoutes.get('/events', async (c) => {
   // peticion rara, y contestar la lista entera seria el peor comportamiento posible.
   const kindsClause = kinds.length ? 'kind IN (' + kinds.map(() => '?').join(', ') + ') AND' : '';
 
-  const filters: string[] = [...kinds, from, to, ...scope.params, String(limit)];
+  // La ventana se abre por la IZQUIERDA para las series: una casa que empezo «sacar la basura» en
+  // marzo la quiere seguir viendo en octubre. Por la derecha no se abre: lo que empieza despues de
+  // `to` no ha empezado aun. `exceptions` no se filtra aqui —son dias sueltos, y la expansion los
+  // salta— para que el SQL no tenga que saber de JSON.
+  const filters: string[] = [...kinds, to, from, ...scope.params, String(limit)];
   const rows = db
     .prepare(
       `SELECT ${EVENT_COLUMNS} FROM calendar_events
-       WHERE ${kindsClause} date >= ? AND date <= ? AND ${scope.clause}
+       WHERE ${kindsClause} date <= ? AND (recurrence != 'none' OR date >= ?) AND ${scope.clause}
        ORDER BY date ASC, all_day DESC, start_time ASC, id ASC
        LIMIT ?`
     )
@@ -467,22 +486,48 @@ calendarRoutes.get('/events', async (c) => {
   // Una sola lectura para toda la pagina, no una por evento: en la vista de mes son 42 dias.
   const invited = attendeesByEvent(db, rows.map((row) => row.id));
 
+  // Cada fila se materializa en los dias que ocupa de la ventana (HOGARIA-SPEC 12t-R). Se expande
+  // DESPUES del LIMIT a proposito: «200 filas» sigue significando 200 sueltas escritas por alguien, no
+  // dos semanas de un cepillo de dientes que se repite. Y se expande con la ventana ya aplicada, que
+  // es lo que hace que una serie empezada en enero se vea entera en octubre.
+  const data: Record<string, unknown>[] = [];
+  let truncated = false;
+  for (const row of rows) {
+    const expansion = expandOccurrences({
+      date: row.date,
+      recurrence: (isRecurrence(row.recurrence) ? row.recurrence : 'none') as Recurrence,
+      exceptions: row.exceptions ?? null
+    }, { from, to });
+    truncated = truncated || expansion.truncated;
+    const base = toEvent(row, authors.get(row.user_id) ?? null);
+    // Los invitados van en la proyeccion y no en un detalle aparte: en la rejilla se pintan las
+    // caras, y una cara sin nombre debajo (o un nombre sin cara) es media identidad.
+    const attendees = invited.get(row.id) ?? [];
+    for (const date of expansion.dates) {
+      data.push({
+        ...base,
+        // `date` es el dia que se pinta (cada ocurrencia es un objeto, y el `trackBy` del frontend
+        // sigue funcionando porque comparten el `id` de la serie: lo que se edite, se edita en serie).
+        date,
+        attendees,
+        // La pareja `attendees` / `attendeeIds` es lo que el dialogo de edicion necesita para pintar las
+        // casillas marcadas. Sin `attendeeIds` en el listado, abrir «editar» sobre un evento con dos
+        // invitados los mostraba con dos caras y cero casillas, y guardar las borraba.
+        attendeeIds: attendees.map((person) => person.id),
+        // El frontend no adivina si puede editar: lo dice el servidor, que es quien sabe
+        // quien es quien. Y es `editable`, no `es mio`, porque el dia que haya roles de
+        // admin de casa solo hay que cambiar esta linea.
+        editable: row.user_id === scope.userId
+      });
+    }
+  }
+
   return c.json({
     success: true,
-    data: rows.map((row) => ({
-      ...toEvent(row, authors.get(row.user_id) ?? null),
-      // Los invitados van en la proyeccion y no en un detalle aparte: en la rejilla se pintan las
-      // caras, y una cara sin nombre debajo (o un nombre sin cara) es media identidad.
-      attendees: invited.get(row.id) ?? [],
-      // La pareja `attendees` / `attendeeIds` es lo que el dialogo de edicion necesita para pintar las
-      // casillas marcadas. Sin `attendeeIds` en el listado, abrir «editar» sobre un evento con dos
-      // invitados los mostraba con dos caras y cero casillas, y guardar las borraba.
-      attendeeIds: (invited.get(row.id) ?? []).map((person) => person.id),
-      // El frontend no adivina si puede editar: lo dice el servidor, que es quien sabe
-      // quien es quien. Y es `editable`, no `es mio`, porque el dia que haya roles de
-      // admin de casa solo hay que cambiar esta linea.
-      editable: row.user_id === scope.userId
-    }))
+    data,
+    // Se avisa de que la ventana corto una serie: mejor un «no te fies» en el payload que un calendario
+    // que parece incompleto sin decir por que.
+    ...(truncated ? { truncated: true } : {})
   });
 });
 
@@ -518,8 +563,8 @@ calendarRoutes.post('/events', async (c) => {
 
   db.prepare(
     `INSERT INTO calendar_events
-     (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'user')`
+     (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, recurrence, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'user')`
   ).run(
     id,
     // Sin casa la suelta es solo tuya; con casa, solo se comparte si quien la escribe
@@ -534,7 +579,9 @@ calendarRoutes.post('/events', async (c) => {
     allDay,
     input.color ?? null,
     input.notes ?? null,
-    input.location ?? null
+    input.location ?? null,
+    // `exceptions` empieza vacia a proposito: no es un campo del formulario.
+    input.recurrence ?? 'none'
   );
 
   // Los invitados se escriben DESPUES del insert y antes de responder: si la lista era imposible
@@ -611,6 +658,19 @@ calendarRoutes.patch('/events/:id', async (c) => {
   put('color', input.color);
   put('notes', input.notes);
   put('location', input.location);
+  put('recurrence', input.recurrence);
+  // Dos limpiezas que solo aqui se pueden hacer, y que sin ellas dejan basura con aspecto de dato:
+  // 1) quitar la cadencia vacia los dias excluidos —una excepcion sin serie no significa nada, y
+  //    volveria a molestar el dia que la cosa vuelva a repetirse—;
+  // 2) mover el inicio de la serie a un dia que estaba quitado borra esa excepcion, porque lo que se
+  //    pidio explicitamente es que la serie empiece (y por tanto ocurra) ese dia.
+  if (input.recurrence === 'none') put('exceptions', '[]');
+  const diaNuevo = typeof input.date === 'string' ? input.date : null;
+  if (diaNuevo) {
+    const antes = parseExceptionDates(existing.exceptions);
+    const despues = antes.filter((dia) => dia !== diaNuevo);
+    if (despues.length !== antes.length) put('exceptions', JSON.stringify(despues));
+  }
   if (input.allDay !== undefined) {
     set.push('all_day = ?');
     params.push(flag(input.allDay, 0));
@@ -700,7 +760,54 @@ calendarRoutes.delete('/events/:id/attendees/me', async (c) => {
   return c.json({ success: true, message: 'Has salido del evento' });
 });
 
-// DELETE /api/calendar/events/:id
+// DELETE /api/calendar/events/:id/occurrences/:date —«solo este dia no» (HOGARIA-SPEC 12t-R).
+//
+// No borra la fila: anota la fecha en `exceptions` y la expansion la salta. Sin esto, faltar a un
+// gimnasio de los martes era elegir entre «lo quito de todos los martes» o «lo muevo y lo dejo
+// duplicado», y las dos opciones se llaman «dejo de usar el calendario».
+calendarRoutes.delete('/events/:id/occurrences/:date', async (c) => {
+  const db = getDatabase();
+  const id = c.req.param('id');
+  const date = c.req.param('date');
+  const userId = c.get('userId') as string;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return c.json({ success: false, message: 'La fecha tiene que ser AAAA-MM-DD' }, 400);
+  }
+  const row = db
+    .prepare('SELECT user_id, date, recurrence, exceptions FROM calendar_events WHERE id = ?')
+    .get(id) as { user_id: string; date: string; recurrence: string; exceptions: string | null } | undefined;
+  if (!row) return c.json({ success: false, message: 'Evento no encontrado' }, 404);
+  if (row.user_id !== userId) {
+    return c.json(
+      { success: false, message: 'FORBIDDEN', data: { hint: 'Solo quien lo escribio puede quitarle un dia.' } },
+      403
+    );
+  }
+  if (!isRecurrence(row.recurrence) || row.recurrence === 'none') {
+    return c.json(
+      {
+        success: false,
+        message: 'EVENTO_SIN_REPETICION',
+        data: { hint: 'Este dia no se repite: se borra, no se quita.' }
+      },
+      400
+    );
+  }
+  const antes = parseExceptionDates(row.exceptions);
+  if (antes.includes(date)) {
+    // Idempotente a proposito: el segundo «quitar este dia» (doble clic, reintentar tras un pico) no
+    // es un error, y contestar 404 por algo que ya esta como se pidio es enseñar un fallo que no hay.
+    return c.json({ success: true, message: 'Ese dia ya estaba fuera de la serie', data: { id, exceptions: antes } });
+  }
+  const despues = [...antes, date].sort();
+  db.prepare('UPDATE calendar_events SET exceptions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+    JSON.stringify(despues),
+    id
+  );
+  return c.json({ success: true, message: 'Dia quitado de la serie', data: { id, exceptions: despues } });
+});
+
+// DELETE /api/calendar/events/:id —la serie entera (para un dia esta la ruta de arriba).
 calendarRoutes.delete('/events/:id', async (c) => {
   const db = getDatabase();
   const id = c.req.param('id');
