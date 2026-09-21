@@ -2240,6 +2240,68 @@ background and inherited colour. Which is exactly the screen the user is complai
   variants). The rule now refuses a control with no state; collapsing the skins into tokens is the next
   step and it touches every screen.
 
+## 12r. Round 20 checklist — la suite e2e no habia corrido nunca, y ahora se ve
+
+Esta tanda no la pidio el usuario: la produjo la ronda 19 al arreglar `playwright.config.ts`, que apuntaba
+a un reporter inexistente. Con un reporter que no esta, Playwright no llega al test numero 1 —falla el
+proceso, no la asercion—, y asi llevaba la suite desde que se escribio. En el primer run real (CI, 4 shards
+con Chromium) han salido **28 tests fallidos**: 9 en el shard 1 (`account`, `calendar`), 11 en el 2
+(`onboarding`, `full-stack/*`), 8 en el 4 (`shopping-*`); el shard 3 entero en verde. Ninguno es de la ronda
+19: los dos asserts nuevos de «Por defecto» (tour y Preferencias) pasaron.
+
+La regla que hay que escribirse: **un test que no se ejecuta no es un test, es un comentario largo**. Los
+gates de este proyecto se median «a mano» en un sandbox sin navegador, y eso esta bien para el codigo, pero
+dejaba la capa e2e entera sin verificar durante ocho tandas.
+
+### A. Triaje por causa, no por fichero
+
+- [ ] 12 fallos son **selectores que ya no existen** o datos que el seed ya no pone: `[data-test="add-input"]`,
+      `[data-test="selection-toolbar"]`, `[data-test="pay-sheet"]`, `[data-test="discount-amount"] input`,
+      `.tab` con texto «Información», `[data-test="item-row"]` esperando filas que el seed actual no crea,
+      y el email `@hogaria.test` (el helper genera `@example.com`). Se arregla el test, no la app, salvo que
+      el selector haya desaparecido por un cambio real —entonces el que estaba mal era el test al revés.
+- [ ] 4 son **aserciones sobre texto que cambio el producto**: `offer-chip` dice `3x1` donde el test queria
+      `3x2` (el test no miraba el estado que se estaba poniendo), `photo-error` dice «El modelo no esta
+      disponible ahora mismo» y el test esperaba «Falta configurar la IA». Decidir cual de los dos textos es
+      el correcto para el usuario y alinear el otro; no silenciar el assert.
+- [ ] 2 son **estrict mode de Playwright**: `input[name="chip-select-custom"]` resuelve a dos elementos
+      porque hay dos `app-chip-select` en el mismo paso. El selector tiene que bajar al contenedor del paso
+      (`page.locator('#ob-allergies').locator(...)`) y no al revés.
+- [ ] 1 es un **click que no llega**: «Siguiente →» en el paso de gustos —hay que mirar si el boton esta
+      deshabilitado por una validacion del propio paso o si hay un overlay; el log dice `waiting for element
+      to be visible, enabled and stable`, que es lo que separa un test mal escrito de una pantalla que
+      bloquea.
+- [ ] 6 son del **job full-stack**, y su causa es el entorno: `429` esperado y `404` recibido (los limites
+      no se aplican igual cuando el server arranca con otra config), `results.json` que no se escribe, el
+      404 de un asset que devuelve `text/html`, y dos cuentas del `request-budget` que cuentan los
+      `@vite/client` del dev server en un build que deberia ser de produccion. Hay que separar «el stack
+      roto» de «el test que corre contra el stack equivocado» antes de tocar nada.
+- [ ] 2 del visor de logs: `logs-status` se queda en «Reintentando en 10 s» —el SSE no casa con el CI. Es
+      el unico grupo que podria ser un defecto real de la app, y por eso va el primero en la lista.
+
+### B. Que tiene que existir para que esto no vuelva
+
+- [ ] El job de CI que corre los e2e **falla si `test-results/results.json` no aparece**. Ya lo hace el de
+      full-stack (su mensaje existe: «Playwright no llego a escribir resultados»); falta en los shards
+      normales, y es exactamente la red que habria convertido ocho tandas de e2e silenciosos en un rojo el
+      dia uno. Es una linea en `.github/workflows/ci.yml`, no un proyecto.
+- [ ] `tools/reporters/hogaria-e2e-reporter.js` se escribe o se olvida para siempre. Mientras el fichero no
+      este, la configuracion apunta a la nada, y esto es la segunda ronda que lo descubre.
+- [ ] Un gate nuevo en `scripts/check-ui.mjs`, regla 13: **toda cadena de `data-test` escrita en un spec e2e
+      existe en alguna plantilla del frontend**. Es mecanica, es barata, y habria pillado 12 de los 28 antes
+      de que nadie abriera el navegador. Los textos, no: esos cambian y el test debe poder discutirlos.
+
+### Gates
+
+- [ ] Los 28 con nombre y apellidos: cada uno o arreglado o marcado `test.skip` con un motivo de una linea
+      (un skip sin motivo es la puerta por la que volvera el silencio).
+- [ ] CI verde en el shard 1-4 y en full-stack, medido en el run, no afirmado desde el sandbox.
+
+### Coming soon, deliberadamente fuera de aqui
+
+- [ ] Ejecutar los e2e en local: no hay Chromium en esta maquina y no se va a instalar uno de 300 MB para
+      una tanda. El navegador es CI, y eso obliga a que el gate de CI sea el bueno.
+
 ## 13. Coming soon (deliberately not in this program)
 - **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
   (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
