@@ -260,6 +260,41 @@ describe('horarios de las comidas', () => {
     });
   });
 
+  it('sin decir nada, la IA planifica las cuatro comidas', () => {
+    const user = createUser();
+
+    expect(taste.readTasteResponse(db, user).mealPlan).toEqual(taste.MEAL_PLAN_DEFAULTS);
+    expect(taste.plannedMealTypes(taste.MEAL_PLAN_DEFAULTS)).toEqual(['breakfast', 'lunch', 'snack', 'dinner']);
+  });
+
+  it('bloquear la merienda deja las otras tres como estaban', () => {
+    const user = createUser();
+
+    const response = taste.saveTasteProfile(db, user, { mealPlan: { snack: false } });
+
+    expect(response.mealPlan).toEqual({ breakfast: true, lunch: true, snack: false, dinner: true });
+    expect(taste.plannedMealTypes(taste.readMealPlan(db, user))).toEqual(['breakfast', 'lunch', 'dinner']);
+    // Persistido de verdad, y sin que el bloqueo se cuele en las horas (son dos claves del mismo JSON).
+    expect(readPreferencesColumn(user).mealPlan).toEqual({ snack: false });
+    expect(readPreferencesColumn(user).mealTimes).toBeUndefined();
+  });
+
+  it('volver a desbloquear es escribir true, y null deja el permiso en su defecto', () => {
+    const user = createUser();
+    taste.saveTasteProfile(db, user, { mealPlan: { snack: false, dinner: false } });
+
+    const response = taste.saveTasteProfile(db, user, { mealPlan: { snack: null } });
+
+    expect(response.mealPlan).toEqual({ breakfast: true, lunch: true, snack: true, dinner: false });
+    expect(readPreferencesColumn(user).mealPlan).toEqual({ dinner: false });
+  });
+
+  it('un permiso imposible en el JSON no rompe la lectura', () => {
+    const user = createUser(JSON.stringify({ mealPlan: { lunch: 'a comer', dinner: 0, snack: false } }));
+
+    expect(taste.readMealPlan(db, user)).toEqual({ breakfast: true, lunch: true, snack: false, dinner: true });
+  });
+
   it('el prompt lleva las cuatro horas de la casa', () => {
     const lines = taste.mealTimesPromptLines({
       breakfast: '08:00',

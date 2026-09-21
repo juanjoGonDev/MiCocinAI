@@ -71,6 +71,44 @@ export function toMealTimes(stored: unknown): MealTimes {
   return out;
 }
 
+/**
+ * Que la IA planifique cada comida. `true` de fabrica para las cuatro, que es exactamente lo que hacia la app
+ * antes de esta preferencia: una casa que no ha dicho nada sigue teniendo el semana completo.
+ *
+ * No es un filtro del prompt, es un contrato de escritura: `plan-week` recorta lo que ofrece y
+ * `persistWeeklyPlan` ignora lo bloqueado aunque el modelo se lo invente (12t-T).
+ */
+export const MEAL_PLAN_DEFAULTS: Record<MealTypeKey, boolean> = {
+  breakfast: true,
+  lunch: true,
+  snack: true,
+  dinner: true
+};
+
+export const mealPlanSchema = z.object({
+  breakfast: z.boolean().nullish(),
+  lunch: z.boolean().nullish(),
+  snack: z.boolean().nullish(),
+  dinner: z.boolean().nullish()
+});
+
+export type MealPlan = Record<MealTypeKey, boolean>;
+
+/** Como `toMealTimes`: un JSON viejo, escrito a mano o roto no puede romper una lectura. */
+export function toMealPlan(stored: unknown): MealPlan {
+  const raw = stored && typeof stored === 'object' ? (stored as Record<string, unknown>) : {};
+  const out: MealPlan = { ...MEAL_PLAN_DEFAULTS };
+  for (const key of MEAL_TYPE_KEYS) {
+    if (typeof raw[key] === 'boolean') out[key] = raw[key] as boolean;
+  }
+  return out;
+}
+
+/** Las comidas que el planificador tiene permiso de escribir, en el orden del dia. */
+export function plannedMealTypes(plan: MealPlan): MealTypeKey[] {
+  return MEAL_TYPE_KEYS.filter((key) => plan[key]);
+}
+
 /** Lo que la IA necesita saber para no proponer una cena a las 13:00. */
 export function mealTimesPromptLines(times: MealTimes): string {
   const list = MEAL_TYPE_KEYS.map((key) => `${MEAL_TYPE_LABELS[key].toLowerCase()} a las ${times[key]}`);
@@ -172,7 +210,9 @@ export const updateTasteSchema = z.object({
    * bloque entero, pero un PATCH parcial (o una casilla vaciada) tiene que significar «no tocar» y
    * «vuelve al defecto» respectivamente, no un 400.
    */
-  mealTimes: formField(mealTimesSchema)
+  mealTimes: formField(mealTimesSchema),
+  /** Que la IA planifique cada comida (12t-T). Mismo contrato de tres estados que `mealTimes`. */
+  mealPlan: formField(mealPlanSchema)
 });
 
 export type TasteProfileInput = z.infer<typeof tasteProfileSchema>;
@@ -198,6 +238,8 @@ export interface TasteResponse {
   profile: HomeProfileView;
   /** Siempre las cuatro horas: las que la casa no ha tocado salen con el defecto. */
   mealTimes: MealTimes;
+  /** Y siempre los cuatro permisos: sin decir nada, la IA planifica las cuatro comidas. */
+  mealPlan: MealPlan;
 }
 
 export const emptyTasteProfile = (): TasteProfile => ({
@@ -287,7 +329,8 @@ export function readTasteResponse(db: Database.Database, userId: string): TasteR
     taste: toTasteProfile(prefs.taste),
     onboarding: toOnboardingState(prefs.onboarding),
     profile: toHomeProfile(prefs.profile, row?.cooking_level),
-    mealTimes: toMealTimes(prefs.mealTimes)
+    mealTimes: toMealTimes(prefs.mealTimes),
+    mealPlan: toMealPlan(prefs.mealPlan)
   };
 }
 
@@ -341,6 +384,22 @@ export function saveTasteProfile(
     prefs.mealTimes = next;
   }
 
+  if (patch.mealPlan) {
+    // Tres estados, los mismos de arriba: clave ausente no se toca, `null` vuelve al fabrica (que para un
+    // permiso es «dejarla planificar»), y un booleano escribe. `''` no es un estado valido aqui: un
+    // checkbox no se vacia, se marca o se desmarca.
+    const stored = prefs.mealPlan && typeof prefs.mealPlan === 'object' ? prefs.mealPlan : {};
+    const next: Record<string, boolean> = { ...(stored as Record<string, boolean>) };
+    const patchPlan = patch.mealPlan as Record<string, unknown>;
+    for (const key of MEAL_TYPE_KEYS) {
+      if (!(key in patchPlan)) continue;
+      const value = patchPlan[key];
+      if (typeof value === 'boolean') next[key] = value;
+      else delete next[key];
+    }
+    prefs.mealPlan = next;
+  }
+
   if (patch.onboardingStatus) {
     prefs.onboarding = {
       status: patch.onboardingStatus,
@@ -376,6 +435,12 @@ export function readTasteProfile(db: Database.Database, userId: string): TastePr
 export function readMealTimes(db: Database.Database, userId: string): MealTimes {
   const row = selectUserRow(db, userId);
   return toMealTimes(readPreferences(row?.preferences).mealTimes);
+}
+
+/** Lo que pregunta el calendario antes de mandar `mealTypes`, y lo que respeta la persistencia. */
+export function readMealPlan(db: Database.Database, userId: string): MealPlan {
+  const row = selectUserRow(db, userId);
+  return toMealPlan(readPreferences(row?.preferences).mealPlan);
 }
 
 /**

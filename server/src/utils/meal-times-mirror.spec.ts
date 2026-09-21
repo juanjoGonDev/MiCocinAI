@@ -33,8 +33,11 @@ function objectEntries(source: string, name: string): Record<string, string> {
   for (const line of body.split('\n')) {
     const clean = line.trim();
     if (!clean || clean.startsWith('*') || clean.startsWith('/') || clean.startsWith('//')) continue;
-    const pair = /^'?(?<key>[\w-]+)'?:\s*'(?<value>[^']*)',?$/.exec(clean);
-    if (pair?.groups) out[pair.groups.key] = pair.groups.value;
+    // El valor puede venir entrecomillado (las horas, las etiquetas) o pelado (los booleanos del plan):
+    // sin la segunda forma, `MEAL_PLAN_DEFAULTS` se leeria vacio en los dos lados y el `toEqual` daria
+    // verde sin comparar nada, que es peor que no tener test.
+    const pair = /^'?(?<key>[\w-]+)'?:\s*(?:'(?<value>[^']*)'|(?<bare>true|false|null|-?\d+(?:\.\d+)?)),?$/.exec(clean);
+    if (pair?.groups) out[pair.groups.key] = pair.groups.value ?? pair.groups.bare ?? '';
   }
   return out;
 }
@@ -62,8 +65,24 @@ describe('las comidas son las mismas en los dos lados', () => {
     );
   });
 
-  it('el orden del dia es el mismo: la merienda antes que la cena', () => {
-    const order = arrayConst(server, 'MEAL_TYPE_KEYS');
+  it('los cuatro permisos de planificacion por defecto coinciden (12t-T)', () => {
+    // «Que la IA te planifique la cena» vale solo si los dos lados entienden lo mismo por «no he tocado
+    // el interruptor nunca»: si la app creyera que por defecto NO se planifica la merienda, el usuario
+    // veria como un fallo de la IA lo que es un desajuste de dos literales.
+    expect(objectEntries(frontendModel, 'MEAL_PLAN_DEFAULTS')).toEqual(
+      objectEntries(server, 'MEAL_PLAN_DEFAULTS')
+    );
+    // Y el defecto es «si» en las cuatro: se escribe aqui, y no por omision, para que el assert anterior
+    // no pueda ponerse verde cambiando los dos lados a la vez.
+    expect(objectEntries(server, 'MEAL_PLAN_DEFAULTS')).toEqual({
+      breakfast: 'true',
+      lunch: 'true',
+      snack: 'true',
+      dinner: 'true'
+    });
+  });
+
+  it('el orden del dia es el mismo: la merienda antes que la cena', () => {    const order = arrayConst(server, 'MEAL_TYPE_KEYS');
 
     expect(order).toEqual(['breakfast', 'lunch', 'snack', 'dinner']);
     expect(arrayConst(frontendModel, 'MEAL_ORDER')).toEqual(order);
@@ -90,6 +109,11 @@ describe('las comidas son las mismas en los dos lados', () => {
     );
     expect(frontendTimes).not.toMatch(/\[\s*'breakfast'/);
     expect(frontendTimes).not.toMatch(/export const MEAL_(ORDER|TYPE_LABELS|TIME_DEFAULTS)/);
-    expect(frontendTimes).toMatch(/export \{ MEAL_TIME_DEFAULTS, MealTimes \};/);
+    // El reexport de 12t-T anadio `MEAL_PLAN_DEFAULTS`/`MealPlan` a la misma linea: se sigue exigiendo
+    // en su forma completa, porque una linea de reexport es exactamente lo que no puede volverse a
+    // escribir a mano el dia de manana.
+    expect(frontendTimes).toMatch(
+      /export \{ MEAL_PLAN_DEFAULTS, MEAL_TIME_DEFAULTS, MealPlan, MealTimes \};/
+    );
   });
 });

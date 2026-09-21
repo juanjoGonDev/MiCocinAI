@@ -16,7 +16,9 @@ import {
   detailLevelForCookingLevel,
   hasTasteProfile,
   MEAL_TYPE_LABELS,
+  plannedMealTypes,
   readCookingLevel,
+  readMealPlan,
   readMealTimes,
   readTasteProfile,
   tastePromptLines
@@ -361,7 +363,23 @@ aiRoutes.post('/plan-week', async (c) => {
 
   // Las comidas pedidas y las horas de la casa entran en el prompt y en lo que se guarda: si solo
   // cambian la peticion, el modelo seguiria escribiendo un dia completo que despues habria que tirar.
-  const mealTypes = resolveMealTypes(input.mealTypes);
+  //
+  // Y por encima estan las cuatro palabras de 12t-T: la casa puede tener comidas **bloqueadas** en
+  // Preferencias, y un bloqueo se respeta aqui (el prompt) y en la persistencia. `resolveMealTypes` trata
+  // «vacio» como «las cuatro», asi que el filtro se aplica despues —pedir solo lo bloqueado no puede
+  // acabar planificando la semana entera.
+  const permitidas = plannedMealTypes(readMealPlan(db, userId));
+  const mealTypes = resolveMealTypes(input.mealTypes).filter((type) => permitidas.includes(type));
+  if (mealTypes.length === 0) {
+    return c.json(
+      {
+        success: false,
+        code: 'MEAL_PLAN_ALL_BLOCKED',
+        message: 'Todas las comidas estan bloqueadas en Preferencias: no hay nada que planificar.'
+      },
+      400
+    );
+  }
   const mealTimes = readMealTimes(db, userId);
   const mealShape = mealTypes
     .map((type) => `        "${type}": {"name": "", "ingredients": [], "time": 0}`)
