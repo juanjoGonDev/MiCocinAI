@@ -22,7 +22,7 @@ const E2E_DIR = 'tests/e2e';
 // Cuantas reglas hay dentro. Se cuenta aqui y no a mano porque la ultima vez que se anadio una (la de
 // los selectores huerfanos) el mensaje de «sin incidencias» seguia diciendo siete, que es exactamente
 // el tipo de mentira que este fichero existe para evitar.
-const RULES = 15;
+const RULES = 17;
 
 // ---------------------------------------------------------------------------
 // Deuda heredada, declarada en voz alta.
@@ -42,8 +42,15 @@ const LEGACY = {
     'frontend/src/app/features/account/account.component.ts'
   ],
   'sin-emoji': [
-    // Los emoji de Configuracion viajaban dentro del diccionario del service; al mover el diccionario a
-    // su fichero se muda tambien la deuda, que sigue siendo la misma cuenta (regla 1, tanda aparte).
+    // La deuda de emoji va detras de la clave: al migrar la plantilla al diccionario se llevaban los
+    // pictogramas consigo, asi que los ficheros que estaban aqui perdonados ahora lo estan ahi dentro.
+    'frontend/src/app/core/i18n/dict/ai_config.ts',
+    'frontend/src/app/core/i18n/dict/dashboard.ts',
+    'frontend/src/app/core/i18n/dict/household.ts',
+    'frontend/src/app/core/i18n/dict/invite.ts',
+    'frontend/src/app/core/i18n/dict/onboarding.ts',
+    'frontend/src/app/core/i18n/dict/pantry.ts',
+    'frontend/src/app/core/i18n/dict/recipes.ts',
     'frontend/src/app/core/i18n/dict/settings.ts',
     'frontend/src/app/features/ai-config/ai-config.component.ts',
     'frontend/src/app/features/dashboard/dashboard.component.ts',
@@ -61,7 +68,7 @@ const LEGACY = {
     'frontend/src/app/shared/components/ui/toast/toast.component.ts',
     'frontend/src/app/shared/models/taste-profile.ts',
     'frontend/src/app/shared/pipes/difficulty.pipe.spec.ts',
-    'frontend/src/app/shared/pipes/difficulty.pipe.ts',
+    'frontend/src/app/shared/pipes/difficulty.pipe.ts'
   ],
   'ui-sin-uso': [
     'frontend/src/app/shared/components/ui/card/card.component.ts',
@@ -73,30 +80,6 @@ const LEGACY = {
   // Tanda 20: el diccionario aun no es el unico camino para el texto en estas 22 pantallas. La lista es la
   // cuenta de lo que queda de esta tanda, NO un «ya llegara»: cada commit la acorta, y el objetivo es
   // borrarla entera (HOGARIA-SPEC 12s). Si un fichero se va y se queda aqui, check-ui lo dice.
-  'texto-sin-traducir': [
-    'frontend/src/app/features/account/account.component.ts',
-    'frontend/src/app/features/account/avatar-editor.component.ts',
-    'frontend/src/app/features/ai-config/ai-config.component.ts',
-    'frontend/src/app/features/auth/forgot-password/forgot-password.component.ts',
-    'frontend/src/app/features/auth/login/login.component.ts',
-    'frontend/src/app/features/auth/register/register.component.ts',
-    'frontend/src/app/features/calendar/calendar-event.component.ts',
-    'frontend/src/app/features/calendar/calendar-month.component.ts',
-    'frontend/src/app/features/calendar/calendar-timeline.component.ts',
-    'frontend/src/app/features/calendar/calendar.component.ts',
-    'frontend/src/app/features/household/household.component.ts',
-    'frontend/src/app/features/invite/invite.component.ts',
-    'frontend/src/app/features/logs/logs.component.ts',
-    'frontend/src/app/features/onboarding/onboarding.component.ts',
-    'frontend/src/app/features/pantry/pantry.component.ts',
-    'frontend/src/app/features/preferences/preferences.component.ts',
-    'frontend/src/app/features/recipes/recipes.component.ts',
-    'frontend/src/app/features/shopping/shopping-list-detail.component.ts',
-    'frontend/src/app/features/shopping/shopping-lists.component.ts',
-    'frontend/src/app/features/shopping/unit-picker.component.ts',
-    'frontend/src/app/layouts/auth-layout/auth-layout.component.ts',
-    'frontend/src/app/shared/components/ui/home-profile-picker/home-profile-picker.component.ts',
-  ],
   'sin-select-nativo': [
     'frontend/src/app/features/ai-config/ai-config.component.ts',
     'frontend/src/app/features/calendar/calendar.component.ts',
@@ -110,11 +93,16 @@ const problems = [];
 const stale = new Map(Object.entries(LEGACY).map(([rule, files]) => [rule, new Set(files)]));
 const touched = new Map(); // rule -> ficheros que la incumplen, deuden o no
 
+// `--sin-deuda` ignora las listas de LEGACY: sirve para medir lo que queda de una migracion sin tener
+// que estar tocando la lista de deuda a cada paso (y para que el «cuanto falta» sea una pregunta que se
+// puede hacer, no una que se responde reeditando el script).
+const IGNORE_LEGACY = process.argv.includes('--sin-deuda');
+
 const fail = (file, line, rule, detail) => {
   const normalized = file.replace(/\\/g, '/');
   if (!touched.has(rule)) touched.set(rule, new Set());
   touched.get(rule).add(normalized);
-  if (stale.get(rule)?.has(normalized)) return;
+  if (!IGNORE_LEGACY && stale.get(rule)?.has(normalized)) return;
   problems.push({ file: normalized, line, rule, detail });
 };
 
@@ -703,7 +691,7 @@ for (const file of sourceFiles) {
   const block = text.match(/template:\s*`([\s\S]*?)\n\s*`/);
   if (!block) continue;
   const tpl = block[1];
-  const base = text.indexOf(tpl, block.index);
+  const base = block.index + block[0].indexOf(tpl);
 
   for (const attr of VISIBLE_ATTRS) {
     for (const match of tpl.matchAll(new RegExp(`[\\s]${attr}="([^"]*)"`, 'g'))) {
@@ -735,6 +723,26 @@ for (const file of sourceFiles) {
     );
   }
 
+  // Literales dentro de una expresion (`[attr.title]="'Ver el dia ' + iso"`, `placeholder="Ej: …"`): aqui
+  // es donde se esconde el texto que la regla no veia, porque la cadena ya no esta en un atributo estatico
+  // sino concatenada. Se perdonan las claves del diccionario y los tokens tecnicos (`'HH:mm'`, `'es-ES'`,
+  // un nombre de clase), que no son frases.
+  for (const match of tpl.matchAll(/'([^'\n]+)'/g)) {
+    const value = match[1];
+    if (value.includes('{{') || /\|\s*t\b/.test(tpl.slice(match.index + match[0].length, match.index + match[0].length + 6))) continue;
+    // `[class]="'chip chip--' + tono"`: son clases, no frases. Se excluye por el atributo que lo envuelve,
+    // no por el contenido, que «Ver el » tambien es minusculas y si que es texto.
+    const antes = tpl.slice(Math.max(0, match.index - 48), match.index);
+    if (/\[(class|ngClass|style|ngStyle)[.\]]?[\w.%-]*\s*=\s*"$/.test(antes)) continue;
+    if (!/[ ]|[áéíóúñ]/.test(value) || !isProse(value)) continue;
+    fail(
+      file,
+      lineOf(text, base + match.index),
+      'texto-sin-traducir',
+      `literal dentro de la expresion de la plantilla: «${value.slice(0, 60)}» — la frase va al diccionario con {parametros} y se concatena ahi, no aqui`
+    );
+  }
+
   for (const match of text.matchAll(/@Input\(\)\s+\w+(?:!)??\s*(?::\s*[^=]+)?=\s*'([^']*)'/g)) {
     if (!isProse(match[1])) continue;
     fail(
@@ -759,7 +767,7 @@ const dictPairs = (text, ident) => {
   const match = text.match(new RegExp(`const ${ident}[^{]*\\{([\\s\\S]*?)\\n\\}`));
   if (!match) return new Map();
   const out = new Map();
-  for (const kv of match[1].matchAll(/'([^']+)':\s*'((?:[^'\\]|\\.)*)'/g)) out.set(kv[1], kv[2]);
+  for (const kv of match[1].matchAll(/'([^']+)':\s*(?:'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\")/g)) out.set(kv[1], (kv[2] ?? kv[3]).replace(/\\'/g, "'"));
   return out;
 };
 
@@ -790,6 +798,9 @@ for (const file of dictFiles) {
 const KEY_LITERAL = /'([a-z][a-z0-9_.-]*\.[a-z0-9_.-]+)'/gi;
 const usedKeys = new Set();
 for (const file of sourceFiles) {
+  // Los diccionarios no cuentan como uso: si no se excluyen, cada clave se «usa» a si misma por estar
+  // escrita en su propio fichero, y la comprobacion de cadena muerta nofindaria nunca nada.
+  if (file.replace(/\\/g, '/').includes('/core/i18n/dict/')) continue;
   const text = readFileSync(file, 'utf8');
   for (const match of text.matchAll(KEY_LITERAL)) {
     const key = match[1];
@@ -814,6 +825,54 @@ for (const file of dictFiles) {
       const enBlock = /En:/.test(text.slice(0, match.index));
       if (enBlock) continue;
       fail(file, lineOf(text, match.index), 'clave-sin-traduccion', `«${match[1]}» no la invoca nadie: o se usa o se borra`);
+    }
+  }
+}
+
+// --------------------------------------------------------------------------------
+// 16) Si la plantilla usa `| t`, el componente importa la pipe.
+//
+// Falta evidente, y sin embargo era el unico modo de romper la build: el extractor metia `| t` en un
+// componente que ya tenia `TranslatePipe` en otro sitio del fichero (un comentario, el import de otro
+// componente) y se quedaba sin el `imports`, que es lo que mira el compilador de Angular. `tsc` no lo
+// ve —solo `ng build`—, y `ng build` tarda lo suficiente como para no ejecutarlo cada dos minutos.
+// --------------------------------------------------------------------------------
+for (const file of sourceFiles) {
+  if (!file.endsWith('.component.ts')) continue;
+  const text = readFileSync(file, 'utf8');
+  const block = text.match(/template:\s*`([\s\S]*?)\n\s*`/);
+  if (!block) continue;
+  if (!/\|\s*t\b/.test(block[1])) continue;
+  const imports = text.match(/imports:\s*\[([\s\S]*?)\]/);
+  if (imports && /TranslatePipe/.test(imports[1])) continue;
+  fail(file, lineOf(text, block.index), 'pipe-sin-importar', 'la plantilla usa `| t` y el componente no importa TranslatePipe: `ng build` lo para, y aqui se ve en 40 ms');
+}
+
+// --------------------------------------------------------------------------------
+// 17) Todo `data-test` que pregunta un e2e existe en alguna plantilla.
+//
+// De donde sale: la tanda 19. Ocho de los 28 e2e que se escribieron buscaban un atributo que nadie pintaba;
+// como el locator no aparece, Playwright espera su timeout y falla, y mientras tanto el test «no corre». Un
+// gate de 20 lineas convierte eso en un rojo en 40 ms, sin navegador.
+//
+// Se admite la composicion: `[attr.data-test]="'layer-' + kind"` no contiene nunca el nombre entero, y los
+// e2e si lo conocen ('layer-meals'). Asi que vale tambien un literal que acabe en `-` y sea prefijo.
+// --------------------------------------------------------------------------------
+{
+  const literales = new Set();
+  for (const file of sourceFiles) {
+    for (const match of readFileSync(file, 'utf8').matchAll(/['"]([a-z0-9][a-z0-9_-]{2,})['"]/g)) {
+      literales.add(match[1]);
+    }
+  }
+  const prefijos = [...literales].filter((l) => l.endsWith('-'));
+  for (const file of walk(E2E_DIR, (path) => path.endsWith('.ts'))) {
+    const text = readFileSync(file, 'utf8');
+    for (const match of text.matchAll(/data-test=["']([a-z0-9][a-z0-9_-]*)["']/g)) {
+      const nombre = match[1];
+      if (literales.has(nombre)) continue;
+      if (prefijos.some((prefijo) => nombre.startsWith(prefijo))) continue;
+      fail(file, lineOf(text, match.index), 'data-test-huerfano', `el e2e pregunta por «${nombre}» y ese atributo no lo pinta ningun componente: Playwright espera 30s y falla, aqui se ve al instante`);
     }
   }
 }
