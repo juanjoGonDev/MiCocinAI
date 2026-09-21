@@ -44,6 +44,9 @@ export const householdEs = {
   'household.unirse_a_un_hogar': 'Unirse a un Hogar',
   'household.unirse_con_codigo': 'Unirse con código',
   'household.unirse': 'Unirse',
+  'household.rol_admin': 'Admin',
+  'household.rol_miembro': 'Miembro',
+  'household.rol_nino': 'Niño',
 } as const;
 
 export const householdEn: Record<keyof typeof householdEs, string> = {
@@ -90,4 +93,7 @@ export const householdEn: Record<keyof typeof householdEs, string> = {
   'household.unirse_a_un_hogar': 'Join a Household',
   'household.unirse_con_codigo': 'Join with a code',
   'household.unirse': 'Join',
+  'household.rol_admin': 'Admin',
+  'household.rol_miembro': 'Member',
+  'household.rol_nino': 'Child',
 };

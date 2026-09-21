@@ -49,6 +49,10 @@ export const recipesEs = {
   'recipes.selecciona_los_ingredientes_que': 'Selecciona los ingredientes que tienes y la IA generará una receta personalizada.',
   'recipes.title': '📖 Recetas',
   'recipes.tu_despensa': 'Tu despensa',
+  'recipes.filtro_todas': 'Todas',
+  'recipes.filtro_favoritas': 'Favoritas',
+  'recipes.filtro_rapidas': 'Rápidas',
+  'recipes.filtro_ia': 'IA',
 } as const;
 
 export const recipesEn: Record<keyof typeof recipesEs, string> = {
@@ -94,4 +98,8 @@ export const recipesEn: Record<keyof typeof recipesEs, string> = {
   'recipes.selecciona_los_ingredientes_que': 'Select the ingredients you have and the AI will generate a personalised recipe.',
   'recipes.title': '📖 Recipes',
   'recipes.tu_despensa': 'Your pantry',
+  'recipes.filtro_todas': 'All',
+  'recipes.filtro_favoritas': 'Favorites',
+  'recipes.filtro_rapidas': 'Quick',
+  'recipes.filtro_ia': 'AI',
 };

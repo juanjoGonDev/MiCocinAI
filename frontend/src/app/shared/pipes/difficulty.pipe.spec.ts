@@ -1,46 +1,41 @@
-import { DifficultyPipe } from './difficulty.pipe';
-import { DICTS } from '../../core/i18n';
+import { DICTS, type TranslationKey } from '../../core/i18n';
+import { difficultyLabel } from './difficulty.pipe';
 
-describe('DifficultyPipe', () => {
-  let pipe: DifficultyPipe;
+/**
+ * `t` se le pasa por parametro y el diccionario en espanol es el de verdad: el pipe no tiene logica propia,
+ * y lo que puede romperse es el reparto de claves, el punto de color y el «esto no es una dificultad».
+ */
+const es = (key: TranslationKey) => (DICTS.es as Record<string, string>)[key] ?? key;
 
-  beforeEach(() => {
-    // El pipe traduce por dentro y un spec de pipe no arranca el arbol de Angular: se le pone por delante el
-    // diccionario en espanol, que es lo que ve quien no cambia de idioma.
-    pipe = new DifficultyPipe({ t: (key: string) => (DICTS.es as Record<string, string>)[key] ?? key } as never);
+describe('difficultyLabel', () => {
+  it('traduce las tres', () => {
+    expect(difficultyLabel('easy', es)).toBe('Fácil');
+    expect(difficultyLabel('medium', es)).toBe('Medio');
+    expect(difficultyLabel('hard', es)).toBe('Difícil');
   });
 
-  it('should create an instance', () => {
-    expect(pipe).toBeTruthy();
+  it('la marca no la cambia el idioma', () => {
+    const en = (key: TranslationKey) => (DICTS.en as Record<string, string>)[key] ?? key;
+    expect(difficultyLabel('easy', en)).toBe('Easy');
+    expect(difficultyLabel('hard', en)).toBe('Hard');
   });
 
-  it('should transform easy to Fácil', () => {
-    expect(pipe.transform('easy')).toBe('Fácil');
+  it('ante una dificultad que no conoce, ensena el dato, no una clave', () => {
+    expect(difficultyLabel('Experta en frituras', es)).toBe('Experta en frituras');
   });
 
-  it('should transform medium to Medio', () => {
-    expect(pipe.transform('medium')).toBe('Medio');
+  it('el punto de color solo si se pide y solo si hay nivel', () => {
+    expect(difficultyLabel('easy', es, true)).toBe('🟢 Fácil');
+    expect(difficultyLabel('rara', es, true)).toBe('rara');
   });
 
-  it('should transform hard to Difícil', () => {
-    expect(pipe.transform('hard')).toBe('Difícil');
+  it('sin dato, nada', () => {
+    expect(difficultyLabel(null, es)).toBe('');
+    expect(difficultyLabel(undefined, es)).toBe('');
+    expect(difficultyLabel('', es)).toBe('');
   });
 
-  it('should show icon when showIcon is true', () => {
-    expect(pipe.transform('easy', true)).toBe('🟢 Fácil');
-    expect(pipe.transform('medium', true)).toBe('🟡 Medio');
-    expect(pipe.transform('hard', true)).toBe('🔴 Difícil');
-  });
-
-  it('should return empty string for null', () => {
-    expect(pipe.transform(null)).toBe('');
-  });
-
-  it('should return empty string for undefined', () => {
-    expect(pipe.transform(undefined)).toBe('');
-  });
-
-  it('should return original value for unknown difficulty', () => {
-    expect(pipe.transform('unknown')).toBe('unknown');
+  it('acepta la cadena como la escribio la IA, en lo que sea', () => {
+    expect(difficultyLabel('HARD', es)).toBe('Difícil');
   });
 });

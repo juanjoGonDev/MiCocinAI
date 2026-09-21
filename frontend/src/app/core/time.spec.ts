@@ -3,7 +3,7 @@ import {
   daysUntil,
   formatDateTime,
   formatDay,
-  formatRelative,
+  relativeTimeParts,
   formatTime,
   formatTimePrecise,
   parseDay,
@@ -90,15 +90,35 @@ describe('core/time — leer lo que manda la API', () => {
 
   it('el tiempo relativo dice lo que espera una persona, y en futuro si toca', () => {
     const now = new Date(2026, 4, 4, 12, 0, 0);
-    expect(formatRelative(new Date(now.getTime() - 30_000).toISOString(), now)).toBe('ahora');
-    expect(formatRelative(new Date(now.getTime() - 5 * 60_000).toISOString(), now)).toBe('hace 5 min');
-    expect(formatRelative(new Date(now.getTime() - 95 * 60_000).toISOString(), now)).toBe('hace 2 h');
-    expect(formatRelative(new Date(now.getTime() - 3 * 86_400_000).toISOString(), now)).toBe('hace 3 d');
+    // Aqui se prueba el reparto en partes; la frase («hace 5 min» / «5 min ago») la compone el idioma, en
+    // `I18nService.relativeTime`, y se ve en los e2e de la lista de la compra.
+    expect(relativeTimeParts(new Date(now.getTime() - 30_000).toISOString(), now)).toEqual({ kind: 'now' });
+    expect(relativeTimeParts(new Date(now.getTime() - 5 * 60_000).toISOString(), now)).toEqual({
+      kind: 'ago',
+      amount: 5,
+      unit: 'min'
+    });
+    expect(relativeTimeParts(new Date(now.getTime() - 95 * 60_000).toISOString(), now)).toEqual({
+      kind: 'ago',
+      amount: 2,
+      unit: 'h'
+    });
+    expect(relativeTimeParts(new Date(now.getTime() - 3 * 86_400_000).toISOString(), now)).toEqual({
+      kind: 'ago',
+      amount: 3,
+      unit: 'd'
+    });
     // A la una de la madrugada de manana: «en 22 h», no «hace 0 min».
-    expect(formatRelative(new Date(now.getTime() + 22 * 3_600_000).toISOString(), now)).toBe('en 22 h');
-    expect(formatRelative('2026-03-01T12:00:00Z', now)).toContain('mar');
-    expect(formatRelative('', now)).toBe('');
-    expect(formatRelative(null, now)).toBe('');
+    expect(relativeTimeParts(new Date(now.getTime() + 22 * 3_600_000).toISOString(), now)).toEqual({
+      kind: 'in',
+      amount: 22,
+      unit: 'h'
+    });
+    const lejano = relativeTimeParts('2026-03-01T12:00:00Z', now);
+    expect(lejano.kind).toBe('date');
+    if (lejano.kind === 'date') expect(lejano.day.toLowerCase()).toContain('mar');
+    expect(relativeTimeParts('', now)).toEqual({ kind: 'none' });
+    expect(relativeTimeParts(null, now)).toEqual({ kind: 'none' });
   });
 
   it('la zona se detecta: un nombre IANA, y en el encabezado se dice en cristiano', () => {

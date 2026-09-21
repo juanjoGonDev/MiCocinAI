@@ -15,6 +15,7 @@ import { TimerComponent } from '../../shared/components/ui/timer/timer.component
 import { Recipe, Difficulty } from '../../shared/models/recipe.model';
 import { AIRecipeResponse } from '../../shared/models/ai-config.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
 @Component({
@@ -52,7 +53,7 @@ import { I18nService } from '../../core/services/i18n.service';
           [selected]="activeFilter() === filter.value"
           (onClick)="setFilter(filter.value)"
         >
-          {{ filter.icon }} {{ filter.label }}
+          {{ filter.icon }} {{ filter.labelKey | t }}
         </app-tag>
       </div>
 
@@ -791,11 +792,12 @@ export class RecipesComponent implements OnInit {
     detailLevel: 'intermediate'
   };
 
-  quickFilters = [
-    { value: '', label: 'Todas', icon: '📋' },
-    { value: 'favorites', label: 'Favoritas', icon: '❤️' },
-    { value: 'quick', label: 'Rápidas', icon: '⚡' },
-    { value: 'ai', label: 'IA', icon: '🤖' }
+  /** Cuatro filtros, cuatro claves. «IA» en ingles se escribe «AI», y eso un catalogo con la frase dentro no lo puede saber. */
+  readonly quickFilters: { value: string; labelKey: TranslationKey; icon: string }[] = [
+    { value: '', labelKey: 'recipes.filtro_todas', icon: '📋' },
+    { value: 'favorites', labelKey: 'recipes.filtro_favoritas', icon: '❤️' },
+    { value: 'quick', labelKey: 'recipes.filtro_rapidas', icon: '⚡' },
+    { value: 'ai', labelKey: 'recipes.filtro_ia', icon: '🤖' }
   ];
 
   ngOnInit(): void {

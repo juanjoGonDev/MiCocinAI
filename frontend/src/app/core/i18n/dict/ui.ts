@@ -127,6 +127,14 @@ export const uiEs = {
   'ui.options': 'Opciones',
   'ui.remove_tag': 'Quitar etiqueta',
   'ui.usar_este_texto': 'usar este texto',
+  'ui.ahora': 'ahora',
+  'ui.hace_unidad': 'hace {amount} {unidad}',
+  'ui.en_unidad': 'en {amount} {unidad}',
+  'ui.unidad_min': 'min',
+  'ui.unidad_h': 'h',
+  'ui.unidad_d': 'd',
+  'ui.el_dia': 'el {day}',
+  'ui.dia_y_ano': '{day} {year}',
 } as const;
 
 export const uiEn: Record<keyof typeof uiEs, string> = {
@@ -245,4 +253,12 @@ export const uiEn: Record<keyof typeof uiEs, string> = {
   'ui.options': 'Options',
   'ui.remove_tag': 'Remove tag',
   'ui.usar_este_texto': 'use this text',
+  'ui.ahora': 'now',
+  'ui.hace_unidad': '{amount} {unidad} ago',
+  'ui.en_unidad': 'in {amount} {unidad}',
+  'ui.unidad_min': 'min',
+  'ui.unidad_h': 'h',
+  'ui.unidad_d': 'd',
+  'ui.el_dia': 'on {day}',
+  'ui.dia_y_ano': '{day} {year}',
 };

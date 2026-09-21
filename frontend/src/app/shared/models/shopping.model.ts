@@ -7,6 +7,9 @@
  * mal contada, y eso es exactamente el tipo de bug que hace que nadie vuelva a anotar
  * un precio.
  */
+
+import type { TranslationKey } from '../../core/i18n';
+
 import { dateLocale } from '../../core/time';
 
 export type ShoppingListStatus = 'active' | 'archived' | 'done';
@@ -486,11 +489,16 @@ export interface LineOffer {
   take: number;
 }
 
-export const OFFER_PRESETS: { label: string; buy: number; take: number; hint: string }[] = [
-  { label: '3x2', buy: 3, take: 2, hint: 'Pagas dos, llevas tres' },
-  { label: '2x1', buy: 2, take: 1, hint: 'Uno gratis' },
-  { label: '4x3', buy: 4, take: 3, hint: 'Pagas tres, llevas cuatro' },
-  { label: '5x4', buy: 5, take: 4, hint: 'Pagas cuatro, llevas cinco' }
+/**
+ * Las ofertas redondas. `label` es el nombre del truco (3x2), no texto de interfaz: se guarda, se busca y se
+ * lee igual en los dos idiomas. La pista si que es una frase, y por eso viaja como clave del diccionario —el
+ * mismo arreglo que `home-profile.ts` con `hintKey`: un tipo importado, no una dependencia (HOGARIA-SPEC ## 12u).
+ */
+export const OFFER_PRESETS: { label: string; buy: number; take: number; hintKey: TranslationKey }[] = [
+  { label: '3x2', buy: 3, take: 2, hintKey: 'shopping_list_detail.oferta_pista_3x2' },
+  { label: '2x1', buy: 2, take: 1, hintKey: 'shopping_list_detail.oferta_pista_2x1' },
+  { label: '4x3', buy: 4, take: 3, hintKey: 'shopping_list_detail.oferta_pista_4x3' },
+  { label: '5x4', buy: 5, take: 4, hintKey: 'shopping_list_detail.oferta_pista_5x4' }
 ];
 
 export function describeOffer(offer: LineOffer | null | undefined): string | null {

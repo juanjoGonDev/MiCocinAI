@@ -61,6 +61,9 @@ export const accountEs = {
   'account.n_escrituras_esperando': '{n} writes waiting for the network',
   'account.nada_guardado_en': 'Nothing saved in this browser',
   'account.bytes_en_entradas': '{bytes} in {n} entries',
+  'account.pestanja_cuenta': 'Cuenta',
+  'account.pestanja_seguridad': 'Seguridad',
+  'account.pestanja_informacion': 'Informacion',
 } as const;
 
 export const accountEn: Record<keyof typeof accountEs, string> = {
@@ -124,4 +127,7 @@ export const accountEn: Record<keyof typeof accountEs, string> = {
   'account.n_escrituras_esperando': '{n} escrituras esperando la red',
   'account.nada_guardado_en': 'Nada guardado en este navegador',
   'account.bytes_en_entradas': '{bytes} en {n} entradas',
+  'account.pestanja_cuenta': 'Account',
+  'account.pestanja_seguridad': 'Security',
+  'account.pestanja_informacion': 'About',
 };

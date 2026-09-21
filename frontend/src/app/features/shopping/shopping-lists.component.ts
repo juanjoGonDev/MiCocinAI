@@ -2,7 +2,6 @@ import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { formatRelative } from '../../core/time';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -12,29 +11,32 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
 type StatusFilter = 'active' | 'done' | 'all';
 
-const SORT_LABELS: Record<ListsSort, string> = {
-  updated: 'Actualizado',
-  name: 'Lista',
-  total: 'Total',
-  lines: 'Lineas'
-};
+// Lo que se puede ordenar, no como se llama: las cabeceras llevan su `labelKey` y este mapa solo servia
+// para comprobar que el `?sort=` de la URL era un orden conocido (## 12u).
+const SORTS: readonly ListsSort[] = ['updated', 'name', 'total', 'lines'];
 
-const MIN_TOTALS: PickerOption[] = [
-  { value: '', label: 'Cualquier total' },
-  { value: '1000', label: 'mas de 10 €', hint: 'cestas medias' },
-  { value: '2500', label: 'mas de 25 €' },
-  { value: '5000', label: 'mas de 50 €' },
-  { value: '10000', label: 'mas de 100 €' }
+/**
+ * Filtros de total. La cantidad esta escrita dentro de la clave a proposito: no es un numero formateado, es
+ * una etiqueta fija («over 25 €»), y partir la frase en dos la dejaria intraducible en los idiomas que
+ * cambian el sitio del simbolo.
+ */
+const MIN_TOTALS: { value: string; labelKey: TranslationKey; hintKey?: TranslationKey }[] = [
+  { value: '', labelKey: 'shopping_lists.total_cualquier' },
+  { value: '1000', labelKey: 'shopping_lists.total_10', hintKey: 'shopping_lists.total_cestas_medias' },
+  { value: '2500', labelKey: 'shopping_lists.total_25' },
+  { value: '5000', labelKey: 'shopping_lists.total_50' },
+  { value: '10000', labelKey: 'shopping_lists.total_100' }
 ];
 
-const PAGE_SIZES: PickerOption[] = [
-  { value: '10', label: '10 por pagina' },
-  { value: '25', label: '25 por pagina' },
-  { value: '50', label: '50 por pagina' }
+const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
+  { value: '10', labelKey: 'shopping_lists.pagina_10' },
+  { value: '25', labelKey: 'shopping_lists.pagina_25' },
+  { value: '50', labelKey: 'shopping_lists.pagina_50' }
 ];
 
 /**
@@ -130,7 +132,7 @@ const PAGE_SIZES: PickerOption[] = [
             [attr.data-test]="option.value === 'done' ? 'tab-done' : null"
             (click)="setStatus(option.value)"
           >
-            {{ option.label }}
+            {{ option.labelKey | t }}
           </button>
         }
         <span class="tray__tabs-spacer"></span>
@@ -172,7 +174,7 @@ const PAGE_SIZES: PickerOption[] = [
             />
             <app-picker
               [label]="'shopping_lists.total_minimo' | t"
-              [options]="minTotalOptions"
+              [options]="minTotalOptions()"
               [value]="minTotal()"
               [placeholder]="'shopping_lists.cualquier_total' | t"
               (valueChange)="setMinTotal($event)"
@@ -231,7 +233,7 @@ const PAGE_SIZES: PickerOption[] = [
                 (click)="sortBy(column.key)"
                 [disabled]="!column.key"
               >
-                <span>{{ column.label }}</span>
+                <span>{{ column.labelKey ? (column.labelKey | t) : '' }}</span>
                 @if (sort() === column.key) {
                   <app-icon [name]="dir() === 'asc' ? 'expand_less' : 'expand_more'" [size]="16" [label]="null" />
                 }
@@ -326,7 +328,7 @@ const PAGE_SIZES: PickerOption[] = [
           <span class="tray__pager-text">{{ rangeLabel() }} de {{ total() }}</span>
           <app-icon-button icon="chevron_right" [label]="'shopping_lists.pagina_siguiente' | t" size="md" variant="soft" [disabled]="!canGoNext()" (onClick)="go(1)" />
           <span class="tray__pager-spacer"></span>
-          <app-picker [label]="'shopping_lists.tamano_de_pagina' | t" [options]="pageSizes" [value]="pageSizeValue()" [filterFrom]="99" (valueChange)="setSize($event)" />
+          <app-picker [label]="'shopping_lists.tamano_de_pagina' | t" [options]="pageSizes()" [value]="pageSizeValue()" [filterFrom]="99" (valueChange)="setSize($event)" />
         </nav>
       }
     </div>
@@ -834,21 +836,31 @@ export class ShoppingListsComponent {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
-  readonly statusOptions: { value: StatusFilter; label: string }[] = [
-    { value: 'active', label: 'Activas' },
-    { value: 'done', label: 'Terminadas' },
-    { value: 'all', label: 'Todas' }
+  readonly statusOptions: { value: StatusFilter; labelKey: TranslationKey }[] = [
+    { value: 'active', labelKey: 'shopping_lists.estado_activas' },
+    { value: 'done', labelKey: 'shopping_lists.estado_terminadas' },
+    { value: 'all', labelKey: 'shopping_lists.estado_todas' }
   ];
-  readonly minTotalOptions = MIN_TOTALS;
-  readonly pageSizes = PAGE_SIZES;
+  /** El picker exige `label` ya escrita: se resuelve aqui, una vez, y no en cada fila de la plantilla. */
+  readonly minTotalOptions = computed<PickerOption[]>(() =>
+    MIN_TOTALS.map((option) => ({
+      value: option.value,
+      label: this.i18n.t(option.labelKey),
+      ...(option.hintKey ? { hint: this.i18n.t(option.hintKey) } : {})
+    }))
+  );
+  readonly pageSizes = computed<PickerOption[]>(() =>
+    PAGE_SIZES.map((option) => ({ value: option.value, label: this.i18n.t(option.labelKey) }))
+  );
   /** `key` vacia = columna que no se ordena (tienda y acciones). */
-  readonly columns: { key: ListsSort | ''; label: string }[] = [
-    { key: 'name', label: 'Lista' },
-    { key: '', label: 'Tienda' },
-    { key: 'lines', label: 'Progreso' },
-    { key: 'total', label: 'Total' },
-    { key: 'updated', label: 'Actualizado' },
-    { key: '', label: '' }
+  readonly columns: { key: ListsSort | ''; labelKey: TranslationKey | null }[] = [
+    { key: 'name', labelKey: 'shopping_lists.columna_lista' },
+    { key: '', labelKey: 'shopping_lists.columna_tienda' },
+    { key: 'lines', labelKey: 'shopping_lists.columna_progreso' },
+    { key: 'total', labelKey: 'shopping_lists.columna_total' },
+    { key: 'updated', labelKey: 'shopping_lists.columna_actualizado' },
+    // La sexta columna son las acciones: un hueco en la rejilla, sin cabecera que traducir.
+    { key: '', labelKey: null }
   ];
   readonly pageSizeValue = computed(() => String(this.size()));
 
@@ -921,7 +933,7 @@ export class ShoppingListsComponent {
     const to = params.get('to');
     if (to) this.to.set(to);
     const sort = params.get('sort') as ListsSort | null;
-    if (sort && sort in SORT_LABELS) this.sort.set(sort);
+    if (sort && (SORTS as readonly string[]).includes(sort)) this.sort.set(sort);
     const dir = params.get('dir');
     if (dir === 'asc' || dir === 'desc') this.dir.set(dir);
     const page = Number(params.get('page'));
@@ -1099,7 +1111,8 @@ export class ShoppingListsComponent {
   }
 
   statusLabel(): string {
-    return this.statusOptions.find((option) => option.value === this.status())?.label ?? 'listas';
+    const option = this.statusOptions.find((o) => o.value === this.status());
+    return option ? this.i18n.t(option.labelKey) : this.i18n.t('shopping_lists.estado_todas');
   }
 
   emptyTitle(): string {
@@ -1226,6 +1239,6 @@ export class ShoppingListsComponent {
   // La hora la pone `core/time`, en la zona detectada del navegador. Cada pantalla que hacıa
   // su propio `new Date(...)` era una pantalla con la hora torcida.
   since(value: string): string {
-    return formatRelative(value);
+    return this.i18n.relativeTime(value);
   }
 }

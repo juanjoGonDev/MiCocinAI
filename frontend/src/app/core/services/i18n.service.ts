@@ -1,6 +1,6 @@
 import { Injectable, signal, effect } from '@angular/core';
 import { STORAGE_KEYS } from './storage.service';
-import { setDateLocale } from '../time';
+import { relativeTimeParts, setDateLocale, type TimeInput } from '../time';
 import { DICTS, type TranslationKey, type TranslationParams } from '../i18n';
 
 /**
@@ -73,6 +73,28 @@ export class I18nService {
    * pare en el compilador en lugar de enseiar la clave en crudo en la pantalla. El fallback sigue siendo
    * el espanol y, si tampoco esta, la clave —por si el diccionario llega a medias de una rama larga.
    */
+  /**
+   * «hace 3 d», «en 22 h» y, cuando ya no es cercania, la fecha. Las partes las decide `relativeTimeParts`
+   * (calendario, sin idioma); aqui se junta con la frase, que es lo que cambia entre idiomas.
+   */
+  relativeTime(value: TimeInput, now: Date = new Date()): string {
+    const parts = relativeTimeParts(value, now);
+    switch (parts.kind) {
+      case 'none':
+        return '';
+      case 'now':
+        return this.t('ui.ahora');
+      case 'date':
+        return parts.year
+          ? this.t('ui.dia_y_ano', { day: parts.day, year: parts.year })
+          : this.t('ui.el_dia', { day: parts.day });
+      default: {
+        const unidad = this.t(parts.unit === 'min' ? 'ui.unidad_min' : parts.unit === 'h' ? 'ui.unidad_h' : 'ui.unidad_d');
+        return this.t(parts.kind === 'in' ? 'ui.en_unidad' : 'ui.hace_unidad', { amount: parts.amount, unidad });
+      }
+    }
+  }
+
   t(key: TranslationKey, params?: TranslationParams): string {
     const dict = DICTS[this.resolvedSignal()];
     let str: string = dict[key] ?? DICTS.es[key] ?? key;

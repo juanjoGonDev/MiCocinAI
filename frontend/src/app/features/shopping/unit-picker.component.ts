@@ -87,7 +87,9 @@ export class UnitPickerComponent {
    * Las unidades, agrupadas por titulo de familia. Ni descripcion por fila (en una columna
    * de movil se recortaba a dos letras: ruido con puntos suspensivos) ni familia elegible.
    */
-  readonly options = computed<PickerOption[]>(() => unitPickerOptions());
+  readonly options = computed<PickerOption[]>(() =>
+    unitPickerOptions().map((option) => ({ ...option, group: this.i18n.t(option.groupKey) }))
+  );
 
   /** El icono de la familia, en el disparador: «kg» se ve, «peso» se intuye. */
   readonly familyIcon = computed<IconName>(() => familyOf(this.value)?.icon ?? 'unfold_more');

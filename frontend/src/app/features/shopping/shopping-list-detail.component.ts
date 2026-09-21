@@ -2,7 +2,7 @@ import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { formatDateTime, formatRelative } from '../../core/time';
+import { formatDateTime } from '../../core/time';
 import { UnitPickerComponent } from './unit-picker.component';
 import { canonicalUnit, isKnownUnit } from './unit-families';
 import {
@@ -41,6 +41,7 @@ import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
 /** Una linea de la foto con lo que la persona toco: `keep` no existe en el contrato. */
@@ -439,7 +440,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
       @if (selection().length > 0) {
         <div class="detail__selection" data-test="selection-toolbar" role="toolbar" [attr.aria-label]="'shopping_list_detail.acciones_de_la_seleccion' | t">
-          <span class="detail__selection-count">{{ selection().length }} seleccionadas</span>
+          <span class="detail__selection-count">{{ 'shopping_list_detail.seleccionadas' | t: { count: selection().length } }}</span>
           <button type="button" class="detail__ghost" data-test="bulk-check" (click)="bulkCheck(true)">{{ 'shopping_list_detail.marcar_comprado' | t }}</button>
           <button type="button" class="detail__ghost" data-test="bulk-remove" (click)="bulkRemove()">{{ 'shopping_list_detail.quitar' | t }}</button>
           <button type="button" class="detail__ghost" data-test="bulk-discount" (click)="openDiscountForSelection()">
@@ -524,7 +525,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     class="detail__chip-btn"
                     [class.detail__chip-btn--active]="isOffer(preset)"
                     [attr.aria-pressed]="isOffer(preset)"
-                    [attr.title]="preset.hint"
+                    [attr.title]="preset.hintKey | t"
                     data-test="offer-preset"
                     (click)="pickOfferPreset(preset)"
                   >
@@ -560,7 +561,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     (click)="pickLineKind(kind.value)"
                   >
                     <app-icon [name]="kind.icon" [size]="14" [label]="null" />
-                    {{ kind.label }}
+                    {{ kind.labelKey | t }}
                   </button>
                 }
               </div>
@@ -681,7 +682,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   (click)="setDiscountKind(kind.value)"
                 >
                   <app-icon [name]="kind.icon" [size]="16" [label]="null" />
-                  {{ kind.label }}
+                  {{ kind.labelKey | t }}
                 </button>
               }
             </div>
@@ -730,11 +731,11 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     type="button"
                     class="detail__chip-btn"
                     [class.detail__chip-btn--active]="discountDraft().scope === scope.value"
-                    [attr.title]="scope.hint"
+                    [attr.title]="scope.hintKey | t"
                     data-test="discount-scope"
                     (click)="patchDiscount({ scope: scope.value })"
                   >
-                    {{ scope.label }}
+                    {{ scope.labelKey | t }}
                   </button>
                 }
               </div>
@@ -1010,7 +1011,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             <div class="detail__sheet-grid">
               <div class="detail__field">
                 <span class="detail__field-label">{{ 'shopping_list_detail.que_es_la_foto' | t }}</span>
-                <app-picker [label]="'shopping_list_detail.modo' | t" [options]="photoModes" [value]="photoMode()" (valueChange)="setPhotoMode($event)" data-test="photo-mode" />
+                <app-picker [label]="'shopping_list_detail.modo' | t" [options]="photoModes()" [value]="photoMode()" (valueChange)="setPhotoMode($event)" data-test="photo-mode" />
               </div>
               <label class="detail__field">
                 <span>{{ 'shopping_list_detail.nota_para_el_modelo' | t }}</span>
@@ -2997,10 +2998,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
    * pregunta: la oferta cambia CUANTAS unidades se pagan, este cambia CUANTO se paga por elas,
    * y en caja van uno detras de otro — por eso siguen siendo dos bloques y no un menu unico.
    */
-  readonly lineKinds: { value: LineDiscountKindUi; label: string; icon: 'close' | 'percent' | 'payments' }[] = [
-    { value: 'none', label: 'Sin descuento', icon: 'close' },
-    { value: 'percent', label: 'Porcentaje', icon: 'percent' },
-    { value: 'amount', label: 'Importe', icon: 'payments' }
+  readonly lineKinds: { value: LineDiscountKindUi; labelKey: TranslationKey; icon: 'close' | 'percent' | 'payments' }[] = [
+    { value: 'none', labelKey: 'shopping_list_detail.sin_descuento', icon: 'close' },
+    { value: 'percent', labelKey: 'shopping_list_detail.tipo_porcentaje', icon: 'percent' },
+    { value: 'amount', labelKey: 'shopping_list_detail.tipo_importe', icon: 'payments' }
   ];
   readonly lineKind = signal<LineDiscountKindUi>('none');
   readonly linePercent = signal('');
@@ -3071,12 +3072,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (!item) return '';
     const discount = this.draft.discount;
     if (!discount) {
-      return this.lineKind() === 'none'
-        ? 'Sin descuento: se paga lo que marca el estante.'
-        : 'Escribe cuanto baja y se guarda solo.';
+      return this.i18n.t(
+        this.lineKind() === 'none' ? 'shopping_list_detail.pista_sin_descuento' : 'shopping_list_detail.pista_escribe'
+      );
     }
     const unitMinor = this.draft.price ? parseMoneyToMinor(this.draft.price) : item.price_minor;
-    if (!unitMinor) return 'Ponle un precio a la linea para ver cuanto baja.';
+    if (!unitMinor) return this.i18n.t('shopping_list_detail.pista_sin_precio');
     const quantity = Number(this.draft.quantity) > 0 ? Number(this.draft.quantity) : 1;
     const offer = this.draftOffer();
     const paid = offer ? paidUnitsOf(quantity, offer) : quantity;
@@ -3085,31 +3086,37 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const raw = discount.kind === 'percent' ? Math.round((base * (discount.percentBps ?? 0)) / 10_000) : (discount.valueMinor ?? 0);
     const off = Math.min(raw, base);
     const label = this.describeDiscount(discount) ?? this.i18n.t('shopping_list_detail.descuento');
-    if (raw <= 0) return `${label}: todavia no hay valor que aplicar.`;
+    if (raw <= 0) return this.i18n.t('shopping_list_detail.pista_sin_valor', { label });
     if (discount.units && capped < paid) {
-      return `${label} · en la cesta hay ${trimNumber(paid)} ${paid === 1 ? 'unidad' : 'unidades'} pagadas; no llegan a ${trimNumber(discount.units)}.`;
+      return this.i18n.t('shopping_list_detail.pista_no_llegan', {
+        label,
+        paid: trimNumber(paid),
+        unidad: this.i18n.t(paid === 1 ? 'shopping_list_detail.unidad' : 'shopping_list_detail.unidades'),
+        units: trimNumber(discount.units)
+      });
     }
     const from = this.money(base);
     const to = this.money(base - off);
-    return raw > base
-      ? `${label} · la linea vale ${from} y no puede bajar de 0: se queda en ${to}.`
-      : `${label} · de ${from} a ${to}.`;
+    return this.i18n.t(
+      raw > base ? 'shopping_list_detail.pista_no_baja_de_cero' : 'shopping_list_detail.pista_de_a',
+      { label, from, to }
+    );
   }
 
   // ------------------------------------------------------------------- descuento
 
   readonly discountOpen = signal(false);
-  readonly discountKinds: { value: 'amount' | 'percent'; label: string; icon: 'payments' | 'percent' }[] = [
-    { value: 'amount', label: 'Importe', icon: 'payments' },
-    { value: 'percent', label: 'Porcentaje', icon: 'percent' }
+  readonly discountKinds: { value: 'amount' | 'percent'; labelKey: TranslationKey; icon: 'payments' | 'percent' }[] = [
+    { value: 'amount', labelKey: 'shopping_list_detail.tipo_importe', icon: 'payments' },
+    { value: 'percent', labelKey: 'shopping_list_detail.tipo_porcentaje', icon: 'percent' }
   ];
   // Los cuatro alcances que se ven en el pasillo de verdad: la oferta de la cesta, la de
   // «los dos primeros», la del producto concretado en la etiqueta y la del pasillo entero.
-  readonly discountScopes: { value: DiscountScope; label: string; hint: string }[] = [
-    { value: 'all', label: 'Toda la cesta', hint: 'Se aplica al total' },
-    { value: 'firstUnits', label: 'Primeras unidades', hint: 'Tipo «2 primeros cafés a 1 €»' },
-    { value: 'product', label: 'En productos', hint: '«2 € en jamón y queso»: solo esas líneas bajan' },
-    { value: 'category', label: 'En secciones', hint: 'Pasillos enteros, p. ej. lácteos y charcutería' }
+  readonly discountScopes: { value: DiscountScope; labelKey: TranslationKey; hintKey: TranslationKey }[] = [
+    { value: 'all', labelKey: 'shopping_list_detail.alcance_cesta', hintKey: 'shopping_list_detail.alcance_cesta_pista' },
+    { value: 'firstUnits', labelKey: 'shopping_list_detail.alcance_primeras', hintKey: 'shopping_list_detail.alcance_primeras_pista' },
+    { value: 'product', labelKey: 'shopping_list_detail.alcance_productos', hintKey: 'shopping_list_detail.alcance_productos_pista' },
+    { value: 'category', labelKey: 'shopping_list_detail.alcance_secciones', hintKey: 'shopping_list_detail.alcance_secciones_pista' }
   ];
   readonly percentOptions: PickerOption[] = [5, 10, 15, 20, 25, 50].map((value) => ({ value: String(value), label: value + ' %' }));
   readonly discountDraft = signal<{
@@ -3206,7 +3213,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
   /** La fila de totales: el descuento presente o ausente, pero dicho con palabras. */
   readonly discountSummary = computed(() => {
     const description = this.list()?.discountDescription;
-    return description ? `Descuento · ${description}` : 'Anadir descuento';
+    return description
+      ? this.i18n.t('shopping_list_detail.descuento_de', { description })
+      : this.i18n.t('shopping_list_detail.anadir_descuento');
   });
 
   /**
@@ -3334,11 +3343,16 @@ export class ShoppingListDetailComponent implements OnDestroy {
   readonly photoData = signal<string | null>(null);
   readonly photoPreview = signal<string | null>(null);
   readonly photoResult = signal<PhotoReview | null>(null);
-  readonly photoModes: PickerOption[] = [
-    { value: 'auto', label: 'No lo se', hint: 'que lo juzgue el modelo' },
-    { value: 'ticket', label: 'Ticket / factura', hint: 'lo pagado' },
-    { value: 'shelf', label: 'Estanteria', hint: 'precio por unidad' }
-  ];
+  /** El modo de la foto: el picker quiere la etiqueta escrita, asi que se traduce en el computed. */
+  readonly photoModes = computed<PickerOption[]>(() =>
+    (
+      [
+        { value: 'auto', labelKey: 'shopping_list_detail.foto_no_lo_se', hintKey: 'shopping_list_detail.foto_no_lo_se_pista' },
+        { value: 'ticket', labelKey: 'shopping_list_detail.foto_ticket', hintKey: 'shopping_list_detail.foto_ticket_pista' },
+        { value: 'shelf', labelKey: 'shopping_list_detail.foto_estanteria', hintKey: 'shopping_list_detail.foto_estanteria_pista' }
+      ] as const
+    ).map((mode) => ({ value: mode.value, label: this.i18n.t(mode.labelKey), hint: this.i18n.t(mode.hintKey) }))
+  );
 
   openDiscount(prefill?: string[]): void {
     this.hydrateDiscount();
@@ -3514,7 +3528,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
    * mal situada en la zona del dispositivo se nota en cuanto se la escribe entera.
    */
   since(value: string): string {
-    return formatRelative(value);
+    return this.i18n.relativeTime(value);
   }
 
   when(value: string): string {

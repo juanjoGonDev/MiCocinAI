@@ -8,11 +8,13 @@ import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
 interface FilterOption<T extends string> {
   value: T;
-  label: string;
+  /** Clave del diccionario: lo que se pinta depende del idioma, y el catalogo no lo puede saber. */
+  labelKey: TranslationKey;
 }
 
 @Component({
@@ -58,7 +60,7 @@ interface FilterOption<T extends string> {
             [ngModel]="logService.sourceFilter()"
             (ngModelChange)="onSourceChange($event)"
           >
-            <option *ngFor="let opt of sourceOptions" [value]="opt.value">{{ opt.label }}</option>
+            <option *ngFor="let opt of sourceOptions" [value]="opt.value">{{ opt.labelKey | t }}</option>
           </select>
 
           <select
@@ -66,7 +68,7 @@ interface FilterOption<T extends string> {
             [ngModel]="logService.levelFilter()"
             (ngModelChange)="onLevelChange($event)"
           >
-            <option *ngFor="let opt of levelOptions" [value]="opt.value">{{ opt.label }}</option>
+            <option *ngFor="let opt of levelOptions" [value]="opt.value">{{ opt.labelKey | t }}</option>
           </select>
 
           <app-button
@@ -443,19 +445,23 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
 
   @ViewChild('bodyEl') bodyEl!: ElementRef<HTMLDivElement>;
 
+  /**
+   * Los dos filtros de la barra. `labelKey`, no `label`: un catalogo con la frase dentro se pinta tal cual en
+   * el `@for` de la plantilla y no hay idioma que lo alcance (HOGARIA-SPEC ## 12u).
+   */
   sourceOptions: FilterOption<LogSource | 'all'>[] = [
-    { value: 'all', label: 'Todos' },
-    { value: 'server', label: 'Servidor' },
-    { value: 'browser', label: 'Cliente' }
+    { value: 'all', labelKey: 'logs.fuente_todos' },
+    { value: 'server', labelKey: 'logs.fuente_servidor' },
+    { value: 'browser', labelKey: 'logs.fuente_cliente' }
   ];
 
   levelOptions: FilterOption<LogLevel | 'all'>[] = [
-    { value: 'all', label: 'Todos los niveles' },
-    { value: 'error', label: 'Error' },
-    { value: 'warn', label: 'Warning' },
-    { value: 'info', label: 'Info' },
-    { value: 'log', label: 'Log' },
-    { value: 'debug', label: 'Debug' }
+    { value: 'all', labelKey: 'logs.nivel_todos' },
+    { value: 'error', labelKey: 'logs.nivel_error' },
+    { value: 'warn', labelKey: 'logs.nivel_warning' },
+    { value: 'info', labelKey: 'logs.nivel_info' },
+    { value: 'log', labelKey: 'logs.nivel_log' },
+    { value: 'debug', labelKey: 'logs.nivel_debug' }
   ];
 
   filtered = computed<LogEntry[]>(() =>
@@ -595,13 +601,15 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   /** 'En vivo' · 'Reintentando en 5 s' · 'Sin conexion (lo intentaba cada X s)'. */
   statusLabel(): string {
     const status = this.logService.streamStatus();
-    if (status === 'live') return 'En vivo';
-    if (status === 'connecting') return 'Conectando';
+    if (status === 'live') return this.i18n.t('logs.estado_en_vivo');
+    if (status === 'connecting') return this.i18n.t('logs.estado_conectando');
     if (status === 'retrying') {
       const ms = this.logService.retryIn();
-      return ms ? `Reintentando en ${Math.round(ms / 1000)} s` : 'Reintentando';
+      return ms
+        ? this.i18n.t('logs.estado_reintentando_en', { seconds: Math.round(ms / 1000) })
+        : this.i18n.t('logs.estado_reintentando');
     }
-    return 'Sin conexion';
+    return this.i18n.t('logs.estado_sinConexion');
   }
 
   reconnect(): void {

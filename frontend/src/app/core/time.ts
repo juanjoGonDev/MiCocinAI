@@ -216,31 +216,33 @@ export function daysUntil(value: TimeInput, now: Date = new Date()): number | nu
 }
 
 /**
- * «hace 5 min», «hace 2 h», «hace 3 d», y cuando ya no es cercania, la fecha — porque
- * «hace 40 d» no le dice a nadie cuando fue.
+ * De una marca de tiempo a «lo cerca que está», sin palabras. `core/time.ts` es un modulo puro: no ve el
+ * idioma, y no debe empezar a verlo. Aqui se decide el numero y la unidad; la frase la compone
+ * `I18nService.relativeTime`, que es donde vive el idioma. Hace falta la frase entera y no un prefijo: en
+ * ingles el numero va delante («3 d ago»), y pegar «hace » delante de una cifra es el error clasico.
  */
-export function formatRelative(value: TimeInput, now: Date = new Date()): string {
+export type RelativeTimeParts =
+  | { kind: 'none' }
+  | { kind: 'now' }
+  | { kind: 'ago' | 'in'; amount: number; unit: 'min' | 'h' | 'd' }
+  | { kind: 'date'; day: string; year: string | null };
+
+export function relativeTimeParts(value: TimeInput, now: Date = new Date()): RelativeTimeParts {
   const date = parseInstant(value);
-  if (!date) return '';
+  if (!date) return { kind: 'none' };
   const signed = now.getTime() - date.getTime();
   // Un minuto redondeado a 1 no es «ahora»: en una fila de lista, «hace 1 min» y «ahora» son
   // la diferencia entre mirar el movil o no.
-  if (Math.abs(signed) < 60_000) return 'ahora';
-  const future = signed < 0;
+  if (Math.abs(signed) < 60_000) return { kind: 'now' };
   const amount = Math.round(Math.abs(signed) / 60_000);
-  const unit =
-    amount < 60
-      ? `${amount} min`
-      : amount < 60 * 24
-        ? `${Math.round(amount / 60)} h`
-        : amount < 60 * 24 * 7
-          ? `${Math.floor(amount / (60 * 24))} d`
-          : null;
-  if (unit) return future ? `en ${unit}` : `hace ${unit}`;
-  const sameYear = date.getFullYear() === now.getFullYear();
+  if (amount < 60) return { kind: signed < 0 ? 'in' : 'ago', amount, unit: 'min' };
+  if (amount < 60 * 24) return { kind: signed < 0 ? 'in' : 'ago', amount: Math.round(amount / 60), unit: 'h' };
+  if (amount < 60 * 24 * 7) return { kind: signed < 0 ? 'in' : 'ago', amount: Math.floor(amount / (60 * 24)), unit: 'd' };
   const day = clock(dateLocale(), { day: 'numeric', month: 'short', timeZone: clientTimeZone() }).format(date);
-  return future ? `el ${day}` : `${day}${sameYear ? '' : ` ${String(date.getFullYear()).slice(2)}`}`;
+  const year = date.getFullYear() === now.getFullYear() ? null : String(date.getFullYear()).slice(2);
+  return { kind: 'date', day, year };
 }
+
 
 /** La fecha con la hora detras, para cuando «ayer» ya no aclara nada. */
 export function formatDateTimeWithYear(value: TimeInput, now: Date = new Date(), timeZone?: string): string {

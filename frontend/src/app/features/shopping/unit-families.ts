@@ -5,10 +5,12 @@
  * bote, y entonces el precio por unidad deja de ser comparable entre semanas.
  */
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
+import type { TranslationKey } from '../../core/i18n';
 
 export type UnitFamily = {
   id: string;
-  label: string;
+  /** Como se ensena la familia: clave del diccionario, no frase. Ver HOGARIA-SPEC ## 12u. */
+  labelKey: TranslationKey;
   icon: IconName;
   /** La que se pone al elegir la familia sin afinar. */
   defaultUnit: string;
@@ -16,19 +18,19 @@ export type UnitFamily = {
 };
 
 export const UNIT_FAMILIES: readonly UnitFamily[] = [
-  { id: 'weight', label: 'Peso', icon: 'scale', defaultUnit: 'kg', units: ['kg', 'g', '500 g', '250 g', 'lb'] },
-  { id: 'volume', label: 'Volumen', icon: 'local_drink', defaultUnit: 'L', units: ['L', 'ml', '1,5 L', '750 ml'] },
-  { id: 'count', label: 'Unidades', icon: 'numbers', defaultUnit: 'ud', units: ['ud', 'pieza', 'docena', 'manojo'] },
+  { id: 'weight', labelKey: 'shopping_list_detail.familia_peso', icon: 'scale', defaultUnit: 'kg', units: ['kg', 'g', '500 g', '250 g', 'lb'] },
+  { id: 'volume', labelKey: 'shopping_list_detail.familia_volumen', icon: 'local_drink', defaultUnit: 'L', units: ['L', 'ml', '1,5 L', '750 ml'] },
+  { id: 'count', labelKey: 'shopping_list_detail.familia_unidades', icon: 'numbers', defaultUnit: 'ud', units: ['ud', 'pieza', 'docena', 'manojo'] },
   {
     id: 'package',
-    label: 'Envase',
+    labelKey: 'shopping_list_detail.familia_envase',
     icon: 'inventory_2',
     defaultUnit: 'bote',
     units: ['bote', 'lata', 'botella', 'brick', 'pack', 'caja', 'bolsa', 'bandeja', 'barra', 'paquete']
   },
   {
     id: 'kitchen',
-    label: 'Medida de cocina',
+    labelKey: 'shopping_list_detail.familia_medida_de_cocina',
     icon: 'kitchen',
     defaultUnit: 'cucharada',
     units: ['cucharada', 'cucharadita', 'taza', 'pizca', 'vaso']
@@ -116,11 +118,15 @@ export function isKnownUnit(value: string | null | undefined): boolean {
  * opcion —es una etiqueta—, y por eso aqui no hay filas duplicadas ni un `value` que valga
  * dos cosas: `kg` aparece una vez y el disparador siempre dice la unidad que hay dentro.
  */
-export function unitPickerOptions(): { value: string; label: string; group: string }[] {
-  const out: { value: string; label: string; group: string }[] = [];
+/**
+ * Lo que se puede elegir. `groupKey`, y no el titulo ya escrito: este modulo es logica sin Angular y no ve el
+ * idioma; quien arma las opciones del picker (`unit-picker.component.ts`) lo resuelve con el diccionario.
+ */
+export function unitPickerOptions(): { value: string; label: string; groupKey: TranslationKey }[] {
+  const out: { value: string; label: string; groupKey: TranslationKey }[] = [];
   for (const family of UNIT_FAMILIES) {
     for (const unit of family.units) {
-      out.push({ value: unit, label: unit, group: family.label });
+      out.push({ value: unit, label: unit, groupKey: family.labelKey });
     }
   }
   return out;

@@ -19,6 +19,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { environment } from '../../../environments/environment';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
 /**
@@ -67,7 +68,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
           (click)="switchTab(tab.id)"
         >
           <app-icon [name]="tab.icon" [size]="16" />
-          {{ tab.label }}
+          {{ tab.labelKey | t }}
         </button>
       </div>
 
@@ -661,10 +662,11 @@ export class AccountComponent {
   private readonly shopping = inject(ShoppingService);
   private readonly toastService = inject(ToastService);
 
-  readonly tabs: Array<{ id: AccountTab; label: string; icon: IconName }> = [
-    { id: 'account', label: 'Cuenta', icon: 'account_circle' },
-    { id: 'security', label: 'Seguridad', icon: 'settings' },
-    { id: 'info', label: 'Informacion', icon: 'description' }
+  /** Las tres secciones de la pantalla, con clave: pintar `tab.label` era pintar espanol fijo (## 12u). */
+  readonly tabs: Array<{ id: AccountTab; labelKey: TranslationKey; icon: IconName }> = [
+    { id: 'account', labelKey: 'account.pestanja_cuenta', icon: 'account_circle' },
+    { id: 'security', labelKey: 'account.pestanja_seguridad', icon: 'settings' },
+    { id: 'info', labelKey: 'account.pestanja_informacion', icon: 'description' }
   ];
   readonly activeTab = signal<AccountTab>('account');
 
