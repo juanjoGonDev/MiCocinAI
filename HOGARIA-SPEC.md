@@ -2936,6 +2936,66 @@ cinco palabras y `cookingLevel` devolviendo clave + `'Sin marcar'`), `household`
 necesitan `TestBed`, y con `ng lint` sin poder ejecutarse. Y el detalle ortográfico anotado arriba: «Buscar
 seccion» y compañía siguen sin tildes porque esta tanda mueve cadenas, no las reescribe.
 
+## 12w. Tanda 24 — lo que el servidor escribe en castellano: el historial, la despensa sembrada y los utensilios
+
+> «El historial se sigue viendo en español. El querer generar recetas hay ingredientes en español. Los utensilios
+> se ven en español.» (con captura del modal «Generate Recipe with AI» en ingles: `Vino tinto`, `Cerveza`, `Levadura`…
+> y un historial que dice `Juanjo ha desmarcado «Leche»`).
+
+Las tres cosas son la misma: **texto escrito por el servidor en castellano y pintado como si fuera interfaz**. No es
+que falten claves; es que no habia ninguna clave que poner.
+
+1. **El historial de la lista.** `server/src/utils/shopping-events.ts:describeEvent` compone la frase
+   (`${who} ha desmarcado${item}`) y la ruta la manda como `description`; la pantalla la pinta. Y aqui hay un bug que
+   ni estaba en el mapa: el tipo del cliente `ListEventAction` declara **otras** acciones (`items.add`,
+   `list.rename`, `list.clear_checked`…) que no son las del server (`item.add`, `list.update`, `list.clear-checked`,
+   `items.bulk`…). Nueve de los nombres no existen en el server: un tipo inventado, que nadie pudo usar para componer
+   la frase en el idioma activo. El payload ya trae `action`, `item_name` y `user_name` —la tabla los tiene—, así que
+   la correccion es enteramente del cliente: **componer con `t()` a partir de la accion**, y `description` queda como
+   reserva para una accion que el cliente aun no conoce (filas viejas, o un server nuevo con un cliente viejo: los
+   dos se leen).
+2. **La despensa sembrada.** `server/src/utils/seed-data.ts` crea la casa nueva con **68 alimentos y 54 utensilios con
+   nombre en castellano** (122 en total), y el modal de la IA, la despensa y el onboarding pintan `item.name`. Es el
+   mismo caso que los alergenos de la ronda 22 —el nombre es el dato—, con un matiz: aqui la persona **no lo escribió**,
+   lo escribió la app al sembrar la casa. Dejarlo en español no es respetar su texto, es enseñarle su propio semillero.
+   Se traduce **la etiqueta**, igual que con gustos y categorías: mapa valor → clave en el punto de pintura.
+3. **Cuando se traduce un nombre y cuando no**, que es la linea que separa esto de un caos:
+   - lectura de un nombre del catalogo sembrado (despensa, utensilios, ingrediente, fila de la lista) → **etiqueta
+     traducida si la palabra está en el catalogo, crudo si no lo está**;
+   - campo **editable** (el input donde se escribe el nombre, el cuadro de renombrar) → **el dato tal cual**: traducir
+     lo que se edita es reescribir la base de datos con un golpe de idioma;
+   - lo que **una persona o la IA escribieron** (lineas de un ticket fotografiado, nombre de una receta, texto libre)
+     → **crudo siempre**: es su texto, y la pantalla no tiene derecho a corregirlo.
+
+### Checklist
+
+- [ ] `ListEventAction` pasa a ser **la lista del server**, y un spec espejo en `server/` (el patron de
+      `meal-times-mirror.spec.ts`) compara las dos: si alguien anade una accion al server y el cliente no la traduce,
+      CI lo para. Sin este paso la traduccion del historial se cae a la primera accion nueva.
+- [ ] Cada accion tiene clave con sus parametros: `list_event.<slug>` con `{who}` siempre y `{item}` solo donde el
+      server manda nombre. El espejo comprueba el detalle que se olvida siempre: **las acciones con `item_name` llevan
+      `{item}` en la frase y las que no, no** —si no, «ha vaciado el carro {item}» se queda con la llave pintada.
+- [ ] `auditFace` deja de reescribir la frase del server con `startsWith`/`slice` (el apaño para cambiar «Juanjo» por
+      «Tú» dentro de una cadena ya compuesta): el sujeto pasa a ser un **parametro**, elegido al componer y no a
+      posteriori. Y la prueba de que el apaño era frágil: en la captura del parte el historial se leía pegado
+      («…comprada1 d agoJuanjo…») porque la fila pinta nombre y frase en dos nodos contiguos.
+- [ ] Dos mapas de catalogo (`FOOD_LABEL_KEYS`, `UTENSIL_LABEL_KEYS`) **generados desde el propio `seed-data.ts`**, no
+      tecleados, con las 122 claves en los dos idiomas, y un espejo que exige que cada nombre sembrado tenga la suya.
+      Un mapa escrito a mano se pudre la primera vez que alguien anade un alimento al semillero.
+- [ ] Un pipe `catalogLabel` (`shared/pipes/catalog-label.pipe.ts`), **impuro a propósito** como `t`: puro no se
+      re-evalúa al cambiar de idioma, y ese es el bug congelado de la ronda 20. La logica vive al lado, pura
+      (`catalogLabelKey(tipo, valor)`), con su spec en el puente: se prueba sin navegador.
+- [ ] Puntos de pintura: `pantry` (alimentos, «con esto puedo cocinar», utensilios), `onboarding` (paso de utensilios),
+      `shopping-list-detail` (fila de la lista y titulo de su ficha), `recipes` (chips del modal de la IA e
+      ingredientes de la receta). Los tickets fotografidos y el nombre de una receta **no** pasan por el pipe, por la
+      regla 3 de arriba.
+- [ ] Censo y cierre: `check-ui` en 0 con las 20 reglas de la tanda 23, `tsc` de app **y de spec** (el de spec es el
+      que corto el `expect(valor, mensaje)` de la ronda pasada; sigue siendo gate), `typecheck:e2e`, puente, suite del
+      server y build de produccion.
+- [ ] `DESIGN-SYSTEM.md`: la regla «lectura traducida / edicion en crudo / texto ajeno intacto» y el aviso de que un
+      tipo de cliente que no coincide con el contrato del server es un bug silencioso —nadie lo usa mal porque nadie
+      lo usa.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - `ng test` (Karma/Chromium) y `playwright test` siguen sin ejecutarse en esta maquina: no hay navegador.
