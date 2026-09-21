@@ -2157,9 +2157,30 @@ something needs either a button or a sentence, and here it had a sentence that u
       of «20:3» on narrow columns, and its native spinner is 12 px on desktop: it is a field, it gets
       `--control-height`.
 
+### D. The `var(--token)` that does not exist (found while writing rule 11)
+
+The hover audit turned out not to be the whole of «no parece un botón»: the hours inputs added last round
+were styled with `var(--surface)`, `var(--border)`, `var(--text)`, and **no such token exists** in
+`styles.scss` — it is `--bg-secondary`, `--border-default`, `--text-primary` here. CSS does not error on
+an unknown custom property: the declaration is dropped, and the field arrives with no border, no
+background and inherited colour. Which is exactly the screen the user is complaining about.
+
+- [ ] Rule 12, `token-inexistente`: every `var(--x)` used anywhere in `frontend/src` must be defined in
+      some file of the frontend, or be a property that the same code sets at runtime —
+      `[style.--hour-px]` counts, because that is how the grid passes geometry down. The three runtime
+      ones (`--event-color`, `--hour-px`, `--swipe-x`) are the proof the rule can tell the difference.
+- [ ] The nine that were missing get fixed to their real token: the four of the hours inputs (this
+      program's own bug, two files) and five pre-existing (`--color-warning` in the log viewer,
+      `--duration-fast` in settings and the home-profile picker, `--primary-alpha` in the same picker,
+      `--primary-soft` in `app-picker`, `--color-warning-400` in `app-rating`). Each is a style that was
+      silently not being applied, not a cosmetic preference.
+- [ ] The tokens the app *should* have and does not: `--surface` and friends were invented because the
+      names in use (`--bg-secondary`, `--text-primary`) do not say which is on top of which. Renaming is
+      not this round (160 definitions, every screen); the rule is what stops the pile growing.
+
 ### Gates
 
-- [ ] `check-ui` with 11 rules and no findings, `tsc` (server, app, spec), `typecheck:e2e`, server
+- [ ] `check-ui` with 12 rules and no findings, `tsc` (server, app, spec), `typecheck:e2e`, server
       vitest, the bridge suite (including any pure module this round extracts), production build with no
       new budget warning beyond the two pre-existing ones.
 - [ ] The e2e written last round is re-read against the new ids (nothing renamed), and no claim is made
