@@ -59,6 +59,16 @@ export const shoppingListsEs = {
   'shopping_lists.pagina_25': '25 por pagina',
   'shopping_lists.pagina_50': '50 por pagina',
   'shopping_lists.pager_de': '{range} de {total}',
+  'shopping_lists.categoria_frutas_verduras': 'Frutas y verduras',
+  'shopping_lists.categoria_carnes_pescados': 'Carnes y pescados',
+  'shopping_lists.categoria_lacteos': 'Lacteos',
+  'shopping_lists.categoria_despensa': 'Despensa',
+  'shopping_lists.categoria_higiene_limpieza': 'Higiene y limpieza',
+  'shopping_lists.categoria_bebidas_alcohol': 'Bebidas y alcohol',
+  'shopping_lists.categoria_mascotas': 'Mascotas',
+  'shopping_lists.categoria_congelados': 'Congelados',
+  'shopping_lists.categoria_otros': 'Otros',
+  'shopping_list_detail.en_el_carro': 'En el carro',
 } as const;
 
 export const shoppingListsEn: Record<keyof typeof shoppingListsEs, string> = {
@@ -120,4 +130,14 @@ export const shoppingListsEn: Record<keyof typeof shoppingListsEs, string> = {
   'shopping_lists.pagina_25': '25 per page',
   'shopping_lists.pagina_50': '50 per page',
   'shopping_lists.pager_de': '{range} of {total}',
+  'shopping_lists.categoria_frutas_verduras': 'Fruit and veg',
+  'shopping_lists.categoria_carnes_pescados': 'Meat and fish',
+  'shopping_lists.categoria_lacteos': 'Dairy',
+  'shopping_lists.categoria_despensa': 'Cupboard',
+  'shopping_lists.categoria_higiene_limpieza': 'Bath and cleaning',
+  'shopping_lists.categoria_bebidas_alcohol': 'Drinks and booze',
+  'shopping_lists.categoria_mascotas': 'Pet supplies',
+  'shopping_lists.categoria_congelados': 'Frozen',
+  'shopping_lists.categoria_otros': 'Other',
+  'shopping_list_detail.en_el_carro': 'In the cart',
 };

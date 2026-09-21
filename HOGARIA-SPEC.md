@@ -2782,11 +2782,71 @@ sandbox; `ng test` necesita ChromeHeadless y `ng lint` no puede correr porque `f
 
 
 
+
+**Y despues del 0, nueve mas (ampliar la regla 14).** Con el texto de nodo ya medido, la regla 14 —«toda
+cadena en negrita o titulo de bloque va por clave»— tenia un angulo ciego: perdonaba cualquier nodo cuyo
+texto empezara con una interpolacion porque `isProse` exigia mayuscula o tilde, y un nodo que empieza con el
+numero de una seleccion (`{{ n }} seleccionadas`) empieza en minuscula. Es la cadena que responde al «12
+elementos seleccionados» de `list-toolbar`, `batch-assign-category-dialog`, `shopping-list-detail`,
+`calendar-batch-*`, `inventory` y `bulk` — seis pantallas que decian una cifra en castellano con el idioma
+en ingles. No he metido una exencion: el predicado de nodo (`esProsaDeNodo`) es mas estricto que el de
+atributo, porque un nodo de texto no puede contener una clase CSS, una URL ni una ruta, que es exactamente
+lo que justifica la laxitud de la otra. El mismo paso se ha llevado por delante `Difficult: fácil` de la
+ficha de receta (con el `strong` dentro del `h3`, la regla 14 lo miraba y le pasaba de largo) y el «1
+configuraciones / 3 miembros» de Configuracion de IA y Gestion de hogar, que eran texto plano sin etiqueta.
+
+**Un plural no es una cadena: es dos.** «1 configuraciones» estaba mal escrito hasta en castellano, y eso
+es lo que hacia visible la traduccion. En el diccionario es `ai_config.n_configuraciones_uno` y `..._varios`
+con `{count}`, y el servicio tiene `plural(cantidad, claveUno, claveVarios, params)` que elige; la pantalla
+no hace aritmetica de genero ni de numero. La regla vale igual para `household.n_miembros_uno/_varios` y
+`recipes.n_recetas_uno/_varios`. Los nombres en plural de los idiomas en el selector (`IDIOMA_LABELS`) son
+nombre propio y se quedan, porque el `option` de un `select` nativo no admite nada que no sea texto.
+
+**Un catalogo pintado no es lo mismo que un catalogo guardado.** Los alergenos, los gustos y las aversiones
+del onboarding y de Preferencias, y las categorias de las listas de la compra, se guardan y viajan al prompt
+en castellano: son el dato, y traducirlos romperia la canonizacion de `core/normalize.ts` y la relectura que
+hace la IA. Lo que se ensena pasa por un mapa valor → clave (`TASTE_VALUE_LABEL_KEYS`,
+`LIST_CATEGORY_LABEL_KEYS` en `core/i18n/labels.ts`), y lo que la persona escribio a mano se pinta tal cual
+porque es su texto. `app-chip-select` resuelve la etiqueta en un unico punto, asi que picker y fichas
+guardadas hablan el mismo idioma. Que `preferences.tab_allergies` ya estuviera traducido no significa nada:
+lo que se veia debajo no lo estaba, y ese era el parte del usuario.
+
+**Como ha quedado la tanda (2026-09-21, cierre).** Las dos reglas que miden esto son la 14 (ningun texto de
+la interfaz se escribe a mano: texto desnudo en plantilla, nodos con interpolacion delante, y atributos
+`aria-label`/`placeholder`/`title`/`alt`) y la 19 (la etiqueta de un catalogo no se escribe en el catalogo),
+ampliada la 14 con `esProsaDeNodo`. Gate: **0 incidencias en 175 ficheros, 19 reglas**. 141 candidatos → 86 → 59 → 0, mas las 9 de la 14. Once dominios
+del diccionario han ganado 96 claves en los tres commits previos de la tanda, y 76 mas en el cierre (65 de
+alergenos y gustos del perfil de gustos, 10 de categorias de la compra incluido «En el carro», y la del estado
+«Pendiente» de la prueba del proveedor de IA); `relativeTimeEscofina` ha muerto (seis llamadas y cero
+pruebas) en favor de `relativeTimeParts`, que devuelve piezas y deja la frase al diccionario, y
+`time-format.pipe.ts` ha muerto con su spec porque nadie lo importaba. El spec y `DESIGN-SYSTEM.md` dicen lo
+mismo, que es la prueba de que la regla esta en el sistema y no en mi memoria. Puente vitest 12 ficheros /
+109 pruebas, suite del server 23/592, `tsc` de app y spec limpios, `typecheck:e2e` limpio y build de
+produccion sin un error nuevo (siguen los dos avisos de budget de siempre, mas los `NG8107`/`TS-998113`
+preexistentes).
+
+**Lo que sigue siendo deuda, y no es de esta tanda.** `ng lint` esta declarado en `frontend/package.json`
+pero no se puede ejecutar: faltan los paquetes `@angular-eslint/*`, y no he instalado dependencias nuevas
+para arreglarlo (aqui `pnpm install` necesita `--no-frozen-lockfile` y reconstruir nativos). Mientras tanto
+el gate propio es el que manda. Y, otra vez, aqui no hay navegador: ni Karma, ni Playwright. El `describe.skip`
+del spec de `pantry-section` no se ha quitado porque no hay forma honesta de ejecutarlo; el puente de vitest
+que si lo hace esta montado para los modulos puros y sus tests (12 ficheros) y el resto se queda para una
+maquina con Chrome.
+
 ## 13. Coming soon (deliberately not in this program)
+
+- `ng test` (Karma/Chromium) y `playwright test` siguen sin ejecutarse en esta maquina: no hay navegador.
+  Los specs que necesitan `TestBed` se validan a traves del puente de vitest (12 ficheros / 109 pruebas),
+  que es estrictamente menor que la suite real; los 34 ficheros excluidos del puente son la deuda, y con
+  Chrome encima hay que quitar el `describe.skip` de `pantry-section.spec.ts` y pasar la suite e2e de una
+  vez por todas.
+
 - **`npm run lint` no puede correrse.** `frontend/package.json` declara `"lint": "ng lint"` y ni
   `@angular-eslint/builder` ni las reglas están entre sus dependencias: el comando falla al arrancar, asi que
   no hay forma de que nadie lo ponga como gate. O se instala el conjunto (y se arregla lo que salga, que seran
   cientos de avisos la primera vez), o se borra el script y se dice en el README que no hay linter.
+  Es el unico checker que no puedo cerrar, y por eso el gate propio (`scripts/check-ui.mjs`) es el que
+  manda en el CI.
 - **Las etiquetas de catálogo sin uso de `shared/models/household.model.ts`.** `*_LABELS` en español que no
   lee ningún componente: no son texto visible, son un residuo. O se enganchan a una pantalla con su `labelKey`
   o se borran; mientras no cuelguen de la regla 15 (que solo exige que lo que se usa esté en los dos idiomas),

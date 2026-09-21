@@ -1628,7 +1628,11 @@ Reglas que se siguen de ahí, y que no son estilo sino física del framework:
 - **Un catálogo pinta lo que lleva dentro.** `tabs = [{ label: 'Activas' }]` con `{{ tab.label }}` es una
   pantalla que no cambia nunca de idioma, y cambia de golpe en todas las que comparten el catálogo. La lista de
   opciones lleva la **clave**; quien no pueda aplicar la pipe (un `PickerOption[]`, el `aria-label` de una
-  sección) resuelve `this.i18n.t(clave)` una vez dentro de un `computed`.
+  sección) resuelve `this.i18n.t(clave)` una vez dentro de un `computed`. Cuando el catálogo ya estaba escrito
+  como dato (los alérgenos y gustos del perfil, las categorías de la compra), el dato no se toca y se traduce
+  en el punto de pintura con un mapa valor → clave —`tasteLabelKey`, `listCategoryLabelKey` en
+  `core/i18n/labels.ts`—; lo que no está en el catálogo se pinta tal cual, porque es texto escrito por la
+  persona y la pantalla no tiene derecho a corregirlo.
 - **Traducible es lo que la app dice, no lo que la casa guarda.** Los nombres de alimentos, las categorías de
   la cesta y los alérgenos escritos por una persona se muestran tal cual: traducirlos haría que la pantalla
   mintiera sobre la base de datos. Lo mismo aplica a lo que entiende el planificador: esas cadenas viven en el
@@ -1638,7 +1642,8 @@ Reglas que se siguen de ahí, y que no son estilo sino física del framework:
 ### Quién lo vigila
 
 `scripts/check-ui.mjs`, reglas 14 (`texto-sin-traducir`: también los nodos de texto que pegan a una `{{ }}`, y
-los `aria-label`/`title` escritos a mano), 15 (`clave-sin-traduccion`: la clave existe en `es`
+los `aria-label`/`placeholder`/`title`/`alt` escritos a mano —la mitad del conteo de la tanda 21 salió de
+ahí—), 15 (`clave-sin-traduccion`: la clave existe en `es`
 **y** en `en`, y se usa en algún sitio), 16 (`pipe-sin-importar`), 17 (`data-test-huerfano`), 18
 (`prosa-en-un-sink`: literal con pinta de frase que acaba en `toast.*`, `*Error.set`, `note`, `title` o un
 `return`, dentro o fuera de `t()` —incluidos el `cond ? 'prosa' : 'prosa'` y las variables `t(clave)`— y 19

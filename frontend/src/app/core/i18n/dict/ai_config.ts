@@ -52,6 +52,7 @@ export const aiConfigEs = {
   'ai_config.no_se_pudo_conectar': 'Couldn’t connect',
   'ai_config.n_configuraciones_uno': '{count} configuración',
   'ai_config.n_configuraciones_varios': '{count} configuraciones',
+  'ai_config.pendiente': 'Pendiente',
 } as const;
 
 export const aiConfigEn: Record<keyof typeof aiConfigEs, string> = {
@@ -106,4 +107,5 @@ export const aiConfigEn: Record<keyof typeof aiConfigEs, string> = {
   'ai_config.no_se_pudo_conectar': 'No se pudo conectar',
   'ai_config.n_configuraciones_uno': '{count} config',
   'ai_config.n_configuraciones_varios': '{count} configs',
+  'ai_config.pendiente': 'Not run yet',
 };

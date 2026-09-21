@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ButtonComponent } from '../button/button.component';
 import { ChipOption } from '../../../models/taste-profile';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
+import { tasteLabelKey } from '../../../../core/i18n/labels';
 import { I18nService } from '../../../../core/services/i18n.service';
 
 /**
@@ -32,7 +33,7 @@ import { I18nService } from '../../../../core/services/i18n.service';
           (click)="toggle(option.value)"
         >
           <span class="chip-select__icon" *ngIf="option.icon">{{ option.icon }}</span>
-          <span class="chip-select__text">{{ option.value }}</span>
+          <span class="chip-select__text">{{ labelDe(option) }}</span>
           <span class="chip-select__x" *ngIf="isCustom(option.value)" aria-hidden="true">×</span>
         </button>
       </div>
@@ -128,6 +129,13 @@ import { I18nService } from '../../../../core/services/i18n.service';
 })
 export class ChipSelectComponent {
   private readonly i18n = inject(I18nService);
+
+  /** El valor del catalogo, traducido; lo que escribio la persona, tal cual. */
+  labelDe(option: ChipOption): string {
+    const clave = tasteLabelKey(option.value);
+    return clave ? this.i18n.t(clave) : option.value;
+  }
+
 
   /** Opciones propuestas (las ya elegidas se muestran aunque no estén aquí). */
   @Input() options: ChipOption[] = [];

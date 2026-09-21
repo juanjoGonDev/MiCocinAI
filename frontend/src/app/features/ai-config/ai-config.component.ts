@@ -669,9 +669,9 @@ export class AiConfigComponent implements OnInit {
   getTestStatusLabel(status: string): string {
     switch (status) {
       case 'success': return 'OK';
-      case 'failed': return 'Error';
-      case 'testing': return 'Probando...';
-      default: return 'Pendiente';
+      case 'failed': return this.i18n.t('ui.error');
+      case 'testing': return this.i18n.t('ai_config.probando');
+      default: return this.i18n.t('ai_config.pendiente');
     }
   }
 

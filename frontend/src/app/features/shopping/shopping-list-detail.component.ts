@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { formatDateTime } from '../../core/time';
+import { listCategoryLabelKey } from '../../core/i18n/labels';
 import { UnitPickerComponent } from './unit-picker.component';
 import { canonicalUnit, isKnownUnit } from './unit-families';
 import {
@@ -262,7 +263,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             <li class="detail__group">
               <h2 class="detail__group-title">
                 <span class="detail__group-dot" [style.background]="colorOf(group.category)" aria-hidden="true"></span>
-                {{ group.category }}
+                {{ etiquetaCategoria(group.category) }}
               </h2>
               <ul class="detail__rows">
                 @for (item of group.items; track item.id) {
@@ -2306,6 +2307,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const want = this.tab() === 'checked' ? 1 : 0;
     return this.items().filter(item => item.checked === want);
   });
+  /** La categoria guardada esta en castellano (es un valor, no una etiqueta): aqui se traduce. */
+  protected etiquetaCategoria(categoria: string): string {
+    const clave = listCategoryLabelKey(categoria);
+    return clave ? this.i18n.t(clave) : categoria;
+  }
+
   readonly groups = computed(() =>
     this.tab() === 'checked'
       ? [{ category: 'En el carro', items: this.visibleItems() }]
