@@ -122,6 +122,25 @@ export const MEAL_TIME_DEFAULTS: Record<MealType, string> = {
 export type MealTimes = Record<MealType, string>;
 
 /**
+ * Que la IA planifique cada comida (HOGARIA-SPEC 12t-T). `true` de fabrica para las cuatro, que es
+ * exactamente lo que hacia la app antes de esta preferencia: una casa que no ha dicho nada sigue
+ * teniendo la semana entera.
+ *
+ * Mismo sitio y mismo motivo que `MEAL_TIME_DEFAULTS`: lo necesita `app-meal-hours` (que no importa de
+ * `core/`) y es el dato que responde el server cuando no hay nada guardado. Su espejo del lado server
+ * lo vigila `server/src/utils/meal-times-mirror.spec.ts`.
+ */
+export const MEAL_PLAN_DEFAULTS: Record<MealType, boolean> = {
+  breakfast: true,
+  lunch: true,
+  snack: true,
+  dinner: true
+};
+
+/** Los cuatro permisos, siempre completos: lo que no esta escrito es «si», no un hueco. */
+export type MealPlan = Record<MealType, boolean>;
+
+/**
  * El orden del día español: desayuno, almuerzo, merienda, cena. Estuvo al revés (cena antes que
  * merienda) desde la primera version, y no era un detalle de etiqueta: es la clave con la que se
  * ordenan la rejilla, el mes y las filas que escribe la IA, asi que ahi se leia una cena a media
@@ -259,6 +278,14 @@ export interface HouseholdEvent {
    */
   attendees?: EventAttendee[];
   attendeeIds?: string[];
+  /**
+   * Cada cuanto se repite (HOGARIA-SPEC 12t-R). `none` o ausente es un dia suelto, que es lo que eran
+   * todas las sueltas hasta ayer. Las ocurrencias no se guardan en ningun sitio: el servidor las
+   * calcula sobre la ventana leida, y por eso aqui llegan como una entrada por dia.
+   */
+  recurrence?: HouseholdRecurrence;
+  /** El dia que define la serie. No es `date` cuando se abre la serie desde un martes cualquiera. */
+  seriesDate?: string;
 }
 
 export const HOUSEHOLD_EVENT_META: Record<
@@ -270,6 +297,21 @@ export const HOUSEHOLD_EVENT_META: Record<
   appointment: { labelKey: 'household_event.appointment', color: '#E05A5A', icon: 'event_available' },
   personal: { labelKey: 'household_event.personal', color: '#8E5AC8', icon: 'person' },
   other: { labelKey: 'household_event.other', color: '#8A8F98', icon: 'flag' }
+};
+
+/**
+ * Cada cuanto se repite una suelta (HOGARIA-SPEC 12t-R). Dos cadencias y «no se repite», que es lo que
+ * se pide de verdad en una casa: el martes de carpintero y el pan de los sabados. Mensual, quincenal y
+ * el resto van al §13 —una opcion en el menu que luego no se puede cumplir es peor que no tenerla.
+ */
+export const HOUSEHOLD_RECURRENCES = ['none', 'daily', 'weekly'] as const;
+export type HouseholdRecurrence = (typeof HOUSEHOLD_RECURRENCES)[number];
+
+/** Etiquetas del selector, en el catalogo y no en el componente: el idioma cambia y el campo no. */
+export const HOUSEHOLD_RECURRENCE_META: Record<HouseholdRecurrence, { labelKey: TranslationKey }> = {
+  none: { labelKey: 'calendar.no_se_repite' },
+  daily: { labelKey: 'calendar.todos_los_dias' },
+  weekly: { labelKey: 'calendar.cada_semana' }
 };
 
 export const HOUSEHOLD_EVENT_COLORS = ['#4FA3D1', '#4CAF50', '#E05A5A', '#8E5AC8', '#C99A2E', '#2FA79B'];

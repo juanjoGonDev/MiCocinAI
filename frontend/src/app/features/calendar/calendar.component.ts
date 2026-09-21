@@ -25,7 +25,7 @@ import {
   MEAL_TYPE_META
 } from '../../shared/models/calendar.model';
 import { clearTabParam, readTabParam, writeTabParam } from '../../core/utils/tab-url';
-import { mealAnchors as anchorsFor, mealTimeOf, selectedMealTypes } from '../../core/meal-times';
+import { mealAnchors as anchorsFor, mealTimeOf, plannedMealTypes, selectedMealTypes } from '../../core/meal-times';
 import {
   addDays,
   addMonths,
@@ -53,7 +53,10 @@ import {
   HOUSEHOLD_EVENT_COLORS,
   HOUSEHOLD_EVENT_KINDS,
   HOUSEHOLD_EVENT_META,
+  HOUSEHOLD_RECURRENCE_META,
+  HOUSEHOLD_RECURRENCES,
   HouseholdEvent,
+  HouseholdRecurrence,
   HouseholdEventKind,
   eventTimeLabel
 } from '../../shared/models/calendar.model';
@@ -255,7 +258,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           </div>
 
           <span class="cal-strip__done" *ngIf="doneCount() > 0">
-            {{ doneCount() }} {{ doneCount() === 1 ? 'hecha' : 'hechas' }}
+            {{ doneCount() }} {{ (doneCount() === 1 ? 'calendar.hecha' : 'calendar.hechas') | t }}
           </span>
 
           <span class="cal-strip__spacer"></span>
@@ -330,7 +333,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               <span class="cal-agenda__today" data-test="agenda-today">{{ 'calendar.hoy' | t }}</span>
             }
             @if (agendaDay().events.length) {
-              <span class="cal-agenda__count">{{ agendaDay().events.length }} {{ agendaDay().events.length === 1 ? 'plan' : 'planes' }}</span>
+              <span class="cal-agenda__count">{{ agendaDay().events.length }} {{ (agendaDay().events.length === 1 ? 'calendar.plan' : 'calendar.planes') | t }}</span>
             }
           </header>
 
@@ -381,6 +384,25 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               <label for="event-date">{{ 'calendar.dia' | t }}</label>
               <input id="event-date" name="eventDate" type="date" class="cal-input" [(ngModel)]="eventDraft.date" />
             </div>
+          </div>
+
+          <div class="meal-form__row">
+            <div class="meal-form__field meal-form__field--sm">
+              <span class="cal-field-label">{{ 'calendar.repetir' | t }}</span>
+              <app-picker
+                [label]="'calendar.cada_cuanto' | t"
+                [options]="recurrenceOptions()"
+                [value]="eventDraft.recurrence"
+                [filterFrom]="99"
+                data-test="event-recurrence"
+                (valueChange)="setRecurrence($event)"
+              />
+            </div>
+            @if (eventDraft.recurrence !== 'none') {
+              <p class="cal-note">
+                {{ (eventDraft.id ? 'calendar.los_cambios_afectan' : 'calendar.se_repite_desde') | t }}
+              </p>
+            }
           </div>
 
           <div class="meal-form__row">
@@ -470,6 +492,11 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           <div class="meal-form__actions">
             @if (eventDraft.id) {
               <button type="button" class="cal-btn cal-btn--ghost cal-btn--danger" (click)="removeEvent()">{{ 'calendar.borrar' | t }}</button>
+              @if (eventDraft.recurrence !== 'none') {
+                <button type="button" class="cal-btn cal-btn--ghost" data-test="event-skip-day" (click)="removeOccurrence()">
+                  {{ 'calendar.quitar_solo_este_dia' | t }}
+                </button>
+              }
             }
             <span class="meal-form__grow"></span>
             <button type="button" class="cal-btn cal-btn--ghost" (click)="closeEventModal()">{{ 'common.cancel' | t }}</button>
@@ -480,7 +507,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               [disabled]="!eventDraft.title.trim() || calendarService.creatingEvent()"
               (click)="saveEvent()"
             >
-              {{ calendarService.creatingEvent() ? 'Guardando…' : 'Guardar' }}
+              {{ (calendarService.creatingEvent() ? 'ui.guardando' : 'common.save') | t }}
             </button>
           </div>
         </div>
@@ -674,7 +701,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
                  querer. Ninguna marcada = el dia entero, y eso se dice aqui, no en un 400. -->
             <div class="goals-form__options">
               <app-checkbox
-                *ngFor="let meal of mealTypesForPicker"
+                *ngFor="let meal of mealTypesForPicker(); trackBy: trackMeal"
                 [attr.data-test]="'gen-meal-' + meal"
                 [label]="mealLabel(meal)"
                 [checked]="generateOptions.mealTypes[meal]"
@@ -683,6 +710,11 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             </div>
             <span class="cal-hint">
               {{ 'calendar.solo_se_pediran_y' | t }}
+            </span>
+            <!-- Que la IA no ofrezca una comida no puede parecer un olvido: se dice cual esta bloqueada
+                 y donde se cambia, aqui mismo, que es donde se echo de menos. -->
+            <span class="cal-hint" *ngIf="blockedMeals().length > 0" data-test="gen-blocked-line">
+              {{ 'calendar.bloqueadas_en_preferencias' | t:{comidas: blockedMealsLabel()} }}
             </span>
           </fieldset>
 
@@ -716,11 +748,15 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
           <div class="meal-form__actions">
             <span class="meal-form__grow"></span>
+            <!-- Un boton apagado sin motivo es una app que no explica: el mensaje vive junto al boton. -->
+            <span class="cal-hint" *ngIf="mealTypesForPicker().length === 0" data-test="gen-blocked-all">
+              {{ 'calendar.nada_que_planificar' | t }}
+            </span>
             <button type="button" class="cal-btn" (click)="closeGenerateModal()">{{ 'common.cancel' | t }}</button>
             <button
               type="button"
               class="cal-btn cal-btn--primary"
-              [disabled]="isGenerating()"
+              [disabled]="isGenerating() || mealTypesForPicker().length === 0"
               (click)="generateWeeklyPlan()"
             >
               <span class="cal-spinner" *ngIf="isGenerating()" aria-hidden="true"></span>
@@ -1640,8 +1676,18 @@ export class CalendarComponent implements OnInit {
     mealTypes: { breakfast: true, lunch: true, snack: true, dinner: true } as Record<MealType, boolean>
   };
   readonly goalOptions = GOAL_OPTIONS;
-  /** Las cuatro comidas, en el orden del dia: lo que recorre la plantilla del dialogo de IA. */
-  readonly mealTypesForPicker = MEAL_ORDER;
+  /**
+   * Que comidas se pueden pedir (12t-T): las cuatro menos las bloqueadas en Preferencias.
+   *
+   * Es un `computed` sobre el signal del service, no una constante: si alguien desbloquea la merienda
+   * en otra pestana, el dialog cambia solo. Y no ofrece lo bloqueado —no lo muestra desmarcado— porque
+   * «no te lo ofrezco» y «te lo ofrezco apagado» son dos mensajes distintos, y el primero es el que la
+   * casa eligio.
+   */
+  readonly allowedMeals = computed(() => plannedMealTypes(this.tasteService.mealPlan()));
+  readonly blockedMeals = computed(() => MEAL_ORDER.filter((type) => !this.allowedMeals().includes(type)));
+  /** Lo que recorre la plantilla del dialogo de IA: el orden del dia, sin las bloqueadas. */
+  readonly mealTypesForPicker = this.allowedMeals;
   /** Nombre de cada comida (la plantilla no puede importar el modelo por su cuenta). */
   readonly mealMeta = MEAL_TYPE_META;
 
@@ -1828,9 +1874,9 @@ export class CalendarComponent implements OnInit {
       case 'month':
         return labels.month(this.anchor());
       case 'day':
-        return 'este día';
+        return this.i18n.t('calendar.este_dia');
       default:
-        return 'esta semana';
+        return this.i18n.t('calendar.esta_semana');
     }
   }
 
@@ -2043,34 +2089,51 @@ export class CalendarComponent implements OnInit {
     request.subscribe({
       next: (saved) => {
         if (!saved) {
-          this.toastService.error('Error', 'No se pudo guardar la comida');
+          this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.no_se_pudo_guardar'));
           return;
         }
         const when = parseISODate(this.draft.date);
         this.toastService.success(
-          this.draft.id ? 'Comida actualizada' : 'Comida añadida',
+          this.draft.id ? this.i18n.t('calendar.comida_actualizada') : this.i18n.t('calendar.comida_anadida'),
           `${this.i18n.t(MEAL_LABEL_KEYS[this.draft.mealType])}${when ? ' · ' + labels.longDay(when) : ''}`
         );
         this.closeMealModal();
       },
-      error: () => this.toastService.error('Error', 'No se pudo guardar la comida')
+      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.no_se_pudo_guardar'))
     });
+  }
+
+  /**
+   * El sufijo del aviso de «generar con IA»: cuantos huecos estaban ya ocupados y se han respetado.
+   * Va aparte porque el singular/plural se elige aqui, no dentro de una plantilla.
+   */
+  private huecosYaOcupados(skipped: number): string {
+    if (!skipped) return '';
+    return ' · ' + this.i18n.t(
+      skipped === 1 ? 'calendar.hueco_ocupado_uno' : 'calendar.huecos_ocupados_varios',
+      { n: skipped }
+    );
   }
 
   removeMeal(meal: CalendarMeal): void {
     void this.removeMealById(meal.id, meal.title);
   }
 
-  async removeMealById(id: string, title = 'esta comida'): Promise<void> {
+  async removeMealById(id: string, title?: string): Promise<void> {
+    // El nombre por defecto tambien se traduce: si se resolviera en la firma, el ingles llegaria tarde.
+    const que = title ?? this.i18n.t('calendar.esta_comida');
     const accepted = await this.confirmService.confirm({
-      title: 'Eliminar comida',
-      message: `¿Quitar «${title}» de la planificación?`,
-      confirmText: 'Eliminar'
+      title: this.i18n.t('calendar.eliminar_comida'),
+      message: this.i18n.t('calendar.quitar_de_la_planificacion', { title: que }),
+      confirmText: this.i18n.t('common.delete')
     });
     if (!accepted) return;
 
     this.calendarService.deleteMeal(id).subscribe(() => {
-      this.toastService.success('Quitada', `${title} ya no está en el calendario`);
+      this.toastService.success(
+        this.i18n.t('calendar.quitada'),
+        this.i18n.t('calendar.ya_no_esta_en_el', { title: que })
+      );
       if (this.isMealModalOpen()) this.closeMealModal();
     });
   }
@@ -2106,7 +2169,7 @@ export class CalendarComponent implements OnInit {
       dailyCalories: Number(this.goalsDraft.dailyCalories) || undefined,
       restrictions: previous?.restrictions ?? []
     }, toISODate(startOfWeek(this.anchor())));
-    this.toastService.success('Guardado', 'Objetivos de la semana actualizados');
+    this.toastService.success(this.i18n.t('ui.guardado'), this.i18n.t('calendar.objetivos_de_la_semana'));
     this.closeGoalsModal();
   }
 
@@ -2115,6 +2178,12 @@ export class CalendarComponent implements OnInit {
   private tasteGoalApplied = false;
 
   openGenerateModal(): void {
+    // Las casillas arrancan de lo que la casa dejo abierto: si la cena esta bloqueada esa casilla no
+    // existe, y las demas vuelven a estar marcadas (no guardan la eleccion de la semana pasada).
+    const permitidas = this.allowedMeals();
+    for (const type of MEAL_ORDER) {
+      this.generateOptions.mealTypes[type] = permitidas.includes(type);
+    }
     this.isGenerateModalOpen.set(true);
     this.applyTasteGoal();
   }
@@ -2125,12 +2194,26 @@ export class CalendarComponent implements OnInit {
   }
 
   /**
-   * Lo que se manda: las comidas marcadas, en el orden del dia. Si no se ha marcado ninguna se mandan
-   * las cuatro (ver `selectedMealTypes`), y por eso el boton de generar nunca se desactiva por eso.
+   * Lo que se manda: las comidas marcadas, en el orden del dia. Si no se ha marcado ninguna se manda el
+   * dia completo (ver `selectedMealTypes`), pero el «dia completo» de esta casa son **las permitidas**:
+   * filtrar despues y no antes es lo que evita que «no marque nada» acabe planificando lo bloqueado.
    */
   get generateMealTypes(): MealType[] {
     const flags = this.generateOptions.mealTypes;
-    return selectedMealTypes(MEAL_ORDER.filter((type) => flags[type]));
+    const permitidas = this.allowedMeals();
+    const marcadas = permitidas.filter((type) => flags[type]);
+    return selectedMealTypes(marcadas.length > 0 ? marcadas : permitidas);
+  }
+
+  /** Los nombres de las comidas bloqueadas, para la linea que dice por que no estan ahi. */
+  blockedMealsLabel(): string {
+    const nombres = this.blockedMeals().map((type) => this.mealLabel(type));
+    if (nombres.length < 2) return nombres[0] ?? '';
+    return nombres.slice(0, -1).join(', ') + ' y ' + nombres[nombres.length - 1];
+  }
+
+  trackMeal(_index: number, meal: MealType): MealType {
+    return meal;
   }
 
   /**
@@ -2174,6 +2257,9 @@ export class CalendarComponent implements OnInit {
   }
 
   generateWeeklyPlan(): void {
+    // El boton ya esta apagado en ese caso; esto es por si el bloqueo llego mientras el dialog estaba
+    // abierto (la otra pestana, otro aparato). Nunca se manda una peticion que el server va a tirar.
+    if (this.allowedMeals().length === 0) return;
     this.isGenerating.set(true);
 
     // La IA planifica la semana del día ancla, vea lo que se vea.
@@ -2201,25 +2287,35 @@ export class CalendarComponent implements OnInit {
           this.isGenerating.set(false);
           const saved = data?.saved;
           if (!saved) {
-            this.toastService.error('Error', 'La IA no devolvió un plan válido');
+            this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.la_ia_no_devolvio'));
             return;
           }
           this.reload();
           this.closeGenerateModal();
           this.toastService.success(
-            'Plan guardado',
+            this.i18n.t('calendar.plan_guardado'),
             saved.created
-              ? `${saved.created} ${saved.created === 1 ? 'comida añadida' : 'comidas añadidas'}${
-                  saved.skipped
-                    ? ` · ${saved.skipped === 1 ? '1 hueco ya ocupado, intacto' : `${saved.skipped} huecos ya ocupados, intactos`}`
-                    : ''
-                }`
-              : 'La semana ya estaba cubierta: no había huecos que rellenar'
+              ? this.i18n.t(
+                  saved.created === 1 ? 'calendar.comidas_generadas_uno' : 'calendar.comidas_generadas_varios',
+                  { n: saved.created }
+                ) + this.huecosYaOcupados(saved.skipped)
+              : this.i18n.t('calendar.la_semana_ya_estaba')
           );
         },
-        error: () => {
+        error: (err) => {
           this.isGenerating.set(false);
-          this.toastService.error('Error', 'No se pudo generar el plan');
+          if (err?.original?.error?.code === 'MEAL_PLAN_ALL_BLOCKED') {
+            // El server dijo «no hay nada que planificar» porque las comidas se bloquearon mientras
+            // tanto: se refresca el estado para que el dialog se pinte con la verdad, y el aviso sale
+            // del diccionario en vez de la frase que escribio el server.
+            this.tasteService.load().subscribe({ error: () => undefined });
+            this.toastService.warning(
+              this.i18n.t('calendar.no_se_pudo_generar'),
+              this.i18n.t('calendar.bloqueo_a_medio')
+            );
+            return;
+          }
+          this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.no_se_pudo_generar'));
         }
       });
   }
@@ -2247,6 +2343,12 @@ export class CalendarComponent implements OnInit {
      * una Renata que cambie de apellido seguiria invitada a la cena de hace un ano.
      */
     attendeeIds: string[];
+    /** Cada cuanto se repite (HOGARIA-SPEC 12t-R). `none` es un dia suelto, como toda la vida. */
+    recurrence: HouseholdRecurrence;
+    /** El dia que define la serie. Al abrir un martes cualquiera sigue siendo el de inicio: si no, cambiar el titulo le moveria el ancla. */
+    seriesDate?: string;
+    /** El dia sobre el que se hizo clic. Es el que se quita con «solo este dia no». */
+    occurrenceDate?: string;
     /** Si lo escribio esta cuenta. Con `false` el modal no abre: abre la salida. */
     editable?: boolean;
   } = {
@@ -2261,6 +2363,7 @@ export class CalendarComponent implements OnInit {
     notes: '',
     sharedWithHousehold: true,
     attendeeIds: [],
+    recurrence: 'none',
     editable: true
   };
 
@@ -2290,6 +2393,19 @@ export class CalendarComponent implements OnInit {
     // El color sigue al tipo salvo que la persona haya elegido uno a mano: asi «Citas»
     // sale en rojo sin tener que explicarlo, y lo que se toco a mano se respeta.
     if (!this.eventDraft.colorTouched) this.eventDraft.color = null;
+  }
+
+  /** Opciones del «Repetir» (12t-R): el catalogo esta en el modelo; la etiqueta, en el diccionario. */
+  readonly recurrenceOptions = computed<PickerOption[]>(() =>
+    HOUSEHOLD_RECURRENCES.map((recurrence) => ({
+      value: recurrence,
+      label: this.i18n.t(HOUSEHOLD_RECURRENCE_META[recurrence].labelKey)
+    }))
+  );
+
+  /** El picker emite `string | null`; aqui el `null` vuelve a ser «una vez», que es lo que significa. */
+  setRecurrence(value: string | null): void {
+    this.eventDraft.recurrence = value === 'daily' || value === 'weekly' ? value : 'none';
   }
 
   setAllDay(value: boolean): void {
@@ -2351,6 +2467,9 @@ export class CalendarComponent implements OnInit {
     startTime?: string
   ): void {
     const iso = event?.date ?? day?.iso ?? day?.date ?? this.anchorIso();
+    // El campo del dia es el de la SERIE, no el del dia pulsado: editar una ocurrencia edita la serie
+    // (12t-R), y escribir aqui el dia pulsado convertia un cambio de titulo en un cambio de martes.
+    const serie = event?.seriesDate ?? iso;
     if (event && event.editable === false) {
       // No es un «no tienes permiso» seco: lo que esa persona quiere hacer aqui es salirse, y eso si
       // puede hacerlo. Abrir un formulario de solo lectura seria enseñarle campos que no puede tocar.
@@ -2361,7 +2480,7 @@ export class CalendarComponent implements OnInit {
       id: event?.id,
       title: event?.title ?? '',
       kind: (event?.kind ?? 'other') as HouseholdEventKind,
-      date: iso,
+      date: serie,
       allDay: event?.allDay ?? startTime === '',
       startTime: event?.startTime ?? (startTime || ''),
       endTime: event?.endTime ?? '',
@@ -2370,6 +2489,9 @@ export class CalendarComponent implements OnInit {
       notes: event?.notes ?? '',
       sharedWithHousehold: event ? true : true,
       attendeeIds: selectedInvitees(event),
+      recurrence: event?.recurrence ?? 'none',
+      seriesDate: serie,
+      occurrenceDate: event ? iso : undefined,
       editable: event?.editable ?? true
     };
     // El picker solo existe si la casa estaba cargada al abrir. Guardar sin esa marca NO manda lista:
@@ -2385,17 +2507,20 @@ export class CalendarComponent implements OnInit {
    */
   async leaveEvent(event: HouseholdEvent): Promise<void> {
     const accepted = await this.confirmService.confirm({
-      title: 'Salir del evento',
-      message: `«${event.title}» lo apunto ${event.authorName ?? 'otra persona de la casa'}. Puedes salirte y dejara de verse en tu calendario; el evento sigue para los demas.`,
-      confirmText: 'Salirme'
+      title: this.i18n.t('calendar.salir_del_evento'),
+      message: this.i18n.t('calendar.lo_apunto_otra_persona', {
+        title: event.title,
+        autor: event.authorName ?? this.i18n.t('calendar.otra_persona_de_la'),
+      }),
+      confirmText: this.i18n.t('calendar.salirme')
     });
     if (!accepted) return;
     const done = await this.calendarService.leaveHouseholdEvent(event.id);
     if (done) {
-      this.toastService.show({ type: 'info', title: 'Te has salido del evento', duration: 4000, countdown: true });
+      this.toastService.show({ type: 'info', title: this.i18n.t('calendar.te_has_salido_del'), duration: 4000, countdown: true });
       return;
     }
-    this.toastService.error('No se pudo salir', 'Vuelve a intentarlo en un momento.');
+    this.toastService.error(this.i18n.t('calendar.no_se_pudo_salir'), this.i18n.t('calendar.vuelve_a_intentarlo_en'));
   }
 
   /** Los de la casa, menos yo, en orden de nombre: la regla vive en `core/event-invitations`. */
@@ -2458,6 +2583,7 @@ export class CalendarComponent implements OnInit {
       startTime: string | null;
       endTime: string | null;
       attendeeIds?: string[];
+      recurrence: HouseholdRecurrence;
     } = {
       title,
       kind: draft.kind,
@@ -2468,33 +2594,78 @@ export class CalendarComponent implements OnInit {
       location: draft.location.trim() || null,
       notes: draft.notes.trim() || null,
       startTime: draft.allDay ? null : draft.startTime || null,
-      endTime: draft.allDay ? null : draft.endTime || null
+      endTime: draft.allDay ? null : draft.endTime || null,
+      recurrence: draft.recurrence
     };
     // Las caras van con el criterio del pure helper: lista vacia es «nadie invitado» SOLO si el picker
     // se vio; si no se vio, la clave no va y el servidor no toca la lista.
     Object.assign(body, attendeeIdsPayload(this.eventAttendeesShown, draft.attendeeIds));
     const saved = await this.calendarService.saveHouseholdEvent(body, draft.id);
-    if (saved) this.closeEventModal();
+    if (!saved) return;
+    // Con recurrencia se vuelve a leer: lo que el servicio guarda en local es UNA fila, y los dias que
+    // ocupa los calcula el servidor. Sin esto, crear «todos los dias» pintaba un dia y pareciera que no
+    // se guardo nada. El parpadeo es el precio de no tener dos reglas de expansion (una aqui y otra alla).
+    if (draft.recurrence !== 'none') this.calendarService.refreshHouseholdEvents();
+    this.closeEventModal();
   }
 
   async removeEvent(): Promise<void> {
     const id = this.eventDraft.id;
     if (!id) return;
-    const what = this.eventDraft.title.trim() || 'este evento';
+    const what = this.eventDraft.title.trim() || this.i18n.t('calendar.este_evento');
     // El aviso dice el alcance verdadero, que no es el que sugiere el boton: borrar el evento lo borra
     // para toda la casa. Para quitarselo de encima sin tocar a los demas existe «salir».
     const accepted = await this.confirmService.confirm({
-      title: 'Eliminar evento',
-      message: `«${what}» dejara de verse para toda la casa, no solo para ti. Si quien lo apunto fue otra persona, lo que puedes hacer es salirte del evento.`,
-      confirmText: 'Eliminar',
+      title: this.i18n.t('calendar.eliminar_evento'),
+      // Con cadencia no se borra «el evento»: se borran todos sus dias, para toda la casa. El aviso lo
+      // tiene que decir, que es la diferencia entre un clic y una discusion de pareja.
+      message: this.i18n.t(
+        this.eventDraft.recurrence === 'none'
+          ? 'calendar.dejara_de_verse_para'
+          : 'calendar.se_borra_toda_la_serie',
+        { title: what }
+      ),
+      confirmText: this.i18n.t('common.delete'),
       variant: 'danger'
     });
     if (!accepted) return;
     const ok = await this.calendarService.removeHouseholdEvent(id);
     if (ok) {
       this.closeEventModal();
-      this.toastService.show({ type: 'info', title: 'Evento borrado', duration: 4000, countdown: true });
+      this.toastService.show({ type: 'info', title: this.i18n.t('calendar.evento_borrado'), duration: 4000, countdown: true });
     }
+  }
+
+  /**
+   * «Quitar solo este dia» (HOGARIA-SPEC 12t-R). Falta a un gimnasio de los martes no es dejar de ir los
+   * martes, y hasta ahora la unica salida era borrar la serie entera o no decirlo.
+   */
+  async removeOccurrence(): Promise<void> {
+    const draft = this.eventDraft;
+    const date = draft.occurrenceDate;
+    if (!draft.id || !date || draft.recurrence === 'none') return;
+    const accepted = await this.confirmService.confirm({
+      title: this.i18n.t('calendar.quitar_solo_este_dia'),
+      message: this.i18n.t('calendar.se_quita_el_dia', {
+        date,
+        title: draft.title.trim() || this.i18n.t('calendar.este_evento')
+      }),
+      confirmText: this.i18n.t('calendar.quitar_solo_este_dia'),
+      variant: 'danger'
+    });
+    if (!accepted) return;
+    const ok = await this.calendarService.skipHouseholdOccurrence(draft.id, date);
+    if (ok) {
+      this.closeEventModal();
+      this.toastService.show({
+        type: 'info',
+        title: this.i18n.t('calendar.dia_fuera_de_serie'),
+        duration: 4000,
+        countdown: true
+      });
+      return;
+    }
+    this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.no_se_pudo_quitar'));
   }
 
   eventTimeLabel(event: HouseholdEvent): string {

@@ -11,6 +11,7 @@ import {
   NutritionalGoals,
   WeeklyCalendar
 } from '../../shared/models/calendar.model';
+import { I18nService } from '../../core/services/i18n.service';
 
 /** Fila cruda de `meals` tal y como la devuelve la API (snake_case). */
 interface MealRow {
@@ -72,6 +73,7 @@ function toMeal(row: MealRow): CalendarMeal {
   providedIn: 'root'
 })
 export class CalendarService {
+  private readonly i18n = inject(I18nService);
   private readonly apiUrl = `${environment.apiUrl}/calendar`;
   private http = inject(HttpClient);
 
@@ -129,7 +131,7 @@ export class CalendarService {
           // Se deja el dato anterior en pantalla: mejor un calendario algo
           // desactualizado que uno vacío por un pico de la API.
           this.lastRequested = '';
-          this.errorSignal.set('No se han podido cargar tus comidas.');
+          this.errorSignal.set(this.i18n.t('ui.no_se_han_podido'));
           this.isLoadingSignal.set(false);
           return of(null);
         })
@@ -364,6 +366,31 @@ export class CalendarService {
   }
 
   /**
+   * «Solo este dia no» (HOGARIA-SPEC 12t-R). NO es un DELETE del evento: anota la excepcion en la serie,
+   * y los demas dias siguen ahi. Se vuelve a leer la ventana en vez de retocar la lista a mano porque
+   * quien sabe que dias ocupa una serie es la expansion del servidor.
+   */
+  skipHouseholdOccurrence(id: string, date: string): Promise<boolean> {
+    return new Promise<boolean>(resolve => {
+      this.http
+        .delete(`${this.apiUrl}/events/${id}/occurrences/${date}`)
+        .pipe(
+          catchError(error => {
+            this.eventsError.set(this.readError(error));
+            return of(null);
+          })
+        )
+        .subscribe({
+          next: () => {
+            this.refreshHouseholdEvents();
+            resolve(true);
+          },
+          error: () => resolve(false)
+        });
+    });
+  }
+
+  /**
    * Salirse de un evento ajeno (HOGARIA-SPEC 12o). Es un DELETE en la invitacion, no en el evento:
    * `delete` del evento daria 403 y, si no lo diera, borrariria la cena de toda la casa.
    */
@@ -400,8 +427,10 @@ export class CalendarService {
 
   private readError(error: unknown): string {
     const status = (error as { status?: number })?.status;
-    if (status === 403) return 'Solo quien escribio el evento puede cambiarlo.';
-    if (status === 400) return 'Revisa la fecha y las horas.';
-    return 'No se ha podido hablar con el calendario.';
+    // Las tres salian en espanol tal cual con la app en ingles: el codigo lo decide el servidor, pero
+    // la frase que ve la persona va al diccionario, que es el unico sitio donde existen los dos idiomas.
+    if (status === 403) return this.i18n.t('calendar.solo_quien_lo_escribio');
+    if (status === 400) return this.i18n.t('calendar.revisa_la_fecha');
+    return this.i18n.t('calendar.no_se_ha_podido_hablar');
   }
 }

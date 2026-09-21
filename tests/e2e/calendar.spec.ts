@@ -348,3 +348,90 @@ test.describe('Calendario — invitar a la casa', () => {
     await ownerCtx.close();
   });
 });
+
+/**
+ * Repeticiones (HOGARIA-SPEC 12t-R): lo que pidio quien usa la app —«que en la creacion de eventos pueda
+ * repetirse, semanal, diario»—. Se comprueba aqui lo que se ve, que es lo que importa: la fila que pinta
+ * el server con una serie (UNA, no siete), la marca de que se repite, y «quitar solo este dia», que es la
+ * unica forma de faltar a una cita sin cargarse el resto.
+ */
+test.describe('Calendario — repeticiones', () => {
+  test.beforeEach(async ({ page }) => {
+    await registerAndGoto(page, '/calendar');
+    await expect(page.locator('h1.calendar__title')).toBeVisible();
+  });
+
+  /** Abre el «+», rellena titulo y fecha, y elige la cadencia si se le dice. Devuelve al modal abierto. */
+  async function nuevaSuelta(
+    page: import('@playwright/test').Page,
+    titulo: string,
+    fecha: string,
+    cadencia?: 'Cada semana' | 'Todos los días'
+  ): Promise<void> {
+    await page.locator('[data-test="event-add"]').click();
+    await expect(page.locator('.modal__title')).toContainText('Apuntar un evento');
+    await page.fill('#event-title', titulo);
+    await page.fill('#event-date', fecha);
+    if (cadencia) {
+      const repetir = page.locator('[data-test="event-recurrence"]');
+      await repetir.locator('.picker__trigger').click();
+      await repetir.locator('.picker__option', { hasText: cadencia }).click();
+    }
+    await page.locator('[data-test="event-save"]').click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
+  }
+
+  test('una serie semanal pinta una sola fila, en el hueco que le toca de esta semana', async ({ page }) => {
+    // La fecha de la serie es HACE SIETE DIAS: si el calendario de esta semana la enseña, es porque la
+    // expansión funciona —no porque el server guarde una fila por día, que era la otra solución posible.
+    await nuevaSuelta(page, 'Sacar la basura', daysFromToday(-7), 'Cada semana');
+
+    const chips = page.locator('[data-test="household-event"]', { hasText: 'Sacar la basura' });
+    await expect(chips).toHaveCount(1);
+    // Y se ve que se repite: el glifo de repeticion va en la pastilla, no en un boton aparte.
+    await expect(chips.locator('.cal-evt__repeat')).toHaveCount(1);
+  });
+
+  test('una serie diaria llena la semana entera y sigue siendo un solo evento', async ({ page }) => {
+    // Ancla de hace un mes: los siete dias de la semana vista caen dentro de la serie.
+    await nuevaSuelta(page, 'Revisar el riego', daysFromToday(-30), 'Todos los días');
+
+    await expect(page.locator('[data-test="household-event"]', { hasText: 'Revisar el riego' })).toHaveCount(7);
+    // Un evento, no siete: el modal se abre igual y dice cuantos dias lleva en pie.
+    await page.locator('[data-test="household-event"]', { hasText: 'Revisar el riego' }).first().click();
+    await expect(page.locator('[data-test="event-skip-day"]')).toBeVisible();
+    await expect(page.locator('.cal-note').filter({ hasText: 'replica desde' })).toHaveCount(1);
+  });
+
+  test('«quitar solo este día» deja los otros seis en pie', async ({ page }) => {
+    await nuevaSuelta(page, 'Pasar el aspirador', daysFromToday(-30), 'Todos los días');
+    const chips = page.locator('[data-test="household-event"]', { hasText: 'Pasar el aspirador' });
+    await expect(chips).toHaveCount(7);
+
+    await chips.first().click();
+    await page.locator('[data-test="event-skip-day"]').click();
+    // Confirmacion propia de la app, no `confirm()` del navegador: se acepta por el boton que la app pinta.
+    const dialog = page.locator('.modal-overlay');
+    await expect(dialog).toHaveCount(1);
+    await dialog.getByRole('button', { name: 'Quitar solo este día' }).click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
+
+    await expect(page.locator('[data-test="household-event"]', { hasText: 'Pasar el aspirador' })).toHaveCount(6);
+    // El hueco quitado no se rellena: es la prueba de que la excepcion se guardo, no de que se tardo.
+    await expect(chips).toHaveCount(6);
+  });
+
+  test('una suelta normal sigue sin selector de repeticion a la vista: «No se repite» es el defecto', async ({ page }) => {
+    await page.locator('[data-test="event-add"]').click();
+    const repetir = page.locator('[data-test="event-recurrence"]');
+    await repetir.locator('.picker__trigger').click();
+    await expect(repetir.locator('.picker__option', { hasText: 'No se repite' })).toHaveCount(1);
+    await page.fill('#event-title', 'Comprar lija');
+    await page.locator('[data-test="event-save"]').click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
+
+    const chip = page.locator('[data-test="household-event"]', { hasText: 'Comprar lija' });
+    await expect(chip).toHaveCount(1);
+    await expect(chip.locator('.cal-evt__repeat')).toHaveCount(0);
+  });
+});

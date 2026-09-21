@@ -55,6 +55,7 @@ export const ICON_SHAPES = {
   "event_note": { viewBox: '0 0 24 24', d: ['M17 10H7v2h10v-2zm2-7h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zm-5-5H7v2h7v-2z'] },
   "expand_less": { viewBox: '0 0 24 24', d: ['M12 8l-6 6l1.41 1.41L12 10.83l4.59 4.58L18 14z'] },
   "expand_more": { viewBox: '0 0 24 24', d: ['M16.59 8.59L12 13.17L7.41 8.59L6 10l6 6l6-6z'] },
+  "repeat": { viewBox: '0 0 24 24', d: ['M7 7h10v3l4-4l-4-4v3H5v6h2V7zm10 10H7v-3l-4 4l4 4v-3h12v-6h-2v4z'] },
   "favorite": { viewBox: '0 0 24 24', d: ['M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5C2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3C19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z'] },
   "filter_list": { viewBox: '0 0 24 24', d: ['M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z'] },
   "flag": { viewBox: '0 0 24 24', d: ['M14.4 6L14 4H5v17h2v-7h5.6l.4 2h7V6z'] },
