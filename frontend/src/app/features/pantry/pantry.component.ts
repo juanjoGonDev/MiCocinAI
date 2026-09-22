@@ -1,21 +1,28 @@
-import { Component, ElementRef, effect, inject, OnInit, computed, signal, viewChild } from '@angular/core';
+import { Component, inject, OnInit, computed, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { daysUntil, toDayKey } from '../../core/time';
 import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
-import { clearTabParam, syncTabWithUrl, writeTabParam } from '../../core/utils/tab-url';
+import { syncTabWithUrl } from '../../core/utils/tab-url';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { CardComponent } from '../../shared/components/ui/card/card.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
-import { TagComponent } from '../../shared/components/ui/tag/tag.component';
+import { CheckboxComponent } from '../../shared/components/ui/checkbox/checkbox.component';
+import {
+  DataTableComponent,
+  DataTableCellDirective
+} from '../../shared/components/ui/data-table/data-table.component';
+import type { DataTableColumna } from '../../shared/components/ui/data-table/data-table.types';
+import { quitarAcentos } from '../../shared/components/ui/data-table/data-table.util';
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
-import { colorDeCategoria } from './pantry-gestor.util';
+import { clavesSubarbolDe, colorDeCategoria } from './pantry-gestor.util';
 import {
   Ingredient,
   IngredientCategory,
@@ -39,23 +46,11 @@ type PantryTab = 'ingredients' | 'utensils';
 const PANTRY_TABS = ['ingredients', 'utensils'] as const;
 
 /**
- * El catálogo de utensilios son ~54 filas: como lista única no se acaba nunca.
- * Se agrupa por categoría y se corta en secciones de este tamaño, así que una
- * sección pueden ser varias categorías pequeñas juntas o un trozo de una grande
- * (Herramientas tiene 34). La sección activa viaja en la URL:
- *   /pantry?tab=utensils&section=tools-2
- * usando la categoría que la abre (y el número de vez, si se repite).
+ * El inventario se pinta con `app-data-table` (## 12ab): orden, filtros por columna, paginacion y lote
+ * los lleva la tabla sobre las filas completas, que el servicio carga de 100 en 100 de una vez. Los tramos
+ * de secciones con `?section=` que habia antes eran una paginacion artesanal para un catalogo que ya no
+ * necesita tramos: la misma tabla los ordena y los filtra.
  */
-const UTENSIL_SECTION_SIZE = 12;
-const UTENSIL_SECTION_PARAM = 'section';
-
-/**
- * La despensa se pinta entera en pantalla (sin paginacion), asi que se pide
- * una unica pagina amplia: con el tamano por defecto (20) solo se veian 20
- * de los 68 ingredientes sembrados al crear el hogar.
- */
-const PAGE_SIZE = 100;
-
 @Component({
   selector: 'app-pantry',
   standalone: true,
@@ -64,7 +59,7 @@ const PAGE_SIZE = 100;
     
     CommonModule, FormsModule,
     ButtonComponent, InputComponent, CardComponent,
-    BadgeComponent, TagComponent, ModalComponent, LoadingComponent
+    BadgeComponent, ModalComponent, LoadingComponent, CheckboxComponent, DataTableComponent, DataTableCellDirective
   , CatalogLabelPipe,
     PantryCategoryLabelPipe,
     PickerComponent,
@@ -155,127 +150,167 @@ const PAGE_SIZE = 100;
           </span>
         </div>
 
-        <!-- Search & Filters -->
+        <!-- Busqueda + filtro de categorias minimizado (## 12ab): el riel con scroll era un div con barras. -->
         <div class="pantry__filters">
           <app-input
             id="search"
             name="search"
             type="search"
             [placeholder]="'pantry.buscar_ingredientes' | t"
-            [(ngModel)]="searchTerm"
-            (ngModelChange)="onSearch()"
+            [ngModel]="searchTerm()"
+            (ngModelChange)="escribirBusqueda($event)"
           ></app-input>
-
-          <div class="pantry__filter-tags">
-            <app-tag
-              *ngFor="let cat of categoriasFiltro()"
-              [selected]="selectedIngCategory() === cat.value"
-              (onClick)="filterByCategory(cat.value)"
-              [attr.data-test]="'pantry-chip-cat-' + (cat.value || 'todos')"
-            >
-              {{ cat.etiqueta }}
-            </app-tag>
+          <div class="pantry__filtro-cat">
+            <app-picker
+              [options]="opcionesFiltroCategoria()"
+              [value]="filtroCategoria()"
+              [placeholder]="'pantry.categoria_todos' | t"
+              [label]="('pantry.categoria' | t)"
+              data-test="pantry-filtro-categoria"
+              (valueChange)="elegirCategoria($event)"
+            />
           </div>
         </div>
 
         <app-loading *ngIf="pantryService.isLoading()" [message]="'pantry.cargando_ingredientes' | t"></app-loading>
 
         <div *ngIf="!pantryService.isLoading()">
-          <!-- Suggestions chips (qty=0 items) -->
-          <div class="suggestions" *ngIf="suggestions().length > 0">
-            <div class="suggestions__header">
-              <span class="suggestions__title">{{ 'pantry.sugerencias_comunes' | t }}</span>
-              <span class="suggestions__hint">{{ 'pantry.toca_para_anadirlas_a' | t }}</span>
+          <!-- Lo que la casa conoce y no tiene: un expand cerrado por defecto (## 12ab). -->
+          @if (suggestions().length > 0) {
+            <div class="suggestions" data-test="pantry-sugerencias">
+              <div class="suggestions__header">
+                <span class="suggestions__title">{{ 'pantry.sugerencias_comunes' | t }}</span>
+                <button
+                  type="button"
+                  class="suggestions__toggle"
+                  [attr.aria-expanded]="sugerenciasAbiertas()"
+                  (click)="alternarSugerencias()"
+                  data-test="pantry-sugerencias-toggle"
+                >
+                  <span class="suggestions__cuenta">{{ 'pantry.sugerencias_cuenta' | t: { n: suggestions().length } }}</span>
+                  <span class="suggestions__verbo">{{ (sugerenciasAbiertas() ? 'pantry.sugerencias_cerrar' : 'pantry.sugerencias_abrir') | t }}</span>
+                  <app-icon [name]="sugerenciasAbiertas() ? 'expand_less' : 'expand_more'" [size]="18" [label]="null" />
+                </button>
+              </div>
+              @if (sugerenciasAbiertas()) {
+                <p class="suggestions__hint">{{ 'pantry.toca_para_anadirlas_a' | t }}</p>
+                <div class="suggestions__chips">
+                  @for (s of suggestions(); track s.id) {
+                    <button
+                      type="button"
+                      class="chip"
+                      (click)="quickAddSuggestion(s)"
+                      [title]="s.name | catalog"
+                      [attr.data-test]="'pantry-sugerencia-' + s.id"
+                    >
+                      <span class="chip__punto" [style.background]="colorDe(s.category)" aria-hidden="true"></span>
+                      <span class="chip__name">{{ s.name | catalog }}</span>
+                      <span class="chip__plus">+</span>
+                    </button>
+                  }
+                </div>
+              }
             </div>
-            <div class="suggestions__chips">
-              <button
-                type="button"
-                class="chip"
-                *ngFor="let s of suggestions()"
-                (click)="quickAddSuggestion(s)"
-                [title]="s.name | catalog"
-              >
-                <span class="chip__punto" [style.background]="colorDe(s.category)" aria-hidden="true"></span>
-                <span class="chip__name">{{ s.name | catalog }}</span>
-                <span class="chip__plus">+</span>
-              </button>
-            </div>
-          </div>
+          }
 
-          <!-- Ingredients List -->
-          <div class="pantry__list">
-            <div
-              *ngFor="let ingredient of inPantry(); trackBy: trackById"
-              class="ingredient-item"
+          @if (filasInventario().length > 0) {
+            <app-data-table
+              #tablaInv
+              data-test="pantry-tabla-inventario"
+              [filas]="filasInventario()"
+              [columnas]="columnasInventario()"
+              [seleccionable]="true"
+              [claveDeFila]="identificadorDeFila"
+              [etiquetaDeFila]="nombreDeFila"
+              [claseFila]="claseFilaInv"
+              (seleccionChange)="inventarioSeleccion.set($event)"
             >
-              <span class="ingredient-item__punto" [style.background]="colorDe(ingredient.category)" aria-hidden="true"></span>
-              <div class="ingredient-item__info">
-                <span class="ingredient-item__name">{{ ingredient.name | catalog }}</span>
+              <div data-tabla-lote>
+                @if (inventarioSeleccion().length > 0) {
+                  <div class="lote" data-test="pantry-lote">
+                    <span class="lote__cta">{{ 'pantry.seleccionados' | t: { n: inventarioSeleccion().length } }}</span>
+                    <span class="lote__acciones">
+                      <button type="button" class="lote__btn" (click)="loteVaciar()" data-test="pantry-lote-vaciar">{{ 'pantry.lote_vaciar' | t }}</button>
+                      <button type="button" class="lote__btn lote__btn--peligro" (click)="loteBorrar()" data-test="pantry-lote-borrar">{{ 'pantry.lote_borrar' | t }}</button>
+                      <button type="button" class="lote__btn" (click)="loteAnular()" data-test="pantry-lote-anular">{{ 'pantry.lote_anular' | t }}</button>
+                    </span>
+                  </div>
+                }
+              </div>
+              <ng-template appDataTableCell="nombre" let-fila>
+                <span class="celda-nombre">
+                  <span class="ingredient-item__punto" [style.background]="colorDe(filaCat(fila))" aria-hidden="true"></span>
+                  <span>{{ filaNombre(fila) | catalog }}</span>
+                </span>
+              </ng-template>
+              <ng-template appDataTableCell="cantidad" let-fila>
                 <span class="pantry__stock">
                   <button
                     type="button"
                     class="stock-btn"
                     [attr.aria-label]="'pantry.quitar_unidad' | t"
                     [attr.title]="'pantry.quitar_unidad' | t"
-                    (click)="quitarUnidad(ingredient)"
-                    [attr.data-test]="'pantry-stock-menos-' + ingredient.id"
+                    (click)="quitarUnidad(filaIngrediente(fila))"
+                    [attr.data-test]="'pantry-stock-menos-' + filaId(fila)"
                   >
                     <app-icon name="remove" [size]="16" [label]="null" />
                   </button>
-                  <span class="ingredient-item__quantity">{{ ingredient.quantity }} {{ ingredient.unit }}</span>
+                  <span class="ingredient-item__quantity">{{ filaCantidad(fila) }}</span>
                   <button
                     type="button"
                     class="stock-btn"
                     [attr.aria-label]="'pantry.anadir_unidad' | t"
                     [attr.title]="'pantry.anadir_unidad' | t"
-                    (click)="anadirUnidad(ingredient)"
-                    [attr.data-test]="'pantry-stock-mas-' + ingredient.id"
+                    (click)="anadirUnidad(filaIngrediente(fila))"
+                    [attr.data-test]="'pantry-stock-mas-' + filaId(fila)"
                   >
                     <app-icon name="add" [size]="16" [label]="null" />
                   </button>
                 </span>
-              </div>
-              <div class="ingredient-item__meta">
-                <app-badge
-                  *ngIf="getExpirationStatus(ingredient) as status"
-                  [variant]="status.variant"
-                  size="sm"
-                >
-                  {{ status.label }}
-                </app-badge>
-                <span class="ingredient-item__location">{{ getLocationIcon(ingredient.location) }}</span>
-              </div>
-              <div class="ingredient-item__actions">
-                <button
-                  type="button"
-                  class="action-btn"
-                  [attr.aria-label]="'pantry.editar_ingrediente' | t"
-                  [attr.title]="'pantry.editar_ingrediente' | t"
-                  (click)="editIngredient(ingredient)"
-                  [attr.data-test]="'pantry-editar-' + ingredient.id"
-                >
-                  <app-icon name="edit" [size]="16" [label]="null" />
-                </button>
-                <button
-                  type="button"
-                  class="action-btn action-btn--danger"
-                  [attr.aria-label]="'pantry.eliminar_ingrediente' | t"
-                  [attr.title]="'pantry.eliminar_ingrediente' | t"
-                  (click)="deleteIngredient(ingredient)"
-                  [attr.data-test]="'pantry-eliminar-' + ingredient.id"
-                >
-                  <app-icon name="delete" [size]="16" [label]="null" />
-                </button>
-              </div>
-            </div>
-
-            <div *ngIf="inPantry().length === 0 && suggestions().length === 0" class="empty-state">
+              </ng-template>
+              <ng-template appDataTableCell="caducidad" let-fila>
+                <span class="celda-caducidad">
+                  @if (filaCaducidad(fila); as dia) {
+                    <span class="celda">{{ dia }}</span>
+                  }
+                  @if (getExpirationStatus(filaIngrediente(fila)); as status) {
+                    <app-badge [variant]="status.variant" size="sm">{{ status.label }}</app-badge>
+                  }
+                </span>
+              </ng-template>
+              <ng-template appDataTableCell="acciones" let-fila>
+                <span class="ingrediente-acciones">
+                  <button
+                    type="button"
+                    class="action-btn"
+                    [attr.aria-label]="'pantry.editar_ingrediente' | t"
+                    [attr.title]="'pantry.editar_ingrediente' | t"
+                    (click)="editIngredient(filaIngrediente(fila))"
+                    [attr.data-test]="'pantry-editar-' + filaId(fila)"
+                  >
+                    <app-icon name="edit" [size]="16" [label]="null" />
+                  </button>
+                  <button
+                    type="button"
+                    class="action-btn action-btn--danger"
+                    [attr.aria-label]="'pantry.eliminar_ingrediente' | t"
+                    [attr.title]="'pantry.eliminar_ingrediente' | t"
+                    (click)="deleteIngredient(filaIngrediente(fila))"
+                    [attr.data-test]="'pantry-eliminar-' + filaId(fila)"
+                  >
+                    <app-icon name="delete" [size]="16" [label]="null" />
+                  </button>
+                </span>
+              </ng-template>
+            </app-data-table>
+          } @else if (suggestions().length === 0) {
+            <div class="empty-state">
               <span class="empty-state__icon">📦</span>
               <h3 class="empty-state__title">{{ 'pantry.empty' | t }}</h3>
               <p class="empty-state__text">{{ 'pantry.agrega_ingredientes_para_empezar' | t }}</p>
               <app-button variant="primary" (onClick)="openAddModal()">{{ 'pantry.agregar_primer_ingrediente' | t }}</app-button>
             </div>
-          </div>
+          }
         </div>
       </ng-container>
 
@@ -287,114 +322,85 @@ const PAGE_SIZE = 100;
 
         <app-loading *ngIf="utensilsLoading()" [message]="'onboarding.cargando_utensilios' | t"></app-loading>
 
-        <div *ngIf="!utensilsLoading()" class="utensils" #utensilsTop>
-          <!--
-            El catálogo se recorre por secciones (UTENSIL_SECTION_SIZE filas
-            cada una, agrupadas por categoría): como lista única de ~54 filas no
-            lo acaba nadie. La sección activa viaja en la URL (?section=), así
-            que se puede enlazar, sobrevive a la recarga y al «atrás».
-          -->
-          <div class="utensils-bar" *ngIf="utensilTotal() > 0">
-            <span
-              class="utensils-bar__step"
-              *ngIf="!showAllUtensilGroups() && utensilSections().length > 1"
-            >
-              {{ 'pantry.seccion_de' | t:{index: activeUtensilSectionIndex() + 1, total: utensilSections().length, label: activeUtensilSectionLabel()} }}
-            </span>
-            <span class="utensils-bar__track" aria-hidden="true">
-              <span class="utensils-bar__fill" [style.width.%]="utensilProgress()"></span>
-            </span>
-            <span class="utensils-bar__label">
-              {{ 'pantry.de_marcados' | t:{owned: ownedUtensilsCount(), total: utensilTotal()} }}
-            </span>
-            <button type="button" class="utensils-bar__mode" (click)="toggleUtensilSections()">
-              {{ showAllUtensilGroups() ? ('pantry.ver_por_secciones' | t) : ('pantry.ver_todo_de_golpe' | t) }}
-            </button>
+        <div *ngIf="!utensilsLoading()" class="utensils">
+          <div class="utensils-meta">
+            <span>{{ 'pantry.de_marcados' | t:{owned: ownedUtensilsCount(), total: utensilTotal()} }}</span>
           </div>
 
-          <!-- Atajo a cada categoría: salta a la sección donde cae -->
-          <div
-            class="utensils-sections"
-            *ngIf="!showAllUtensilGroups() && utensilGroups().length > 1"
-          >
-            <button
-              *ngFor="let category of utensilGroups()"
-              type="button"
-              class="utensils-section"
-              [class.utensils-section--active]="isUtensilGroupActive(category.value)"
-              (click)="showUtensilCategory(category.value)"
-            >
-              {{ category.icon }} {{ category.label }}
-              <span class="utensils-section__count">
-                {{ markedUtensilsIn(category) }}/{{ category.items.length }}
-              </span>
-            </button>
+          <div class="utensils-buscar">
+            <app-input
+              id="utensilios-q"
+              name="utensiliosQ"
+              type="search"
+              [placeholder]="'pantry.buscar_utensilios' | t"
+              [ngModel]="utensiliosQ()"
+              (ngModelChange)="utensiliosQ.set($event ?? '')"
+            />
           </div>
 
-          <div *ngIf="utensilTotal() === 0" class="empty-state">
-            <span class="empty-state__icon">🍳</span>
-            <h3 class="empty-state__title">{{ 'pantry.todavia_no_hay_utensilios' | t }}</h3>
-            <p class="empty-state__text">
-              {{ 'pantry.anade_los_que_uses' | t }}
-            </p>
-            <app-button variant="primary" (onClick)="openUtensilModal()">{{ 'pantry.anadir_utensilio' | t }}</app-button>
-          </div>
-
-          <div
-            *ngFor="let group of visibleUtensilGroups(); trackBy: trackByCategory"
-            class="utensil-group"
-          >
-            <div class="utensil-group__head">
-              <h3 class="utensil-group__title">{{ group.icon }} {{ group.label }}</h3>
-              <span class="utensil-group__meta">
-                {{ 'pantry.marcados_en_grupo' | t:{owned: markedUtensilsIn(group), total: group.items.length} }}
-              </span>
+          @if (utensilTotal() === 0) {
+            <div class="empty-state">
+              <span class="empty-state__icon">🍳</span>
+              <h3 class="empty-state__title">{{ 'pantry.todavia_no_hay_utensilios' | t }}</h3>
+              <p class="empty-state__text">
+                {{ 'pantry.anade_los_que_uses' | t }}
+              </p>
+              <app-button variant="primary" (onClick)="openUtensilModal()">{{ 'pantry.anadir_utensilio' | t }}</app-button>
             </div>
-            <div class="utensil-grid">
-              <label
-                *ngFor="let u of group.items; trackBy: trackById"
-                class="utensil-card"
-                [class.utensil-card--owned]="u.available"
-              >
-                <input
-                  type="checkbox"
-                  [checked]="u.available"
-                  (change)="toggleUtensil(u)"
-                  class="utensil-card__check"
+          } @else {
+            <app-data-table
+              #tablaUti
+              data-test="utensilios-tabla"
+              [filas]="utensiliosFiltrados()"
+              [columnas]="columnasUtensilios()"
+              [seleccionable]="true"
+              [claveDeFila]="identificadorDeFila"
+              [etiquetaDeFila]="nombreDeFila"
+              [claseFila]="claseFilaUti"
+              (seleccionChange)="utensiliosSeleccion.set($event)"
+            >
+              <div data-tabla-lote>
+                @if (utensiliosSeleccion().length > 0) {
+                  <div class="lote" data-test="utensilios-lote">
+                    <span class="lote__cta">{{ 'pantry.seleccionados' | t: { n: utensiliosSeleccion().length } }}</span>
+                    <span class="lote__acciones">
+                      <button type="button" class="lote__btn" (click)="loteUtensilios(true)" data-test="utensilios-lote-marcar">{{ 'pantry.lote_disponibles' | t }}</button>
+                      <button type="button" class="lote__btn" (click)="loteUtensilios(false)" data-test="utensilios-lote-desmarcar">{{ 'pantry.lote_no_disponibles' | t }}</button>
+                      <button type="button" class="lote__btn" (click)="loteUtensiliosAnular()" data-test="utensilios-lote-anular">{{ 'pantry.lote_anular' | t }}</button>
+                    </span>
+                  </div>
+                }
+              </div>
+              <ng-template appDataTableCell="estado" let-fila>
+                <app-checkbox
+                  [hideLabel]="true"
+                  [label]="filaNombre(fila)"
+                  [checked]="filaDisponible(fila)"
+                  (onChange)="toggleUtensil(filaUtensil(fila))"
+                  [attr.data-test]="'utensil-marcar-' + filaId(fila)"
                 />
-                <span class="utensil-card__name">{{ u.name | catalog }}</span>
-                <button
-                  type="button"
-                  class="utensil-card__delete"
-                  [attr.title]="'common.delete' | t"
-                  (click)="deleteUtensil(u); $event.preventDefault()"
-                  *ngIf="isCustomUtensil(u)"
-                >🗑️</button>
-              </label>
-            </div>
-          </div>
-
-          <div class="utensils-nav" *ngIf="!showAllUtensilGroups() && utensilSections().length > 1">
-            <app-button
-              variant="ghost"
-              size="sm"
-              [disabled]="activeUtensilSectionIndex() === 0"
-              (onClick)="prevUtensilSection()"
-            >
-              ← {{ previousSectionName() || ('common.anterior' | t) }}
-            </app-button>
-            <app-button
-              [variant]="isLastUtensilSection() ? 'secondary' : 'primary'"
-              size="sm"
-              (onClick)="nextUtensilSection()"
-            >
-              {{
-                isLastUtensilSection()
-                  ? ('pantry.ver_todo_el_catalogo' | t)
-                  : ('pantry.siguiente_seccion' | t:{name: nextSectionName()})
-              }}
-            </app-button>
-          </div>
+              </ng-template>
+              <ng-template appDataTableCell="nombre" let-fila>
+                <span class="celda-nombre">
+                  <span>{{ filaNombre(fila) | catalog }}</span>
+                </span>
+              </ng-template>
+              <ng-template appDataTableCell="acciones" let-fila>
+                <span class="ingrediente-acciones">
+                  <button
+                    type="button"
+                    class="action-btn action-btn--danger utensil-card__delete"
+                    [attr.aria-label]="'common.delete' | t"
+                    [attr.title]="'common.delete' | t"
+                    (click)="deleteUtensil(filaUtensil(fila))"
+                    [attr.data-test]="'utensil-borrar-' + filaId(fila)"
+                  >
+                    <app-icon name="delete" [size]="16" [label]="null" />
+                  </button>
+                </span>
+              </ng-template>
+            </app-data-table>
+          }
 
           <div class="utensils-add">
             <h3 class="utensils-add__title">{{ 'pantry.no_encuentras_un_utensilio' | t }}</h3>
@@ -643,7 +649,13 @@ const PAGE_SIZE = 100;
 
     .pantry__header-acciones { display: flex; align-items: center; gap: var(--space-2); }
 
-    .pantry__filters { margin-bottom: var(--space-5); }
+    .pantry__filters {
+      display: flex; flex-wrap: wrap; align-items: flex-end;
+      gap: var(--space-3) var(--space-4); margin-bottom: var(--space-5);
+    }
+    .pantry__filters app-input { flex: 1 1 280px; min-width: 0; }
+    /* El filtro minimizado (## 12ab): un picker del sistema, no un riel con scroll. */
+    .pantry__filtro-cat { flex: 0 1 280px; min-width: 200px; }
     /* La entrada al catalogo vive dentro de la pantalla del inventario y antes era una fila de botones sueltos:
        ahora es una franja con su superficie, su titulo a la izquierda y sus acciones a la derecha, alineada con
        el resto de bloques de la pagina. */
@@ -668,34 +680,12 @@ const PAGE_SIZE = 100;
     .gestion__enlace:hover { border-color: var(--border-strong); background: var(--primary-subtle); }
     .gestion__enlace:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-    /* Los mismos app-tag de siempre: scroller horizontal en movil, riel en columna a partir de 960px, al
-       lado del buscador. Un solo DOM —lo que cambia es el reflujo— (## 12aa). */
-    .pantry__filter-tags {
-      display: flex; flex-wrap: nowrap; gap: var(--space-2); margin-top: var(--space-3);
-      overflow-x: auto; scrollbar-width: thin; -webkit-overflow-scrolling: touch; padding-bottom: 2px;
-    }
-    .pantry__filter-tags app-tag { flex: none; }
-    @media (min-width: 960px) {
-      .pantry__filters { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: var(--space-4); align-items: start; }
-      .pantry__filter-tags {
-        margin-top: 0; flex-direction: column; align-items: flex-start;
-        overflow: auto; max-height: 232px; position: sticky; top: var(--space-4);
-        padding: var(--space-3); background: var(--bg-secondary);
-        border: 1px solid var(--border-default); border-radius: var(--radius-xl);
-      }
-    }
-
-    .pantry__list { display: flex; flex-direction: column; gap: var(--space-2); }
-
-    /* Ingredient Item */
-    .ingredient-item {
-      display: flex; align-items: center; gap: var(--space-3);
-      padding: var(--space-3); background: var(--bg-secondary);
-      border-radius: var(--radius-lg); border: 1px solid var(--border-default);
-      transition: var(--transition-fast);
-      &:hover { border-color: var(--border-strong); }
-    }
+    /* La tabla del inventario (## 12ab): las piezas de siempre siguen vivas dentro de las celdas. */
     .ingredient-item__punto { flex: none; width: 12px; height: 12px; border-radius: var(--radius-full); }
+    .celda-nombre {
+      display: inline-flex; align-items: center; gap: var(--space-2);
+      min-width: 0; font-weight: var(--font-medium);
+    }
     .pantry__stock { display: inline-flex; align-items: center; gap: var(--space-1); }
     .stock-btn {
       display: grid; place-items: center; width: 36px; height: 36px; color: var(--text-secondary);
@@ -704,20 +694,9 @@ const PAGE_SIZE = 100;
     }
     .stock-btn:hover { color: var(--primary); border-color: var(--border-strong); background: var(--primary-subtle); }
     .stock-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    @media (max-width: 959px) { .stock-btn { width: 44px; height: 44px; } }
-    .ingredient-item__info { flex: 1; display: flex; flex-direction: column; }
-    .ingredient-item__name { font-size: var(--text-sm); font-weight: var(--font-medium); }
-    .ingredient-item__quantity { font-size: var(--text-xs); color: var(--text-secondary); }
-    .ingredient-item__meta { display: flex; align-items: center; gap: var(--space-2); }
-    .ingredient-item__location { font-size: var(--text-lg); }
-    /* En tactil las acciones no se esconden hasta pasar por encima: en una pantalla de movil no hay hover,
-       y un boton que no se puede tocar no existe (## 12aa). */
-    .ingredient-item__actions { display: flex; gap: var(--space-1); transition: var(--transition-fast); }
-    @media (hover: hover) {
-      .ingredient-item__actions { opacity: 0; }
-      .ingredient-item:hover .ingredient-item__actions { opacity: 1; }
-      .ingredient-item:focus-within .ingredient-item__actions { opacity: 1; }
-    }
+    .ingredient-item__quantity { font-size: var(--text-xs); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .celda-caducidad { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+    .ingrediente-acciones { display: flex; gap: var(--space-1); justify-content: flex-end; }
     .action-btn {
       display: flex; align-items: center; justify-content: center;
       width: 40px; height: 40px; border-radius: var(--radius-md);
@@ -726,6 +705,28 @@ const PAGE_SIZE = 100;
       &:hover { background: var(--bg-tertiary); color: var(--primary); }
       &:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
       &--danger:hover { background: var(--error-subtle); color: var(--error); }
+    }
+    /* El lote (## 12ab): la barra de acciones sobre la seleccion, anclada en la cabecera de la tabla. */
+    .lote {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+      flex-wrap: wrap; padding: var(--space-2) var(--space-3);
+      background: var(--primary-subtle); border-radius: var(--radius-md);
+    }
+    .lote__cta { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-primary); }
+    .lote__acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    .lote__btn {
+      font: inherit; font-size: var(--text-xs); padding: 6px 12px; cursor: pointer;
+      background: var(--bg-primary); color: var(--text-primary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-md);
+      transition: var(--transition-fast);
+    }
+    .lote__btn:hover { border-color: var(--primary); }
+    .lote__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .lote__btn--peligro { color: var(--error); }
+    .lote__btn--peligro:hover { border-color: var(--error); background: var(--error-subtle); }
+    @media (max-width: 959px) {
+      /* En movil el lote se queda pegado abajo: la tabla puede tener 25 filas y la seleccion no puede desaparecer. */
+      .lote { position: sticky; bottom: var(--space-2); box-shadow: var(--shadow-md); }
     }
 
     /* Suggestions */
@@ -737,9 +738,22 @@ const PAGE_SIZE = 100;
       margin-bottom: var(--space-5);
     }
     .suggestions__header {
-      display: flex; justify-content: space-between; align-items: baseline;
-      margin-bottom: var(--space-3); flex-wrap: wrap; gap: var(--space-2);
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: var(--space-2);
     }
+    /* Cerrado, el bloque se aprieta; abierto, respira antes de los chips. */
+    .suggestions__header:has(+ .suggestions__chips) { margin-bottom: var(--space-3); }
+    /* Cerrado por defecto (## 12ab): el contador y el verbo dicen que hay ocho cosas esperando. */
+    .suggestions__toggle {
+      display: inline-flex; align-items: center; gap: var(--space-2);
+      font: inherit; font-size: var(--text-xs); color: var(--text-secondary);
+      background: var(--bg-primary); border: 1px solid var(--border-default);
+      border-radius: var(--radius-full); padding: 4px 10px; cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .suggestions__toggle:hover { border-color: var(--border-strong); color: var(--text-primary); }
+    .suggestions__toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .suggestions__cuenta { font-weight: var(--font-semibold); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
     .suggestions__title { font-weight: var(--font-semibold); font-size: var(--text-sm); }
     .suggestions__hint { font-size: var(--text-xs); color: var(--text-secondary); }
     .suggestions__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
@@ -767,112 +781,19 @@ const PAGE_SIZE = 100;
       color: var(--text-secondary);
       margin-bottom: var(--space-5);
     }
-    .utensils { display: flex; flex-direction: column; gap: var(--space-5); }
-    .utensil-group__title {
-      font-family: var(--font-display);
-      font-size: var(--text-base);
-      font-weight: var(--font-semibold);
-      margin: 0 0 var(--space-2);
-    }
-    .utensil-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: var(--space-2);
-    }
-    .utensil-card {
-      display: flex; align-items: center; gap: var(--space-2);
-      padding: var(--space-2) var(--space-3);
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-md);
-      cursor: pointer; transition: var(--transition-fast);
-      font-size: var(--text-sm);
-      &:hover { border-color: var(--border-strong); }
-      &--owned {
-        background: var(--success-subtle);
-        border-color: var(--success);
-      }
-    }
-    .utensil-card__check { accent-color: var(--success); }
-    .utensil-card__name { flex: 1; }
+    .utensils { display: flex; flex-direction: column; }
+    /* Catalogo en tabla (## 12ab): meta arriba, busqueda propia, y la fila luce las clases de siempre. */
+    .utensils-meta { display: flex; justify-content: flex-end; margin-bottom: var(--space-2); }
+    .utensils-meta span { font-size: var(--text-xs); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .utensils-buscar { max-width: 360px; margin-bottom: var(--space-4); }
+    /* La pertenencia sigue viendose como la tarjeta de siempre: fondo verde suave en la fila entera. */
+    :host ::ng-deep tr.utensil-card--owned { background: var(--success-subtle); }
     .utensil-card__delete {
-      background: none; border: none; cursor: pointer;
-      opacity: 0; font-size: 12px; padding: 2px;
-      .utensil-card:hover & { opacity: 1; }
+      /* El boton de borrar del catalogo: en la tabla esta siempre visible (el riel de hover era de la rejilla). */
+      width: 34px; height: 34px; font-size: 14px; opacity: 1;
     }
-    /* Barra de progreso del repaso + cambio de modo */
-    .utensils-bar {
-      display: flex; align-items: center; gap: var(--space-3);
-      flex-wrap: wrap;
-    }
-    .utensils-bar__track {
-      flex: 1 1 120px; height: 6px; min-width: 80px;
-      background: var(--bg-tertiary);
-      border-radius: var(--radius-full);
-      overflow: hidden;
-    }
-    .utensils-bar__fill {
-      display: block; height: 100%;
-      background: var(--success);
-      border-radius: var(--radius-full);
-      transition: width var(--duration-200) var(--ease-out);
-    }
-    .utensils-bar__label, .utensils-bar__step {
-      font-size: var(--text-xs); color: var(--text-secondary);
-      white-space: nowrap;
-    }
-    .utensils-bar__step {
-      font-weight: var(--font-medium); color: var(--text-primary);
-    }
-    .utensils-bar__mode {
-      background: none; border: 1px solid var(--border-default);
-      border-radius: var(--radius-full);
-      padding: 2px 10px; font-family: var(--font-sans);
-      font-size: var(--text-xs); color: var(--text-secondary);
-      cursor: pointer; transition: var(--transition-fast);
-      &:hover { border-color: var(--primary); color: var(--primary); }
-    }
-
-    /* Navegador de secciones (una cada vez) */
-    .utensils-sections {
-      display: flex; flex-wrap: wrap; gap: var(--space-2);
-    }
-    .utensils-section {
-      display: inline-flex; align-items: center; gap: var(--space-2);
-      padding: var(--space-1) var(--space-3);
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-full);
-      font-family: var(--font-sans); font-size: var(--text-xs);
-      color: var(--text-secondary); cursor: pointer;
-      transition: var(--transition-fast);
-      &:hover { border-color: var(--border-strong); color: var(--text-primary); }
-      &--active {
-        background: var(--primary-subtle);
-        border-color: var(--primary);
-        color: var(--primary-dark);
-      }
-    }
-    .utensils-section__count {
-      font-size: 11px; font-variant-numeric: tabular-nums;
-      background: var(--bg-tertiary);
-      border-radius: var(--radius-full); padding: 0 6px;
-      color: var(--text-tertiary);
-      .utensils-section--active & { background: var(--bg-primary); color: var(--primary-dark); }
-    }
-
-    .utensil-group__head {
-      display: flex; align-items: baseline; justify-content: space-between;
-      gap: var(--space-3); flex-wrap: wrap; margin-bottom: var(--space-2);
-    }
-    .utensil-group__head .utensil-group__title { margin: 0; }
-    .utensil-group__meta { font-size: var(--text-xs); color: var(--text-tertiary); }
-
-    .utensils-nav {
-      display: flex; align-items: center; justify-content: space-between;
-      gap: var(--space-3);
-    }
-
+    .utensil-card__delete:hover { background: var(--error-subtle); color: var(--error); }
+    .utensil-card__delete:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     .utensils-add {
       background: var(--bg-secondary);
       border: 1px solid var(--border-default);
@@ -949,8 +870,17 @@ export class PantryComponent implements OnInit {
   );
 
   // Ingredients
-  searchTerm = '';
-  selectedIngCategory = signal<IngredientCategory | ''>('');
+  /** Busqueda instantanea sobre lo cargado (## 12ab): signal + URL, ya no se llama al server por tecla. */
+  searchTerm = signal('');
+  filtroCategoria = signal('');
+  sugerenciasAbiertas = signal(false);
+  /** La seleccion del lote es de esta visita: no viaja en la URL (igual que en el gestor de productos). */
+  inventarioSeleccion = signal<readonly unknown[]>([]);
+  utensiliosSeleccion = signal<readonly unknown[]>([]);
+  utensiliosQ = signal('');
+  private readonly tablaInv = viewChild<DataTableComponent>('tablaInv');
+  private readonly tablaUti = viewChild<DataTableComponent>('tablaUti');
+
   isIngredientModalOpen = signal(false);
   editingIngredient = signal<Ingredient | null>(null);
   isSaving = signal(false);
@@ -967,232 +897,190 @@ export class PantryComponent implements OnInit {
     available: true
   };
 
-  inPantry = computed(() =>
-    this.pantryService.ingredients().filter(i => (i.quantity ?? 0) > 0)
-  );
-  suggestions = computed(() =>
-    this.pantryService.ingredients().filter(i => (i.quantity ?? 0) <= 0)
-  );
-  inPantryCount = computed(() => this.inPantry().length);
+  /** El inventario entero de la casa, sin filtros: de aqui salen tablas, cuentas y sugerencias. */
+  ingredientesTodos = computed(() => this.pantryService.ingredients());
+
   ownedUtensilsCount = computed(() => this.pantryService.utensils().filter(u => u.available).length);
-
-  // Utensils grouped
-  utensilGroups = computed(() => {
-    const all = this.pantryService.utensils();
-    return this.utensilCategoryOptions
-      .map((cat) => ({ ...cat, label: this.i18n.t(cat.labelKey), items: all.filter((u) => u.category === cat.value) }))
-      .filter((g) => g.items.length > 0);
-  });
-
-  /**
-   * Secciones del catálogo de utensilios (ver UTENSIL_SECTION_SIZE). El cursor
-   * es un índice: la misma categoría puede abrir varias secciones (Herramientas
-   * va por tramos), así que no sirve guardarlo como categoría.
-   */
-  private readonly utensilSectionSize = UTENSIL_SECTION_SIZE;
-  private utensilSectionCursor = signal(0);
-  showAllUtensilGroups = signal(false);
-  private utensilsTop = viewChild<ElementRef<HTMLElement>>('utensilsTop');
-
-  /** Sección pedida por URL antes de tener el catálogo cargado. */
-  private pendingUtensilSection: string | null = null;
-
   utensilTotal = computed(() => this.pantryService.utensils().length);
 
-  utensilProgress = computed(() =>
-    this.utensilTotal() === 0
-      ? 0
-      : Math.round((this.ownedUtensilsCount() / this.utensilTotal()) * 100)
-  );
+  private coincideBusqueda(nombre: string): boolean {
+    const q = this.searchTerm().trim();
+    if (!q) return true;
+    return quitarAcentos(nombre).includes(quitarAcentos(q));
+  }
 
-  /** Grupos (categoría + sus utensilios) empaquetados en secciones. */
-  utensilSections = computed(() => {
-    const size = this.utensilSectionSize;
-    type Slice = { value: UtensilCategory; label: string; icon: string; items: Utensil[] };
+  /** El subarbol elegido: «Alimentos» trae tambien sus hijas, igual que hacia el server (## 12aa). */
+  private clavesFiltro(): Set<string> | null {
+    const raiz = this.filtroCategoria();
+    if (!raiz) return null;
+    return clavesSubarbolDe(this.pantryService.categories(), raiz);
+  }
 
-    // 1) las categorías que no caben en una sección se parten en tramos
-    const slices: Slice[] = [];
-    for (const group of this.utensilGroups()) {
-      if (group.items.length <= size) {
-        slices.push(group);
-        continue;
-      }
-      for (let i = 0; i < group.items.length; i += size) {
-        slices.push({ ...group, items: group.items.slice(i, i + size) });
-      }
-    }
-
-    // 2) las categorías pequeñas rellenan la sección que esté abierta
-    const sections: { label: string; groups: Slice[]; size: number }[] = [];
-    for (const slice of slices) {
-      const current = sections[sections.length - 1];
-      if (current && current.size + slice.items.length <= size) {
-        current.groups.push(slice);
-        current.size += slice.items.length;
-      } else {
-        sections.push({ label: slice.label, groups: [slice], size: slice.items.length });
-      }
-    }
-    return sections;
+  /** Las filas del inventario: cantidad > 0 y con la busqueda y el subarbol puestos (el server ya no filtra). */
+  filasInventario = computed(() => {
+    const claves = this.clavesFiltro();
+    return this.ingredientesTodos().filter((i) =>
+      (i.quantity ?? 0) > 0 && this.coincideBusqueda(i.name) && (!claves || claves.has(i.category ?? 'other'))
+    );
   });
 
-  /** Índice dentro de rango: al borrar el último de una sección no nos salimos. */
-  activeUtensilSectionIndex = computed(() => {
-    const last = Math.max(this.utensilSections().length - 1, 0);
-    return Math.min(Math.max(this.utensilSectionCursor(), 0), last);
+  /** Lo que la casa conoce pero no tiene: mismas reglas, cantidad a cero. */
+  suggestions = computed(() => {
+    const claves = this.clavesFiltro();
+    return this.ingredientesTodos().filter((i) =>
+      (i.quantity ?? 0) <= 0 && this.coincideBusqueda(i.name) && (!claves || claves.has(i.category ?? 'other'))
+    );
   });
 
-  activeUtensilSection = computed(() => this.utensilSections()[this.activeUtensilSectionIndex()]);
+  /** La cuenta de la cabecera es siempre el total de la casa: no depende de los filtros puestos. */
+  inPantryCount = computed(() => this.ingredientesTodos().filter((i) => (i.quantity ?? 0) > 0).length);
 
-  /** 'Horno +1' para una sección que arrastra varias categorías pequeñas. */
-  private utensilSectionLabel(index: number): string {
-    const section = this.utensilSections()[index];
-    const first = section?.groups[0];
-    if (!first) return '';
-    const extra = section.groups.length - 1;
-    return extra > 0 ? `${first.label} +${extra}` : first.label;
-  }
-
-  activeUtensilSectionLabel = computed(() =>
-    this.utensilSectionLabel(this.activeUtensilSectionIndex())
-  );
-
-  isLastUtensilSection = computed(
-    () => this.activeUtensilSectionIndex() >= this.utensilSections().length - 1
-  );
-
-  /** En modo secciones solo se pinta la activa; en 'todas', el catálogo entero. */
-  visibleUtensilGroups = computed(() => {
-    if (this.showAllUtensilGroups()) return this.utensilGroups();
-    return this.activeUtensilSection()?.groups ?? [];
+  /** Utensilios por la busqueda; el orden, la pagina y los filtros de columna los ve la tabla (## 12ab). */
+  utensiliosFiltrados = computed(() => {
+    const q = this.utensiliosQ().trim();
+    const todos = this.pantryService.utensils();
+    if (!q) return todos;
+    return todos.filter((u) => quitarAcentos(u.name).includes(quitarAcentos(q)));
   });
 
-  markedUtensilsIn(group: { items: Utensil[] }): number {
-    return group.items.filter(u => u.available).length;
-  }
+  /** Las siete columnas del inventario; las etiquetas, traducidas al vuelo (## 12ab). */
+  columnasInventario = computed<DataTableColumna[]>(() => {
+    this.i18n.changeTick();
+    const catalogo = new Map(this.pantryService.categories().map((cat) => [cat.key, cat]));
+    const ubicaciones: Record<string, TranslationKey> = {
+      fridge: 'pantry.nevera', freezer: 'pantry.congelador', pantry: 'pantry.title', counter: 'pantry.encimera'
+    };
+    return [
+      { clave: 'name', etiqueta: this.i18n.t('pantry.columna_nombre'), celda: 'nombre' },
+      { clave: 'quantity', etiqueta: this.i18n.t('pantry.cantidad'), tipo: 'numero', celda: 'cantidad', alineacion: 'start' },
+      { clave: 'unit', etiqueta: this.i18n.t('pantry.unidad'), filtrable: true },
+      { clave: 'category', etiqueta: this.i18n.t('pantry.categoria'), etiquetaValor: (v) => {
+        const cat = catalogo.get(String(v));
+        return cat ? pantryCategoryLabel(cat, (key) => this.i18n.t(key)) : String(v);
+      } },
+      { clave: 'expirationDate', etiqueta: this.i18n.t('pantry.caducidad_producto'), tipo: 'fecha', celda: 'caducidad' },
+      { clave: 'location', etiqueta: this.i18n.t('pantry.ubicacion'), etiquetaValor: (v) => this.i18n.t(ubicaciones[String(v)] ?? 'pantry.title') },
+      { clave: 'acciones', etiqueta: this.i18n.t('pantry.acciones'), celda: 'acciones', ordenable: false, filtrable: false, alineacion: 'end', ancho: '88px' }
+    ];
+  });
 
-  /** Identificador de la sección para la URL: 'oven', 'tools', 'tools-2'... */
-  private utensilSectionKey(index: number): string {
-    const section = this.utensilSections()[index];
-    if (!section) return '';
-    const first = section.groups[0]?.value ?? '';
-    const repeated = this.utensilSections()
-      .slice(0, index)
-      .filter(other => other.groups[0]?.value === first).length;
-    return repeated === 0 ? first : `${first}-${repeated + 1}`;
-  }
+  /** Las cuatro del catalogo de utensilios; «estado» filtra por disponible / no disponible. */
+  columnasUtensilios = computed<DataTableColumna[]>(() => {
+    this.i18n.changeTick();
+    const etiquetas = new Map<string, string>(this.utensilCategoryOptions.map((op) => [String(op.value), this.i18n.t(op.labelKey)]));
+    return [
+      { clave: 'name', etiqueta: this.i18n.t('pantry.columna_nombre'), celda: 'nombre' },
+      { clave: 'category', etiqueta: this.i18n.t('pantry.categoria'), etiquetaValor: (v) => etiquetas.get(String(v)) ?? String(v) },
+      { clave: 'available', etiqueta: this.i18n.t('pantry.estado'), tipo: 'booleano', celda: 'estado',
+        etiquetaValor: (v) => v === true ? this.i18n.t('pantry.disponible') : this.i18n.t('pantry.no_disponible') },
+      { clave: 'acciones', etiqueta: this.i18n.t('pantry.acciones'), celda: 'acciones', ordenable: false, filtrable: false, alineacion: 'end', ancho: '64px' }
+    ];
+  });
 
-  private utensilSectionIndexOfKey(key: string): number {
-    return this.utensilSections().findIndex((_, index) => this.utensilSectionKey(index) === key);
-  }
-
-  /** Salta a la sección donde cae esa categoría (atajo de los chips). */
-  showUtensilCategory(category: UtensilCategory): void {
-    const index = this.utensilSections().findIndex(section =>
-      section.groups.some(group => group.value === category)
-    );
-    if (index >= 0) {
-      this.showAllUtensilGroups.set(false);
-      this.utensilSectionCursor.set(index);
-      this.scrollToUtensils();
+  /** El filtro de categorias minimizado: un picker del sistema con cuentas y color, no un riel con scroll. */
+  opcionesFiltroCategoria = computed<PickerOption[]>(() => {
+    this.i18n.changeTick();
+    const catalogo = this.pantryService.categories();
+    const base: PickerOption[] = [{ value: '', label: this.i18n.t('pantry.categoria_todos') }];
+    if (catalogo.length === 0) {
+      return [...base, ...this.ingredientCategoriesNoAll.map((cat) => ({ value: cat.value as string, label: this.i18n.t(cat.labelKey) }))];
     }
+    return [
+      ...base,
+      ...catalogo.map((cat) => {
+        const etiqueta = pantryCategoryLabel(cat, (key) => this.i18n.t(key));
+        const cuenta = cat.counts?.descendantProducts ?? cat.counts?.products ?? 0;
+        return {
+          value: cat.key,
+          label: cuenta > 0 ? `${etiqueta} · ${cuenta}` : etiqueta,
+          color: cat.color ?? undefined,
+          group: cat.parentName ?? undefined
+        } satisfies PickerOption;
+      })
+    ];
+  });
+
+  // ── helpers de las celdas proyectadas ──
+  /** El contexto de las plantillas llega como `unknown` (la tabla no conoce el modelo); aqui se viste. */
+  protected filaId(fila: unknown): string { return String((fila as { id: string }).id); }
+  protected filaNombre(fila: unknown): string { return String((fila as { name: string }).name ?? ''); }
+  protected filaCat(fila: unknown): PantryCategoryKey | undefined { return (fila as { category?: PantryCategoryKey }).category; }
+  protected filaIngrediente(fila: unknown): Ingredient { return fila as Ingredient; }
+  protected filaUtensil(fila: unknown): Utensil { return fila as Utensil; }
+  protected filaCantidad(fila: unknown): string { const i = fila as Ingredient; return `${i.quantity} ${i.unit}`; }
+  protected filaDisponible(fila: unknown): boolean { return !!(fila as Utensil).available; }
+  /** La fecha en dd/mm/aaaa, como en el gestor: la tabla recibe el dato crudo y aqui se viste. */
+  protected filaCaducidad(fila: unknown): string {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String((fila as { expirationDate?: string | null }).expirationDate ?? ''));
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
   }
 
-  isUtensilGroupActive(category: UtensilCategory): boolean {
-    if (this.showAllUtensilGroups()) return false;
-    return (this.activeUtensilSection()?.groups ?? []).some(group => group.value === category);
+  protected readonly identificadorDeFila = (fila: unknown): string => String((fila as { id?: string }).id ?? '');
+  protected readonly nombreDeFila = (fila: unknown): string => String((fila as { name?: string }).name ?? '');
+  /** Las clases de siempre, para que la fila siga pareciendo lo que era. */
+  protected readonly claseFilaInv = (): string => 'ingredient-item';
+  protected readonly claseFilaUti = (fila: unknown): string =>
+    'utensil-card' + ((fila as Utensil).available ? ' utensil-card--owned' : '');
+
+  // ── lote (## 12ab): vaciar = PATCH {quantity:0} en bucle; borrar = DELETE en bucle, con confirmacion ──
+  protected loteAnular(): void { this.tablaInv()?.limpiarSeleccion(); }
+  protected loteUtensiliosAnular(): void { this.tablaUti()?.limpiarSeleccion(); }
+
+  protected async loteVaciar(): Promise<void> {
+    const ids = this.inventarioSeleccion().map((f) => this.identificadorDeFila(f)).filter(Boolean);
+    if (ids.length === 0) return;
+    const aceptado = await this.confirmService.confirm({
+      title: this.i18n.t('pantry.lote_titulo_vaciar'),
+      message: this.i18n.t('pantry.lote_pregunta_vaciar', { n: ids.length }),
+      confirmText: this.i18n.t('pantry.lote_vaciar')
+    });
+    if (!aceptado) return;
+    await Promise.all(ids.map(async (id) => {
+      try { await firstValueFrom(this.pantryService.updateIngredient(id, { quantity: 0 })); }
+      catch { /* la recarga pinta lo que haya vuelto; el error ya lo grita el interceptor */ }
+    }));
+    this.tablaInv()?.limpiarSeleccion();
+    await this.recargarInventario();
+    this.toastService.success(this.i18n.t('pantry.lote_vaciados', { n: ids.length }));
   }
 
-  stepUtensilSection(delta: -1 | 1): void {
-    const target = this.activeUtensilSectionIndex() + delta;
-    if (target < 0 || target > this.utensilSections().length - 1) return;
-    this.utensilSectionCursor.set(target);
-    this.scrollToUtensils();
+  protected async loteBorrar(): Promise<void> {
+    const filas = this.inventarioSeleccion().map((f) => f as Ingredient).filter((f) => !!f?.id);
+    if (filas.length === 0) return;
+    const aceptado = await this.confirmService.confirm({
+      title: this.i18n.t('pantry.lote_titulo_borrar'),
+      message: this.i18n.t('pantry.lote_pregunta_borrar', { n: filas.length }),
+      confirmText: this.i18n.t('pantry.lote_borrar')
+    });
+    if (!aceptado) return;
+    await Promise.all(filas.map(async (f) => {
+      try { await firstValueFrom(this.pantryService.deleteIngredient(f.id)); }
+      catch { /* idem: la recarga deja el mapa como esta en el server */ }
+    }));
+    this.tablaInv()?.limpiarSeleccion();
+    await this.recargarInventario();
+    this.toastService.success(this.i18n.t('pantry.lote_borrados', { n: filas.length }));
   }
 
-  prevUtensilSection(): void {
-    this.stepUtensilSection(-1);
-  }
-
-  /** En la última sección el botón pasa a "ver todo" (ya no hay siguiente). */
-  nextUtensilSection(): void {
-    if (this.isLastUtensilSection()) {
-      this.showAllUtensilGroups.set(true);
-      this.scrollToUtensils();
-      return;
-    }
-    this.stepUtensilSection(1);
-  }
-
-  toggleUtensilSections(): void {
-    this.showAllUtensilGroups.update(all => !all);
-    this.scrollToUtensils();
-  }
-
-  previousSectionName(): string {
-    return this.utensilSections()[this.activeUtensilSectionIndex() - 1]?.groups[0]?.label ?? '';
-  }
-
-  nextSectionName(): string {
-    return this.utensilSections()[this.activeUtensilSectionIndex() + 1]?.groups[0]?.label ?? '';
-  }
-
-  /**
-   * Deja visible la sección que contiene un utensilio concreto (tras darlo de
-   * alta, si no, parece que no ha pasado nada: está en otra sección).
-   */
-  private revealUtensil(utensilId: string): void {
-    const index = this.utensilSections().findIndex(section =>
-      section.groups.some(group => group.items.some(u => u.id === utensilId))
-    );
-    if (index >= 0) {
-      this.showAllUtensilGroups.set(false);
-      this.utensilSectionCursor.set(index);
-    }
-  }
-
-  /** Aplica la sección pedida en la URL (tras cargar el catálogo). */
-  private applyUtensilSectionFromUrl(): void {
-    const key = this.pendingUtensilSection ?? this.route.snapshot.queryParamMap.get(UTENSIL_SECTION_PARAM);
-    this.pendingUtensilSection = null;
-
-    const index = key ? this.utensilSectionIndexOfKey(key) : -1;
-    if (index >= 0) this.utensilSectionCursor.set(index);
-    this.syncUtensilSectionParam();
-  }
-
-  /** La sección activa se refleja en la URL (sección 0 = URL limpia). */
-  private syncUtensilSectionParam(): void {
-    const sectionInUrl =
-      this.activeTab() === 'utensils' &&
-      !this.showAllUtensilGroups() &&
-      this.utensilSections().length > 1;
-
-    if (!sectionInUrl) {
-      clearTabParam(this.router, this.route, UTENSIL_SECTION_PARAM);
-      return;
-    }
-
-    writeTabParam(
-      this.router,
-      this.route,
-      UTENSIL_SECTION_PARAM,
-      this.utensilSectionKey(this.activeUtensilSectionIndex()),
-      this.utensilSectionKey(0)
-    );
-  }
-
-  private scrollToUtensils(): void {
-    this.utensilsTop()?.nativeElement.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  protected async loteUtensilios(disponibles: boolean): Promise<void> {
+    const ids = this.utensiliosSeleccion().map((f) => this.identificadorDeFila(f)).filter(Boolean);
+    if (ids.length === 0) return;
+    await Promise.all(ids.map(async (id) => {
+      try { await firstValueFrom(this.pantryService.updateUtensil(id, { available: disponibles })); }
+      catch { /* la lista se recarga al final y pinta la realidad */ }
+    }));
+    this.tablaUti()?.limpiarSeleccion();
+    this.loadUtensils();
+    this.toastService.success(this.i18n.t('pantry.lote_utensilios_actualizados', { n: ids.length }));
   }
 
   private router = inject(Router);
   private route = inject(ActivatedRoute);
 
   /**
-   * La pestaña activa viaja en la URL (?tab=utensils), igual que en el resto de
-   * vistas con pestañas de la aplicación. La sección del catálogo de utensilios
-   * también (?section=tools-2) para que sea enlazable y sobreviva a la recarga.
+   * La pestaña activa viaja en la URL (?tab=utensils), igual que en el resto de vistas con pestañas de
+   * la aplicacion. Busqueda y subarbol tambien (`?buscar=`, `?category=`, ## 12ab): pantalla enlazable
+   * y a prueba de F5. `?section=` ya no existe: la tabla del catalogo lo sustituye.
    */
   constructor() {
     syncTabWithUrl<PantryTab>({
@@ -1200,28 +1088,10 @@ export class PantryComponent implements OnInit {
       values: PANTRY_TABS,
       fallback: 'ingredients',
       current: () => this.activeTab(),
-      onChange: tab => this.activeTab.set(tab)
-    });
-
-    // El catálogo aún no está cargado: la sección se guarda y se aplica al
-    // terminar la carga (si no, el efecto de abajo la limpiaría de la URL).
-    this.pendingUtensilSection = this.route.snapshot.queryParamMap.get(UTENSIL_SECTION_PARAM);
-
-    effect(() => {
-      // Se suscribe a lo que cambia la sección visible...
-      if (this.utensilsLoading()) return;
-      this.activeTab();
-      this.showAllUtensilGroups();
-      this.activeUtensilSectionIndex();
-      // ...y lo escribe en la URL
-      this.syncUtensilSectionParam();
+      onChange: (tab) => this.activeTab.set(tab)
     });
   }
 
-  // Track which utensils are custom (no household seed match by name)
-  // Simple heuristic: custom ones are those whose name doesn't exist in a fresh seed list.
-  // We just let all have a delete button — deletes only affect items the user owns anyway.
-  isCustomUtensil(_u: Utensil): boolean { return true; }
 
   formData = {
     name: '',
@@ -1287,37 +1157,6 @@ export class PantryComponent implements OnInit {
     ...this.ingredientCategoriesNoAll
   ];
 
-  /** Icono de siempre por clave de fabrica: lo que decora el articulo, no lo que la nombra. */
-  private readonly iconosPorClave = new Map<string, string>(this.ingredientCategoriesNoAll.map((cat) => [cat.value as string, cat.icon]));
-
-  /**
-   * Los chips del filtro, del catalogo de la casa (## 12x). Antes eran las doce palabras del codigo, y una
-   * categoria anadida por la familia no tenia forma de filtrarse: se veia en la lista y no habia forma de
-   * llegar a ella. Se leen `changeTick()` a mano porque la etiqueta se resuelve aqui, no en el arbol, y sin
-   * eso el computed no se entera del cambio de idioma.
-   */
-  readonly categoriasFiltro = computed<{ value: string; etiqueta: string }[]>(() => {
-    this.i18n.changeTick();
-    const catalogo = this.pantryService.categories();
-    if (catalogo.length === 0) {
-      return [
-        { value: '', etiqueta: this.i18n.t('pantry.categoria_todos') },
-        ...this.ingredientCategoriesNoAll.map((cat) => ({ value: cat.value as string, etiqueta: this.i18n.t(cat.labelKey) }))
-      ];
-    }
-    return [
-      { value: '', etiqueta: this.i18n.t('pantry.categoria_todos') },
-      ...catalogo.map((cat) => {
-        const etiqueta = pantryCategoryLabel(cat, (key) => this.i18n.t(key));
-        // ## 12aa: el conteo del chip es el SUBARBOL (`descendantProducts`), que es exactamente lo que el
-        // server va a responder al pulsar; el `products` de siempre dejaria al padre prometiendo menos
-        // (o nada) de lo que tiene debajo.
-        const cuenta = cat.counts?.descendantProducts ?? cat.counts?.products ?? 0;
-        return { value: cat.key, etiqueta: cuenta > 0 ? `${etiqueta} · ${cuenta}` : etiqueta };
-      })
-    ];
-  });
-
   /** Las opciones del picker de categoria, con su color y las subcategorias agrupadas bajo su padre. */
   readonly opcionesCategoria = computed<PickerOption[]>(() => {
     this.i18n.changeTick();
@@ -1352,48 +1191,63 @@ export class PantryComponent implements OnInit {
   ];
 
   ngOnInit(): void {
-    // El catalogo de categorias (## 12x): los chips del filtro y el picker del alta se pintan con el, y si la
-    // casa no lo tiene todavia se siembra en el propio server al pedirlo.
+    // El catalogo de categorias (## 12x): el picker del filtro, la columna y el color del punto salen de el.
     this.pantryService.loadCategories();
-    // `?buscar=` llega del gestor de productos («ver en la despensa», ## 12x): la busqueda vive en la URL como
-    // todo lo demas que la pantalla puede querer compartir, y no en un estado que se pierde al entrar.
-    const busqueda = this.route.snapshot.queryParamMap.get('buscar');
-    if (busqueda) this.searchTerm = busqueda;
-    this.pantryService.loadIngredients({ pageSize: PAGE_SIZE });
-    this.pantryService.loadStats();
-    this.loadUtensils();
+    // `?buscar=` llega del boton «ver en la despensa» del gestor y `?category=` es el subarbol elegido:
+    // los dos viajan en la URL (## 12ab), se leen al montar y se reescriben al cambiar —enlazable y a
+    // prueba de F5 sin depender de que el server recuerde nada—.
+    const query = this.route.snapshot.queryParamMap;
+    const busqueda = query.get('buscar');
+    if (busqueda) this.searchTerm.set(busqueda);
+    const categoria = query.get('category');
+    if (categoria) this.filtroCategoria.set(categoria);
+    void this.recargarInventario();
+    void this.loadUtensils();
   }
 
-  private loadUtensils(): void {
+  private async loadUtensils(): Promise<void> {
     this.utensilsLoading.set(true);
-    this.pantryService.loadUtensils().subscribe({
-      next: () => {
-        this.utensilsLoading.set(false);
-        this.applyUtensilSectionFromUrl();
-      },
-      error: () => this.utensilsLoading.set(false)
-    });
+    try { await firstValueFrom(this.pantryService.loadUtensils()); }
+    catch { /* el interceptor ya avisa; la pantalla enseña el empty-state de siempre */ }
+    this.utensilsLoading.set(false);
   }
 
   switchTab(tab: PantryTab): void {
     this.activeTab.set(tab);
   }
 
-  onSearch(): void {
-    this.pantryService.loadIngredients({
-      search: this.searchTerm,
-      category: this.selectedIngCategory() || undefined,
-      pageSize: PAGE_SIZE
-    });
+  /** La busqueda es instantanea sobre lo cargado; la URL solo guarda el estado compartible. */
+  escribirBusqueda(valor: string): void {
+    this.searchTerm.set(valor ?? '');
+    void this.escribirUrl();
   }
 
-  filterByCategory(category: string): void {
-    this.selectedIngCategory.set(category as IngredientCategory | '');
-    this.pantryService.loadIngredients({
-      search: this.searchTerm,
-      category: (category as IngredientCategory) || undefined,
-      pageSize: PAGE_SIZE
-    });
+  elegirCategoria(valor: string | null): void {
+    this.filtroCategoria.set(valor ?? '');
+    void this.escribirUrl();
+  }
+
+  alternarSugerencias(): void {
+    this.sugerenciasAbiertas.update((abierto) => !abierto);
+  }
+
+  /** `?tab=`, `?buscar=` y `?category=` son todo el estado viajero de esta pantalla (## 12ab). */
+  private async escribirUrl(): Promise<void> {
+    const queryParams: Record<string, string> = {};
+    const tab = this.activeTab();
+    if (tab !== 'ingredients') queryParams['tab'] = tab;
+    const busqueda = this.searchTerm().trim();
+    if (busqueda) queryParams['buscar'] = busqueda;
+    if (this.filtroCategoria()) queryParams['category'] = this.filtroCategoria();
+
+    const actual = this.route.snapshot.queryParamMap;
+    const mismo =
+      (actual.get('tab') ?? '') === (queryParams['tab'] ?? '') &&
+      (actual.get('buscar') ?? '') === (queryParams['buscar'] ?? '') &&
+      (actual.get('category') ?? '') === (queryParams['category'] ?? '');
+    if (mismo) return;
+
+    await this.router.navigate(['/pantry'], { queryParams, replaceUrl: true });
   }
 
   /** El boton del header abre el modal de lo que se esta viendo. */
@@ -1413,7 +1267,7 @@ export class PantryComponent implements OnInit {
   private moverStock(ingrediente: Ingredient, delta: number): void {
     const siguiente = Math.max(0, (ingrediente.quantity ?? 0) + delta);
     if (siguiente === ingrediente.quantity) return;
-    this.pantryService.updateIngredient(ingrediente.id, { quantity: siguiente }).subscribe(() => this.reloadIngredients());
+    this.pantryService.updateIngredient(ingrediente.id, { quantity: siguiente }).subscribe(() => { void this.recargarInventario(); });
   }
 
   openAddModal(prefill?: Partial<typeof this.formData>): void {
@@ -1460,14 +1314,11 @@ export class PantryComponent implements OnInit {
     });
   }
 
-  /** Recarga la lista respetando la busqueda y la categoria activas. */
-  private reloadIngredients(): void {
-    this.pantryService.loadIngredients({
-      search: this.searchTerm,
-      category: this.selectedIngCategory() || undefined,
-      pageSize: PAGE_SIZE
+  /** El inventario entero y las stats detras: lo que llama toda mutacion de filas (## 12ab). */
+  private recargarInventario(): Promise<void> {
+    return this.pantryService.cargarInventarioCompleto().then(() => {
+      this.pantryService.loadStats();
     });
-    this.pantryService.loadStats();
   }
 
   saveIngredient(): void {
@@ -1493,7 +1344,7 @@ export class PantryComponent implements OnInit {
         );
         this.closeIngredientModal();
         this.isSaving.set(false);
-        this.reloadIngredients();
+        void this.recargarInventario();
       },
       error: () => {
         this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_guardar'));
@@ -1516,7 +1367,7 @@ export class PantryComponent implements OnInit {
           this.i18n.t('pantry.eliminado'),
           this.i18n.t('pantry.nombre_eliminado', { name: ingredient.name })
         );
-        this.reloadIngredients();
+        void this.recargarInventario();
       },
       error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_eliminar'))
     });
@@ -1592,9 +1443,9 @@ export class PantryComponent implements OnInit {
         this.toastService.success(this.i18n.t('pantry.anadido'), this.i18n.t('pantry.utensilio_anadido', { name }));
         this.closeUtensilModal();
         this.isSavingUtensil.set(false);
-        // Se abre la sección donde ha caído: si no, parece que no se ha
-        // añadido nada (el catálogo va por secciones).
-        this.revealUtensil(created.id);
+        // La tabla pagina, asi que «dejarlo a la vista» ahora es buscarlo: el filtro revela la fila al
+        // instante (## 12ab; antes se saltaba al tramo donde habia caido).
+        this.utensiliosQ.set(name);
       },
       error: () => {
         this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_anadir'));
@@ -1626,13 +1477,6 @@ export class PantryComponent implements OnInit {
     return null;
   }
   trackById(_i: number, item: Ingredient | Utensil): string { return item.id; }
-
-  /**
-   * Sin trackBy, al marcar un utensilio Angular destruia y volvia a crear
-   * los 10 grupos (las filas del computed son objetos nuevos en cada
-   * recalculo): el checkbox perdia el foco y la pagina saltaba arriba.
-   */
-  trackByCategory(_i: number, group: { value: string }): string { return group.value; }
 
   private resetForm(): void {
     this.formData = {
