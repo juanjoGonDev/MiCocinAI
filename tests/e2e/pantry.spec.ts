@@ -33,7 +33,7 @@ async function darAlta(
   if (opts.ubicacion) await elegir(page, '[data-test="pantry-picker-ubicacion"]', opts.ubicacion);
   if (opts.caducidad) await page.fill('input#expiration', opts.caducidad);
   await page.locator('app-modal button[type="submit"]').click();
-  await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
+  await expect(page.locator('.toast--success').last()).toContainText('Agregado');
 }
 
 test.describe('Pantry — inventario en tabla', () => {
@@ -171,6 +171,7 @@ test.describe('Pantry — inventario en tabla', () => {
     await tabla(page).locator('[data-test="tabla-orden-name"]').click(); // click suelto: la columna manda sola otra vez
     await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveText('1');
     await tabla(page).locator('[data-test="tabla-orden-quantity"]').click({ modifiers: ['Shift'] });
+    await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveText('1');
     await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveText('2');
 
     // y a 100 por pagina, la cuenta del pie dice la realidad
@@ -193,7 +194,7 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(dialogo.locator('.modal__title')).toContainText('¿Vaciar los articulos elegidos?');
     await expect(dialogo.locator('.confirm__message')).toContainText('2 articulos');
     await dialogo.getByRole('button', { name: 'Vaciar' }).click();
-    await expect(page.locator('.toast--success .toast__title')).toContainText('2 articulos vaciados');
+    await expect(page.locator('.toast--success').last()).toContainText('2 articulos vaciados');
     await expect(tabla(page)).toHaveCount(0); // ya no hay filas con cantidad: 0
     await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('0');
 
@@ -206,7 +207,7 @@ test.describe('Pantry — inventario en tabla', () => {
     await page.locator('[data-test="pantry-lote-borrar"]').click();
     await expect(dialogo.locator('.modal__title')).toContainText('¿Borrar los articulos elegidos?');
     await dialogo.getByRole('button', { name: 'Borrar' }).click();
-    await expect(page.locator('.toast--success .toast__title')).toContainText('1 articulos borrados');
+    await expect(page.locator('.toast--success').last()).toContainText('1 articulos borrados');
     await expect(fila(page, 'C borrado')).toHaveCount(0);
   });
 
@@ -301,9 +302,11 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(tabla(page).locator('[data-test="tabla-anterior"]')).toBeDisabled();
 
     await tabla(page).locator('[data-test="tabla-siguiente"]').click();
+    // El orden por defecto es el del server (llega por creacion), asi que la pagina 2 se comprueba por su
+    // tamano y su rango, no por cual de las once filas es: la tabla es la que corta, no la pantalla.
     await expect(tabla(page).locator('[data-test="tabla-rango"]')).toContainText('11-11 de 11');
     await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
-    await expect(fila(page, 'Fila 11')).toHaveCount(1);
+    await expect(tabla(page).locator('tr.ingredient-item').first()).toContainText('Fila ');
     await expect(tabla(page).locator('[data-test="tabla-siguiente"]')).toBeDisabled();
   });
 });
