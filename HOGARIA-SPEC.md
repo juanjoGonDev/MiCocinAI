@@ -3259,6 +3259,33 @@ Checklist de esta segunda mitad, medida contra las anotaciones:
       con su anotación, esperando alguien con Playwright delante. Lo que sí se espera es que al anclar el idioma
       varias se alineen solas; si lo hacen, se borran de esta lista con la medición, no a ojo.
 
+
+### La segunda tanda del CI (mismo método: las anotaciones mandan)
+
+Segundo bucle sobre las anotaciones (run `35724969328`, con los localizadores de `pantry-managers` ya
+corregidos): `settings-theme-i18n` pasa ✓, los dos casos de `pantry.spec.ts` que dependían del `<select>` pasan ✓,
+y quedan tres de los míos. Leyéndolos contra el fuente sale **otro bug real de la tanda 25**, y del mismo sitio en
+las dos pantallas: `ngOnInit` leía el `paramMap` pero **nunca leía la `queryParamMap`** —el gestor escribía
+`?filter=&q=&offset=` con `replaceUrl` y al montar los ignoraba—, así que «F5 conserva el filtro, la búsqueda y la
+página» era una promesa del `## 12x` que no se cumplía: entrar por `?filter=in-pantry` pintaba `staples` con la
+caja vacía (y de ahí, también, el botón de borrar «enabled» que mi caso esperaba deshabilitado: la fila que se
+estaba mirando no era del filtro pedido).
+
+- El arreglo vive en el util (`valorDeQuery`, `offsetDeQuery`) y no en cada componente, porque **las dos pantallas
+  tienen que leer el estado exactamente igual**; el valor que la app no conoce cae al de fábrica (la URL es texto
+  libre del navegador, no una entrada de formulario), y el `offset` negativo o no numérico se queda en la
+  primera página. Escrito con TDD en el puente: `pantry-gestor.util.spec.ts` pasa de 13 a **17** y las cuatro
+  nuevas estuvieron en rojo antes de existir las funciones.
+- `pantry-managers` afila dos casos: el del alias entra por URL (`?filter=all&q=levadura%20fresca`) en lugar de
+  teclear en la caja —lo que se prueba es que el alias encuentra el producto, no el `debounce` de un input— y el
+  del F5 comprueba además que **la caja recupera el texto** y que el `view` sigue en la URL.
+- Puertas tras el cambio: `check-ui` 184/20 en 0 · `tsc` app y spec en 0 · `build:prod` completo ·
+  `typecheck:e2e` en 0 · `pantry-gestor.util.spec.ts` 17/17. La suite del server no se vuelve a correr: ningún
+  fichero de `server/` cambia en este tramo.
+- **La regla, esta vez en condiciones**: escribir el estado en la URL y no leerlo al montar es lo mismo que no
+  escribirlo. Cualquier pantalla que prometa «el F5 conserva» tiene que tener su lectura en el `ngOnInit`, y eso
+  se prueba en el util —sin navegador— con un valor desconocido, una ausencia y un número sucio.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
