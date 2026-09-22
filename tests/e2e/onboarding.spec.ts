@@ -160,8 +160,10 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await expect(page.locator('#meal-lunch')).toHaveValue('14:00');
     await expect(page.locator('.tab', { hasText: 'Horarios' })).toContainText('09:00–21:45');
 
-    // El utencilio marcado en el onboarding vive en la despensa, no en un sitio aparte
+    // El utencilio marcado en el onboarding vive en la despensa, no en un sitio aparte.
+    // La tabla pagina, asi que se busca: la prueba no depende de en que pagina caiga.
     await page.goto('/pantry?tab=utensils');
+    await page.fill('input#utensilios-q', 'Airfryer');
     await expect(page.locator('.utensil-card', { hasText: 'Airfryer' })).toHaveClass(
       /utensil-card--owned/
     );
