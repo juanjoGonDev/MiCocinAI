@@ -1,149 +1,309 @@
 import { test, expect } from './fixtures';
-import type { Page } from '@playwright/test';
+import type { Page, Locator } from '@playwright/test';
 import { registerWithHousehold } from './helpers/auth';
 
-test.describe('Pantry', () => {
+/**
+ * El visor del inventario es `app-data-table` desde la ## 12ab: orden por columna, filtros estilo Excel,
+ * paginacion y lote. El riel de chips con scroll y la lista de siempre estan jubilados. Las pruebas
+ * empujan la tabla por los huecos que la pantalla le pasa (busqueda/subarbol en la URL, lote con
+ * confirmacion propia) y dejan los detalles del mecanismo para la spec de la tabla.
+ */
+
+const tabla = (page: Page): Locator => page.locator('[data-test="pantry-tabla-inventario"]');
+const fila = (page: Page, nombre: string): Locator => tabla(page).locator('tr.ingredient-item', { hasText: nombre });
+
+const filasPrimera = (page: Page): Locator => tabla(page).locator('tr.ingredient-item').first();
+
+const elegir = async (page: Page, picker: string, opcion: string): Promise<void> => {
+  const caja = page.locator(picker);
+  await caja.locator('.picker__trigger').click();
+  await caja.locator('.picker__option').filter({ hasText: opcion }).first().click();
+};
+
+/** Alta por el modal de siempre: el visor no tiene formulario propio, y el modal es de la casa. */
+async function darAlta(
+  page: Page,
+  opts: { nombre: string; cantidad: string; categoria?: string; ubicacion?: string; unidad?: string; caducidad?: string }
+): Promise<void> {
+  await page.getByRole('button', { name: '+ Agregar' }).click();
+  await page.fill('input#ingredientName', opts.nombre);
+  await page.fill('input#quantity', opts.cantidad);
+  if (opts.unidad) await page.selectOption('select[name="unit"]', opts.unidad);
+  if (opts.categoria) await elegir(page, '[data-test="pantry-picker-categoria"]', opts.categoria);
+  if (opts.ubicacion) await elegir(page, '[data-test="pantry-picker-ubicacion"]', opts.ubicacion);
+  if (opts.caducidad) await page.fill('input#expiration', opts.caducidad);
+  await page.locator('app-modal button[type="submit"]').click();
+  await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
+}
+
+test.describe('Pantry — inventario en tabla', () => {
   test.beforeEach(async ({ page }) => {
-    // El seed de ingredientes se crea junto al hogar
+    // El seed de ingredientes se crea junto al hogar, todo a cero: el inventario empieza vacio.
     await registerWithHousehold(page, '/pantry');
     await expect(page.locator('h1.pantry__title')).toBeVisible();
   });
 
-  test('should display pantry page', async ({ page }) => {
-    await expect(page.locator('h1.pantry__title')).toContainText('Inventario'); // ## 12aa
-  });
-
-  test('should show stats cards', async ({ page }) => {
+  test('la pagina abre con las stats y la tabla todavia sin llenar', async ({ page }) => {
     await expect(page.locator('.stat-card__label')).toContainText([
       'En inventario',
       'Por caducar',
       'Caducados'
     ]);
-  });
-
-  test('should show search input', async ({ page }) => {
-    await expect(page.locator('input[type="search"]')).toBeVisible();
-  });
-
-  test('should show category filters', async ({ page }) => {
-    const tags = page.locator('app-tag');
-    // ## 12aa: con el arbol sembrado en la casa hay un chip nuevo, y es el del padre. Se ancla aqui el
-    // indice que sube para que quien lea el diff sepa por que se movio Verduras y no se mueva otro por gusto.
-    await expect(tags.nth(0)).toContainText('Todos');
-    await expect(tags.nth(1)).toContainText('Alimentos');
-    await expect(tags.nth(2)).toContainText('Verduras');
-    await expect(tags.nth(3)).toContainText('Frutas');
-  });
-
-  test('should filter by category chip', async ({ page }) => {
-    await page.locator('app-tag', { hasText: 'Verduras' }).click();
-    await expect(page.locator('app-tag .tag--selected')).toContainText('Verduras');
-  });
-
-  test('should open add ingredient modal', async ({ page }) => {
-    await page.getByRole('button', { name: '+ Agregar' }).click();
-
-    await expect(page.locator('.modal__title')).toContainText('Agregar Ingrediente');
-    await expect(page.locator('input#ingredientName')).toBeVisible();
-    await expect(page.locator('input#quantity')).toBeVisible();
-  });
-
-  // Desde la tanda 25 el formulario de la despensa no tiene <select>: categoria y ubicacion son `app-picker`,
-  // que abre una lista de opciones y se pulsa por texto. Con el idioma del arnes anclado en castellano, el texto
-  // es el del diccionario (y en ubicacion lleva el pictograma delante, de ahi que se filtre por substring).
-  const elegir = async (page: Page, picker: string, opcion: string): Promise<void> => {
-    const caja = page.locator(picker);
-    await caja.locator('.picker__trigger').click();
-    await caja.locator('.picker__option').filter({ hasText: opcion }).first().click();
-  };
-
-  test('should add a new ingredient', async ({ page }) => {
-    await page.getByRole('button', { name: '+ Agregar' }).click();
-
-    await page.fill('input#ingredientName', 'Tomate');
-    await page.fill('input#quantity', '500');
-    await elegir(page, '[data-test="pantry-picker-categoria"]', 'Verduras');
-    await elegir(page, '[data-test="pantry-picker-ubicacion"]', 'Nevera');
-
-    await page.locator('app-modal button[type="submit"]').click();
-
-    await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
-    await expect(page.locator('.ingredient-item', { hasText: 'Tomate' })).toHaveCount(1);
-  });
-
-  test('should add an ingredient with expiration date', async ({ page }) => {
-    await page.getByRole('button', { name: '+ Agregar' }).click();
-
-    await page.fill('input#ingredientName', 'Yogur');
-    await page.fill('input#quantity', '6');
-    await elegir(page, '[data-test="pantry-picker-categoria"]', 'Lácteos');
-    await elegir(page, '[data-test="pantry-picker-ubicacion"]', 'Nevera');
-    // <input type="date"> produce YYYY-MM-DD (el backend no debe exigir ISO datetime)
-    await page.fill('input#expiration', '2026-12-31');
-
-    await page.locator('app-modal button[type="submit"]').click();
-
-    await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
-    await expect(page.locator('.ingredient-item', { hasText: 'Yogur' })).toHaveCount(1);
-  });
-
-  test('should close modal on cancel', async ({ page }) => {
-    await page.getByRole('button', { name: '+ Agregar' }).click();
-    await expect(page.locator('.modal__title')).toContainText('Agregar Ingrediente');
-
-    await page.getByRole('button', { name: 'Cancelar' }).click();
-    await expect(page.locator('.modal-overlay')).toHaveCount(0);
-  });
-
-  // --- Seed de ingredientes comunes (sugerencias) -------------------------
-
-  test('should show the common ingredients seeded with the household', async ({ page }) => {
-    const suggestions = page.locator('.suggestions .chip');
-    await expect(page.locator('.suggestions__title')).toContainText('Sugerencias comunes');
-    await expect(suggestions.first()).toBeVisible();
-    // El backend pagina de 20 en 20 y la UI no pagina: se pide una pagina
-    // amplia para que lleguen los 68 ingredientes sembrados.
-    expect(await suggestions.count()).toBeGreaterThan(50);
-  });
-
-  test('suggestions do not count as pantry stock', async ({ page }) => {
-    // "En despensa" solo cuenta items con quantity > 0
     await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('0');
+    await expect(tabla(page)).toHaveCount(0);
   });
 
-  test('el stepper de la fila mueve la cantidad de uno en uno (## 12aa)', async ({ page }) => {
-    await page.getByRole('button', { name: '+ Agregar' }).click();
-    await page.fill('input#ingredientName', 'Tomate stepper');
-    await page.fill('input#quantity', '5');
-    await page.locator('app-modal button[type="submit"]').click();
-    await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
+  test('el alta pinta la fila con su cantidad y sube el contador global', async ({ page }) => {
+    await darAlta(page, { nombre: 'Tomate', cantidad: '500' });
+    await expect(fila(page, 'Tomate')).toHaveCount(1);
+    await expect(fila(page, 'Tomate')).toContainText('500 g'); // el modal nace en gramos
+    await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('1');
+  });
 
-    const fila = page.locator('.ingredient-item', { hasText: 'Tomate stepper' });
-    await expect(fila).toContainText('5 g'); // el modal nace en gramos: el stepper mueve la cantidad, no la unidad
-    await fila.locator('[data-test^="pantry-stock-mas-"]').click();
-    await expect(fila).toContainText('6 g');
-    await fila.locator('[data-test^="pantry-stock-menos-"]').click();
-    await expect(fila).toContainText('5 g');
-    // Bajar a 0 no borra la ficha: la deja en «lo que la casa conoce», que es la semantica de `staples` (## 12x).
-    // Se espera la cifra entre pulsaciones: cinco clicks seguidos pueden leerse contra el cierre de fila
-    // anterior al refresco (el PATCH va al server y la lista vuelve despues), y el run de CI lo enseño con un
-    // «1» de sobra —un stepper que cuenta de uno en uno se prueba de uno en uno—.
+  test('la busqueda es instantanea, ignora mayusculas y acentos, y viaja en la URL', async ({ page }) => {
+    await darAlta(page, { nombre: 'Tomate', cantidad: '500' });
+
+    await page.fill('input#search', 'toma');
+    await expect(fila(page, 'Tomate')).toHaveCount(1);
+    await expect(page).toHaveURL(/[?&]buscar=toma/);
+
+    // mayusculas y acentos: «TOMÁ» sigue valiendo para «tomate»… pero sobre todo no la lian al reescribir
+    await page.fill('input#search', 'TOMATE');
+    await expect(fila(page, 'Tomate')).toHaveCount(1);
+
+    await page.fill('input#search', 'nada-que-ver');
+    await expect(tabla(page)).toHaveCount(0);
+
+    // F5 con la busqueda puesta: la pantalla vuelve igual, sin depender del server
+    await page.reload();
+    await expect(page.locator('input#search')).toHaveValue('nada-que-ver');
+    await expect(tabla(page)).toHaveCount(0);
+
+    await page.fill('input#search', '');
+    await expect(fila(page, 'Tomate')).toHaveCount(1);
+    await expect(page).not.toHaveURL(/buscar=/);
+  });
+
+  test('el filtro de categorias minimiza el riel en un picker y filtra por subarbol', async ({ page }) => {
+    await darAlta(page, { nombre: 'Tomate', cantidad: '500', categoria: 'Verduras' });
+
+    const picker = page.locator('[data-test="pantry-filtro-categoria"]');
+    await picker.locator('.picker__trigger').click();
+    // ## 12aa: el padre (Alimentos) existe como opcion aparte; «Todos» es el valor limpio.
+    const opciones = picker.locator('.picker__option');
+    await expect(opciones.filter({ hasText: 'Todos' })).toHaveCount(1);
+    await expect(opciones.filter({ hasText: 'Verduras' })).toHaveCount(1);
+    await opciones.filter({ hasText: 'Alimentos' }).first().click();
+
+    // «Alimentos» arrastra a sus hijas: el tomate (Verduras) se ve con el padre elegido.
+    await expect(fila(page, 'Tomate')).toHaveCount(1);
+    await expect(page).toHaveURL(/[?&]category=/);
+
+    await picker.locator('.picker__trigger').click();
+    await picker.locator('.picker__option').filter({ hasText: 'Frutas' }).first().click();
+    await expect(tabla(page)).toHaveCount(0);
+
+    // La recarga conserva el subarbol elegido: la pantalla sigue siendo enlazable.
+    await page.reload();
+    await expect(tabla(page)).toHaveCount(0);
+
+    await picker.locator('.picker__trigger').click();
+    await picker.locator('.picker__option').filter({ hasText: 'Todos' }).first().click();
+    await expect(fila(page, 'Tomate')).toHaveCount(1);
+    await expect(page).not.toHaveURL(/category=/);
+  });
+
+  test('el menu de columna filtra por valores como Excel', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'el cabezal con los menus es del reflujo de escritorio; en movil manda la hoja (abajo)');
+    await darAlta(page, { nombre: 'Tomate', cantidad: '500' }); // g
+    await darAlta(page, { nombre: 'Leche', cantidad: '2', unidad: 'l' });
+    await darAlta(page, { nombre: 'Huevos', cantidad: '12', unidad: 'unit' });
+
+    await tabla(page).locator('[data-test="tabla-filtro-unit"]').click();
+    const menu = page.locator('.menu');
+    await menu.locator('.menu__fila', { hasText: 'l' }).locator('button[role="checkbox"]').click();
+
+    await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
+    await expect(fila(page, 'Leche')).toHaveCount(1);
+
+    await menu.locator('[data-test="tabla-menu-limpiar"]').click();
+    await page.keyboard.press('Escape');
+    await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(3);
+  });
+
+  test('la caducidad filtra por «hoy» desde su menu', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'el menu de la columna fecha vive en el cabezal: en movil, lo mismo desde la hoja');
+    const hoy = new Date();
+    const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+    await darAlta(page, { nombre: 'Yogur hoy', cantidad: '6', caducidad: iso });
+    await darAlta(page, { nombre: 'Leche larga', cantidad: '2', caducidad: '2030-01-01' });
+
+    await tabla(page).locator('[data-test="tabla-filtro-expirationDate"]').click();
+    await page.locator('.menu [data-test="tabla-modo-hoy"]').click();
+    await page.keyboard.press('Escape');
+
+    await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
+    await expect(fila(page, 'Yogur hoy')).toHaveCount(1);
+    // y la celda muestra el dia en dd/mm/aaaa, no el ISO del server
+    await expect(fila(page, 'Yogur hoy')).toContainText(`${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`);
+  });
+
+  test('ordenar por columna y orden multiple con shift', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'los botones de orden del cabezal no existen en el reflujo de movil');
+    await darAlta(page, { nombre: 'Tomate', cantidad: '500' });
+    await darAlta(page, { nombre: 'Leche', cantidad: '2' });
+    await darAlta(page, { nombre: 'Huevos', cantidad: '12' });
+
+    const primeraFila = tabla(page).locator('tr.ingredient-item').first();
+
+    await tabla(page).locator('[data-test="tabla-orden-name"]').click(); // primera pulsacion: ascendente
+    await expect(primeraFila).toContainText('Huevos');
+
+    await tabla(page).locator('[data-test="tabla-orden-name"]').click(); // segunda: descendente
+    await expect(primeraFila).toContainText('Tomate');
+
+    // El numero ordena por numero, no por texto: 2 < 12 < 500 (con texto, 12 ganaria a 2 por el '1').
+    await tabla(page).locator('[data-test="tabla-orden-quantity"]').click();
+    await expect(primeraFila).toContainText('Leche');
+
+    // shift+click anade el secundario: por ubicacion ascendente dentro de cantidad ascendente… con una sola
+    // ubicacion sembrada no se aprecia, asi que se comprueba la cabecera: el ② aparece en la columna.
+    await tabla(page).locator('[data-test="tabla-orden-name"]').click(); // click suelto: la columna manda sola otra vez
+    await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveText('1');
+    await tabla(page).locator('[data-test="tabla-orden-quantity"]').click({ modifiers: ['Shift'] });
+    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveText('2');
+
+    // y a 100 por pagina, la cuenta del pie dice la realidad
+    await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
+    await expect(tabla(page).locator('[data-test="tabla-rango"]')).toContainText('de 3');
+  });
+
+  test('el lote: vaciar manda las filas a las sugerencias y borrar las quita, con su confirmacion', async ({ page }) => {
+    await darAlta(page, { nombre: 'A lotazo', cantidad: '10' });
+    await darAlta(page, { nombre: 'B lotazo', cantidad: '20' });
+
+    for (const nombre of ['A lotazo', 'B lotazo']) {
+      await fila(page, nombre).locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]').click();
+    }
+    await expect(page.locator('[data-test="pantry-lote"]')).toContainText('2 seleccionados');
+
+    // vaciar = PATCH {quantity:0} en bucle, con el dialogo propio de la app en medio
+    await page.locator('[data-test="pantry-lote-vaciar"]').click();
+    const dialogo = page.locator('.modal-overlay');
+    await expect(dialogo.locator('.modal__title')).toContainText('¿Vaciar los articulos elegidos?');
+    await expect(dialogo.locator('.confirm__message')).toContainText('2 articulos');
+    await dialogo.getByRole('button', { name: 'Vaciar' }).click();
+    await expect(page.locator('.toast--success .toast__title')).toContainText('2 articulos vaciados');
+    await expect(tabla(page)).toHaveCount(0); // ya no hay filas con cantidad: 0
+    await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('0');
+
+    // y las dos vuelven a «lo que la casa conoce»: el contador del expand sube
+    await expect(page.locator('[data-test="pantry-sugerencias-toggle"]')).toContainText('sin existencias');
+
+    // borrar = DELETE en bucle: las fichas desaparecen del inventario de la casa
+    await darAlta(page, { nombre: 'C borrado', cantidad: '5' });
+    await fila(page, 'C borrado').locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]').click();
+    await page.locator('[data-test="pantry-lote-borrar"]').click();
+    await expect(dialogo.locator('.modal__title')).toContainText('¿Borrar los articulos elegidos?');
+    await dialogo.getByRole('button', { name: 'Borrar' }).click();
+    await expect(page.locator('.toast--success .toast__title')).toContainText('1 articulos borrados');
+    await expect(fila(page, 'C borrado')).toHaveCount(0);
+  });
+
+  test('anular seleccion suelta el lote sin tocar nada', async ({ page }) => {
+    await darAlta(page, { nombre: 'Tomate', cantidad: '500' });
+    await fila(page, 'Tomate').locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]').click();
+    await expect(page.locator('[data-test="pantry-lote"]')).toBeVisible();
+    await page.locator('[data-test="pantry-lote-anular"]').click();
+    await expect(page.locator('[data-test="pantry-lote"]')).toHaveCount(0);
+    await expect(fila(page, 'Tomate')).toHaveCount(1);
+    await expect(fila(page, 'Tomate')).toContainText('500 g');
+  });
+
+  test('el stepper de la fila mueve la cantidad de uno en uno y a cero no borra la ficha', async ({ page }) => {
+    await darAlta(page, { nombre: 'Tomate stepper', cantidad: '5' });
+
+    const filaEst = fila(page, 'Tomate stepper');
+    await filaEst.locator('[data-test^="pantry-stock-mas-"]').click();
+    await expect(filaEst).toContainText('6 g');
+    await filaEst.locator('[data-test^="pantry-stock-menos-"]').click();
+    await expect(filaEst).toContainText('5 g');
+
+    // Bajar a 0 deja la ficha en «lo que la casa conoce» (la semantica de `staples`, ## 12x). Se espera la
+    // cifra entre pulsaciones: el PATCH va al server y la tabla se redrawibera con la recarga completa.
     for (let cantidad = 5; cantidad > 0; cantidad--) {
-      await page.locator('.ingredient-item', { hasText: 'Tomate stepper' }).locator('[data-test^="pantry-stock-menos-"]').click();
+      await page
+        .locator('tr.ingredient-item', { hasText: 'Tomate stepper' })
+        .locator('[data-test^="pantry-stock-menos-"]')
+        .click();
       if (cantidad > 1) {
-        await expect(page.locator('.ingredient-item', { hasText: 'Tomate stepper' })).toContainText(`${cantidad - 1} g`);
+        await expect(page.locator('tr.ingredient-item', { hasText: 'Tomate stepper' })).toContainText(`${cantidad - 1} g`);
       }
     }
-    await expect(page.locator('.ingredient-item', { hasText: 'Tomate stepper' })).toHaveCount(0);
+    await expect(tabla(page).locator('tr.ingredient-item', { hasText: 'Tomate stepper' })).toHaveCount(0);
   });
 
-  test('clicking a suggestion opens the modal prefilled', async ({ page }) => {
-    const chip = page.locator('.suggestions .chip').first();
-    const chipName = (await chip.locator('.chip__name').textContent())!.trim();
+  test('en movil, el orden y el filtro viven en la hoja inferior', async ({ page }, testInfo) => {
+    // La otra cara del cabezal (## 12ab): por debajo de 720 no hay th que pulsar, y el panel entero se
+    // convoca desde la barra movil. El spec de la tabla se prueba aqui porque es esta pantalla la que la
+    // monta; los detalles del panel, en la propia spec de la tabla.
+    test.skip(testInfo.project.name === 'chromium', 'la hoja es el reflujo de movil: en cabecera no hay boton que abrir');
+    await darAlta(page, { nombre: 'Tomate', cantidad: '500' }); // g
+    await darAlta(page, { nombre: 'Leche', cantidad: '2', unidad: 'l' });
 
+    await tabla(page).locator('[data-test="tabla-hoja-abrir"]').click();
+    await expect(page.locator('[data-test="tabla-hoja"]')).toBeVisible();
+
+    // primero el orden, desde la lista de columnas de la hoja
+    await page.locator('[data-test="hoja-orden-name"]').click();
+    await expect(filasPrimera(page)).toContainText('Leche');
+
+    // y el filtro: la hoja encaja el mismo panel del cabezal, sin copias
+    await page.locator('[data-test="hoja-filtro-unit"]').click();
+    await page.locator('.hoja__cuerpo .menu__fila', { hasText: 'l' }).locator('button[role="checkbox"]').click();
+    await page.locator('[data-test="hoja-cerrar"]').click();
+
+    await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
+    await expect(fila(page, 'Leche')).toHaveCount(1);
+  });
+
+  test('las sugerencias viven en un expand cerrado; al abrirlo, el chip prellena el alta', async ({ page }) => {
+    await expect(page.locator('.suggestions__title')).toContainText('Sugerencias comunes');
+    await expect(page.locator('.suggestions .chip')).toHaveCount(0); // cerrado por defecto (## 12ab)
+
+    const toggle = page.locator('[data-test="pantry-sugerencias-toggle"]');
+    await expect(toggle).toContainText('sin existencias');
+    await toggle.click();
+
+    // El seed del hogar siembra el catalogo entero a cero: decenas de chips ahora visibles
+    const chips = page.locator('.suggestions .chip');
+    expect(await chips.count()).toBeGreaterThan(50);
+
+    const chip = chips.first();
+    const chipNombre = (await chip.locator('.chip__name').textContent())!.trim();
     await chip.click();
 
     await expect(page.locator('.modal__title')).toContainText('Agregar Ingrediente');
-    await expect(page.locator('input#ingredientName')).toHaveValue(chipName);
+    await expect(page.locator('input#ingredientName')).toHaveValue(chipNombre);
+    await page.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true'); // sigue abierta: nadie la cerro
+  });
+
+  test('paginar: el tamano corta y las flechas mueven la ventana de filas', async ({ page }) => {
+    // Once filas con nombre numerado: a 10 por pagina, la onceava vive en la pagina 2
+    for (let i = 1; i <= 11; i++) {
+      await darAlta(page, { nombre: `Fila ${String(i).padStart(2, '0')}`, cantidad: String(i) });
+    }
+    await tabla(page).locator('[data-test="tabla-tamano-10"]').click();
+
+    await expect(tabla(page).locator('[data-test="tabla-rango"]')).toContainText('1-10 de 11');
+    await expect(tabla(page).locator('[data-test="tabla-pagina"]')).toContainText('Pagina 1 de 2');
+    await expect(tabla(page).locator('[data-test="tabla-anterior"]')).toBeDisabled();
+
+    await tabla(page).locator('[data-test="tabla-siguiente"]').click();
+    await expect(tabla(page).locator('[data-test="tabla-rango"]')).toContainText('11-11 de 11');
+    await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
+    await expect(fila(page, 'Fila 11')).toHaveCount(1);
+    await expect(tabla(page).locator('[data-test="tabla-siguiente"]')).toBeDisabled();
   });
 });

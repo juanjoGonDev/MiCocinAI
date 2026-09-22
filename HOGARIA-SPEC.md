@@ -3659,25 +3659,25 @@ propio spec para no mezclar 3 reescrituras e2e más en el lote de CI de esta.
 
 ### Checklist de la tanda
 
-- [ ] `data-table.util.ts` + spec (TDD: rojo primero): únicos con cuenta y orden estable, predicados por tipo
+- [x] `data-table.util.ts` + spec (TDD: rojo primero): únicos con cuenta y orden estable, predicados por tipo
       (texto/enum casillas, numero condiciones, fecha condiciones con huecos tolerados), orden multi-clave
       (asc/desc/ninguno, mezcla de tipos, `null` al final), paginación (recorte, fuera de rango al filtrar).
-- [ ] `data-table.component.ts`: cabecera con orden cíclico + Shift, menú de filtro popover (un panel vivo),
+- [x] `data-table.component.ts`: cabecera con orden cíclico + Shift, menú de filtro popover (un panel vivo),
       selección con casillas y emisión, lote por proyección, paginación con tamaño, modo tarjetas <720px y hoja
       inferior con los mismos controles, estado vacío con clave i18n.
-- [ ] Servicio: `cargarInventarioCompleto()` (loop 100, tope 2.000) sin tocar `loadIngredients` (lo usan otras
+- [x] Servicio: `cargarInventarioCompleto()` (loop 100, tope 2.000) sin tocar `loadIngredients` (lo usan otras
       pantallas); en el visor, búsqueda y categoría client-side con URL leída y escrita; `clavesSubarbol` en el
       util del gestor (misma semántica que el server).
-- [ ] Visor: picker de categorías (con cuenta, color, grupo) sustituyendo al riel con scroll; expand de
+- [x] Visor: picker de categorías (con cuenta, color, grupo) sustituyendo al riel con scroll; expand de
       sugerencias cerrado por defecto; tabla de inventario con las 7 columnas; lote vaciar/borrar con
       confirmación propia y un toast; stepper y acciones intactos en su celda; fuera los emojis de ubicación.
-- [ ] Utensilios: tabla (nombre, categoría, estado con casilla, acciones), lote de marcado, fuera tramos y
+- [x] Utensilios: tabla (nombre, categoría, estado con casilla, acciones), lote de marcado, fuera tramos y
       `?section=`; modal de alta y texto de intro, como estaban.
-- [ ] i18n: claves `ui.tabla_*` (orden, filtros, hoja, selección, paginación) y las nuevas de `pantry.*` en los
+- [x] i18n: claves `ui.tabla_*` (orden, filtros, hoja, selección, paginación) y las nuevas de `pantry.*` en los
       dos idiomas; ninguna cadena escrita a mano; ninguna clave huérfana (check-ui 15).
-- [ ] e2e en la misma tanda: `pantry.spec` y `utensils.spec` reescritos (más el test de móvil de la hoja);
+- [x] e2e en la misma tanda: `pantry.spec` y `utensils.spec` reescritos (más el test de móvil de la hoja);
       ningún botón pintado sin destino verificado en la plantilla tocada.
-- [ ] Puertas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration
+- [x] Puertas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration
       production` completo · suite del server (intacta, pero verde por si el picker cambia algo).
 - [ ] Run de CI como juez de los e2e y su bucle de fixes.
 - [ ] Validación manual del usuario en la preview (escritorio y móvil emulado).

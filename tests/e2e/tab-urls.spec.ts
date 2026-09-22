@@ -72,26 +72,40 @@ test.describe('Pestañas y URL', () => {
     await expect(page.locator('.tab--active')).toContainText('Cuenta');
   });
 
-  test('la sección del catálogo de utensilios también viaja en la URL', async ({ page }) => {
-    await registerWithHousehold(page, '/pantry?tab=utensils');
-    await expect(page.locator('.utensil-group__title').first()).toContainText('Horno');
+  test('la busqueda y la categoria del inventario viajan en la URL (## 12ab)', async ({ page }) => {
+    await registerWithHousehold(page, '/pantry');
+    await expect(page.locator('h1.pantry__title')).toBeVisible();
 
-    // La primera sección es la por defecto: no ensucia la URL
-    await expect(page).not.toHaveURL(/[?&]section=/);
+    // Escribir en la busqueda no navega a ningun otro sitio: reescribe la URL de la pantalla, sin historial.
+    await page.fill('input#search', 'Leche');
+    await expect(page).toHaveURL(/[?&]buscar=Leche/);
 
-    await page.getByRole('button', { name: /Siguiente:/ }).click();
-    await expect(page).toHaveURL(/[?&]section=cookware/);
+    // El subarbol elegido tambien viaja, y los dos sobreviven a la recarga.
+    const picker = page.locator('[data-test="pantry-filtro-categoria"]');
+    await picker.locator('.picker__trigger').click();
+    await picker.locator('.picker__option').filter({ hasText: 'Verduras' }).first().click();
+    await expect(page).toHaveURL(/category=/);
 
     await page.reload();
-    await expect(page.locator('.utensil-group__title').first()).toContainText('Ollas / Sartenes');
+    await expect(page.locator('input#search')).toHaveValue('Leche');
+    await expect(picker.locator('.picker__trigger')).toContainText('Verduras');
 
-    // Y se puede enlazar directamente a una sección
-    await page.goto('/pantry?tab=utensils&section=tools');
-    await expect(page.locator('.utensil-group__title').first()).toContainText('Herramientas');
+    // Y se puede enlazar la vista directamente
+    await page.goto('/pantry?buscar=Tomate');
+    await expect(page.locator('input#search')).toHaveValue('Tomate');
 
-    // Fuera de la pestaña de utensilios el parametro no tiene sentido
-    await page.locator('.tab', { hasText: 'Ingredientes' }).click();
-    await expect(page).not.toHaveURL(/section=/);
+    // Quitar los dos filtros deja la URL limpia: el estado vacio no se inventa un parametro.
+    await page.fill('input#search', '');
+    await picker.locator('.picker__trigger').click();
+    await picker.locator('.picker__option').filter({ hasText: 'Todos' }).first().click();
+    await expect(page).not.toHaveURL(/buscar=/);
+    await expect(page).not.toHaveURL(/category=/);
+
+    // `?section=` se jubilo con los tramos: la tabla lo sustituyo. El parametro, si alguien lo escribe a
+    // mano, es decorativo: la pantalla lo ignora y pinta la tabla entera igualmente.
+    await page.goto('/pantry?tab=utensils&section=tools-2');
+    await expect(page.locator('.utensils')).toBeVisible();
+    await expect(page.locator('[data-test="utensilios-tabla"]')).toBeVisible();
   });
 
   test('las pestañas del modal de comida también cambian la URL', async ({ page }) => {
