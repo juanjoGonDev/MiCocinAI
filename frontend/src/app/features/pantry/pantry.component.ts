@@ -678,7 +678,7 @@ const PAGE_SIZE = 100;
     @media (min-width: 960px) {
       .pantry__filters { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: var(--space-4); align-items: start; }
       .pantry__filter-tags {
-        margin-top: 0; flex-direction: column; align-items: stretch;
+        margin-top: 0; flex-direction: column; align-items: flex-start;
         overflow: auto; max-height: 232px; position: sticky; top: var(--space-4);
         padding: var(--space-3); background: var(--bg-secondary);
         border: 1px solid var(--border-default); border-radius: var(--radius-xl);

@@ -41,7 +41,7 @@ test.describe('El gestor del inventario', () => {
     await expect(page).toHaveURL(/\/pantry\/categories$/);
 
     // La pagina por defecto son diez filas: la nueva se busca por su nombre, no se cuenta a mano.
-    await page.locator('#gestor-categorias-q input').fill('Frutos secos');
+    await page.locator('#gestor-categorias-q').fill('Frutos secos');
     const fila = page.locator('[data-test="gestor-categorias-fila-frutos secos"]');
     await expect(fila).toBeVisible();
     await expect(fila.locator('.fila__padre')).toHaveText('Frutas');
@@ -50,7 +50,7 @@ test.describe('El gestor del inventario', () => {
 
   test('la reserva no se puede romper desde ninguno de los dos sitios', async ({ page }) => {
     await page.goto('/pantry/categories');
-    await page.locator('#gestor-categorias-q input').fill('Otros');
+    await page.locator('#gestor-categorias-q').fill('Otros');
     const fila = page.locator('[data-test="gestor-categorias-fila-other"]');
     await expect(fila.locator('[data-test^="gestor-categorias-borrar-"]')).toBeDisabled();
 
@@ -142,6 +142,9 @@ test.describe('El gestor del inventario', () => {
   });
 
   test('volver lleva a la lista desde la ficha, y al inventario desde la lista', async ({ page }) => {
+    // Fallo del propio test, no de la pantalla: en la tanda 28 se escribió el click sin navegar antes, y en
+    // /pantry el boton del gestor no existe —eso es lo que el CI enseño a la primera—.
+    await page.goto('/pantry/categories');
     // El boton vive en la cabecera de las dos pantallas, o sea que las dos tienen que llevar a algun lado. Estaba
     // guardado por «esto es una ficha?», que en la lista es falso, y el resultado era un boton que no hacia nada:
     // «el boton de volver al inventario no funciona». Se decide por la URL, no por el estado, porque durante el

@@ -119,11 +119,11 @@ test.describe('Pantry', () => {
     await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
 
     const fila = page.locator('.ingredient-item', { hasText: 'Tomate stepper' });
-    await expect(fila).toContainText('5 unit');
+    await expect(fila).toContainText('5 g'); // el modal nace en gramos: el stepper mueve la cantidad, no la unidad
     await fila.locator('[data-test^="pantry-stock-mas-"]').click();
-    await expect(fila).toContainText('6 unit');
+    await expect(fila).toContainText('6 g');
     await fila.locator('[data-test^="pantry-stock-menos-"]').click();
-    await expect(fila).toContainText('5 unit');
+    await expect(fila).toContainText('5 g');
     // Bajar a 0 no borra la ficha: la deja en «lo que la casa conoce», que es la semantica de `staples` (## 12x).
     for (let i = 0; i < 5; i++) {
       await page.locator('.ingredient-item', { hasText: 'Tomate stepper' }).locator('[data-test^="pantry-stock-menos-"]').click();

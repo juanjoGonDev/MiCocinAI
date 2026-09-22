@@ -565,7 +565,12 @@ export class PantryCategoriesComponent implements OnInit {
    * navegador—, y a diferencia de `localStorage` no deja la sorpresa de «por que mi lista aparece filtrada».
    */
   private async escribirUrl(): Promise<void> {
-    await this.router.navigate(['../'], {
+    // `['../']` relativo, desde la LISTA, dependía de cómo Angular subiera un tramo por encima de una ruta sin
+    // params: según eso era no-op o era un salto que desmontaba la pantalla —y las dos lecturas explican cosas
+    // distintas del CI de la tanda 29, que es justo el problema de navegar «hacia arriba» en vez de «a casa».
+    // El estado se escribe sobre la URL propia, absoluta; cerrar la ficha es otro paso (salvar/borrar) y no
+    // pasa por aqui desde la Tanda 28.
+    await this.router.navigate(['/pantry/categories'], {
       relativeTo: this.route,
       queryParams: { view: this.view === 'all' ? null : this.view, q: this.q || null, offset: this.offset || null },
       queryParamsHandling: 'merge',
