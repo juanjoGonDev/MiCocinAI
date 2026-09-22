@@ -292,7 +292,9 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
         La hoja inferior del movil y el menu de filtro comparten el panel: un solo DOM vivo por menu (la regla
         del spec; dos copias del mismo control serian dos formas de que se contradigan).
       -->
-      @if (menu() !== null || hoja()) {
+      /* El velo es de la hoja: el popover del cabezal vive dentro del th (contexto de apilado propio) y un
+         velo encima le robaría cada clic. Fuera se cierra solo, como los menús que imitamos (## 12ab). */
+      @if (hoja()) {
         <div class="tabla__velo" (click)="cerrarCapas()" data-test="tabla-velo"></div>
       }
       @if (hoja()) {
@@ -387,7 +389,7 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
                 [class.modo--on]="modoDe(col) === m.clave"
                 [attr.data-test]="'tabla-modo-' + m.clave"
                 (click)="ponerModo(col, m.clave)"
-              >{{ m.etiqueta }}</button>
+              >{{ m.etiqueta | t }}</button>
             }
           </div>
           @if (necesitaA(col)) {
@@ -981,6 +983,15 @@ export class DataTableComponent implements AfterContentInit {
     return this.columnas().find((c) => c.clave === m.col) ?? null;
   }
   protected ponerBusqueda(valor: string): void { this.busquedaMenu.set(valor ?? ''); }
+
+  /** Un clic fuera del popover del cabezal lo cierra (dentro no llega: el propio menu corta la propagacion). */
+  @HostListener('document:click', ['$event.target'])
+  protected alClicFuera(alvo: HTMLElement | null): void {
+    const m = this.menu();
+    if (!m || m.sup !== 'cabezal') return;
+    if (alvo?.closest('.th__emb, .th__menu')) return;
+    this.menu.set(null);
+  }
 
   @HostListener('document:keydown.escape')
   protected alEscape(): void { if (this.menu() || this.hoja()) this.cerrarCapas(); }
