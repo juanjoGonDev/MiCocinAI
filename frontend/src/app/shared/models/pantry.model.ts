@@ -99,6 +99,51 @@ export interface PantryProductInput {
   aliases?: string[] | null;
 }
 
+/**
+ * El catalogo pre-registrado del super (## 12aa). Es dato de fabrica: no vive en ninguna tabla y su `id`
+ * (`hoja:indice`) es una referencia efimera —lo que se guarda en la casa al anadir es el nombre, la unidad y
+ * la categoria—.
+ */
+export interface PantryCatalogCategory {
+  key: string;
+  name: string;
+  color: string;
+  /** `null` = padre de seis; lo demas cuelga de uno. */
+  parent: string | null;
+  productCount: number;
+}
+
+export interface PantryCatalogProduct {
+  id: string;
+  name: string;
+  unit: MeasurementUnit;
+  category: string;
+  /** La etiqueta del pasillo, en el vocabulario del catalogo (no de la casa). */
+  categoryLabel: string;
+  /** Si ese nombre ya es un producto de la casa (clave `productKeyOf`, no un parecidos). */
+  inHousehold: boolean;
+}
+
+export interface PantryCatalogQuery {
+  q?: string;
+  /** Hoja o padre; con padre, el server responde el subarbol. */
+  category?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface PantryCatalogListResult {
+  data: PantryCatalogProduct[];
+  meta: { total: number; limit: number; offset: number };
+  hasMore: boolean;
+}
+
+export interface PantryCatalogAddResult {
+  added: number;
+  skipped: number;
+  categoriesCreated: number;
+}
+
 export type PantryProductFilter = 'all' | 'staples' | 'in-pantry' | 'expiring';
 export type PantryProductSort = 'name' | 'recent';
 

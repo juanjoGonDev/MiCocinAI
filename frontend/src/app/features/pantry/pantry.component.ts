@@ -14,6 +14,8 @@ import { BadgeComponent } from '../../shared/components/ui/badge/badge.component
 import { TagComponent } from '../../shared/components/ui/tag/tag.component';
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { colorDeCategoria } from './pantry-gestor.util';
 import {
   Ingredient,
   IngredientCategory,
@@ -65,7 +67,8 @@ const PAGE_SIZE = 100;
     BadgeComponent, TagComponent, ModalComponent, LoadingComponent
   , CatalogLabelPipe,
     PantryCategoryLabelPipe,
-    PickerComponent],
+    PickerComponent,
+    IconComponent],
   template: `
     <div class="pantry">
       <!-- Header -->
@@ -73,9 +76,15 @@ const PAGE_SIZE = 100;
         <div class="pantry__title-section">
           <h1 class="pantry__title">{{ 'pantry.title' | t }}</h1>
         </div>
-        <app-button variant="primary" (onClick)="openAddModal()">
-          {{ addButtonLabel() }}
-        </app-button>
+        <div class="pantry__header-acciones">
+          <!-- ## 12aa: el alta manual sigue, pero la puerta rapida al inventario de la casa es el catalogo. -->
+          <app-button variant="secondary" (onClick)="abrirCatalogo()" data-test="pantry-anadir-catalogo">
+            {{ 'pantry.catalogo_anadir' | t }}
+          </app-button>
+          <app-button variant="primary" (onClick)="openAddModal()">
+            {{ addButtonLabel() }}
+          </app-button>
+        </div>
       </div>
 
       <!-- Tabs -->
@@ -104,21 +113,21 @@ const PAGE_SIZE = 100;
         <!-- Stats Cards -->
         <div class="pantry__stats" *ngIf="pantryService.stats() as stats">
           <div class="stat-card stat-card--total">
-            <span class="stat-card__icon">📦</span>
+            <span class="stat-card__icon"><app-icon name="inventory_2" [size]="22" [label]="null" /></span>
             <div class="stat-card__content">
               <span class="stat-card__value">{{ inPantryCount() }}</span>
               <span class="stat-card__label">{{ 'pantry.en_despensa' | t }}</span>
             </div>
           </div>
           <div class="stat-card stat-card--warning">
-            <span class="stat-card__icon">⚠️</span>
+            <span class="stat-card__icon"><app-icon name="schedule" [size]="22" [label]="null" /></span>
             <div class="stat-card__content">
               <span class="stat-card__value">{{ stats.expiringSoon }}</span>
               <span class="stat-card__label">{{ 'pantry.por_caducar' | t }}</span>
             </div>
           </div>
           <div class="stat-card stat-card--danger">
-            <span class="stat-card__icon">❌</span>
+            <span class="stat-card__icon"><app-icon name="error_outline" [size]="22" [label]="null" /></span>
             <div class="stat-card__content">
               <span class="stat-card__value">{{ stats.expired }}</span>
               <span class="stat-card__label">{{ 'pantry.caducados' | t }}</span>
@@ -138,6 +147,10 @@ const PAGE_SIZE = 100;
             </button>
             <button type="button" class="gestion__enlace" (click)="abrirGestor('products')" data-test="pantry-abrir-productos">
               {{ 'pantry.gestor_productos' | t }}
+            </button>
+            <button type="button" class="gestion__enlace" (click)="abrirGestor('catalogo')" data-test="pantry-abrir-catalogo">
+              <app-icon name="storefront" [size]="16" [label]="null" />
+              <span>{{ 'pantry.catalogo_titulo' | t }}</span>
             </button>
           </span>
         </div>
@@ -182,7 +195,7 @@ const PAGE_SIZE = 100;
                 (click)="quickAddSuggestion(s)"
                 [title]="s.name | catalog"
               >
-                <span class="chip__icon">{{ getCategoryIcon(s.category) }}</span>
+                <span class="chip__punto" [style.background]="colorDe(s.category)" aria-hidden="true"></span>
                 <span class="chip__name">{{ s.name | catalog }}</span>
                 <span class="chip__plus">+</span>
               </button>
@@ -195,10 +208,32 @@ const PAGE_SIZE = 100;
               *ngFor="let ingredient of inPantry(); trackBy: trackById"
               class="ingredient-item"
             >
-              <div class="ingredient-item__icon">{{ getCategoryIcon(ingredient.category) }}</div>
+              <span class="ingredient-item__punto" [style.background]="colorDe(ingredient.category)" aria-hidden="true"></span>
               <div class="ingredient-item__info">
                 <span class="ingredient-item__name">{{ ingredient.name | catalog }}</span>
-                <span class="ingredient-item__quantity">{{ ingredient.quantity }} {{ ingredient.unit }}</span>
+                <span class="pantry__stock">
+                  <button
+                    type="button"
+                    class="stock-btn"
+                    [attr.aria-label]="'pantry.quitar_unidad' | t"
+                    [attr.title]="'pantry.quitar_unidad' | t"
+                    (click)="quitarUnidad(ingredient)"
+                    [attr.data-test]="'pantry-stock-menos-' + ingredient.id"
+                  >
+                    <app-icon name="remove" [size]="16" [label]="null" />
+                  </button>
+                  <span class="ingredient-item__quantity">{{ ingredient.quantity }} {{ ingredient.unit }}</span>
+                  <button
+                    type="button"
+                    class="stock-btn"
+                    [attr.aria-label]="'pantry.anadir_unidad' | t"
+                    [attr.title]="'pantry.anadir_unidad' | t"
+                    (click)="anadirUnidad(ingredient)"
+                    [attr.data-test]="'pantry-stock-mas-' + ingredient.id"
+                  >
+                    <app-icon name="add" [size]="16" [label]="null" />
+                  </button>
+                </span>
               </div>
               <div class="ingredient-item__meta">
                 <app-badge
@@ -211,8 +246,26 @@ const PAGE_SIZE = 100;
                 <span class="ingredient-item__location">{{ getLocationIcon(ingredient.location) }}</span>
               </div>
               <div class="ingredient-item__actions">
-                <button type="button" class="action-btn" (click)="editIngredient(ingredient)">✏️</button>
-                <button type="button" class="action-btn action-btn--danger" (click)="deleteIngredient(ingredient)">🗑️</button>
+                <button
+                  type="button"
+                  class="action-btn"
+                  [attr.aria-label]="'pantry.editar_ingrediente' | t"
+                  [attr.title]="'pantry.editar_ingrediente' | t"
+                  (click)="editIngredient(ingredient)"
+                  [attr.data-test]="'pantry-editar-' + ingredient.id"
+                >
+                  <app-icon name="edit" [size]="16" [label]="null" />
+                </button>
+                <button
+                  type="button"
+                  class="action-btn action-btn--danger"
+                  [attr.aria-label]="'pantry.eliminar_ingrediente' | t"
+                  [attr.title]="'pantry.eliminar_ingrediente' | t"
+                  (click)="deleteIngredient(ingredient)"
+                  [attr.data-test]="'pantry-eliminar-' + ingredient.id"
+                >
+                  <app-icon name="delete" [size]="16" [label]="null" />
+                </button>
               </div>
             </div>
 
@@ -564,24 +617,31 @@ const PAGE_SIZE = 100;
       color: var(--primary-dark);
     }
 
-    /* Stats */
+    /* Stats: una franja profesional, no tres tarjetas sueltas (## 12aa). Una sola superficie con tres celdas
+       separadas por un hilo, y la cifra en tabular-nums para que el numero no baile al refrescar. */
     .pantry__stats {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: var(--space-3);
-      margin-bottom: var(--space-5);
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-bottom: var(--space-5); background: var(--bg-secondary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-xl); overflow: hidden;
     }
     .stat-card {
-      display: flex; align-items: center; gap: var(--space-3);
-      padding: var(--space-3); background: var(--bg-secondary);
-      border-radius: var(--radius-lg); border: 1px solid var(--border-default);
+      display: flex; align-items: center; gap: var(--space-3); min-width: 0;
+      padding: var(--space-3) var(--space-4); color: var(--text-secondary);
     }
-    .stat-card__icon { font-size: var(--text-2xl); }
-    .stat-card__content { display: flex; flex-direction: column; }
-    .stat-card__value { font-size: var(--text-xl); font-weight: var(--font-bold); }
+    .stat-card + .stat-card { border-left: 1px solid var(--border-default); }
+    .stat-card__icon { display: grid; place-items: center; flex: none; }
+    .stat-card__content { display: flex; flex-direction: column; min-width: 0; }
+    .stat-card__value { font-size: var(--text-xl); font-weight: var(--font-bold); font-variant-numeric: tabular-nums; }
     .stat-card__label { font-size: var(--text-xs); color: var(--text-secondary); }
+    @media (max-width: 600px) {
+      .pantry__stats { grid-template-columns: 1fr; }
+      .stat-card + .stat-card { border-left: none; border-top: 1px solid var(--border-default); }
+    }
     .stat-card--warning .stat-card__value { color: var(--warning); }
     .stat-card--danger .stat-card__value { color: var(--error); }
+
+    .pantry__header-acciones { display: flex; align-items: center; gap: var(--space-2); }
 
     .pantry__filters { margin-bottom: var(--space-5); }
     /* La entrada al catalogo vive dentro de la pantalla del inventario y antes era una fila de botones sueltos:
@@ -608,8 +668,21 @@ const PAGE_SIZE = 100;
     .gestion__enlace:hover { border-color: var(--border-strong); background: var(--primary-subtle); }
     .gestion__enlace:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
+    /* Los mismos app-tag de siempre: scroller horizontal en movil, riel en columna a partir de 960px, al
+       lado del buscador. Un solo DOM —lo que cambia es el reflujo— (## 12aa). */
     .pantry__filter-tags {
-      display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3);
+      display: flex; flex-wrap: nowrap; gap: var(--space-2); margin-top: var(--space-3);
+      overflow-x: auto; scrollbar-width: thin; -webkit-overflow-scrolling: touch; padding-bottom: 2px;
+    }
+    .pantry__filter-tags app-tag { flex: none; }
+    @media (min-width: 960px) {
+      .pantry__filters { display: grid; grid-template-columns: minmax(0, 1fr) 260px; gap: var(--space-4); align-items: start; }
+      .pantry__filter-tags {
+        margin-top: 0; flex-direction: column; align-items: stretch;
+        overflow: auto; max-height: 232px; position: sticky; top: var(--space-4);
+        padding: var(--space-3); background: var(--bg-secondary);
+        border: 1px solid var(--border-default); border-radius: var(--radius-xl);
+      }
     }
 
     .pantry__list { display: flex; flex-direction: column; gap: var(--space-2); }
@@ -622,22 +695,37 @@ const PAGE_SIZE = 100;
       transition: var(--transition-fast);
       &:hover { border-color: var(--border-strong); }
     }
-    .ingredient-item__icon { font-size: var(--text-2xl); width: 40px; text-align: center; }
+    .ingredient-item__punto { flex: none; width: 12px; height: 12px; border-radius: var(--radius-full); }
+    .pantry__stock { display: inline-flex; align-items: center; gap: var(--space-1); }
+    .stock-btn {
+      display: grid; place-items: center; width: 36px; height: 36px; color: var(--text-secondary);
+      background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md);
+      cursor: pointer; transition: var(--transition-fast);
+    }
+    .stock-btn:hover { color: var(--primary); border-color: var(--border-strong); background: var(--primary-subtle); }
+    .stock-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    @media (max-width: 959px) { .stock-btn { width: 44px; height: 44px; } }
     .ingredient-item__info { flex: 1; display: flex; flex-direction: column; }
     .ingredient-item__name { font-size: var(--text-sm); font-weight: var(--font-medium); }
     .ingredient-item__quantity { font-size: var(--text-xs); color: var(--text-secondary); }
     .ingredient-item__meta { display: flex; align-items: center; gap: var(--space-2); }
     .ingredient-item__location { font-size: var(--text-lg); }
-    .ingredient-item__actions {
-      display: flex; gap: var(--space-1); opacity: 0; transition: var(--transition-fast);
+    /* En tactil las acciones no se esconden hasta pasar por encima: en una pantalla de movil no hay hover,
+       y un boton que no se puede tocar no existe (## 12aa). */
+    .ingredient-item__actions { display: flex; gap: var(--space-1); transition: var(--transition-fast); }
+    @media (hover: hover) {
+      .ingredient-item__actions { opacity: 0; }
+      .ingredient-item:hover .ingredient-item__actions { opacity: 1; }
+      .ingredient-item:focus-within .ingredient-item__actions { opacity: 1; }
     }
-    .ingredient-item:hover .ingredient-item__actions { opacity: 1; }
     .action-btn {
       display: flex; align-items: center; justify-content: center;
-      width: 32px; height: 32px; border-radius: var(--radius-md);
+      width: 40px; height: 40px; border-radius: var(--radius-md);
       background: none; border: none; cursor: pointer; transition: var(--transition-fast);
-      &:hover { background: var(--bg-tertiary); }
-      &--danger:hover { background: var(--error-subtle); }
+      color: var(--text-secondary);
+      &:hover { background: var(--bg-tertiary); color: var(--primary); }
+      &:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+      &--danger:hover { background: var(--error-subtle); color: var(--error); }
     }
 
     /* Suggestions */
@@ -666,7 +754,7 @@ const PAGE_SIZE = 100;
         transform: translateY(-1px);
       }
     }
-    .chip__icon { font-size: 14px; }
+    .chip__punto { flex: none; width: 10px; height: 10px; border-radius: var(--radius-full); }
     .chip__plus { color: var(--primary); font-weight: var(--font-bold); }
 
     /* Utensils */
@@ -1180,8 +1268,18 @@ export class PantryComponent implements OnInit {
   }
 
   /** El gestor del catalogo de la casa: dos rutas, no dos modales. */
-  protected abrirGestor(destino: 'categories' | 'products'): void {
+  protected abrirGestor(destino: 'categories' | 'products' | 'catalogo'): void {
     void this.router.navigate(['/pantry', destino]);
+  }
+
+  protected abrirCatalogo(): void {
+    void this.router.navigate(['/pantry', 'catalogo']);
+  }
+
+  /** El punto de color de la fila y de la sugerencia: el dato de la categoria, ya cargada, no un emoji por clave. */
+  protected colorDe(clave: PantryCategoryKey | null | undefined): string {
+    if (!clave) return colorDeCategoria(undefined);
+    return colorDeCategoria(this.pantryService.categories().find((cat) => cat.key === clave));
   }
 
   ingredientCategories: { value: IngredientCategory | ''; labelKey: TranslationKey; icon: string }[] = [
@@ -1204,15 +1302,18 @@ export class PantryComponent implements OnInit {
     if (catalogo.length === 0) {
       return [
         { value: '', etiqueta: this.i18n.t('pantry.categoria_todos') },
-        ...this.ingredientCategoriesNoAll.map((cat) => ({ value: cat.value as string, etiqueta: `${cat.icon} ${this.i18n.t(cat.labelKey)}` }))
+        ...this.ingredientCategoriesNoAll.map((cat) => ({ value: cat.value as string, etiqueta: this.i18n.t(cat.labelKey) }))
       ];
     }
     return [
       { value: '', etiqueta: this.i18n.t('pantry.categoria_todos') },
       ...catalogo.map((cat) => {
-        const icono = this.iconosPorClave.get(cat.key) ?? '';
         const etiqueta = pantryCategoryLabel(cat, (key) => this.i18n.t(key));
-        return { value: cat.key, etiqueta: icono ? `${icono} ${etiqueta}` : etiqueta };
+        // ## 12aa: el conteo del chip es el SUBARBOL (`descendantProducts`), que es exactamente lo que el
+        // server va a responder al pulsar; el `products` de siempre dejaria al padre prometiendo menos
+        // (o nada) de lo que tiene debajo.
+        const cuenta = cat.counts?.descendantProducts ?? cat.counts?.products ?? 0;
+        return { value: cat.key, etiqueta: cuenta > 0 ? `${etiqueta} · ${cuenta}` : etiqueta };
       })
     ];
   });
@@ -1296,6 +1397,25 @@ export class PantryComponent implements OnInit {
   }
 
   /** El boton del header abre el modal de lo que se esta viendo. */
+  // ── el stepper de cantidad (## 12aa) ──
+  // El PATCH de `ingredients/:id` es el mismo del modal de edicion, y ahi esta la gracia: el stepper no es una
+  // segunda forma de cambiar algo, es un atajo a lo mismo. Bajar a 0 NO borra la fila: deja el producto en «lo
+  // que la casa conoce y no tiene» (la semantica de `staples` de la ## 12x) y la fila vuelve a las sugerencias.
+
+  anadirUnidad(ingrediente: Ingredient): void {
+    this.moverStock(ingrediente, 1);
+  }
+
+  quitarUnidad(ingrediente: Ingredient): void {
+    this.moverStock(ingrediente, -1);
+  }
+
+  private moverStock(ingrediente: Ingredient, delta: number): void {
+    const siguiente = Math.max(0, (ingrediente.quantity ?? 0) + delta);
+    if (siguiente === ingrediente.quantity) return;
+    this.pantryService.updateIngredient(ingrediente.id, { quantity: siguiente }).subscribe(() => this.reloadIngredients());
+  }
+
   openAddModal(prefill?: Partial<typeof this.formData>): void {
     if (this.activeTab() === 'utensils') {
       this.openUtensilModal();
@@ -1483,14 +1603,6 @@ export class PantryComponent implements OnInit {
     });
   }
 
-  getCategoryIcon(category: string): string {
-    const icons: Record<string, string> = {
-      dairy: '🧀', meat: '🥩', fish: '🐟', vegetables: '🥬',
-      fruits: '🍎', grains: '🌾', spices: '🧂', condiments: '🫙',
-      frozen: '❄️', canned: '🥫', beverages: '🥤', other: '📦'
-    };
-    return icons[category] || '📦';
-  }
   getLocationIcon(location: string): string {
     const icons: Record<string, string> = {
       fridge: '🧊', freezer: '❄️', pantry: '📦', counter: '🍳'

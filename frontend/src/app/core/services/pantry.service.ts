@@ -24,7 +24,11 @@ import {
   PantryProductListResult,
   PantryProductQuery,
   PantryRequest,
-  PantryBulkImpact
+  PantryBulkImpact,
+  PantryCatalogCategory,
+  PantryCatalogListResult,
+  PantryCatalogAddResult,
+  PantryCatalogQuery
 } from '../../shared/models/pantry.model';
 
 @Injectable({
@@ -309,6 +313,34 @@ export class PantryService {
       this.http
         .post<{ data: { deleted: number } }>(`${this.apiUrl}/products/bulk-delete`, { ids })
         .pipe(map((response) => response.data))
+    );
+  }
+
+  // ── El catalogo pre-registrado del super (## 12aa) ──
+  // Se lee de memoria en el server; no hay cache que invalidar en el cliente, solo paginas y el `inHousehold`
+  // que se refresca al volver a pedir la pagina (despues de anadir, la pantalla re-pide lo que muestra).
+
+  listCatalogCategories(): Promise<PantryCatalogCategory[]> {
+    return this.request<{ data: PantryCatalogCategory[] }>(() =>
+      this.http.get<{ data: PantryCatalogCategory[] }>(`${this.apiUrl}/catalog/categories`)
+    ).then((resultado) => (resultado.ok ? resultado.data?.data ?? [] : []));
+  }
+
+  listCatalog(query: PantryCatalogQuery = {}): Promise<PantryCatalogListResult | null> {
+    let params = new HttpParams();
+    if (query.q) params = params.set('q', query.q);
+    if (query.category) params = params.set('category', query.category);
+    params = params.set('limit', String(query.limit ?? 24)).set('offset', String(query.offset ?? 0));
+    return this.request<PantryCatalogListResult>(() =>
+      this.http.get<any>(`${this.apiUrl}/catalog/products`, { params }).pipe(
+        map((response) => ({ data: (response.data ?? []) as PantryCatalogListResult['data'], meta: response.meta, hasMore: Boolean(response.hasMore) }))
+      )
+    ).then((resultado) => (resultado.ok ? resultado.data : null));
+  }
+
+  addFromCatalog(ids: string[]): Promise<PantryRequest<PantryCatalogAddResult>> {
+    return this.request<PantryCatalogAddResult>(() =>
+      this.http.post<{ data: PantryCatalogAddResult }>(`${this.apiUrl}/catalog/add`, { ids }).pipe(map((response) => response.data))
     );
   }
 

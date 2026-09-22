@@ -10,12 +10,12 @@ test.describe('Pantry', () => {
   });
 
   test('should display pantry page', async ({ page }) => {
-    await expect(page.locator('h1.pantry__title')).toContainText('Despensa');
+    await expect(page.locator('h1.pantry__title')).toContainText('Inventario'); // ## 12aa
   });
 
   test('should show stats cards', async ({ page }) => {
     await expect(page.locator('.stat-card__label')).toContainText([
-      'En despensa',
+      'En inventario',
       'Por caducar',
       'Caducados'
     ]);
@@ -27,9 +27,12 @@ test.describe('Pantry', () => {
 
   test('should show category filters', async ({ page }) => {
     const tags = page.locator('app-tag');
+    // ## 12aa: con el arbol sembrado en la casa hay un chip nuevo, y es el del padre. Se ancla aqui el
+    // indice que sube para que quien lea el diff sepa por que se movio Verduras y no se mueva otro por gusto.
     await expect(tags.nth(0)).toContainText('Todos');
-    await expect(tags.nth(1)).toContainText('Verduras');
-    await expect(tags.nth(2)).toContainText('Frutas');
+    await expect(tags.nth(1)).toContainText('Alimentos');
+    await expect(tags.nth(2)).toContainText('Verduras');
+    await expect(tags.nth(3)).toContainText('Frutas');
   });
 
   test('should filter by category chip', async ({ page }) => {
@@ -106,6 +109,26 @@ test.describe('Pantry', () => {
   test('suggestions do not count as pantry stock', async ({ page }) => {
     // "En despensa" solo cuenta items con quantity > 0
     await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('0');
+  });
+
+  test('el stepper de la fila mueve la cantidad de uno en uno (## 12aa)', async ({ page }) => {
+    await page.getByRole('button', { name: '+ Agregar' }).click();
+    await page.fill('input#ingredientName', 'Tomate stepper');
+    await page.fill('input#quantity', '5');
+    await page.locator('app-modal button[type="submit"]').click();
+    await expect(page.locator('.toast--success .toast__title')).toContainText('Agregado');
+
+    const fila = page.locator('.ingredient-item', { hasText: 'Tomate stepper' });
+    await expect(fila).toContainText('5 unit');
+    await fila.locator('[data-test^="pantry-stock-mas-"]').click();
+    await expect(fila).toContainText('6 unit');
+    await fila.locator('[data-test^="pantry-stock-menos-"]').click();
+    await expect(fila).toContainText('5 unit');
+    // Bajar a 0 no borra la ficha: la deja en «lo que la casa conoce», que es la semantica de `staples` (## 12x).
+    for (let i = 0; i < 5; i++) {
+      await page.locator('.ingredient-item', { hasText: 'Tomate stepper' }).locator('[data-test^="pantry-stock-menos-"]').click();
+    }
+    await expect(page.locator('.ingredient-item', { hasText: 'Tomate stepper' })).toHaveCount(0);
   });
 
   test('clicking a suggestion opens the modal prefilled', async ({ page }) => {

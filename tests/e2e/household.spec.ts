@@ -24,7 +24,7 @@ test.describe('Household sharing & invite flow', () => {
     await expect(page.getByRole('button', { name: /Copiar enlace/ })).toBeVisible();
     // Share toggles present (admin sees them)
     const shareSection = page.locator('.settings-section');
-    await expect(shareSection).toContainText('Despensa compartida');
+    await expect(shareSection).toContainText('Inventario compartido'); // ## 12aa: la pantalla es del inventario de la casa, no solo de la cocina
     await expect(shareSection).toContainText('Recetas compartidas');
     await expect(shareSection).toContainText('Calendario compartido');
     // Admin badge on member list
