@@ -3006,6 +3006,103 @@ coincidian con el server antes de tocar nada. Gates: `check-ui` 179 ficheros / 2
 spec · `typecheck:e2e` · puente de vitest 16 ficheros / 139 pruebas · suite del server 25 ficheros / 611 pruebas
 (14 del espejo del catalogo y 5 del del historial) · `ng build --configuration production` sin errores.
 
+## 12x. Tanda 25 — el gestor de categorías del inventario y el gestor de productos principales
+
+> «Ahora tendrás que implementar el gestor de categorías de inventario como está en Basketra y el gestor de
+> productos principales.»
+
+### De dónde se parte, medido
+
+Hoy la categoría de un artículo de despensa es un **enum cerrado en el código, en los dos lados del contrato**:
+`server/src/schemas/pantry.schema.ts:9` (doce claves) y `frontend/src/app/shared/models/pantry.model.ts:20` (las
+mismas doce), y el desplegable del formulario es un `<select>` nativo con las doce escritas a mano
+(`pantry.component.ts:382`). No hay catálogo: **no se puede crear la categoría de tu casa, ni renombrar la de
+siempre, ni quitar lo que no usas**.
+
+Y el catálogo de productos tampoco existe como dato gestionable: `seed-data.ts` escribe 68 alimentos y 54
+utensilios al dar de alta la casa, y la pantalla llama «sugerencias» a las filas con `quantity = 0`
+(`pantry.routes.ts:127`). O sea: el catálogo de la casa **son** esas filas, sin nombre propio y sin gestor —lo que
+tu casa no compra se queda ahí para siempre, y lo que sí compra y no está sembrado hay que escribirlo entero cada
+vez—.
+
+### El modelo que se adopta (Basketra)
+
+`src/domain/categories.ts`, `src/api/catalog-management-core.ts` y
+`.agents/specs/2026-09-02-professional-inventory/` (capturas 02 y 04) dicen lo siguiente, y esto es lo que se copia:
+
+- **Categoría** = `name` + `color` (`#RRGGBB`, normalizado a mayúsculas al escribir) + `description` + `parentId`,
+  y una **categoría de reserva protegida** (`category_unknown`, «desconocido»). La reserva no se borra, no se
+  renombra y no se recoloca: en el editor, nombre y padre están **deshabilitados** y el botón de eliminar está
+  deshabilitado con una nota al lado (`#category-protected-note`). No es un aviso: es un dato que la app sabe que
+  necesita.
+- **Borrar bloqueado mientras quede algo encima.** `canDelete` exige `productCount === 0 && childCount === 0`, y
+  el 409 lleva el impacto en el cuerpo para que el diálogo pueda decir *por qué* no, con números.
+- **Lista jerárquica aplanada y paginada**: hijo indentado dentro del padre, `childCount` / `productCount` /
+  `descendantProductCount` por fila, «1-2 de 2» y «10 por página», con `total` = **el total filtrado** (un pager
+  que dice «10» sobre 3 filtrados miente).
+- **Vistas**: todas / activas / sin productos / con subcategorías, y orden por nombre.
+- **El producto** lleva `aliases` (cómo lo llama la casa), un índice de búsqueda que se refresca al escribir, y el
+  borrado —suelto o en lote, hasta 100— anuncia la evidencia que lo impide (líneas de cesta, tickets,
+  observaciones de precio) en lugar de borrar historia.
+- **Tres pantallas enrutadas** —lista → detalle → editor—, así que `.../categories/new?parent=category_food` es un
+  enlace que se puede pegar en un chat y **sobrevive a un F5**. El estado vive en la URL, no en un signal.
+
+### Checklist
+
+- [ ] **Migration `pantry_categories`**: `id, user_id, household_id, key, name, color, description, parent_key,
+      position, created_at, updated_at`, única por casa y `key`, índice por `position`. `key` es **el dato** que ya
+      guardan `ingredients.category` y el prompt de la IA: las doce claves de fábrica se siembran con su `name` en
+      castellano y su color, y `other` nace protegida. Se siembra desde `backfillHouseholdSeeds` de forma
+      idempotente: las casas ya creadas reciben el catálogo **sin migrar una sola fila de `ingredients`**.
+- [ ] `ingredients.aliases` (JSON, como `model_params` de `household_ai_config`): lista de cómo llama la casa al
+      producto. Se escribe en mayúsculas-normalizada y **solo sirve para buscar**; lo que se guarda y se compara en
+      la cesta sigue siendo `productKeyOf(name)` —dos criterios de «esto es un kg» son dos productos distintos—.
+- [ ] `server/src/utils/pantry-categories.ts`, el módulo del dominio, imitando a `shopping-categories.ts`:
+      `normalizeCategoryName` (1..120, espacios colapsados), `normalizeCategoryColor` (`#RRGGBB` a mayúsculas o 400),
+      `slug` de la clave, y `assertNoCycle`: el padre no puede ser la propia categoría **ni ninguno de sus
+      descendientes**, con profundidad máxima 4. Basketra solo corta el auto-padre; aquí se corta el ciclo porque
+      el conteo de descendientes recorre el árbol, y un ciclo haría un `while` eterno en la pantalla.
+- [ ] Rutas: `GET/POST /api/pantry/categories`, `PATCH/DELETE /api/pantry/categories/:id`,
+      `GET /api/pantry/categories/:id/delete-impact` y `PUT /api/pantry/categories/order` (reordenar a mano).
+      Sobre `PATCH`: `formPartial`, que es el contrato de `form-contract.spec.ts` —quitar el padre o la descripción
+      escribe `null` explícito, no los omite—.
+- [ ] `category` deja de ser un enum cerrado en `pantry.schema.ts`: pasa a «la clave existe en el catálogo de esta
+      casa», con `400 PANTRY_CATEGORY_UNKNOWN` que contesta las claves válidas, y reserva a `other` cuando el
+      formulario no manda ninguna. El agrupador de estadísticas (`GROUP BY category`) y el prompt no cambian de
+      forma: ya valían con cualquier clave.
+- [ ] **Gestor de productos principales** sobre lo que ya existe: `staples` = filas con `quantity = 0`. Rutas
+      `GET /api/pantry/products` (búsqueda por nombre, alias, `barcode` y `notes`; filtros `todas / con stock / sin
+      stock / caduca pronto`; orden `nombre / recientes`; paginado con `meta.total`), `POST`, `PATCH /:id`,
+      `GET /:id/delete-impact`, `DELETE /:id`, y `POST /products/bulk-delete-impact` + `POST /products/bulk-delete`
+      (máximo 100, todo-o-nada dentro de una transacción). Borrar un producto principal **borra la sugerencia, no
+      la historia**: las líneas de cesta y las observaciones de precioExisting no se tocan, y el impacto se pinta en
+      el diálogo para que se sepa lo que se deja.
+- [ ] Cliente: `PantryCategory` y `PantryProduct` en `shared/models/pantry.model.ts`; `pantry.service` con los
+      mismos filtros y el mismo `save-state` que el resto de mutaciones; dos pantallas enrutadas,
+      `/pantry/categories` y `/pantry/products`, con lista → detalle → editor. Piezas del sistema: `app-picker`
+      (padre y categoría), `app-confirm-dialog` (todo lo que borra, reglas 9), `app-icon-button`, `app-tag`
+      (aliases como etiquetas), `app-badge` (recuentos). Nada de `<select>` nativo: el del formulario de la despensa
+      pasa al picker del catálogo, que es justo la deuda anotada en `## 13`.
+- [ ] **La regla de traducción de `## 12w`, sin excepción**: la etiqueta de una categoría de fábrica se pinta con su
+      clave `pantry.categoria_*` (doce claves que ya existen en los dos idiomas); la de una categoría que creó la
+      casa se pinta con su `name` crudo, porque ese texto lo escribió una persona. El `name` es dato y nunca clave;
+      el campo editable del formulario pinta el dato tal cual. Y todo el chrome del gestor sale del diccionario
+      (reglas 14, 15, 18, 19 y 20, con `check-ui` en 0).
+- [ ] El color manda en la fila (punto de color, como Basketra) y **no se añade ningún emoji**: `getCategoryIcon`
+      se queda donde decora el artículo, no donde se nombra la categoría (regla 1).
+- [ ] `data-test` nuevos con sus casos e2e (`tests/e2e/pantry-managers.spec.ts`): crear una categoría con padre y
+      color; la reserva con «Eliminar» deshabilitado y con nombre/padre deshabilitados en el editor; borrado
+      bloqueado enseñando el impacto; un alias que encuentra el producto en la búsqueda; F5 que conserva lista,
+      detalle y filtro; borrado en lote con impacto.
+- [ ] Gates: `node scripts/check-ui.mjs` en 0 · `tsc -p tsconfig.app.json` **y** `-p tsconfig.spec.json` ·
+      `pnpm run typecheck:e2e` · puente de vitest (los specs puros de las dos pantallas corren ahí) · suite del
+      server con las rutas · `ng build --configuration production`.
+- [ ] **No se hace a propósito**: exportar el catálogo (Basketra tiene «Exportar» y HogarIA no tiene ninguna ruta de
+      exportación: nace con su propio contrato y su propio CSV que nadie ha pedido), precios por comercio en la
+      ficha del producto (HogarIA guarda `price_observations` por línea de cesta, no por producto: enlazarlos es
+      otra tanda con su migración), y las variantes/«importados» de Basketra (aquí un producto es una fila, no un
+      `canonical_product` con `product_variants`; importar la mitad del modelo para no usarlo sería pior).
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
