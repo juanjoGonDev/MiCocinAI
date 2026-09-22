@@ -132,10 +132,11 @@ test.describe('El gestor del inventario', () => {
     await page.goto('/pantry/categories');
     await page.locator('#gestor-categorias-q').fill('Frutas');
     await page.locator('[data-test="gestor-categorias-vista-without-products"] .tag').click();
-    // El click no espera a que el componente confirme su navegacion `replaceUrl`: leer la URL y recargar
-    // seguidos gana o pierde segun lo lenta que este la maquina (y en un CI con cuatro shards, pierde).
-    // La consecuencia observable del click es la píldora seleccionada; se espera a eso antes de tocar la URL.
-    await expect(page.locator('[data-test="gestor-categorias-vista-without-products"] .tag')).toHaveClass(/tag--selected/);
+    // Las dos aserciones separan culpables si esto vuelve a fallar: la URL es la consecuencia de la accion
+    // del componente (el click escribio o no escribio), la clase es la consecuencia del estado (la pantalla
+    // hidrato o no hidrato). Antes se leia `page.url()` a ciegas justo despues del click: en una maquina con
+    // cuatro shards ese «leer ya» gana o pierde segun el ritmo, y perder no era un bug de la app.
+    await expect(page).toHaveURL(/view=without-products/);
     const url = page.url();
     await page.reload();
     expect(page.url()).toBe(url);

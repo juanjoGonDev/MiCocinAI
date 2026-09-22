@@ -740,10 +740,33 @@ export class PantryCategoriesComponent implements OnInit {
       description: this.formulario.description.trim() || null,
       parentKey: this.formulario.parentKey.trim() || null
     };
+    // El PATCH del server distingue «tocar estructura» de «pintar y anotar» por lo que trae el payload
+    // (`'parentKey' in input`, nombre no vacio): reenviar la forma entera convertia cualquier anotacion de la
+    // reserva en un 409 y al guardado de cualquiera en un `rename` fantasma. En la edicion se manda el diff —
+    // lo mismo que ve el contrato de la ## 12x; el alta, como no hay con que comparar, sigue entera—.
+    const original = this.ficha;
+    const cambios: Partial<typeof entrada> = {};
+    if (original) {
+      if (nombre !== original.name) cambios.name = nombre;
+      const colorFinal = color || null;
+      const colorAntes = (original.color ?? '').trim() || null;
+      if (colorFinal !== colorAntes) cambios.color = colorFinal;
+      const descripcion = this.formulario.description.trim() || null;
+      if (descripcion !== (original.description ?? null)) cambios.description = descripcion;
+      const padre = this.formulario.parentKey.trim() || null;
+      if (padre !== (original.parentKey ?? null)) cambios.parentKey = padre;
+      if (Object.keys(cambios).length === 0) {
+        // Nada que guardar: se cierra la ficha sin pasar por el server, que un 200 de una operacion vacia
+        // contaria como exito algo que no ha tocado nada.
+        await this.volver();
+        return;
+      }
+    }
+    const payload = this.esNueva || !original ? entrada : cambios;
     this.guardando = true;
     const resultado = this.esNueva
       ? await this.pantry.createCategory(entrada)
-      : await this.pantry.updateCategory(this.ficha!.id, entrada);
+      : await this.pantry.updateCategory(original!.id, payload);
     this.guardando = false;
     if (!resultado.ok) {
       this.error = this.frase(resultado.error, resultado.message, color);

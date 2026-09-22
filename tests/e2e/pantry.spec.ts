@@ -125,8 +125,14 @@ test.describe('Pantry', () => {
     await fila.locator('[data-test^="pantry-stock-menos-"]').click();
     await expect(fila).toContainText('5 g');
     // Bajar a 0 no borra la ficha: la deja en «lo que la casa conoce», que es la semantica de `staples` (## 12x).
-    for (let i = 0; i < 5; i++) {
+    // Se espera la cifra entre pulsaciones: cinco clicks seguidos pueden leerse contra el cierre de fila
+    // anterior al refresco (el PATCH va al server y la lista vuelve despues), y el run de CI lo enseño con un
+    // «1» de sobra —un stepper que cuenta de uno en uno se prueba de uno en uno—.
+    for (let cantidad = 5; cantidad > 0; cantidad--) {
       await page.locator('.ingredient-item', { hasText: 'Tomate stepper' }).locator('[data-test^="pantry-stock-menos-"]').click();
+      if (cantidad > 1) {
+        await expect(page.locator('.ingredient-item', { hasText: 'Tomate stepper' })).toContainText(`${cantidad - 1} g`);
+      }
     }
     await expect(page.locator('.ingredient-item', { hasText: 'Tomate stepper' })).toHaveCount(0);
   });
