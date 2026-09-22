@@ -199,11 +199,14 @@ import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQue
 
           <div class="ficha__campo">
             <span class="ficha__etiqueta">{{ 'pantry.padre_categoria' | t }}</span>
+            <!-- La reserva se puede pintar y anotar, no renombrar, MOVER ni borrar (## 12x): el nombre y el
+                 borrado ya lo respetaban; el picker del padre era el hueco, y lo cazó el e2e de la tanda 29. -->
             <app-picker
               [options]="opcionesPadre()"
               [value]="formulario.parentKey || null"
               (valueChange)="elegirPadre($event)"
               [placeholder]="('pantry.sin_padre' | t)"
+              [disabled]="ficha.protected"
               data-test="gestor-categorias-campo-padre"
             />
             @if (formulario.parentKey) {

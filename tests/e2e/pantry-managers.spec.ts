@@ -132,6 +132,10 @@ test.describe('El gestor del inventario', () => {
     await page.goto('/pantry/categories');
     await page.locator('#gestor-categorias-q').fill('Frutas');
     await page.locator('[data-test="gestor-categorias-vista-without-products"] .tag').click();
+    // El click no espera a que el componente confirme su navegacion `replaceUrl`: leer la URL y recargar
+    // seguidos gana o pierde segun lo lenta que este la maquina (y en un CI con cuatro shards, pierde).
+    // La consecuencia observable del click es la píldora seleccionada; se espera a eso antes de tocar la URL.
+    await expect(page.locator('[data-test="gestor-categorias-vista-without-products"] .tag')).toHaveClass(/tag--selected/);
     const url = page.url();
     await page.reload();
     expect(page.url()).toBe(url);
