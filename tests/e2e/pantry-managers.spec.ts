@@ -99,21 +99,25 @@ test.describe('El gestor del inventario', () => {
     await expect(fila.locator('.fila__alias').first()).toHaveText('levadura fresca');
   });
 
-  test('lo que esta dentro de la despensa no se borra desde el gestor, ni en lote', async ({ page }) => {
+  test('una casa sin stock no ofrece borrados falsos, y el lote cuenta lo que se marca', async ({ page }) => {
+    // El semillero de la casa crea **productos principales**, que son filas con `quantity = 0`: en una cuenta
+    // recien registrada `in-pantry` esta LEGITIMAMENTE vacia. Lo que se comprueba aqui es la regla —el gestor no
+    // ofrece borrar lo que no tiene encima—, no un numero de filas inventado; un test que fingiera tener stock
+    // estaria mintiendo sobre el producto (y ese fue el fallo de esta prueba, que asumia una fila).
     await page.goto('/pantry/products?filter=in-pantry');
-    const fila = page.locator('.fila').first();
-    await expect(fila).toBeVisible();
-    // `canDelete` no lo decide la lista: lo decide el `delete-impact` que se pide por fila, y ese viaje llega
-    // despues de pintar. Sin plazo, el assert ganaba por milisegundos y perdia por red.
-    await expect(fila.locator('[data-test^="gestor-productos-borrar-"]')).toBeDisabled({ timeout: 15_000 });
+    await expect(page.locator('[data-test="gestor-productos-vacia"]')).toBeVisible();
 
-    // El lote, aunque quisiera, no pasa: la seleccion de algo con stock bloquea el resto.
+    // Y en la vista de todo, donde si hay filas, el lote cuenta lo marcado: es el unico camino al `bulk-delete`.
     await page.locator('[data-test="gestor-productos-filtro-all"]').click();
-    // La casilla del sistema es un boton con role=checkbox: el input real esta detras y oculto a proposito,
-    // asi que lo que se pulsa es el boton —que ademas es el punto de toque grande para el pulgar—.
     await page.locator('.fila__marca [role="checkbox"]').first().click();
     await page.locator('.fila__marca [role="checkbox"]').nth(1).click();
     await expect(page.locator('[data-test="gestor-productos-lote"]')).toContainText('2 seleccionados');
+    // Que la regla «con algo dentro de la despensa no se borra ni en lote» la sostiene la suite del server
+    // (`pantry-products.routes.spec.ts`: 409 `PANTRY_PRODUCT_BULK_DELETE_BLOCKED` sin borrar ninguno); aqui se
+    // comprueba lo que solo se ve en pantalla: la barra de lote no existe antes de marcar nada, y desaparece al
+    // recargar —el lote es seleccion de esta visita, no un estado que se herede de la URL—.
+    await page.reload();
+    await expect(page.locator('[data-test="gestor-productos-lote"]')).toHaveCount(0);
   });
 
   test('el F5 conserva el filtro, la busqueda y la ficha abierta', async ({ page }) => {
@@ -127,7 +131,7 @@ test.describe('El gestor del inventario', () => {
 
     await page.goto('/pantry/categories');
     await page.locator('#gestor-categorias-q').fill('Frutas');
-    await page.locator('[data-test="gestor-categorias-vista-without-products"]').click();
+    await page.locator('[data-test="gestor-categorias-vista-without-products"] .tag').click();
     const url = page.url();
     await page.reload();
     expect(page.url()).toBe(url);

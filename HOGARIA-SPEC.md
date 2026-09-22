@@ -3286,6 +3286,22 @@ estaba mirando no era del filtro pedido).
   escribirlo. Cualquier pantalla que prometa «el F5 conserva» tiene que tener su lectura en el `ngOnInit`, y eso
   se prueba en el util —sin navegador— con un valor desconocido, una ausencia y un número sucio.
 
+
+### Tercer bucle: el test que fingia datos
+
+Con la hidratacion de la query, `pantry-managers` baja a dos casos y el CI los explica los dos: el click iba
+contra el host de `app-tag` (lo que se pulsa es su `.tag` de dentro, que es donde vive el estado `tag--selected`),
+y el gestor, en una cuenta recien registrada, **no tiene filas en `in-pantry`** —el semillero de la casa crea
+productos principales, que son filas con `quantity = 0` por contrato—. El segundo era un test que asumia datos que
+el arnes no siembra: se reescribe contra la regla (la vista vacia se anuncia como tal, la barra de lote no existe
+antes de marcar y no sobrevive a un reload), y la parte de «con stock dentro de la despensa no se borra, ni en
+lote» se deja donde ya esta probada con datos reales: `pantry-products.routes.spec.ts`, que comprueba el 409
+`PANTRY_PRODUCT_BULK_DELETE_BLOCKED` sin borrar ninguno.
+
+- **Regla**: un e2e no puede sembrar a mano lo que el arnes no siembra; si la regla necesita datos, o el arnes
+  los pone (otro dia, con su helper y su contrato) o la regla se prueba en el server. Fingir una fila para que el
+  assert pase es exactamente el tipo de test que este repo ya borro una vez (`108cb55`).
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
