@@ -621,7 +621,28 @@ export class PantryProductsComponent implements OnInit {
   private abrirFicha(id: string): void {
     this.esNueva = id === 'new';
     if (this.esNueva) {
-      this.ficha = null;
+      // La plantilla decide «lista o ficha» con `@if (!ficha)`, así que el alta necesita una ficha EN BLANCO, no
+      // `null`: con `null` el botón de crear volvía a pintar la lista y el formulario del alta no existía. Es el
+      // mismo truco que en las categorías, y lo que de una fila inexistente no se puede decir (impacto, pie de
+      // ficha, borrado) ya está tapado por `@if (!esNueva)`.
+      this.ficha = {
+        id: '',
+        name: '',
+        category: 'other',
+        categoryKey: 'other',
+        categoryName: '',
+        quantity: 0,
+        unit: 'unit',
+        inPantry: false,
+        expirationDate: null,
+        location: 'pantry',
+        barcode: null,
+        notes: null,
+        aliases: [],
+        createdAt: '',
+        updatedAt: '',
+        impact: { listLines: 0, priceObservations: 0 }
+      };
       this.formulario = { name: '', category: 'other', unit: 'unit', quantity: 0, expirationDate: '', notes: '', aliases: [] };
       return;
     }
