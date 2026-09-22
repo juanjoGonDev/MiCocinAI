@@ -24,6 +24,10 @@ import {
 } from '../../shared/models/pantry.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
+import { PantryCategoryLabelPipe } from '../../shared/pipes/pantry-category-label.pipe';
+import { PickerComponent, type PickerOption } from '../../shared/components/ui/picker/picker.component';
+import { pantryCategoryLabel } from '../../core/i18n/labels';
+import type { PantryCategoryKey } from '../../shared/models/pantry.model';
 import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 
@@ -59,7 +63,9 @@ const PAGE_SIZE = 100;
     CommonModule, FormsModule,
     ButtonComponent, InputComponent, CardComponent,
     BadgeComponent, TagComponent, ModalComponent, LoadingComponent
-  , CatalogLabelPipe],
+  , CatalogLabelPipe,
+    PantryCategoryLabelPipe,
+    PickerComponent],
   template: `
     <div class="pantry">
       <!-- Header -->
@@ -120,6 +126,20 @@ const PAGE_SIZE = 100;
           </div>
         </div>
 
+        <!--
+          El catalogo de la casa, desde la ## 12x, es gestionable: categorias y productos principales son dos
+          rutas, no dos modales, y aqui solo se entra en ellas.
+        -->
+        <div class="pantry__gestion" data-test="pantry-gestion">
+          <span class="gestion__titulo">{{ 'pantry.gestion_del_inventario' | t }}</span>
+          <button type="button" class="gestion__enlace" (click)="abrirGestor('categories')" data-test="pantry-abrir-categorias">
+            {{ 'pantry.gestor_categorias' | t }}
+          </button>
+          <button type="button" class="gestion__enlace" (click)="abrirGestor('products')" data-test="pantry-abrir-productos">
+            {{ 'pantry.gestor_productos' | t }}
+          </button>
+        </div>
+
         <!-- Search & Filters -->
         <div class="pantry__filters">
           <app-input
@@ -133,11 +153,12 @@ const PAGE_SIZE = 100;
 
           <div class="pantry__filter-tags">
             <app-tag
-              *ngFor="let cat of ingredientCategories"
+              *ngFor="let cat of categoriasFiltro()"
               [selected]="selectedIngCategory() === cat.value"
               (onClick)="filterByCategory(cat.value)"
+              [attr.data-test]="'pantry-chip-cat-' + (cat.value || 'todos')"
             >
-              {{ cat.icon }} {{ cat.labelKey | t }}
+              {{ cat.etiqueta }}
             </app-tag>
           </div>
         </div>
@@ -378,22 +399,31 @@ const PAGE_SIZE = 100;
 
           <div class="form-row">
             <div class="form-field">
-              <label class="form-label">{{ 'pantry.categoria' | t }}</label>
-              <select [(ngModel)]="formData.category" name="category" class="form-select">
-                <option *ngFor="let cat of ingredientCategoriesNoAll" [value]="cat.value">
-                  {{ cat.icon }} {{ cat.labelKey | t }}
-                </option>
-              </select>
+              <!--
+                El select nativo se cae en la ## 12x por dos motivos: no se puede pintar con el tema (en Android
+                abre el dialogo del sistema) y, sobre todo, no puede ensenar el catalogo de la casa —que desde
+                esta tanda incluye lo que la familia haya anadido— con su punto de color y su subcategoria
+                agrupada bajo su padre. El picker si, y es la pieza que el diseno ya tenia para esto.
+              -->
+              <app-picker
+                [options]="opcionesCategoria()"
+                [(value)]="formData.category"
+                [label]="'pantry.categoria' | t"
+                [placeholder]="('pantry.categoria' | t)"
+                data-test="pantry-picker-categoria"
+              />
             </div>
 
             <div class="form-field">
-              <label class="form-label">{{ 'pantry.ubicacion' | t }}</label>
-              <select [(ngModel)]="formData.location" name="location" class="form-select">
-                <option value="fridge">{{ 'pantry.nevera' | t }}</option>
-                <option value="freezer">{{ 'pantry.congelador' | t }}</option>
-                <option value="pantry">{{ 'pantry.title' | t }}</option>
-                <option value="counter">{{ 'pantry.encimera' | t }}</option>
-              </select>
+              <!-- El segundo select que quedaba en el formulario, fuera por el mismo motivo que el de
+                   categoria: no se pinta con el tema y no puede ensenar nada que el codigo no conozca. -->
+              <app-picker
+                [options]="opcionesUbicacion()"
+                [value]="formData.location"
+                (valueChange)="elegirUbicacion($event)"
+                [label]="('pantry.ubicacion' | t)"
+                data-test="pantry-picker-ubicacion"
+              />
             </div>
           </div>
 
@@ -552,6 +582,14 @@ const PAGE_SIZE = 100;
     .stat-card--danger .stat-card__value { color: var(--error); }
 
     .pantry__filters { margin-bottom: var(--space-5); }
+.pantry__gestion { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    .gestion__enlace {
+      padding: 6px 12px; font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
+      color: var(--text-primary); background: var(--bg-secondary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
+    }
+    .gestion__enlace:hover { border-color: var(--border-strong); }
+
     .pantry__filter-tags {
       display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3);
     }
@@ -1083,7 +1121,7 @@ export class PantryComponent implements OnInit {
     name: '',
     quantity: 0,
     unit: 'g' as MeasurementUnit,
-    category: 'other' as IngredientCategory,
+    category: 'other' as PantryCategoryKey,
     location: 'pantry' as StorageLocation,
     expirationDate: '',
     notes: ''
@@ -1108,10 +1146,77 @@ export class PantryComponent implements OnInit {
     { value: 'beverages', labelKey: 'pantry.categoria_bebidas', icon: '🥤' },
     { value: 'other', labelKey: 'pantry.categoria_otros', icon: '📦' }
   ];
+  /** Las cuatro guardas de siempre, en un picker (## 12x: se quitan los `select` nativos del formulario). */
+  readonly opcionesUbicacion = computed<PickerOption[]>(() => {
+    this.i18n.changeTick();
+    return [
+      { value: 'fridge', label: this.i18n.t('pantry.nevera') },
+      { value: 'freezer', label: this.i18n.t('pantry.congelador') },
+      { value: 'pantry', label: this.i18n.t('pantry.title') },
+      { value: 'counter', label: this.i18n.t('pantry.encimera') }
+    ];
+  });
+
+  protected elegirUbicacion(valor: string | null): void {
+    this.formData.location = (valor ?? 'pantry') as StorageLocation;
+  }
+
+  /** El gestor del catalogo de la casa: dos rutas, no dos modales. */
+  protected abrirGestor(destino: 'categories' | 'products'): void {
+    void this.router.navigate(['/pantry', destino]);
+  }
+
   ingredientCategories: { value: IngredientCategory | ''; labelKey: TranslationKey; icon: string }[] = [
     { value: '', labelKey: 'pantry.categoria_todos', icon: '📋' },
     ...this.ingredientCategoriesNoAll
   ];
+
+  /** Icono de siempre por clave de fabrica: lo que decora el articulo, no lo que la nombra. */
+  private readonly iconosPorClave = new Map<string, string>(this.ingredientCategoriesNoAll.map((cat) => [cat.value as string, cat.icon]));
+
+  /**
+   * Los chips del filtro, del catalogo de la casa (## 12x). Antes eran las doce palabras del codigo, y una
+   * categoria anadida por la familia no tenia forma de filtrarse: se veia en la lista y no habia forma de
+   * llegar a ella. Se leen `changeTick()` a mano porque la etiqueta se resuelve aqui, no en el arbol, y sin
+   * eso el computed no se entera del cambio de idioma.
+   */
+  readonly categoriasFiltro = computed<{ value: string; etiqueta: string }[]>(() => {
+    this.i18n.changeTick();
+    const catalogo = this.pantryService.categories();
+    if (catalogo.length === 0) {
+      return [
+        { value: '', etiqueta: this.i18n.t('pantry.categoria_todos') },
+        ...this.ingredientCategoriesNoAll.map((cat) => ({ value: cat.value as string, etiqueta: `${cat.icon} ${this.i18n.t(cat.labelKey)}` }))
+      ];
+    }
+    return [
+      { value: '', etiqueta: this.i18n.t('pantry.categoria_todos') },
+      ...catalogo.map((cat) => {
+        const icono = this.iconosPorClave.get(cat.key) ?? '';
+        const etiqueta = pantryCategoryLabel(cat, (key) => this.i18n.t(key));
+        return { value: cat.key, etiqueta: icono ? `${icono} ${etiqueta}` : etiqueta };
+      })
+    ];
+  });
+
+  /** Las opciones del picker de categoria, con su color y las subcategorias agrupadas bajo su padre. */
+  readonly opcionesCategoria = computed<PickerOption[]>(() => {
+    this.i18n.changeTick();
+    const catalogo = this.pantryService.categories();
+    if (catalogo.length === 0) {
+      return this.ingredientCategoriesNoAll.map((cat) => ({
+        value: cat.value as string,
+        label: this.i18n.t(cat.labelKey)
+      }));
+    }
+    return catalogo.map((cat) => ({
+      value: cat.key,
+      label: pantryCategoryLabel(cat, (key) => this.i18n.t(key)),
+      color: cat.color,
+      group: cat.parentName ?? undefined,
+      hint: cat.counts.products > 0 ? this.i18n.t('pantry.cuenta_articulos', { n: cat.counts.products }) : undefined
+    }));
+  });
 
   /** Opciones del catálogo de utensilios (orden de secciones incluido). */
   utensilCategoryOptions: { value: UtensilCategory; labelKey: TranslationKey; icon: string }[] = [
@@ -1128,6 +1233,13 @@ export class PantryComponent implements OnInit {
   ];
 
   ngOnInit(): void {
+    // El catalogo de categorias (## 12x): los chips del filtro y el picker del alta se pintan con el, y si la
+    // casa no lo tiene todavia se siembra en el propio server al pedirlo.
+    this.pantryService.loadCategories();
+    // `?buscar=` llega del gestor de productos («ver en la despensa», ## 12x): la busqueda vive en la URL como
+    // todo lo demas que la pantalla puede querer compartir, y no en un estado que se pierde al entrar.
+    const busqueda = this.route.snapshot.queryParamMap.get('buscar');
+    if (busqueda) this.searchTerm = busqueda;
     this.pantryService.loadIngredients({ pageSize: PAGE_SIZE });
     this.pantryService.loadStats();
     this.loadUtensils();

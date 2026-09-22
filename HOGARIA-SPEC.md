@@ -3080,24 +3080,26 @@ vez—.
       (máximo 100, todo-o-nada dentro de una transacción). Borrar un producto principal **borra la sugerencia, no
       la historia**: las líneas de cesta y las observaciones de precio no se tocan, y el impacto se pinta en el
       diálogo para que se sepa lo que se deja.
-- [ ] Cliente: `PantryCategory` y `PantryProduct` en `shared/models/pantry.model.ts`; `pantry.service` con los
+- [x] Cliente: `PantryCategory` y `PantryProduct` en `shared/models/pantry.model.ts`; `pantry.service` con los
       mismos filtros y el mismo `save-state` que el resto de mutaciones; dos pantallas enrutadas,
       `/pantry/categories` y `/pantry/products`, con lista → detalle → editor. Piezas del sistema: `app-picker`
-      (padre y categoría), `app-confirm-dialog` (todo lo que borra, reglas 9), `app-icon-button`, `app-tag`
-      (aliases como etiquetas), `app-badge` (recuentos). Nada de `<select>` nativo: el del formulario de la despensa
-      pasa al picker del catálogo, que es justo la deuda anotada en `## 13`.
-- [ ] **La regla de traducción de `## 12w`, sin excepción**: la etiqueta de una categoría de fábrica se pinta con su
+      (padre y categoría), `app-confirm-dialog` (todo lo que borra), `app-tag` (vistas, filtros y aliases),
+      `app-badge` (la reserva) y `app-checkbox` (el lote). Los **dos** `<select>` nativos del formulario se van
+      al picker —el de categoría y, aprovechando el mismo array, el de ubicación—: se cierra la deuda que
+      `## 13` apuntaba para esta pantalla, y el catálogo de la casa pasa a ser lo que pintan los chips del
+      filtro, con su etiqueta traducida y su punto de color.
+- [x] **La regla de traducción de `## 12w`, sin excepción**: la etiqueta de una categoría de fábrica se pinta con su
       clave `pantry.categoria_*` (doce claves que ya existen en los dos idiomas); la de una categoría que creó la
       casa se pinta con su `name` crudo, porque ese texto lo escribió una persona. El `name` es dato y nunca clave;
       el campo editable del formulario pinta el dato tal cual. Y todo el chrome del gestor sale del diccionario
       (reglas 14, 15, 18, 19 y 20, con `check-ui` en 0).
-- [ ] El color manda en la fila (punto de color, como Basketra) y **no se añade ningún emoji**: `getCategoryIcon`
+- [x] El color manda en la fila (punto de color, como Basketra) y **no se añade ningún emoji**: `getCategoryIcon`
       se queda donde decora el artículo, no donde se nombra la categoría (regla 1).
-- [ ] `data-test` nuevos con sus casos e2e (`tests/e2e/pantry-managers.spec.ts`): crear una categoría con padre y
+- [x] `data-test` nuevos con sus casos e2e (`tests/e2e/pantry-managers.spec.ts`): crear una categoría con padre y
       color; la reserva con «Eliminar» deshabilitado y con nombre/padre deshabilitados en el editor; borrado
       bloqueado enseñando el impacto; un alias que encuentra el producto en la búsqueda; F5 que conserva lista,
       detalle y filtro; borrado en lote con impacto.
-- [ ] Gates: `node scripts/check-ui.mjs` en 0 · `tsc -p tsconfig.app.json` **y** `-p tsconfig.spec.json` ·
+- [x] Gates: `node scripts/check-ui.mjs` en 0 · `tsc -p tsconfig.app.json` **y** `-p tsconfig.spec.json` ·
       `pnpm run typecheck:e2e` · puente de vitest (los specs puros de las dos pantallas corren ahí) · suite del
       server con las rutas · `ng build --configuration production`.
 - [ ] **No se hace a propósito**: exportar el catálogo (Basketra tiene «Exportar» y HogarIA no tiene ninguna ruta de
@@ -3122,6 +3124,39 @@ el previsto: «no puede resolver ./pantry-categories.js». Cerrado el lote del s
   bien que sea así: es como se entera uno de que un lote de 101 ids debe dar 400 y no 500.
 - `assertPlacement` comprueba ciclo y profundidad sobre el árbol **que resultaría** del cambio (alta incluida),
   no sobre el guardado; es la única forma de no escribir un ciclo y descubrirlo al recorrerlo.
+
+### Cierre de la tanda
+
+Medido al cerrar (ronda 25, tanda `## 12x`):
+
+- `node scripts/check-ui.mjs` → **184 ficheros, 20 reglas, sin incidencias**. La regla
+  `backtick-cierra-el-literal` se re-ensayó a propósito antes de dar el gate por bueno: con un comentario HTML
+  con backticks dentro del template del gestor salta, y sin ellos no. Es el error que esta sesión ha cometido
+  cuatro veces, y lo volverá a cometer quien confíe en `tsc`: el AOT lo ve, el tipador no.
+- `tsc -p tsconfig.app.json` y `-p tsconfig.spec.json` → 0 errores. `corepack pnpm run typecheck:e2e` → 0.
+- `corepack pnpm --filter @hogaria/web build:prod` → bundle completo. Quedan los dos avisos de `?.`/`??`
+  redundantes y los `NG8113` de importaciones sin usar, todos en ficheros ajenos a la tanda.
+- Suite del server → **28 ficheros / 690 pruebas** (antes de la tanda: 25 / 609). Los tres ficheros nuevos son
+  `pantry-categories.spec.ts` (11), `pantry-categories.routes.spec.ts` (15) y `pantry-products.routes.spec.ts`
+  (13), y `pantry-catalog-i18n.spec.ts` pasó de 14 a 19 con el espejo de las doce categorías de fábrica.
+- La lógica del frente (`pantry-gestor.util.spec.ts`, 13 pruebas) se ejecuta en verde con el vitest del server
+  (`--globals`, `--root ..`): Karma pide un navegador que el contenedor no tiene, así que el resto de specs del
+  frente se validan por `tsconfig.spec.json` y por el build, como en las tandas anteriores.
+- `tests/e2e/pantry-managers.spec.ts` (7 casos) deja escrito lo que solo se ve con navegador: las dos rutas de
+  entrada, el alta con color y padre, la reserva cerrada por los dos sitios, el borrado bloqueado enseñando los
+  números, el alias que encuentra el producto y el F5 que conserva filtro, búsqueda y ficha.
+
+Lo que la tanda deja dicho para quien siga:
+
+- **El patrón de gestor de catálogo ya existe.** `shopping_categories` sigue sin pantalla propia (solo tiene
+  `GET`/`POST` en `shopping.service.ts`); ahora hay a donde migrar: en el server, `utils/*-categories.ts` con
+  `meta.total` filtrado, 409 con el impacto en el cuerpo y reserva protegida; en el frente, dos rutas, picker
+  del catálogo, confirmación con impacto y el estado en la query.
+- **La reserva protegida no es un adorno.** Que `other` no se pueda renombrar ni borrar es lo que permite que
+  una fila de `ingredients` con una clave que ya no existe se pinte sin romper la pantalla; la próxima tanda que
+  toque el catálogo no debería poder quitárselo de encima.
+- La **reordenación a mano** no se hizo, y `position` ya se guarda: el día que se arrastre la lista no habrá
+  migración, solo una ruta.
 
 ## 13. Coming soon (deliberately not in this program)
 
@@ -3157,13 +3192,14 @@ el previsto: «no puede resolver ./pantry-categories.js». Cerrado el lote del s
 - **Quitar los emoji de las claves del diccionario.** La regla `sin-emoji` perdona cinco `dict/*.ts` porque
   los pictogramas venían perdonados en sus plantillas. Convertirlo es decidir si el glifo es decoración (se
   quita) o es información (pasa a `app-icon` con su nombre), y toca 5 pantallas con sus capturas.
-- **Despensa: iconos y el desplegable del formulario.** Doce categorias se ensenan con emoji
-  (`🧀 🥩 🐟`) y el `<select>` de ubicacion lleva los suyos dentro de cada `<option>`; la regla de
-  «los iconos nunca son emojis» solo se cumple en lo que `check-ui` mira, y la despensa esta en su
-  lista de deuda. Convertirla es: `getCategoryIcon`/`getLocationIcon` devuelven el NOMBRE del
-  icono, el formulario pasa a `app-picker` (con `app-unit-picker` para la unidad, que ya existe)
-  y se quitan los dos ficheros de la lista. Se hizo el visor de logs en la ronda 10 porque ya
-  estaba en el diff; la despensa entera merece su propia tanda con sus capturas.
+- **Despensa: los emoji de las doce categorias.** Doce categorias se ensenan con emoji (`🧀 🥩 🐟`), y
+  ahora tambien en los chips del filtro y en las filas del gestor, porque el catalogo de la casa pinta
+  mas sitios que antes. (La ronda 25 se llevo por delante los dos <select> del formulario —categoria y
+  ubicacion—, que eran la otra mitad de esta deuda; el glifo sigue donde estaba.) La regla de «los iconos
+  nunca son emojis» solo se cumple en lo que `check-ui` mira, y la despensa esta en su lista de deuda.
+  Convertirla es: `getCategoryIcon`/`getLocationIcon` devuelven el NOMBRE del icono, `app-unit-picker`
+  (que ya existe) cubre la unidad, y se quitan los dos ficheros de la lista. Se hizo el visor de logs en
+  la ronda 10 porque ya estaba en el diff; la despensa entera merece su propia tanda con sus capturas.
 - **Fotos de las lineas de la compra, tambien en disco.** `uploads/` existe desde §12j para el
   avatar de la cuenta; la foto que se adjunta a una linea sigue viajando como base64 dentro de la
   propia fila, que es lo que hace pesada la lectura de una lista con diez fotos. Moverla es

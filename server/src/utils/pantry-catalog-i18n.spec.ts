@@ -158,3 +158,79 @@ describe('la pipe de lectura (## 12w)', () => {
     }
   });
 });
+
+// ── Las DOCE categorias del inventario (HOGARIA-SPEC ## 12x) ──
+//
+// El catalogo de categorias es dato desde esta tanda, y el dato tiene un problema que los demas no tienen: las
+// doce filas de fabrica estan escritas en CUATRO sitios (el semillero del server, los dos mapas del frente, el
+// array del formulario de la despensa y el diccionario en dos idiomas). Ninguno de los cuatro se entera cuando
+// otro cambia, y el fallo no es un 500: es una categoria que vuelve a salir en castellano para siempre, o un
+// articulo que se queda sin etiqueta porque la clave de fabrica ya no existe. Este bloque es el que se entera.
+
+const CATALOGOS = join(REPO_ROOT, 'server/src/utils/pantry-categories.ts');
+const PANTRY_COMPONENT = join(REPO_ROOT, 'frontend/src/app/features/pantry/pantry.component.ts');
+
+/** `DEFAULT_PANTRY_CATEGORIES` del server: las claves y los nombres con los que nace una casa. */
+function categoriasDeFabrica(): { key: string; name: string; color: string }[] {
+  const texto = readFileSync(CATALOGOS, 'utf8');
+  const i = texto.indexOf('export const DEFAULT_PANTRY_CATEGORIES');
+  if (i < 0) throw new Error('DEFAULT_PANTRY_CATEGORIES ya no esta en pantry-categories.ts');
+  const bloque = texto.slice(i, texto.indexOf('];', i));
+  const filas = [...bloque.matchAll(/\{\s*key:\s*'([^']+)',\s*name:\s*'([^']+)',\s*color:\s*'(#[0-9A-Fa-f]{6})'\s*\}/g)];
+  if (filas.length < 12) throw new Error(`el semillero de categorias se ha leido corto: ${filas.length} filas`);
+  return filas.map((m) => ({ key: m[1], name: m[2], color: m[3] }));
+}
+
+function mapaDeLabels2x(nombre: string): Map<string, string> {
+  const i = labels.indexOf(`export const ${nombre}`);
+  if (i < 0) throw new Error(`falta ${nombre} en core/i18n/labels.ts`);
+  const bloque = labels.slice(i, labels.indexOf('};', i));
+  const out = new Map<string, string>();
+  for (const m of bloque.matchAll(/^\s*([a-z ]+):\s*'(pantry\.[a-z_.]+)'/gm)) out.set(m[1], m[2]);
+  for (const m of bloque.matchAll(/^\s*([a-z ]+):\s*'([^']+)'/gm)) if (!out.has(m[1])) out.set(m[1], m[2]);
+  return out;
+}
+
+describe('las doce categorias de fabrica (## 12x)', () => {
+  const semillas = categoriasDeFabrica();
+  const etiquetas = mapaDeLabels2x('PANTRY_CATEGORY_LABEL_KEYS');
+  const nombres = mapaDeLabels2x('PANTRY_CATEGORY_FACTORY_NAMES');
+  const { es, en } = idiomas();
+
+  it('el frente tiene las mismas doce claves, en el mismo orden', () => {
+    expect([...etiquetas.keys()]).toEqual(semillas.map((s) => s.key));
+    expect([...nombres.keys()]).toEqual(semillas.map((s) => s.key));
+  });
+
+  it('el nombre que el frente cree de fabrica es el que el server escribe, tilde por tilde', () => {
+    for (const semilla of semillas) expect(nombres.get(semilla.key)).toBe(semilla.name);
+  });
+
+  it('la etiqueta castellana ES el nombre sembrado, y el ingles existe y no es el castellano copiado', () => {
+    for (const semilla of semillas) {
+      const clave = etiquetas.get(semilla.key);
+      if (!clave) throw new Error(`${semilla.key} se ha quedado sin clave de etiqueta`);
+      expect(es.get(clave)).toBe(semilla.name);
+      const traduccion = en.get(clave);
+      expect(typeof traduccion).toBe('string');
+      expect((traduccion ?? '').trim().length).toBeGreaterThan(0);
+      expect(traduccion).not.toMatch(/[áéíóúñÁÉÍÓÚÑ]/);
+    }
+  });
+
+  it('el formulario de la despensa ofrece las mismas doce claves (no una lista propia)', () => {
+    const texto = readFileSync(PANTRY_COMPONENT, 'utf8');
+    const i = texto.indexOf('ingredientCategoriesNoAll: {');
+    if (i < 0) throw new Error('el array de categorias de la despensa ya no esta en pantry.component.ts');
+    const bloque = texto.slice(i, texto.indexOf('];', i));
+    const vistas = [...bloque.matchAll(/value:\s*'([^']+)'/g)].map((m) => m[1]);
+    expect(vistas).toEqual(semillas.map((s) => s.key));
+    const claves = [...bloque.matchAll(/labelKey:\s*'(pantry\.[a-z_.]+)'/g)].map((m) => m[1]);
+    expect(claves).toEqual(semillas.map((s) => etiquetas.get(s.key)));
+  });
+
+  it('la reserva es la ultima, y se llama como la clave que guarda la fila', () => {
+    expect(semillas[semillas.length - 1].key).toBe('other');
+    expect(es.get(etiquetas.get('other') ?? '')).toBe('Otros');
+  });
+});

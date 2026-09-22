@@ -314,3 +314,58 @@ export function catalogLabelKey(value: string | null | undefined): TranslationKe
 
 /** Los dos catalogos juntos, para quien solo necesita saber si una palabra es del semillero (y pruebas). */
 export const CATALOG_LABEL_KEYS: Record<string, TranslationKey> = { ...FOOD_LABEL_KEYS, ...UTENSIL_LABEL_KEYS };
+
+/**
+ * Las doce categorias con las que nace una casa (HOGARIA-SPEC ## 12x) y el nombre en castellano con el que el
+ * server las siembra. Los dos mapas van juntos y el `spec` del puente falla si se separan de
+ * `server/src/utils/pantry-categories.ts`, que es quien los escribe.
+ *
+ * Para que sirve el segundo: si alguien renombra «Verduras» a «Verduras de la huerta», **la etiqueta pasa a ser
+ * su texto**, no la frase del diccionario —lo que hay en la base de datos gana, siempre—. Por eso la decision
+ * no es «la clave es de fabrica», sino «la clave es de fabrica y el nombre sigue siendo el de fabrica».
+ */
+export const PANTRY_CATEGORY_LABEL_KEYS: Record<string, TranslationKey> = {
+  vegetables: 'pantry.categoria_verduras',
+  fruits: 'pantry.categoria_frutas',
+  meat: 'pantry.categoria_carnes',
+  fish: 'pantry.categoria_pescados',
+  dairy: 'pantry.categoria_lacteos',
+  grains: 'pantry.categoria_cereales',
+  spices: 'pantry.categoria_especias',
+  condiments: 'pantry.categoria_condimentos',
+  frozen: 'pantry.categoria_congelados',
+  canned: 'pantry.categoria_enlatados',
+  beverages: 'pantry.categoria_bebidas',
+  other: 'pantry.categoria_otros'
+};
+
+export const PANTRY_CATEGORY_FACTORY_NAMES: Record<string, string> = {
+  vegetables: 'Verduras',
+  fruits: 'Frutas',
+  meat: 'Carnes',
+  fish: 'Pescados',
+  dairy: 'Lácteos',
+  grains: 'Cereales',
+  spices: 'Especias',
+  condiments: 'Condimentos',
+  frozen: 'Congelados',
+  canned: 'Enlatados',
+  beverages: 'Bebidas',
+  other: 'Otros'
+};
+
+/**
+ * La etiqueta de una categoria del inventario, en el idioma activo. `key` y `name` pueden venir sueltos (una
+ * fila de la despensa solo trae la clave) o juntos (una fila del catalogo).
+ */
+export function pantryCategoryLabel(
+  categoria: { key?: string | null; name?: string | null } | string | null | undefined,
+  t: (key: TranslationKey) => string
+): string {
+  const fila = typeof categoria === 'string' ? { key: categoria } : categoria ?? {};
+  const clave = fila.key ?? '';
+  const etiquetaDeFabrica = PANTRY_CATEGORY_LABEL_KEYS[clave];
+  const sigueSiendoDeFabrica = !fila.name || fila.name === PANTRY_CATEGORY_FACTORY_NAMES[clave];
+  if (etiquetaDeFabrica && sigueSiendoDeFabrica) return t(etiquetaDeFabrica);
+  return fila.name ?? clave ?? '';
+}
