@@ -798,7 +798,19 @@ export class PantryCategoriesComponent implements OnInit {
     else await this.refrescar();
   }
 
+  /**
+   * Volver. El boton vive en la cabecera de las DOS pantallas, o sea que las dos tienen que llevar a algun
+   * lado: de la ficha a la lista, y de la lista al inventario. Antes estaba guardado por «esto es una ficha?»,
+   * que en la lista es falso, y el resultado era un boton que no hacia nada —lo que se oyo fue «el boton de
+   * volver al inventario no funciona»—. Se decide por la URL (existe el segmento `:id`?), no por el estado:
+   * `ficha` se muda durante el guardado y del borrado, y «volver» tiene que significar lo mismo en los dos
+   * momentos de la misma pantalla.
+   */
   protected async volver(): Promise<void> {
-    if (this.ficha) await this.router.navigate(['../'], { relativeTo: this.route });
+    if (this.route.snapshot.paramMap.has('id')) {
+      await this.router.navigate(['../'], { relativeTo: this.route });
+      return;
+    }
+    await this.router.navigate(['/pantry']);
   }
 }

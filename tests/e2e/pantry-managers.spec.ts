@@ -140,4 +140,20 @@ test.describe('El gestor del inventario', () => {
     await expect(page.locator('#gestor-categorias-q')).toHaveValue('Frutas');
     expect(url).toContain('view=without-products');
   });
+
+  test('volver lleva a la lista desde la ficha, y al inventario desde la lista', async ({ page }) => {
+    // El boton vive en la cabecera de las dos pantallas, o sea que las dos tienen que llevar a algun lado. Estaba
+    // guardado por «esto es una ficha?», que en la lista es falso, y el resultado era un boton que no hacia nada:
+    // «el boton de volver al inventario no funciona». Se decide por la URL, no por el estado, porque durante el
+    // guardado y el borrado el estado cambia y el boton no puede cambiar de significado con el.
+    await page.locator('[data-test="gestor-categorias-volver"]').click();
+    await expect(page).toHaveURL(/\/pantry(\?|$)/);
+    await expect(page.locator('h1.pantry__title')).toBeVisible();
+
+    await page.goto('/pantry/products/new');
+    await expect(page.locator('[data-test="gestor-productos-ficha"]')).toBeVisible();
+    await page.locator('[data-test="gestor-productos-volver"]').click();
+    await expect(page).toHaveURL(/\/pantry\/products$/);
+    await expect(page.locator('[data-test="gestor-productos-lista"]')).toBeVisible();
+  });
 });

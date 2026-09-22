@@ -3379,6 +3379,22 @@ superficie para la barra de trabajo y sin columnas —los colores y las piezas e
       decir que la tanda está cerrada; puede que quede algún `--space-6` de más o de menos, y eso solo se ve
       mirando.
 
+
+### Y un boton que se pinta en dos pantallas necesita dos destinos
+
+Al ver las dos vistas salio lo que el CSS no podia tapar: «el boton de volver al inventario no funciona». No es
+que el router no funcionara —`volver()` estaba guardado por `if (this.ficha)`, y en la **lista** `ficha` es `null`,
+asi que el boton de la cabecera no hacia absolutamente nada—. Los dos sitios que comparten cabecera necesitan su
+propio destino: de la ficha a la lista (`../`) y de la lista al inventario (`/pantry`).
+
+- Se decide **por la URL** (`paramMap.has('id')`), no por el estado: `ficha` se queda a `null` a mitad del
+  guardado y del borrado, y «volver» no puede cambiar de significado a media operacion. Los sitios internos que
+  querian «cerrar la ficha» siguen haciendo lo mismo que hacian (estan detras de un `if (this.ficha)`).
+- `tests/e2e/pantry-managers.spec.ts` gana un caso con las dos mitades: desde la lista el boton deja en `/pantry`
+  (con el titulo de la despensa visible) y desde el alta `/pantry/products/new` deja en `/pantry/products` con su
+  lista visible. Un boton que no hace nada es invisible para `tsc`, para `check-ui` y para el build: lo ve quien
+  lo pulsa, o quien escribe el caso que lo pulsa.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
