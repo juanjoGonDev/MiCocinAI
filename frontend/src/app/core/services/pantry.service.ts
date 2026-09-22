@@ -81,6 +81,36 @@ export class PantryService {
     ).subscribe();
   }
 
+  /**
+   * El inventario completo, de 100 en 100 (HOGARIA-SPEC ## 12ab).
+   *
+   * La tabla filtra y ordena sobre TODAS las filas de la casa, no sobre la pagina que toque: «ordenar por
+   * caducidad» o «solo verduras vencidas» sobre 20 filas es mentir. El server pagina con tope de 100 por
+   * peticion, asi que se bucea hasta agotar `total` —y con un techo de 20 paginas (2.000 filas), que una casa
+   * no tiene mas; si algun dia las hubiera, la tabla mostraria las que hay y el pie de pagina lo dice—.
+   */
+  async cargarInventarioCompleto(): Promise<void> {
+    this.isLoadingSignal.set(true);
+    try {
+      const todas: Ingredient[] = [];
+      let total = Infinity;
+      let pagina = 1;
+      while (todas.length < total && pagina <= 20) {
+        const params = new HttpParams().set('pageSize', '100').set('page', String(pagina));
+        const response = await firstValueFrom(this.http.get<any>(`${this.apiUrl}/ingredients`, { params }));
+        const lote = (response?.data?.ingredients ?? []) as Ingredient[];
+        total = Number(response?.data?.total ?? lote.length);
+        todas.push(...lote);
+        if (lote.length === 0) break;
+        pagina += 1;
+      }
+      this.ingredientsSignal.set(todas);
+      this.totalSignal.set(Number.isFinite(total) ? total : todas.length);
+    } finally {
+      this.isLoadingSignal.set(false);
+    }
+  }
+
   getIngredient(id: string): Observable<Ingredient | null> {
     return this.http.get<any>(`${this.apiUrl}/ingredients/${id}`).pipe(
       tap(response => response.data),

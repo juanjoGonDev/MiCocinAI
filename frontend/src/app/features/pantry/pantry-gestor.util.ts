@@ -110,3 +110,29 @@ export function offsetDeQuery(query: ConsultaDeQuery, campo = 'offset'): number 
   const leido = Number(query.get(campo));
   return Number.isFinite(leido) && leido > 0 ? Math.floor(leido) : 0;
 }
+
+/**
+ * Las claves de la raiz y de todo lo que cuelga de ella (HOGARIA-SPEC ## 12ab).
+ *
+ * Es la misma expansion que hace el server al filtrar `?category=` por subarbol (## 12aa), replicada en cliente
+ * porque la tabla del visor filtra sus propias filas: al elegir el padre «Alimentos» entran tambien sus hijas.
+ * Se comparte aqui con el gestor porque las dos reglas del arbol viven en este fichero desde la ## 12x.
+ */
+export function clavesSubarbolDe(
+  categorias: readonly Pick<PantryCategory, 'key' | 'parentKey'>[],
+  raiz: string
+): Set<string> {
+  const claves = new Set<string>([raiz]);
+  let pendientes = [raiz];
+  while (pendientes.length > 0) {
+    const actual = pendientes[0]!;
+    pendientes = pendientes.slice(1);
+    for (const cat of categorias) {
+      if (cat.parentKey === actual && !claves.has(cat.key)) {
+        claves.add(cat.key);
+        pendientes.push(cat.key);
+      }
+    }
+  }
+  return claves;
+}

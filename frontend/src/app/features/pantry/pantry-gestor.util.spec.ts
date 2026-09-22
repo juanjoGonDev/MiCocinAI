@@ -3,6 +3,7 @@ import { pantryEn, pantryEs } from '../../core/i18n/dict/pantry';
 import type { PantryCategory } from '../../shared/models/pantry.model';
 import {
   aliasVisibles,
+  clavesSubarbolDe,
   clavesNoElegiblesComoPadre,
   colorDeCategoria,
   normalizarAlias,
@@ -151,5 +152,22 @@ describe('el estado de la lista vuelve de la query', () => {
     // Negativo seria una pagina que no existe: la primera pagina siempre es la primera.
     expect(offsetDeQuery(query({ offset: '-10' }))).toBe(0);
     expect(offsetDeQuery(query({ offset: '12.9' }))).toBe(12);
+  });
+});
+
+describe('clavesSubarbolDe (## 12ab)', () => {
+  const arbol = [
+    { key: 'alimentos', parentKey: null },
+    { key: 'verduras', parentKey: 'alimentos' },
+    { key: 'frutas', parentKey: 'alimentos' },
+    { key: 'bocadillos', parentKey: 'verduras' },
+    { key: 'other', parentKey: null }
+  ];
+  it('sube la raiz y baja por todos los nietos', () => {
+    expect(clavesSubarbolDe(arbol, 'alimentos')).toEqual(new Set(['alimentos', 'verduras', 'frutas', 'bocadillos']));
+  });
+  it('un callejon sin hijos es el mismo; y un ciclo no lo monta nadie (no hay padres repetidos)', () => {
+    expect(clavesSubarbolDe(arbol, 'frutas')).toEqual(new Set(['frutas']));
+    expect(clavesSubarbolDe(arbol, 'other')).toEqual(new Set(['other']));
   });
 });
