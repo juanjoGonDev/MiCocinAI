@@ -168,3 +168,25 @@ describe('dias de caducidad', () => {
     expect(untouched.notes).toBe('para el gazpacho');
   });
 });
+
+describe('el stepper de la fila puede bajar a 0 (## 12aa)', () => {
+  it('quantity 0 se guarda, la casilla vacia cae a 0 y la fila no se borra', async () => {
+    // El visor promete que bajar a 0 devuelve el articulo a «lo que la casa conoce» sin borrarlo. El alta
+    // exige >= 1 (la cantidad vacia no es un ingrediente, es una sugerencia), pero el stepper necesita
+    // escribir el 0 por el PATCH de toda la vida, que era `formPartial(create)` y se comia el `.positive()`
+    // del alta: la fila se quedaba en 1 sin decir nada (el 400 no tenia ni destinatario en el cliente).
+    const saved = await data(await call('POST', '/ingredients', {
+      name: 'Tomate sin botes', quantity: 1, category: 'other', unit: 'g'
+    }));
+    const cero = await data(await call('PATCH', `/ingredients/${saved.id}`, { quantity: 0 }));
+    expect(cero.quantity).toBe(0);
+    // `null` —la casilla vaciada a mano— cae a 0: «sin existencias» es lo mismo que 0 aqui, y la columna
+    // es NOT NULL, asi que el hueco tiene que elegir un lado. Elige el 0, no el 500.
+    const vacio = await data(await call('PATCH', `/ingredients/${saved.id}`, { quantity: null, notes: 'el ultimo bote, al armario' }));
+    expect(vacio.quantity).toBe(0);
+    expect(vacio.notes).toBe('el ultimo bote, al armario');
+    // Y la fila sigue viva: el 0 la mueve de seccion, no de tabla.
+    const lista = await data(await call('GET', '/ingredients'));
+    expect(namesOf(lista)).toContain('Tomate sin botes');
+  });
+});

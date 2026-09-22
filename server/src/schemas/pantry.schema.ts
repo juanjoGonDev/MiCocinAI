@@ -39,7 +39,16 @@ export const createIngredientSchema = z.object({
 
 // `formPartial` y no `.partial()`: ver el contrato en `form-contract.spec.ts` —un PATCH tiene que
 // poder escribir `null` para quitar la foto o la nota, y `.partial()` lo rechaza.
-export const updateIngredientSchema = formPartial(createIngredientSchema);
+// `formPartial` y no `.partial()`: ver el contrato de la ## 12x —un PATCH tiene que
+// poder escribir `null` para quitar la foto o la nota, y `.partial()` lo rechaza.
+//
+// La unica excepcion al `extend` de arriba se llama `quantity`: el alta exige >= 1 (una cantidad vacia
+// no es un ingrediente, es una sugerencia), pero el PATCH tiene que poder escribir el 0, que es la
+// accion del stepper de la fila en el visor —«bajar a 0 lo devuelve a sugerencias sin borrarlo» (## 12aa)—.
+// `formNumber` y no un `min(0)` pelado por coherencia con el alta de `createProductSchema`, que mide igual.
+export const updateIngredientSchema = formPartial(createIngredientSchema).extend({
+  quantity: formNumber({ min: 0, max: 100000 })
+});
 
 /**
  * Un flag pasado por la URL. `z.boolean()` a secas no sirve: la query siempre manda texto, y

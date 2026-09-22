@@ -319,7 +319,9 @@ pantryRoutes.patch('/ingredients/:id', async (c) => {
 
   if (input.quantity !== undefined) {
     updates.push('quantity = ?');
-    values.push(input.quantity);
+    // El hueco elegido es 0, no `null`: «sin existencias» y 0 son la misma cosa en la despensa, y la
+    // columna es NOT NULL —empujar el `null` del PATCH vaciado era un 500 con muy mala educacion—.
+    values.push(input.quantity ?? 0);
   }
 
   if (input.unit !== undefined) {
