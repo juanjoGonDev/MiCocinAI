@@ -23,7 +23,7 @@ import type {
   PantryProductSort,
   PantryRequest
 } from '../../shared/models/pantry.model';
-import { aliasVisibles, colorDeCategoria, normalizarAlias } from './pantry-gestor.util';
+import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorDeQuery } from './pantry-gestor.util';
 
 /**
  * El gestor de productos principales (HOGARIA-SPEC ## 12x).
@@ -523,6 +523,14 @@ export class PantryProductsComponent implements OnInit {
 
   ngOnInit(): void {
     this.pantry.loadCategories();
+    // El estado de la lista es la query, y aqui es donde la query vuelve a ser estado: entrar por
+    // `/pantry/products?filter=in-pantry` o sobrevivir a un F5 tiene que pintar el filtro, la busqueda y la
+    // pagina que dice la URL. Sin esto se ignoraba y la pantalla caia al de fabrica —el bug que encontro el CI—.
+    const query = this.route.snapshot.queryParamMap;
+    this.filtro = valorDeQuery(query, 'filter', ['all', 'staples', 'in-pantry', 'expiring'] as const, 'staples');
+    this.orden = valorDeQuery(query, 'sort', ['name', 'recent'] as const, 'name');
+    this.q = valorDeQuery(query, 'q', null, '');
+    this.offset = offsetDeQuery(query);
     const id = this.route.snapshot.paramMap.get('id');
     if (id) this.abrirFicha(id);
     else void this.refrescar();

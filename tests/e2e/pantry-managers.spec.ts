@@ -91,9 +91,11 @@ test.describe('El gestor del inventario', () => {
     await page.locator('[data-test="gestor-productos-guardar"]').click();
 
     await expect(page).toHaveURL(/\/pantry\/products$/);
-    await page.locator('#gestor-productos-q').fill('levadura fresca');
+    // Se entra por URL, no escribiendo en la caja: desde que el gestor lee la query al montar, la URL ES el
+    // estado, y es lo que se quiere probar aqui (que el alias encuentra el producto, no que el debounce pinte).
+    await page.goto('/pantry/products?filter=all&q=levadura%20fresca');
     const fila = page.locator('.fila', { hasText: 'Levadura de panadero' });
-    await expect(fila).toBeVisible();
+    await expect(fila).toBeVisible({ timeout: 15_000 });
     await expect(fila.locator('.fila__alias').first()).toHaveText('levadura fresca');
   });
 
@@ -130,5 +132,8 @@ test.describe('El gestor del inventario', () => {
     await page.reload();
     expect(page.url()).toBe(url);
     await expect(page.locator('[data-test="gestor-categorias-vista-without-products"] .tag')).toHaveClass(/tag--selected/);
+    // Y el estado vuelve de la query, no del componente: la busqueda sigue en su caja y el filtro esta en la URL.
+    await expect(page.locator('#gestor-categorias-q')).toHaveValue('Frutas');
+    expect(url).toContain('view=without-products');
   });
 });

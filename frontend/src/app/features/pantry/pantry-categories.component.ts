@@ -17,7 +17,7 @@ import { PickerComponent, type PickerOption } from '../../shared/components/ui/p
 import { PantryCategoryLabelPipe } from '../../shared/pipes/pantry-category-label.pipe';
 import { pantryCategoryLabel } from '../../core/i18n/labels';
 import type { PantryCategory, PantryCategoryView } from '../../shared/models/pantry.model';
-import { clavesNoElegiblesComoPadre, colorDeCategoria } from './pantry-gestor.util';
+import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQuery } from './pantry-gestor.util';
 
 /**
  * El gestor de categorias del inventario (HOGARIA-SPEC ## 12x).
@@ -419,6 +419,12 @@ export class PantryCategoriesComponent implements OnInit {
 
   ngOnInit(): void {
     this.pantry.loadCategories();
+    // Lo mismo que en productos: la query es el estado, y al entrar se lee. `view` es el nombre que comparte con
+    // el servidor para las vistas, no un detalle interno de la URL.
+    const query = this.route.snapshot.queryParamMap;
+    this.view = valorDeQuery(query, 'view', ['all', 'without-products', 'with-children'] as const, 'all');
+    this.q = valorDeQuery(query, 'q', null, '');
+    this.offset = offsetDeQuery(query);
     const id = this.route.snapshot.paramMap.get('id');
     if (id) this.abrirFicha(id);
     else void this.refrescar();

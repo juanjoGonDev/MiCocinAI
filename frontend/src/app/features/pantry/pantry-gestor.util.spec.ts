@@ -1,7 +1,14 @@
 import { pantryCategoryLabel } from '../../core/i18n/labels';
 import { pantryEn, pantryEs } from '../../core/i18n/dict/pantry';
 import type { PantryCategory } from '../../shared/models/pantry.model';
-import { aliasVisibles, clavesNoElegiblesComoPadre, colorDeCategoria, normalizarAlias } from './pantry-gestor.util';
+import {
+  aliasVisibles,
+  clavesNoElegiblesComoPadre,
+  colorDeCategoria,
+  normalizarAlias,
+  offsetDeQuery,
+  valorDeQuery
+} from './pantry-gestor.util';
 
 // El `es` del diccionario es la fuente de la verdad para estas pruebas: el semillero del server escribe los
 // nombres en castellano, y lo que se comprueba aqui es como se lee ese texto, no como suena en otro idioma.
@@ -104,5 +111,45 @@ describe('la etiqueta de una categoria (## 12x)', () => {
   it('una clave sin fila (la borraron y el articulo se quedo) se pinta como lo que es: una clave', () => {
     expect(pantryCategoryLabel('despensa-vieja', t)).toBe('despensa-vieja');
     expect(pantryCategoryLabel({ key: 'despensa-vieja' }, t)).toBe('despensa-vieja');
+  });
+});
+
+// El estado de la lista (filtro, vista, busqueda, pagina) viaja en la query para que un F5 conserve el sitio.
+// Eso solo vale si al entrar se lee: escribir la URL y no mirarla es un adorno, y era exactamente el bug que
+// encontro el CI en la tanda 25 (entrar por `/pantry/products?filter=in-pantry` ponia la primera pagina de
+// `staples`, con la busqueda vacia). Se prueba aqui, que es donde se puede probar sin navegador.
+const query = (pares: Record<string, string>): { get(campo: string): string | null } => ({
+  get: (campo: string) => pares[campo] ?? null
+});
+
+describe('el estado de la lista vuelve de la query', () => {
+  it('lo que la query dice manda, si es un valor conocido', () => {
+    const filtros = ['all', 'staples', 'in-pantry', 'expiring'] as const;
+    expect(valorDeQuery(query({ filter: 'in-pantry' }), 'filter', filtros, 'staples')).toBe('in-pantry');
+    expect(valorDeQuery(query({}), 'filter', filtros, 'staples')).toBe('staples');
+  });
+
+  it('un valor que no esta en la lista cae al de fabrica, no se cuela', () => {
+    const vistas = ['all', 'without-products', 'with-children'] as const;
+    expect(valorDeQuery(query({ view: 'todo-y-mas' }), 'view', vistas, 'all')).toBe('all');
+    // Un tipo de dato que la app no entiende tampoco: la query es texto libre, viene del navegador.
+    expect(valorDeQuery(query({ view: '5' }), 'view', vistas, 'all')).toBe('all');
+  });
+
+  it('la busqueda se lee tal cual, y ausencia es cadena vacia', () => {
+    expect(valorDeQuery(query({ q: 'Levadura' }), 'q', null, '')).toBe('Levadura');
+    expect(valorDeQuery(query({}), 'q', null, '')).toBe('');
+    // El espacio es un dato escrito por una persona: no se inventa un filtro con una cadena en blanco.
+    expect(valorDeQuery(query({ q: '   ' }), 'q', null, '')).toBe('   ');
+  });
+
+  it('el desplazamiento solo cuenta hacia delante, y lo que no es numero no es pagina', () => {
+    expect(offsetDeQuery(query({ offset: '20' }))).toBe(20);
+    expect(offsetDeQuery(query({ offset: '0' }))).toBe(0);
+    expect(offsetDeQuery(query({}))).toBe(0);
+    expect(offsetDeQuery(query({ offset: 'abc' }))).toBe(0);
+    // Negativo seria una pagina que no existe: la primera pagina siempre es la primera.
+    expect(offsetDeQuery(query({ offset: '-10' }))).toBe(0);
+    expect(offsetDeQuery(query({ offset: '12.9' }))).toBe(12);
   });
 });

@@ -71,3 +71,42 @@ export function aliasVisibles(aliases: string[], maximo = 3): { visibles: string
   if (aliases.length <= maximo) return { visibles: aliases, ocultos: 0 };
   return { visibles: aliases.slice(0, maximo), ocultos: aliases.length - maximo };
 }
+
+// ── el estado de la lista, que viaja en la query ─────────────────────────────────────────────────────────
+//
+// Escribir `?filter=&q=&offset=` con `replaceUrl` no sirve de nada si al entrar nadie lo lee: el F5 se queda en
+// la primera pagina del filtro de fabrica y la caja de busqueda vacia. Paso en la tanda 25, descubierto por el
+// CI (los casos `pantry-managers` que aqui dentro se escribieron a ciegas): la URL decia `filter=in-pantry` y la
+// pantalla pintaba `staples`. Se resuelve en el util, y no en cada componente, porque las dos pantallas del
+// gestor tienen que leer el estado exactamente igual.
+
+/** Un trozo de la query, con forma de «lo que no esta en la lista de valores no vale». */
+export type ConsultaDeQuery = { get(campo: string): string | null };
+
+/**
+ * El valor de `campo`, si la app lo conoce. `permitidos` a `null` es «texto libre» —la busqueda—: la URL
+ * transporta lo que escribio una persona, con sus espacios, y la ausencia es cadena vacia (no `null`: un input
+ * ligado a `null` es un input que alguien tendra que recordar cazar).
+ */
+export function valorDeQuery<T extends string>(
+  query: ConsultaDeQuery,
+  campo: string,
+  permitidos: readonly T[] | null,
+  porDefecto: T
+): T {
+  const valor = query.get(campo);
+  if (valor === null) return porDefecto;
+  if (permitidos === null) return valor as T;
+  // El `as` es para el tipador, no para el dato: `permitidos` es una lista de literales y `valor` viene de
+  // la URL como string; lo que decide si vale es la comparacion, y esa compara cadenas.
+  return (permitidos as readonly string[]).includes(valor) ? (valor as T) : porDefecto;
+}
+
+/**
+ * El desplazamiento en filas. La query es texto del navegador: lo que no es un numero no es pagina, y lo
+ * negativo se queda en la primera —una pagina antes de la primera no existe—.
+ */
+export function offsetDeQuery(query: ConsultaDeQuery, campo = 'offset'): number {
+  const leido = Number(query.get(campo));
+  return Number.isFinite(leido) && leido > 0 ? Math.floor(leido) : 0;
+}
