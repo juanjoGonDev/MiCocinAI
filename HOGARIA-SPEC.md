@@ -3395,6 +3395,162 @@ propio destino: de la ficha a la lista (`../`) y de la lista al inventario (`/pa
   lista visible. Un boton que no hace nada es invisible para `tsc`, para `check-ui` y para el build: lo ve quien
   lo pulsa, o quien escribe el caso que lo pulsa.
 
+## 12aa. Tanda 29 — el inventario es de la casa entera, y el catálogo llega pre-registrado
+
+Lo que se dijo: «crea un visor profesional tanto para PC como para mobile, y sería de inventario en general:
+ya no es solo una app de cocina, ahora es de la casa, por lo que la despensa será inventario —puedes crear la
+categoría padre "Alimentos" donde estén todos estos, o "Despensa", como tú quieras—. Y quiero pre-registro, con
+su relación producto-categoría y categoría-categoría-padre, de productos comunes en los supermercados de España
+(Mercadona, Lidl, Consum, Carrefour, Alcampo, Coviran, Día…). Pon una inmensa mayoría: así está pre-registrado
+y es más fácil añadirlo.»
+
+Tres peticiones, y las tres tienen forma de dato antes que de pantalla:
+
+### A. El nombre: «Inventario»
+
+La pantalla deja de ser la despensa de la cocina y pasa a ser el inventario de la casa. Se cambian **los
+valores, no las claves ni las rutas**: `/pantry`, las claves `pantry.*` y las rutas de la API son contratos
+(enlaces guardados de gente que ya usa la app, el `data-module-switch="pantry"`, toda la suite e2e). Renombrar
+eso a `/inventario` no añade una sola palabra visible y toca dos contratos por fuera. Lo visible es el texto,
+y el texto es del diccionario: `nav.pantry` pasa a «Inventario»/«Inventory», `pantry.title` pierde el «Despensa»
+y el pictograma de más adelante, `pantry.en_despensa` pasa a «En inventario», y los rótulos del ajuste de casa
+(`household.despensa_*`: «Despensa compartida», «Despensa individual») pasan a hablar de inventario compartido.
+La clave interna de la preferencia sigue siendo `sharedPantry`, por el mismo motivo que la ruta.
+
+### B. El pre-registro: catálogo de supermercado en el server
+
+`server/src/utils/supermarket-catalog.ts` trae el dato: **seis categorías padre** —`alimentos` (Alimentos),
+`limpieza` (Limpieza del hogar), `higiene` (Higiene personal), `hogar` (Hogar y desechables), `mascotas`
+(Mascotas) y `bebe` (Bebé)—, **treinta y dos hojas** colgando de ellas (las once hojas de comida de siempre,
+con su `key` exacta para caer en las categorias que la casa ya tiene, más `charcuteria`, `panaderia`,
+`desayunos`, `snacks`, `dulces`, `colada`, `fregadero`, `superficies`, `bano`, `cabello`, `corporal`, `bucal`,
+`botiquin`, `desechables`, `almacenaje`, `mantenimiento`, `perro`, `gato`, `panales`, `alimentacion-bebe`,
+`cuidado-bebe`…), y **una inmensa mayoría de productos**: 340 como mínimo, medidos en el propio test de
+invariantes, repartidos por los pasillos que se recorren de verdad en un súper español. Cada producto es
+`[nombre, unidad]`, con la unidad del vocabulario de siempre (nada de `pack`: `unit` es la caja, la botella,
+el pack de seis —que es como la casa cuenta de todas maneras—).
+
+Tres decisiones de modelo, escritas antes de tocar código:
+
+- **No hay tabla nueva.** El catálogo es dato de fábrica, como el de utensilios, no dato de la casa:
+  copiarlo a una tabla hace que cada producto nuevo exija una migración para actualizar la copia. Vive en el
+  módulo; los endpoints leen de memoria; lo único que se persiste es lo que la persona añade, que es una fila
+  de `ingredients` con su categoría. Si mañana el catálogo quisiera ser editable, eso es otra tanda con su
+  migración.
+- **`id` = `hoja:índice`** (p. ej. `dairy:3`): determinista, legible en el log, y **referencia efímera**: lo
+  que guarda la casa es el nombre, no el id. Reordenar el fichero no rompe ninguna casa, a lo sumo cambia el
+  id con el que alguien llamó dos minutos antes. El test de invariantes exige claves únicas dentro de la hoja.
+- **La relación producto-categoría y categoría-padre se respeta al añadir, no solo al pintar.** `POST
+  /catalog/add` crea en la casa la hoja que falte con su nombre y su color **y su padre en orden**
+  (`alimentos` antes que `charcuteria`), reutilizando `createCategory` —techo de profundidad, clave única
+  y reserva de `other` incluidos—. Un catálogo sin padre sería la lista de la compra; con padre es el árbol
+  que el gestor de categorías ya sabe pintar.
+
+Y tres endpoints bajo `/api/pantry` (misma auth y mismo ámbito que los dos gestores; en `pantry.schema.ts`
+los `zod` correspondientes):
+
+- `GET /catalog/categories` — la lista plana de las 38 con su `productCount`; el cliente se monta el árbol,
+  que son treinta y ocho filas.
+- `GET /catalog/products?q=&category=&limit=&offset=` — `q` busca sin acentos y sin mayúsculas sobre el
+  nombre; `category` vale una hoja o una padre (con padre, se responde el subárbol); el orden es hoja →
+  nombre; la paginación y el `meta` son los de siempre. Cada fila trae `inHousehold`: si ese nombre ya es
+  un producto de la casa (la misma `productKeyOf` que usa el gestor, no un `LIKE`).
+- `POST /catalog/add {ids}` — por cada id: si no existe ficha, se inserta con **`quantity` 1** («añadir al
+  inventario» promete inventario, no un registro vacío —eso ya lo hace el gestor—); si existe con stock a 0,
+  sube a 1; si existe con stock, se salta y se cuenta en `skipped`. Un `ids` con un id desconocido o vacío es
+  400: un lote a medias es la clase de estado que luego nadie sabe arreglar (el mismo criterio del
+  `bulk-delete`).
+
+### C. «Alimentos» también en la casa, y el filtro por padre filtra el subárbol
+
+- `DEFAULT_PANTRY_CATEGORIES` gana la padre `alimentos` y las once hojas de comida nacen colgando de ella
+  (la reserva `other` se queda arriba, protegida y sin padre —es donde cae lo que no encaja, no una sección de
+  comida—). Para las casas que ya existen, `asegurarPadreAlimentos(db, casa)`: idempotente, solo toca a la
+  casa que tiene las hojas de fábrica **con su nombre de fábrica y sin mover de sitio**, y no reescribe la
+  fila de nadie que ya las reorganizó. Se llama desde el backfill de arranque, que es donde viven las
+  migraciones de dato en este repo.
+- **Filtrar por categoría incluye el subárbol** en `GET /products` y `GET /ingredients`. Con `category =
+  'alimentos'`, el `category = ?` exacto devolvía cero filas: un botón pintado que no encuentra nada es el
+  botón de la ronda 28 repetido en el sitio del lado equivocado. El conteo del padre en los chips del visor
+  pasa a ser `descendantProducts`, que es lo que la fila del padre promete.
+- La etiqueta de fábrica `alimentos` entra en los dos mapas de `labels.ts` (`pantry.categoria_alimentos`,
+  «Alimentos»/«Food»), y las hojas que crea el catálogo en una casa son categorías **de la casa**: su nombre
+  se pinta crudo, que es la regla de la ## 12w al revés de como se mira —se traduce la lectura de lo de
+  fábrica; lo que la casa escribió, no—.
+
+### D. La pantalla `/pantry/catalogo`: el visor profesional del catálogo
+
+Un navegador en ruta, no un modal —mismo contrato que los dos gestores: F5 sobrevive, el botón atrás significa
+lo que significa, y el estado viaja en la query (`?cat=&q=`), **hidratándola al montar** (la lección del bug
+de la ## 12y). La caja es `.gestor` (1000px, `--space-4`/`--space-6`, pie `--space-16`/`--space-20`), con el
+mismo vocabulario de superficies que sus dos vecinas:
+
+- **PC (≥ 960px)**: dos columnas `220px minmax(0,1fr)`. A la izquierda, el árbol en riel `position: sticky`:
+  las seis padres como microetiquetas y sus hojas debajo con sangrado y contador `tabular-nums`. A la derecha,
+  la barra de trabajo (buscador, «Añadir lo visible») y la lista: filas en `.lista` con grid `minmax(0,1fr)
+  auto auto` —nombre + punto de color, etiqueta de categoría, botón de acción—.
+- **Móvil**: las mismas filas del árbol se vuelven un scroller horizontal de píldoras (un único DOM, que el
+  CSS es el que cambia el reflujo: dos piezas por medio = dos `data-test` iguales = strict-mode en la primera
+  prueba que pase por ahí); las filas, apiladas, con el botón de añadir a 44px de diana.
+- Fila ya en casa: el botón se convierte en `check_circle` deshabilitado con su etiqueta «en tu inventario» —
+  que el catálogo diga qué es tuyo sin tener que ir comprobándolo es media gracia del pre-registro—.
+- «Añadir lo visible (N)» manda los ids de la página actual: el lote es el mismo endpoint con la selección
+  que estabas mirando, no un botón mágico por arriba.
+
+### E. El visor del inventario (la pantalla que ya existía) se pone a la altura
+
+Cambios sobre `pantry.component.ts` sin tocar ningún `data-test` ni clase que pisan los e2e existentes:
+
+- Fuera pictogramas de la pestaña de inventario: el punto de color de la categoría en la fila y en las
+  sugerencias (el dato de la categoría, ya cargado, en lugar de un emoji por clave), `app-icon` para editar
+  y borrar, y los stats como franja profesional (icono del sistema + cifra `tabular-nums`) en vez de las tres
+  tarjetas con 📦⚠️❌. La pestaña de utensilios no se toca: su pictografía vive en su propia lista de deuda y
+  migrarla es otra tanda —el fichero, por eso, sigue en el LEGACY de `sin-emoji` (lo dice check-ui, no yo).
+- **Cantidad con stepper −/+** en la fila con existencias (PATCH a `ingredients`, mínimo 0; bajar a 0 deja la
+  ficha en «lo que la casa conoce» sin borrarla, que es exactamente la semántica de `staples` de la ## 12x).
+- Filtros en riel a partir de 960px (columna con los `app-tag` de siempre, `overflow: auto`, sticky) y
+  scroller horizontal por debajo: el mismo DOM en las dos pantallas.
+- Cabecera: botón «Añadir del catálogo» (ruta nueva) junto al de alta manual, y la franja `pantry__gestion`
+  gana el tercer enlace `pantry-abrir-catalogo`.
+
+### F. La suite e2e, en la misma tanda (regla de la ## 12y)
+
+- `pantry.spec.ts`: `h1` a «Inventario», la stat a «En inventario», y el orden de los chips cambia porque el
+  árbol existe: `nth(1)` pasa a ser «Alimentos» y «Verduras» desciende a `nth(2)` — se ancla aquí para que el
+  que lea el diff sepa por qué se movió un índice y no se toque otro índice por gusto.
+- `household.spec.ts`: «Inventario compartido».
+- `pantry-catalog.spec.ts` (nuevo): entrada desde la franja → buscador «leche» → fila con su botón → añadir →
+  la fila pasa a «en tu inventario» → «Añadir lo visible» cuenta y no duplica → volver deja `/pantry` con el
+  título de la despensa… perdón, del inventario → y el alta del catálogo aparece en `/pantry/products` con su
+  padre `alimentos` visible en el gestor de categorías.
+- El caso de «volver» de la ronda 28 no se mueve: el catálogo no comparte cabecera con una ficha, tiene un
+  solo destino.
+
+### Checklist de la tanda
+
+- [ ] `supermarket-catalog.spec.ts` (TDD, rojo primero): ≥ 340 productos; cada hoja no vacía y con ≥ 8
+      productos; toda `category` de producto existe y es hoja (nadie cuelga un producto de un padre); todo
+      padre existe; `key` y `id` únicos; unidades dentro del enum; nombres sin espacios dobles y ≤ 100; los
+      once `key` de comida coinciden con `DEFAULT_PANTRY_CATEGORIES`; `buscarCatalogo` sin acentos y subárbol;
+      paginación (total/offset).
+- [ ] `pantry-categories`: `ensureDefaultCategories` siembra `alimentos` + once hijas + `other` suelto;
+      `asegurarPadreAlimentos` idempotente (casa renombrada/reorganizada no se toca); `clavesDeSubarbol`.
+- [ ] Rutas: `pantry-catalog.routes.spec.ts` con los tres endpoints (counts, `inHousehold`, subárbol, add con
+      creación de categorías con padre en orden, bump 0→1, skip con stock, 400 con id desconocido o lote
+      vacío, límite 100).
+- [ ] Filtro `category` de `GET /products` y `GET /ingredients` por subárbol; chips del visor con
+      `descendantProducts`.
+- [ ] Frontend: tipos y `pantry.service` (listar catálogo, añadir); pantalla `pantry-catalog.component.ts` con
+      la query hidratada al montar y escrita al cambiar; visor con stepper, iconos del sistema y riel.
+- [ ] i18n: claves nuevas del catálogo y del stepper en `dict/pantry.ts` en los dos idiomas (la tipa del
+      `en` obliga), `pantry.categoria_alimentos`, y los renombrados de «despensa»→«inventario» en
+      nav/dashboard/household/pantry/onboarding donde lean a pantalla.
+- [ ] Puertas medidas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `build:prod` completo ·
+      `typecheck:e2e` 0 · vitest del server completo.
+- [ ] Mirar las dos pantallas en la preview (`/pantry` y `/pantry/catalogo`, y el gestor de categorías para
+      ver el padre) — el punto que quedó abierto en la ## 12z y que el sandbox ahora sí permite.
+
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
