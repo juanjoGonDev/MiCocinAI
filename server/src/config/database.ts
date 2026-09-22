@@ -4,7 +4,7 @@ import { config } from './app.config.js';
 import * as schema from '../models/schema.js';
 import { existsSync, mkdirSync, renameSync } from 'fs';
 import { dirname, join } from 'path';
-import { backfillHouseholdSeeds, backfillUserSeeds } from '../utils/seed-data.js';
+import { backfillHouseholdSeeds, backfillUserSeeds, asegurarPadreAlimentosTodas } from '../utils/seed-data.js';
 
 let db: Database.Database;
 let drizzleDb: ReturnType<typeof drizzle>;
@@ -610,6 +610,10 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // ... y las cuentas SIN hogar tampoco: para ellas el catalogo es personal
   // (household_id NULL), que es lo que se siembra al registrarse.
   backfillUserSeeds(db);
+
+  // Y el padre de fabrica de la ## 12aa: las casas anteriores nacen con las doce categorias planas, y `alimentos`
+  // es lo que les falta para que el visor y el catalogo hablen el mismo idioma.
+  asegurarPadreAlimentosTodas(db);
 
   console.log('Database tables and indexes created');
 }

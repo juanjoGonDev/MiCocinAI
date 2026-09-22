@@ -325,6 +325,9 @@ export const CATALOG_LABEL_KEYS: Record<string, TranslationKey> = { ...FOOD_LABE
  * no es «la clave es de fabrica», sino «la clave es de fabrica y el nombre sigue siendo el de fabrica».
  */
 export const PANTRY_CATEGORY_LABEL_KEYS: Record<string, TranslationKey> = {
+  // El padre de fabrica de la ## 12aa: una casa que lo tiene, lo lee en su idioma; y el catalogo del super lo
+  // crea delante de sus hojas cuando añade algo de un pasillo que la casa aun no tiene.
+  alimentos: 'pantry.categoria_alimentos',
   vegetables: 'pantry.categoria_verduras',
   fruits: 'pantry.categoria_frutas',
   meat: 'pantry.categoria_carnes',
@@ -340,6 +343,7 @@ export const PANTRY_CATEGORY_LABEL_KEYS: Record<string, TranslationKey> = {
 };
 
 export const PANTRY_CATEGORY_FACTORY_NAMES: Record<string, string> = {
+  alimentos: 'Alimentos',
   vegetables: 'Verduras',
   fruits: 'Frutas',
   meat: 'Carnes',

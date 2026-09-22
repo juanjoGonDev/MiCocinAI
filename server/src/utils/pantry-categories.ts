@@ -27,18 +27,22 @@ import type Database from 'better-sqlite3';
 type Db = Database.Database;
 
 /** Lo que hay en las filas hoy, palabra por palabra: cambiar esto es un contrato, no un capricho. */
-export const DEFAULT_PANTRY_CATEGORIES: readonly { key: string; name: string; color: string }[] = [
-  { key: 'vegetables', name: 'Verduras', color: '#4CAF50' },
-  { key: 'fruits', name: 'Frutas', color: '#E05A5A' },
-  { key: 'meat', name: 'Carnes', color: '#A6343E' },
-  { key: 'fish', name: 'Pescados', color: '#4FA3D1' },
-  { key: 'dairy', name: 'Lácteos', color: '#E6C34A' },
-  { key: 'grains', name: 'Cereales', color: '#B26A00' },
-  { key: 'spices', name: 'Especias', color: '#8E5AC8' },
-  { key: 'condiments', name: 'Condimentos', color: '#C99A2E' },
-  { key: 'frozen', name: 'Congelados', color: '#6C8AE4' },
-  { key: 'canned', name: 'Enlatados', color: '#2FA79B' },
-  { key: 'beverages', name: 'Bebidas', color: '#5C6BC0' },
+export const DEFAULT_PANTRY_CATEGORIES: readonly { key: string; name: string; color: string; parent?: string }[] = [
+  // Desde la ## 12aa las once hojas de comida nacen colgando de `alimentos`: la despensa ya no es la cocina, es
+  // el inventario de la casa, y el padre de fabrica es el que da sitio a lo demas (limpieza, higiene…). La
+  // reserva `other` se queda arriba, sin padre: ahi cae lo que no encaja, no es una seccion de comida.
+  { key: 'alimentos', name: 'Alimentos', color: '#E67E22' },
+  { key: 'vegetables', name: 'Verduras', color: '#4CAF50', parent: 'alimentos' },
+  { key: 'fruits', name: 'Frutas', color: '#E05A5A', parent: 'alimentos' },
+  { key: 'meat', name: 'Carnes', color: '#A6343E', parent: 'alimentos' },
+  { key: 'fish', name: 'Pescados', color: '#4FA3D1', parent: 'alimentos' },
+  { key: 'dairy', name: 'Lácteos', color: '#E6C34A', parent: 'alimentos' },
+  { key: 'grains', name: 'Cereales', color: '#B26A00', parent: 'alimentos' },
+  { key: 'spices', name: 'Especias', color: '#8E5AC8', parent: 'alimentos' },
+  { key: 'condiments', name: 'Condimentos', color: '#C99A2E', parent: 'alimentos' },
+  { key: 'frozen', name: 'Congelados', color: '#6C8AE4', parent: 'alimentos' },
+  { key: 'canned', name: 'Enlatados', color: '#2FA79B', parent: 'alimentos' },
+  { key: 'beverages', name: 'Bebidas', color: '#5C6BC0', parent: 'alimentos' },
   { key: 'other', name: 'Otros', color: '#8A8F98' }
 ];
 
@@ -310,11 +314,55 @@ export function ensureDefaultCategories(db: Db, userId: string, householdId: str
   if (count > 0) return;
   const insert = db.prepare(
     `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color, description, parent_key, position)
-     VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?)`
   );
   DEFAULT_PANTRY_CATEGORIES.forEach((seed, index) => {
-    insert.run(`pcat-${userId}-${index}`, userId, householdId, seed.key, seed.name, seed.color, index);
+    insert.run(`pcat-${userId}-${index}`, userId, householdId, seed.key, seed.name, seed.color, seed.parent ?? null, index);
   });
+}
+
+/**
+ * Backfill idempotente de la ## 12aa: casas anteriores a esta tanda, con las doce categorias de fabrica tal
+ * cual, ganan el padre `alimentos` y se reubican debajo. Solo toca a quien no toc6 nada: una casa que renombro
+ * «Lacteos» o movio algo de sitio ya decidio sobre su arbol, y la migracion no discute decisiones. Si la casa
+ * ya tiene una categoria `alimentos` (la creo ella), tampoco se mete: esa clave es suya.
+ */
+export function asegurarPadreAlimentos(db: Db, userId: string, householdId: string | null): number {
+  const scope: Scope = { userId, householdId };
+  const todas = selectAll(db, scope);
+  if (todas.length === 0) return 0; // casa virgen: `ensureDefaultCategories` ya la siembra con el padre
+  if (todas.some((categoria) => categoria.key === 'alimentos')) return 0;
+  const semillas = DEFAULT_PANTRY_CATEGORIES.filter((seed) => seed.parent === 'alimentos');
+  const candidatas = semillas.filter((seed) => {
+    const fila = todas.find((categoria) => categoria.key === seed.key);
+    return fila && fila.parentKey === null && fila.name === seed.name;
+  });
+  if (candidatas.length === 0) return 0;
+
+  const posiciones = todas.map((categoria) => categoria.position);
+  const insert = db.prepare(
+    `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color, description, parent_key, position)
+     VALUES (?, ?, ?, 'alimentos', 'Alimentos', '#E67E22', NULL, NULL, ?)`
+  );
+  insert.run(`pcat-${userId}-alimentos`, userId, householdId, Math.min(...posiciones) - 1);
+  const reubicar = db.prepare(
+    `UPDATE pantry_categories SET parent_key = 'alimentos', updated_at = CURRENT_TIMESTAMP
+     WHERE key = ? AND parent_key IS NULL AND name = ? AND ${scopeClause(scope).clause}`
+  );
+  for (const seed of candidatas) reubicar.run(seed.key, seed.name, ...scopeClause(scope).params);
+  return candidatas.length;
+}
+
+/**
+ * Clave y descendientes, en el orden del recorrido: es lo que necesita el filtro `?category=` para que pinchar
+ * un padre enseñe SU CONTENIDO, no solo lo que cuelga directamente de el (con el padre de fabrica `alimentos`
+ * eso dejo de ser un detalle: filtrar por el y ver la lista vacia era el boton roto de la ronda 28 repetido
+ * del lado de los datos).
+ */
+export function clavesDeSubarbol(db: Db, scope: Scope, clave: string): string[] {
+  const todas = selectAll(db, scope);
+  if (!todas.some((categoria) => categoria.key === clave)) return [clave]; // clave muerta: el IN no encuentra nada y la ruta responde vacio, que es la verdad
+  return [clave, ...descendantsOf(todas, clave).map((categoria) => categoria.key)];
 }
 
 

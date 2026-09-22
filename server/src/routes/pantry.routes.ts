@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import {
   bulkProductIdsSchema,
+  catalogAddSchema,
+  catalogFilterSchema,
   createPantryCategorySchema,
   createProductSchema,
   pantryCategoryFilterSchema,
@@ -18,8 +20,15 @@ import {
   findCategoryByKey,
   listCategories,
   pantryCategoryKey,
-  updateCategory
+  updateCategory,
+  clavesDeSubarbol
 } from '../utils/pantry-categories.js';
+import {
+  CATALOGO_CATEGORIAS,
+  buscarProductos,
+  conteoPorHoja,
+  productoPorId
+} from '../utils/supermarket-catalog.js';
 import { productKeyOf } from '../utils/product-key.js';
 import { nanoid } from 'nanoid';
 import { getDatabase } from '../config/database.js';
@@ -91,8 +100,12 @@ pantryRoutes.get('/ingredients', async (c) => {
   }
 
   if (filter.category) {
-    conditions.push('category = ?');
-    params.push(filter.category);
+    // Desde la ## 12aa el filtro es por SUBARBOL: pinchar el padre `alimentos` (o cualquier padre que la casa
+    // se fabrique) muestra lo que cuelga debajo, no solo lo que tiene el padre puesto en la fila. Un boton de
+    // filtro que pinta cero filas es el boton roto de la ronda 28 repetido del lado de los datos.
+    const claves = clavesDeSubarbol(db, scopeDePantry(userId), filter.category);
+    conditions.push(`category IN (${claves.map(() => '?').join(', ')})`);
+    params.push(...claves);
   }
 
   if (filter.location) {
@@ -839,8 +852,11 @@ pantryRoutes.get('/products', async (c) => {
     for (let i = 0; i < 4; i++) params.push(`%${q.q}%`);
   }
   if (q.category) {
-    conditions.push('category = ?');
-    params.push(q.category);
+    // Subarbol igual que en la lista del inventario: el gestor y el visor prometen lo mismo por el mismo
+    // precio (ver ## 12aa).
+    const claves = clavesDeSubarbol(db, casa, q.category);
+    conditions.push(`category IN (${claves.map(() => '?').join(', ')})`);
+    params.push(...claves);
   }
   if (q.filter === 'staples') conditions.push('quantity = 0');
   if (q.filter === 'in-pantry') conditions.push('quantity > 0');
@@ -1043,4 +1059,157 @@ pantryRoutes.post('/products/bulk-delete', async (c) => {
     return lista.length;
   });
   return c.json({ success: true, data: { deleted: borrar(borrables) } });
+});
+
+// ═══════════════════════════════════════════════════════════════════
+// El catalogo pre-registrado del super (HOGARIA-SPEC ## 12aa)
+// ═══════════════════════════════════════════════════════════════════
+//
+// El catalogo es dato de fabrica en memoria (`utils/supermarket-catalog.ts`), no una tabla: copiarlo a SQL
+// convertiria cada producto nuevo en una migracion para actualizar la copia. Lo unico que se persiste es lo
+// que la persona anade, que pasa a ser una fila de `ingredients` con su categoria —con su padre delante, que
+// es la relacion que el pre-registro tenia que respetar por contrato—.
+
+const NOMBRES_POR_CLAVE = new Map(CATALOGO_CATEGORIAS.map((cat) => [cat.key, cat]));
+
+/**
+ * Garantiza que la hoja del catalogo existe como categoria de la casa, y su padre ANTES que ella
+ * (`createCategory` comprueba la profundidad sobre el arbol resultante, y un hijo sin padre no cabe).
+ * Devuelve cuantas filas nuevas escribe —0, 1 (la hoja) o 2 (padre y hoja)—.
+ */
+function garantizarCategoriaDelCatalogo(db: ReturnType<typeof getDatabase>, casa: Casa, claveHoja: string): number {
+  let creadas = 0;
+  const hoja = NOMBRES_POR_CLAVE.get(claveHoja);
+  if (!hoja) return 0;
+  if (hoja.parent) {
+    const padre = NOMBRES_POR_CLAVE.get(hoja.parent);
+    if (padre && !findCategoryByKey(db, casa, padre.key)) {
+      createCategory(db, {
+        userId: casa.userId,
+        householdId: casa.householdId,
+        key: padre.key,
+        name: padre.name,
+        color: padre.color,
+        parentKey: null,
+        idFactory: nanoid
+      });
+      creadas += 1;
+    }
+  }
+  if (!findCategoryByKey(db, casa, hoja.key)) {
+    createCategory(db, {
+      userId: casa.userId,
+      householdId: casa.householdId,
+      key: hoja.key,
+      name: hoja.name,
+      color: hoja.color,
+      parentKey: hoja.parent ?? null,
+      idFactory: nanoid
+    });
+    creadas += 1;
+  }
+  return creadas;
+}
+
+// GET /api/pantry/catalog/categories — el arbol plano, con su cuenta. El cliente se monta el arbol: son 38 filas.
+pantryRoutes.get('/catalog/categories', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  ensureDefaultCategories(db, casa.userId, casa.householdId);
+  const conteo = conteoPorHoja();
+  const datos = CATALOGO_CATEGORIAS.map((cat) => ({
+    ...cat,
+    // La cuenta del padre es la suma de sus hojas: lo que el arbol ensena es lo que el filtro va a responder.
+    productCount: cat.parent === null
+      ? CATALOGO_CATEGORIAS.reduce((total, hoja) => (hoja.parent === cat.key ? total + (conteo.get(hoja.key) ?? 0) : total), 0)
+      : conteo.get(cat.key) ?? 0
+  }));
+  return c.json({ success: true, data: datos });
+});
+
+// GET /api/pantry/catalog/products — busqueda normalizada, subarbol opcional y marca de «esto ya es tuyo».
+pantryRoutes.get('/catalog/products', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const q = catalogFilterSchema.parse(c.req.query());
+  const scope = getUserScope(userId);
+  const { productos, total } = buscarProductos({ q: q.q, category: q.category, limit: q.limit, offset: q.offset });
+
+  // `inHousehold` con la MISMA clave que usa el gestor (`productKeyOf` sobre el nombre), no un LIKE: dos
+  // nombres que se parecen no son la misma fila, y decir «ya lo tienes» por parecerse es peor que callarselo.
+  const clavesDeCasa = new Set(
+    (
+      db.prepare(`SELECT name FROM ingredients WHERE ${scope.userClause}`).all(...scope.userParams) as { name: string }[]
+    ).map((fila) => productKeyOf(fila.name))
+  );
+
+  const data = productos.map((producto) => ({
+    ...producto,
+    categoryLabel: NOMBRES_POR_CLAVE.get(producto.category)?.name ?? producto.category,
+    inHousehold: clavesDeCasa.has(productKeyOf(producto.name))
+  }));
+  return c.json({
+    success: true,
+    data,
+    meta: { total, limit: q.limit, offset: q.offset },
+    hasMore: q.offset + data.length < total
+  });
+});
+
+// POST /api/pantry/catalog/add — de la estanteria a casa, con su categoria y su padre.
+pantryRoutes.post('/catalog/add', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const casa = scopeDePantry(userId);
+  const { ids } = catalogAddSchema.parse(await c.req.json());
+  const unicos = [...new Set(ids)];
+
+  // Validacion total antes de escribir nada: un lote a medias es la clase de estado que nadie sabe arreglar
+  // (el mismo criterio del `bulk-delete` de productos).
+  const desconocidos = unicos.filter((id) => !productoPorId(id));
+  if (desconocidos.length > 0) {
+    return falla(c, 400, `${desconocidos.length} id(s) no existen en el catalogo`, 'PANTRY_CATALOG_ID_UNKNOWN', { unknownIds: desconocidos });
+  }
+
+  ensureDefaultCategories(db, casa.userId, casa.householdId);
+
+  const resultado = db.transaction(() => {
+    let anadidos = 0;
+    let saltados = 0;
+    let categoriasCreadas = 0;
+    for (const id of unicos) {
+      const producto = productoPorId(id)!;
+      categoriasCreadas += garantizarCategoriaDelCatalogo(db, casa, producto.category);
+      const categoria = findCategoryByKey(db, casa, producto.category) ? producto.category : PROTECTED_PANTRY_KEY;
+
+      const existente = buscarPorClave(db, casa, producto.name);
+      if (existente) {
+        if (Number(existente.quantity) > 0) {
+          saltados += 1; // ya esta en casa: el catalogo no repone stock a nadie, eso es del visor
+          continue;
+        }
+        // Lo que la casa conocia sin tenerlo pasa a tenerlo: la ficha no se duplica, sube a 1.
+        db.prepare('UPDATE ingredients SET quantity = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(existente.id);
+        anadidos += 1;
+        continue;
+      }
+      // `aliases` es NOT NULL con default: la ruta de productos siempre escribe JSON, y esta tambien —'[]'
+      // es «sin alias», NULL es una fila que no se puede insertar.
+      db.prepare(
+        `INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit, expiration_date, location, image, barcode, notes, aliases)
+         VALUES (?, ?, ?, ?, ?, 1, ?, NULL, 'pantry', NULL, NULL, NULL, '[]')`
+      ).run(nanoid(), userId, casa.householdId, producto.name, categoria, producto.unit);
+      anadidos += 1;
+    }
+    return { anadidos, saltados, categoriasCreadas };
+  })();
+
+  return c.json({
+    success: true,
+    data: {
+      added: resultado.anadidos,
+      skipped: resultado.saltados,
+      categoriesCreated: resultado.categoriasCreadas
+    }
+  });
 });

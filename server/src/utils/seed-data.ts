@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import { ensureDefaultCategories } from './pantry-categories.js';
+import { asegurarPadreAlimentos, ensureDefaultCategories } from './pantry-categories.js';
 import { nanoid } from 'nanoid';
 
 /**
@@ -317,6 +317,26 @@ export function adoptPersonalRowsIntoHousehold(
   `).run(userId, householdId, userId);
 
   db.prepare(`DELETE FROM ingredients WHERE ${personal}`).run(userId);
+}
+
+/**
+ * Backfill del padre de fabrica (HOGARIA-SPEC ## 12aa): cada ambito que ya tiene el catalogo sembrado con las
+ * doce de siempre gana `alimentos` por encima. Se llama en cada arranque, como el resto de backfills del repo;
+ * `asegurarPadreAlimentos` decide por dentro a cuales toca (solo casas con las hojas intactas) y a cuales no.
+ */
+export function asegurarPadreAlimentosTodas(db: Database.Database): void {
+  const ambitos = db
+    .prepare(
+      `SELECT user_id AS userId, household_id AS householdId
+       FROM pantry_categories
+       GROUP BY COALESCE(household_id, ''), user_id`
+    )
+    .all() as { userId: string; householdId: string | null }[];
+  let reubicadas = 0;
+  for (const ambito of ambitos) {
+    reubicadas += asegurarPadreAlimentos(db, ambito.userId, ambito.householdId);
+  }
+  if (reubicadas > 0) console.log(`[DB] Backfill Alimentos: ${reubicadas} categorias de fabrica cuelgan ahora de su padre`);
 }
 
 /** Siembra ingredientes + utensilios al crear un hogar. */

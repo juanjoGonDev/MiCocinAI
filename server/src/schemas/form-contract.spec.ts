@@ -40,6 +40,8 @@ import {
   pantryCategoryFilterSchema,
   bulkProductIdsSchema,
   productFilterSchema,
+  catalogAddSchema,
+  catalogFilterSchema,
   updateIngredientSchema,
   updatePantryCategorySchema,
   updateProductSchema,
@@ -170,6 +172,14 @@ const ROWS: Row[] = [
     note: 'Un lote vacio no tiene sentido (min 1) y uno de mil tampoco: el techo de 100 es lo que el servidor esta dispuesto a borrar de una vez.'
   },
   query('productFilterSchema', productFilterSchema),
+  // ── El catalogo pre-registrado del super (## 12aa) ──
+  query('catalogFilterSchema', catalogFilterSchema),
+  {
+    name: 'catalogAddSchema',
+    schema: catalogAddSchema,
+    required: { ids: ['dairy:0'] },
+    note: 'Igual que el lote de borrado: entre 1 y 100 ids. Un lote vacio no escribe en la casa, y uno de mil tampoco.'
+  },
 
   // ── casa y perfil ──
   { name: 'createHouseholdSchema', schema: createHouseholdSchema, required: { name: 'Los del 3B' } },

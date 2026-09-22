@@ -171,14 +171,16 @@ const CATALOGOS = join(REPO_ROOT, 'server/src/utils/pantry-categories.ts');
 const PANTRY_COMPONENT = join(REPO_ROOT, 'frontend/src/app/features/pantry/pantry.component.ts');
 
 /** `DEFAULT_PANTRY_CATEGORIES` del server: las claves y los nombres con los que nace una casa. */
-function categoriasDeFabrica(): { key: string; name: string; color: string }[] {
+function categoriasDeFabrica(): { key: string; name: string; color: string; parent: string | null }[] {
   const texto = readFileSync(CATALOGOS, 'utf8');
   const i = texto.indexOf('export const DEFAULT_PANTRY_CATEGORIES');
   if (i < 0) throw new Error('DEFAULT_PANTRY_CATEGORIES ya no esta en pantry-categories.ts');
   const bloque = texto.slice(i, texto.indexOf('];', i));
-  const filas = [...bloque.matchAll(/\{\s*key:\s*'([^']+)',\s*name:\s*'([^']+)',\s*color:\s*'(#[0-9A-Fa-f]{6})'\s*\}/g)];
-  if (filas.length < 12) throw new Error(`el semillero de categorias se ha leido corto: ${filas.length} filas`);
-  return filas.map((m) => ({ key: m[1], name: m[2], color: m[3] }));
+  // Desde la ## 12aa el semillero tiene padres: la fila puede traer `parent` al final, y el contrato del test
+  // (etiquetas, orden, reserva) es igual para las hojas; el padre solo pide su propia etiqueta de fabrica.
+  const filas = [...bloque.matchAll(/\{\s*key:\s*'([^']+)',\s*name:\s*'([^']+)',\s*color:\s*'(#[0-9A-Fa-f]{6})'(?:,\s*parent:\s*'([^']+)')?\s*\}/g)];
+  if (filas.length < 13) throw new Error(`el semillero de categorias se ha leido corto: ${filas.length} filas`);
+  return filas.map((m) => ({ key: m[1], name: m[2], color: m[3], parent: m[4] ?? null }));
 }
 
 function mapaDeLabels2x(nombre: string): Map<string, string> {
@@ -191,13 +193,13 @@ function mapaDeLabels2x(nombre: string): Map<string, string> {
   return out;
 }
 
-describe('las doce categorias de fabrica (## 12x)', () => {
+describe('las categorias de fabrica (## 12x, con su padre desde la ## 12aa)', () => {
   const semillas = categoriasDeFabrica();
   const etiquetas = mapaDeLabels2x('PANTRY_CATEGORY_LABEL_KEYS');
   const nombres = mapaDeLabels2x('PANTRY_CATEGORY_FACTORY_NAMES');
   const { es, en } = idiomas();
 
-  it('el frente tiene las mismas doce claves, en el mismo orden', () => {
+  it('el frente tiene las mismas claves, en el mismo orden', () => {
     expect([...etiquetas.keys()]).toEqual(semillas.map((s) => s.key));
     expect([...nombres.keys()]).toEqual(semillas.map((s) => s.key));
   });
@@ -218,15 +220,19 @@ describe('las doce categorias de fabrica (## 12x)', () => {
     }
   });
 
-  it('el formulario de la despensa ofrece las mismas doce claves (no una lista propia)', () => {
+  it('el formulario de la despensa ofrece las mismas hojas (no una lista propia)', () => {
+    // El array de reserva pinta la primera pantalla antes de que conteste el catalogo de la casa. El padre
+    // `alimentos` no esta ahi, y no falta: una opcion del picker es un sitio donde CAE un articulo, y los
+    // articulos caen en las doce de siempre (el padre agrupa, no recibe).
+    const hojas = semillas.filter((s) => s.key !== 'alimentos');
     const texto = readFileSync(PANTRY_COMPONENT, 'utf8');
     const i = texto.indexOf('ingredientCategoriesNoAll: {');
     if (i < 0) throw new Error('el array de categorias de la despensa ya no esta en pantry.component.ts');
     const bloque = texto.slice(i, texto.indexOf('];', i));
     const vistas = [...bloque.matchAll(/value:\s*'([^']+)'/g)].map((m) => m[1]);
-    expect(vistas).toEqual(semillas.map((s) => s.key));
+    expect(vistas).toEqual(hojas.map((s) => s.key));
     const claves = [...bloque.matchAll(/labelKey:\s*'(pantry\.[a-z_.]+)'/g)].map((m) => m[1]);
-    expect(claves).toEqual(semillas.map((s) => etiquetas.get(s.key)));
+    expect(claves).toEqual(hojas.map((s) => etiquetas.get(s.key)));
   });
 
   it('la reserva es la ultima, y se llama como la clave que guarda la fila', () => {

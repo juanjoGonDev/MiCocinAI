@@ -121,6 +121,20 @@ export const bulkProductIdsSchema = z.object({
   ids: z.array(z.string().trim().min(1).max(64)).min(1, 'Marca al menos un producto').max(100, 'Son demasiados de una vez (100)')
 });
 
+// ── El catalogo pre-registrado del super (HOGARIA-SPEC ## 12aa) ──
+// `category` es la hoja o el padre del catalogo (no hace falta que exista en la casa: es vocabulario del
+// catalogo, no de la casa); los `ids` son la referencia efimera `hoja:indice`, maximo 100 por lote.
+export const catalogFilterSchema = z.object({
+  q: formField(z.string().trim().max(80)),
+  category: formField(pantryCategoryKeySchema),
+  limit: formDefault(z.coerce.number().int().min(1).max(100), 24),
+  offset: formDefault(z.coerce.number().int().min(0), 0)
+});
+
+export const catalogAddSchema = z.object({
+  ids: z.array(z.string().trim().min(1).max(64)).min(1, 'Marca al menos un producto').max(100, 'Son demasiados de una vez (100)')
+});
+
 // Utensil schemas
 export const createUtensilSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -147,6 +161,8 @@ export type CreateProductInput = z.infer<typeof createProductSchema>;
 export type UpdateProductInput = z.infer<typeof updateProductSchema>;
 export type ProductFilterInput = z.infer<typeof productFilterSchema>;
 export type BulkProductIdsInput = z.infer<typeof bulkProductIdsSchema>;
+export type CatalogFilterInput = z.infer<typeof catalogFilterSchema>;
+export type CatalogAddInput = z.infer<typeof catalogAddSchema>;
 export type CreateUtensilInput = z.infer<typeof createUtensilSchema>;
 export type UpdateUtensilInput = z.infer<typeof updateUtensilSchema>;
 export type UtensilFilterInput = z.infer<typeof utensilFilterSchema>;

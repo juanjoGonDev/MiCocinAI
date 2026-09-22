@@ -72,19 +72,21 @@ beforeEach(async () => {
 });
 
 describe('GET /categories', () => {
-  it('la casa arranca con las doce de fabrica, con sus recuentos y su punto de color', async () => {
+  it('la casa arranca con el padre delante y las doce de siempre, con sus recuentos y su punto de color', async () => {
     const { status, payload } = await call('GET', '/categories');
     expect(status).toBe(200);
     // La pagina por defecto son diez filas —el gestor entra paginado, como el de la cesta— y `total` dice que
-    // hay doce: si `total` contara lo que cabe en la pagina, el paginador mentiria.
+    // hay trece (once hojas, un padre y la reserva): si `total` contara lo que cabe en la pagina, el paginador
+    // mentiria.
     expect(payload.data).toHaveLength(10);
-    expect(payload.meta.total).toBe(12);
+    expect(payload.meta.total).toBe(13);
     const todas = await call('GET', '/categories?limit=50');
-    expect(todas.payload.data).toHaveLength(12);
-    expect(todas.payload.meta).toMatchObject({ total: 12, limit: 50, offset: 0 });
+    expect(todas.payload.data).toHaveLength(13);
+    expect(todas.payload.meta).toMatchObject({ total: 13, limit: 50, offset: 0 });
     const verduras = todas.payload.data.find((row: any) => row.key === 'vegetables');
-    expect(verduras).toMatchObject({ name: 'Verduras', color: '#4CAF50', protected: false });
+    expect(verduras).toMatchObject({ name: 'Verduras', color: '#4CAF50', protected: false, parentName: 'Alimentos' });
     expect(verduras.counts).toEqual({ products: 0, children: 0, descendantProducts: 0 });
+    expect(todas.payload.data.find((row: any) => row.key === 'alimentos')).toMatchObject({ name: 'Alimentos', protected: false });
     expect(todas.payload.data.find((row: any) => row.key === 'other')).toMatchObject({ protected: true, canDelete: false });
   });
 
@@ -120,7 +122,7 @@ describe('POST /categories', () => {
     expect(status).toBe(201);
     expect(payload.data).toMatchObject({ key: 'recien horneados', name: 'Recien horneados', color: '#B26A00' });
     expect(payload.data.description).toBe('Pan y bollería del dia');
-    expect(payload.data.position).toBe(12);
+    expect(payload.data.position).toBe(13);
   });
 
   it('un color que no es #RRGGBB no entra, y lo dice el campo', async () => {
