@@ -3287,20 +3287,37 @@ estaba mirando no era del filtro pedido).
   se prueba en el util —sin navegador— con un valor desconocido, una ausencia y un número sucio.
 
 
-### Tercer bucle: el test que fingia datos
+### Tercer bucle: lo que queda abierto, dicho como esta
 
-Con la hidratacion de la query, `pantry-managers` baja a dos casos y el CI los explica los dos: el click iba
-contra el host de `app-tag` (lo que se pulsa es su `.tag` de dentro, que es donde vive el estado `tag--selected`),
-y el gestor, en una cuenta recien registrada, **no tiene filas en `in-pantry`** —el semillero de la casa crea
-productos principales, que son filas con `quantity = 0` por contrato—. El segundo era un test que asumia datos que
-el arnes no siembra: se reescribe contra la regla (la vista vacia se anuncia como tal, la barra de lote no existe
-antes de marcar y no sobrevive a un reload), y la parte de «con stock dentro de la despensa no se borra, ni en
-lote» se deja donde ya esta probada con datos reales: `pantry-products.routes.spec.ts`, que comprueba el 409
-`PANTRY_PRODUCT_BULK_DELETE_BLOCKED` sin borrar ninguno.
+Tras arreglar la query, `pantry-managers` pasa de cinco casos fallando a **dos**, y el CI sigue siendo la unica
+ventanilla que tengo (el sandbox no puede descargar un navegador: `playwright install chromium` falla en la
+descarga). Lo que miden las anotaciones del run `35726780626`:
+
+- `el F5 conserva el filtro, la busqueda y la ficha abierta` — `locator.click` agotando 45 s esperando
+  `[data-test="gestor-categorias-vista-without-products"]`: el host del tag existe (en el run anterior la
+  anotacion lo nombraba: `<app-tag ng-reflect-selected="false" ...>`), y con el intento de pulsar por `.tag`
+  tampoco. Es decir: **no es un selector inventado, es una cuestion de accionabilidad o de cuando se pinta**,
+  y eso necesita Playwright delante para saber de que lado esta el error —del test o de un `app-tag` que no
+  deberia estar deshabilitado—. Se queda abierto, con la anotacion copiada, no se maquilla.
+- `una casa sin stock no ofrece borrados falsos, y el lote cuenta lo que se marca` — la primera mitad (la vista
+  `in-pantry` anuncia que esta vacia) pasa; la segunda espera `.fila__marca [role="checkbox"]` y no lo
+  encuentra, lo que apunta a que en `all` la lista no pinto filas: habria que ver si `refrescar()` se queda en
+  `cargando` con un `null` del servicio (un 5xx del `?filter=all` en el entorno del arnes). Abierto igual que el
+  anterior, y con la sospecha escrita.
+
+Lo que si se decidio con el fuente delante: el caso que **asumia una fila en `in-pantry`** estaba fingiendo
+datos —el semillero de la casa crea productos principales, que son filas con `quantity = 0`, y por contrato ahi
+no hay nada en despensa—; se reescribio contra la regla, y la parte de «con algo dentro de la despensa no se
+borra, ni en lote» se queda donde esta probada con datos reales, en `pantry-products.routes.spec.ts` (409
+`PANTRY_PRODUCT_BULK_DELETE_BLOCKED`, sin borrar ninguno).
 
 - **Regla**: un e2e no puede sembrar a mano lo que el arnes no siembra; si la regla necesita datos, o el arnes
   los pone (otro dia, con su helper y su contrato) o la regla se prueba en el server. Fingir una fila para que el
-  assert pase es exactamente el tipo de test que este repo ya borro una vez (`108cb55`).
+  assert pase es el tipo de test que este repo ya borro una vez (`108cb55`).
+- **Y la contrapartida, que es lo que esta tanda deja medido**: cinco de mis siete casos valen (entrada, alta de
+  categoria con color y padre, reserva cerrada por los dos sitios, impacto del borrado, alta de producto con su
+  alias encontrado por busqueda) y dos siguen abiertos con la anotacion al lado. Un test que nunca se ejecuto es
+  eso: una hipotesis tipada.
 
 ## 13. Coming soon (deliberately not in this program)
 
