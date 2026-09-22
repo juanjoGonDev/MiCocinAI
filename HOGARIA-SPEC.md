@@ -3207,6 +3207,58 @@ se queda escrito, no se toca a ciegas.
       corra la suite con navegador: si al arreglar el anclaje del idioma se alinean solos, se cierra aquí; si no,
       cada uno merece su mirada.
 
+### Lo que midió el CI (aquí el CI es el navegador)
+
+Run `35723671031`, el primero con el arnés del idioma arreglado: `Install`, `Server Tests`, `Type Check` y
+`Production Build` en verde; siguen rojos `Full-stack E2E` (no llega a escribir `test-results/results.json`: es
+arranque del proceso único, no un assert) y los shards. Las anotaciones dan para clasificar sin adivinar, y lo que
+clasifican incluye **lo mío**:
+
+- **La tanda 25 tenía un bug, y lo encontró un e2e que nadie había ejecutado.** `un producto principal se
+  registra sin meter nada en la despensa` esperaba el campo del nombre y no aparecía: `abrirFicha('new')` ponía
+  `ficha = null`, y la plantilla decide «lista o ficha» con `@if (!ficha)` —el botón de crear, por tanto, volvía a
+  pintar la lista; el formulario del alta no existía—. Las categorías lo hacían bien (ficha en blanco) y productos
+  no; se repara con la misma forma (ficha en blanco con `impact` a ceros), y lo que de una fila inexistente no se
+  puede decir ya estaba detrás de un `@if (!esNueva)`.
+- **`app-input` pone el `id` en el `<input>` nativo y el del host a `null`** (`host: { '[attr.id]': 'null' }`, lo
+  dice el componente): en un e2e se localiza `#gestor-productos-q`, **no** `#gestor-productos-q input`. Cuatro
+  sitios de mi spec lo hacían al revés y la anotación de CI los nombraba uno por uno.
+- **`app-picker` no hace teleport**: sus `.picker__option` viven dentro del host, así que «abrir el picker y
+  pulsar la opción por su texto» es un patrón legítimo, y es el que sustituye a los cuatro
+  `page.selectOption('select[name="category"]')` de `pantry.spec.ts` —que llevaban meses verdes mientras el
+  `<select>` existió—.
+- **Cambiar una pieza de la UI es cambiar la suite e2e en la misma tanda.** Es la regla que sale de la tabla de
+  arriba: `check-ui` no mira `tests/`, pero los selectores de `tests/` son contrato con la pantalla igual que los
+  `data-test`. Si la próxima tanda sustituye otra pieza, los casos que la tocan se actualizan ahí, no «cuando
+  alguien pase lista».
+- **Un assert sobre un dato que la pantalla pide aparte lleva plazo.** En el gestor, `canDelete` de una fila lo
+  decide el `delete-impact` que se pide por fila y llega después de pintar: sin `timeout` propio, el assert
+  perdía por red lo que ganaba por milisegundos.
+- **El anclaje del idioma del arnés se tuvo que corregir dos veces.** Primero porque escribía una clave que nadie
+  leía (`hogaria.language` frente a `STORAGE_KEYS.language` = `hogar:v1:language`); después porque, ya leída,
+  `addInitScript` la sembraba en **cada** navegación y le ganaba a un test que consistía en que la preferencia
+  sobrevive a un reload (`settings-theme-i18n`). Semilla, no imposición: `if (!getItem(key))`.
+
+Checklist de esta segunda mitad, medida contra las anotaciones:
+
+- [x] Ficha en blanco en el alta de productos (el bug de arriba), con `build:prod` y `tsc -p
+      tsconfig.app.json` volviendo a decir 0.
+- [x] Los cinco localizadores míos corregidos (`#id`, sin ` input`), el `gestor-productos-ficha` visible antes de
+      rellenar la ficha —si alguien vuelve a romper el alta, el fallo dice eso, no «timeout»—, y el plazo en el
+      assert del borrado.
+- [x] `pantry.spec.ts`: los cuatro `selectOption` convertidos al picker, con el texto de la opción del
+      diccionario (`Verduras`, `Lácteos`, `Nevera`) y un comentario que diga por qué se filtra por substring (el
+      pictograma de ubicación va delante).
+- [x] `fixtures.ts`: el anclaje solo cuando no hay preferencia.
+- [x] Puertas: `check-ui` en 0 · `tsc` app **y** `-p tsconfig.spec.json` en 0 · `corepack pnpm run
+      typecheck:e2e` en 0 · `--filter @hogaria/web build:prod` completo. La suite del server no se vuelve a correr:
+      ningún fichero de `server/` cambia en este tramo.
+  Y **se sigue sin tocar** lo que necesita navegador para juzgarse (`.cal-event` a 0, `.modal__title` vacio,
+      `offer-chip` 3x2/3x1, `unit-picker` «Sin unidad», los timeouts en cascada de `shopping-round6`, el
+      `photo-error` con las dos frases del diccionario, y el arranque del `Full-stack E2E`): seis filas, cada una
+      con su anotación, esperando alguien con Playwright delante. Lo que sí se espera es que al anclar el idioma
+      varias se alineen solas; si lo hacen, se borran de esta lista con la medición, no a ojo.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
