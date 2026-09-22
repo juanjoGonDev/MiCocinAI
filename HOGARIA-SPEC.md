@@ -3547,7 +3547,14 @@ Cambios sobre `pantry.component.ts` sin tocar ningún `data-test` ni clase que p
       nav/dashboard/household/pantry/onboarding donde lean a pantalla.
 - [x] Puertas medidas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `build:prod` completo ·
       `typecheck:e2e` 0 · vitest del server completo.
-- [x] - [ ] Mirar las dos pantallas en la preview (`/pantry` y `/pantry/catalogo`, y el gestor de categorías para
+- [x] Run de CI como juez final y sus tres bucles: el primer run enseñó selectores muertos y zonas muertas de
+      click (`ea083fd`); el segundo, dos cosas en el gestor de categorías —el picker del padre de la reserva sin
+      `disabled` y una lectura de URL competida en el F5 (`6b85737`)— que al arreglarse destaparon que `guardar()`
+      reenviaba la forma entera y el server leía ahí un renombre/movimiento (`8250a22`); el tercero, la única de
+      verdad: el PATCH `/ingredients/:id` heredaba el `.positive()` del alta y el 0 del stepper moría en un 400
+      sin destinatario (`19f5c83`). En `19f5c83`: cero rojos de `pantry-*`; quedan los 20 de deuda preexistente
+      de la tabla de la ## 12y, que no se tocan aquí.
+- [ ] Mirar las dos pantallas en la preview (`/pantry` y `/pantry/catalogo`, y el gestor de categorías para
       ver el padre) — el punto que quedó abierto en la ## 12z y que el sandbox ahora sí permite.
 
 
