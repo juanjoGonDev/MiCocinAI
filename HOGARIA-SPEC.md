@@ -3528,26 +3528,26 @@ Cambios sobre `pantry.component.ts` sin tocar ningún `data-test` ni clase que p
 
 ### Checklist de la tanda
 
-- [ ] `supermarket-catalog.spec.ts` (TDD, rojo primero): ≥ 340 productos; cada hoja no vacía y con ≥ 8
+- [x] `supermarket-catalog.spec.ts` (TDD, rojo primero): ≥ 340 productos; cada hoja no vacía y con ≥ 8
       productos; toda `category` de producto existe y es hoja (nadie cuelga un producto de un padre); todo
       padre existe; `key` y `id` únicos; unidades dentro del enum; nombres sin espacios dobles y ≤ 100; los
       once `key` de comida coinciden con `DEFAULT_PANTRY_CATEGORIES`; `buscarCatalogo` sin acentos y subárbol;
       paginación (total/offset).
-- [ ] `pantry-categories`: `ensureDefaultCategories` siembra `alimentos` + once hijas + `other` suelto;
+- [x] `pantry-categories`: `ensureDefaultCategories` siembra `alimentos` + once hijas + `other` suelto;
       `asegurarPadreAlimentos` idempotente (casa renombrada/reorganizada no se toca); `clavesDeSubarbol`.
-- [ ] Rutas: `pantry-catalog.routes.spec.ts` con los tres endpoints (counts, `inHousehold`, subárbol, add con
+- [x] Rutas: `pantry-catalog.routes.spec.ts` con los tres endpoints (counts, `inHousehold`, subárbol, add con
       creación de categorías con padre en orden, bump 0→1, skip con stock, 400 con id desconocido o lote
       vacío, límite 100).
-- [ ] Filtro `category` de `GET /products` y `GET /ingredients` por subárbol; chips del visor con
+- [x] Filtro `category` de `GET /products` y `GET /ingredients` por subárbol; chips del visor con
       `descendantProducts`.
-- [ ] Frontend: tipos y `pantry.service` (listar catálogo, añadir); pantalla `pantry-catalog.component.ts` con
+- [x] Frontend: tipos y `pantry.service` (listar catálogo, añadir); pantalla `pantry-catalog.component.ts` con
       la query hidratada al montar y escrita al cambiar; visor con stepper, iconos del sistema y riel.
-- [ ] i18n: claves nuevas del catálogo y del stepper en `dict/pantry.ts` en los dos idiomas (la tipa del
+- [x] i18n: claves nuevas del catálogo y del stepper en `dict/pantry.ts` en los dos idiomas (la tipa del
       `en` obliga), `pantry.categoria_alimentos`, y los renombrados de «despensa»→«inventario» en
       nav/dashboard/household/pantry/onboarding donde lean a pantalla.
-- [ ] Puertas medidas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `build:prod` completo ·
+- [x] Puertas medidas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `build:prod` completo ·
       `typecheck:e2e` 0 · vitest del server completo.
-- [ ] Mirar las dos pantallas en la preview (`/pantry` y `/pantry/catalogo`, y el gestor de categorías para
+- [x] - [ ] Mirar las dos pantallas en la preview (`/pantry` y `/pantry/catalogo`, y el gestor de categorías para
       ver el padre) — el punto que quedó abierto en la ## 12z y que el sandbox ahora sí permite.
 
 
