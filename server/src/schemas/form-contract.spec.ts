@@ -33,9 +33,16 @@ import {
 import { updateTasteSchema } from '../utils/taste-profile.js';
 import {
   createIngredientSchema,
+  createPantryCategorySchema,
+  createProductSchema,
   createUtensilSchema,
   ingredientFilterSchema,
+  pantryCategoryFilterSchema,
+  bulkProductIdsSchema,
+  productFilterSchema,
   updateIngredientSchema,
+  updatePantryCategorySchema,
+  updateProductSchema,
   updateUtensilSchema,
   utensilFilterSchema
 } from './pantry.schema.js';
@@ -139,6 +146,30 @@ const ROWS: Row[] = [
   { name: 'createCalendarSchema', schema: createCalendarSchema, required: { weekStart: '2026-03-09' } },
   query('calendarFilterSchema', calendarFilterSchema),
   query('calendarEventFilterSchema', calendarEventFilterSchema, { from: '2026-03-01', to: '2026-03-31' }),
+
+  // ── el gestor del inventario (## 12x) ──
+  {
+    name: 'createPantryCategorySchema',
+    schema: createPantryCategorySchema,
+    required: { name: 'Frutos secos' },
+    note: 'Solo el nombre es obligatorio: el color lo elige la casa y la descripcion y el padre admiten el hueco.'
+  },
+  { name: 'updatePantryCategorySchema', schema: updatePantryCategorySchema },
+  query('pantryCategoryFilterSchema', pantryCategoryFilterSchema),
+  {
+    name: 'createProductSchema',
+    schema: createProductSchema,
+    required: { name: 'Levadura' },
+    note: 'El resto cae en su defecto (other / unit / 0): registrar un basico no puede exigir rellenar medio formulario.'
+  },
+  { name: 'updateProductSchema', schema: updateProductSchema },
+  {
+    name: 'bulkProductIdsSchema',
+    schema: bulkProductIdsSchema,
+    required: { ids: ['pi-1'] },
+    note: 'Un lote vacio no tiene sentido (min 1) y uno de mil tampoco: el techo de 100 es lo que el servidor esta dispuesto a borrar de una vez.'
+  },
+  query('productFilterSchema', productFilterSchema),
 
   // ── casa y perfil ──
   { name: 'createHouseholdSchema', schema: createHouseholdSchema, required: { name: 'Los del 3B' } },

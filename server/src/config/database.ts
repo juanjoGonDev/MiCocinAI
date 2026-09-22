@@ -425,6 +425,31 @@ async function runMigrations(db: Database.Database): Promise<void> {
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
     );
+    -- El catalogo de categorias del inventario (HOGARIA-SPEC ## 12x). key es lo que guardan
+    -- ingredients.category y el prompt de la IA; name es solo la etiqueta, y por eso renombrar no reescribe
+    -- ninguna fila. parent_key sostiene el arbol (techo de 4 niveles, ver utils/pantry-categories.ts) y
+    -- 'other' es la reserva protegida: lo que no encaja cae ahi.
+    -- (Sin backticks en este comentario: vive dentro de un template literal de SQL, y el aviso esta escrito
+    --  mas abajo con motivo. Romperian el string, no el estilo.)
+    CREATE TABLE IF NOT EXISTS pantry_categories (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      key TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#8A8F98',
+      description TEXT,
+      parent_key TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_pantry_categories_user ON pantry_categories(user_id, position);
+    CREATE INDEX IF NOT EXISTS idx_pantry_categories_household ON pantry_categories(household_id, position);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_pantry_categories_key ON pantry_categories(user_id, key);
+
     -- La oferta (3x2, 2x1) es de la LINEA porque cambia cuantas unidades se pagan.
     -- Un promo_take >= promo_buy no tiene sentido (pagarias todo), y se ignora en
     -- lugar de guardarse: es un dato de origen, no una decision del usuario.
@@ -517,6 +542,11 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // diana) y `targets` es el JSON con las demas. Reconstruir la tabla para migrar el
   // formato antiguo habria sido una forma cara de perder datos si algo iba mal.
   addColumnIfMissing('shopping_list_discounts', 'targets', 'TEXT');
+  // Los alias del producto principal (## 12x): como la casa llama a la cosa. Solo sirven para buscar y para
+  // pintar la ficha, nunca para comparar —lo que iguala dos productos sigue siendo `productKeyOf(name)`—, y por
+  // eso es una lista en JSON y no una tabla: ninguna consulta necesita una alias suelta. (Mismo acuerdo que
+  // `model_params` en `household_ai_config`.)
+  addColumnIfMissing('ingredients', 'aliases', "TEXT NOT NULL DEFAULT '[]'");
   addColumnIfMissing('shopping_list_items', 'promo_buy', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'promo_take', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'added_by', 'TEXT');

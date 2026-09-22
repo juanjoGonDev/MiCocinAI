@@ -1,4 +1,26 @@
 import { Hono } from 'hono';
+import {
+  bulkProductIdsSchema,
+  createPantryCategorySchema,
+  createProductSchema,
+  pantryCategoryFilterSchema,
+  productFilterSchema,
+  updatePantryCategorySchema,
+  updateProductSchema
+} from '../schemas/pantry.schema.js';
+import {
+  PROTECTED_PANTRY_KEY,
+  PantryCategoryProtectedError,
+  createCategory,
+  deleteImpact,
+  ensureDefaultCategories,
+  findCategoryById,
+  findCategoryByKey,
+  listCategories,
+  pantryCategoryKey,
+  updateCategory
+} from '../utils/pantry-categories.js';
+import { productKeyOf } from '../utils/product-key.js';
 import { nanoid } from 'nanoid';
 import { getDatabase } from '../config/database.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
@@ -212,6 +234,8 @@ pantryRoutes.post('/ingredients', async (c) => {
 
   // Get user's household
   const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as any;
+  const categoriaMala = comprobarCategoria(c, db, { userId, householdId: user?.household_id ?? null }, input.category);
+  if (categoriaMala) return categoriaMala;
 
   db.prepare(`
     INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit, expiration_date, location, image, barcode, notes)
@@ -269,8 +293,15 @@ pantryRoutes.patch('/ingredients/:id', async (c) => {
   }
 
   if (input.category !== undefined) {
+    // Null = «sin categoria», y sin categoria es la reserva: nunca un valor suelto en la columna, porque
+    // entonces el agrupado de la pantalla tendria un grupo sin nombre. Y el valor tiene que estar en el
+    // catalogo de la casa (## 12x): una clave inventada agrupa como si fuera una categoria mas.
+    const categoria = input.category === null || String(input.category).trim() === '' ? 'other' : String(input.category).trim();
+    const scopeDeCasa = getUserScope(userId);
+    const mala = comprobarCategoria(c, db, { userId, householdId: scopeDeCasa.householdId ?? null }, categoria);
+    if (mala) return mala;
     updates.push('category = ?');
-    values.push(input.category);
+    values.push(categoria);
   }
 
   if (input.quantity !== undefined) {
@@ -493,3 +524,523 @@ pantryRoutes.delete('/utensils/:id', async (c) => {
 });
 
 export { pantryRoutes };
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════
+ * EL GESTOR DEL INVENTARIO — categorias de la casa y productos principales (HOGARIA-SPEC ## 12x)
+ * ═══════════════════════════════════════════════════════════════════════════════════════════
+ *
+ * Todo lo que decide *si se puede* vive en `utils/pantry-categories.ts`; aqui solo lo que le toca a una
+ * ruta: el ambito de la casa, la forma del envelope y los codigos de error con su impacto dentro. Dos
+ * cosas de estas respuestas no son negociables y por eso estan escritas:
+ *
+ *   - `meta.total` es el total **filtrado**, no lo que cabria en la pagina. Es la diferencia entre «3 de
+ *     42» y «3 de 10», y la segunda no se puede paginar ni entender.
+ *   - Un 409 lleva el recuento en `details`. «No se puede borrar» sin numeros obliga a ir probando
+ *     articulo por articulo; «42 articulos y 3 subcategorias» dice donde hay que mirar.
+ *
+ * El paginador del gestor es `limit`/`offset` (diez por defecto) y no `page`/`pageSize` como el del listado
+ * de la despensa: son dos clientes distintos, y el gestor es el que imita a la cesta, que es donde la casa
+ * ya sabe lo que significa «pagina 2».
+ */
+
+type Casa = { userId: string; householdId: string | null };
+
+function scopeDePantry(userId: string): Casa {
+  const scope = getUserScope(userId);
+  // `householdId` solo viene puesto cuando la casa comparte la despensa: el ambito del catalogo es, a
+  // proposito, el mismo ambito de las filas. Categorias que no se ven con los articulos que agrupan son la
+  // mitad del bug que hacia que «Otros» se llenara solo.
+  return { userId, householdId: scope.householdId ?? null };
+}
+
+/**
+ * El envelope de error del proyecto, en una linea y con su status: `{success:false, error, message, details?}`.
+ * Existe porque sin ella cada ruta escribia el objeto a mano y alguna se dejaba `details` fuera —que es justo
+ * el campo que permite al dialogo decir «42 articulos» en vez de «no se puede»—. `c` entra como `any` a
+ * proposito: es el contexto de Hono, y arrastrar el tipo generico para un helper de este fichero es ruido.
+ */
+function falla(c: any, status: number, message: string, error: string, details?: unknown): Response {
+  return c.json({ success: false, error, message, ...(details === undefined ? {} : { details }) }, status);
+}
+
+/**
+ * La clave tiene que existir en el catalogo de la casa. Se siembra antes de comprobar, para que una casa
+ * antigua no reciba un 400 por una categoria que existio siempre: si no hay filas, las doce de fabrica son
+ * el catalogo, y a partir de ahi ya es cosa suya.
+ */
+function comprobarCategoria(c: any, db: ReturnType<typeof getDatabase>, casa: Casa, category: string): Response | null {
+  ensureDefaultCategories(db, casa.userId, casa.householdId);
+  if (findCategoryByKey(db, casa, category)) return null;
+  return falla(c, 400, `La categoria «${category}» no esta en el catalogo de esta casa`, 'PANTRY_CATEGORY_UNKNOWN', {
+    category,
+    validKeys: listCategories(db, casa).map((fila) => fila.key)
+  });
+}
+
+/** Alias: lo que la familia llama al producto. Solo sirven para buscar y para pintar la ficha. */
+function normalizarAliases(lista: unknown, nombre: string): string[] {
+  if (!Array.isArray(lista)) return [];
+  const salida: string[] = [];
+  const vistas = new Set<string>();
+  for (const entrada of lista) {
+    const alias = String(entrada ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (!alias) continue;
+    const clave = alias.toLowerCase();
+    if (clave === nombre.toLowerCase() || vistas.has(clave)) continue; // el nombre no es un alias de si mismo
+    vistas.add(clave);
+    salida.push(alias);
+    if (salida.length >= 20) break;
+  }
+  return salida;
+}
+
+function leerAliases(valor: unknown): string[] {
+  if (Array.isArray(valor)) return valor.map((item) => String(item));
+  if (typeof valor !== 'string' || !valor.trim()) return [];
+  try {
+    const analizado = JSON.parse(valor);
+    return Array.isArray(analizado) ? analizado.map((item) => String(item)) : [];
+  } catch {
+    return []; // una columna con basura no puede reventar una lista: se pinta sin alias y ya
+  }
+}
+
+// ── Categorias ──
+
+pantryRoutes.get('/categories', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  const q = pantryCategoryFilterSchema.parse(c.req.query());
+  ensureDefaultCategories(db, casa.userId, casa.householdId);
+  const filas = listCategories(db, casa, {
+    view: (q.view ?? 'all') as 'all' | 'without-products' | 'with-children',
+    q: q.q ?? undefined
+  });
+  const data = filas.slice(q.offset, q.offset + q.limit);
+  return c.json({
+    success: true,
+    data,
+    meta: { total: filas.length, limit: q.limit, offset: q.offset },
+    hasMore: q.offset + data.length < filas.length
+  });
+});
+
+pantryRoutes.post('/categories', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  const input = createPantryCategorySchema.parse(await c.req.json());
+  ensureDefaultCategories(db, casa.userId, casa.householdId);
+  const clave = pantryCategoryKey(input.name);
+  if (findCategoryByKey(db, casa, clave)) {
+    return falla(c, 409, 'Ya hay una categoria con ese nombre en esta casa', 'PANTRY_CATEGORY_EXISTS', { key: clave });
+  }
+  if (input.parentKey && !findCategoryByKey(db, casa, input.parentKey)) {
+    return falla(c, 404, 'La categoria padre no existe en esta casa', 'PANTRY_CATEGORY_PARENT_NOT_FOUND', { parentKey: input.parentKey });
+  }
+  try {
+    const creada = createCategory(db, {
+      ...casa,
+      name: input.name,
+      color: input.color ?? null,
+      description: input.description ?? null,
+      parentKey: input.parentKey ?? null,
+      idFactory: () => `pcat-${nanoid()}`
+    });
+    return c.json({ success: true, data: creada }, 201);
+  } catch (error) {
+    if (error instanceof RangeError) return falla(c, 400, error.message, 'PANTRY_CATEGORY_INVALID');
+    throw error;
+  }
+});
+
+pantryRoutes.get('/categories/:id/delete-impact', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  try {
+    return c.json({ success: true, data: deleteImpact(db, casa, c.req.param('id')) });
+  } catch (error) {
+    if (error instanceof RangeError) {
+      return falla(c, 404, 'La categoria no existe en esta casa', 'PANTRY_CATEGORY_NOT_FOUND');
+    }
+    throw error;
+  }
+});
+
+pantryRoutes.patch('/categories/:id', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  const id = c.req.param('id');
+  const input = updatePantryCategorySchema.parse(await c.req.json());
+  ensureDefaultCategories(db, casa.userId, casa.householdId);
+  const actual = findCategoryById(db, casa, id);
+  if (!actual) return falla(c, 404, 'La categoria no existe en esta casa', 'PANTRY_CATEGORY_NOT_FOUND');
+  // Renombrar y mover son las dos cosas que rompen la reserva; pintar y anotar no. Se comprueba aqui, en la
+  // forma cruda del PATCH, porque `parentKey: null` (subir de nivel) es un cambio de estructura que llega
+  // como `null` y un `if (input.parentKey !== undefined)` de andar por casa lo contaria como «no tocar».
+  const tocaEstructura = Boolean(input.name) || 'parentKey' in input;
+  if (actual.key === PROTECTED_PANTRY_KEY && tocaEstructura) {
+    return falla(c, 409, 'La categoria de reserva se puede pintar y anotar, pero no renombrar ni mover: ahi cae todo lo que no encaja', 'PANTRY_CATEGORY_PROTECTED', { key: PROTECTED_PANTRY_KEY });
+  }
+  if (input.name) {
+    const claveNueva = pantryCategoryKey(String(input.name));
+    if (claveNueva !== actual.key && findCategoryByKey(db, casa, claveNueva)) {
+      return falla(c, 409, 'Ya hay una categoria con ese nombre en esta casa', 'PANTRY_CATEGORY_EXISTS', { key: claveNueva });
+    }
+  }
+  if (input.parentKey && !findCategoryByKey(db, casa, String(input.parentKey))) {
+    return falla(c, 404, 'La categoria padre no existe en esta casa', 'PANTRY_CATEGORY_PARENT_NOT_FOUND', { parentKey: input.parentKey });
+  }
+  try {
+    const fila = updateCategory(db, {
+      ...casa,
+      id,
+      patch: {
+        ...(input.name === undefined || input.name === null ? {} : { name: String(input.name) }),
+        ...(input.color === undefined ? {} : { color: input.color == null ? null : String(input.color) }),
+        ...(input.description === undefined ? {} : { description: input.description == null ? null : String(input.description) }),
+        ...('parentKey' in input ? { parentKey: input.parentKey == null ? null : String(input.parentKey) } : {})
+      }
+    });
+    return c.json({ success: true, data: fila });
+  } catch (error) {
+    if (error instanceof PantryCategoryProtectedError) {
+      return falla(c, 409, error.message, 'PANTRY_CATEGORY_PROTECTED', { key: PROTECTED_PANTRY_KEY });
+    }
+    if (error instanceof RangeError) return falla(c, 400, error.message, 'PANTRY_CATEGORY_INVALID');
+    throw error;
+  }
+});
+
+pantryRoutes.delete('/categories/:id', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  const id = c.req.param('id');
+  if (!findCategoryById(db, casa, id)) {
+    return falla(c, 404, 'La categoria no existe en esta casa', 'PANTRY_CATEGORY_NOT_FOUND');
+  }
+  const impacto = deleteImpact(db, casa, id);
+  if (impacto.protected) {
+    return falla(c, 409, 'La categoria de reserva no se puede borrar', 'PANTRY_CATEGORY_PROTECTED', { key: PROTECTED_PANTRY_KEY });
+  }
+  if (!impacto.canDelete) {
+    return falla(c, 409, 'La categoria todavia tiene articulos o subcategorias', 'PANTRY_CATEGORY_IN_USE', impacto);
+  }
+  db.prepare('DELETE FROM pantry_categories WHERE id = ?').run(id);
+  return c.body(null, 204);
+});
+
+// ── Productos principales ──
+
+type FilaIngrediente = {
+  id: string;
+  name: string;
+  category: string;
+  quantity: number;
+  unit: string;
+  expiration_date: string | null;
+  location: string | null;
+  barcode: string | null;
+  notes: string | null;
+  aliases: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function productoDe(fila: FilaIngrediente, nombres: Map<string, string>) {
+  return {
+    id: fila.id,
+    name: fila.name,
+    // `category` es la clave cruda —lo que guarda la fila y lo que viaja al prompt—; `categoryName`, la
+    // etiqueta del catalogo de esa casa. Si la clave ya no esta (la borro otra persona y el articulo se
+    // quedo colgando), se pinta la clave: es feo, y dice la verdad.
+    category: fila.category,
+    categoryKey: fila.category,
+    categoryName: nombres.get(fila.category) ?? fila.category,
+    quantity: fila.quantity,
+    unit: fila.unit,
+    inPantry: fila.quantity > 0,
+    expirationDate: fila.expiration_date ? String(fila.expiration_date).slice(0, 10) : null,
+    location: fila.location,
+    barcode: fila.barcode,
+    notes: fila.notes,
+    aliases: leerAliases(fila.aliases),
+    createdAt: fila.created_at,
+    updatedAt: fila.updated_at
+  };
+}
+
+/** Donde cae un producto: dos criterios de «esto es lo mismo» son dos bugs, asi que manda una sola funcion. */
+function buscarPorClave(db: ReturnType<typeof getDatabase>, casa: Casa, nombre: string): FilaIngrediente | null {
+  const candidatos = db
+    .prepare('SELECT * FROM ingredients WHERE (user_id = ? OR household_id = ?) AND lower(trim(name)) = lower(trim(?))')
+    .all(casa.userId, casa.householdId, nombre) as FilaIngrediente[];
+  const clave = productKeyOf(nombre);
+  return candidatos.find((fila) => productKeyOf(fila.name) === clave) ?? null;
+}
+
+/** Un alias que es el nombre de otro producto crea dos fichas para la misma cosa: se dice, no se calla. */
+function buscarAliasEnCasa(
+  db: ReturnType<typeof getDatabase>,
+  casa: Casa,
+  alias: string[],
+  nombre: string,
+  exceptoId: string | null
+) {
+  for (const entrada of alias) {
+    const encontrada = buscarPorClave(db, casa, entrada);
+    if (encontrada && encontrada.id !== exceptoId && productKeyOf(encontrada.name) !== productKeyOf(nombre)) {
+      return { alias: entrada, productId: encontrada.id, productName: encontrada.name };
+    }
+  }
+  return null;
+}
+
+function productoO404(db: ReturnType<typeof getDatabase>, casa: Casa, id: string): FilaIngrediente | undefined {
+  return db
+    .prepare('SELECT * FROM ingredients WHERE id = ? AND (user_id = ? OR household_id = ?)')
+    .get(id, casa.userId, casa.householdId) as FilaIngrediente | undefined;
+}
+
+function impactoProducto(db: ReturnType<typeof getDatabase>, fila: FilaIngrediente) {
+  const clave = productKeyOf(fila.name);
+  const lineas = (db.prepare('SELECT COUNT(*) AS count FROM shopping_list_items WHERE product_key = ?').get(clave) as {
+    count: number;
+  }).count;
+  const precios = (db.prepare('SELECT COUNT(*) AS count FROM price_observations WHERE product_key = ?').get(clave) as {
+    count: number;
+  }).count;
+  return {
+    id: fila.id,
+    name: fila.name,
+    quantity: fila.quantity,
+    listLines: lineas,
+    priceObservations: precios,
+    // Se puede borrar la ficha de algo que no esta en la despensa. Lo que esta dentro se quita de dentro,
+    // desde la despensa, con su motivo —no desde un gestor que no ve el estante—.
+    canDelete: fila.quantity === 0
+  };
+}
+
+pantryRoutes.get('/products', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const casa = scopeDePantry(userId);
+  const q = productFilterSchema.parse(c.req.query());
+  const scope = getUserScope(userId);
+  ensureDefaultCategories(db, casa.userId, casa.householdId);
+  const nombres = new Map(listCategories(db, casa).map((fila) => [fila.key, fila.name]));
+
+  const conditions: string[] = [scope.userClause];
+  const params: unknown[] = [...scope.userParams];
+  if (q.q) {
+    // Se busca en la nota y en los alias, no solo en el nombre: «el de la plaza, solo los sabados» es
+    // exactamente el tipo de cosa que alguien recuerda y no puede teclear de otra manera.
+    conditions.push('(name LIKE ? OR notes LIKE ? OR aliases LIKE ? OR barcode LIKE ?)');
+    for (let i = 0; i < 4; i++) params.push(`%${q.q}%`);
+  }
+  if (q.category) {
+    conditions.push('category = ?');
+    params.push(q.category);
+  }
+  if (q.filter === 'staples') conditions.push('quantity = 0');
+  if (q.filter === 'in-pantry') conditions.push('quantity > 0');
+  if (q.filter === 'expiring') {
+    conditions.push("expiration_date IS NOT NULL AND date(expiration_date) >= date('now')");
+    conditions.push("expiration_date IS NOT NULL AND date(expiration_date) <= date('now', '+3 days')");
+  }
+  const where = `WHERE ${conditions.join(' AND ')}`;
+  const total = (db.prepare(`SELECT COUNT(*) AS count FROM ingredients ${where}`).get(...params) as { count: number }).count;
+  const orden = q.sort === 'recent' ? 'updated_at DESC, name ASC' : 'name COLLATE NOCASE ASC, id ASC';
+  const filas = db
+    .prepare(`SELECT * FROM ingredients ${where} ORDER BY ${orden} LIMIT ? OFFSET ?`)
+    .all(...params, q.limit, q.offset) as FilaIngrediente[];
+
+  // El impacto de cada fila, en dos consultas para la pagina entera: «4 lineas de cesta» es lo que el
+  // dialogo de borrado tiene que poder decir antes de que nadie marque nada.
+  const claves = [...new Set(filas.map((fila) => productKeyOf(fila.name)))];
+  const lineas = new Map<string, number>();
+  const precios = new Map<string, number>();
+  if (claves.length > 0) {
+    const hoyos = claves.map(() => '?').join(', ');
+    for (const [tabla, destino] of [
+      ['shopping_list_items', lineas],
+      ['price_observations', precios]
+    ] as const) {
+      const conteo = db
+        .prepare(`SELECT product_key AS key, COUNT(*) AS count FROM ${tabla} WHERE product_key IN (${hoyos}) GROUP BY product_key`)
+        .all(...claves) as { key: string; count: number }[];
+      for (const fila of conteo) destino.set(fila.key, fila.count);
+    }
+  }
+
+  const data = filas.map((fila) => ({
+    ...productoDe(fila, nombres),
+    impact: {
+      listLines: lineas.get(productKeyOf(fila.name)) ?? 0,
+      priceObservations: precios.get(productKeyOf(fila.name)) ?? 0
+    }
+  }));
+  return c.json({ success: true, data, meta: { total, limit: q.limit, offset: q.offset }, hasMore: q.offset + data.length < total });
+});
+
+pantryRoutes.post('/products', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const casa = scopeDePantry(userId);
+  const input = createProductSchema.parse(await c.req.json());
+  const mala = comprobarCategoria(c, db, casa, input.category);
+  if (mala) return mala;
+  const nombres = new Map(listCategories(db, casa).map((fila) => [fila.key, fila.name]));
+  const alias = normalizarAliases(input.aliases, input.name);
+  const choca = buscarAliasEnCasa(db, casa, alias, input.name, null);
+  if (choca) {
+    return falla(c, 409, `«${choca.alias}» ya es el nombre de otro producto de esta casa: dos fichas para la misma cosa es lo que hay que arreglar aqui, no un aviso`, 'PANTRY_PRODUCT_ALIAS_CLASH', choca);
+  }
+
+  // Idempotente por clave de producto: registrar dos veces lo mismo no duplica la ficha, y tampoco la
+  // renombra —el nombre guardado es el que pinta la pantalla y el que saldra en la cesta.
+  const existente = buscarPorClave(db, casa, input.name);
+  if (existente) return c.json({ success: true, data: { ...productoDe(existente, nombres), created: false } }, 200);
+
+  const id = nanoid();
+  db.prepare(
+    `INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit, expiration_date, location, image, barcode, notes, aliases)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pantry', NULL, NULL, ?, ?)`
+  ).run(
+    id,
+    userId,
+    casa.householdId,
+    input.name.trim(),
+    input.category,
+    input.quantity ?? 0,
+    input.unit ?? 'unit',
+    input.expirationDate ?? null,
+    input.notes ?? null,
+    JSON.stringify(alias)
+  );
+  const fila = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(id) as FilaIngrediente;
+  return c.json({ success: true, data: { ...productoDe(fila, nombres), created: true } }, 201);
+});
+
+pantryRoutes.patch('/products/:id', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const casa = scopeDePantry(userId);
+  const id = c.req.param('id');
+  const input = updateProductSchema.parse(await c.req.json());
+  const existente = productoO404(db, casa, id);
+  if (!existente) return falla(c, 404, 'El producto no existe en esta casa', 'PANTRY_PRODUCT_NOT_FOUND');
+
+  const updates: string[] = [];
+  const values: unknown[] = [];
+  if (input.category !== undefined) {
+    const categoria = input.category === null || String(input.category).trim() === '' ? 'other' : String(input.category).trim();
+    const mala = comprobarCategoria(c, db, casa, categoria);
+    if (mala) return mala;
+    updates.push('category = ?');
+    values.push(categoria);
+  }
+  if (input.name) {
+    updates.push('name = ?');
+    values.push(String(input.name).trim());
+  }
+  if (input.unit) {
+    updates.push('unit = ?');
+    values.push(input.unit);
+  }
+  // `notes: null` y `aliases: null` significan «quitar», no «dejar como estaba» —es la diferencia que
+  // `formPartial` existe para poder expresar, y en la ficha del producto se nota: la nota se borra.
+  if (input.notes !== undefined) {
+    updates.push('notes = ?');
+    values.push(input.notes ?? null);
+  }
+  if (input.aliases !== undefined) {
+    const nombreFinal = input.name ? String(input.name).trim() : existente.name;
+    const alias = input.aliases === null ? [] : normalizarAliases(input.aliases, nombreFinal);
+    const choca = buscarAliasEnCasa(db, casa, alias, nombreFinal, existente.id);
+    if (choca) return falla(c, 409, `«${choca.alias}» ya es el nombre de otro producto de esta casa`, 'PANTRY_PRODUCT_ALIAS_CLASH', choca);
+    updates.push('aliases = ?');
+    values.push(JSON.stringify(alias));
+  }
+  if (input.expirationDate !== undefined) {
+    updates.push('expiration_date = ?');
+    values.push(input.expirationDate ?? null);
+  }
+  if (updates.length === 0) return falla(c, 400, 'No hay nada que actualizar', 'PANTRY_PRODUCT_NOTHING_TO_UPDATE');
+
+  updates.push('updated_at = CURRENT_TIMESTAMP');
+  db.prepare(`UPDATE ingredients SET ${updates.join(', ')} WHERE id = ?`).run(...values, id);
+  const fila = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(id) as FilaIngrediente;
+  const nombres = new Map(listCategories(db, casa).map((categoria) => [categoria.key, categoria.name]));
+  return c.json({ success: true, data: productoDe(fila, nombres) });
+});
+
+pantryRoutes.get('/products/:id/delete-impact', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  const fila = productoO404(db, casa, c.req.param('id'));
+  if (!fila) return falla(c, 404, 'El producto no existe en esta casa', 'PANTRY_PRODUCT_NOT_FOUND');
+  return c.json({ success: true, data: impactoProducto(db, fila) });
+});
+
+pantryRoutes.delete('/products/:id', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  const fila = productoO404(db, casa, c.req.param('id'));
+  if (!fila) return falla(c, 404, 'El producto no existe en esta casa', 'PANTRY_PRODUCT_NOT_FOUND');
+  const impacto = impactoProducto(db, fila);
+  if (impacto.quantity > 0) {
+    return falla(c, 409, 'Este producto tiene unidades dentro de la despensa: quitale el stock primero', 'PANTRY_PRODUCT_IN_PANTRY', { quantity: impacto.quantity, unit: fila.unit });
+  }
+  // Se borra la ficha, no la historia: las lineas de cesta y las observaciones de precio guardan su copia
+  // del nombre y de la clave, y una casa no pierde lo que compro porque alguien quite un basico del catalogo.
+  db.prepare('DELETE FROM ingredients WHERE id = ?').run(fila.id);
+  return c.body(null, 204);
+});
+
+function revisarLote(db: ReturnType<typeof getDatabase>, casa: Casa, ids: string[]) {
+  const bloques: unknown[] = [];
+  const borrables: string[] = [];
+  for (const id of ids) {
+    const fila = productoO404(db, casa, id);
+    if (!fila) continue; // un id que no es de la casa no cuenta: ni se borra ni se llora
+    const impacto = impactoProducto(db, fila);
+    if (impacto.canDelete) borrables.push(id);
+    else bloques.push(impacto);
+  }
+  return { bloques, borrables };
+}
+
+pantryRoutes.post('/products/bulk-delete-impact', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  const { ids } = bulkProductIdsSchema.parse(await c.req.json());
+  const { bloques, borrables } = revisarLote(db, casa, ids);
+  return c.json({
+    success: true,
+    data: {
+      requestedCount: ids.length,
+      deletableIds: borrables,
+      blocked: bloques,
+      canDelete: bloques.length === 0 && borrables.length > 0
+    }
+  });
+});
+
+pantryRoutes.post('/products/bulk-delete', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  const { ids } = bulkProductIdsSchema.parse(await c.req.json());
+  const { bloques, borrables } = revisarLote(db, casa, ids);
+  if (bloques.length > 0) {
+    // Todo o nada: un lote que borra «la mitad» deja una casa con la seleccion a medias y sin forma de saber
+    // cuales se fueron. Se rechaza el lote entero y se dice cuales estorban.
+    return falla(c, 409, `${bloques.length} de ${ids.length} productos tienen unidades dentro de la despensa`, 'PANTRY_PRODUCT_BULK_DELETE_BLOCKED', { blocked: bloques });
+  }
+  const borrar = db.transaction((lista: string[]) => {
+    const stmt = db.prepare('DELETE FROM ingredients WHERE id = ?');
+    for (const id of lista) stmt.run(id);
+    return lista.length;
+  });
+  return c.json({ success: true, data: { deleted: borrar(borrables) } });
+});

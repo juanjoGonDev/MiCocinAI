@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { ensureDefaultCategories } from './pantry-categories.js';
 import { nanoid } from 'nanoid';
 
 /**
@@ -320,6 +321,9 @@ export function adoptPersonalRowsIntoHousehold(
 
 /** Siembra ingredientes + utensilios al crear un hogar. */
 export function seedDefaultsForHousehold(db: Database.Database, householdId: string, userId: string): void {
+  // El catalogo de categorias va primero: las filas de `ingredients` guardan claves, y una casa con las
+  // categorias puestas es una casa cuyos articulos tienen donde caer (## 12x).
+  ensureDefaultCategories(db, userId, householdId);
   seedCommonIngredients(db, householdId, userId);
   seedCommonUtensils(db, householdId, userId);
 }
@@ -338,6 +342,8 @@ export function backfillHouseholdSeeds(db: Database.Database): void {
   for (const household of households) {
     const owner = ownerStmt.get(household.id) as { user_id: string } | undefined;
     if (!owner) continue;
+
+    ensureDefaultCategories(db, owner.user_id, household.id);
 
     const ingredients = seedCommonIngredients(db, household.id, owner.user_id);
     const utensils = seedCommonUtensils(db, household.id, owner.user_id);

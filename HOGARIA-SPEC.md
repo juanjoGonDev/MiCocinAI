@@ -3049,34 +3049,37 @@ vez—.
 
 ### Checklist
 
-- [ ] **Migration `pantry_categories`**: `id, user_id, household_id, key, name, color, description, parent_key,
+- [x] **Migration `pantry_categories`**: `id, user_id, household_id, key, name, color, description, parent_key,
       position, created_at, updated_at`, única por casa y `key`, índice por `position`. `key` es **el dato** que ya
       guardan `ingredients.category` y el prompt de la IA: las doce claves de fábrica se siembran con su `name` en
       castellano y su color, y `other` nace protegida. Se siembra desde `backfillHouseholdSeeds` de forma
       idempotente: las casas ya creadas reciben el catálogo **sin migrar una sola fila de `ingredients`**.
-- [ ] `ingredients.aliases` (JSON, como `model_params` de `household_ai_config`): lista de cómo llama la casa al
+- [x] `ingredients.aliases` (JSON, como `model_params` de `household_ai_config`): lista de cómo llama la casa al
       producto. Se escribe en mayúsculas-normalizada y **solo sirve para buscar**; lo que se guarda y se compara en
       la cesta sigue siendo `productKeyOf(name)` —dos criterios de «esto es un kg» son dos productos distintos—.
-- [ ] `server/src/utils/pantry-categories.ts`, el módulo del dominio, imitando a `shopping-categories.ts`:
+- [x] `server/src/utils/pantry-categories.ts`, el módulo del dominio, imitando a `shopping-categories.ts`:
       `normalizeCategoryName` (1..120, espacios colapsados), `normalizeCategoryColor` (`#RRGGBB` a mayúsculas o 400),
       `slug` de la clave, y `assertNoCycle`: el padre no puede ser la propia categoría **ni ninguno de sus
       descendientes**, con profundidad máxima 4. Basketra solo corta el auto-padre; aquí se corta el ciclo porque
       el conteo de descendientes recorre el árbol, y un ciclo haría un `while` eterno en la pantalla.
-- [ ] Rutas: `GET/POST /api/pantry/categories`, `PATCH/DELETE /api/pantry/categories/:id`,
-      `GET /api/pantry/categories/:id/delete-impact` y `PUT /api/pantry/categories/order` (reordenar a mano).
-      Sobre `PATCH`: `formPartial`, que es el contrato de `form-contract.spec.ts` —quitar el padre o la descripción
-      escribe `null` explícito, no los omite—.
-- [ ] `category` deja de ser un enum cerrado en `pantry.schema.ts`: pasa a «la clave existe en el catálogo de esta
+- [x] Rutas: `GET/POST /api/pantry/categories`, `PATCH/DELETE /api/pantry/categories/:id`,
+      `GET /api/pantry/categories/:id/delete-impact`. Sobre `PATCH`: `formPartial`, que es el contrato de
+      `form-contract.spec.ts` —quitar el padre o la descripción escribe `null` explícito, no los omite—.
+      **La ruta de reordenación manual de Basketra (`PUT .../order`) se cae de la tanda**: `position` se guarda al
+      crear y el gestor ordena por nombre; mientras no haya una UI de arrastrar, una ruta de reordenar es un
+      contrato sin cliente. El campo queda escrito para que el día que se arrastre no haya migración.
+- [x] `category` deja de ser un enum cerrado en `pantry.schema.ts`: pasa a «la clave existe en el catálogo de esta
       casa», con `400 PANTRY_CATEGORY_UNKNOWN` que contesta las claves válidas, y reserva a `other` cuando el
       formulario no manda ninguna. El agrupador de estadísticas (`GROUP BY category`) y el prompt no cambian de
       forma: ya valían con cualquier clave.
-- [ ] **Gestor de productos principales** sobre lo que ya existe: `staples` = filas con `quantity = 0`. Rutas
-      `GET /api/pantry/products` (búsqueda por nombre, alias, `barcode` y `notes`; filtros `todas / con stock / sin
-      stock / caduca pronto`; orden `nombre / recientes`; paginado con `meta.total`), `POST`, `PATCH /:id`,
+- [x] **Gestor de productos principales** sobre lo que ya existe: `staples` = filas con `quantity = 0`. Rutas
+      `GET /api/pantry/products` (búsqueda `q` por nombre, alias, `barcode` y `notes`; `filter=all|staples|in-pantry|
+      expiring` —`staples`, sin stock, es la pestaña con la que abre la pantalla—; `sort=name|recent`; paginado
+      `limit`/`offset` con `meta.total` filtrado y `hasMore`), `POST`, `PATCH /:id`,
       `GET /:id/delete-impact`, `DELETE /:id`, y `POST /products/bulk-delete-impact` + `POST /products/bulk-delete`
       (máximo 100, todo-o-nada dentro de una transacción). Borrar un producto principal **borra la sugerencia, no
-      la historia**: las líneas de cesta y las observaciones de precioExisting no se tocan, y el impacto se pinta en
-      el diálogo para que se sepa lo que se deja.
+      la historia**: las líneas de cesta y las observaciones de precio no se tocan, y el impacto se pinta en el
+      diálogo para que se sepa lo que se deja.
 - [ ] Cliente: `PantryCategory` y `PantryProduct` en `shared/models/pantry.model.ts`; `pantry.service` con los
       mismos filtros y el mismo `save-state` que el resto de mutaciones; dos pantallas enrutadas,
       `/pantry/categories` y `/pantry/products`, con lista → detalle → editor. Piezas del sistema: `app-picker`
@@ -3100,8 +3103,25 @@ vez—.
 - [ ] **No se hace a propósito**: exportar el catálogo (Basketra tiene «Exportar» y HogarIA no tiene ninguna ruta de
       exportación: nace con su propio contrato y su propio CSV que nadie ha pedido), precios por comercio en la
       ficha del producto (HogarIA guarda `price_observations` por línea de cesta, no por producto: enlazarlos es
-      otra tanda con su migración), y las variantes/«importados» de Basketra (aquí un producto es una fila, no un
-      `canonical_product` con `product_variants`; importar la mitad del modelo para no usarlo sería pior).
+      otra tanda con su migración), las variantes/«importados» de Basketra (aquí un producto es una fila, no un
+      `canonical_product` con `product_variants`; importar la mitad del modelo para no usarlo sería pior), y la
+      **reordenación a mano** por el mismo motivo de arriba: sin UI que la exercise no se acuña un contrato.
+
+### Lo que midió el servidor (fin de la primera mitad)
+
+`server/src/utils/pantry-categories.spec.ts` (11) y `server/src/routes/pantry-categories.routes.spec.ts` (15) +
+`server/src/routes/pantry-products.routes.spec.ts` (13) escribieron **antes** que la implementación y el rojo fue
+el previsto: «no puede resolver ./pantry-categories.js». Cerrado el lote del servidor con la suite entera en
+**28 ficheros / 685 pruebas** (antes: 25 / 609). Tres cosas que el plan no sabía:
+
+- `formPartial` afloja el tipado inferido de los PATCH (`Record<string, ZodTypeAny>`), así que en
+  `PATCH /categories/:id` los `String(...)` no son ceremonia: sin ellos `tsc` no deja pasar el objeto `patch`
+  del módulo.
+- El candado de `form-contract.spec.ts` exige fila por cada schema exportado, incluido
+  `bulkProductIdsSchema` —un `z.object` con un solo campo y sin opcionales también entra en el registro, y está
+  bien que sea así: es como se entera uno de que un lote de 101 ids debe dar 400 y no 500.
+- `assertPlacement` comprueba ciclo y profundidad sobre el árbol **que resultaría** del cambio (alta incluida),
+  no sobre el guardado; es la única forma de no escribir un ciclo y descubrirlo al recorrerlo.
 
 ## 13. Coming soon (deliberately not in this program)
 
