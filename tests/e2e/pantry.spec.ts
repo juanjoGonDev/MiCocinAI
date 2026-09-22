@@ -121,7 +121,10 @@ test.describe('Pantry — inventario en tabla', () => {
 
     await tabla(page).locator('[data-test="tabla-filtro-unit"]').click();
     const menu = page.locator('.menu');
-    await menu.locator('.menu__fila', { hasText: 'l' }).locator('button[role="checkbox"]').click();
+    // La semantica es la de Excel: todas las casillas nacen marcadas y lo que se hace es DESMARCAR las que
+    // no interesan. Quitar «g» y «unit» deja la tabla con las filas en litros.
+    await menu.locator('.menu__fila', { hasText: /^g/ }).locator('button[role="checkbox"]').click();
+    await menu.locator('.menu__fila', { hasText: /^unit/ }).locator('button[role="checkbox"]').click();
 
     await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
     await expect(fila(page, 'Leche')).toHaveCount(1);
@@ -170,9 +173,20 @@ test.describe('Pantry — inventario en tabla', () => {
     // ubicacion sembrada no se aprecia, asi que se comprueba la cabecera: el ② aparece en la columna.
     await tabla(page).locator('[data-test="tabla-orden-name"]').click(); // click suelto: la columna manda sola otra vez
     await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveText('1');
-    await tabla(page).locator('[data-test="tabla-orden-quantity"]').click({ modifiers: ['Shift'] });
+    // Shift sujeto con el teclado, no con `modifiers`: es el gesto exacto del usuario, y deja menos
+    // margen a que el navegador reparta el clic sin la tecla pisada.
+    await page.keyboard.down('Shift');
+    await tabla(page).locator('[data-test="tabla-orden-quantity"]').click();
+    await page.keyboard.up('Shift');
     await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveText('1');
     await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveText('2');
+    // Y el secundario se puede quitar solo, conservando el primario: shift+clic sobre quantity lo suelta.
+    await page.keyboard.down('Shift');
+    await tabla(page).locator('[data-test="tabla-orden-quantity"]').click();
+    await page.keyboard.up('Shift');
+    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"]')).toHaveCount(1); // sigue la columna
+    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveCount(0); // sin gemelo
+    await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveCount(0); // y manda sola
 
     // y a 100 por pagina, la cuenta del pie dice la realidad
     await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
