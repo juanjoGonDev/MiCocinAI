@@ -3158,6 +3158,55 @@ Lo que la tanda deja dicho para quien siga:
 - La **reordenación a mano** no se hizo, y `position` ya se guarda: el día que se arrastre la lista no habrá
   migración, solo una ruta.
 
+## 12y. Tanda 26 — la suite e2e del branch estaba roja, y no la rompió la tanda 25
+
+Medido en GitHub, no supuesto: los tres runs de CI de esta rama (`7d7da09` —un commit que solo tocaba este
+fichero—, `cf2e92b` y `4029d06`) fallan **igual** en `Full-stack E2E` y en los shards 1, 3 y 4 (el 2 pasa).
+Un commit de documentación ya estaba rojo: **la tanda 25 no introdujo nada de esto**. Y aquí no se puede
+reproducir con navegador —`corepack pnpm exec playwright install chromium` falla descargando: el CDN de
+Playwright no es alcanzable desde el sandbox—, así que cada caso se ha juzgado **contra el fuente de la app**,
+y solo se arregla lo que el fuente prueba. Lo que necesita un navegador para saber de qué lado está el error
+se queda escrito, no se toca a ciegas.
+
+### Lo que dice la anotación de CI, y con qué se casa
+
+| prueba | qué esperaba | qué salió | veredicto |
+| --- | --- | --- | --- |
+| `auth.spec.ts` — «should show login form» | `h2` con `Iniciar Sesión` | `Iniciar sesión` | prueba vieja: la ronda de i18n pasó los títulos a minúscula de frase; `household.spec.ts` ya busca `/Iniciar sesión/` |
+| `account.spec.ts` — «informacion dice lo que la app guarda» | `account-email` con `@hogaria.test` | `e2e-r…a1s1-1-…@example.com` | prueba vieja: `registerAndGoto` **devuelve el email que crea** y el dominio del arnés es `@example.com` |
+| `onboarding.spec.ts` — desmarcar la merienda y la cena | `[data-test="gen-meal-snack"] input[type="checkbox"]` | 45 s esperando el localizador | prueba vieja: `app-checkbox` es un `button[role="checkbox"]` —**no hay input dentro que marcar**— y el `data-test` está en el propio `<app-checkbox>` |
+| los textos en español que salieron en inglés (`10 % en 2 units`) | chip en castellano | chip en inglés | **el arnés estaba roto**: `fixtures.ts` anclaba el idioma escribiendo `hogaria.language`, y la app lee `STORAGE_KEYS.language` = `hogar:v1:language`. La clave no existía para nadie: quien cambiaba de idioma en otro sitio se llevaba el `auto` del navegador (en CI, `en-US`) |
+| `calendar.spec.ts` (`.cal-event` a 0, hover esperando) | eventos en la rejilla | ninguno | **no se toca**: la clase existe (`calendar-event.component.ts`, `class: 'cal-event'`), así que es dato/tiempo, y sin navegador no se decide si es del test o del planificador |
+| `recipes.spec.ts` y `ai-goal.spec.ts` (`.modal__title` vacío) | título del modal | cadena vacía | **no se toca**: `.modal__title` sigue en el sistema (2 ficheros); o el modal no estaba abierto en el assert o el `[title]` no llega —hay que verlo— |
+| `shopping-round6.spec.ts` — oferta `3x2`, `selection-toolbar`, `add-input`, `discount-amount` | 3x2 / toolbar visible | `3x1` / no aparece | **no se toca**: todos los `data-test` existen en la app; la pinta de cascada (un paso anterior no hizo lo que el test creía) |
+| `shopping-round10.spec.ts` — «bote de 400 g» en el picker | la medida escrita a mano | `Sin unidad` | **no se toca** por el mismo motivo, y puede que lo arregle el anclaje del idioma |
+| `shopping-round6.spec.ts` — hoja de foto sin IA | `/Falta configurar la IA/i` | `El modelo no esta disponible ahora mismo.` | **no se toca**: las dos frases están en el diccionario (`ui.falta_configurar_la_ia`, `ui.el_modelo_no_esta`) y son condiciones distintas —cuál toca depende del estado del arnés |
+| `Full-stack E2E` | `test-results/results.json` | «Playwright no llegó a escribir resultados (posible fallo al arrancar el webServer)» | **no se toca**: es el job de proceso único (build de producción + servidor), y su fallo es de arranque, no de ningún assert |
+
+### Checklist
+
+- [ ] `tests/e2e/fixtures.ts`: el anclaje de idioma tiene que escribir **la clave que lee la app**
+      (`STORAGE_KEYS.language` → `hogar:v1:language`). Se pone la constante al lado del literal y un comentario
+      que diga que si `STORAGE_PREFIX` cambia, esto cambia; un fixture que escribe una clave muerta no es un
+      fixture, es decoración.
+- [ ] `auth.spec.ts`: el título se busca como lo pinta la app (`Iniciar sesión`).
+- [ ] `account.spec.ts`: se afirma contra el email que el propio helper registró (`const email = await
+      registerAndGoto(...)`), no contra un dominio que el arnés ya no usa.
+- [ ] `onboarding.spec.ts`: las casillas se pulsan por su rol (`[role="checkbox"]`) y se comprueban por
+      `aria-checked`, como hace `pantry-managers.spec.ts` desde la tanda 25. Nadie marca un input que no existe.
+- [ ] `corepack pnpm run typecheck:e2e` en 0 tras los cuatro cambios (es la única puerta que el sandbox puede
+      cerrar de esto: el `check-ui` no mira `tests/`, y Playwright no arranca aquí).
+- [ ] **Regla que sale**: un e2e se escribe contra **lo que la app pinta**, no contra el nombre que el equipo se
+      puso a sí mismo. `input[type="checkbox"]` era el componente de antes; `app-checkbox` es lo que hay; y
+      `hogaria.language` era la clave de antes. Ninguna de las dos cosas se ve con `tsc` —el selector es una
+      cadena—, así que el guardián es el CI: si un test lleva meses fallando «por datos», la sospecha es el
+      arnés.
+- [ ] **Lo que no se hace**: no se reescriben los tests que necesitan navegador para ser juzgados (tabla de
+      arriba, seis filas). Cambiarles el assert hasta que pasen sin haber visto la pantalla es exactamente lo que
+      este proyecto llama «tests que mienten» (`108cb55`). Quedan escritos con su anotación de CI para quien
+      corra la suite con navegador: si al arreglar el anclaje del idioma se alinean solos, se cierra aquí; si no,
+      cada uno merece su mirada.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
