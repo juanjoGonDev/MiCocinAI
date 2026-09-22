@@ -903,10 +903,11 @@ export class PantryComponent implements OnInit {
   ownedUtensilsCount = computed(() => this.pantryService.utensils().filter(u => u.available).length);
   utensilTotal = computed(() => this.pantryService.utensils().length);
 
+  /** `quitarAcentos` no cambia las mayusculas: aqui si, que una busqueda que distingue el caso miente. */
   private coincideBusqueda(nombre: string): boolean {
     const q = this.searchTerm().trim();
     if (!q) return true;
-    return quitarAcentos(nombre).includes(quitarAcentos(q));
+    return quitarAcentos(nombre.toLowerCase()).includes(quitarAcentos(q.toLowerCase()));
   }
 
   /** El subarbol elegido: «Alimentos» trae tambien sus hijas, igual que hacia el server (## 12aa). */
@@ -940,7 +941,7 @@ export class PantryComponent implements OnInit {
     const q = this.utensiliosQ().trim();
     const todos = this.pantryService.utensils();
     if (!q) return todos;
-    return todos.filter((u) => quitarAcentos(u.name).includes(quitarAcentos(q)));
+    return todos.filter((u) => quitarAcentos(u.name.toLowerCase()).includes(quitarAcentos(q.toLowerCase())));
   });
 
   /** Las siete columnas del inventario; las etiquetas, traducidas al vuelo (## 12ab). */
