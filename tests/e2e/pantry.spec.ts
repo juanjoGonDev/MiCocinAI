@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import type { Page } from '@playwright/test';
 import { registerWithHousehold } from './helpers/auth';
 
 test.describe('Pantry', () => {
@@ -44,13 +45,22 @@ test.describe('Pantry', () => {
     await expect(page.locator('input#quantity')).toBeVisible();
   });
 
+  // Desde la tanda 25 el formulario de la despensa no tiene <select>: categoria y ubicacion son `app-picker`,
+  // que abre una lista de opciones y se pulsa por texto. Con el idioma del arnes anclado en castellano, el texto
+  // es el del diccionario (y en ubicacion lleva el pictograma delante, de ahi que se filtre por substring).
+  const elegir = async (page: Page, picker: string, opcion: string): Promise<void> => {
+    const caja = page.locator(picker);
+    await caja.locator('.picker__trigger').click();
+    await caja.locator('.picker__option').filter({ hasText: opcion }).first().click();
+  };
+
   test('should add a new ingredient', async ({ page }) => {
     await page.getByRole('button', { name: '+ Agregar' }).click();
 
     await page.fill('input#ingredientName', 'Tomate');
     await page.fill('input#quantity', '500');
-    await page.selectOption('select[name="category"]', 'vegetables');
-    await page.selectOption('select[name="location"]', 'fridge');
+    await elegir(page, '[data-test="pantry-picker-categoria"]', 'Verduras');
+    await elegir(page, '[data-test="pantry-picker-ubicacion"]', 'Nevera');
 
     await page.locator('app-modal button[type="submit"]').click();
 
@@ -63,8 +73,8 @@ test.describe('Pantry', () => {
 
     await page.fill('input#ingredientName', 'Yogur');
     await page.fill('input#quantity', '6');
-    await page.selectOption('select[name="category"]', 'dairy');
-    await page.selectOption('select[name="location"]', 'fridge');
+    await elegir(page, '[data-test="pantry-picker-categoria"]', 'Lácteos');
+    await elegir(page, '[data-test="pantry-picker-ubicacion"]', 'Nevera');
     // <input type="date"> produce YYYY-MM-DD (el backend no debe exigir ISO datetime)
     await page.fill('input#expiration', '2026-12-31');
 

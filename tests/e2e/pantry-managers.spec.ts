@@ -84,13 +84,14 @@ test.describe('El gestor del inventario', () => {
     await expect(page.locator('[data-test="gestor-productos-filtro-staples"] .tag')).toHaveClass(/tag--selected/);
 
     await page.locator('[data-test="gestor-productos-nueva"]').click();
+    await expect(page.locator('[data-test="gestor-productos-ficha"]')).toBeVisible();
     await page.locator('[data-test="gestor-productos-campo-nombre"] input').fill('Levadura de panadero');
-    await page.locator('#gestor-producto-alias input').fill('levadura fresca');
+    await page.locator('#gestor-producto-alias').fill('levadura fresca');
     await page.locator('[data-test="gestor-productos-anadir-alias"]').click();
     await page.locator('[data-test="gestor-productos-guardar"]').click();
 
     await expect(page).toHaveURL(/\/pantry\/products$/);
-    await page.locator('#gestor-productos-q input').fill('levadura fresca');
+    await page.locator('#gestor-productos-q').fill('levadura fresca');
     const fila = page.locator('.fila', { hasText: 'Levadura de panadero' });
     await expect(fila).toBeVisible();
     await expect(fila.locator('.fila__alias').first()).toHaveText('levadura fresca');
@@ -100,7 +101,9 @@ test.describe('El gestor del inventario', () => {
     await page.goto('/pantry/products?filter=in-pantry');
     const fila = page.locator('.fila').first();
     await expect(fila).toBeVisible();
-    await expect(fila.locator('[data-test^="gestor-productos-borrar-"]')).toBeDisabled();
+    // `canDelete` no lo decide la lista: lo decide el `delete-impact` que se pide por fila, y ese viaje llega
+    // despues de pintar. Sin plazo, el assert ganaba por milisegundos y perdia por red.
+    await expect(fila.locator('[data-test^="gestor-productos-borrar-"]')).toBeDisabled({ timeout: 15_000 });
 
     // El lote, aunque quisiera, no pasa: la seleccion de algo con stock bloquea el resto.
     await page.locator('[data-test="gestor-productos-filtro-all"]').click();
@@ -113,15 +116,15 @@ test.describe('El gestor del inventario', () => {
 
   test('el F5 conserva el filtro, la busqueda y la ficha abierta', async ({ page }) => {
     await page.goto('/pantry/products?filter=all&sort=recent&q=Levadura');
-    await expect(page.locator('#gestor-productos-q input')).toHaveValue('Levadura');
+    await expect(page.locator('#gestor-productos-q')).toHaveValue('Levadura');
     await expect(page.locator('[data-test="gestor-productos-filtro-all"] .tag')).toHaveClass(/tag--selected/);
 
     await page.reload();
     await expect(page).toHaveURL(/filter=all&sort=recent&q=Levadura/);
-    await expect(page.locator('#gestor-productos-q input')).toHaveValue('Levadura');
+    await expect(page.locator('#gestor-productos-q')).toHaveValue('Levadura');
 
     await page.goto('/pantry/categories');
-    await page.locator('#gestor-categorias-q input').fill('Frutas');
+    await page.locator('#gestor-categorias-q').fill('Frutas');
     await page.locator('[data-test="gestor-categorias-vista-without-products"]').click();
     const url = page.url();
     await page.reload();

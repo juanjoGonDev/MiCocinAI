@@ -25,9 +25,15 @@ export const test = base.extend<{ nativeDialogs: string[] }>({
       // Escribir otra cadena hacia lo mismo que no anclar nada: la app caia a `auto` y se llevaba el idioma del
       // navegador, que en CI es `en-US` —de ahi los chips que salian en ingles en `shopping-round10`—. Si cambia
       // `STORAGE_PREFIX`, cambia esto.
+      // ...pero SOLO si la persona que corre el test no eligio idioma: `addInitScript` se ejecuta antes de CADA
+      // navegacion, recargar incluida, y anclar `es` a la fuerza borraba la preferencia que un test estaba
+      // probando que persistia (`settings-theme-i18n > language preference persists across reloads`). Semilla,
+      // no imposicion.
       await page.addInitScript(() => {
         try {
-          window.localStorage.setItem('hogar:v1:language', 'es');
+          if (!window.localStorage.getItem('hogar:v1:language')) {
+            window.localStorage.setItem('hogar:v1:language', 'es');
+          }
         } catch {
           /* el test aun puede correr: la app cae a `auto`, y el locale del navegador es es-ES */
         }
