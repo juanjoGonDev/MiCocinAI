@@ -20,9 +20,14 @@ export const test = base.extend<{ nativeDialogs: string[] }>({
       // Y el idioma, anclado en la preferencia guardada, no solo en el navegador: `language: 'es'` es lo
       // que lee `I18nService` al arrancar. Sin esto, quien escriba un test despues de cambiar de idioma en
       // otro (el `localStorage` sobrevive entre specs dentro del mismo worker) prueba otra app.
+      // La clave NO es nuestra: es `STORAGE_KEYS.language` (`frontend/src/app/core/services/storage.service.ts`),
+      // que vale `hogar:v1:language` porque todo el almacenamiento de la app lleva el prefijo `STORAGE_PREFIX`.
+      // Escribir otra cadena hacia lo mismo que no anclar nada: la app caia a `auto` y se llevaba el idioma del
+      // navegador, que en CI es `en-US` —de ahi los chips que salian en ingles en `shopping-round10`—. Si cambia
+      // `STORAGE_PREFIX`, cambia esto.
       await page.addInitScript(() => {
         try {
-          window.localStorage.setItem('hogaria.language', 'es');
+          window.localStorage.setItem('hogar:v1:language', 'es');
         } catch {
           /* el test aun puede correr: la app cae a `auto`, y el locale del navegador es es-ES */
         }

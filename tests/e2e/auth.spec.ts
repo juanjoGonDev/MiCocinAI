@@ -11,7 +11,9 @@ test.describe('Authentication', () => {
   });
 
   test('should show login form', async ({ page }) => {
-    await expect(page.locator('h2')).toContainText('Iniciar Sesión');
+    // Minuscula de frase: la tanda del diccionario (`## 12v`) paso los titulos a `Iniciar sesion` y aqui se
+    // afirma lo que la app pinta, no como se llamaba el literal antes de existir el diccionario.
+    await expect(page.locator('h2')).toContainText('Iniciar sesión');
     await expect(page.locator('input#email')).toBeVisible();
     await expect(page.locator('input#password')).toBeVisible();
     await expect(page.locator('button[type="submit"]')).toBeVisible();

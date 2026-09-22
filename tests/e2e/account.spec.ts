@@ -192,9 +192,12 @@ test.describe('Mi cuenta', () => {
   });
 
   test('informacion dice lo que la app guarda en este navegador', async ({ page }) => {
-    await registerAndGoto(page, '/account?tab=info', 'acct-info');
+    const email = await registerAndGoto(page, '/account?tab=info', 'acct-info');
 
-    await expect(page.locator('[data-test="account-email"]')).toContainText('@hogaria.test');
+    // El arnés genera una cuenta por test (dominio `@example.com`, con el run id dentro para que dos workers no
+    // se pisen), asi que lo que se comprueba es QUE se ve la cuenta de esta sesion, no un dominio fijo que ya
+    // no existe: `account-email` tiene que decir exactamente lo que `registerAndGoto` registro.
+    await expect(page.locator('[data-test="account-email"]')).toContainText(email);
     await expect(page.locator('[data-test="account-version"]')).toContainText('1.');
     // El tamano se dice en unidades legibles, y la cola de escribiras se ve aunque este vacia.
     await expect(page.locator('[data-test="account-storage"]')).toContainText(/B|KB|MB/);

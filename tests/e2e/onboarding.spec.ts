@@ -279,8 +279,12 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     // Las cuatro comidas vienen marcadas; desmarcar la merienda es decirle a la IA que no la escriba
     await expect(page.locator('[data-test="gen-meals"]')).toBeVisible();
     await expect(page.locator('[data-test="gen-meal-breakfast"]')).toBeVisible();
-    await page.locator('[data-test="gen-meal-snack"] input[type="checkbox"]').uncheck();
-    await page.locator('[data-test="gen-meal-dinner"] input[type="checkbox"]').uncheck();
-    await expect(page.locator('[data-test="gen-meal-snack"] input[type="checkbox"]')).not.toBeChecked();
+    // `app-checkbox` es un `button[role="checkbox"]` con el `data-test` en el propio elemento: no hay ningun
+    // input dentro que marcar (esperarlo era esperar 45 segundos a un localizador que no existe). Se pulsa por
+    // su rol y se comprueba por `aria-checked`, igual que en `pantry-managers.spec.ts`.
+    const casilla = (comida: string) => page.locator(`[data-test="gen-meal-${comida}"] [role="checkbox"]`);
+    await casilla('snack').click();
+    await casilla('dinner').click();
+    await expect(casilla('snack')).toHaveAttribute('aria-checked', 'false');
   });
 });

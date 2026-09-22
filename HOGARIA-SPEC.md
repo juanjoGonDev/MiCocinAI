@@ -3185,18 +3185,18 @@ se queda escrito, no se toca a ciegas.
 
 ### Checklist
 
-- [ ] `tests/e2e/fixtures.ts`: el anclaje de idioma tiene que escribir **la clave que lee la app**
+- [x] `tests/e2e/fixtures.ts`: el anclaje de idioma tiene que escribir **la clave que lee la app**
       (`STORAGE_KEYS.language` → `hogar:v1:language`). Se pone la constante al lado del literal y un comentario
       que diga que si `STORAGE_PREFIX` cambia, esto cambia; un fixture que escribe una clave muerta no es un
       fixture, es decoración.
-- [ ] `auth.spec.ts`: el título se busca como lo pinta la app (`Iniciar sesión`).
-- [ ] `account.spec.ts`: se afirma contra el email que el propio helper registró (`const email = await
+- [x] `auth.spec.ts`: el título se busca como lo pinta la app (`Iniciar sesión`).
+- [x] `account.spec.ts`: se afirma contra el email que el propio helper registró (`const email = await
       registerAndGoto(...)`), no contra un dominio que el arnés ya no usa.
-- [ ] `onboarding.spec.ts`: las casillas se pulsan por su rol (`[role="checkbox"]`) y se comprueban por
+- [x] `onboarding.spec.ts`: las casillas se pulsan por su rol (`[role="checkbox"]`) y se comprueban por
       `aria-checked`, como hace `pantry-managers.spec.ts` desde la tanda 25. Nadie marca un input que no existe.
-- [ ] `corepack pnpm run typecheck:e2e` en 0 tras los cuatro cambios (es la única puerta que el sandbox puede
+- [x] `corepack pnpm run typecheck:e2e` en 0 tras los cuatro cambios (es la única puerta que el sandbox puede
       cerrar de esto: el `check-ui` no mira `tests/`, y Playwright no arranca aquí).
-- [ ] **Regla que sale**: un e2e se escribe contra **lo que la app pinta**, no contra el nombre que el equipo se
+- [x] **Regla que sale**: un e2e se escribe contra **lo que la app pinta**, no contra el nombre que el equipo se
       puso a sí mismo. `input[type="checkbox"]` era el componente de antes; `app-checkbox` es lo que hay; y
       `hogaria.language` era la clave de antes. Ninguna de las dos cosas se ve con `tsc` —el selector es una
       cadena—, así que el guardián es el CI: si un test lleva meses fallando «por datos», la sospecha es el
