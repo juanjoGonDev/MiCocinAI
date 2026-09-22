@@ -98,7 +98,14 @@ export class PantryService {
       while (todas.length < total && pagina <= 20) {
         const params = new HttpParams().set('pageSize', '100').set('page', String(pagina));
         const response = await firstValueFrom(this.http.get<any>(`${this.apiUrl}/ingredients`, { params }));
-        const lote = (response?.data?.ingredients ?? []) as Ingredient[];
+        // El LIST de /ingredients devuelve la fila en snake_case (expiration_date) y el modelo del visor
+        // promete camelCase: aqui se viste, una vez, en el unico sitio donde el visor lee las filas
+        // completas (## 12ab). `loadIngredients` se queda crudo para no moverle el suelo al gestor.
+        const lote = ((response?.data?.ingredients ?? []) as Record<string, unknown>[]).map((f) => ({
+          ...f,
+          quantity: Number(f['quantity'] ?? 0),
+          expirationDate: f['expirationDate'] ?? f['expiration_date'] ?? null
+        })) as unknown as Ingredient[];
         total = Number(response?.data?.total ?? lote.length);
         todas.push(...lote);
         if (lote.length === 0) break;
