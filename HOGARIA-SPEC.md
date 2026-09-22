@@ -3558,6 +3558,130 @@ Cambios sobre `pantry.component.ts` sin tocar ningún `data-test` ni clase que p
       ver el padre) — el punto que quedó abierto en la ## 12z y que el sandbox ahora sí permite.
 
 
+## 12ab. Tanda 30 — todas las listas de la pantalla de inventario pasan a tabla profesional
+
+El veredicto del usuario sobre el visor tras la ## 12aa: «varias cosas» — el filtro de categorías pintado como
+riel con `overflow: auto` no es un filtro, es un div con scroll; las sugerencias, tal cual, ocupan media pantalla
+para pulsarlas una vez; y la lista de filas, sin orden ni filtrado por columna, no es el visor «de pc como de
+mobile» que se prometía. La respuesta no es retocar tres sitios: es el componente que la casa aún no tiene.
+
+### A. `app-data-table` — el componente (shared/components/ui/data-table/)
+
+Una tabla de datos presentacional, sin fetch dentro: la pantalla le da las filas y ella se ocupa de orden,
+filtrado, paginación y selección. Contrato:
+
+- **Columnas** (`DataTableColumn[]`): `key` (campo de la fila o nombre de celda proyectada), `labelKey` (i18n —
+  la tabla no escribe texto: reglan 14/15—), `tipo` (`texto | numero | fecha | enum`), `alineacion`,
+  `ancho`, `ordenable`, `filtrable`, y `celda` para las celdas proyectadas con la directiva estructural
+  `appDataTableCell` (contexto: la fila). El valor pintado de un enum sale de `etiqueta(valor)` que pone la
+  pantalla: la tabla no sabe de catálogos (regla 19).
+- **Ordenación múltiple**: clic en la etiqueta del encabezado cicla asc → desc → sin orden; `Shift`+clic añade
+  la columna al orden activo. El encabezado muestra el sentido (`expand_less`/`expand_more`) y, si hay
+  varias claves, el índice del orden. `aria-sort` en el `th`.
+- **Filtro por columna, modo Excel**: cada columna filtrable lleva su embudo en el encabezado. Menú:
+  - `texto`/`enum`: lista de los valores presentes (con su cuenta de filas), buscador dentro del menú,
+    «Seleccionar todo»/«Ninguno», casillas; «Limpiar filtro» en el pie.
+  - `numero`: condiciones (`igual a`, `mayor que`, `menor que`, `entre`) con campos `app-input type=number`.
+  - `fecha`: `antes de`, `después de`, `entre`, más los atajos `hoy`, `próximos 7 días`, `caducados`.
+  El filtro activo se marca en el embudo (punto + `aria-pressed`) y su estado vive en la tabla, no en la URL:
+  lo que comparte una pantalla es la búsqueda y la categoría, no cada casilla pulsada.
+- **Paginación** del lado cliente: tamaños 10/24/50/100, «desde–hasta de total», anterior/siguiente. La tabla
+  itera el dataset completo de la pantalla; por eso el visor carga las filas de una vez (§B).
+- **Selección múltiple**: columna de casillas (`app-checkbox`), cabecera con «todas las filas visibles» (y su
+  estado indeterminado); la selección se emite (`seleccionChange`) para que la pantalla pinte su barra de lote
+  con `ng-content select="[data-tabla-lote]"` dentro de la cabecera de la tabla. Vaciar la selección desde
+  fuera: método público `limpiarSeleccion()`.
+- **Móvil (<720px)**: las filas se reflujaan a tarjetas (cada celda con su etiqueta `data-label`); el
+  encabezado de columnas desaparece y sus controles se recogen en un botón «Ordenar y filtrar» que abre una
+  hoja inferior con la lista de columnas: por columna, orden y el mismo menú de filtro. Un solo DOM por menú
+  (un panel vivo a la vez, anclado al cabezal en escritorio y a la hoja en móvil), porque dos copias con el
+  mismo `data-test` partirían la suite e2e por la mitad.
+- **Lógica pura fuera del componente** (`data-table.util.ts`) con spec en la misma carpeta (el patrón de
+  `calendar-grid.spec.ts`): enumeración de valores únicos, predicados de filtro por tipo, orden multi-clave
+  con comparadores por tipo y recorte de paginación. Así el contrato se prueba sin navegador.
+
+### B. El visor del inventario: carga entera, y a la tabla
+
+- **Carga**: `pantry.service` estrena `cargarInventarioCompleto()` — página de 100 en 100 hasta `total`, tope
+  duro de 2.000 filas (una casa no tiene más; si lo tuviera, se avisa y la tabla pagina lo que hay). Con eso
+  la búsqueda, el filtro de categoría y los filtros de columna son instantáneos y coherentemente Excel:
+  ordenar por caducidad sobre 400 filas sin tener que hojear el servidor es el punto de la ronda.
+- **URL**: `?buscar=` y `?category=` se leen y se escriben (`replaceUrl`, como en los gestores); `?tab=` sigue.
+  El parámetro `category` es el subárbol (ya lo era server-side; ahora la expansión `clavesSubarbol` se hace en
+  cliente sobre el catálogo de categorías cargado, mismo contrato).
+- **Filtro de categorías minimizado**: el riel con scroll se va. En su sitio, un `app-picker` (el selector del
+  sistema, con buscador propio dentro, color por opción y «Todos» arriba): el disparador dice la categoría
+  activa siempre, el menú aparece al pulsar y se cierra al elegir. Las cuentas viajan en la etiqueta («Alimentos ·
+  80») porque ya salían en el riel. Grupos: los padres del árbol se agrupan con `group` del picker.
+- **Sugerencias en un expand**: el bloque `.suggestions` pasa a un botón-cabecera con `aria-expanded` y la
+  cuenta («N sin existencias»), cerrado por defecto; el cuerpo son las mismas píldoras de un clic (añaden a 1).
+  Una sección que se usa una vez al mes no puede ocupar media pantalla por defecto.
+- **Columnas del inventario**: nombre (punto de color + nombre + badge de estado si caduca/caduca), cantidad
+  (stepper de la fila dentro de la celda —mismos `data-test` `pantry-stock-mas-/menos-`—, `numero` filtrable),
+  unidad (enum), categoría (enum con etiqueta `pantryCategoryLabel`, punto de color), caducidad (fecha con el
+  badge, `fecha` filtrable), ubicación (enum con las etiquetas del modal) y acciones (editar/borrar, como hoy).
+  Los pictogramas-emoji de la fila (`getLocationIcon`) salen del DOM: la ubicación se lee en su columna.
+- **Lote**: «Vaciar (mueve a sugerencias)» (PATCH `quantity: 0` por fila, en paralelo, un solo toast al final) y
+  «Borrar del inventario» (DELETE por fila en paralelo), cada uno con su confirmación propia de la app
+  (ConfirmService) nombrando cuántas filas; «Anular selección» limpia sin preguntar. El borrado NO usa
+  `bulk-delete` de productos: ese endpoint rechaza por diseño las filas con existencias (todo-o-nada) y en el
+  visor todas las filas las tienen —el camino del visor es el DELETE que ya usa la fila suelta—.
+
+### C. Utensilios a la tabla, y los tramos se van
+
+La pestaña de utensilios recorre hoy un catálogo de ~54 filas en secciones de 12 con `?section=`, barra de
+progreso y atajos por categoría: una paginación artesanal nacida porque la lista no se podía ordenar ni filtrar.
+Con la tabla, eso sobra: columnas nombre, categoría (enum), estado (casilla `app-checkbox` en la celda —el
+mismo toque que alternar la tarjeta—) y acciones (borrar, solo en los propios). «Ver todo de golpe», los tramos y
+el parámetro `section` desaparecen; la paginación de la tabla (y su selector de tamaño) hacen el trabajo, y el
+lote gana «Marcar como disponibles»/«Marcar como no disponibles» con su toast. `?tab=utensils` se escribe y se
+lee igual que antes (regla de las pestañas).
+
+### D. Lo que NO entra en la tanda (queda apuntado, no improvisado)
+
+El catálogo y los dos gestores ya tienen paginación propia server-side y su e2e en verde; pasarlos a la tabla es
+casi regalar el componente a tres pantallas, pero cada una toca su suite. Se anotan como siguiente tanda con su
+propio spec para no mezclar 3 reescrituras e2e más en el lote de CI de esta.
+
+### E. La suite e2e, en la misma tanda (regla de la ## 12y)
+
+- `pantry.spec.ts`: las filas se localizan por `[data-test="pantry-fila-<id>"]` (y se mantiene
+  `.ingredient-item` como clase de la fila para no reescribir el mundo); los chips de categoría pasan a prueba
+  por el picker (abrir, elegir, verificar etiqueta en el disparador y `?category=` en la URL); el expand de
+  sugerencias se abre antes de pulsar la píldora (el test que clickaba la píldora a ciegas aprendió de la tanda
+  29: primero la consecuencia observable, luego la acción); orden por columna (clic de cabecera, comprobar el
+  orden en la primera fila), filtro de columna con menú (elegir un valor, comprobar filas restantes y el punto
+  del embudo), paginación (tamaño 10, avance, «x–y de z»), lote (marcar dos, vaciar con confirmación de la app,
+  las filas se van a sugerencias).
+- `utensils.spec.ts`: se reescribe contra la tabla (adiós a las pruebas de tramos/`?section=`/progreso; hola a
+  paginación, filtro por categoría, toggle en celda y lote de marcado masivo). Un test nuevo de móvil viewport
+  (412 px): la hoja «Ordenar y filtrar» abre, filtra por estado y la tarjeta refleja el filtro.
+
+### Checklist de la tanda
+
+- [ ] `data-table.util.ts` + spec (TDD: rojo primero): únicos con cuenta y orden estable, predicados por tipo
+      (texto/enum casillas, numero condiciones, fecha condiciones con huecos tolerados), orden multi-clave
+      (asc/desc/ninguno, mezcla de tipos, `null` al final), paginación (recorte, fuera de rango al filtrar).
+- [ ] `data-table.component.ts`: cabecera con orden cíclico + Shift, menú de filtro popover (un panel vivo),
+      selección con casillas y emisión, lote por proyección, paginación con tamaño, modo tarjetas <720px y hoja
+      inferior con los mismos controles, estado vacío con clave i18n.
+- [ ] Servicio: `cargarInventarioCompleto()` (loop 100, tope 2.000) sin tocar `loadIngredients` (lo usan otras
+      pantallas); en el visor, búsqueda y categoría client-side con URL leída y escrita; `clavesSubarbol` en el
+      util del gestor (misma semántica que el server).
+- [ ] Visor: picker de categorías (con cuenta, color, grupo) sustituyendo al riel con scroll; expand de
+      sugerencias cerrado por defecto; tabla de inventario con las 7 columnas; lote vaciar/borrar con
+      confirmación propia y un toast; stepper y acciones intactos en su celda; fuera los emojis de ubicación.
+- [ ] Utensilios: tabla (nombre, categoría, estado con casilla, acciones), lote de marcado, fuera tramos y
+      `?section=`; modal de alta y texto de intro, como estaban.
+- [ ] i18n: claves `ui.tabla_*` (orden, filtros, hoja, selección, paginación) y las nuevas de `pantry.*` en los
+      dos idiomas; ninguna cadena escrita a mano; ninguna clave huérfana (check-ui 15).
+- [ ] e2e en la misma tanda: `pantry.spec` y `utensils.spec` reescritos (más el test de móvil de la hoja);
+      ningún botón pintado sin destino verificado en la plantilla tocada.
+- [ ] Puertas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration
+      production` completo · suite del server (intacta, pero verde por si el picker cambia algo).
+- [ ] Run de CI como juez de los e2e y su bucle de fixes.
+- [ ] Validación manual del usuario en la preview (escritorio y móvil emulado).
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
