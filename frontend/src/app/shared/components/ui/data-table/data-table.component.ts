@@ -1,0 +1,1038 @@
+import {
+  AfterContentInit,
+  Component,
+  ContentChildren,
+  Directive,
+  EventEmitter,
+  HostListener,
+  Input,
+  Output,
+  TemplateRef,
+  computed,
+  effect,
+  input,
+  signal
+} from '@angular/core';
+import { CommonModule, NgTemplateOutlet } from '@angular/common';
+import { FormsModule } from '@angular/forms';
+import { IconComponent } from '../icon/icon.component';
+import { CheckboxComponent } from '../checkbox/checkbox.component';
+import { InputComponent } from '../input/input.component';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../../../core/i18n';
+import type {
+  DataTableColumna,
+  DireccionOrden,
+  FiltroColumna,
+  FiltroFecha,
+  FiltroNumero,
+  ModoFecha,
+  ModoNumero,
+  OrdenTabla,
+  TipoColumna
+} from './data-table.types';
+import {
+  SIN_VALOR,
+  coincideEnMenu,
+  cuboDe,
+  direccionDe,
+  filtroActivo,
+  hoyLocal,
+  ordenar,
+  paginar,
+  pasarFiltros,
+  posicionDeOrden,
+  recortarFiltro,
+  rotarOrden,
+  valorTipado,
+  valoresUnicos,
+  type FiltroDeColumna
+} from './data-table.util';
+
+/**
+ * Celda proyectada de `app-data-table` (HOGARIA-SPEC ## 12ab).
+ *
+ * La tabla no sabe qué es un ingrediente ni un utensilio; lo que sabe es pintar columnas. Lo que una pantalla
+ * necesite meter dentro de una celda (un stepper, un botón de borrar, un badge) viaja aquí: la pantalla declara
+ * `<ng-template appDataTableCell="cantidad" let-fila>` y la tabla instancia esa plantilla en la columna cuya
+ * `celda` sea `'cantidad'`.
+ */
+@Directive({ selector: '[appDataTableCell]', standalone: true })
+export class DataTableCellDirective {
+  /** Nombre de la columna a la que pertenece (`[appDataTableCell]`); si falta, vale la `clave`. */
+  @Input('appDataTableCell') nombre = '';
+  constructor(readonly tpl: TemplateRef<{ $implicit: unknown; fila: unknown }>) {}
+}
+
+type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
+
+/**
+ * La tabla de datos de la casa (HOGARIA-SPEC ## 12ab).
+ *
+ * Nace del veredicto del usuario sobre el visor del inventario: «filtros por columnas al estilo Excel, que te
+ * abre un mini menú con selección, ordenación múltiple, búsqueda y paginación, y que se vea bien en móvil».
+ * Es presentacional por contrato: recibe las filas que la pantalla ya tenga (servidor, cache, lo que sea) y
+ * se ocupa de orden, filtro, paginación y selección sobre ESAS filas. Por eso el visor carga el inventario
+ * completo en vez de hojear el servidor —filtrar «solo verduras vencidas» sobre una página de 20 es mentir—.
+ *
+ * Dos superficies, un solo DOM por control: en escritorio los menús cuelgan del cabezal; por debajo de 720px
+ * la tabla se refluja a tarjetas y los mismos controles viven en una hoja inferior («Ordenar y filtrar»).
+ * Los `data-test` del cabezal llevan prefijo `tabla-` y los de la hoja `hoja-`, porque en Playwright (que
+ * corre los tres viewports) un selector que resolve dos elementos, uno oculto, es un rojo por strict-mode.
+ */
+@Component({
+  selector: 'app-data-table',
+  standalone: true,
+  imports: [
+    CommonModule,
+    FormsModule,
+    NgTemplateOutlet,
+    IconComponent,
+    CheckboxComponent,
+    InputComponent,
+    TranslatePipe
+  ],
+  template: `
+    <div class="tabla">
+      <div class="tabla__lote"><ng-content select="[data-tabla-lote]"></ng-content></div>
+
+      <div class="tabla__barra-movil">
+        <button type="button" class="movil" (click)="abrirHoja()" data-test="tabla-hoja-abrir">
+          <app-icon name="filter_list" [size]="16" [label]="null" />
+          <span>{{ 'ui.tabla_ordenar_y_filtrar' | t }}</span>
+          @if (nFiltros() > 0) {
+            <span class="movil__marca">{{ nFiltros() }}</span>
+          }
+        </button>
+      </div>
+
+      <div class="tabla__lienzo">
+        <table class="tabla__el">
+          <thead>
+            <tr>
+              @if (seleccionable()) {
+                <th class="tabla__th tabla__th--check">
+                  <button
+                    type="button"
+                    class="cbox"
+                    role="checkbox"
+                    [attr.aria-checked]="estadoSeleccionPagina()"
+                    [attr.aria-label]="'ui.tabla_seleccionar_pagina' | t"
+                    (click)="togglePagina()"
+                    data-test="tabla-seleccionar-pagina"
+                  >
+                    @if (estadoSeleccionPagina() === 'all') {
+                      <app-icon name="check" [size]="13" [label]="null" />
+                    } @else if (estadoSeleccionPagina() === 'mixed') {
+                      <app-icon name="remove" [size]="13" [label]="null" />
+                    }
+                  </button>
+                </th>
+              }
+              @for (col of columnas(); track col.clave) {
+                <th
+                  class="tabla__th"
+                  [class.tabla__th--fin]="col.alineacion === 'end'"
+                  [style.width]="col.ancho ?? null"
+                  [attr.aria-sort]="ariaSortDe(col.clave)"
+                >
+                  <div class="th">
+                    <button
+                      type="button"
+                      class="th__txt"
+                      [class.th__txt--mudo]="!esOrdenable(col)"
+                      [disabled]="!esOrdenable(col)"
+                      [attr.data-test]="'tabla-orden-' + col.clave"
+                      (click)="clicOrden(col, $event)"
+                    >
+                      <span>{{ col.etiqueta }}</span>
+                      @if (dirDe(col.clave); as dir) {
+                        <app-icon
+                          [name]="dir === 'asc' ? 'expand_less' : 'expand_more'"
+                          [size]="15"
+                          [label]="null"
+                        />
+                        @if (posicion(col.clave); as p) {
+                          <span class="th__ord">{{ p }}</span>
+                        }
+                      } @else if (esOrdenable(col)) {
+                        <app-icon class="th__hud" name="unfold_more" [size]="14" [label]="null" />
+                      }
+                    </button>
+                    @if (col.filtrable !== false) {
+                      <button
+                        type="button"
+                        class="th__emb"
+                        [class.th__emb--on]="activo(col.clave)"
+                        [attr.aria-label]="('ui.tabla_filtrar_columna' | t: { columna: col.etiqueta })"
+                        [attr.aria-expanded]="menu()?.col === col.clave && menu()?.sup === 'cabezal'"
+                        [attr.data-test]="'tabla-filtro-' + col.clave"
+                        (click)="alternarMenu(col, 'cabezal')"
+                      >
+                        <app-icon name="filter_list" [size]="14" [label]="null" />
+                        @if (activo(col.clave)) {
+                          <span class="th__punto" aria-hidden="true"></span>
+                        }
+                      </button>
+                      @if (menu()?.col === col.clave && menu()?.sup === 'cabezal') {
+                        <div class="th__menu">
+                          <ng-container *ngTemplateOutlet="panelFiltro; context: { $implicit: col }" />
+                        </div>
+                      }
+                    }
+                  </div>
+                </th>
+              }
+            </tr>
+          </thead>
+          <tbody>
+            @if (vista().total === 0) {
+              <tr class="tabla__vacia">
+                <td class="tabla__td" [attr.colspan]="anchoFila()">
+                  <div class="vacia">
+                    <p class="vacia__texto">
+                      {{ (filas().length > 0 ? 'ui.tabla_nada_coincide' : (claveVacia() ?? 'ui.tabla_lista_vacia')) | t }}
+                    </p>
+                    @if (filas().length > 0 && nFiltros() > 0) {
+                      <button type="button" class="vacia__limpiar" (click)="limpiarFiltros()" data-test="tabla-vacia-limpiar">
+                        {{ 'ui.tabla_limpiar_todos' | t }}
+                      </button>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
+            @for (fila of vista().filas; track identificadorDe(fila)) {
+              <tr
+                class="tabla__fila"
+                [class]="claseFilaStr(fila)"
+                [attr.data-test]="'tabla-fila-' + identificadorDe(fila)"
+              >
+                @if (seleccionable()) {
+                  <td class="tabla__td tabla__td--check">
+                    <app-checkbox
+                      [hideLabel]="true"
+                      [label]="etiquetaFilaDe(fila)"
+                      [checked]="seleccionada(fila)"
+                      (onChange)="marcarFila(fila, $event)"
+                      [attr.data-test]="'tabla-marcar-' + identificadorDe(fila)"
+                    />
+                  </td>
+                }
+                @for (col of columnas(); track col.clave) {
+                  <td
+                    class="tabla__td"
+                    [class.tabla__td--fin]="col.alineacion === 'end'"
+                    [class.tabla__td--vacia]="!textoCelda(col, fila) && !plantillaDe(col)"
+                    [attr.data-label]="col.etiqueta"
+                  >
+                    @if (plantillaDe(col); as tpl) {
+                      <ng-container *ngTemplateOutlet="tpl; context: { $implicit: fila, fila: fila }" />
+                    } @else if (col.tipo === 'booleano') {
+                      @if (esVerdadero(fila, col)) {
+                        <app-icon name="check" [size]="16" [label]="null" class="celda__si" />
+                      } @else {
+                        <span class="celda celda--guion" aria-hidden="true">—</span>
+                      }
+                    } @else {
+                      <span class="celda">{{ textoCelda(col, fila) }}</span>
+                    }
+                  </td>
+                }
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tabla__pie">
+        <span class="pie__rango" data-test="tabla-rango">
+          {{ 'ui.tabla_rango' | t: { desde: vista().desde, hasta: vista().hasta, total: vista().total } }}
+        </span>
+        <div class="pie__tam">
+          <span class="pie__etq">{{ 'ui.tabla_por_pagina' | t }}</span>
+          @for (t of tamanos(); track t) {
+            <button
+              type="button"
+              class="tam"
+              [class.tam--on]="t === tamano()"
+              [attr.data-test]="'tabla-tamano-' + t"
+              (click)="cambiarTamano(t)"
+            >{{ t }}</button>
+          }
+        </div>
+        <div class="pie__pag">
+          <button
+            type="button"
+            class="pag"
+            [disabled]="pagina() <= 1"
+            (click)="irA(pagina() - 1)"
+            [attr.aria-label]="'common.anterior' | t"
+            data-test="tabla-anterior"
+          >
+            <app-icon name="chevron_left" [size]="18" [label]="null" />
+          </button>
+          <span class="pag__cta" data-test="tabla-pagina">
+            {{ 'ui.tabla_pagina' | t: { pagina: pagina(), ultima: vista().ultima } }}
+          </span>
+          <button
+            type="button"
+            class="pag"
+            [disabled]="pagina() >= vista().ultima"
+            (click)="irA(pagina() + 1)"
+            [attr.aria-label]="'ui.tabla_siguiente' | t"
+            data-test="tabla-siguiente"
+          >
+            <app-icon name="chevron_right" [size]="18" [label]="null" />
+          </button>
+        </div>
+      </div>
+
+      <!--
+        La hoja inferior del movil y el menu de filtro comparten el panel: un solo DOM vivo por menu (la regla
+        del spec; dos copias del mismo control serian dos formas de que se contradigan).
+      -->
+      @if (menu() !== null || hoja()) {
+        <div class="tabla__velo" (click)="cerrarCapas()" data-test="tabla-velo"></div>
+      }
+      @if (hoja()) {
+        <section class="tabla__hoja" role="dialog" [attr.aria-label]="'ui.tabla_ordenar_y_filtrar' | t" data-test="tabla-hoja">
+          @if (menu()?.sup === 'hoja' && colDeCapa(); as col) {
+            <div class="hoja__cab">
+              <button type="button" class="hoja__volver" (click)="volverColumnas()" data-test="hoja-volver">
+                <app-icon name="chevron_left" [size]="18" [label]="null" />
+                <span>{{ col.etiqueta }}</span>
+              </button>
+            </div>
+            <div class="hoja__cuerpo hoja__cuerpo--menu">
+              <ng-container *ngTemplateOutlet="panelFiltro; context: { $implicit: col }" />
+            </div>
+          } @else {
+            <div class="hoja__cab">
+              <span class="hoja__titulo">{{ 'ui.tabla_columnas' | t }}</span>
+              <button type="button" class="hoja__x" (click)="cerrarCapas()" [attr.aria-label]="'ui.tabla_listo' | t" data-test="hoja-cerrar">
+                <app-icon name="close" [size]="18" [label]="null" />
+              </button>
+            </div>
+            <ul class="hoja__lista">
+              @for (col of columnas(); track col.clave) {
+                <li class="hoja__fila">
+                  <span class="hoja__etq">{{ col.etiqueta }}</span>
+                  <span class="hoja__acciones">
+                    @if (esOrdenable(col)) {
+                      <button
+                        type="button"
+                        class="hoja__btn"
+                        [class.hoja__btn--on]="dirDe(col.clave)"
+                        (click)="clicOrden(col, $event)"
+                        [attr.data-test]="'hoja-orden-' + col.clave"
+                      >
+                        @if (dirDe(col.clave); as dir) {
+                          <app-icon [name]="dir === 'asc' ? 'expand_less' : 'expand_more'" [size]="15" [label]="null" />
+                        } @else {
+                          <app-icon name="unfold_more" [size]="15" [label]="null" />
+                        }
+                        <span>{{ 'ui.tabla_ordenar' | t }}</span>
+                        @if (posicion(col.clave); as p) { <span class="hoja__ord">{{ p }}</span> }
+                      </button>
+                    }
+                    @if (col.filtrable !== false) {
+                      <button
+                        type="button"
+                        class="hoja__btn"
+                        [class.hoja__btn--on]="activo(col.clave)"
+                        (click)="abrirMenuHoja(col)"
+                        [attr.data-test]="'hoja-filtro-' + col.clave"
+                      >
+                        <app-icon name="filter_list" [size]="15" [label]="null" />
+                        <span>{{ 'ui.tabla_filtrar' | t }}</span>
+                        @if (activo(col.clave)) { <span class="th__punto" aria-hidden="true"></span> }
+                      </button>
+                    }
+                  </span>
+                </li>
+              }
+            </ul>
+            <div class="hoja__pie">
+              <p class="hoja__ayuda">{{ 'ui.tabla_orden_multiple' | t }}</p>
+              @if (nFiltros() > 0) {
+                <button type="button" class="hoja__limpiar" (click)="limpiarFiltros()" data-test="hoja-limpiar">
+                  {{ 'ui.tabla_limpiar_todos' | t }}
+                </button>
+              }
+            </div>
+          }
+        </section>
+      }
+    </div>
+
+    <!-- El panel del filtro: una definicion, dos superficies (cabezal en escritorio, hoja en movil). -->
+    <ng-template #panelFiltro let-col>
+      <div class="menu" (click)="$event.stopPropagation()">
+        <div class="menu__cab">
+          <span class="menu__titulo">{{ col.etiqueta }}</span>
+          @if (activo(col.clave)) {
+            <button type="button" class="menu__limpiar" (click)="limpiarFiltro(col)" data-test="tabla-menu-limpiar">
+              {{ 'ui.tabla_limpiar_filtro' | t }}
+            </button>
+          }
+        </div>
+
+        @if (tipoDe(col) === 'numero' || tipoDe(col) === 'fecha') {
+          <div class="menu__modos">
+            @for (m of modosDe(col); track m.clave) {
+              <button
+                type="button"
+                class="modo"
+                [class.modo--on]="modoDe(col) === m.clave"
+                [attr.data-test]="'tabla-modo-' + m.clave"
+                (click)="ponerModo(col, m.clave)"
+              >{{ m.etiqueta }}</button>
+            }
+          </div>
+          @if (necesitaA(col)) {
+            <app-input
+              [id]="'tabla-extremo-a-' + col.clave"
+              [name]="'tabla-extremo-a-' + col.clave"
+              [type]="tipoDe(col) === 'numero' ? 'number' : 'date'"
+              [label]="(necesitaB(col) ? 'ui.tabla_desde' : (tipoDe(col) === 'numero' ? 'ui.tabla_valor' : 'ui.tabla_dia')) | t"
+              [ngModel]="extremoDe(col, 'a')"
+              (ngModelChange)="fijarExtremo(col, 'a', $event)"
+            />
+          }
+          @if (necesitaB(col)) {
+            <app-input
+              [id]="'tabla-extremo-b-' + col.clave"
+              [name]="'tabla-extremo-b-' + col.clave"
+              [type]="tipoDe(col) === 'numero' ? 'number' : 'date'"
+              [label]="('ui.tabla_hasta' | t)"
+              [ngModel]="extremoDe(col, 'b')"
+              (ngModelChange)="fijarExtremo(col, 'b', $event)"
+            />
+          }
+        } @else {
+          <div class="menu__buscar-caja">
+            <app-input
+              [id]="'tabla-menu-buscar-' + col.clave"
+              [name]="'tabla-buscar-valor-' + col.clave"
+              type="search"
+              [placeholder]="('ui.tabla_buscar_valor' | t)"
+              [ngModel]="busquedaMenu()"
+              (ngModelChange)="ponerBusqueda($event)"
+            />
+          </div>
+          <div class="menu__links">
+            <button type="button" (click)="marcarTodos(col)" data-test="tabla-menu-todo">{{ 'ui.tabla_seleccionar_todo' | t }}</button>
+            <button type="button" (click)="marcarNinguno(col)" data-test="tabla-menu-nada">{{ 'ui.tabla_ninguno' | t }}</button>
+          </div>
+          <ul class="menu__lista">
+            @for (v of valoresMenu(col); track v.valor) {
+              <li class="menu__fila">
+                <app-checkbox
+                  [label]="etiquetaDeValor(col, v.valor)"
+                  [checked]="valorMarcado(col, v.valor)"
+                  (onChange)="toggleValor(col, v.valor)"
+                />
+                <span class="menu__cta">{{ v.cuenta }}</span>
+              </li>
+            }
+          </ul>
+          <div class="menu__pie">
+            <button type="button" class="menu__recortar" (click)="recortarA(col)" data-test="tabla-menu-recortar">
+              {{ 'ui.tabla_recortar' | t }}
+            </button>
+          </div>
+        }
+      </div>
+    </ng-template>
+  `,
+  styles: [`
+    :host { display: block; }
+
+    .tabla { position: relative; }
+    .tabla__lote:empty { display: none; }
+    .tabla__lote { margin-bottom: var(--space-3); }
+
+    /* ── lienzo y tabla ── */
+    .tabla__lienzo {
+      overflow-x: auto;
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      background: var(--bg-secondary);
+    }
+    .tabla__el { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+
+    .tabla__th {
+      position: sticky; top: 0; z-index: 2;
+      text-align: start; padding: 0; margin: 0;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border-default);
+    }
+    .tabla__th--fin .th { justify-content: flex-end; }
+    .tabla__th--check { width: 44px; }
+    .th {
+      display: flex; align-items: center; gap: var(--space-1);
+      padding: var(--space-1) var(--space-2);
+      min-height: 44px;
+    }
+    .th__txt {
+      display: inline-flex; align-items: center; gap: 2px;
+      font: inherit; font-weight: var(--font-semibold); color: var(--text-primary);
+      background: none; border: 0; padding: var(--space-1) var(--space-1);
+      border-radius: var(--radius-md); cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .th__txt:hover { background: var(--primary-subtle); }
+    .th__txt:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+    .th__txt--mudo { cursor: default; }
+    .th__txt--mudo:hover { background: none; }
+    .th__hud { color: var(--text-tertiary); opacity: 0; transition: opacity var(--duration-100); }
+    .th__txt:hover .th__hud { opacity: 1; }
+    .th__ord {
+      font-size: 10px; font-weight: var(--font-bold); color: var(--primary-dark);
+      background: var(--primary-subtle); border-radius: var(--radius-full);
+      padding: 0 5px; margin-inline-start: 2px;
+    }
+    .th__emb {
+      position: relative; display: inline-grid; place-items: center;
+      width: 30px; height: 30px; flex: none;
+      color: var(--text-tertiary); background: none; border: 0;
+      border-radius: var(--radius-md); cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .th__emb:hover { color: var(--primary-dark); background: var(--primary-subtle); }
+    .th__emb:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+    .th__emb--on { color: var(--primary-dark); background: var(--primary-subtle); }
+    .th__punto {
+      position: absolute; top: 3px; right: 3px; width: 7px; height: 7px;
+      border-radius: var(--radius-full); background: var(--primary);
+      border: 1.5px solid var(--bg-tertiary);
+    }
+    .th__menu { position: relative; z-index: 60; }
+
+    .tabla__fila { border-bottom: 1px solid var(--border-default); transition: background var(--duration-100); }
+    .tabla__fila:last-child { border-bottom: 0; }
+    .tabla__fila:hover { background: var(--bg-primary); }
+    .tabla__fila--sel { background: var(--primary-subtle); }
+    .tabla__td { padding: var(--space-2); vertical-align: middle; }
+    .tabla__td--fin { text-align: end; }
+    .tabla__td--check { width: 44px; }
+    .celda { font-size: var(--text-sm); color: var(--text-primary); }
+    .celda--guion { color: var(--text-tertiary); }
+    .celda__si { color: var(--success, var(--primary)); }
+
+    .vacia { padding: var(--space-6); text-align: center; }
+    .vacia__texto { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
+    .vacia__limpiar {
+      font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
+      color: var(--primary-dark); background: none; border: 0; cursor: pointer;
+      padding: var(--space-1) var(--space-3); border-radius: var(--radius-full);
+    }
+    .vacia__limpiar:hover { background: var(--primary-subtle); }
+
+    /* ── pie con paginacion ── */
+    .tabla__pie {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: var(--space-2) var(--space-4);
+      padding: var(--space-2) var(--space-1);
+      font-size: var(--text-xs); color: var(--text-secondary);
+    }
+    .pie__rango { font-variant-numeric: tabular-nums; }
+    .pie__tam { display: inline-flex; align-items: center; gap: var(--space-1); }
+    .pie__etq { color: var(--text-tertiary); }
+    .tam {
+      min-width: 34px; padding: 2px var(--space-2);
+      font: inherit; font-size: var(--text-xs); font-variant-numeric: tabular-nums;
+      color: var(--text-secondary); background: var(--bg-tertiary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-full);
+      cursor: pointer; transition: var(--transition-fast);
+    }
+    .tam:hover { border-color: var(--border-strong); }
+    .tam--on { color: var(--primary-dark); border-color: var(--primary); background: var(--primary-subtle); }
+    .pie__pag { display: inline-flex; align-items: center; gap: var(--space-2); }
+    .pag {
+      display: inline-grid; place-items: center; width: 34px; height: 34px;
+      color: var(--text-secondary); background: var(--bg-tertiary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-full);
+      cursor: pointer; transition: var(--transition-fast);
+    }
+    .pag:hover:not(:disabled) { color: var(--primary-dark); border-color: var(--border-strong); }
+    .pag:disabled { opacity: 0.4; cursor: default; }
+    .pag__cta { font-variant-numeric: tabular-nums; }
+
+    /* ── cabecitas de seleccion ── */
+    .cbox {
+      display: inline-grid; place-items: center; width: 26px; height: 26px;
+      color: var(--primary-dark); background: var(--bg-secondary);
+      border: 1.5px solid var(--border-strong); border-radius: var(--radius-md);
+      cursor: pointer; transition: var(--transition-fast);
+    }
+    .cbox:hover { border-color: var(--primary); }
+
+    /* ── el menu (una instancia viva) ── */
+    .menu {
+      position: absolute; top: calc(100% + 2px); right: 0; z-index: 61;
+      width: 264px; max-height: 72vh; display: flex; flex-direction: column;
+      background: var(--bg-secondary); border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+      padding: var(--space-3);
+      font-size: var(--text-sm); text-align: start;
+    }
+    .menu__cab { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+    .menu__titulo { font-weight: var(--font-semibold); }
+    .menu__limpiar, .menu__links button, .menu__recortar {
+      font: inherit; font-size: var(--text-xs); color: var(--primary-dark);
+      background: none; border: 0; cursor: pointer;
+      padding: 2px var(--space-2); border-radius: var(--radius-full);
+    }
+    .menu__limpiar:hover, .menu__links button:hover, .menu__recortar:hover { background: var(--primary-subtle); text-decoration: underline; }
+    .menu__links { display: flex; gap: var(--space-1); border-block: 1px solid var(--border-default); padding: var(--space-1) 0; }
+    .menu__buscar-caja { margin-bottom: var(--space-2); }
+    .menu__lista {
+      list-style: none; margin: var(--space-2) 0 0; padding: 0 2px;
+      overflow-y: auto; max-height: 240px;
+      scrollbar-width: thin;
+    }
+    .menu__fila { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+    .menu__fila app-checkbox { min-width: 0; }
+    .menu__cta { font-size: var(--text-xs); color: var(--text-tertiary); font-variant-numeric: tabular-nums; flex: none; }
+    .menu__modos { display: flex; flex-wrap: wrap; gap: var(--space-1); margin-bottom: var(--space-3); }
+    .modo {
+      font: inherit; font-size: var(--text-xs); padding: var(--space-1) var(--space-2);
+      color: var(--text-secondary); background: var(--bg-tertiary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-full);
+      cursor: pointer; transition: var(--transition-fast);
+    }
+    .modo:hover { border-color: var(--border-strong); }
+    .modo--on { color: var(--primary-dark); border-color: var(--primary); background: var(--primary-subtle); }
+    .menu app-input { margin-bottom: var(--space-2); }
+    .menu__pie { display: flex; justify-content: flex-end; margin-top: var(--space-2); }
+
+    /* ── hoja inferior del movil ── */
+    .tabla__barra-movil { display: none; }
+    .movil {
+      display: inline-flex; align-items: center; gap: var(--space-2);
+      font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
+      color: var(--text-primary); background: var(--bg-secondary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-full);
+      padding: var(--space-2) var(--space-4); cursor: pointer;
+    }    .movil:hover { border-color: var(--border-strong); }
+    .movil:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+    .movil__marca {
+      font-size: 11px; color: var(--primary-dark); background: var(--primary-subtle);
+      border-radius: var(--radius-full); padding: 0 6px; font-variant-numeric: tabular-nums;
+    }
+    .tabla__velo { position: fixed; inset: 0; z-index: 55; background: rgba(0, 0, 0, 0.35); }
+    .tabla__hoja {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+      max-height: 78vh; overflow-y: auto;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-default);
+      border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+      padding: var(--space-3) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom));
+    }
+    .hoja__cab { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); margin-bottom: var(--space-2); }
+    .hoja__titulo { font-family: var(--font-display); font-weight: var(--font-semibold); }
+    .hoja__volver {
+      display: inline-flex; align-items: center; gap: var(--space-1);
+      font: inherit; font-weight: var(--font-semibold); color: var(--text-primary);
+      background: none; border: 0; padding: var(--space-1); cursor: pointer;
+    }    .hoja__volver:hover { color: var(--primary-dark); }
+    .hoja__volver:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+    .hoja__x {
+      display: inline-grid; place-items: center; width: 34px; height: 34px;
+      color: var(--text-secondary); background: none; border: 0; border-radius: var(--radius-full); cursor: pointer;
+    }    .hoja__x:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+    .hoja__x:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+    .hoja__lista { list-style: none; margin: 0; padding: 0; }
+    .hoja__fila {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
+      padding: var(--space-2) 0; border-bottom: 1px solid var(--border-default);
+    }
+    .hoja__fila:last-child { border-bottom: 0; }
+    .hoja__etq { font-weight: var(--font-medium); }
+    .hoja__acciones { display: inline-flex; gap: var(--space-1); }
+    .hoja__btn {
+      position: relative; display: inline-flex; align-items: center; gap: 4px;
+      font: inherit; font-size: var(--text-xs); color: var(--text-secondary);
+      background: var(--bg-tertiary); border: 1px solid var(--border-default);
+      border-radius: var(--radius-full); padding: var(--space-1) var(--space-2); cursor: pointer;
+    }
+    .hoja__btn--on { color: var(--primary-dark); border-color: var(--primary); background: var(--primary-subtle); }    .hoja__btn:hover { border-color: var(--border-strong); color: var(--text-primary); }
+    .hoja__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+    .hoja__ord { font-size: 10px; font-weight: var(--font-bold); color: var(--primary-dark); }
+    .hoja__pie { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-3); }
+    .hoja__ayuda { margin: 0; font-size: var(--text-xs); color: var(--text-tertiary); }
+    .hoja__limpiar {
+      font: inherit; font-size: var(--text-sm); color: var(--error, var(--primary-dark));
+      background: none; border: 0; padding: var(--space-1) var(--space-3);
+      border-radius: var(--radius-full); cursor: pointer;
+    }    .hoja__limpiar:hover { background: var(--error-subtle); }
+    .hoja__limpiar:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+    .hoja__cuerpo--menu .menu { position: static; width: auto; max-height: none; box-shadow: none; border: 0; padding: 0 0 var(--space-2); }
+
+    /* ── el reflujo a tarjetas por debajo de 720 ── */
+    @media (max-width: 719px) {
+      .tabla__barra-movil { display: block; margin-bottom: var(--space-2); }
+      .tabla__lienzo { overflow: visible; border: 0; background: none; }
+      .tabla__el, .tabla__el thead, .tabla__el tbody { display: block; }
+      .tabla__el thead { display: none; }
+      .tabla__fila {
+        display: block; margin-bottom: var(--space-2); padding: var(--space-3);
+        background: var(--bg-secondary); border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+      }
+      .tabla__fila:hover { background: var(--bg-secondary); }
+      .tabla__td { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 2px 0; text-align: start; }
+      .tabla__td--fin { text-align: end; }
+      .tabla__td::before {
+        content: attr(data-label);
+        font-size: var(--text-xs); color: var(--text-tertiary);
+        flex: none; margin-inline-end: auto;
+      }
+      .tabla__td--check { position: absolute; right: var(--space-2); top: var(--space-2); padding: 0; }
+      .tabla__td--check::before { content: none; }
+      .tabla__fila { position: relative; }
+      .tabla__td--vacia::before { color: var(--text-tertiary); }
+      .tabla__vacia td { display: block; padding: 0; }
+      .tabla__vacia td::before { content: none; }
+      .tabla__hoja { border-radius: var(--radius-xl) var(--radius-xl) 0 0; }
+    }
+  `]
+})
+export class DataTableComponent implements AfterContentInit {
+  @ContentChildren(DataTableCellDirective) private celdasProyectadas?: DataTableCellDirective[];
+
+  /** Las filas completas de la pantalla: la tabla no pide nada, pero si filtra, ordena y corta. */
+  readonly filas = input<readonly unknown[]>([]);
+  readonly columnas = input<readonly DataTableColumna[]>([]);
+  /** La clave estable de la fila (identificadores, no posiciones: la seleccion sobreviva al filtro). */
+  readonly claveDeFila = input<(fila: unknown) => string>((fila) => String((fila as { id?: unknown }).id ?? ''));
+  /** Etiqueta de la fila para el `aria-label` de la casilla (el nombre, si la pantalla lo sabe decir). */
+  readonly etiquetaDeFila = input<(fila: unknown) => string>(() => '');
+  /** Clases extra de la fila: la pantalla puede conservar las suyas (`ingredient-item`, lo que pinte). */
+  readonly claseFila = input<(fila: unknown) => string | null | undefined>(() => null);
+  readonly seleccionable = input(false);
+  readonly tamanos = input<readonly number[]>([10, 24, 50, 100]);
+  readonly tamanoInicial = input(24);
+  /** La frase del hueco de la pantalla (la tabla solo trae la genérica). */
+  readonly claveVacia = input<TranslationKey | null>(null);
+
+  @Output() readonly seleccionChange = new EventEmitter<unknown[]>();
+
+  readonly orden = signal<OrdenTabla>([]);
+  readonly filtros = signal<Readonly<Record<string, FiltroColumna | undefined>>>({});
+  readonly pagina = signal(1);
+  readonly tamano = signal(24);
+  readonly busquedaMenu = signal('');
+  readonly menu = signal<EstadoCapa | null>(null);
+  readonly hoja = signal(false);
+  private readonly seleccion = signal<ReadonlySet<string>>(new Set());
+  private plantillas: Readonly<Record<string, TemplateRef<{ $implicit: unknown; fila: unknown }>>> = {};
+
+  constructor() {
+    // Cambiar filtro, tamano o cualquier cosa que reordene el mundo: la pagina se reinicia. Sin esto, estar
+    // en la pagina 4 y filtrar deja una tabla vacia «sin motivo».
+    effect(() => {
+      this.filtros();
+      this.tamano();
+      this.pagina.set(1);
+    });
+    const t = this.tamanoInicial();
+    if (this.tamanos().includes(t)) this.tamano.set(t);
+  }
+
+  ngAfterContentInit(): void {
+    const mapa: Record<string, TemplateRef<{ $implicit: unknown; fila: unknown }>> = {};
+    for (const c of this.celdasProyectadas ?? []) mapa[c.nombre] = c.tpl;
+    this.plantillas = mapa;
+  }
+
+  // ── tipos y lecturas ──
+
+  protected readonly tipoDe = (col: DataTableColumna): TipoColumna => col.tipo ?? 'texto';
+  private leedor = (fila: unknown, clave: string): unknown => (fila as Record<string, unknown>)[clave];
+
+  protected identificadorDe(fila: unknown): string { return this.claveDeFila()(fila); }
+  protected etiquetaFilaDe(fila: unknown): string { return this.etiquetaDeFila()(fila); }
+  protected claseFilaStr(fila: unknown): string {
+    const fn = this.claseFila();
+    const extra = fn(fila);
+    return ['tabla__fila', this.seleccionada(fila) ? 'tabla__fila--sel' : '', extra ?? ''].filter(Boolean).join(' ');
+  }
+  protected anchoFila(): number { return this.columnas().length + (this.seleccionable() ? 1 : 0); }
+
+  protected plantillaDe(col: DataTableColumna): TemplateRef<{ $implicit: unknown; fila: unknown }> | null {
+    return this.plantillas[col.celda ?? col.clave] ?? null;
+  }
+
+  protected esOrdenable(col: DataTableColumna): boolean { return col.ordenable !== false; }
+  protected esVerdadero(fila: unknown, col: DataTableColumna): boolean {
+    return valorTipado(this.leedor(fila, col.clave), 'booleano') === true;
+  }
+
+  protected textoCelda(col: DataTableColumna, fila: unknown): string {
+    const crudo = this.leedor(fila, col.clave);
+    // El hueco se pinta hueco incluso con etiqueta: una columna sin dato no debe decir «Despensa» (## 12ab).
+    if (crudo === null || crudo === undefined || crudo === '') return '';
+    if (col.etiquetaValor) return col.etiquetaValor(crudo) ?? '';
+    switch (this.tipoDe(col)) {
+      case 'numero': {
+        const n = valorTipado(crudo, 'numero');
+        return n === null ? '' : String(n);
+      }
+      case 'fecha': {
+        const dia = String(crudo).slice(0, 10);
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia);
+        return m ? `${m[3]}/${m[2]}/${m[1]}` : dia;
+      }
+      default:
+        return String(crudo);
+    }
+  }
+
+  // ── el pipeline: filtrar -> ordenar -> cortar ──
+
+  protected readonly vista = computed(() => {
+    const columnas = this.columnas();
+    const activos: FiltroDeColumna[] = [];
+    const filtros = this.filtros();
+    for (const col of columnas) {
+      const f = filtros[col.clave];
+      if (f && filtroActivo(f)) activos.push({ columna: col.clave, tipo: this.tipoDe(col), filtro: f });
+    }
+    const filtradas = pasarFiltros(this.filas(), activos, this.leedor, hoyLocal());
+    const ordenadas = ordenar(filtradas, this.orden(), this.leedor, (clave) => {
+      const col = columnas.find((c) => c.clave === clave);
+      return col ? this.tipoDe(col) : 'texto';
+    });
+    return paginar(ordenadas, this.pagina(), this.tamano());
+  });
+
+  // ── orden ──
+
+  protected clicOrden(col: DataTableColumna, evento: MouseEvent): void {
+    if (!this.esOrdenable(col)) return;
+    this.orden.set(rotarOrden(this.orden(), col.clave, evento.shiftKey));
+  }
+  protected dirDe(clave: string): DireccionOrden | null { return direccionDe(this.orden(), clave); }
+  protected posicion(clave: string): number | null { return posicionDeOrden(this.orden(), clave); }
+  protected ariaSortDe(clave: string): string {
+    const dir = this.dirDe(clave);
+    return dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : 'none';
+  }
+
+  // ── filtros ─
+
+  protected activo(clave: string): boolean { return filtroActivo(this.filtros()[clave]); }
+  protected readonly nFiltros = computed(() => this.columnas().filter((c) => this.activo(c.clave)).length);
+
+  private escribirFiltro(clave: string, filtro: FiltroColumna | undefined): void {
+    this.filtros.update((actuales) => {
+      const copia: Record<string, FiltroColumna | undefined> = { ...actuales };
+      if (filtro === undefined) delete copia[clave];
+      else copia[clave] = filtro;
+      return copia;
+    });
+  }
+
+  protected limpiarFiltro(col: DataTableColumna): void { this.escribirFiltro(col.clave, undefined); }
+  protected limpiarFiltros(): void { this.filtros.set({}); }
+
+  // valores del menu: los de TODAS las filas (lo que Excel hace; la busqueda del menu solo recorta la lista)
+  protected valoresDe(col: DataTableColumna): { valor: string; cuenta: number }[] {
+    return valoresUnicos(this.filas(), col.clave, this.leedor, this.tipoDe(col));
+  }
+  protected valoresMenu(col: DataTableColumna): { valor: string; cuenta: number }[] {
+    const b = this.busquedaMenu();
+    const lista = this.valoresDe(col);
+    if (!b.trim()) return lista;
+    return lista.filter((v) => coincideEnMenu(this.etiquetaDeValor(col, v.valor), b));
+  }
+  protected etiquetaDeValor(col: DataTableColumna, valor: string): string {
+    if (valor === SIN_VALOR) return '—';
+    return col.etiquetaValor ? col.etiquetaValor(valor) : valor;
+  }
+
+  private seleccionados(col: DataTableColumna): string[] | null {
+    const f = this.filtros()[col.clave];
+    if (!f || f.tipo !== 'valores') return null;
+    if (f.activos === null) return null;
+    return f.activos;
+  }
+  protected valorMarcado(col: DataTableColumna, valor: string): boolean {
+    const activos = this.seleccionados(col);
+    if (activos === null) return true; // sin filtro: todo marcado (Excel pinta las casillas llenas)
+    return activos.includes(valor);
+  }
+  protected toggleValor(col: DataTableColumna, valor: string): void {
+    const todos = this.valoresDe(col).map((v) => v.valor);
+    const base = this.seleccionados(col) ?? [...todos];
+    const tiene = base.includes(valor);
+    const nuevos = tiene ? base.filter((v) => v !== valor) : [...base, valor];
+    // Volver a marcarlo todo DESACTIVA el filtro (es lo que el embudo pintaba: sin punto = sin filtro).
+    if (nuevos.length === todos.length) this.escribirFiltro(col.clave, { tipo: 'valores', activos: null });
+    else this.escribirFiltro(col.clave, { tipo: 'valores', activos: nuevos });
+  }
+  protected marcarTodos(col: DataTableColumna): void { this.escribirFiltro(col.clave, { tipo: 'valores', activos: null }); }
+  protected marcarNinguno(col: DataTableColumna): void { this.escribirFiltro(col.clave, { tipo: 'valores', activos: [] }); }
+  protected recortarA(col: DataTableColumna): void {
+    // «Quedarse con lo visible»: deja marcados solo los valores de esta columna que sobreviven a los DEMAS
+    // filtros activos. Es el recortar de Excel, y es lo que la gente usa para filtrar por franjas.
+    const otros: FiltroDeColumna[] = [];
+    const filtros = this.filtros();
+    for (const c of this.columnas()) {
+      if (c.clave === col.clave) continue;
+      const f = filtros[c.clave];
+      if (f && filtroActivo(f)) otros.push({ columna: c.clave, tipo: this.tipoDe(c), filtro: f });
+    }
+    const visibles = new Set(pasarFiltros(this.filas(), otros, this.leedor, hoyLocal()).map((f) => cuboDe(this.leedor(f, col.clave))));
+    const actuales = this.seleccionados(col) ?? this.valoresDe(col).map((v) => v.valor);
+    const recortados = actuales.filter((v) => visibles.has(v));
+    this.escribirFiltro(col.clave, recortarFiltro({ tipo: 'valores', activos: recortados }));
+  }
+
+  // ── filtros de numero y fecha ──
+
+  protected modosDe(col: DataTableColumna): { clave: string; etiqueta: TranslationKey }[] {
+    if (this.tipoDe(col) === 'numero') {
+      return [
+        { clave: 'igual', etiqueta: 'ui.tabla_igual' },
+        { clave: 'mayor', etiqueta: 'ui.tabla_mayor' },
+        { clave: 'menor', etiqueta: 'ui.tabla_menor' },
+        { clave: 'entre', etiqueta: 'ui.tabla_entre' }
+      ];
+    }
+    return [
+      { clave: 'hoy', etiqueta: 'ui.tabla_hoy' },
+      { clave: 'siete', etiqueta: 'ui.tabla_proximos_7' },
+      { clave: 'vencidos', etiqueta: 'ui.tabla_vencidos' },
+      { clave: 'antes', etiqueta: 'ui.tabla_antes_de' },
+      { clave: 'despues', etiqueta: 'ui.tabla_despues_de' },
+      { clave: 'entre', etiqueta: 'ui.tabla_entre' }
+    ];
+  }
+  protected modoDe(col: DataTableColumna): string | null {
+    const f = this.filtros()[col.clave];
+    if (!f || (f.tipo !== 'numero' && f.tipo !== 'fecha')) return null;
+    return f.modo;
+  }
+  protected ponerModo(col: DataTableColumna, modo: string): void {
+    const prev = this.filtros()[col.clave];
+    if (this.tipoDe(col) === 'numero') {
+      const a = prev && prev.tipo === 'numero' ? prev.a : null;
+      const b = prev && prev.tipo === 'numero' ? prev.b : null;
+      this.escribirFiltro(col.clave, { tipo: 'numero', modo: modo as ModoNumero, a, b });
+    } else {
+      const a = prev && prev.tipo === 'fecha' ? prev.a : null;
+      const b = prev && prev.tipo === 'fecha' ? prev.b : null;
+      this.escribirFiltro(col.clave, { tipo: 'fecha', modo: modo as ModoFecha, a, b });
+    }
+  }
+  protected necesitaA(col: DataTableColumna): boolean {
+    const m = this.modoDe(col);
+    return !!m && m !== 'hoy' && m !== 'siete' && m !== 'vencidos';
+  }
+  protected necesitaB(col: DataTableColumna): boolean { return this.modoDe(col) === 'entre'; }
+  protected extremoDe(col: DataTableColumna, lado: 'a' | 'b'): string {
+    const f = this.filtros()[col.clave];
+    if (!f || (f.tipo !== 'numero' && f.tipo !== 'fecha')) return '';
+    const v = f[lado];
+    return v === null || v === undefined ? '' : String(v);
+  }
+  protected fijarExtremo(col: DataTableColumna, lado: 'a' | 'b', valor: string | number | null): void {
+    const tipo = this.tipoDe(col);
+    let anterior: FiltroNumero | FiltroFecha;
+    const prev = this.filtros()[col.clave];
+    if (tipo === 'numero') {
+      const base: FiltroNumero = prev && prev.tipo === 'numero' ? prev : { tipo: 'numero', modo: 'igual', a: null, b: null };
+      const n = valor === null || valor === '' || valor === undefined ? null : Number(valor);
+      anterior = { ...base, [lado]: Number.isFinite(n as number) ? n : null } as FiltroNumero;
+    } else {
+      const base: FiltroFecha = prev && prev.tipo === 'fecha' ? prev : { tipo: 'fecha', modo: 'hoy', a: null, b: null };
+      anterior = { ...base, [lado]: valor ? String(valor).slice(0, 10) : null } as FiltroFecha;
+    }
+    this.escribirFiltro(col.clave, anterior);
+  }
+
+  // ── las capas: menu popover / hoja del movil ──
+
+  protected alternarMenu(col: DataTableColumna, sup: 'cabezal' | 'hoja'): void {
+    const actual = this.menu();
+    this.busquedaMenu.set('');
+    if (actual && actual.col === col.clave && actual.sup === sup) this.menu.set(null);
+    else this.menu.set({ col: col.clave, sup });
+  }
+  protected abrirMenuHoja(col: DataTableColumna): void {
+    this.busquedaMenu.set('');
+    this.menu.set({ col: col.clave, sup: 'hoja' });
+  }
+  protected abrirHoja(): void { this.menu.set(null); this.hoja.set(true); }
+  protected volverColumnas(): void { this.menu.set(null); }
+  protected cerrarCapas(): void { this.menu.set(null); this.hoja.set(false); }
+  protected colDeCapa(): DataTableColumna | null {
+    const m = this.menu();
+    if (!m) return null;
+    return this.columnas().find((c) => c.clave === m.col) ?? null;
+  }
+  protected ponerBusqueda(valor: string): void { this.busquedaMenu.set(valor ?? ''); }
+
+  @HostListener('document:keydown.escape')
+  protected alEscape(): void { if (this.menu() || this.hoja()) this.cerrarCapas(); }
+
+  // ── paginacion ──
+
+  protected cambiarTamano(t: number): void { this.tamano.set(t); }
+  protected irA(p: number): void {
+    const { ultima } = this.vista();
+    this.pagina.set(Math.min(Math.max(1, p), ultima));
+  }
+
+  // ── seleccion ──
+
+  protected seleccionada(fila: unknown): boolean { return this.seleccion().has(this.identificadorDe(fila)); }
+  protected marcarFila(fila: unknown, valor: boolean): void {
+    const id = this.identificadorDe(fila);
+    const copia = new Set(this.seleccion());
+    if (valor) copia.add(id);
+    else copia.delete(id);
+    this.aplicarSeleccion(copia);
+  }
+  protected estadoSeleccionPagina(): 'none' | 'all' | 'mixed' {
+    const visibles = this.vista().filas.map((f) => this.identificadorDe(f));
+    if (visibles.length === 0) return 'none';
+    const marcadas = visibles.filter((id) => this.seleccion().has(id)).length;
+    if (marcadas === 0) return 'none';
+    return marcadas === visibles.length ? 'all' : 'mixed';
+  }
+  protected togglePagina(): void {
+    const visibles = this.vista().filas.map((f) => this.identificadorDe(f));
+    const copia = new Set(this.seleccion());
+    const todas = visibles.every((id) => copia.has(id));
+    for (const id of visibles) {
+      if (todas) copia.delete(id);
+      else copia.add(id);
+    }
+    this.aplicarSeleccion(copia);
+  }
+  private aplicarSeleccion(ids: ReadonlySet<string>): void {
+    // La seleccion se poda contra las filas vivas: una fila borrada en el servidor no puede seguir «elegida».
+    const claves = new Set(this.filas().map((f) => this.identificadorDe(f)));
+    const podada = new Set([...ids].filter((id) => claves.has(id)));
+    this.seleccion.set(podada);
+    this.seleccionChange.emit(this.filas().filter((f) => podada.has(this.identificadorDe(f))));
+  }
+  /** La pantalla vacia la barra de lote con esto tras aplicar la accion. */
+  limpiarSeleccion(): void {
+    this.seleccion.set(new Set());
+    this.seleccionChange.emit([]);
+  }
+  readonly seleccionadas = computed(() =>
+    this.filas().filter((f) => this.seleccion().has(this.identificadorDe(f)))
+  );
+}
