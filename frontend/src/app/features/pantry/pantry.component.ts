@@ -132,12 +132,14 @@ const PAGE_SIZE = 100;
         -->
         <div class="pantry__gestion" data-test="pantry-gestion">
           <span class="gestion__titulo">{{ 'pantry.gestion_del_inventario' | t }}</span>
-          <button type="button" class="gestion__enlace" (click)="abrirGestor('categories')" data-test="pantry-abrir-categorias">
-            {{ 'pantry.gestor_categorias' | t }}
-          </button>
-          <button type="button" class="gestion__enlace" (click)="abrirGestor('products')" data-test="pantry-abrir-productos">
-            {{ 'pantry.gestor_productos' | t }}
-          </button>
+          <span class="gestion__acciones">
+            <button type="button" class="gestion__enlace" (click)="abrirGestor('categories')" data-test="pantry-abrir-categorias">
+              {{ 'pantry.gestor_categorias' | t }}
+            </button>
+            <button type="button" class="gestion__enlace" (click)="abrirGestor('products')" data-test="pantry-abrir-productos">
+              {{ 'pantry.gestor_productos' | t }}
+            </button>
+          </span>
         </div>
 
         <!-- Search & Filters -->
@@ -582,13 +584,29 @@ const PAGE_SIZE = 100;
     .stat-card--danger .stat-card__value { color: var(--error); }
 
     .pantry__filters { margin-bottom: var(--space-5); }
-.pantry__gestion { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-    .gestion__enlace {
-      padding: 6px 12px; font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
-      color: var(--text-primary); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
+    /* La entrada al catalogo vive dentro de la pantalla del inventario y antes era una fila de botones sueltos:
+       ahora es una franja con su superficie, su titulo a la izquierda y sus acciones a la derecha, alineada con
+       el resto de bloques de la pagina. */
+    .pantry__gestion {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+      gap: var(--space-3) var(--space-4); margin-bottom: var(--space-5);
+      padding: var(--space-4); background: var(--bg-secondary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-xl);
     }
-    .gestion__enlace:hover { border-color: var(--border-strong); }
+    .gestion__titulo {
+      font-family: var(--font-display); font-size: var(--text-base); font-weight: var(--font-semibold);
+      color: var(--text-primary); line-height: var(--leading-snug);
+    }
+    .gestion__acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+    .gestion__enlace {
+      display: inline-flex; align-items: center; gap: var(--space-2);
+      padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
+      color: var(--text-primary); background: var(--bg-tertiary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
+      transition: var(--transition-fast);
+    }
+    .gestion__enlace:hover { border-color: var(--border-strong); background: var(--primary-subtle); }
+    .gestion__enlace:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
     .pantry__filter-tags {
       display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-3);

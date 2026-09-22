@@ -3319,6 +3319,66 @@ borra, ni en lote» se queda donde esta probada con datos reales, en `pantry-pro
   alias encontrado por busqueda) y dos siguen abiertos con la anotacion al lado. Un test que nunca se ejecuto es
   eso: una hipotesis tipada.
 
+## 12z. Tanda 27 — las dos pantallas del catálogo, maquetadas con el sistema
+
+Lo que se dijo: «las vistas no son buenas, el diseño a penas tiene márgenes, padding, alineaciones etc». Medido
+contra `DESIGN-SYSTEM.md`, era cierto y tenía nombre propio: las dos pantallas salieron **maquetadas con
+píxeles sueltos** (`gap: 2px`, `padding: 6px 12px`, `padding: 10px 4px 10px 10px`), sin contenedor de página, sin
+superficie para la barra de trabajo y sin columnas —los colores y las piezas eran del sistema, la caja no—.
+
+### Las reglas que se aplicaron (las dos pantallas, iguales donde son la misma pantalla)
+
+- **Contenedor**: `max-width: 1000px` + `margin: 0 auto` + `--space-4` en móvil y `--space-6` desde 768px, con
+  `--space-16`/`--space-20` de aire al pie. Son los números de la pantalla de la despensa, la vecina por la que se
+  entra: al saltar de una a otra nada cambia de ancho. Sin esto, en un monitor ancho la lista se estiraba y
+  ninguna columna cuadraba con la de arriba.
+- **Espaciado solo del tipo de espaciado** (`--space-*`): donde hace falta un 2px se pone `--space-1` y se
+  reordena la tipografía, no se escribe `2px`. Lo que queda de `padding: 0` son ceros de reset, que no cuentan.
+- **La barra de trabajo es una superficie** (`--bg-secondary`, borde de 1px, `--radius-xl`, `padding: --space-3
+  --space-4`) y `align-items: end`, para que buscador, filtros, orden y botón compartan línea de base. El grupo
+  de vistas vive dentro de una píldora `--bg-tertiary`: tres filtros dentro de un fondo común se leen como
+  *elegir vista*, tres sueltos se leen como tres botones.
+- **La lista es una tarjeta con filas**, no fichitas separadas 2px: `--radius-xl` + `overflow: hidden`,
+  `border-bottom` de 1px entre filas, `padding: --space-4` en cada una y `gap: --space-2 --space-4` entre piezas.
+- **Alineación con `grid`, declarada por pantalla**: desde 860px `.fila__cuerpo` es grid con las pistas de cada
+  una —categorías `auto minmax(0,1fr) auto auto`, productos `minmax(0,0.9fr) minmax(0,1.6fr) auto`—. En la hoja
+  común no va: los hijos de cada fila son distintos y en número variable, y poner `1fr auto` a secas mandaba el
+  último a una segunda línea. Un número alineado porque existe su columna; suelto, alineado por casualidad.
+- **La jerarquía se ve**: las filas hijas llevan `.fila--anidada` (sangrado a `--space-8` con un hilo de 1px).
+  El server ya devolvía el árbol aplanado; pintarlo plano sin decir nada era medio contrato roto.
+- **Los datos de la fila son etiquetas**: `--radius-full`, `--space-1 --space-2`, `font-variant-numeric:
+  tabular-nums`; `--success-subtle` cuando hay existencias y `--warning-subtle` cuando caduca en días, y los
+  alias con borde discontinuo para que se distingan de los datos duros sin añadir un icono.
+- **La ficha es un formulario**: `--radius-2xl`, `padding: --space-4`/`--space-6`, microetiqueta en `--text-xs` +
+  `uppercase` + `--tracking-wide` (el patrón de etiquetas de la app), `.form-row` en dos columnas desde 720px,
+  avisos con 3px de acento a la izquierda, y las acciones separadas del cuerpo por una línea con Guardar a la
+  derecha del todo (`margin-inline-start: auto`).
+- **La barra de lote es flotante y pegada abajo** (`position: sticky; bottom: --space-3`, `--shadow-lg`,
+  `--radius-full`): una acción destructiva aparece donde se está marcando, no arriba, y no tapa la fila que se
+  está mirando.
+- **La franja de entrada al catálogo** (en la despensa) dejó de ser una fila de botones sueltos: superficie con
+  `--space-4`, título a la izquierda y las dos acciones agrupadas a la derecha. Y sus botones tienen
+  `:focus-visible`, que antes no tenía ninguno.
+
+### Checklist
+
+- [x] Las dos hojas de estilo reescritas con el mismo vocabulario (contenedor, superficie, grid, píldoras,
+      tarjetas) y las clases del template intactas: ningún `data-test` ni gancho de e2e cambia de nombre, así que
+      `pantry-managers.spec.ts` sigue hablando con las mismas piezas.
+- [x] Cobertura comprobada con un barrido: cada `class` que aparece en las plantillas tiene su regla en la hoja
+      correspondiente (cero elementos huérfanos, que es como se ven los «sin padding»).
+- [x] Hover y foco visible en todo lo clicable de las dos pantallas, incluido el botón primario (sin hover
+      propio parecía deshabilitado al lado del secundario).
+- [x] Puertas: `node scripts/check-ui.mjs` 184 ficheros / 20 reglas en 0 · `tsc -p tsconfig.app.json` en 0 ·
+      `corepack pnpm --filter @hogaria/web build:prod` completo. La suite del server y los e2e no se tocan: es
+      CSS y un gancho de clase en la fila hija.
+- [ ] **Queda, y es lo que el sandbox no puede dar**: verlas. Este repo no tiene un gate visual para el catálogo
+      (las capturas existen para el onboarding y para el tour, no para estas dos rutas), y el contenedor no tiene
+      navegador. Un `pnpm exec playwright test tests/e2e/pantry-managers.spec.ts --project=chromium` con
+      `--headed`, o simplemente abrir `/pantry/categories` y `/pantry/products` en el dev, es lo que falta para
+      decir que la tanda está cerrada; puede que quede algún `--space-6` de más o de menos, y eso solo se ve
+      mirando.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`

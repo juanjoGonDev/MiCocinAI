@@ -320,130 +320,251 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
   styles: [`
     :host { display: block; }
 
-    .gestor { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4) 0; }
+    /* La pantalla entera se acota y se respira: lo que heredo de la despensa vecina (max-width de 1000px,
+       padding del sistema y margen automatico) es lo que hace que al cambiar de pantalla nada salte de
+       ancho. Un gestor sin contenedor, en un monitor de 27 pulgadas, es una linea de 2400px de larga y
+       ninguna columna vuelve a cuadrar con la de arriba. */
+    .gestor {
+      display: flex; flex-direction: column; gap: var(--space-4);
+      box-sizing: border-box; width: 100%; max-width: 1000px; margin: 0 auto;
+      padding: var(--space-4) var(--space-4) var(--space-16);
+    }
+    @media (min-width: 768px) {
+      .gestor { gap: var(--space-6); padding: var(--space-6) var(--space-6) var(--space-20); }
+    }
 
+    /* Cabecera con su propio aire y una linea de separacion: el titulo, la ayuda y el volver son tres cosas
+       distintas y no pueden ir pegadas. */
+    .gestor__header {
+      display: flex; flex-direction: column; gap: var(--space-1);
+      padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-default);
+    }
     .gestor__back {
-      display: inline-flex; align-items: center; gap: 2px;
-      padding: 2px 4px 2px 0; margin: 0;
+      display: inline-flex; align-items: center; gap: var(--space-1);
+      align-self: flex-start; margin: 0 0 var(--space-2); padding: var(--space-1) var(--space-2) var(--space-1) 0;
       font: inherit; font-size: var(--text-xs); color: var(--text-secondary);
       background: none; border: none; border-radius: var(--radius-sm); cursor: pointer;
+      transition: var(--transition-fast);
     }
     .gestor__back:hover { color: var(--text-primary); }
+    .gestor__back:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .gestor__title {
+      margin: 0; font-family: var(--font-display); font-size: var(--text-xl);
+      font-weight: var(--font-bold); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight);
+      color: var(--text-primary);
+    }
+    .gestor__ayuda {
+      margin: var(--space-1) 0 0; max-width: 66ch; color: var(--text-secondary);
+      font-size: var(--text-sm); line-height: var(--leading-relaxed);
+    }
+    @media (min-width: 768px) {
+      .gestor__title { font-size: var(--text-2xl); }
+      .gestor__ayuda { font-size: var(--text-base); }
+    }
 
-    .gestor__title { margin: var(--space-1) 0 0; font-size: var(--text-xl); font-weight: var(--font-semibold); }
-    .gestor__ayuda { margin: 4px 0 0; color: var(--text-secondary); font-size: var(--text-sm); }
-
-    .gestor__toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-    .gestor__vistas { display: flex; flex-wrap: wrap; gap: 4px; }
-    .gestor__buscar { flex: 1 1 190px; min-width: 170px; }
-    .gestor__orden { flex: 0 0 auto; min-width: 130px; }
-
+    /* La barra de trabajo es una superficie, no tres controles sueltos flotando en la pagina: se alinea por
+       su linea de base (align-items al final) para que buscador, filtros y boton compartan alturas. */
+    .gestor__toolbar {
+      display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-xl);
+    }
+    .gestor__vistas {
+      display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center;
+      margin-right: auto; padding: var(--space-1);
+      background: var(--bg-tertiary); border-radius: var(--radius-full);
+    }
+    .gestor__buscar { flex: 1 1 220px; min-width: 180px; }
     .gestor__nueva {
-      display: inline-flex; align-items: center; gap: 2px;
-      padding: 6px 10px; font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
-      color: var(--bg-secondary); background: var(--primary); border: none; border-radius: var(--radius-md); cursor: pointer;
+      display: inline-flex; align-items: center; gap: var(--space-2);
+      padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: var(--font-semibold);
+      color: var(--bg-secondary); background: var(--primary); border: 1px solid transparent;
+      border-radius: var(--radius-full); cursor: pointer; transition: var(--transition-fast);
     }
     .gestor__nueva:hover { filter: brightness(1.06); }
+    .gestor__nueva:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-    .gestor__estado { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); }
+    .gestor__estado {
+      margin: 0; padding: var(--space-5) var(--space-4); text-align: center;
+      color: var(--text-secondary); font-size: var(--text-sm);
+      background: var(--bg-secondary); border: 1px dashed var(--border-default); border-radius: var(--radius-xl);
+    }
 
-    .lista { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
-
+    /* Una sola tarjeta con filas separadas por un hilo, en vez de fichitas con dos pixeles de hueco: es lo que
+       hace que el ojo recorra la columna de numeros sin perder el sitio. */
+    .lista {
+      display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none;
+      background: var(--bg-secondary); border: 1px solid var(--border-default);
+      border-radius: var(--radius-xl); overflow: hidden;
+    }
     .fila {
-      display: flex; align-items: center; gap: var(--space-2);
-      padding-right: 2px;
-      background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-md);
+      display: flex; align-items: stretch; gap: 0;
+      border-bottom: 1px solid var(--border-default); transition: var(--transition-fast);
     }
-    .fila:hover { border-color: var(--border-strong); }
-    .fila__marca { flex: none; }
-
+    .fila:last-child { border-bottom: none; }
+    .fila:hover { background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent); }
     .fila__cuerpo {
-      flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px;
-      padding: 9px 4px 9px 0; font: inherit; color: inherit; text-align: left;
-      background: none; border: none; cursor: pointer;
+      flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center;
+      gap: var(--space-2) var(--space-4); padding: var(--space-4);
+      font: inherit; color: inherit; text-align: left; background: none; border: none; cursor: pointer;
     }
-    .fila__nombre { font-weight: var(--font-medium); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .fila__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-secondary); }
-    .fila__punto { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
-    .fila__categoria { margin-right: auto; }
-    .fila__stock { font-variant-numeric: tabular-nums; color: var(--text-primary); }
-    .fila__caduca { font-variant-numeric: tabular-nums; }
-    .fila__caduca--cerca { color: var(--warning); }
-    .fila__alias {
-      padding: 1px 6px; border: 1px solid var(--border-default); border-radius: var(--radius-full);
-      color: var(--text-secondary);
-    }
-    .fila__alias--mas { border-style: dashed; }
-    .fila__impacto { font-size: var(--text-xs); color: var(--text-secondary); }
-
+    .fila__cuerpo:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; border-radius: var(--radius-md); }
     .fila__accion {
-      flex: none; display: grid; place-items: center; width: 34px; height: 34px; padding: 0;
-      color: var(--text-secondary); background: none; border: none; border-radius: var(--radius-sm); cursor: pointer;
+      flex: none; display: grid; place-items: center; width: 48px; padding: 0;
+      color: var(--text-secondary); background: none; border: none; cursor: pointer;
+      transition: var(--transition-fast);
     }
-    .fila__accion:hover:not(:disabled) { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
+    .fila__accion:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; border-radius: var(--radius-md); }
     .fila__accion:disabled { opacity: 0.35; cursor: not-allowed; }
 
-    .lote {
-      display: flex; align-items: center; justify-content: space-between; gap: var(--space-2);
-      padding: 8px 10px; font-size: var(--text-sm);
-      background: color-mix(in srgb, var(--primary) 8%, var(--bg-secondary));
-      border: 1px solid var(--border-default); border-radius: var(--radius-md);
+    @media (min-width: 860px) {
+      /* Y a partir de aqui, columnas de verdad: los numeros se alinean entre filas porque el grid las declara,
+         no porque a cada texto le quepa su hueco. */
+      .fila__cuerpo { display: grid; flex-wrap: nowrap; gap: var(--space-6); }
     }
 
-    .paginador { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+    .paginador {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
+      gap: var(--space-3); padding: 0 var(--space-1);
+      font-size: var(--text-sm); color: var(--text-secondary);
+    }
     .paginador button {
-      padding: 5px 10px; font: inherit; color: var(--text-primary); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-md); cursor: pointer;
+      display: inline-flex; align-items: center; gap: var(--space-1);
+      padding: var(--space-2) var(--space-3); font: inherit; font-size: var(--text-sm);
+      color: var(--text-primary); background: var(--bg-secondary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
+      transition: var(--transition-fast);
     }
+    .paginador button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-tertiary); }
+    .paginador button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     .paginador button:disabled { opacity: 0.45; cursor: not-allowed; }
-    .paginador__cifra { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .paginador__cifra { font-variant-numeric: tabular-nums; }
 
+    /* La ficha es un formulario, no una lista de campos pegados: una tarjeta con padding generoso, campos con
+    su microetiqueta y dos columnas cuando el ancho lo permite. */
     .ficha {
-      display: flex; flex-direction: column; gap: var(--space-3);
+      display: flex; flex-direction: column; gap: var(--space-5);
       padding: var(--space-4); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-lg);
+      border: 1px solid var(--border-default); border-radius: var(--radius-2xl);
     }
-    .ficha__campo { display: flex; flex-direction: column; gap: 6px; }
-    .ficha__cabecera { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
-    .ficha__titulo { margin: 0; font-size: var(--text-lg); font-weight: var(--font-semibold); }
-    .ficha__etiqueta { font-size: var(--text-xs); font-weight: var(--font-medium); color: var(--text-secondary); }
+    @media (min-width: 768px) { .ficha { gap: var(--space-6); padding: var(--space-6); } }
+    .ficha__titulo {
+      margin: 0; font-family: var(--font-display); font-size: var(--text-lg); font-weight: var(--font-semibold);
+      line-height: var(--leading-snug);
+    }
+    .ficha__etiqueta {
+      font-size: var(--text-xs); font-weight: var(--font-semibold); letter-spacing: var(--tracking-wide);
+      text-transform: uppercase; color: var(--text-tertiary);
+    }
+    .ficha__campo { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+    .form-row { display: grid; gap: var(--space-4); }
+    @media (min-width: 720px) { .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+    .form-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+
+    .ficha__aviso, .ficha__ayuda, .ficha__error {
+      display: flex; align-items: flex-start; gap: var(--space-2); margin: 0;
+      padding: var(--space-3) var(--space-4); font-size: var(--text-sm); line-height: var(--leading-relaxed);
+      border-radius: var(--radius-lg); border-left: 3px solid var(--border-strong);
+      background: var(--bg-tertiary); color: var(--text-primary);
+    }
+    .ficha__aviso { border-left-color: var(--warning); background: var(--warning-subtle); }
+    .ficha__error { border-left-color: var(--error); background: var(--error-subtle); color: var(--error); }
+
+    .ficha__acciones {
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3);
+      padding-top: var(--space-4); border-top: 1px solid var(--border-default);
+    }
     .ficha__enlace {
-      padding: 0; font: inherit; font-size: var(--text-xs); color: var(--primary);
-      background: none; border: none; cursor: pointer; text-decoration: underline;
+      align-self: flex-start; padding: var(--space-1) 0; font: inherit; font-size: var(--text-sm);
+      color: var(--primary); background: none; border: none; cursor: pointer; text-decoration: underline;
+      text-underline-offset: 2px;
     }
-    .ficha__ayuda { margin: 0; font-size: var(--text-xs); color: var(--text-secondary); }
-    .ficha__cifras { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0; font-size: var(--text-xs); color: var(--text-secondary); }
-    .ficha__error {
-      margin: 0; padding: 8px 10px; font-size: var(--text-sm); color: var(--error);
-      background: color-mix(in srgb, var(--error) 12%, transparent); border-radius: var(--radius-md);
-    }
+    .ficha__enlace:hover { color: var(--text-primary); }
+    .ficha__enlace:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--radius-sm); }
 
-    .form-row { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-    .form-row > * { flex: 1 1 150px; min-width: 0; }
-    .form-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-
-    .alias { display: flex; flex-wrap: wrap; gap: 4px; }
-    .alias__nuevo { display: flex; align-items: flex-end; gap: var(--space-2); }
-    .alias__nuevo app-input { flex: 1 1 auto; }
-
-    .ficha__acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
     .boton {
-      padding: 8px 14px; font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
+      display: inline-flex; align-items: center; gap: var(--space-2);
+      padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
       color: var(--text-primary); background: var(--bg-tertiary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-md); cursor: pointer;
+      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
+      transition: var(--transition-fast);
     }
     .boton:disabled { opacity: 0.5; cursor: not-allowed; }
-    .boton--primario { color: var(--bg-secondary); background: var(--primary); border-color: transparent; }
+    .boton--primario { color: var(--bg-secondary); background: var(--primary); border-color: transparent; font-weight: var(--font-semibold); margin-inline-start: auto; }
     .boton--peligro { color: var(--error); border-color: color-mix(in srgb, var(--error) 45%, transparent); }
 
-    /* Que un boton se pueda pulsar se nota sin tocarlo: la regla 8 del sistema pide hover y foco en todo lo
-       que acepta un click, y el foco visible es lo unico que hace el teclado tan usable como el raton. */
-    .fila__cuerpo:hover { background: color-mix(in srgb, var(--bg-tertiary) 45%, transparent); }
-    .fila__cuerpo:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: var(--radius-md); }
-    .swatch:hover { transform: scale(1.1); }
-    .swatch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .ficha__enlace:hover { color: var(--text-primary); }
-    .ficha__enlace:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    /* Pistas de la fila: nombre, la linea de etiquetas y el impacto. El nombre no puede comerse el ancho de
+       las etiquetas, y el impacto se queda a la derecha del todo en todas las filas. */
+    @media (min-width: 860px) {
+      .fila__cuerpo { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr) auto; }
+    }
+
+    /* La casilla de lote abre la fila: 48px de ancho y centrada, para que el punto de toque no se solape con
+       el nombre y las filas con y sin casilla cuadren igual. */
+    .fila__marca { flex: none; display: grid; place-items: center; width: 48px; padding-left: var(--space-2); }
+
+    .fila__nombre {
+      min-width: 0; font-size: var(--text-base); font-weight: var(--font-medium); color: var(--text-primary);
+      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+    }
+    .fila__meta {
+      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
+      min-width: 0; color: var(--text-secondary); font-size: var(--text-xs);
+    }
+    .fila__punto {
+      flex: none; width: 10px; height: 10px; border-radius: var(--radius-full);
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+    }
+    /* Cada dato de la fila es una etiqueta, y las etiquetas se pintan igual en las dos pantallas: relleno
+       redondeado, numero tabular y un hueco constante entre ellas. */
+    .fila__categoria, .fila__stock, .fila__caduca, .fila__alias, .fila__impacto {
+      padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); background: var(--bg-tertiary);
+      font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .fila__categoria { color: var(--text-secondary); }
+    .fila__stock { color: var(--success); background: var(--success-subtle); }
+    .fila__caduca { color: var(--text-secondary); }
+    .fila__caduca--cerca { color: var(--warning); background: var(--warning-subtle); }
+    .fila__alias { color: var(--text-secondary); background: none; border: 1px dashed var(--border-default); }
+    .fila__alias--mas { opacity: 0.7; }
+    .fila__impacto { margin-left: auto; color: var(--text-tertiary); background: none; }
+    @media (min-width: 860px) { .fila__impacto { margin-left: 0; } }
+
+    /* La barra de lote se queda pegada abajo mientras se marca: es el unico sitio donde tiene sentido que
+       aparezca una accion destructiva, y no debe tapar la fila que se esta mirando. */
+    .lote {
+      position: sticky; bottom: var(--space-3); z-index: 5;
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      background: var(--bg-secondary); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-full); box-shadow: var(--shadow-lg);
+      font-size: var(--text-sm);
+    }
+
+    .ficha__cabecera {
+      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4);
+      padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-default);
+    }
+    .ficha__cifras {
+      display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin: 0;
+      color: var(--text-secondary); font-size: var(--text-sm);
+    }
+    .ficha__cifras span { padding: var(--space-1) var(--space-3); background: var(--bg-tertiary); border-radius: var(--radius-full); }
+
+    /* El editor de alias: lo que hay dentro, y debajo la forma de anadir uno. Sin relleno, los dos se leen como
+       un mismo campo y nadie encuentra el boton. */
+    .alias { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+    .alias__nuevo {
+      display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2);
+      padding: var(--space-3); background: var(--bg-tertiary); border-radius: var(--radius-lg);
+    }
+    .alias__nuevo app-input { flex: 1 1 200px; min-width: 160px; }
+    .gestor__orden { flex: 0 0 auto; min-width: 190px; }
+
+    /* Que un boton se pueda pulsar se nota sin tocarlo: hover y foco visible en todo lo que acepta un click
+       (regla 8 del sistema), incluido el boton primario, que si no parece deshabilitado junto al resto. */
+    .fila__cuerpo:hover { background: color-mix(in srgb, var(--bg-tertiary) 40%, transparent); }
+    .fila__accion:hover:not(:disabled) { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
     .boton:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-secondary); }
     .boton:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     .boton--primario:hover:not(:disabled) { filter: brightness(1.06); background: var(--primary); }
