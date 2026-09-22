@@ -1133,7 +1133,14 @@ pantryRoutes.get('/catalog/products', async (c) => {
   const userId = c.get('userId');
   const q = catalogFilterSchema.parse(c.req.query());
   const scope = getUserScope(userId);
-  const { productos, total } = buscarProductos({ q: q.q, category: q.category, limit: q.limit, offset: q.offset });
+  // El `formField` del contrato admite el hueco como `null` (las query strings vacias lo producen); el buscador
+  // en memoria quiere `undefined`, y `?? undefined` es la traduccion honesta, no un `as`.
+  const { productos, total } = buscarProductos({
+    q: q.q ?? undefined,
+    category: q.category ?? undefined,
+    limit: q.limit,
+    offset: q.offset
+  });
 
   // `inHousehold` con la MISMA clave que usa el gestor (`productKeyOf` sobre el nombre), no un LIKE: dos
   // nombres que se parecen no son la misma fila, y decir «ya lo tienes» por parecerse es peor que callarselo.
