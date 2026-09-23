@@ -2,14 +2,17 @@ import {
   AfterContentInit,
   Component,
   ContentChildren,
+  DestroyRef,
   Directive,
   EventEmitter,
   HostListener,
   Input,
   Output,
   TemplateRef,
+  afterNextRender,
   computed,
   effect,
+  inject,
   input,
   signal
 } from '@angular/core';
@@ -167,7 +170,7 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
                         [attr.aria-label]="('ui.tabla_filtrar_columna' | t: { columna: col.etiqueta })"
                         [attr.aria-expanded]="menu()?.col === col.clave && menu()?.sup === 'cabezal'"
                         [attr.data-test]="'tabla-filtro-' + col.clave"
-                        (click)="alternarMenu(col, 'cabezal')"
+                        (click)="alternarMenu(col, 'cabezal', $event)"
                       >
                         <app-icon name="filter_list" [size]="14" [label]="null" />
                         @if (activo(col.clave)) {
@@ -175,7 +178,12 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
                         }
                       </button>
                       @if (menu()?.col === col.clave && menu()?.sup === 'cabezal') {
-                        <div class="th__menu">
+                        <div
+                          class="th__menu"
+                          [class.th__menu--arriba]="!anclaAbajo()"
+                          [style.top.px]="menuAncla()?.top"
+                          [style.left.px]="menuAncla()?.left"
+                        >
                           <ng-container *ngTemplateOutlet="panelFiltro; context: { $implicit: col }" />
                         </div>
                       }
@@ -290,10 +298,9 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
 
       <!--
         La hoja inferior del movil y el menu de filtro comparten el panel: un solo DOM vivo por menu (la regla
-        del spec; dos copias del mismo control serian dos formas de que se contradigan).
+        del spec; dos copias del mismo control serian dos formas de que se contradigan). El velo es solo de la
+        hoja: el popover del cabezal se cierra con clic fuera, como los menus que imitamos (## 12ab).
       -->
-      /* El velo es de la hoja: el popover del cabezal vive dentro del th (contexto de apilado propio) y un
-         velo encima le robaría cada clic. Fuera se cierra solo, como los menús que imitamos (## 12ab). */
       @if (hoja()) {
         <div class="tabla__velo" (click)="cerrarCapas()" data-test="tabla-velo"></div>
       }
@@ -510,7 +517,10 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
       border-radius: var(--radius-full); background: var(--primary);
       border: 1.5px solid var(--bg-tertiary);
     }
-    .th__menu { position: relative; z-index: 60; }
+    /* Capa flotante anclada en coordenadas de pantalla: dentro del lienzo (overflow) cualquier absoluto
+       se recorta contra el borde de la tabla y el usuario no ve media lista (## 12ab, rojo del menu). */
+    .th__menu { position: fixed; z-index: 60; width: 264px; }
+    .th__menu--arriba { transform: translateY(calc(-100% - 12px)); }
 
     .tabla__fila { border-bottom: 1px solid var(--border-default); transition: background var(--duration-100); }
     .tabla__fila:last-child { border-bottom: 0; }
@@ -573,8 +583,8 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
 
     /* ── el menu (una instancia viva) ── */
     .menu {
-      position: absolute; top: calc(100% + 2px); right: 0; z-index: 61;
-      width: 264px; max-height: 72vh; display: flex; flex-direction: column;
+      display: flex; flex-direction: column;
+      max-height: 72vh;
       background: var(--bg-secondary); border: 1px solid var(--border-default);
       border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
       padding: var(--space-3);
@@ -676,7 +686,8 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
     }    .hoja__limpiar:hover { background: var(--error-subtle); }
     .hoja__limpiar:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
-    .hoja__cuerpo--menu .menu { position: static; width: auto; max-height: none; box-shadow: none; border: 0; padding: 0 0 var(--space-2); }
+    .th__menu--arriba .menu { max-height: min(48vh, 420px); }
+    .hoja__cuerpo--menu .menu { width: auto; max-height: none; box-shadow: none; border: 0; padding: 0 0 var(--space-2); }
 
     /* ── el reflujo a tarjetas por debajo de 720 ── */
     @media (max-width: 719px) {
@@ -734,10 +745,25 @@ export class DataTableComponent implements AfterContentInit {
   readonly busquedaMenu = signal('');
   readonly menu = signal<EstadoCapa | null>(null);
   readonly hoja = signal(false);
+  /** El popover del cabezal vive en coordenadas de pantalla: dentro del lienzo con overflow se recortaba. */
+  readonly menuAncla = signal<{ top: number; left: number } | null>(null);
+  readonly anclaAbajo = signal(true);
+  private botonMenu: HTMLElement | null = null;
   private readonly seleccion = signal<ReadonlySet<string>>(new Set());
   private plantillas: Readonly<Record<string, TemplateRef<{ $implicit: unknown; fila: unknown }>>> = {};
 
+  private readonly destroyRef = inject(DestroyRef);
+
   constructor() {
+    afterNextRender(() => {
+      const reposicionar = () => { if (this.menu()?.sup === 'cabezal') this.ajustarAncla(); };
+      window.addEventListener('scroll', reposicionar, true);
+      window.addEventListener('resize', reposicionar);
+      this.destroyRef.onDestroy(() => {
+        window.removeEventListener('scroll', reposicionar, true);
+        window.removeEventListener('resize', reposicionar);
+      });
+    });
     // Cambiar filtro, tamano o cualquier cosa que reordene el mundo: la pagina se reinicia. Sin esto, estar
     // en la pagina 4 y filtrar deja una tabla vacia «sin motivo».
     effect(() => {
@@ -964,11 +990,30 @@ export class DataTableComponent implements AfterContentInit {
 
   // ── las capas: menu popover / hoja del movil ──
 
-  protected alternarMenu(col: DataTableColumna, sup: 'cabezal' | 'hoja'): void {
+  protected alternarMenu(col: DataTableColumna, sup: 'cabezal' | 'hoja', evento?: Event): void {
     const actual = this.menu();
     this.busquedaMenu.set('');
-    if (actual && actual.col === col.clave && actual.sup === sup) this.menu.set(null);
-    else this.menu.set({ col: col.clave, sup });
+    if (actual && actual.col === col.clave && actual.sup === sup) {
+      this.menu.set(null);
+      return;
+    }
+    this.menu.set({ col: col.clave, sup });
+    if (sup === 'cabezal') {
+      this.botonMenu = (evento?.currentTarget as HTMLElement) ?? this.botonMenu;
+      this.ajustarAncla();
+    }
+  }
+
+  /** Encaja el popover bajo (o sobre) el boton del embudo, dentro del borde de la ventana. */
+  private ajustarAncla(): void {
+    const boton = this.botonMenu;
+    if (!boton) return;
+    const caja = boton.getBoundingClientRect();
+    const ANCHO = 264;
+    const left = Math.max(8, Math.min(caja.right - ANCHO, window.innerWidth - ANCHO - 8));
+    const cabeAbajo = caja.bottom + 300 < window.innerHeight;
+    this.anclaAbajo.set(cabeAbajo);
+    this.menuAncla.set(cabeAbajo ? { top: caja.bottom + 6, left } : { top: caja.top - 6, left });
   }
   protected abrirMenuHoja(col: DataTableColumna): void {
     this.busquedaMenu.set('');

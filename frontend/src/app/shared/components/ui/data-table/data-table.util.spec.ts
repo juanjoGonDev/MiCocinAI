@@ -86,14 +86,14 @@ describe('rotarOrden (el ciclo del encabezado, ## 12ab)', () => {
 describe('ordenar (multi-clave, con huecos al final)', () => {
   it('una clave de texto, ascendente, sin mayusculas en el camino', () => {
     const salida = ordenar(filas, [{ clave: 'nombre', dir: 'asc' }], leer, tipoTexto);
-    expect(salida.map((f) => f.nombre)).toEqual(['aceite', 'Lechuga', 'Manzana', 'Tomate']);
+    expect(salida.map((f) => f['nombre'])).toEqual(['aceite', 'Lechuga', 'Manzana', 'Tomate']);
   });
 
   it('el hueco va al final en los dos sentidos', () => {
     const asc = ordenar(filas, [{ clave: 'cantidad', dir: 'asc' }], leer, () => 'numero');
-    expect(asc.map((f) => f.cantidad)).toEqual([3, 5, 12, null]);
+    expect(asc.map((f) => f['cantidad'])).toEqual([3, 5, 12, null]);
     const desc = ordenar(filas, [{ clave: 'cantidad', dir: 'desc' }], leer, () => 'numero');
-    expect(desc.map((f) => f.cantidad)).toEqual([12, 5, 3, null]);
+    expect(desc.map((f) => f['cantidad'])).toEqual([12, 5, 3, null]);
   });
 
   it('dos claves: la segunda desempata a la primera', () => {
@@ -106,7 +106,7 @@ describe('ordenar (multi-clave, con huecos al final)', () => {
       leer,
       (clave) => (clave === 'cantidad' ? 'numero' : 'texto')
     );
-    expect(salida.map((f) => `${f.cat}/${f.cantidad}`)).toEqual([
+    expect(salida.map((f) => `${f['cat']}/${f['cantidad']}`)).toEqual([
       'frutas/null',
       'otros/3',
       'verduras/12',
@@ -116,12 +116,12 @@ describe('ordenar (multi-clave, con huecos al final)', () => {
 
   it('fecha: el dia manda, no el instante', () => {
     const salida = ordenar(filas, [{ clave: 'caducidad', dir: 'asc' }], leer, () => 'fecha');
-    expect(salida.map((f) => f.caducidad)).toEqual(['2026-10-01', '2026-10-02', '2027-01-15', null]);
+    expect(salida.map((f) => f['caducidad'])).toEqual(['2026-10-01', '2026-10-02', '2027-01-15', null]);
   });
 
   it('booleano: falso antes que verdadero en asc', () => {
     const salida = ordenar(filas, [{ clave: 'veg', dir: 'asc' }], leer, () => 'booleano');
-    expect(salida.map((f) => f.veg)).toEqual([false, false, true, true]);
+    expect(salida.map((f) => f['veg'])).toEqual([false, false, true, true]);
   });
 });
 
@@ -162,21 +162,21 @@ describe('pasarFiltros (la intersección de columnas)', () => {
 
   it('el cubo SIN_VALOR es filtrable como un valor mas', () => {
     const salida = pasarFiltros(filas, [{ columna: 'cantidad', tipo: 'numero', filtro: val([SIN_VALOR]) }], leer);
-    expect(salida.map((f) => f.nombre)).toEqual(['Manzana']);
+    expect(salida.map((f) => f['nombre'])).toEqual(['Manzana']);
   });
 
   it('numero: mayor/menor/entre con un extremo o con los dos, e igual exacto', () => {
     expect(
       pasarFiltros(filas, [{ columna: 'cantidad', tipo: 'numero', filtro: { tipo: 'numero', modo: 'mayor', a: 4, b: null } }], leer)
-        .map((f) => f.cantidad)
+        .map((f) => f['cantidad'])
     ).toEqual([5, 12]);
     expect(
       pasarFiltros(filas, [{ columna: 'cantidad', tipo: 'numero', filtro: { tipo: 'numero', modo: 'entre', a: 4, b: 6 } }], leer)
-        .map((f) => f.cantidad)
+        .map((f) => f['cantidad'])
     ).toEqual([5]);
     expect(
       pasarFiltros(filas, [{ columna: 'cantidad', tipo: 'numero', filtro: { tipo: 'numero', modo: 'entre', a: 12, b: null } }], leer)
-        .map((f) => f.cantidad)
+        .map((f) => f['cantidad'])
     ).toEqual([12]);
     // Sin ningun extremo escrito, el filtro no esta: «entre vacio» no es «cero filas», es «todavia no he dicho»
     expect(filtroActivo({ tipo: 'numero', modo: 'entre', a: null, b: null })).toBe(false);
@@ -195,7 +195,7 @@ describe('pasarFiltros (la intersección de columnas)', () => {
     expect(pasarFiltros(conFecha, [{ columna: 'd', tipo: 'fecha', filtro: { tipo: 'fecha', modo: 'vencidos', a: null, b: null } }], leer, hoy).length).toBe(1);
     expect(
       pasarFiltros(conFecha, [{ columna: 'd', tipo: 'fecha', filtro: { tipo: 'fecha', modo: 'entre', a: '2026-10-02', b: '2026-10-06' } }], leer, hoy)
-        .map((f) => f.d)
+        .map((f) => f['d'])
     ).toEqual(['2026-10-05']);
   });
 
@@ -208,7 +208,7 @@ describe('pasarFiltros (la intersección de columnas)', () => {
       ],
       leer
     );
-    expect(salida.map((f) => f.nombre)).toEqual(['Tomate', 'Manzana']);
+    expect(salida.map((f) => f['nombre'])).toEqual(['Tomate', 'Manzana']);
     const vacia = pasarFiltros(
       filas,
       [
