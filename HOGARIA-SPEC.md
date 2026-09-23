@@ -3876,6 +3876,120 @@ pantallas cambian de modelo de datos:
       pantalla de la barra —los selectors de alta pasan a `.celda__accion` dentro de la fila—.
 - [ ] Validación manual del usuario en la preview (escritorio y móvil emulado).
 
+## 12ad. Tanda 32 — la tabla se refina: tramos con Shift, paginador de verdad, lote flotante y buscador pegado
+
+Petición del usuario sobre las tablas heredadas de las tandas 30–31, con una captura del paginador de Windows
+como referencia visual. Seis mejoras, todas en el componente compartido (`app-data-table`) salvo donde diga el
+contrario, y todas con su regla:
+
+### A. La casilla de «seleccionar la página» deja de estar pegada
+
+El `th` de selección no tiene relleno (los `th` de columna lo heredan de `.th`, la casilla va suelta) y el
+cuadrito de 26 px queda a cero del borde. Se centra y se respira: `th--check` y `td--check` a 56 px con
+`text-align: center` y el mismo padding vertical que el resto del cabezal. Nada más se mueve: el cuadrito de
+fila (`.tabla__td--check`) ya vive en un `td` con `--space-2` — se le añade el centrado, que es lo que falta
+para que columna y celda apunten al mismo eje.
+
+### B. Seleccionar tramos con Shift, como en Windows
+
+Mantener Shift y pulsar la casilla de una fila marca el TRAMO desde la última fila pulsada sin Shift hasta la
+pulsada ahora (ambos inclusives), en el orden visible de la página actual —igual que el explorador de Windows:
+el tramo REEMPLAZA la selección, no se suma—. Sin ancla previa, el Shift+click se comporta como un click
+normal. La captura se hace en la fase `capture` del propio `td--check` (`stopPropagation` cuando hay Shift,
+que así no llega al `app-checkbox` y no hay doble toggle); el ancla vive en el componente (guarda el id, no el
+índice: el orden cambia al filtrar y el índice envejece mal) y se actualiza en todo click normal y en
+`togglePagina` (el ancla pasa a ser la primera fila de la página). Cambiar de página o de filtros no rompe el
+ancla mientras la fila siga viva; si desaparece del mapa de la página actual, el tramo se calcula contra la
+lista ordenada completa (`resultado()`) y solo se marcan las filas que además están en la página —no hay
+tramo silencioso a través de filas invisibles—.
+
+Utilidad pura con test: `tramoDeIndices(a, b): number[]` (inclusive, en cualquier sentido). El componente la
+usa; no hay trampa de test pegado a Angular.
+
+### C. «Filas por página» es un desplegable, no cuatro botones
+
+El `pie__tam` de botones sueltos (`tabla-tamano-<n>`) se jubila: pasa a ser un `app-picker` dentro del pie
+(`data-test="tabla-tamano"`), con las opciones del input `tamanos()` etiquetadas con la nueva clave
+`ui.tabla_filas_pagina` («{n} por página»/«{n} per page») y `title`/`aria-label` con `ui.tabla_por_pagina`.
+Cambiar el tamaño mantiene la selección y RE-ANCLA la página para que la fila vista siga a la vista
+(`pagina = floor((paginaAnterior-1)*tamanoAnterior / tamanoNuevo) + 1`, con test unitario de la fórmula en
+`reanclarPagina(actual, tamanoViejo, tamanoNuevo)`). El tamaño no viaja en la URL: es preferencia de la
+visita, como el orden interno de la tabla.
+
+### D. Paginador con selección intermedia de páginas
+
+El «‹ 1/39 ›» se convierte en el paginador de la captura: `‹ Anterior · 1 … 5 6 7 … 39 · Siguiente ›`,
+ themed con los tokens de la casa (mismo `.pag` actual, la página activa con `--on` y `aria-current="true"`).
+Reglas del tramo (`tramoDePaginas(actual, ultima): (number | 'hueco-ini' | 'hueco-fin')[]`, con test):
+primera y última siempre; ventana de ±1 alrededor de la actual; un hueco de UN solo número se imprime como
+número (nada de «1, …, 2»); dos huecos se fusionan si se solapan. Cada número es botón
+(`data-test="tabla-pagina-<n>"`, `title` con `ui.tabla_ir_pagina`); los huecos son texto `…`
+`aria-hidden`; `tabla-anterior`/`tabla-siguiente` conservan data-test y comportamiento (desabilitados en los
+extremos). El texto «Página x de y» (`tabla-pagina`) sigue existiendo como etiqueta accesible del conjunto:
+se pinta aparte en el pie y no compite con los números. En móvil el pie refruye y el paginador se recorta a
+`‹ [6] ›` con el rango textual (`vista` de ≤640 px), como el resto de controles que ya ceden espacio.
+
+### E. El buscador vive pegado a la tabla
+
+La tabla acepta un slot nuevo: `div[data-tabla-buscar]`, proyectado dentro de la tarjeta, por encima del
+lienzo, con `padding: var(--space-3) var(--space-4) var(--space-2)` y la clase `.tabla__buscar:empty {
+display: none }` para que las tablas sin búsqueda no noten nada. Las cuatro pantallas que tienen caja de
+búsqueda sobre la tabla (visor: `#search`; productos: `#gestor-productos-q`; categorías:
+`#gestor-categorias-q`; catálogo: `#catalogo-q`) MUEVEN el `app-input` a ese slot sin tocar ids, data-tests ni
+el debounce propio; la fila de toolbar de cada pantalla conserva lo demás (chips, pickers, botones) y pierde
+el `flex: 1 1 280px` del input, que ya no hace falta. «Pegado» es literal: la caja queda dentro del mismo
+borde redondeado que la tabla, compartiendo fondo.
+
+### F. El lote es una barra flotante de pie que no tapa nada; «Anular selección» pasa a X
+
+El slot `data-tabla-lote` se proyecta AHORA al pie de la tarjeta (después del paginador), y la barra `.lote`
+de las cinco listas (inventarios, utensilios, categorías, productos, catálogo) pasa de «franja en cabecera /
+sticky solo en móvil» a `position: fixed` centrada abajo (`bottom: calc(--space-4 + env(safe-area-inset-bottom))`,
+ancho `min(100% - 2*--space-4, 1000px)`, `z-index` por debajo del popover de columna (60) y del modal, por
+encima del sticky del cabezal), con fondo de tarjeta, borde y `--shadow-lg`. Como flota sobre el contenido,
+CADA barra lleva detrás un separador en el flujo (`.lote__empuje`, altura 72 px, `aria-hidden`) proyectado en
+el mismo `@if`, para que la última fila jamás quede tapada ni con el scroll al fondo. El botón «Anular
+selección» de las cinco listas pasa a botón-icono `close` (16 px) con `aria-label` y `title` =
+`pantry.lote_anular`; los data-tests (`pantry-lote-anular`, `utensilios-lote-anular`,
+`gestor-categorias-lote-anular`, `gestor-productos-lote-anular`, `catalogo-lote-anular`) no cambian.
+
+### G. El lote del catálogo también quita del inventario (con confirmación)
+
+A «Añadir a la despensa» y la X se les suma «Quitar del inventario» (`data-test="catalogo-lote-quitar"`,
+clave nueva `pantry.catalogo_lote_quitar`), activa solo si hay filas seleccionadas con `inHousehold`. El
+borrado es el del visor, no el de las fichas: se resuelve el ingrediente de la casa por la MISMA clave con la
+que el server pinta el «en casa» (`normalizeProductName` del server portada al cliente como
+`claveDeProductoCasa`, con test espejo de sus reglas: acentos, ruido, unidades abreviadas y palabras sueltas),
+se confirma por el diálogo propio nombrando cuántos artículos se quitan (clave nueva
+`pantry.catalogo_lote_quitar_pregunta`, `{n}`), y se aplican `DELETE /ingredients/:id` en bucle (el mismo
+`deleteIngredient` del servicio, que ya poda la cache del visor). Lo no resuelto (fila marcada «en casa» que
+ya no tiene ingrediente) se anuncia en el mismo toast, no se calla. Al terminar: recarga del catálogo y
+`pantry.lote_borrados` en el toast de éxito. NO es destructivo con las fichas: el catálogo no borra
+productos, quita existencias de la casa.
+
+### H. Accesibilidad, i18n y estilo de la tanda
+
+Todo control nuevo lleva `title` (popover nativo) y `aria-label` o etiqueta visible: el picker de tamaño, los
+botones de página (aria-current en el activo), la X de anular y el botón de quitar. Iconos decorativos con
+`[label]="null"`; el hueco «…» con `aria-hidden`. Todos los textos pasan por el diccionario en es+en —claves
+nuevas: `ui.tabla_filas_pagina`, `ui.tabla_ir_pagina`, `pantry.catalogo_lote_quitar`,
+`pantry.catalogo_lote_quitar_pregunta`— y lo jubilado (`tabla-tamano-<n>`, los `.tam`) no deja huérfanas
+(check-ui 16). Se respeta `prefers-reduced-motion` en la sombra de la barra (no hay transiciones nuevas, la
+que hay es la del sistema).
+
+### I. Puertas, e2e y fuera de la tanda
+
+- [ ] TDD de las tres utils (`tramoDeIndices`, `reanclarPagina`, `tramoDePaginas`) y del port `claveDeProductoCasa`, en sus specs actuales.
+- [ ] `check:ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration production` 0 · karma de lo tocado en verde · suite del server intacta.
+- [ ] e2e en la misma tanda (## 12y): actualizar `pantry.spec` (tamño por picker, paginador con números, buscador en su slot) y añadir: Shift+tramo (escritorio), salto por número, tamaño 10 → re-ancla, y el flujo completo de «Quitar del inventario» en el catálogo (añadir → en casa → quitar → vuelve a estar añadible, con su confirmación nombrando el cuántos). `pantry-managers`/`pantry-catalog`: nada de esto cambia sus contratos salvo `tabla-tamano-*` si alguien lo usaba.
+- [ ] Run de CI como juez, verde de lo reescrito sin aumentar deuda.
+- [ ] Validación manual del usuario en la preview (escritorio y móvil emulado).
+
+Fuera de la tanda: el servidor no se toca (la port `claveDeProductoCasa` es lectura del contrato, no cambio);
+la persistencia del tamaño en URL/localstorage no se añade «porque sí» —se apunta para una tanda de
+preferencias si el usuario la pide—; los `alt` en iconos son `aria-label` de botón, que es como funciona la
+casa desde la tanda 8.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
