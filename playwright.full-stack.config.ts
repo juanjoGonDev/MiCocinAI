@@ -22,6 +22,11 @@ import { defineConfig, devices } from '@playwright/test';
 // solos contra la carpeta de esta config, que es la raiz del repo.
 const port = Number(process.env.E2E_FULL_STACK_PORT ?? 3100);
 const base = process.env.E2E_BASE_URL ?? `http://localhost:${port}`;
+// El globalSetup comun calienta el `ng serve` del :4200 porque ahi el primer render compila en frio. Aqui no
+// hay nada que calentar —el binario ya esta construido y el propio webServer espera a `/health`—, y en CI el
+// :4200 no escucha: el warmup se comia su presupuesto de 180 s ENTERO y el job reventaba por timeout sin
+// dejar ni results.json. Se le dice a ese warmup que mire a este servidor: responde un 200 al primer bote.
+process.env.E2E_BASE_URL = base;
 
 export default defineConfig({
   testDir: './tests/e2e/full-stack',
@@ -52,7 +57,9 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         // Solo para entornos sin el navegador de Playwright (sandboxes sin acceso a su CDN):
         // `E2E_CHROME_BIN=/ruta/al/chrome`. En CI la variable no existe y manda el navegador instalado.
-        ...(process.env.E2E_CHROME_BIN ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } } : {})
+        ...(process.env.E2E_CHROME_BIN
+          ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } }
+          : {})
       }
     },
     {
@@ -61,7 +68,9 @@ export default defineConfig({
       name: 'mobile-chrome',
       use: {
         ...devices['Pixel 5'],
-        ...(process.env.E2E_CHROME_BIN ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } } : {})
+        ...(process.env.E2E_CHROME_BIN
+          ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } }
+          : {})
       }
     }
   ],
