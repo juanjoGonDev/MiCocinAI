@@ -10,6 +10,7 @@ import {
   Output,
   TemplateRef,
   afterNextRender,
+  output,
   computed,
   effect,
   inject,
@@ -737,6 +738,8 @@ export class DataTableComponent implements AfterContentInit {
   readonly claveVacia = input<TranslationKey | null>(null);
 
   @Output() readonly seleccionChange = new EventEmitter<unknown[]>();
+  /** Las filas del resultado, re-emitidas cuando cambian (vease `resultado`). Solo si alguien escucha. */
+  readonly resultadoChange = output<readonly unknown[]>();
 
   readonly orden = signal<OrdenTabla>([]);
   readonly filtros = signal<Readonly<Record<string, FiltroColumna | undefined>>>({});
@@ -755,6 +758,9 @@ export class DataTableComponent implements AfterContentInit {
   private readonly destroyRef = inject(DestroyRef);
 
   constructor() {
+    // El resultado filtrado viaja hacia fuera (## 12ac): la pantalla que tenga un boton de lote sobre «lo de
+    // la pantalla» necesita exactamente estas filas, no las de la pagina cortada.
+    effect(() => this.resultadoChange.emit(this.resultado()));
     afterNextRender(() => {
       const reposicionar = () => { if (this.menu()?.sup === 'cabezal') this.ajustarAncla(); };
       window.addEventListener('scroll', reposicionar, true);
@@ -826,7 +832,12 @@ export class DataTableComponent implements AfterContentInit {
 
   // ── el pipeline: filtrar -> ordenar -> cortar ──
 
-  protected readonly vista = computed(() => {
+  /**
+   * Lo que la busqueda y los menus de columna dejan en pie, ordenado y AUN SIN CORTAR por pagina (## 12ac).
+   * Es el «contenido de la pantalla» honesto: un boton de lote que opera sobre «lo visible» tiene que operar
+   * sobre esto, no sobre las 24 filas del corte actual ni sobre el monton original.
+   */
+  protected readonly resultado = computed(() => {
     const columnas = this.columnas();
     const activos: FiltroDeColumna[] = [];
     const filtros = this.filtros();
@@ -835,12 +846,13 @@ export class DataTableComponent implements AfterContentInit {
       if (f && filtroActivo(f)) activos.push({ columna: col.clave, tipo: this.tipoDe(col), filtro: f });
     }
     const filtradas = pasarFiltros(this.filas(), activos, this.leedor, hoyLocal());
-    const ordenadas = ordenar(filtradas, this.orden(), this.leedor, (clave) => {
+    return ordenar(filtradas, this.orden(), this.leedor, (clave) => {
       const col = columnas.find((c) => c.clave === clave);
       return col ? this.tipoDe(col) : 'texto';
     });
-    return paginar(ordenadas, this.pagina(), this.tamano());
   });
+
+  protected readonly vista = computed(() => paginar(this.resultado(), this.pagina(), this.tamano()));
 
   // ── orden ──
 
