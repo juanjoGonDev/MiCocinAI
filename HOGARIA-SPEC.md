@@ -3693,6 +3693,152 @@ propio spec para no mezclar 3 reescrituras e2e más en el lote de CI de esta.
       conocido cancel de shard 2.
 - [ ] Validación manual del usuario en la preview (escritorio y móvil emulado).
 
+## 12ac. Tanda 31 — los tres gestores pasan por la misma tabla: categorías, productos y catálogo
+
+Petición del usuario al cerrar la tanda 30: «Categorías, productos principales y catálogo deberían tener también
+esa tabla con todo lo que comenté». La tanda 30 lo dejó anotado (## 12ab §D: «queda apuntado, no improvisado»):
+el componente ya está hecho y probado; lo que cuesta es reescribir las tres suites e2e, que entran en esta
+misma tanda (regla de la ## 12y). Ninguna de las tres toca el server: los endpoints de hoy dan todo lo que la
+tabla necesita.
+
+### A. La carga: el conjunto completo de la consulta, en cliente
+
+La regla que la casa aprendió en la tanda 30: filtrar u ordenar sobre una página es una mentira. Las tres
+pantallas cambian de modelo de datos:
+
+- El server deja de paginar la vista. Cada gestor carga **todas las páginas** de su endpoint (limit=100, el tope
+  que admite el schema, en bucle hasta `total`, con el mismo tope de 2.000 filas del visor) una vez al montar y
+  tras cada mutación. El util puro `cargarTodasLasPaginas(pedirPagina, tope)` nace en `pantry-gestor.util.ts`
+  con su spec (TDD): para de leer cuando `offset >= total`, cuando una página llega vacía o al tope, y
+  propaga `null` (fallo de red = cero filas con la pantalla avisando, no media lista muda).
+- La búsqueda, los chips de vista/filtro y el pasillo se aplican **en memoria** sobre lo cargado, con la
+  semántica exacta de lo que hoy hace el server (documentada en cada sitio), salvo un detalle deliberado: la
+  búsqueda de estas pantallas pasa a ignorar acentos como la del visor (`quitarAcentos + toLowerCase`), que es
+  mejor y es lo que la casa ya promete en `#search`. Los `LIKE` del server no lo hacían; se anota aquí para que
+  nadie lo tome por regresión.
+  - Categorías: `sin productos` ⇔ `counts.products === 0`; `con subcategorías` ⇔ `counts.children > 0`; la
+    búsqueda casa `name` normalizado o `key` (igual que `pantryCategoryKey` del server, aplicada en cliente).
+  - Productos: `staples` ⇔ `quantity === 0`; `in-pantry` ⇔ `quantity > 0`; `expiring` ⇔ `hoy <= caducidad <=
+    hoy+3` **por día** (`claveDeDia` + `sumarDias`, el error del instante ya corregido en el server); `q` casa
+    `name` o cualquier alias (el server hacía LIKE sobre name y sobre el JSON de aliases; aquí se comparan las
+    cadenas del array, que es el mismo dato sin el JSON).
+  - Catálogo: el pasillo filtra por **subárbol de hojas** del árbol del catálogo (38 filas, `listCatalogCategories()`
+    ya lo trae plano): nuevo pure `hojasDelSubarbol(categorias, clave)` con su spec —elegir un padre suma las filas
+    de todas sus hojas, igual que `hojasDe()` del server, que es lo que fija su e2e («334 productos»). `q` casa solo
+    el nombre, normalizado, como `buscarProductos`.
+- **URL**: se conservan los enlaces ya firmados —`?q=`, `?view=`, `?filter=`, `?cat=`—, leídos al montar y
+  escritos con `replaceUrl` (con el debounce de URL que ya traen, para no reescribir el historial a cada tecla).
+  **Quedan jubilados** `?sort=` del gestor de productos (el orden vive en el cabezal de la tabla, como en el
+  visor) y `?p=`/`?limit=` de los tres (la paginación es del componente; F5 vuelve a la primera página, igual que
+  hoy al no viajar). Los componentes que lean parámetros con `offsetDeQuery` lo dejan de hacer.
+
+### B. Categorías (`/pantry/categories`) — la lista pasa a `app-data-table`
+
+- Columnas: **nombre** (celda proyectada: punto de color + nombre + badge «Reservada» si `protected`;
+  `texto`, con `etiquetaValor` por nombre), **padre** (texto; el hueco —las raíces— se pinta vacío y el menú lo
+  agrupa como «sin valor», la convención del visor), **productos** (numero ← `counts.products`), **subcategorías**
+  (numero ← `counts.children`), **en subárbol** (numero ← `counts.descendantProducts`; es el número que el
+  borrado en cascada respeta, pintarlo aparte tiene sentido porque la reserva se decide por él) y **acciones**
+  (no ordenable, no filtrable). El «estado reserva/no» no necesita columna: el badge de la fila y el menú de
+  «padre» bastan, y una columna booleana con dos valores casi vacíos es ruido.
+- Orden múltiple con Shift, menús por columna, paginación y búsqueda global: gratis de la tabla. El buscador de
+  la barra (`#gestor-categorias-q`) queda enlazado a lo filtrado en memoria (el `?q=` sigue viajando).
+- Chips de vista (`?view=`): se mantienen en la barra, ahora aplicados en cliente.
+- **Selección múltiple + lote**: barra en `data-tabla-lote` con dos acciones — «Borrar seleccionadas» (bucle de
+  `DELETE /categories/:id` **solo sobre las que admiten borrado** —`canDelete`—; las filas seleccionadas que no
+  pueden borrarse se anuncian en el mismo mensaje de confirmación con su cuenta; un solo toast al final con
+  borradas/saltadas; recarga de la carga completa tras el lote) y «Anular selección» (sin preguntar). La
+  confirmación, `ConfirmService` de la app, nunca `confirm()` del navegador.
+- Fila: clic en el cuerpo abre la ficha (ruta `:id`, intacta). El botón de borrar por fila y el aviso «tiene
+  artículos» siguen como estaban; `data-test` de fila: `gestor-categorias-fila-<key>` sobre
+  `tabla-fila-<id>` (el identificador de fila es la `id`; el `key` se conserva como data-test adicional en la
+  celda nombre para no reescribir media suite con mentiras).
+- La ficha, los swatches, el picker de padre y el aviso de reserva: sin cambios.
+
+### C. Productos (`/pantry/products`) — misma tabla, mismo lote con impacto
+
+- Columnas: **nombre** (celda proyectada: punto + nombre + chips de alias con el «+n» de los ocultos,
+  `texto`), **categoría** (`etiquetaValor` = `pantryCategoryLabel` con su punto de color en la celda, como el
+  visor), **unidad** (enum), **en despensa** (booleano ← `inPantry`, etiqueta «Sí/No»; la celda del **stock**
+  pinta `quantity + unit` o raya —numero sobre `quantity`, filtrable con los modos del visor—), **caducidad**
+  (fecha con el badge `por caducar/caduca` igual que el visor, `claveDeDia` del dato ya camel —`expirationDate`
+  del endpoint de productos, no del de ingredientes—), **cesta** (numero ← `impact.listLines`) y **acciones**.
+- Orden, menús, paginación: la tabla. El picker `opcionesOrden` (reciente/nombre) **se borra**: su «reciente»
+  era `updated_at`, y nadie recuerda ese botón; la columna caducidad y un orden por fila de creación no eran la
+  misma promesa. Si algún día hace falta, la columna «actualizado» se añade a la tabla, no un select.
+- Chips de filtro (`?filter=`: staples / en despensa / caducan / todo) se mantienen, en cliente (semánticas del
+  §A). La barra de lote existente (`gestor-productos-lote`) pasa dentro de la tabla con **la ruta de siempre**:
+  `bulkProductImpact` → confirmación de la app nombrando borrables y bloqueados → `bulkDeleteProducts`
+  (todo-o-nada, es el contrato del gestor y lo sostiene `pantry-products.routes.spec.ts` con
+  `PANTRY_PRODUCT_BULK_DELETE_BLOCKED`; la prohibición de `bulk-delete` de la ## 12ab es del **visor**, cuyas
+  filas tienen existencias). «Anular selección» sin preguntar. Tras el lote: recarga de la carga completa.
+- Fila: clic en el cuerpo abre la ficha; el botón de borrar por fila sigue deshabilitado con stock dentro. La
+  ficha (aliases, impacto, «ver en la despensa») no se toca.
+
+### D. Catálogo (`/pantry/catalogo`) — el riel de pasillos se minimiza, la lista es tabla
+
+- El riel de pasillos (padres con sus hojas, botón a botón) se convierte en el **`app-picker`** del visor: una
+  línea «Pasillo: <etiqueta> · <cuenta>» que abre la lista con subárbol (cuenta del padre = suma de hojas, como
+  `productCount` del endpoint) y color por categoría. `?cat=` sigue enlazado; «Todos» es el valor limpio. El
+  contador `catalogo-resultados` se queda (cuenta lo que la tabla muestra: `filas filtradas`, no la página).
+- Columnas: **nombre** (punto + nombre; `texto`), **pasillo** (enum ← `categoryLabel`, etiqueta por el pipe
+  `catalog` de siempre… en la tabla el `etiquetaValor` pone la etiqueta ya traducida), **unidad** (enum,
+  `unit` crudo es el vocabulario del catálogo y así se pinta hoy —no hay clave que traducir—) y **acciones**.
+  El «en casa» NO es columna: es el estado de la fila (check_circle) y sale por el botón, como hoy; añadir una
+  columna booleana de solo-lectura que nadie filtra es pintar el DOM del gestor en otro sitio. La carga trae
+  TODO el catálogo (~800 filas, bajo el tope) —filtrar 24 filas por página es exactamente la mentira de la
+  tanda 30.
+- Búsqueda: `#catalogo-q` filtra en memoria (nombre normalizado, como `buscarProductos`), `?q=` enlazado.
+- **Selección múltiple + lote**: «Añadir a la despensa» de las filas seleccionadas usa `POST /catalog/add` con
+  los ids (es la ruta de la fila suelta, con su validación todo-o-nada y sus contadores `added/skipped`); un
+  toast con el recuento y recarga. La fila individual mantiene su botón `+` idéntico (misma `data-test
+  catalogo-anadir-<id>`). «Añadir lo visible» **cambia de significado con honestidad**: pasa a añadir **lo que
+  la tabla muestra tras filtros** (las filas del dataset filtrado, no la página) —el botón se llama como lo que
+  hace: «Añadir lo de la pantalla» (`pantry.catalogo_anadir_filtrados`, nueva clave; la vieja se borra con su
+  value). Con filtro «solo fuera de casa» activo, el botón hace exactamente lo que el usuario acaba de pedir.
+- La fila ya en casa sigue mostrando «En tu inventario» sin botón; el reflujo móvil, igual que el visor.
+
+### E. i18n y acabado
+
+- Claves nuevas es+en donde haga falta (columnas «subcategorías», «en subárbol», «cesta», «pasillo», el botón de
+  lote de categorías, el aviso de salteadas, «añadir lo de la pantalla»…) y **bajas**: las claves de los textos
+  jubilados (`pantry.catalogo_anadir_visibles`, las de `opcionesOrden` si no las usa nadie más) se borran del
+  diccionario con su value (regla: no dejar huérfanas). Los `t:` con `as any` de la primera versión del visor
+  no se repiten aquí: las claves nuevas se declaran y se usan con `TranslateKey`.
+- Visual: misma cabecera `gestor__header` (volver/título/ayuda) y el `app-page` contenedor; toolbar con
+  [chips][buscador][botón nuevo] y la tabla debajo, con su barra de lote pegada a la cabecera de la tabla. En
+  móvil (<720) el reflujo a tarjetas y la hoja «Ordenar y filtrar» del visor, sin CSS duplicado: es el mismo
+  componente. Márgenes y alineaciones con tokens, como exige la casa.
+
+### F. Suite e2e (misma tanda)
+
+- `pantry-managers.spec.ts` reescrito al molde de la tabla: la categoría nueva con color y padre se busca por la
+  caja y por el menú de «padre»; la reserva sigue sin poder romperse (botón deshabilitado en fila y lote que la
+  salta); «una categoría con artículos no se borra» usa el menú de la columna productos (filtro `mayor que 0`)
+  en vez de contar filas a mano; el lote de categorías borra dos filas con confirmación y un toast; el lote de
+  productos mantiene impacto/confirmación; el F5 conserva `?q=`, `?view=`, `?filter=` y la ficha; `?sort=`
+  jubilado se comprueba por ausencia (entrar con `?sort=recent` no lo devuelve escrito).
+- `pantry-catalog.spec.ts` reescrito: el picker de pasillo pinta subárbol (334 por «alimentos», la cuenta del
+  trigger), la fila se añade con un clic y pasa a «en casa», «añadir lo de la pantalla» manda el conjunto
+  filtrado y no duplica, el lote de selección usa `tabla-marcar-<id>`, y entrar por URL `?q=&cat=` deja la
+  pantalla igual que antes de jubilarse la página server-side.
+- El `leedor` del data-table lee `fila[clave]`: para campos calculados (counts, impact) la pantalla proyecta
+  las filas con esos campos **en la propia fila** (un `map` al cargar: `productos: c.counts.products`, etc.) en
+  lugar de ensuciar el componente con accessors. Es dato de presentación, no modelo: se dice en el componente.
+
+### G. Puertas
+
+- `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration production` 0 ·
+  suite del server intacta y verde (no se toca; si algo del catálogo en cliente revela una semántica mal copiada,
+  se corrige en cliente, no en el server) · unitarios de `pantry-gestor.util` y `data-table.util` verdes en el
+  navegador local · e2e de las tres pantallas, reproduce y decide el navegador local; CI como juez final.
+
+### H. Fuera de la tanda
+
+- El visor (`/pantry`) no se toca: ya tiene su tabla. Las pantallas `:id` (fichas) no se rediseñan.
+- Seguir usando `?q=` compartido con `buscar=` del visor sería coherente, pero rompe contratos de tanda 30 y el
+  e2e de tab-urls: se anota, no se hace.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
