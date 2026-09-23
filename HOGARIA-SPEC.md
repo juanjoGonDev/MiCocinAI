@@ -3679,7 +3679,18 @@ propio spec para no mezclar 3 reescrituras e2e más en el lote de CI de esta.
       ningún botón pintado sin destino verificado en la plantilla tocada.
 - [x] Puertas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration
       production` completo · suite del server (intacta, pero verde por si el picker cambia algo).
-- [ ] Run de CI como juez de los e2e y su bucle de fixes.
+- [x] Run de CI como juez de los e2e y su bucle de fixes —tres bucles, y verde. Bucle 1: el velo tapaba el
+      popover del cabezal (el th sticky apila aparte), los botones de modo se imprimían la clave cruda y la
+      búsqueda no bajaba a minúsculas. Bucle 2: dos promesas del test estaban escritas al revés de lo firmado
+      (toasts apilados, insignia con un solo criterio) y el rojo de `caducidad` destapó el dato gordo —el
+      `GET /ingredients` responde la fila en `snake_case` y el visor prometía camelCase. Bucle 3, con
+      Chromium de npm para reproducir localmente lo que CI solo contaba: el menú del filtro se recortaba
+      contra el lienzo con scroll (ahora se ancla a la pantalla y se reencaja al desplazarse), el «tengo» de
+      utensilios llegaba en tres formas para decir lo mismo (0/1 del server, `true/false` del optimista, y la
+      clave empaquetada como texto en el menú), y el título del modal de alta se pasaba por `[attr.title]`
+      a lo que es un `@Input` (diálogo sin etiqueta). Run `ff67e8f`: `pantry.spec`, `utensils.spec` y `tab-urls.spec` verdes íntegros; los rojos que
+      quedan en el run son deuda preexistente (account, calendar, ai-goal, shopping, recipes) más el
+      conocido cancel de shard 2.
 - [ ] Validación manual del usuario en la preview (escritorio y móvil emulado).
 
 ## 13. Coming soon (deliberately not in this program)
