@@ -1,6 +1,7 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { test } from './fixtures';
 import { createHousehold, registerAndGoto, registerWithHousehold } from './helpers/auth';
+import { ponTamano } from './helpers/tabla';
 
 /**
  * El catalogo de utensilios se tabla desde la ## 12ab: 54 filas como lista infinita no se acaban nunca,
@@ -13,9 +14,11 @@ import { createHousehold, registerAndGoto, registerWithHousehold } from './helpe
 
 const tabla = (page: Page): Locator => page.locator('[data-test="utensilios-tabla"]');
 const filas = (page: Page): Locator => tabla(page).locator('tr.tabla__fila');
-const casillaDe = (fila: Locator): Locator => fila.locator('[data-test^="utensil-marcar-"]').locator('button[role="checkbox"]');
-  // La casilla de la tabla (seleccion de lote) no es la del «tengo» de la fila: dos cosas distintas.
-  const seleccionDe = (fila: Locator): Locator => fila.locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]');
+const casillaDe = (fila: Locator): Locator =>
+  fila.locator('[data-test^="utensil-marcar-"]').locator('button[role="checkbox"]');
+// La casilla de la tabla (seleccion de lote) no es la del «tengo» de la fila: dos cosas distintas.
+const seleccionDe = (fila: Locator): Locator =>
+  fila.locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]');
 
 test.describe('Pantry — catalogo de utensilios en tabla', () => {
   test.beforeEach(async ({ page }) => {
@@ -51,8 +54,13 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
     await expect(tabla(page).locator('[data-test="tabla-rango"]')).toContainText('de 54');
   });
 
-  test('la columna de estado filtra por disponibles / no disponibles', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'chromium', 'el menu de la columna estado cuelga del cabezal: en movil, la hoja');
+  test('la columna de estado filtra por disponibles / no disponibles', async ({
+    page
+  }, testInfo) => {
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'el menu de la columna estado cuelga del cabezal: en movil, la hoja'
+    );
     await casillaDe(filas(page).first()).click();
     await expect(page.locator('.utensils-meta')).toContainText('1 de 54 marcados');
 
@@ -61,7 +69,10 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
     // Excel-fiel, dos veces: las casillas nacen marcadas y se DESMARCA lo que estorba (quitar «No
     // disponible» deja los suyos), y el filtro por texto lleva ancla porque «Disponible» es substring de
     // «No disponible» sin distinguir mayusculas.
-    await menu.locator('.menu__fila', { hasText: /^No disponible/ }).locator('button[role="checkbox"]').click();
+    await menu
+      .locator('.menu__fila', { hasText: /^No disponible/ })
+      .locator('button[role="checkbox"]')
+      .click();
     await expect(filas(page)).toHaveCount(1);
     await page.keyboard.press('Escape');
 
@@ -70,7 +81,10 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
   });
 
   test('ordenar por nombre cambia el orden de la tabla', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'chromium', 'el boton de orden del cabezal no existe en el reflujo de movil');
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'el boton de orden del cabezal no existe en el reflujo de movil'
+    );
     const primera = filas(page).first();
     await tabla(page).locator('[data-test="tabla-orden-name"]').click(); // ascendente
     const ascendente = await primera.innerText();
@@ -90,13 +104,13 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
     // 54 de golpe la comprobacion es determinista.
     await page.reload();
     await page.locator('.tab', { hasText: 'Utensilios' }).click();
-    await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
+    await ponTamano(tabla(page), 100);
     await expect(page.locator('.utensil-card--owned')).toHaveCount(1);
   });
 
   test('marcar no mueve la vista: la fila no se re-renderiza entera', async ({ page }) => {
     // A 100 por pagina entran las 54: la pagina scrollea de verdad.
-    await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
+    await ponTamano(tabla(page), 100);
 
     const ultima = filas(page).nth(53);
     const casilla = casillaDe(ultima);
@@ -113,7 +127,9 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
     expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
   });
 
-  test('agregar un utensilio propio lo marca y la busqueda lo deja a la vista', async ({ page }) => {
+  test('agregar un utensilio propio lo marca y la busqueda lo deja a la vista', async ({
+    page
+  }) => {
     await page.getByRole('button', { name: '+ Agregar' }).click();
     await expect(page.locator('.modal__title')).toContainText('Agregar Utensilio');
     await page.fill('input#utensilName', 'Sous vide');
@@ -133,7 +149,9 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
     await custom.locator('.utensil-card__delete').click();
     const confirmDialog = page.locator('.modal-overlay');
     await expect(confirmDialog.locator('.modal__title')).toHaveText('Eliminar utensilio');
-    await expect(confirmDialog.locator('.confirm__message')).toContainText('Quitar Sous vide del catálogo');
+    await expect(confirmDialog.locator('.confirm__message')).toContainText(
+      'Quitar Sous vide del catálogo'
+    );
     await confirmDialog.getByRole('button', { name: 'Eliminar' }).click();
 
     await expect(page.locator('.toast--success').filter({ hasText: 'Eliminado' })).toBeVisible();
@@ -153,15 +171,19 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
     await expect(filas(page)).toHaveCount(1);
   });
 
-  test('el lote marca y desmarca de golpe, con anular para soltar la seleccion', async ({ page }) => {
-    await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
+  test('el lote marca y desmarca de golpe, con anular para soltar la seleccion', async ({
+    page
+  }) => {
+    await ponTamano(tabla(page), 100);
 
     await seleccionDe(filas(page).first()).click();
     await seleccionDe(filas(page).nth(1)).click();
     await expect(page.locator('[data-test="utensilios-lote"]')).toContainText('2 seleccionados');
 
     await page.locator('[data-test="utensilios-lote-marcar"]').click();
-    await expect(page.locator('.toast--success .toast__title')).toContainText('2 utensilios actualizados');
+    await expect(page.locator('.toast--success .toast__title')).toContainText(
+      '2 utensilios actualizados'
+    );
     await expect(page.locator('.utensil-card--owned')).toHaveCount(2);
     await expect(page.locator('.utensils-meta')).toContainText('2 de 54 marcados');
     await expect(page.locator('[data-test="utensilios-lote"]')).toHaveCount(0); // la accion suelta la seleccion sola
@@ -189,7 +211,7 @@ test.describe('Pantry — utensilios sin hogar', () => {
     await registerAndGoto(page, '/pantry?tab=utensils');
     await expect(page.locator('.utensils')).toBeVisible();
 
-    await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
+    await ponTamano(tabla(page), 100);
     expect(await filas(page).count()).toBeGreaterThanOrEqual(54);
 
     await casillaDe(filas(page).first()).click();
@@ -199,7 +221,7 @@ test.describe('Pantry — utensilios sin hogar', () => {
   test('crear un hogar se lleva el catalogo personal sin duplicarlo', async ({ page }) => {
     await registerAndGoto(page, '/pantry?tab=utensils');
     await expect(page.locator('.utensils')).toBeVisible();
-    await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
+    await ponTamano(tabla(page), 100);
 
     const total = await filas(page).count();
 
@@ -211,7 +233,7 @@ test.describe('Pantry — utensilios sin hogar', () => {
     await createHousehold(page);
     await page.goto('/pantry?tab=utensils');
     await expect(page.locator('.utensils')).toBeVisible();
-    await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
+    await ponTamano(tabla(page), 100);
 
     // Mismo numero de filas (no el doble) y la marca sigue en su sitio.
     await expect(filas(page)).toHaveCount(total);

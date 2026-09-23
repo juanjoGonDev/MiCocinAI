@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures';
 import type { Page, Locator } from '@playwright/test';
 import { registerWithHousehold } from './helpers/auth';
+import { ponTamano } from './helpers/tabla';
 
 /**
  * El visor del inventario es `app-data-table` desde la ## 12ab: orden por columna, filtros estilo Excel,
@@ -10,7 +11,8 @@ import { registerWithHousehold } from './helpers/auth';
  */
 
 const tabla = (page: Page): Locator => page.locator('[data-test="pantry-tabla-inventario"]');
-const fila = (page: Page, nombre: string): Locator => tabla(page).locator('tr.ingredient-item', { hasText: nombre });
+const fila = (page: Page, nombre: string): Locator =>
+  tabla(page).locator('tr.ingredient-item', { hasText: nombre });
 
 const filasPrimera = (page: Page): Locator => tabla(page).locator('tr.ingredient-item').first();
 
@@ -23,7 +25,14 @@ const elegir = async (page: Page, picker: string, opcion: string): Promise<void>
 /** Alta por el modal de siempre: el visor no tiene formulario propio, y el modal es de la casa. */
 async function darAlta(
   page: Page,
-  opts: { nombre: string; cantidad: string; categoria?: string; ubicacion?: string; unidad?: string; caducidad?: string }
+  opts: {
+    nombre: string;
+    cantidad: string;
+    categoria?: string;
+    ubicacion?: string;
+    unidad?: string;
+    caducidad?: string;
+  }
 ): Promise<void> {
   await page.getByRole('button', { name: '+ Agregar' }).click();
   await page.fill('input#ingredientName', opts.nombre);
@@ -50,7 +59,7 @@ test.describe('Pantry — inventario en tabla', () => {
       'Caducados'
     ]);
     await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('0');
-    await expect(tabla(page)).toHaveCount(0);
+    await expect(tabla(page).locator('tr.tabla__fila')).toHaveCount(0);
   });
 
   test('el alta pinta la fila con su cantidad y sube el contador global', async ({ page }) => {
@@ -60,7 +69,9 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('1');
   });
 
-  test('la busqueda es instantanea, ignora mayusculas y acentos, y viaja en la URL', async ({ page }) => {
+  test('la busqueda es instantanea, ignora mayusculas y acentos, y viaja en la URL', async ({
+    page
+  }) => {
     await darAlta(page, { nombre: 'Tomate', cantidad: '500' });
 
     await page.fill('input#search', 'toma');
@@ -72,7 +83,9 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(fila(page, 'Tomate')).toHaveCount(1);
 
     await page.fill('input#search', 'nada-que-ver');
-    await expect(tabla(page)).toHaveCount(0);
+    // (## 12ad, E) El buscador vive ahora dentro de la tarjeta: con cero aciertos la tabla se queda montada
+    // para que el campo siga a mano; lo que desaparece son las filas.
+    await expect(tabla(page).locator('tr.tabla__fila')).toHaveCount(0);
 
     // F5 con la busqueda puesta: la pantalla vuelve igual, sin depender del server. Antes de recargar se
     // espera a que la URL refleje lo ultimo escrito (el repaso es con debounce; si no, el F5 hereda una
@@ -80,14 +93,16 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(page).toHaveURL(/[?&]buscar=nada-que-ver/);
     await page.reload();
     await expect(page.locator('input#search')).toHaveValue('nada-que-ver');
-    await expect(tabla(page)).toHaveCount(0);
+    await expect(tabla(page).locator('tr.tabla__fila')).toHaveCount(0);
 
     await page.fill('input#search', '');
     await expect(fila(page, 'Tomate')).toHaveCount(1);
     await expect(page).not.toHaveURL(/buscar=/);
   });
 
-  test('el filtro de categorias minimiza el riel en un picker y filtra por subarbol', async ({ page }) => {
+  test('el filtro de categorias minimiza el riel en un picker y filtra por subarbol', async ({
+    page
+  }) => {
     await darAlta(page, { nombre: 'Tomate', cantidad: '500', categoria: 'Verduras' });
 
     const picker = page.locator('[data-test="pantry-filtro-categoria"]');
@@ -104,11 +119,11 @@ test.describe('Pantry — inventario en tabla', () => {
 
     await picker.locator('.picker__trigger').click();
     await picker.locator('.picker__option').filter({ hasText: 'Frutas' }).first().click();
-    await expect(tabla(page)).toHaveCount(0);
+    await expect(tabla(page).locator('tr.tabla__fila')).toHaveCount(0);
 
     // La recarga conserva el subarbol elegido: la pantalla sigue siendo enlazable.
     await page.reload();
-    await expect(tabla(page)).toHaveCount(0);
+    await expect(tabla(page).locator('tr.tabla__fila')).toHaveCount(0);
 
     await picker.locator('.picker__trigger').click();
     await picker.locator('.picker__option').filter({ hasText: 'Todos' }).first().click();
@@ -117,7 +132,10 @@ test.describe('Pantry — inventario en tabla', () => {
   });
 
   test('el menu de columna filtra por valores como Excel', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'chromium', 'el cabezal con los menus es del reflujo de escritorio; en movil manda la hoja (abajo)');
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'el cabezal con los menus es del reflujo de escritorio; en movil manda la hoja (abajo)'
+    );
     await darAlta(page, { nombre: 'Tomate', cantidad: '500' }); // g
     await darAlta(page, { nombre: 'Leche', cantidad: '2', unidad: 'l' });
     await darAlta(page, { nombre: 'Huevos', cantidad: '12', unidad: 'unit' });
@@ -127,7 +145,10 @@ test.describe('Pantry — inventario en tabla', () => {
     // La semantica es la de Excel: todas las casillas nacen marcadas y lo que se hace es DESMARCAR las que
     // no interesan. Quitar «g» y «unit» deja la tabla con las filas en litros.
     await menu.locator('.menu__fila', { hasText: /^g/ }).locator('button[role="checkbox"]').click();
-    await menu.locator('.menu__fila', { hasText: /^unit/ }).locator('button[role="checkbox"]').click();
+    await menu
+      .locator('.menu__fila', { hasText: /^unit/ })
+      .locator('button[role="checkbox"]')
+      .click();
 
     await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
     await expect(fila(page, 'Leche')).toHaveCount(1);
@@ -138,7 +159,10 @@ test.describe('Pantry — inventario en tabla', () => {
   });
 
   test('la caducidad filtra por «hoy» desde su menu', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'chromium', 'el menu de la columna fecha vive en el cabezal: en movil, lo mismo desde la hoja');
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'el menu de la columna fecha vive en el cabezal: en movil, lo mismo desde la hoja'
+    );
     const hoy = new Date();
     const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
     await darAlta(page, { nombre: 'Yogur hoy', cantidad: '6', caducidad: iso });
@@ -151,11 +175,16 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
     await expect(fila(page, 'Yogur hoy')).toHaveCount(1);
     // y la celda muestra el dia en dd/mm/aaaa, no el ISO del server
-    await expect(fila(page, 'Yogur hoy')).toContainText(`${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`);
+    await expect(fila(page, 'Yogur hoy')).toContainText(
+      `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`
+    );
   });
 
   test('ordenar por columna y orden multiple con shift', async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== 'chromium', 'los botones de orden del cabezal no existen en el reflujo de movil');
+    test.skip(
+      testInfo.project.name !== 'chromium',
+      'los botones de orden del cabezal no existen en el reflujo de movil'
+    );
     await darAlta(page, { nombre: 'Tomate', cantidad: '500' });
     await darAlta(page, { nombre: 'Leche', cantidad: '2' });
     await darAlta(page, { nombre: 'Huevos', cantidad: '12' });
@@ -181,13 +210,17 @@ test.describe('Pantry — inventario en tabla', () => {
     await tabla(page).locator('[data-test="tabla-orden-quantity"]').click();
     await page.keyboard.up('Shift');
     await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveText('1');
-    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveText('2');
+    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveText(
+      '2'
+    );
     // Y la secundaria se suelta como en Excel: otra pulsacion la invierte (asc→desc) y la siguiente la
     // quita del orden, dejando la primaria intacta. Rotacion firmada en la spec de la util.
     await page.keyboard.down('Shift');
     await tabla(page).locator('[data-test="tabla-orden-quantity"]').click();
     await page.keyboard.up('Shift');
-    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveText('2'); // invertida, sigue segunda
+    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveText(
+      '2'
+    ); // invertida, sigue segunda
     await page.keyboard.down('Shift');
     await tabla(page).locator('[data-test="tabla-orden-quantity"]').click();
     await page.keyboard.up('Shift');
@@ -195,16 +228,21 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveCount(0); // y Nombre manda solo
 
     // y a 100 por pagina, la cuenta del pie dice la realidad
-    await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
+    await ponTamano(tabla(page), 100);
     await expect(tabla(page).locator('[data-test="tabla-rango"]')).toContainText('de 3');
   });
 
-  test('el lote: vaciar manda las filas a las sugerencias y borrar las quita, con su confirmacion', async ({ page }) => {
+  test('el lote: vaciar manda las filas a las sugerencias y borrar las quita, con su confirmacion', async ({
+    page
+  }) => {
     await darAlta(page, { nombre: 'A lotazo', cantidad: '10' });
     await darAlta(page, { nombre: 'B lotazo', cantidad: '20' });
 
     for (const nombre of ['A lotazo', 'B lotazo']) {
-      await fila(page, nombre).locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]').click();
+      await fila(page, nombre)
+        .locator('[data-test^="tabla-marcar-"]')
+        .locator('button[role="checkbox"]')
+        .click();
     }
     await expect(page.locator('[data-test="pantry-lote"]')).toContainText('2 seleccionados');
 
@@ -215,15 +253,20 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(dialogo.locator('.confirm__message')).toContainText('2 articulos');
     await dialogo.getByRole('button', { name: 'Vaciar' }).click();
     await expect(page.locator('.toast--success').last()).toContainText('2 articulos vaciados');
-    await expect(tabla(page)).toHaveCount(0); // ya no hay filas con cantidad: 0
+    await expect(tabla(page).locator('tr.tabla__fila')).toHaveCount(0); // ya no hay filas con cantidad: 0
     await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('0');
 
     // y las dos vuelven a «lo que la casa conoce»: el contador del expand sube
-    await expect(page.locator('[data-test="pantry-sugerencias-toggle"]')).toContainText('sin existencias');
+    await expect(page.locator('[data-test="pantry-sugerencias-toggle"]')).toContainText(
+      'sin existencias'
+    );
 
     // borrar = DELETE en bucle: las fichas desaparecen del inventario de la casa
     await darAlta(page, { nombre: 'C borrado', cantidad: '5' });
-    await fila(page, 'C borrado').locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]').click();
+    await fila(page, 'C borrado')
+      .locator('[data-test^="tabla-marcar-"]')
+      .locator('button[role="checkbox"]')
+      .click();
     await page.locator('[data-test="pantry-lote-borrar"]').click();
     await expect(dialogo.locator('.modal__title')).toContainText('¿Borrar los articulos elegidos?');
     await dialogo.getByRole('button', { name: 'Borrar' }).click();
@@ -233,7 +276,10 @@ test.describe('Pantry — inventario en tabla', () => {
 
   test('anular seleccion suelta el lote sin tocar nada', async ({ page }) => {
     await darAlta(page, { nombre: 'Tomate', cantidad: '500' });
-    await fila(page, 'Tomate').locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]').click();
+    await fila(page, 'Tomate')
+      .locator('[data-test^="tabla-marcar-"]')
+      .locator('button[role="checkbox"]')
+      .click();
     await expect(page.locator('[data-test="pantry-lote"]')).toBeVisible();
     await page.locator('[data-test="pantry-lote-anular"]').click();
     await expect(page.locator('[data-test="pantry-lote"]')).toHaveCount(0);
@@ -241,7 +287,9 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(fila(page, 'Tomate')).toContainText('500 g');
   });
 
-  test('el stepper de la fila mueve la cantidad de uno en uno y a cero no borra la ficha', async ({ page }) => {
+  test('el stepper de la fila mueve la cantidad de uno en uno y a cero no borra la ficha', async ({
+    page
+  }) => {
     await darAlta(page, { nombre: 'Tomate stepper', cantidad: '5' });
 
     const filaEst = fila(page, 'Tomate stepper');
@@ -258,17 +306,24 @@ test.describe('Pantry — inventario en tabla', () => {
         .locator('[data-test^="pantry-stock-menos-"]')
         .click();
       if (cantidad > 1) {
-        await expect(page.locator('tr.ingredient-item', { hasText: 'Tomate stepper' })).toContainText(`${cantidad - 1} g`);
+        await expect(
+          page.locator('tr.ingredient-item', { hasText: 'Tomate stepper' })
+        ).toContainText(`${cantidad - 1} g`);
       }
     }
-    await expect(tabla(page).locator('tr.ingredient-item', { hasText: 'Tomate stepper' })).toHaveCount(0);
+    await expect(
+      tabla(page).locator('tr.ingredient-item', { hasText: 'Tomate stepper' })
+    ).toHaveCount(0);
   });
 
   test('en movil, el orden y el filtro viven en la hoja inferior', async ({ page }, testInfo) => {
     // La otra cara del cabezal (## 12ab): por debajo de 720 no hay th que pulsar, y el panel entero se
     // convoca desde la barra movil. El spec de la tabla se prueba aqui porque es esta pantalla la que la
     // monta; los detalles del panel, en la propia spec de la tabla.
-    test.skip(testInfo.project.name === 'chromium', 'la hoja es el reflujo de movil: en cabecera no hay boton que abrir');
+    test.skip(
+      testInfo.project.name === 'chromium',
+      'la hoja es el reflujo de movil: en cabecera no hay boton que abrir'
+    );
     await darAlta(page, { nombre: 'Tomate', cantidad: '500' }); // g
     await darAlta(page, { nombre: 'Leche', cantidad: '2', unidad: 'l' });
 
@@ -281,14 +336,19 @@ test.describe('Pantry — inventario en tabla', () => {
 
     // y el filtro: la hoja encaja el mismo panel del cabezal, sin copias
     await page.locator('[data-test="hoja-filtro-unit"]').click();
-    await page.locator('.hoja__cuerpo .menu__fila', { hasText: 'l' }).locator('button[role="checkbox"]').click();
+    await page
+      .locator('.hoja__cuerpo .menu__fila', { hasText: 'l' })
+      .locator('button[role="checkbox"]')
+      .click();
     await page.locator('[data-test="hoja-cerrar"]').click();
 
     await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
     await expect(fila(page, 'Leche')).toHaveCount(1);
   });
 
-  test('las sugerencias viven en un expand cerrado; al abrirlo, el chip prellena el alta', async ({ page }) => {
+  test('las sugerencias viven en un expand cerrado; al abrirlo, el chip prellena el alta', async ({
+    page
+  }) => {
     await expect(page.locator('.suggestions__title')).toContainText('Sugerencias comunes');
     await expect(page.locator('.suggestions .chip')).toHaveCount(0); // cerrado por defecto (## 12ab)
 
@@ -310,16 +370,26 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(toggle).toHaveAttribute('aria-expanded', 'true'); // sigue abierta: nadie la cerro
   });
 
-  test('paginar: el tamano corta y las flechas mueven la ventana de filas', async ({ page }) => {
+  test('paginar: el tamano corta y las flechas mueven la ventana de filas', async ({
+    page
+  }, testInfo) => {
     // Once filas con nombre numerado: a 10 por pagina, la onceava vive en la pagina 2
     for (let i = 1; i <= 11; i++) {
       await darAlta(page, { nombre: `Fila ${String(i).padStart(2, '0')}`, cantidad: String(i) });
     }
-    await tabla(page).locator('[data-test="tabla-tamano-10"]').click();
+    await ponTamano(tabla(page), 10);
 
     await expect(tabla(page).locator('[data-test="tabla-rango"]')).toContainText('1-10 de 11');
-    await expect(tabla(page).locator('[data-test="tabla-pagina"]')).toContainText('Pagina 1 de 2');
+    await expect(tabla(page).locator('[data-test="tabla-pagina"]')).toContainText('Página 1 de 2');
     await expect(tabla(page).locator('[data-test="tabla-anterior"]')).toBeDisabled();
+    // El paginador nuevo (## 12ad): las dos paginas salen como botones y la actual lleva aria-current. Por
+    // debajo de 640px la hilera se pliega (regla D): quedan flechas y contador; lo propio de la hilera, aqui.
+    const esMovil = testInfo.project.name !== 'chromium';
+    if (!esMovil)
+      await expect(tabla(page).locator('[data-test="tabla-pagina-1"]')).toHaveAttribute(
+        'aria-current',
+        'true'
+      );
 
     await tabla(page).locator('[data-test="tabla-siguiente"]').click();
     // El orden por defecto es el del server (llega por creacion), asi que la pagina 2 se comprueba por su
@@ -328,5 +398,36 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
     await expect(tabla(page).locator('tr.ingredient-item').first()).toContainText('Fila ');
     await expect(tabla(page).locator('[data-test="tabla-siguiente"]')).toBeDisabled();
+
+    // Saltar por numero: con dos paginas en pantalla, el boton «1» lleva de vuelta y deja de estar activo.
+    if (esMovil) {
+      await expect(tabla(page).locator('[data-test="tabla-pagina-1"]')).toBeHidden(); // plegado por diseno (D)
+      await tabla(page).locator('[data-test="tabla-anterior"]').click();
+    } else {
+      await tabla(page).locator('[data-test="tabla-pagina-1"]').click();
+      await expect(tabla(page).locator('[data-test="tabla-pagina-1"]')).toHaveAttribute(
+        'aria-current',
+        'true'
+      );
+    }
+    await expect(tabla(page).locator('[data-test="tabla-rango"]')).toContainText('1-10 de 11');
+
+    // Re-ancla (## 12ad): en la pagina 2, pasar a 50 por pagina devuelve a la 1 (la onceava fila viaja ahi).
+    await tabla(page).locator('[data-test="tabla-siguiente"]').click();
+    await expect(tabla(page).locator('[data-test="tabla-rango"]')).toContainText('11-11 de 11');
+    await ponTamano(tabla(page), 50);
+    await expect(tabla(page).locator('[data-test="tabla-pagina"]')).toContainText('Página 1 de 1');
+
+    // Shift+click = tramo estilo Windows, inclusivo y reemplazando: de la 1 a la 4, cuatro filas (## 12ad).
+    await ponTamano(tabla(page), 10);
+    const casillas = tabla(page).locator(
+      'tr.tabla__fila [data-test^="tabla-marcar-"] button[role="checkbox"]'
+    );
+    await casillas.nth(0).click();
+    await expect(page.locator('[data-test="pantry-lote"]')).toContainText('1 seleccionado');
+    await casillas.nth(3).click({ modifiers: ['Shift'] });
+    await expect(page.locator('[data-test="pantry-lote"]')).toContainText('4 seleccionados');
+    await page.locator('[data-test="pantry-lote-anular"]').click();
+    await expect(page.locator('[data-test="pantry-lote"]')).toHaveCount(0);
   });
 });
