@@ -14,6 +14,8 @@ import { createHousehold, registerAndGoto, registerWithHousehold } from './helpe
 const tabla = (page: Page): Locator => page.locator('[data-test="utensilios-tabla"]');
 const filas = (page: Page): Locator => tabla(page).locator('tr.tabla__fila');
 const casillaDe = (fila: Locator): Locator => fila.locator('[data-test^="utensil-marcar-"]').locator('button[role="checkbox"]');
+  // La casilla de la tabla (seleccion de lote) no es la del «tengo» de la fila: dos cosas distintas.
+  const seleccionDe = (fila: Locator): Locator => fila.locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]');
 
 test.describe('Pantry — catalogo de utensilios en tabla', () => {
   test.beforeEach(async ({ page }) => {
@@ -56,7 +58,10 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
 
     await tabla(page).locator('[data-test="tabla-filtro-available"]').click();
     const menu = page.locator('.menu');
-    await menu.locator('.menu__fila', { hasText: 'Disponible' }).locator('button[role="checkbox"]').click();
+    // Excel-fiel, dos veces: las casillas nacen marcadas y se DESMARCA lo que estorba (quitar «No
+    // disponible» deja los suyos), y el filtro por texto lleva ancla porque «Disponible» es substring de
+    // «No disponible» sin distinguir mayusculas.
+    await menu.locator('.menu__fila', { hasText: /^No disponible/ }).locator('button[role="checkbox"]').click();
     await expect(filas(page)).toHaveCount(1);
     await page.keyboard.press('Escape');
 
@@ -151,8 +156,8 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
   test('el lote marca y desmarca de golpe, con anular para soltar la seleccion', async ({ page }) => {
     await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
 
-    await casillaDe(filas(page).first()).click();
-    await casillaDe(filas(page).nth(1)).click();
+    await seleccionDe(filas(page).first()).click();
+    await seleccionDe(filas(page).nth(1)).click();
     await expect(page.locator('[data-test="utensilios-lote"]')).toContainText('2 seleccionados');
 
     await page.locator('[data-test="utensilios-lote-marcar"]').click();
@@ -161,13 +166,13 @@ test.describe('Pantry — catalogo de utensilios en tabla', () => {
     await expect(page.locator('.utensils-meta')).toContainText('2 de 54 marcados');
     await expect(page.locator('[data-test="utensilios-lote"]')).toHaveCount(0); // la accion suelta la seleccion sola
 
-    await casillaDe(filas(page).first()).click();
-    await casillaDe(filas(page).nth(1)).click();
+    await seleccionDe(filas(page).first()).click();
+    await seleccionDe(filas(page).nth(1)).click();
     await page.locator('[data-test="utensilios-lote-desmarcar"]').click();
     await expect(page.locator('.utensil-card--owned')).toHaveCount(0);
 
     // y «anular» suelta el lote sin tocar el inventario de nadie
-    await casillaDe(filas(page).first()).click();
+    await seleccionDe(filas(page).first()).click();
     await expect(page.locator('[data-test="utensilios-lote"]')).toBeVisible();
     await page.locator('[data-test="utensilios-lote-anular"]').click();
     await expect(page.locator('[data-test="utensilios-lote"]')).toHaveCount(0);

@@ -74,7 +74,10 @@ test.describe('Pantry — inventario en tabla', () => {
     await page.fill('input#search', 'nada-que-ver');
     await expect(tabla(page)).toHaveCount(0);
 
-    // F5 con la busqueda puesta: la pantalla vuelve igual, sin depender del server
+    // F5 con la busqueda puesta: la pantalla vuelve igual, sin depender del server. Antes de recargar se
+    // espera a que la URL refleje lo ultimo escrito (el repaso es con debounce; si no, el F5 hereda una
+    // busqueda vieja y la prueba mide otra cosa).
+    await expect(page).toHaveURL(/[?&]buscar=nada-que-ver/);
     await page.reload();
     await expect(page.locator('input#search')).toHaveValue('nada-que-ver');
     await expect(tabla(page)).toHaveCount(0);
@@ -169,10 +172,9 @@ test.describe('Pantry — inventario en tabla', () => {
     await tabla(page).locator('[data-test="tabla-orden-quantity"]').click();
     await expect(primeraFila).toContainText('Leche');
 
-    // shift+click anade el secundario: por ubicacion ascendente dentro de cantidad ascendente… con una sola
-    // ubicacion sembrada no se aprecia, asi que se comprueba la cabecera: el ② aparece en la columna.
+    // Un orden solitario no lleva numero: la insignia ①…② solo aparece con dos criterios o mas.
     await tabla(page).locator('[data-test="tabla-orden-name"]').click(); // click suelto: la columna manda sola otra vez
-    await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveText('1');
+    await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveCount(0);
     // Shift sujeto con el teclado, no con `modifiers`: es el gesto exacto del usuario, y deja menos
     // margen a que el navegador reparta el clic sin la tecla pisada.
     await page.keyboard.down('Shift');
@@ -180,13 +182,17 @@ test.describe('Pantry — inventario en tabla', () => {
     await page.keyboard.up('Shift');
     await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveText('1');
     await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveText('2');
-    // Y el secundario se puede quitar solo, conservando el primario: shift+clic sobre quantity lo suelta.
+    // Y la secundaria se suelta como en Excel: otra pulsacion la invierte (asc→desc) y la siguiente la
+    // quita del orden, dejando la primaria intacta. Rotacion firmada en la spec de la util.
     await page.keyboard.down('Shift');
     await tabla(page).locator('[data-test="tabla-orden-quantity"]').click();
     await page.keyboard.up('Shift');
-    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"]')).toHaveCount(1); // sigue la columna
-    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveCount(0); // sin gemelo
-    await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveCount(0); // y manda sola
+    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveText('2'); // invertida, sigue segunda
+    await page.keyboard.down('Shift');
+    await tabla(page).locator('[data-test="tabla-orden-quantity"]').click();
+    await page.keyboard.up('Shift');
+    await expect(tabla(page).locator('[data-test="tabla-orden-quantity"] .th__ord')).toHaveCount(0); // fuera del orden
+    await expect(tabla(page).locator('[data-test="tabla-orden-name"] .th__ord')).toHaveCount(0); // y Nombre manda solo
 
     // y a 100 por pagina, la cuenta del pie dice la realidad
     await tabla(page).locator('[data-test="tabla-tamano-100"]').click();
