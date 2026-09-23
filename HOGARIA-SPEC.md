@@ -3839,6 +3839,43 @@ pantallas cambian de modelo de datos:
 - Seguir usando `?q=` compartido con `buscar=` del visor sería coherente, pero rompe contratos de tanda 30 y el
   e2e de tab-urls: se anota, no se hace.
 
+### I. Cierre de la tanda (2026-09-23)
+
+- [x] Utils del gestor por TDD (`pantry-gestor.util.spec.ts`, 24/24): `cargarTodasLasPaginas` (corta por
+      `total`/`hasMore`/tope 2.000 y devuelve `null` si una página falla, nunca media lista muda),
+      `caducaEnTresDias` (ventana HOY..HOY+3 inclusiva, como `date('now','+3 days')` del server) y
+      `coincideGestor` (OR de campos sin acentos, consulta vacía lo deja pasar todo).
+- [x] `app-data-table` gana `resultadoChange`: el conjunto filtrado y ordenado ANTES del corte de página,
+      emitido por un effect sobre un computed nuevo; es lo que consume el botón «añadir los de la pantalla»
+      del catálogo, para que respete también los menús de columna.
+- [x] Catálogo reescrito al molde de la tabla: riel de pasillos → `app-picker` (con color, cuenta del
+      subárbol y grupos), paginación manual → paginador de la tabla, `?offset=` jubilado, dataset completo
+      en memoria con `coincideGestor` + `clavesSubarbolDe`, selección múltiple con lote (POST /catalog/add
+      sin confirmación: no es destructivo) y botón por fila conservado.
+- [x] Productos: chips `staples/in-pantry/expiring/all` y búsqueda (nombre y alias, sin acentos) en memoria
+      con la semántica exacta del server; picker `opcionesOrden` y `?sort=` fuera; su lote con impacto
+      (`bulkProductImpact` → ConfirmService → `bulk-delete` todo-o-nada) conservado; ficha y alta intactas.
+- [x] Categorías: vista y búsqueda en memoria (recuentos del server, proyectados en la fila para que los menús
+      numéricos sean de verdad), columnas nombre/padres/productos/en subárbol/subcategorías/acciones, y lote =
+      bucle DELETE solo sobre `canDelete` con las no-borrables anunciadas EN la confirmación; ficha intacta.
+- [x] i18n es+en: columnas nuevas (pasillo, cesta, productos, en subárbol, subcategorías), `editar_producto`,
+      lote de categorías y «añadir los de la pantalla»; bajas reales: `catalogo_anadir_visibles`,
+      `opcionesOrden`-claves (`orden_por_nombre`, `orden_recientes`), `siguiente`, `cuenta_sin_articulos` y
+      `cuenta_articulos_descendientes` — cero huérfanas (check-ui).
+- [x] e2e en la misma tanda: `pantry-managers.spec.ts` (12 tests: lote de categorías con salto de la reserva,
+      lote de productos con impacto, menú de columna estilo Excel, búsqueda sin acentos, F5 sin `?sort=`) y
+      `pantry-catalog.spec.ts` (5 tests: carga completa con paginador de tabla, pasillo-picker con URL,
+      selección-lote sin confirmación, alta que sale en el gestor). Verdes íntegros en escritorio y en
+      mobile-chrome local.
+- [x] Puertas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration
+      production` 0 · karma de lo tocado 49/49 · suite del server intacta (no se tocó).
+- [x] Run de CI como juez (`35846007180`): las dos suites reescritas, verdes; el conjunto de rojos finales es
+      el mismo que en el run de la tanda anterior (deuda preexistente: account, calendar, ai-goal, shopping ×3
+      familias, recipes, y el «sin results.json» del job full-stack, ya rojo igual en `a2a5125`). Un detalle
+      que solo enseñó el navegador local: el prefijo `catalogo-anadir-` de las filas choca con el botón de
+      pantalla de la barra —los selectors de alta pasan a `.celda__accion` dentro de la fila—.
+- [ ] Validación manual del usuario en la preview (escritorio y móvil emulado).
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
