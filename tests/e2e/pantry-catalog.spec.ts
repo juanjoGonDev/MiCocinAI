@@ -2,13 +2,18 @@ import { test, expect } from './fixtures';
 import { registerWithHousehold } from './helpers/auth';
 
 /**
- * El visor del catálogo pre-registrado (HOGARIA-SPEC ## 12aa).
+ * El visor del catálogo pre-registrado (HOGARIA-SPEC ## 12aa; tabla, lote y pasillo-picker en la ## 12ac).
  *
  * Lo que prueba no es la calidad del dato —eso vive en `supermarket-catalog.spec.ts` del server— sino la
- * promesa que la pantalla le hace a quien la usa: se entra desde la franja del inventario, se busca sin
- * acentos, la fila se añade con un clic y la propia fila avisa de que ya es tuya; «Añadir lo visible» manda
- * la página entera y no duplica nada. El estado vive en la URL, y aqui se comprueba entrando directo por ella.
+ * promesa que la pantalla le hace a quien la usa desde que es la tabla del visor: que el catálogo se carga
+ * ENTERO y la tabla pagea sola, que buscar sin acentos encuentra, que la fila se añade con un clic y pasa a
+ * «en casa», que «añadir lo de la pantalla» manda las filas filtradas —no la página— y no duplica nada, y
+ * que el pasillo, minimizado a picker, sigue filtrando el subárbol entero. El estado vive en la URL, y aqui
+ * se comprueba entrando directo por ella.
  */
+const filaDe = (page: import('@playwright/test').Page, texto: string | RegExp) =>
+  page.locator('[data-test^="tabla-fila-"]').filter({ hasText: texto });
+
 test.describe('El catálogo del supermercado', () => {
   test.beforeEach(async ({ page }) => {
     await registerWithHousehold(page, '/pantry');
@@ -19,55 +24,96 @@ test.describe('El catálogo del supermercado', () => {
     await expect(page).toHaveURL(/\/pantry\/catalogo/);
     await expect(page.locator('h1')).toContainText('Catálogo del supermercado');
 
+    // El conjunto completo, no la pagina de antes: el contador dice todos los productos, y la tabla corta 24.
+    await expect(page.locator('[data-test="catalogo-resultados"]')).toContainText(/\d{3,} productos/);
+    await expect(page.locator('[data-test^="tabla-fila-"]')).toHaveCount(24);
+
     await page.locator('#catalogo-q').fill('leche');
     await expect(page.locator('[data-test="catalogo-resultados"]')).toContainText('productos');
-    await expect(page.locator('.lista .fila').first()).toBeVisible();
 
     // La primera fila con botón: el seed de la casa ya conoce alguna leche, y esas vienen marcadas en casa.
     const fila = page
-      .locator('.lista .fila')
-      .filter({ has: page.locator('[data-test^="catalogo-anadir-"]') })
+      .locator('[data-test^="tabla-fila-"]')
+      .filter({ has: page.locator('.celda__accion') })
       .first();
-    const nombre = (await fila.locator('.fila__nombre').innerText()).trim();
+    const nombre = (await fila.locator('.celda--nombre').innerText()).trim();
     await fila.locator('[data-test^="catalogo-anadir-"]').click();
-    await expect(page.locator('.toast--success .toast__title').last()).toContainText('añadido a tu inventario');
-    await expect(page.locator('.lista .fila', { hasText: nombre }).locator('.fila__en-casa')).toContainText('En tu inventario');
+    await expect(page.locator('.toast--success .toast__title').last()).toContainText(nombre);
+    await expect(filaDe(page, nombre).locator('[data-test="catalogo-en-casa"]')).toContainText('En tu inventario');
 
-    // «Añadir lo visible» cuenta lo que de verdad entra y deja la página sin botones: no duplica.
-    await page.locator('[data-test="catalogo-anadir-visibles"]').click();
-    await expect(page.locator('.toast--success .toast__title').last()).toContainText('productos añadidos a tu inventario');
-    await expect(page.locator('[data-test^="catalogo-anadir-"]')).toHaveCount(0);
+    // «Añadir lo de la pantalla» cuenta las filas del resultado (no la pagina ni el catalogo) y no duplica.
+    await expect(page.locator('[data-test="catalogo-anadir-filtrados"]')).toBeEnabled();
+    await page.locator('[data-test="catalogo-anadir-filtrados"]').click();
+    await expect(page.locator('.toast--success .toast__title').last()).toContainText('a tu inventario');
+    // Las filas de la pantalla pasan todas a «en casa»; puede quedar alguna que el server conto como saltada
+    // por parecerse a un producto de la casa que no es esta ficha: el lote no duplica, y eso es lo que se prueba.
+    await expect(page.locator('[data-test^="tabla-fila-"]').locator('.celda__accion')).toHaveCount(0);
+    await expect(page.locator('[data-test="catalogo-anadir-filtrados"]')).toBeDisabled();
 
     await page.locator('[data-test="catalogo-volver"]').click();
     await expect(page).toHaveURL(/\/pantry$/);
     await expect(page.locator('h1.pantry__title')).toContainText('Inventario');
+    // Y lo que se anadio es de la casa: sale en el inventario con su unidad.
+    await expect(filaDe(page, nombre)).toBeVisible();
+  });
+
+  test('la seleccion multiple anade un lote sin confirmacion (no es destructivo)', async ({ page }) => {
+    await page.goto('/pantry/catalogo?q=mantequilla');
+    const conBoton = page
+      .locator('[data-test^="tabla-fila-"]')
+      .filter({ has: page.locator('.celda__accion') });
+    await expect(conBoton.first()).toBeVisible();
+    await conBoton.first().locator('[data-test^="tabla-marcar-"]').locator('button[role="checkbox"]').click();
+    await expect(page.locator('[data-test="catalogo-lote"]')).toContainText('1 seleccionado');
+    await page.locator('[data-test="catalogo-lote-anadir"]').click();
+    await expect(page.locator('.toast--success .toast__title').last()).toContainText('añadido a tu inventario');
+    await expect(page.locator('[data-test="catalogo-lote"]')).toHaveCount(0);
   });
 
   test('la query hidratada al montar: entrar directo por URL pinta el pasillo y la búsqueda', async ({ page }) => {
     await page.goto('/pantry/catalogo?q=aceite');
     await expect(page.locator('#catalogo-q')).toHaveValue('aceite');
-    await expect(page.locator('.lista .fila').filter({ hasText: 'Aceite de oliva virgen extra' })).not.toHaveCount(0);
+    await expect(filaDe(page, 'Aceite de oliva virgen extra')).not.toHaveCount(0);
 
     await page.goto('/pantry/catalogo?cat=vegetables');
-    await expect(page.locator('[data-test="catalogo-filtro-vegetables"]')).toHaveClass(/pasillo--activa/);
-    await expect(page.locator('.lista .fila').first()).toBeVisible();
+    await expect(page.locator('[data-test="catalogo-filtro-pasillo"] button')).toContainText('Verduras');
+    await expect(filaDe(page, /./).first()).toBeVisible();
 
-    // El padre filtra su subárbol: más filas que su primera hoja, y ninguna de otro pasillo.
+    // El padre filtra su subárbol desde memoria, y el contador es el del subárbol: 334 como firma el server.
     await page.goto('/pantry/catalogo?cat=alimentos');
-    await expect(page.locator('[data-test="catalogo-filtro-alimentos"]')).toHaveClass(/pasillo--activa/);
     await expect(page.locator('[data-test="catalogo-resultados"]')).toContainText('334 productos');
+  });
+
+  test('el pasillo se elige y se quita con el picker, y la URL lo cuenta todo', async ({ page }) => {
+    await page.goto('/pantry/catalogo');
+    await page.locator('[data-test="catalogo-filtro-pasillo"] button').click();
+    await page.getByRole('option', { name: /Verduras/ }).click();
+    await expect(page).toHaveURL(/cat=vegetables/);
+    const contador = (await page.locator('[data-test="catalogo-resultados"]').innerText()).trim();
+
+    // Quitar el pasillo: la opcion «Todos» —el picker del visor, no un riel que se queda clavado—.
+    await page.locator('[data-test="catalogo-filtro-pasillo"] button').click();
+    await page.getByRole('option', { name: /Todos los pasillos/ }).click();
+    await expect(page).not.toHaveURL(/cat=/);
+    await expect(page.locator('[data-test="catalogo-resultados"]')).not.toHaveText(contador);
+
+    // Y la busqueda viaja con el pasillo en la misma URL.
+    await page.locator('#catalogo-q').fill('espinaca');
+    await expect(page).toHaveURL(/q=espinaca/);
   });
 
   test('lo que el catálogo alta sale en el gestor de productos, con su padre en el de categorías', async ({ page }) => {
     await page.goto('/pantry/catalogo?q=levadura');
-    await page.locator('[data-test^="catalogo-anadir-"]').first().click();
+    await page.locator('[data-test^="tabla-fila-"]').filter({ has: page.locator('.celda__accion') }).locator('.celda__accion').first().click();
     await expect(page.locator('.toast--success .toast__title').last()).toContainText('Levadura química');
 
     await page.goto('/pantry/products?filter=all&q=levadura');
-    await expect(page.locator('.lista .fila').filter({ hasText: 'Levadura química' })).not.toHaveCount(0);
+    await expect(filaDe(page, 'Levadura química')).not.toHaveCount(0);
 
     await page.goto('/pantry/categories');
     await expect(page.locator('[data-test="gestor-categorias-fila-alimentos"]')).toContainText('Alimentos');
-    await expect(page.locator('[data-test="gestor-categorias-fila-grains"]')).toContainText('Alimentos');
+    // `Cereales` cuelga de `Alimentos`: el padre es una COLUMNA en la tabla, no un texto bajo el nombre.
+    const granos = page.locator('[data-test^="tabla-fila-"]').filter({ has: page.locator('[data-test="gestor-categorias-fila-grains"]') });
+    await expect(granos.locator('.celda--padre')).toHaveText('Alimentos');
   });
 });
