@@ -18,7 +18,7 @@ import {
   DataTableCellDirective
 } from '../../shared/components/ui/data-table/data-table.component';
 import type { DataTableColumna } from '../../shared/components/ui/data-table/data-table.types';
-import { quitarAcentos } from '../../shared/components/ui/data-table/data-table.util';
+import { quitarAcentos, valorTipado } from '../../shared/components/ui/data-table/data-table.util';
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
@@ -516,7 +516,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
       <!-- Add Custom Utensil Modal -->
       <app-modal
         [isOpen]="isUtensilModalOpen()"
-        [attr.title]="'pantry.agregar_utensilio' | t"
+        [title]="'pantry.agregar_utensilio' | t"
         size="md"
         (onClose)="closeUtensilModal()"
       >
@@ -939,7 +939,12 @@ export class PantryComponent implements OnInit {
   /** Utensilios por la busqueda; el orden, la pagina y los filtros de columna los ve la tabla (## 12ab). */
   utensiliosFiltrados = computed(() => {
     const q = this.utensiliosQ().trim();
-    const todos = this.pantryService.utensils();
+    // El «tengo» llega 0/1 del server y true/false del guardado optimista: si se cuela la forma cruda, el
+    // menu de la columna «estado» agrupa dos veces el mismo estado. Se normaliza al entrar en la tabla.
+    const crudos = this.pantryService.utensils();
+    const todos = crudos.some((u) => u.available !== !!u.available)
+      ? crudos.map((u) => ({ ...u, available: !!u.available }))
+      : crudos;
     if (!q) return todos;
     return todos.filter((u) => quitarAcentos(u.name.toLowerCase()).includes(quitarAcentos(q.toLowerCase())));
   });
@@ -973,7 +978,9 @@ export class PantryComponent implements OnInit {
       { clave: 'name', etiqueta: this.i18n.t('pantry.columna_nombre'), celda: 'nombre' },
       { clave: 'category', etiqueta: this.i18n.t('pantry.categoria'), etiquetaValor: (v) => etiquetas.get(String(v)) ?? String(v) },
       { clave: 'available', etiqueta: this.i18n.t('pantry.estado'), tipo: 'booleano', celda: 'estado',
-        etiquetaValor: (v) => v === true ? this.i18n.t('pantry.disponible') : this.i18n.t('pantry.no_disponible') },
+        // El menu de la columna pasa la clave ya empaquetada ('true'/'false'), no el booleano: hay que
+        // destiparla aqui o todo el mundo sale «no disponible» (## 12ab, rojo de la sonda).
+        etiquetaValor: (v) => valorTipado(v, 'booleano') === true ? this.i18n.t('pantry.disponible') : this.i18n.t('pantry.no_disponible') },
       { clave: 'acciones', etiqueta: this.i18n.t('pantry.acciones'), celda: 'acciones', ordenable: false, filtrable: false, alineacion: 'end', ancho: '64px' }
     ];
   });
