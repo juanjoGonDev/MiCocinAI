@@ -1,4 +1,5 @@
 import type { PantryCategory } from '../../shared/models/pantry.model';
+import { claveDeDia, hoyLocal, quitarAcentos, sumarDias } from '../../shared/components/ui/data-table/data-table.util';
 
 /**
  * Lo que las dos pantallas del gestor calculan sin tocar el DOM (HOGARIA-SPEC ## 12x).
@@ -135,4 +136,61 @@ export function clavesSubarbolDe(
     }
   }
   return claves;
+}
+
+/** La pagina tal y como la devuelven los tres endpoints de lista del gestor; `null` es «no llego». */
+export type PaginaGestor<T> = { data: readonly T[]; meta?: { total?: number } | null; hasMore?: boolean } | null;
+
+/**
+ * Todas las filas de una consulta, de pagina en pagina (HOGARIA-SPEC ## 12ac).
+ *
+ * Los tres gestores leian su pagina de 10 y paginaban a mano; la tabla que sustituye a esas listas filtra,
+ * ordena y pagina en cliente, y necesita el conjunto completo —filtrar una pagina es la mentira que la casa
+ * ya corrigio en el visor (## 12ab). El server no deja pasar de `limit=100` (lo fija el schema), asi que la
+ * unica forma honesta de tenerlo todo es recorrer las paginas aqui.
+ *
+ * Para cuando la pagina llega vacia, cuando se cubre el `total` que anuncia el server, cuando el server dice
+ * `hasMore: false`, o al chocar con el `tope` (el mismo techo de 2.000 filas del visor: es un guardagabanes,
+ * no una politica de producto). `null` de una pagina = peticion fallida: se devuelve `null` en vez de una
+ * media lista muda —la pantalla decide entonces que pinta, y nunca filas a medias por descuido.
+ */
+export async function cargarTodasLasPaginas<T>(
+  pedirPagina: (offset: number, tamano: number) => Promise<PaginaGestor<T>>,
+  tamano = 100,
+  tope = 2000
+): Promise<T[] | null> {
+  const salida: T[] = [];
+  let offset = 0;
+  for (;;) {
+    const pagina = await pedirPagina(offset, tamano);
+    if (!pagina) return null;
+    const filas = pagina.data ?? [];
+    for (const fila of filas) if (salida.length < tope) salida.push(fila as T);
+    offset += filas.length;
+    const total = pagina.meta?.total;
+    if (filas.length === 0) break;
+    if (salida.length >= tope) break;
+    if (typeof total === 'number' && offset >= total) break;
+    if (pagina.hasMore === false) break;
+  }
+  return salida;
+}
+
+/** El dia caduca dentro de los proximos tres (hoy incluido), contado POR DIA —la misma leccion del server
+ *  de la ## 12z: contra el instante, lo que caduca hoy cuenta como caducado desde la primera hora. */
+export function caducaEnTresDias(valor: unknown, hoy: string = hoyLocal()): boolean {
+  const dia = claveDeDia(valor);
+  if (!dia) return false;
+  return dia >= hoy && dia <= sumarDias(hoy, 3);
+}
+
+/**
+ * La busqueda de las cajas del gestor: sin acentos y sin mayusculas, sobre cualquiera de los campos que la
+ * pantalla nombre (el producto encuentra el alias; la categoria, la clave; el catalogo, solo el nombre, que
+ * es lo que buscaba `buscarProductos` del server). Con la caja vacia lo deja pasar todo.
+ */
+export function coincideGestor(campos: readonly (string | null | undefined)[], consulta: string): boolean {
+  const q = quitarAcentos(consulta.trim().toLowerCase());
+  if (!q) return true;
+  return campos.some((campo) => !!campo && quitarAcentos(campo.toLowerCase()).includes(q));
 }

@@ -8,7 +8,10 @@ import {
   colorDeCategoria,
   normalizarAlias,
   offsetDeQuery,
-  valorDeQuery
+  valorDeQuery,
+  cargarTodasLasPaginas,
+  caducaEnTresDias,
+  coincideGestor
 } from './pantry-gestor.util';
 
 // El `es` del diccionario es la fuente de la verdad para estas pruebas: el semillero del server escribe los
@@ -169,5 +172,70 @@ describe('clavesSubarbolDe (## 12ab)', () => {
   it('un callejon sin hijos es el mismo; y un ciclo no lo monta nadie (no hay padres repetidos)', () => {
     expect(clavesSubarbolDe(arbol, 'frutas')).toEqual(new Set(['frutas']));
     expect(clavesSubarbolDe(arbol, 'other')).toEqual(new Set(['other']));
+  });
+});
+
+describe('cargarTodasLasPaginas (## 12ac: la carga completa de los gestores)', () => {
+  it('recorre las paginas por orden hasta el total, sin pedir de mas', async () => {
+    const pedidos: number[] = [];
+    const paginas = new Map<number, { data: number[]; total: number }>([
+      [0, { data: [1, 2, 3], total: 5 }],
+      [3, { data: [4, 5], total: 5 }]
+    ]);
+    const salida = await cargarTodasLasPaginas(async (offset) => {
+      pedidos.push(offset);
+      const pagina = paginas.get(offset);
+      if (!pagina) return null;
+      return { data: pagina.data, meta: { total: pagina.total }, hasMore: offset + pagina.data.length < pagina.total };
+    }, 3, 2000);
+    expect(salida).toEqual([1, 2, 3, 4, 5]);
+    expect(pedidos).toEqual([0, 3]);
+  });
+
+  it('corta en el tope y devuelve null si una pagina falla', async () => {
+    const corta = await cargarTodasLasPaginas(
+      async (offset) => ({ data: [offset], meta: { total: 100000 }, hasMore: true }),
+      1,
+      3
+    );
+    expect(corta).toEqual([0, 1, 2]);
+
+    let llamadas = 0;
+    const rota = await cargarTodasLasPaginas(async () => {
+      llamadas += 1;
+      return llamadas === 1 ? { data: [1], meta: { total: 9 }, hasMore: true } : null;
+    }, 1, 9);
+    expect(rota).toBeNull();
+  });
+
+  it('una pagina vacia es la lista legalmente vacia, no un fallo', async () => {
+    const salida = await cargarTodasLasPaginas(
+      async () => ({ data: [], meta: { total: 0 }, hasMore: false }),
+      10,
+      2000
+    );
+    expect(salida).toEqual([]);
+  });
+});
+
+describe('caducaEnTresDias (## 12ac: el chip «caducan» del gestor, en dias)', () => {
+  it('cuenta por dia, no por instante, y el limite de los tres dias entra', () => {
+    expect(caducaEnTresDias('2026-10-04T22:10:00', '2026-10-01')).toBe(true);
+    expect(caducaEnTresDias('2026-10-04', '2026-10-01')).toBe(true);
+    expect(caducaEnTresDias('2026-10-05', '2026-10-01')).toBe(false);
+    expect(caducaEnTresDias('2026-09-30', '2026-10-01')).toBe(false);
+    expect(caducaEnTresDias(null, '2026-10-01')).toBe(false);
+    expect(caducaEnTresDias('2026/10/02', '2026-10-01')).toBe(true);
+  });
+});
+
+describe('coincideGestor (## 12ac: la caja busca sin acentos como el visor)', () => {
+  it('casa cualquier campo listado, con la consulta vacia lo deja todo pasar', () => {
+    expect(coincideGestor(['Tomate', 'picadillo'], 'TOMA')).toBe(true);
+    expect(coincideGestor(['Tomate', 'picadillo'], 'PICADI')).toBe(true);
+    expect(coincideGestor(['Limon'], 'limÓN')).toBe(true);
+    expect(coincideGestor(['A'], '')).toBe(true);
+    expect(coincideGestor([null, undefined, ''], 'x')).toBe(false);
+    expect(coincideGestor(['Levadura'], 'naranja')).toBe(false);
   });
 });
