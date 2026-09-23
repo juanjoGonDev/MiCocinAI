@@ -22,13 +22,22 @@ process.env.NODE_ENV = 'test';
 // antes que la app.
 type App = Awaited<ReturnType<typeof import('./app.js').createApp>>;
 
-let createApp: (options?: { rateLimit?: { windowMs: number; limit: number } | null; staticDir?: string | null }) => App;
+let createApp: (options?: {
+  rateLimit?: { windowMs: number; limit: number } | null;
+  staticDir?: string | null;
+}) => App;
 let isRateLimitExempt: (pathname: string) => boolean;
-let rateLimitKey: (authorization: string | undefined, forwarded: string | undefined, realIp: string | undefined) => string;
+let rateLimitKey: (
+  authorization: string | undefined,
+  forwarded: string | undefined,
+  realIp: string | undefined
+) => string;
 let resolveStaticAsset: (staticDir: string, pathname: string) => string | null;
 let resolveStaticDir: (env: Record<string, string | undefined>, base?: string) => string | null;
 let retryAfterSeconds: (windowMs: number, resetHeader: string | null) => number;
-let rateLimitFromEnv: (env: Record<string, string | undefined>) => { windowMs: number; limit: number } | null;
+let rateLimitFromEnv: (
+  env: Record<string, string | undefined>
+) => { windowMs: number; limit: number } | null;
 let getLogs: (options?: { limit?: number; level?: string }) => { message: string }[];
 let clearLogs: () => void;
 let installConsoleCapture: () => void;
@@ -179,10 +188,41 @@ describe('estaticos', () => {
 
   it('el limitador se apaga y se configura, y una tonteria no lo apaga', () => {
     expect(rateLimitFromEnv({ DISABLE_RATE_LIMIT: '1' })).toBeNull();
-    expect(rateLimitFromEnv({ RATE_LIMIT_WINDOW_MS: '30000', RATE_LIMIT_MAX: '42' })).toEqual({ windowMs: 30000, limit: 42 });
+    expect(rateLimitFromEnv({ RATE_LIMIT_WINDOW_MS: '30000', RATE_LIMIT_MAX: '42' })).toEqual({
+      windowMs: 30000,
+      limit: 42
+    });
     // `RATE_LIMIT_MAX=0` no puede significar «sin limite»: alguien lo pondra pensando
     // en apagarlo y se encontrara con una API que 429-loquea. Se vuelve al defecto.
     expect(rateLimitFromEnv({ RATE_LIMIT_MAX: '0' })).toEqual({ windowMs: 60_000, limit: 600 });
     expect(rateLimitFromEnv({})).toEqual({ windowMs: 60_000, limit: 600 });
+  });
+});
+
+describe('el visor de logs, servido por el propio proceso', () => {
+  it('el stream responde text/event-stream: sin esa cabecera, EventSource aborta', async () => {
+    // El fallo historico: `stream()` de Hono fabricaba una Response con `text/plain`, y el
+    // navegador cortaba la conexion con el MIME en la nariz —el visor se quedaba en
+    // «Reintentando» mientras el servidor escribia y escribia—. Ninguna prueba de desarrollo
+    // miraba esa pantalla; la mira esta. Y la mira de verdad es el job full-stack, que por
+    // culpa del `import.meta` del config llevaba rondas sin enterarse de nada.
+    const app = createApp({ rateLimit: null });
+    const res = await app.request('/api/logs/stream');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/event-stream');
+
+    // Primera encuadre:: comentario de apertura y el evento `connected`. Si esto no sale, el visor
+    // no sale de «Conectando» ni con toda la suerte del mundo.
+    const reader = res.body?.getReader();
+    expect(reader).toBeTruthy();
+    const decoder = new TextDecoder();
+    let texto = '';
+    for (let i = 0; i < 6 && !texto.includes('data: {"type":"connected"'); i++) {
+      const chunk = await reader!.read();
+      if (chunk.done) break;
+      texto += decoder.decode(chunk.value, { stream: true });
+    }
+    await reader!.cancel().catch(() => undefined);
+    expect(texto).toContain('data: {"type":"connected"');
   });
 });

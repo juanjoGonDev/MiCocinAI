@@ -1,6 +1,4 @@
 import { defineConfig, devices } from '@playwright/test';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 /**
  * Playwright contra el proyecto ENTERO levantado como en produccion: un unico proceso
@@ -18,7 +16,10 @@ import { fileURLToPath } from 'node:url';
  * Local:  `npm run build && npx playwright test -c playwright.full-stack.config.ts`
  */
 
-const root = dirname(fileURLToPath(import.meta.url));
+// Nada de `import.meta` ni `__dirname`: Playwright carga este fichero como CJS (el package.json de la raiz
+// no declara `type: module`) y ahi `import.meta` es un SyntaxError que tumba el job ANTES de escribir un
+// solo resultado —el fallo que persigue este fix—. `testDir`, `globalSetup` y el `webServer` se resuelven
+// solos contra la carpeta de esta config, que es la raiz del repo.
 const port = Number(process.env.E2E_FULL_STACK_PORT ?? 3100);
 const base = process.env.E2E_BASE_URL ?? `http://localhost:${port}`;
 
@@ -47,13 +48,21 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] }
+      use: {
+        ...devices['Desktop Chrome'],
+        // Solo para entornos sin el navegador de Playwright (sandboxes sin acceso a su CDN):
+        // `E2E_CHROME_BIN=/ruta/al/chrome`. En CI la variable no existe y manda el navegador instalado.
+        ...(process.env.E2E_CHROME_BIN ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } } : {})
+      }
     },
     {
       // Movil de verdad: el 429 se manifesto en el telefono, y el SSE del visor de logs
       // se corta de otra forma cuando el viewport (y el teclado en pantalla) mandan.
       name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] }
+      use: {
+        ...devices['Pixel 5'],
+        ...(process.env.E2E_CHROME_BIN ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } } : {})
+      }
     }
   ],
   webServer: {
@@ -62,7 +71,8 @@ export default defineConfig({
     // del `dist` (`frontend/dist/browser`, `./public`...), que es lo que hace en el
     // contenedor, y asi este config tampoco se queda apuntando a una ruta vieja.
     command: 'node server/dist/index.js',
-    cwd: root,
+    // Sin `cwd`: Playwright la pone en el directorio de esta config (la raiz), que es donde `server/dist`
+    // y `frontend/dist` viven.
     url: `${base}/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
@@ -70,7 +80,8 @@ export default defineConfig({
       PORT: String(port),
       NODE_ENV: 'production',
       // BD propia por puerto, para poder tener el server de desarrollo y este a la vez.
-      DATABASE_PATH: join(root, 'server', 'data', `hogaria-e2e-full-stack-${port}.sqlite`),
+      // Relativo a la raiz del repo (el cwd del webServer): BD propia por puerto, para poder tener el
+      // server de desarrollo y este a la vez.      DATABASE_PATH: `server/data/hogaria-e2e-full-stack-${port}.sqlite`,
       // El limitador NO se apaga: es lo que se viene a probar aqui.
       E2E_SEED: process.env.E2E_SEED ?? ''
     }
