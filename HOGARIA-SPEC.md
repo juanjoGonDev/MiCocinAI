@@ -3895,7 +3895,9 @@ para que columna y celda apunten al mismo eje.
 Mantener Shift y pulsar la casilla de una fila marca el TRAMO desde la última fila pulsada sin Shift hasta la
 pulsada ahora (ambos inclusives), en el orden visible de la página actual —igual que el explorador de Windows:
 el tramo REEMPLAZA la selección, no se suma—. Sin ancla previa, el Shift+click se comporta como un click
-normal. La captura se hace en la fase `capture` del propio `td--check` (`stopPropagation` cuando hay Shift,
+normal. El gesto vive en el `click` (fase burbuja) del propio `td--check`: cuando hay Shift, el toggle que el
+`app-checkbox` ya hizo queda absorbido porque el tramo reemplaza la seleccion; sin Shift, el `td` solo mueve el
+ancla y deja trabajar al boton. (Angular no admite el modificador `.capture` en la sintaxis de eventos.)
 que así no llega al `app-checkbox` y no hay doble toggle); el ancla vive en el componente (guarda el id, no el
 índice: el orden cambia al filtrar y el índice envejece mal) y se actualiza en todo click normal y en
 `togglePagina` (el ancla pasa a ser la primera fila de la página). Cambiar de página o de filtros no rompe el

@@ -10,6 +10,7 @@ import {
   offsetDeQuery,
   valorDeQuery,
   cargarTodasLasPaginas,
+  claveDeProductoCasa,
   caducaEnTresDias,
   coincideGestor
 } from './pantry-gestor.util';
@@ -87,14 +88,23 @@ describe('normalizarAlias', () => {
 
   it('veinte es el techo, y vacio no entra', () => {
     expect(normalizarAlias('   ', 'Leche', [])).toEqual({ error: 'vacio' });
-    expect(normalizarAlias('otra', 'Leche', Array.from({ length: 20 }, (_, i) => `a-${i}`))).toBeNull();
+    expect(
+      normalizarAlias(
+        'otra',
+        'Leche',
+        Array.from({ length: 20 }, (_, i) => `a-${i}`)
+      )
+    ).toBeNull();
   });
 });
 
 describe('aliasVisibles', () => {
   it('la fila no baile: tres y un «+n» con el resto', () => {
     expect(aliasVisibles(['a', 'b'])).toEqual({ visibles: ['a', 'b'], ocultos: 0 });
-    expect(aliasVisibles(['a', 'b', 'c', 'd', 'e'])).toEqual({ visibles: ['a', 'b', 'c'], ocultos: 2 });
+    expect(aliasVisibles(['a', 'b', 'c', 'd', 'e'])).toEqual({
+      visibles: ['a', 'b', 'c'],
+      ocultos: 2
+    });
   });
 });
 
@@ -105,11 +115,15 @@ describe('la etiqueta de una categoria (## 12x)', () => {
   });
 
   it('en cuanto la casa le cambia el nombre, gana lo que ella escribio: el diccionario no corrige datos', () => {
-    expect(pantryCategoryLabel({ key: 'vegetables', name: 'Verduras de la huerta' }, tEn)).toBe('Verduras de la huerta');
+    expect(pantryCategoryLabel({ key: 'vegetables', name: 'Verduras de la huerta' }, tEn)).toBe(
+      'Verduras de la huerta'
+    );
   });
 
   it('una categoria creada por la casa se pinta cruda en los dos idiomas', () => {
-    expect(pantryCategoryLabel({ key: 'frutos secos', name: 'Frutos secos' }, tEn)).toBe('Frutos secos');
+    expect(pantryCategoryLabel({ key: 'frutos secos', name: 'Frutos secos' }, tEn)).toBe(
+      'Frutos secos'
+    );
   });
 
   it('una clave sin fila (la borraron y el articulo se quedo) se pinta como lo que es: una clave', () => {
@@ -129,7 +143,9 @@ const query = (pares: Record<string, string>): { get(campo: string): string | nu
 describe('el estado de la lista vuelve de la query', () => {
   it('lo que la query dice manda, si es un valor conocido', () => {
     const filtros = ['all', 'staples', 'in-pantry', 'expiring'] as const;
-    expect(valorDeQuery(query({ filter: 'in-pantry' }), 'filter', filtros, 'staples')).toBe('in-pantry');
+    expect(valorDeQuery(query({ filter: 'in-pantry' }), 'filter', filtros, 'staples')).toBe(
+      'in-pantry'
+    );
     expect(valorDeQuery(query({}), 'filter', filtros, 'staples')).toBe('staples');
   });
 
@@ -167,7 +183,9 @@ describe('clavesSubarbolDe (## 12ab)', () => {
     { key: 'other', parentKey: null }
   ];
   it('sube la raiz y baja por todos los nietos', () => {
-    expect(clavesSubarbolDe(arbol, 'alimentos')).toEqual(new Set(['alimentos', 'verduras', 'frutas', 'bocadillos']));
+    expect(clavesSubarbolDe(arbol, 'alimentos')).toEqual(
+      new Set(['alimentos', 'verduras', 'frutas', 'bocadillos'])
+    );
   });
   it('un callejon sin hijos es el mismo; y un ciclo no lo monta nadie (no hay padres repetidos)', () => {
     expect(clavesSubarbolDe(arbol, 'frutas')).toEqual(new Set(['frutas']));
@@ -182,12 +200,20 @@ describe('cargarTodasLasPaginas (## 12ac: la carga completa de los gestores)', (
       [0, { data: [1, 2, 3], total: 5 }],
       [3, { data: [4, 5], total: 5 }]
     ]);
-    const salida = await cargarTodasLasPaginas(async (offset) => {
-      pedidos.push(offset);
-      const pagina = paginas.get(offset);
-      if (!pagina) return null;
-      return { data: pagina.data, meta: { total: pagina.total }, hasMore: offset + pagina.data.length < pagina.total };
-    }, 3, 2000);
+    const salida = await cargarTodasLasPaginas(
+      async (offset) => {
+        pedidos.push(offset);
+        const pagina = paginas.get(offset);
+        if (!pagina) return null;
+        return {
+          data: pagina.data,
+          meta: { total: pagina.total },
+          hasMore: offset + pagina.data.length < pagina.total
+        };
+      },
+      3,
+      2000
+    );
     expect(salida).toEqual([1, 2, 3, 4, 5]);
     expect(pedidos).toEqual([0, 3]);
   });
@@ -201,10 +227,14 @@ describe('cargarTodasLasPaginas (## 12ac: la carga completa de los gestores)', (
     expect(corta).toEqual([0, 1, 2]);
 
     let llamadas = 0;
-    const rota = await cargarTodasLasPaginas(async () => {
-      llamadas += 1;
-      return llamadas === 1 ? { data: [1], meta: { total: 9 }, hasMore: true } : null;
-    }, 1, 9);
+    const rota = await cargarTodasLasPaginas(
+      async () => {
+        llamadas += 1;
+        return llamadas === 1 ? { data: [1], meta: { total: 9 }, hasMore: true } : null;
+      },
+      1,
+      9
+    );
     expect(rota).toBeNull();
   });
 
@@ -237,5 +267,31 @@ describe('coincideGestor (## 12ac: la caja busca sin acentos como el visor)', ()
     expect(coincideGestor(['A'], '')).toBe(true);
     expect(coincideGestor([null, undefined, ''], 'x')).toBe(false);
     expect(coincideGestor(['Levadura'], 'naranja')).toBe(false);
+  });
+});
+
+// ── tanda 32 (## 12ad): la clave de producto del server, portada al cliente ──
+
+describe('claveDeProductoCasa (## 12ad)', () => {
+  it('normaliza acentos, mayusculas y puntuacion de sobra', () => {
+    expect(claveDeProductoCasa('Levadura-Fresca.')).toBe('levadura-fresca');
+    expect(claveDeProductoCasa('  Leche   SIN LACTOSA ')).toBe('leche sin lactosa');
+  });
+  it('quita la cantidad entre parentesis y el «x3» entero, como el server', () => {
+    expect(claveDeProductoCasa('Leche Semi (1L)')).toBe('leche semi');
+    expect(claveDeProductoCasa('Manzanas x3')).toBe('manzanas');
+  });
+  it('abrevia las unidades reconocidas', () => {
+    expect(claveDeProductoCasa('Harina Kilos 2')).toBe('harina kg 2');
+    expect(claveDeProductoCasa('Agua litros')).toBe('agua l');
+  });
+  it('conserva los modificadores que cambian el producto y quita los rellenos', () => {
+    expect(claveDeProductoCasa('Leche de la vaca')).toBe('leche vaca');
+    expect(claveDeProductoCasa('Leche sin lactosa')).toBe('leche sin lactosa');
+    expect(claveDeProductoCasa('Leche con lactosa')).toBe('leche con lactosa');
+  });
+  it('la vacia es vacia', () => {
+    expect(claveDeProductoCasa('')).toBe('');
+    expect(claveDeProductoCasa(null as unknown as string)).toBe('');
   });
 });

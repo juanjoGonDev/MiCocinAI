@@ -29,12 +29,15 @@ import {
   MeasurementUnit,
   StorageLocation,
   Utensil,
-  UtensilCategory,
+  UtensilCategory
 } from '../../shared/models/pantry.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
 import { PantryCategoryLabelPipe } from '../../shared/pipes/pantry-category-label.pipe';
-import { PickerComponent, type PickerOption } from '../../shared/components/ui/picker/picker.component';
+import {
+  PickerComponent,
+  type PickerOption
+} from '../../shared/components/ui/picker/picker.component';
 import { pantryCategoryLabel } from '../../core/i18n/labels';
 import type { PantryCategoryKey } from '../../shared/models/pantry.model';
 import type { TranslationKey } from '../../core/i18n';
@@ -56,14 +59,23 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
   standalone: true,
   imports: [
     TranslatePipe,
-    
-    CommonModule, FormsModule,
-    ButtonComponent, InputComponent, CardComponent,
-    BadgeComponent, ModalComponent, LoadingComponent, CheckboxComponent, DataTableComponent, DataTableCellDirective
-  , CatalogLabelPipe,
+
+    CommonModule,
+    FormsModule,
+    ButtonComponent,
+    InputComponent,
+    CardComponent,
+    BadgeComponent,
+    ModalComponent,
+    LoadingComponent,
+    CheckboxComponent,
+    DataTableComponent,
+    DataTableCellDirective,
+    CatalogLabelPipe,
     PantryCategoryLabelPipe,
     PickerComponent,
-    IconComponent],
+    IconComponent
+  ],
   template: `
     <div class="pantry">
       <!-- Header -->
@@ -73,7 +85,11 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
         </div>
         <div class="pantry__header-acciones">
           <!-- ## 12aa: el alta manual sigue, pero la puerta rapida al inventario de la casa es el catalogo. -->
-          <app-button variant="secondary" (onClick)="abrirCatalogo()" data-test="pantry-anadir-catalogo">
+          <app-button
+            variant="secondary"
+            (onClick)="abrirCatalogo()"
+            data-test="pantry-anadir-catalogo"
+          >
             {{ 'pantry.catalogo_anadir' | t }}
           </app-button>
           <app-button variant="primary" (onClick)="openAddModal()">
@@ -104,25 +120,30 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
 
       <!-- ═══════════════ INGREDIENTS TAB ═══════════════ -->
       <ng-container *ngIf="activeTab() === 'ingredients'">
-
         <!-- Stats Cards -->
         <div class="pantry__stats" *ngIf="pantryService.stats() as stats">
           <div class="stat-card stat-card--total">
-            <span class="stat-card__icon"><app-icon name="inventory_2" [size]="22" [label]="null" /></span>
+            <span class="stat-card__icon"
+              ><app-icon name="inventory_2" [size]="22" [label]="null"
+            /></span>
             <div class="stat-card__content">
               <span class="stat-card__value">{{ inPantryCount() }}</span>
               <span class="stat-card__label">{{ 'pantry.en_despensa' | t }}</span>
             </div>
           </div>
           <div class="stat-card stat-card--warning">
-            <span class="stat-card__icon"><app-icon name="schedule" [size]="22" [label]="null" /></span>
+            <span class="stat-card__icon"
+              ><app-icon name="schedule" [size]="22" [label]="null"
+            /></span>
             <div class="stat-card__content">
               <span class="stat-card__value">{{ stats.expiringSoon }}</span>
               <span class="stat-card__label">{{ 'pantry.por_caducar' | t }}</span>
             </div>
           </div>
           <div class="stat-card stat-card--danger">
-            <span class="stat-card__icon"><app-icon name="error_outline" [size]="22" [label]="null" /></span>
+            <span class="stat-card__icon"
+              ><app-icon name="error_outline" [size]="22" [label]="null"
+            /></span>
             <div class="stat-card__content">
               <span class="stat-card__value">{{ stats.expired }}</span>
               <span class="stat-card__label">{{ 'pantry.caducados' | t }}</span>
@@ -137,42 +158,52 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
         <div class="pantry__gestion" data-test="pantry-gestion">
           <span class="gestion__titulo">{{ 'pantry.gestion_del_inventario' | t }}</span>
           <span class="gestion__acciones">
-            <button type="button" class="gestion__enlace" (click)="abrirGestor('categories')" data-test="pantry-abrir-categorias">
+            <button
+              type="button"
+              class="gestion__enlace"
+              (click)="abrirGestor('categories')"
+              data-test="pantry-abrir-categorias"
+            >
               {{ 'pantry.gestor_categorias' | t }}
             </button>
-            <button type="button" class="gestion__enlace" (click)="abrirGestor('products')" data-test="pantry-abrir-productos">
+            <button
+              type="button"
+              class="gestion__enlace"
+              (click)="abrirGestor('products')"
+              data-test="pantry-abrir-productos"
+            >
               {{ 'pantry.gestor_productos' | t }}
             </button>
-            <button type="button" class="gestion__enlace" (click)="abrirGestor('catalogo')" data-test="pantry-abrir-catalogo">
+            <button
+              type="button"
+              class="gestion__enlace"
+              (click)="abrirGestor('catalogo')"
+              data-test="pantry-abrir-catalogo"
+            >
               <app-icon name="storefront" [size]="16" [label]="null" />
               <span>{{ 'pantry.catalogo_titulo' | t }}</span>
             </button>
           </span>
         </div>
 
-        <!-- Busqueda + filtro de categorias minimizado (## 12ab): el riel con scroll era un div con barras. -->
+        <!-- La busqueda se fue arriba de la tabla (regla E, ## 12ad); aqui queda el filtro de categoria. -->
         <div class="pantry__filters">
-          <app-input
-            id="search"
-            name="search"
-            type="search"
-            [placeholder]="'pantry.buscar_ingredientes' | t"
-            [ngModel]="searchTerm()"
-            (ngModelChange)="escribirBusqueda($event)"
-          ></app-input>
           <div class="pantry__filtro-cat">
             <app-picker
               [options]="opcionesFiltroCategoria()"
               [value]="filtroCategoria()"
               [placeholder]="'pantry.categoria_todos' | t"
-              [label]="('pantry.categoria' | t)"
+              [label]="'pantry.categoria' | t"
               data-test="pantry-filtro-categoria"
               (valueChange)="elegirCategoria($event)"
             />
           </div>
         </div>
 
-        <app-loading *ngIf="pantryService.isLoading()" [message]="'pantry.cargando_ingredientes' | t"></app-loading>
+        <app-loading
+          *ngIf="pantryService.isLoading()"
+          [message]="'pantry.cargando_ingredientes' | t"
+        ></app-loading>
 
         <div *ngIf="!pantryService.isLoading()">
           <!-- Lo que la casa conoce y no tiene: un expand cerrado por defecto (## 12ab). -->
@@ -187,9 +218,20 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                   (click)="alternarSugerencias()"
                   data-test="pantry-sugerencias-toggle"
                 >
-                  <span class="suggestions__cuenta">{{ 'pantry.sugerencias_cuenta' | t: { n: suggestions().length } }}</span>
-                  <span class="suggestions__verbo">{{ (sugerenciasAbiertas() ? 'pantry.sugerencias_cerrar' : 'pantry.sugerencias_abrir') | t }}</span>
-                  <app-icon [name]="sugerenciasAbiertas() ? 'expand_less' : 'expand_more'" [size]="18" [label]="null" />
+                  <span class="suggestions__cuenta">{{
+                    'pantry.sugerencias_cuenta' | t: { n: suggestions().length }
+                  }}</span>
+                  <span class="suggestions__verbo">{{
+                    (sugerenciasAbiertas()
+                      ? 'pantry.sugerencias_cerrar'
+                      : 'pantry.sugerencias_abrir'
+                    ) | t
+                  }}</span>
+                  <app-icon
+                    [name]="sugerenciasAbiertas() ? 'expand_less' : 'expand_more'"
+                    [size]="18"
+                    [label]="null"
+                  />
                 </button>
               </div>
               @if (sugerenciasAbiertas()) {
@@ -203,7 +245,11 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                       [title]="s.name | catalog"
                       [attr.data-test]="'pantry-sugerencia-' + s.id"
                     >
-                      <span class="chip__punto" [style.background]="colorDe(s.category)" aria-hidden="true"></span>
+                      <span
+                        class="chip__punto"
+                        [style.background]="colorDe(s.category)"
+                        aria-hidden="true"
+                      ></span>
                       <span class="chip__name">{{ s.name | catalog }}</span>
                       <span class="chip__plus">+</span>
                     </button>
@@ -213,7 +259,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
             </div>
           }
 
-          @if (filasInventario().length > 0) {
+          @if (filasInventario().length > 0 || hayInventario()) {
             <app-data-table
               #tablaInv
               data-test="pantry-tabla-inventario"
@@ -225,21 +271,61 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
               [claseFila]="claseFilaInv"
               (seleccionChange)="inventarioSeleccion.set($event)"
             >
+              <div data-tabla-buscar class="pantry__buscar-tabla">
+                <app-input
+                  id="search"
+                  name="search"
+                  type="search"
+                  [placeholder]="'pantry.buscar_ingredientes' | t"
+                  [ngModel]="searchTerm()"
+                  (ngModelChange)="escribirBusqueda($event)"
+                ></app-input>
+              </div>
               <div data-tabla-lote>
                 @if (inventarioSeleccion().length > 0) {
                   <div class="lote" data-test="pantry-lote">
-                    <span class="lote__cta">{{ 'pantry.seleccionados' | t: { n: inventarioSeleccion().length } }}</span>
+                    <span class="lote__cta">{{
+                      'pantry.seleccionados' | t: { n: inventarioSeleccion().length }
+                    }}</span>
                     <span class="lote__acciones">
-                      <button type="button" class="lote__btn" (click)="loteVaciar()" data-test="pantry-lote-vaciar">{{ 'pantry.lote_vaciar' | t }}</button>
-                      <button type="button" class="lote__btn lote__btn--peligro" (click)="loteBorrar()" data-test="pantry-lote-borrar">{{ 'pantry.lote_borrar' | t }}</button>
-                      <button type="button" class="lote__btn" (click)="loteAnular()" data-test="pantry-lote-anular">{{ 'pantry.lote_anular' | t }}</button>
+                      <button
+                        type="button"
+                        class="lote__btn"
+                        (click)="loteVaciar()"
+                        data-test="pantry-lote-vaciar"
+                      >
+                        {{ 'pantry.lote_vaciar' | t }}
+                      </button>
+                      <button
+                        type="button"
+                        class="lote__btn lote__btn--peligro"
+                        (click)="loteBorrar()"
+                        data-test="pantry-lote-borrar"
+                      >
+                        {{ 'pantry.lote_borrar' | t }}
+                      </button>
+                      <button
+                        type="button"
+                        class="lote__x"
+                        (click)="loteAnular()"
+                        data-test="pantry-lote-anular"
+                        [attr.aria-label]="'pantry.lote_anular' | t"
+                        [title]="'pantry.lote_anular' | t"
+                      >
+                        <app-icon name="close" [size]="16" [label]="null" />
+                      </button>
                     </span>
                   </div>
+                  <div class="lote__empuje" aria-hidden="true"></div>
                 }
               </div>
               <ng-template appDataTableCell="nombre" let-fila>
                 <span class="celda-nombre">
-                  <span class="ingredient-item__punto" [style.background]="colorDe(filaCat(fila))" aria-hidden="true"></span>
+                  <span
+                    class="ingredient-item__punto"
+                    [style.background]="colorDe(filaCat(fila))"
+                    aria-hidden="true"
+                  ></span>
                   <span>{{ filaNombre(fila) | catalog }}</span>
                 </span>
               </ng-template>
@@ -308,7 +394,9 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
               <span class="empty-state__icon">📦</span>
               <h3 class="empty-state__title">{{ 'pantry.empty' | t }}</h3>
               <p class="empty-state__text">{{ 'pantry.agrega_ingredientes_para_empezar' | t }}</p>
-              <app-button variant="primary" (onClick)="openAddModal()">{{ 'pantry.agregar_primer_ingrediente' | t }}</app-button>
+              <app-button variant="primary" (onClick)="openAddModal()">{{
+                'pantry.agregar_primer_ingrediente' | t
+              }}</app-button>
             </div>
           }
         </div>
@@ -320,22 +408,16 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
           <p>{{ 'pantry.marca_los_utensilios_y' | t }}</p>
         </div>
 
-        <app-loading *ngIf="utensilsLoading()" [message]="'onboarding.cargando_utensilios' | t"></app-loading>
+        <app-loading
+          *ngIf="utensilsLoading()"
+          [message]="'onboarding.cargando_utensilios' | t"
+        ></app-loading>
 
         <div *ngIf="!utensilsLoading()" class="utensils">
           <div class="utensils-meta">
-            <span>{{ 'pantry.de_marcados' | t:{owned: ownedUtensilsCount(), total: utensilTotal()} }}</span>
-          </div>
-
-          <div class="utensils-buscar">
-            <app-input
-              id="utensilios-q"
-              name="utensiliosQ"
-              type="search"
-              [placeholder]="'pantry.buscar_utensilios' | t"
-              [ngModel]="utensiliosQ()"
-              (ngModelChange)="utensiliosQ.set($event ?? '')"
-            />
+            <span>{{
+              'pantry.de_marcados' | t: { owned: ownedUtensilsCount(), total: utensilTotal() }
+            }}</span>
           </div>
 
           @if (utensilTotal() === 0) {
@@ -345,7 +427,9 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
               <p class="empty-state__text">
                 {{ 'pantry.anade_los_que_uses' | t }}
               </p>
-              <app-button variant="primary" (onClick)="openUtensilModal()">{{ 'pantry.anadir_utensilio' | t }}</app-button>
+              <app-button variant="primary" (onClick)="openUtensilModal()">{{
+                'pantry.anadir_utensilio' | t
+              }}</app-button>
             </div>
           } @else {
             <app-data-table
@@ -359,16 +443,52 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
               [claseFila]="claseFilaUti"
               (seleccionChange)="utensiliosSeleccion.set($event)"
             >
+              <div data-tabla-buscar class="pantry__buscar-tabla">
+                <app-input
+                  id="utensilios-q"
+                  name="utensiliosQ"
+                  type="search"
+                  [placeholder]="'pantry.buscar_utensilios' | t"
+                  [ngModel]="utensiliosQ()"
+                  (ngModelChange)="utensiliosQ.set($event ?? '')"
+                />
+              </div>
               <div data-tabla-lote>
                 @if (utensiliosSeleccion().length > 0) {
                   <div class="lote" data-test="utensilios-lote">
-                    <span class="lote__cta">{{ 'pantry.seleccionados' | t: { n: utensiliosSeleccion().length } }}</span>
+                    <span class="lote__cta">{{
+                      'pantry.seleccionados' | t: { n: utensiliosSeleccion().length }
+                    }}</span>
                     <span class="lote__acciones">
-                      <button type="button" class="lote__btn" (click)="loteUtensilios(true)" data-test="utensilios-lote-marcar">{{ 'pantry.lote_disponibles' | t }}</button>
-                      <button type="button" class="lote__btn" (click)="loteUtensilios(false)" data-test="utensilios-lote-desmarcar">{{ 'pantry.lote_no_disponibles' | t }}</button>
-                      <button type="button" class="lote__btn" (click)="loteUtensiliosAnular()" data-test="utensilios-lote-anular">{{ 'pantry.lote_anular' | t }}</button>
+                      <button
+                        type="button"
+                        class="lote__btn"
+                        (click)="loteUtensilios(true)"
+                        data-test="utensilios-lote-marcar"
+                      >
+                        {{ 'pantry.lote_disponibles' | t }}
+                      </button>
+                      <button
+                        type="button"
+                        class="lote__btn"
+                        (click)="loteUtensilios(false)"
+                        data-test="utensilios-lote-desmarcar"
+                      >
+                        {{ 'pantry.lote_no_disponibles' | t }}
+                      </button>
+                      <button
+                        type="button"
+                        class="lote__x"
+                        (click)="loteUtensiliosAnular()"
+                        data-test="utensilios-lote-anular"
+                        [attr.aria-label]="'pantry.lote_anular' | t"
+                        [title]="'pantry.lote_anular' | t"
+                      >
+                        <app-icon name="close" [size]="16" [label]="null" />
+                      </button>
                     </span>
                   </div>
+                  <div class="lote__empuje" aria-hidden="true"></div>
                 }
               </div>
               <ng-template appDataTableCell="estado" let-fila>
@@ -417,7 +537,11 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
       <!-- Add/Edit Ingredient Modal -->
       <app-modal
         [isOpen]="isIngredientModalOpen()"
-        [title]="editingIngredient() ? ('pantry.editar_ingrediente' | t) : ('pantry.agregar_ingrediente' | t)"
+        [title]="
+          editingIngredient()
+            ? ('pantry.editar_ingrediente' | t)
+            : ('pantry.agregar_ingrediente' | t)
+        "
         size="md"
         (onClose)="closeIngredientModal()"
       >
@@ -470,7 +594,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                 [options]="opcionesCategoria()"
                 [(value)]="formData.category"
                 [label]="'pantry.categoria' | t"
-                [placeholder]="('pantry.categoria' | t)"
+                [placeholder]="'pantry.categoria' | t"
                 data-test="pantry-picker-categoria"
               />
             </div>
@@ -482,7 +606,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                 [options]="opcionesUbicacion()"
                 [value]="formData.location"
                 (valueChange)="elegirUbicacion($event)"
-                [label]="('pantry.ubicacion' | t)"
+                [label]="'pantry.ubicacion' | t"
                 data-test="pantry-picker-ubicacion"
               />
             </div>
@@ -504,14 +628,16 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
             [(ngModel)]="formData.notes"
           ></app-input>
 
-      <div class="form-actions">
-        <app-button variant="ghost" type="button" (onClick)="closeIngredientModal()">{{ 'common.cancel' | t }}</app-button>
-        <app-button variant="primary" type="submit" [loading]="isSaving()">
-          {{ (editingIngredient() ? 'common.save' : 'pantry.agregar') | t }}
-        </app-button>
-      </div>
-    </form>
-  </app-modal>
+          <div class="form-actions">
+            <app-button variant="ghost" type="button" (onClick)="closeIngredientModal()">{{
+              'common.cancel' | t
+            }}</app-button>
+            <app-button variant="primary" type="submit" [loading]="isSaving()">
+              {{ (editingIngredient() ? 'common.save' : 'pantry.agregar') | t }}
+            </app-button>
+          </div>
+        </form>
+      </app-modal>
 
       <!-- Add Custom Utensil Modal -->
       <app-modal
@@ -556,303 +682,639 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
           </label>
 
           <div class="form-actions">
-            <app-button variant="ghost" type="button" (onClick)="closeUtensilModal()">{{ 'common.cancel' | t }}</app-button>
-            <app-button variant="primary" type="submit" [loading]="isSavingUtensil()">{{ 'pantry.agregar' | t }}</app-button>
+            <app-button variant="ghost" type="button" (onClick)="closeUtensilModal()">{{
+              'common.cancel' | t
+            }}</app-button>
+            <app-button variant="primary" type="submit" [loading]="isSavingUtensil()">{{
+              'pantry.agregar' | t
+            }}</app-button>
           </div>
         </form>
       </app-modal>
     </div>
   `,
-  styles: [`
-    .pantry {
-      padding: var(--space-4);
-      max-width: 1000px;
-      margin: 0 auto;
-    }
-    @media (min-width: 768px) { .pantry { padding: var(--space-6); } }
-
-    .pantry__header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: var(--space-4);
-    }
-    .pantry__title-section { display: flex; align-items: baseline; gap: var(--space-3); }
-    .pantry__title {
-      font-family: var(--font-display);
-      font-size: var(--text-2xl);
-      font-weight: var(--font-bold);
-    }
-
-    /* Tabs */
-    .pantry__tabs {
-      display: flex;
-      gap: var(--space-2);
-      border-bottom: 1px solid var(--border-default);
-      margin-bottom: var(--space-5);
-    }
-    .tab {
-      background: none;
-      border: none;
-      padding: var(--space-3) var(--space-4);
-      font-family: var(--font-sans);
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-      color: var(--text-secondary);
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
-      transition: var(--transition-fast);
-      &:hover { color: var(--text-primary); }
-      &--active {
-        color: var(--primary);
-        border-bottom-color: var(--primary);
+  styles: [
+    `
+      .pantry {
+        padding: var(--space-4);
+        max-width: 1000px;
+        margin: 0 auto;
       }
-    }
-    .tab__count {
-      background: var(--bg-tertiary);
-      border-radius: var(--radius-full);
-      padding: 1px 8px;
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-    }
-    .tab--active .tab__count {
-      background: var(--primary-subtle);
-      color: var(--primary-dark);
-    }
+      @media (min-width: 768px) {
+        .pantry {
+          padding: var(--space-6);
+        }
+      }
 
-    /* Stats: una franja profesional, no tres tarjetas sueltas (## 12aa). Una sola superficie con tres celdas
+      .pantry__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: var(--space-4);
+      }
+      .pantry__title-section {
+        display: flex;
+        align-items: baseline;
+        gap: var(--space-3);
+      }
+      .pantry__title {
+        font-family: var(--font-display);
+        font-size: var(--text-2xl);
+        font-weight: var(--font-bold);
+      }
+
+      /* Tabs */
+      .pantry__tabs {
+        display: flex;
+        gap: var(--space-2);
+        border-bottom: 1px solid var(--border-default);
+        margin-bottom: var(--space-5);
+      }
+      .tab {
+        background: none;
+        border: none;
+        padding: var(--space-3) var(--space-4);
+        font-family: var(--font-sans);
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        color: var(--text-secondary);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        transition: var(--transition-fast);
+        &:hover {
+          color: var(--text-primary);
+        }
+        &--active {
+          color: var(--primary);
+          border-bottom-color: var(--primary);
+        }
+      }
+      .tab__count {
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-full);
+        padding: 1px 8px;
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+      }
+      .tab--active .tab__count {
+        background: var(--primary-subtle);
+        color: var(--primary-dark);
+      }
+
+      /* Stats: una franja profesional, no tres tarjetas sueltas (## 12aa). Una sola superficie con tres celdas
        separadas por un hilo, y la cifra en tabular-nums para que el numero no baile al refrescar. */
-    .pantry__stats {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      margin-bottom: var(--space-5); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-xl); overflow: hidden;
-    }
-    .stat-card {
-      display: flex; align-items: center; gap: var(--space-3); min-width: 0;
-      padding: var(--space-3) var(--space-4); color: var(--text-secondary);
-    }
-    .stat-card + .stat-card { border-left: 1px solid var(--border-default); }
-    .stat-card__icon { display: grid; place-items: center; flex: none; }
-    .stat-card__content { display: flex; flex-direction: column; min-width: 0; }
-    .stat-card__value { font-size: var(--text-xl); font-weight: var(--font-bold); font-variant-numeric: tabular-nums; }
-    .stat-card__label { font-size: var(--text-xs); color: var(--text-secondary); }
-    @media (max-width: 600px) {
-      .pantry__stats { grid-template-columns: 1fr; }
-      .stat-card + .stat-card { border-left: none; border-top: 1px solid var(--border-default); }
-    }
-    .stat-card--warning .stat-card__value { color: var(--warning); }
-    .stat-card--danger .stat-card__value { color: var(--error); }
+      .pantry__stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin-bottom: var(--space-5);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        overflow: hidden;
+      }
+      .stat-card {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        min-width: 0;
+        padding: var(--space-3) var(--space-4);
+        color: var(--text-secondary);
+      }
+      .stat-card + .stat-card {
+        border-left: 1px solid var(--border-default);
+      }
+      .stat-card__icon {
+        display: grid;
+        place-items: center;
+        flex: none;
+      }
+      .stat-card__content {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+      .stat-card__value {
+        font-size: var(--text-xl);
+        font-weight: var(--font-bold);
+        font-variant-numeric: tabular-nums;
+      }
+      .stat-card__label {
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+      }
+      @media (max-width: 600px) {
+        .pantry__stats {
+          grid-template-columns: 1fr;
+        }
+        .stat-card + .stat-card {
+          border-left: none;
+          border-top: 1px solid var(--border-default);
+        }
+      }
+      .stat-card--warning .stat-card__value {
+        color: var(--warning);
+      }
+      .stat-card--danger .stat-card__value {
+        color: var(--error);
+      }
 
-    .pantry__header-acciones { display: flex; align-items: center; gap: var(--space-2); }
+      .pantry__header-acciones {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+      }
 
-    .pantry__filters {
-      display: flex; flex-wrap: wrap; align-items: flex-end;
-      gap: var(--space-3) var(--space-4); margin-bottom: var(--space-5);
-    }
-    .pantry__filters app-input { flex: 1 1 280px; min-width: 0; }
-    /* El filtro minimizado (## 12ab): un picker del sistema, no un riel con scroll. */
-    .pantry__filtro-cat { flex: 0 1 280px; min-width: 200px; }
-    /* La entrada al catalogo vive dentro de la pantalla del inventario y antes era una fila de botones sueltos:
+      .pantry__filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: var(--space-3) var(--space-4);
+        margin-bottom: var(--space-5);
+      }
+      .pantry__buscar-tabla {
+        max-width: 480px;
+      }
+      /* El filtro minimizado (## 12ab): un picker del sistema, no un riel con scroll. */
+      .pantry__filtro-cat {
+        flex: 0 1 280px;
+        min-width: 200px;
+      }
+      /* La entrada al catalogo vive dentro de la pantalla del inventario y antes era una fila de botones sueltos:
        ahora es una franja con su superficie, su titulo a la izquierda y sus acciones a la derecha, alineada con
        el resto de bloques de la pagina. */
-    .pantry__gestion {
-      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
-      gap: var(--space-3) var(--space-4); margin-bottom: var(--space-5);
-      padding: var(--space-4); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-xl);
-    }
-    .gestion__titulo {
-      font-family: var(--font-display); font-size: var(--text-base); font-weight: var(--font-semibold);
-      color: var(--text-primary); line-height: var(--leading-snug);
-    }
-    .gestion__acciones { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-    .gestion__enlace {
-      display: inline-flex; align-items: center; gap: var(--space-2);
-      padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
-      color: var(--text-primary); background: var(--bg-tertiary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .gestion__enlace:hover { border-color: var(--border-strong); background: var(--primary-subtle); }
-    .gestion__enlace:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-
-    /* La tabla del inventario (## 12ab): las piezas de siempre siguen vivas dentro de las celdas. */
-    .ingredient-item__punto { flex: none; width: 12px; height: 12px; border-radius: var(--radius-full); }
-    .celda-nombre {
-      display: inline-flex; align-items: center; gap: var(--space-2);
-      min-width: 0; font-weight: var(--font-medium);
-    }
-    .pantry__stock { display: inline-flex; align-items: center; gap: var(--space-1); }
-    .stock-btn {
-      display: grid; place-items: center; width: 36px; height: 36px; color: var(--text-secondary);
-      background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: var(--radius-md);
-      cursor: pointer; transition: var(--transition-fast);
-    }
-    .stock-btn:hover { color: var(--primary); border-color: var(--border-strong); background: var(--primary-subtle); }
-    .stock-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .ingredient-item__quantity { font-size: var(--text-xs); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-    .celda-caducidad { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
-    .ingrediente-acciones { display: flex; gap: var(--space-1); justify-content: flex-end; }
-    .action-btn {
-      display: flex; align-items: center; justify-content: center;
-      width: 40px; height: 40px; border-radius: var(--radius-md);
-      background: none; border: none; cursor: pointer; transition: var(--transition-fast);
-      color: var(--text-secondary);
-      &:hover { background: var(--bg-tertiary); color: var(--primary); }
-      &:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-      &--danger:hover { background: var(--error-subtle); color: var(--error); }
-    }
-    /* El lote (## 12ab): la barra de acciones sobre la seleccion, anclada en la cabecera de la tabla. */
-    .lote {
-      display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-      flex-wrap: wrap; padding: var(--space-2) var(--space-3);
-      background: var(--primary-subtle); border-radius: var(--radius-md);
-    }
-    .lote__cta { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-primary); }
-    .lote__acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-    .lote__btn {
-      font: inherit; font-size: var(--text-xs); padding: 6px 12px; cursor: pointer;
-      background: var(--bg-primary); color: var(--text-primary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-md);
-      transition: var(--transition-fast);
-    }
-    .lote__btn:hover { border-color: var(--primary); }
-    .lote__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .lote__btn--peligro { color: var(--error); }
-    .lote__btn--peligro:hover { border-color: var(--error); background: var(--error-subtle); }
-    @media (max-width: 959px) {
-      /* En movil el lote se queda pegado abajo: la tabla puede tener 25 filas y la seleccion no puede desaparecer. */
-      .lote { position: sticky; bottom: var(--space-2); box-shadow: var(--shadow-md); }
-    }
-
-    /* Suggestions */
-    .suggestions {
-      background: var(--primary-subtle);
-      border: 1px dashed var(--primary);
-      border-radius: var(--radius-lg);
-      padding: var(--space-4);
-      margin-bottom: var(--space-5);
-    }
-    .suggestions__header {
-      display: flex; justify-content: space-between; align-items: center;
-      flex-wrap: wrap; gap: var(--space-2);
-    }
-    /* Cerrado, el bloque se aprieta; abierto, respira antes de los chips. */
-    .suggestions__header:has(+ .suggestions__chips) { margin-bottom: var(--space-3); }
-    /* Cerrado por defecto (## 12ab): el contador y el verbo dicen que hay ocho cosas esperando. */
-    .suggestions__toggle {
-      display: inline-flex; align-items: center; gap: var(--space-2);
-      font: inherit; font-size: var(--text-xs); color: var(--text-secondary);
-      background: var(--bg-primary); border: 1px solid var(--border-default);
-      border-radius: var(--radius-full); padding: 4px 10px; cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .suggestions__toggle:hover { border-color: var(--border-strong); color: var(--text-primary); }
-    .suggestions__toggle:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .suggestions__cuenta { font-weight: var(--font-semibold); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
-    .suggestions__title { font-weight: var(--font-semibold); font-size: var(--text-sm); }
-    .suggestions__hint { font-size: var(--text-xs); color: var(--text-secondary); }
-    .suggestions__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-    .chip {
-      display: inline-flex; align-items: center; gap: var(--space-1);
-      padding: 6px 10px; background: var(--bg-primary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-full);
-      font-size: var(--text-xs); cursor: pointer; transition: var(--transition-fast);
-      font-family: var(--font-sans);
-      &:hover {
-        border-color: var(--primary); background: var(--bg-primary);
-        transform: translateY(-1px);
+      .pantry__gestion {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3) var(--space-4);
+        margin-bottom: var(--space-5);
+        padding: var(--space-4);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
       }
-    }
-    .chip__punto { flex: none; width: 10px; height: 10px; border-radius: var(--radius-full); }
-    .chip__plus { color: var(--primary); font-weight: var(--font-bold); }
+      .gestion__titulo {
+        font-family: var(--font-display);
+        font-size: var(--text-base);
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+        line-height: var(--leading-snug);
+      }
+      .gestion__acciones {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+      .gestion__enlace {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        font: inherit;
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        color: var(--text-primary);
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-full);
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .gestion__enlace:hover {
+        border-color: var(--border-strong);
+        background: var(--primary-subtle);
+      }
+      .gestion__enlace:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
 
-    /* Utensils */
-    .utensils-intro {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-lg);
-      padding: var(--space-3) var(--space-4);
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-      margin-bottom: var(--space-5);
-    }
-    .utensils { display: flex; flex-direction: column; }
-    /* Catalogo en tabla (## 12ab): meta arriba, busqueda propia, y la fila luce las clases de siempre. */
-    .utensils-meta { display: flex; justify-content: flex-end; margin-bottom: var(--space-2); }
-    .utensils-meta span { font-size: var(--text-xs); color: var(--text-secondary); font-variant-numeric: tabular-nums; }
-    .utensils-buscar { max-width: 360px; margin-bottom: var(--space-4); }
-    /* La pertenencia sigue viendose como la tarjeta de siempre: fondo verde suave en la fila entera. */
-    :host ::ng-deep tr.utensil-card--owned { background: var(--success-subtle); }
-    .utensil-card__delete {
-      /* El boton de borrar del catalogo: en la tabla esta siempre visible (el riel de hover era de la rejilla). */
-      width: 34px; height: 34px; font-size: 14px; opacity: 1;
-    }
-    .utensil-card__delete:hover { background: var(--error-subtle); color: var(--error); }
-    .utensil-card__delete:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .utensils-add {
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-lg);
-      padding: var(--space-4);
-    }
-    .utensils-add__title {
-      font-family: var(--font-display);
-      font-size: var(--text-base);
-      font-weight: var(--font-semibold);
-      margin: 0 0 var(--space-2);
-    }
-    .utensils-add__hint {
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-      margin: 0 0 var(--space-3);
-    }
-    .utensil-form {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
-    }
-    .utensil-form__check {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      font-size: var(--text-sm);
-      color: var(--text-primary);
-      cursor: pointer;
-    }
+      /* La tabla del inventario (## 12ab): las piezas de siempre siguen vivas dentro de las celdas. */
+      .ingredient-item__punto {
+        flex: none;
+        width: 12px;
+        height: 12px;
+        border-radius: var(--radius-full);
+      }
+      .celda-nombre {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+        font-weight: var(--font-medium);
+      }
+      .pantry__stock {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+      }
+      .stock-btn {
+        display: grid;
+        place-items: center;
+        width: 36px;
+        height: 36px;
+        color: var(--text-secondary);
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .stock-btn:hover {
+        color: var(--primary);
+        border-color: var(--border-strong);
+        background: var(--primary-subtle);
+      }
+      .stock-btn:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .ingredient-item__quantity {
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+      .celda-caducidad {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .ingrediente-acciones {
+        display: flex;
+        gap: var(--space-1);
+        justify-content: flex-end;
+      }
+      .action-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-md);
+        background: none;
+        border: none;
+        cursor: pointer;
+        transition: var(--transition-fast);
+        color: var(--text-secondary);
+        &:hover {
+          background: var(--bg-tertiary);
+          color: var(--primary);
+        }
+        &:focus-visible {
+          outline: 2px solid var(--primary);
+          outline-offset: 2px;
+        }
+        &--danger:hover {
+          background: var(--error-subtle);
+          color: var(--error);
+        }
+      }
+      /* ── lote flotante (## 12ad, regla F) ──
+       Barra centrada abajo, por encima de la tarjeta pero por debajo de la hoja de filtros y su velo (55/60).
+       El «empuje» es el hueco que deja la tarjeta para que la ultima fila jamas quede tapada por la barra. */
+      .lote {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+        z-index: 45;
+        width: min(calc(100% - 2 * var(--space-4)), 1000px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+        padding: var(--space-2) var(--space-4);
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+      }
+      /* Con la barra de navegacion inferior (<=1023px), el lote sube por encima, como los toasts. */
+      @media (max-width: 1023px) {
+        .lote {
+          bottom: calc(
+            var(--space-4) + var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px)
+          );
+        }
+      }
+      .lote__empuje {
+        height: 76px;
+      }
+      .lote__cta {
+        font-size: var(--text-sm);
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+      }
+      .lote__acciones {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .lote__btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font: inherit;
+        font-size: var(--text-xs);
+        padding: 6px 12px;
+        cursor: pointer;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        transition: var(--transition-fast);
+      }
+      .lote__btn:hover {
+        border-color: var(--primary);
+      }
+      .lote__btn:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .lote__btn--peligro {
+        color: var(--error);
+      }
+      .lote__btn--peligro:hover {
+        border-color: var(--error);
+        background: var(--error-subtle);
+      }
+      .lote__btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .lote__x {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        background: none;
+        color: var(--text-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .lote__x:hover {
+        color: var(--error);
+        border-color: var(--error);
+        background: var(--error-subtle);
+      }
+      .lote__x:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
 
-    /* Form */
-    .ingredient-form { display: flex; flex-direction: column; gap: var(--space-4); }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
-    .form-field { display: flex; flex-direction: column; gap: var(--space-1); }
-    .form-label { font-size: var(--text-sm); font-weight: var(--font-medium); color: var(--text-primary); }
-    .form-select, .form-input {
-      width: 100%; padding: var(--space-2) var(--space-3);
-      font-family: var(--font-sans); font-size: var(--text-sm);
-      color: var(--text-primary); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-lg);
-      &:focus { outline: none; border-color: var(--primary); }
-    }
-    .form-actions { display: flex; justify-content: flex-end; gap: var(--space-3); margin-top: var(--space-4); }
+      /* Suggestions */
+      .suggestions {
+        background: var(--primary-subtle);
+        border: 1px dashed var(--primary);
+        border-radius: var(--radius-lg);
+        padding: var(--space-4);
+        margin-bottom: var(--space-5);
+      }
+      .suggestions__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+      /* Cerrado, el bloque se aprieta; abierto, respira antes de los chips. */
+      .suggestions__header:has(+ .suggestions__chips) {
+        margin-bottom: var(--space-3);
+      }
+      /* Cerrado por defecto (## 12ab): el contador y el verbo dicen que hay ocho cosas esperando. */
+      .suggestions__toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        font: inherit;
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        background: var(--bg-primary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-full);
+        padding: 4px 10px;
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .suggestions__toggle:hover {
+        border-color: var(--border-strong);
+        color: var(--text-primary);
+      }
+      .suggestions__toggle:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .suggestions__cuenta {
+        font-weight: var(--font-semibold);
+        color: var(--text-tertiary);
+        font-variant-numeric: tabular-nums;
+      }
+      .suggestions__title {
+        font-weight: var(--font-semibold);
+        font-size: var(--text-sm);
+      }
+      .suggestions__hint {
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+      }
+      .suggestions__chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        padding: 6px 10px;
+        background: var(--bg-primary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-full);
+        font-size: var(--text-xs);
+        cursor: pointer;
+        transition: var(--transition-fast);
+        font-family: var(--font-sans);
+        &:hover {
+          border-color: var(--primary);
+          background: var(--bg-primary);
+          transform: translateY(-1px);
+        }
+      }
+      .chip__punto {
+        flex: none;
+        width: 10px;
+        height: 10px;
+        border-radius: var(--radius-full);
+      }
+      .chip__plus {
+        color: var(--primary);
+        font-weight: var(--font-bold);
+      }
 
-    /* Empty */
-    .empty-state {
-      display: flex; flex-direction: column; align-items: center;
-      padding: var(--space-12); text-align: center;
-    }
-    .empty-state__icon { font-size: 64px; margin-bottom: var(--space-4); }
-    .empty-state__title {
-      font-family: var(--font-display); font-size: var(--text-xl);
-      font-weight: var(--font-semibold); margin-bottom: var(--space-2);
-    }
-    .empty-state__text { font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-6); }
+      /* Utensils */
+      .utensils-intro {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: var(--space-3) var(--space-4);
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        margin-bottom: var(--space-5);
+      }
+      .utensils {
+        display: flex;
+        flex-direction: column;
+      }
+      /* Catalogo en tabla (## 12ab): meta arriba, busqueda propia, y la fila luce las clases de siempre. */
+      .utensils-meta {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: var(--space-2);
+      }
+      .utensils-meta span {
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        font-variant-numeric: tabular-nums;
+      }
+      .utensils-buscar {
+        max-width: 360px;
+        margin-bottom: var(--space-4);
+      }
+      /* La pertenencia sigue viendose como la tarjeta de siempre: fondo verde suave en la fila entera. */
+      :host ::ng-deep tr.utensil-card--owned {
+        background: var(--success-subtle);
+      }
+      .utensil-card__delete {
+        /* El boton de borrar del catalogo: en la tabla esta siempre visible (el riel de hover era de la rejilla). */
+        width: 34px;
+        height: 34px;
+        font-size: 14px;
+        opacity: 1;
+      }
+      .utensil-card__delete:hover {
+        background: var(--error-subtle);
+        color: var(--error);
+      }
+      .utensil-card__delete:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .utensils-add {
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: var(--space-4);
+      }
+      .utensils-add__title {
+        font-family: var(--font-display);
+        font-size: var(--text-base);
+        font-weight: var(--font-semibold);
+        margin: 0 0 var(--space-2);
+      }
+      .utensils-add__hint {
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        margin: 0 0 var(--space-3);
+      }
+      .utensil-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+      }
+      .utensil-form__check {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+        color: var(--text-primary);
+        cursor: pointer;
+      }
 
-    @media (max-width: 480px) { .form-row { grid-template-columns: 1fr; } }
-  `]
+      /* Form */
+      .ingredient-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+      }
+      .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: var(--space-4);
+      }
+      .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+      .form-label {
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        color: var(--text-primary);
+      }
+      .form-select,
+      .form-input {
+        width: 100%;
+        padding: var(--space-2) var(--space-3);
+        font-family: var(--font-sans);
+        font-size: var(--text-sm);
+        color: var(--text-primary);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        &:focus {
+          outline: none;
+          border-color: var(--primary);
+        }
+      }
+      .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--space-3);
+        margin-top: var(--space-4);
+      }
+
+      /* Empty */
+      .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: var(--space-12);
+        text-align: center;
+      }
+      .empty-state__icon {
+        font-size: 64px;
+        margin-bottom: var(--space-4);
+      }
+      .empty-state__title {
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
+        font-weight: var(--font-semibold);
+        margin-bottom: var(--space-2);
+      }
+      .empty-state__text {
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        margin-bottom: var(--space-6);
+      }
+
+      @media (max-width: 480px) {
+        .form-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    `
+  ]
 })
 export class PantryComponent implements OnInit {
   private readonly i18n = inject(I18nService);
@@ -866,7 +1328,9 @@ export class PantryComponent implements OnInit {
   /** El boton "+ Agregar" abre el modal de la pestaña activa. */
   addButtonLabel = computed(() =>
     // Regla 18 (12t-i18n): la condicion decide la clave, el diccionario decide la frase.
-    this.i18n.t(this.activeTab() === 'utensils' ? 'pantry.mas_agregar_utensilio' : 'pantry.mas_agregar')
+    this.i18n.t(
+      this.activeTab() === 'utensils' ? 'pantry.mas_agregar_utensilio' : 'pantry.mas_agregar'
+    )
   );
 
   // Ingredients
@@ -900,7 +1364,9 @@ export class PantryComponent implements OnInit {
   /** El inventario entero de la casa, sin filtros: de aqui salen tablas, cuentas y sugerencias. */
   ingredientesTodos = computed(() => this.pantryService.ingredients());
 
-  ownedUtensilsCount = computed(() => this.pantryService.utensils().filter(u => u.available).length);
+  ownedUtensilsCount = computed(
+    () => this.pantryService.utensils().filter((u) => u.available).length
+  );
   utensilTotal = computed(() => this.pantryService.utensils().length);
 
   /** `quitarAcentos` no cambia las mayusculas: aqui si, que una busqueda que distingue el caso miente. */
@@ -920,21 +1386,35 @@ export class PantryComponent implements OnInit {
   /** Las filas del inventario: cantidad > 0 y con la busqueda y el subarbol puestos (el server ya no filtra). */
   filasInventario = computed(() => {
     const claves = this.clavesFiltro();
-    return this.ingredientesTodos().filter((i) =>
-      (i.quantity ?? 0) > 0 && this.coincideBusqueda(i.name) && (!claves || claves.has(i.category ?? 'other'))
+    return this.ingredientesTodos().filter(
+      (i) =>
+        (i.quantity ?? 0) > 0 &&
+        this.coincideBusqueda(i.name) &&
+        (!claves || claves.has(i.category ?? 'other'))
     );
   });
+
+  /**
+   * Si la casa tiene algo, la tabla se queda montada aunque la busqueda no acierte: quien escribe tiene que
+   * poder limpiar el campo sin cazar un fantasma (## 12ad, regla E).
+   */
+  hayInventario = computed(() => this.ingredientesTodos().some((i) => (i.quantity ?? 0) > 0));
 
   /** Lo que la casa conoce pero no tiene: mismas reglas, cantidad a cero. */
   suggestions = computed(() => {
     const claves = this.clavesFiltro();
-    return this.ingredientesTodos().filter((i) =>
-      (i.quantity ?? 0) <= 0 && this.coincideBusqueda(i.name) && (!claves || claves.has(i.category ?? 'other'))
+    return this.ingredientesTodos().filter(
+      (i) =>
+        (i.quantity ?? 0) <= 0 &&
+        this.coincideBusqueda(i.name) &&
+        (!claves || claves.has(i.category ?? 'other'))
     );
   });
 
   /** La cuenta de la cabecera es siempre el total de la casa: no depende de los filtros puestos. */
-  inPantryCount = computed(() => this.ingredientesTodos().filter((i) => (i.quantity ?? 0) > 0).length);
+  inPantryCount = computed(
+    () => this.ingredientesTodos().filter((i) => (i.quantity ?? 0) > 0).length
+  );
 
   /** Utensilios por la busqueda; el orden, la pagina y los filtros de columna los ve la tabla (## 12ab). */
   utensiliosFiltrados = computed(() => {
@@ -946,7 +1426,9 @@ export class PantryComponent implements OnInit {
       ? crudos.map((u) => ({ ...u, available: !!u.available }))
       : crudos;
     if (!q) return todos;
-    return todos.filter((u) => quitarAcentos(u.name.toLowerCase()).includes(quitarAcentos(q.toLowerCase())));
+    return todos.filter((u) =>
+      quitarAcentos(u.name.toLowerCase()).includes(quitarAcentos(q.toLowerCase()))
+    );
   });
 
   /** Las siete columnas del inventario; las etiquetas, traducidas al vuelo (## 12ab). */
@@ -954,34 +1436,86 @@ export class PantryComponent implements OnInit {
     this.i18n.changeTick();
     const catalogo = new Map(this.pantryService.categories().map((cat) => [cat.key, cat]));
     const ubicaciones: Record<string, TranslationKey> = {
-      fridge: 'pantry.nevera', freezer: 'pantry.congelador', pantry: 'pantry.title', counter: 'pantry.encimera'
+      fridge: 'pantry.nevera',
+      freezer: 'pantry.congelador',
+      pantry: 'pantry.title',
+      counter: 'pantry.encimera'
     };
     return [
       { clave: 'name', etiqueta: this.i18n.t('pantry.columna_nombre'), celda: 'nombre' },
-      { clave: 'quantity', etiqueta: this.i18n.t('pantry.cantidad'), tipo: 'numero', celda: 'cantidad', alineacion: 'start' },
+      {
+        clave: 'quantity',
+        etiqueta: this.i18n.t('pantry.cantidad'),
+        tipo: 'numero',
+        celda: 'cantidad',
+        alineacion: 'start'
+      },
       { clave: 'unit', etiqueta: this.i18n.t('pantry.unidad'), filtrable: true },
-      { clave: 'category', etiqueta: this.i18n.t('pantry.categoria'), etiquetaValor: (v) => {
-        const cat = catalogo.get(String(v));
-        return cat ? pantryCategoryLabel(cat, (key) => this.i18n.t(key)) : String(v);
-      } },
-      { clave: 'expirationDate', etiqueta: this.i18n.t('pantry.caducidad_producto'), tipo: 'fecha', celda: 'caducidad' },
-      { clave: 'location', etiqueta: this.i18n.t('pantry.ubicacion'), etiquetaValor: (v) => this.i18n.t(ubicaciones[String(v)] ?? 'pantry.title') },
-      { clave: 'acciones', etiqueta: this.i18n.t('pantry.acciones'), celda: 'acciones', ordenable: false, filtrable: false, alineacion: 'end', ancho: '88px' }
+      {
+        clave: 'category',
+        etiqueta: this.i18n.t('pantry.categoria'),
+        etiquetaValor: (v) => {
+          const cat = catalogo.get(String(v));
+          return cat ? pantryCategoryLabel(cat, (key) => this.i18n.t(key)) : String(v);
+        }
+      },
+      {
+        clave: 'expirationDate',
+        etiqueta: this.i18n.t('pantry.caducidad_producto'),
+        tipo: 'fecha',
+        celda: 'caducidad'
+      },
+      {
+        clave: 'location',
+        etiqueta: this.i18n.t('pantry.ubicacion'),
+        etiquetaValor: (v) => this.i18n.t(ubicaciones[String(v)] ?? 'pantry.title')
+      },
+      {
+        clave: 'acciones',
+        etiqueta: this.i18n.t('pantry.acciones'),
+        celda: 'acciones',
+        ordenable: false,
+        filtrable: false,
+        alineacion: 'end',
+        ancho: '88px'
+      }
     ];
   });
 
   /** Las cuatro del catalogo de utensilios; «estado» filtra por disponible / no disponible. */
   columnasUtensilios = computed<DataTableColumna[]>(() => {
     this.i18n.changeTick();
-    const etiquetas = new Map<string, string>(this.utensilCategoryOptions.map((op) => [String(op.value), this.i18n.t(op.labelKey)]));
+    const etiquetas = new Map<string, string>(
+      this.utensilCategoryOptions.map((op) => [String(op.value), this.i18n.t(op.labelKey)])
+    );
     return [
       { clave: 'name', etiqueta: this.i18n.t('pantry.columna_nombre'), celda: 'nombre' },
-      { clave: 'category', etiqueta: this.i18n.t('pantry.categoria'), etiquetaValor: (v) => etiquetas.get(String(v)) ?? String(v) },
-      { clave: 'available', etiqueta: this.i18n.t('pantry.estado'), tipo: 'booleano', celda: 'estado',
+      {
+        clave: 'category',
+        etiqueta: this.i18n.t('pantry.categoria'),
+        etiquetaValor: (v) => etiquetas.get(String(v)) ?? String(v)
+      },
+      {
+        clave: 'available',
+        etiqueta: this.i18n.t('pantry.estado'),
+        tipo: 'booleano',
+        celda: 'estado',
         // El menu de la columna pasa la clave ya empaquetada ('true'/'false'), no el booleano: hay que
         // destiparla aqui o todo el mundo sale «no disponible» (## 12ab, rojo de la sonda).
-        etiquetaValor: (v) => valorTipado(v, 'booleano') === true ? this.i18n.t('pantry.disponible') : this.i18n.t('pantry.no_disponible') },
-      { clave: 'acciones', etiqueta: this.i18n.t('pantry.acciones'), celda: 'acciones', ordenable: false, filtrable: false, alineacion: 'end', ancho: '64px' }
+        etiquetaValor: (v) =>
+          valorTipado(v, 'booleano') === true
+            ? this.i18n.t('pantry.disponible')
+            : this.i18n.t('pantry.no_disponible')
+      },
+      {
+        clave: 'acciones',
+        etiqueta: this.i18n.t('pantry.acciones'),
+        celda: 'acciones',
+        ordenable: false,
+        filtrable: false,
+        alineacion: 'end',
+        ancho: '64px'
+      }
     ];
   });
 
@@ -991,7 +1525,13 @@ export class PantryComponent implements OnInit {
     const catalogo = this.pantryService.categories();
     const base: PickerOption[] = [{ value: '', label: this.i18n.t('pantry.categoria_todos') }];
     if (catalogo.length === 0) {
-      return [...base, ...this.ingredientCategoriesNoAll.map((cat) => ({ value: cat.value as string, label: this.i18n.t(cat.labelKey) }))];
+      return [
+        ...base,
+        ...this.ingredientCategoriesNoAll.map((cat) => ({
+          value: cat.value as string,
+          label: this.i18n.t(cat.labelKey)
+        }))
+      ];
     }
     return [
       ...base,
@@ -1010,32 +1550,57 @@ export class PantryComponent implements OnInit {
 
   // ── helpers de las celdas proyectadas ──
   /** El contexto de las plantillas llega como `unknown` (la tabla no conoce el modelo); aqui se viste. */
-  protected filaId(fila: unknown): string { return String((fila as { id: string }).id); }
-  protected filaNombre(fila: unknown): string { return String((fila as { name: string }).name ?? ''); }
-  protected filaCat(fila: unknown): PantryCategoryKey | undefined { return (fila as { category?: PantryCategoryKey }).category; }
-  protected filaIngrediente(fila: unknown): Ingredient { return fila as Ingredient; }
-  protected filaUtensil(fila: unknown): Utensil { return fila as Utensil; }
-  protected filaCantidad(fila: unknown): string { const i = fila as Ingredient; return `${i.quantity} ${i.unit}`; }
-  protected filaDisponible(fila: unknown): boolean { return !!(fila as Utensil).available; }
+  protected filaId(fila: unknown): string {
+    return String((fila as { id: string }).id);
+  }
+  protected filaNombre(fila: unknown): string {
+    return String((fila as { name: string }).name ?? '');
+  }
+  protected filaCat(fila: unknown): PantryCategoryKey | undefined {
+    return (fila as { category?: PantryCategoryKey }).category;
+  }
+  protected filaIngrediente(fila: unknown): Ingredient {
+    return fila as Ingredient;
+  }
+  protected filaUtensil(fila: unknown): Utensil {
+    return fila as Utensil;
+  }
+  protected filaCantidad(fila: unknown): string {
+    const i = fila as Ingredient;
+    return `${i.quantity} ${i.unit}`;
+  }
+  protected filaDisponible(fila: unknown): boolean {
+    return !!(fila as Utensil).available;
+  }
   /** La fecha en dd/mm/aaaa, como en el gestor: la tabla recibe el dato crudo y aqui se viste. */
   protected filaCaducidad(fila: unknown): string {
-    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String((fila as { expirationDate?: string | null }).expirationDate ?? ''));
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(
+      String((fila as { expirationDate?: string | null }).expirationDate ?? '')
+    );
     return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
   }
 
-  protected readonly identificadorDeFila = (fila: unknown): string => String((fila as { id?: string }).id ?? '');
-  protected readonly nombreDeFila = (fila: unknown): string => String((fila as { name?: string }).name ?? '');
+  protected readonly identificadorDeFila = (fila: unknown): string =>
+    String((fila as { id?: string }).id ?? '');
+  protected readonly nombreDeFila = (fila: unknown): string =>
+    String((fila as { name?: string }).name ?? '');
   /** Las clases de siempre, para que la fila siga pareciendo lo que era. */
   protected readonly claseFilaInv = (): string => 'ingredient-item';
   protected readonly claseFilaUti = (fila: unknown): string =>
     'utensil-card' + ((fila as Utensil).available ? ' utensil-card--owned' : '');
 
   // ── lote (## 12ab): vaciar = PATCH {quantity:0} en bucle; borrar = DELETE en bucle, con confirmacion ──
-  protected loteAnular(): void { this.tablaInv()?.limpiarSeleccion(); }
-  protected loteUtensiliosAnular(): void { this.tablaUti()?.limpiarSeleccion(); }
+  protected loteAnular(): void {
+    this.tablaInv()?.limpiarSeleccion();
+  }
+  protected loteUtensiliosAnular(): void {
+    this.tablaUti()?.limpiarSeleccion();
+  }
 
   protected async loteVaciar(): Promise<void> {
-    const ids = this.inventarioSeleccion().map((f) => this.identificadorDeFila(f)).filter(Boolean);
+    const ids = this.inventarioSeleccion()
+      .map((f) => this.identificadorDeFila(f))
+      .filter(Boolean);
     if (ids.length === 0) return;
     const aceptado = await this.confirmService.confirm({
       title: this.i18n.t('pantry.lote_titulo_vaciar'),
@@ -1043,17 +1608,24 @@ export class PantryComponent implements OnInit {
       confirmText: this.i18n.t('pantry.lote_vaciar')
     });
     if (!aceptado) return;
-    await Promise.all(ids.map(async (id) => {
-      try { await firstValueFrom(this.pantryService.updateIngredient(id, { quantity: 0 })); }
-      catch { /* la recarga pinta lo que haya vuelto; el error ya lo grita el interceptor */ }
-    }));
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          await firstValueFrom(this.pantryService.updateIngredient(id, { quantity: 0 }));
+        } catch {
+          /* la recarga pinta lo que haya vuelto; el error ya lo grita el interceptor */
+        }
+      })
+    );
     this.tablaInv()?.limpiarSeleccion();
     await this.recargarInventario();
     this.toastService.success(this.i18n.t('pantry.lote_vaciados', { n: ids.length }));
   }
 
   protected async loteBorrar(): Promise<void> {
-    const filas = this.inventarioSeleccion().map((f) => f as Ingredient).filter((f) => !!f?.id);
+    const filas = this.inventarioSeleccion()
+      .map((f) => f as Ingredient)
+      .filter((f) => !!f?.id);
     if (filas.length === 0) return;
     const aceptado = await this.confirmService.confirm({
       title: this.i18n.t('pantry.lote_titulo_borrar'),
@@ -1061,25 +1633,39 @@ export class PantryComponent implements OnInit {
       confirmText: this.i18n.t('pantry.lote_borrar')
     });
     if (!aceptado) return;
-    await Promise.all(filas.map(async (f) => {
-      try { await firstValueFrom(this.pantryService.deleteIngredient(f.id)); }
-      catch { /* idem: la recarga deja el mapa como esta en el server */ }
-    }));
+    await Promise.all(
+      filas.map(async (f) => {
+        try {
+          await firstValueFrom(this.pantryService.deleteIngredient(f.id));
+        } catch {
+          /* idem: la recarga deja el mapa como esta en el server */
+        }
+      })
+    );
     this.tablaInv()?.limpiarSeleccion();
     await this.recargarInventario();
     this.toastService.success(this.i18n.t('pantry.lote_borrados', { n: filas.length }));
   }
 
   protected async loteUtensilios(disponibles: boolean): Promise<void> {
-    const ids = this.utensiliosSeleccion().map((f) => this.identificadorDeFila(f)).filter(Boolean);
+    const ids = this.utensiliosSeleccion()
+      .map((f) => this.identificadorDeFila(f))
+      .filter(Boolean);
     if (ids.length === 0) return;
-    await Promise.all(ids.map(async (id) => {
-      try { await firstValueFrom(this.pantryService.updateUtensil(id, { available: disponibles })); }
-      catch { /* la lista se recarga al final y pinta la realidad */ }
-    }));
+    await Promise.all(
+      ids.map(async (id) => {
+        try {
+          await firstValueFrom(this.pantryService.updateUtensil(id, { available: disponibles }));
+        } catch {
+          /* la lista se recarga al final y pinta la realidad */
+        }
+      })
+    );
     this.tablaUti()?.limpiarSeleccion();
     this.loadUtensils();
-    this.toastService.success(this.i18n.t('pantry.lote_utensilios_actualizados', { n: ids.length }));
+    this.toastService.success(
+      this.i18n.t('pantry.lote_utensilios_actualizados', { n: ids.length })
+    );
   }
 
   private router = inject(Router);
@@ -1100,7 +1686,6 @@ export class PantryComponent implements OnInit {
     });
   }
 
-
   formData = {
     name: '',
     quantity: 0,
@@ -1116,7 +1701,11 @@ export class PantryComponent implements OnInit {
    * del filtro, el selector del alta y el grupo de utensilios) y escribir la frase aqui era tenerla en
    * espanol en los tres, con el idioma cambiado (HOGARIA-SPEC ## 12u).
    */
-  ingredientCategoriesNoAll: { value: IngredientCategory; labelKey: TranslationKey; icon: string }[] = [
+  ingredientCategoriesNoAll: {
+    value: IngredientCategory;
+    labelKey: TranslationKey;
+    icon: string;
+  }[] = [
     { value: 'vegetables', labelKey: 'pantry.categoria_verduras', icon: '🥬' },
     { value: 'fruits', labelKey: 'pantry.categoria_frutas', icon: '🍎' },
     { value: 'meat', labelKey: 'pantry.categoria_carnes', icon: '🥩' },
@@ -1160,7 +1749,11 @@ export class PantryComponent implements OnInit {
     return colorDeCategoria(this.pantryService.categories().find((cat) => cat.key === clave));
   }
 
-  ingredientCategories: { value: IngredientCategory | ''; labelKey: TranslationKey; icon: string }[] = [
+  ingredientCategories: {
+    value: IngredientCategory | '';
+    labelKey: TranslationKey;
+    icon: string;
+  }[] = [
     { value: '', labelKey: 'pantry.categoria_todos', icon: '📋' },
     ...this.ingredientCategoriesNoAll
   ];
@@ -1180,7 +1773,10 @@ export class PantryComponent implements OnInit {
       label: pantryCategoryLabel(cat, (key) => this.i18n.t(key)),
       color: cat.color,
       group: cat.parentName ?? undefined,
-      hint: cat.counts.products > 0 ? this.i18n.t('pantry.cuenta_articulos', { n: cat.counts.products }) : undefined
+      hint:
+        cat.counts.products > 0
+          ? this.i18n.t('pantry.cuenta_articulos', { n: cat.counts.products })
+          : undefined
     }));
   });
 
@@ -1215,8 +1811,11 @@ export class PantryComponent implements OnInit {
 
   private async loadUtensils(): Promise<void> {
     this.utensilsLoading.set(true);
-    try { await firstValueFrom(this.pantryService.loadUtensils()); }
-    catch { /* el interceptor ya avisa; la pantalla enseña el empty-state de siempre */ }
+    try {
+      await firstValueFrom(this.pantryService.loadUtensils());
+    } catch {
+      /* el interceptor ya avisa; la pantalla enseña el empty-state de siempre */
+    }
     this.utensilsLoading.set(false);
   }
 
@@ -1275,7 +1874,9 @@ export class PantryComponent implements OnInit {
   private moverStock(ingrediente: Ingredient, delta: number): void {
     const siguiente = Math.max(0, (ingrediente.quantity ?? 0) + delta);
     if (siguiente === ingrediente.quantity) return;
-    this.pantryService.updateIngredient(ingrediente.id, { quantity: siguiente }).subscribe(() => { void this.recargarInventario(); });
+    this.pantryService.updateIngredient(ingrediente.id, { quantity: siguiente }).subscribe(() => {
+      void this.recargarInventario();
+    });
   }
 
   openAddModal(prefill?: Partial<typeof this.formData>): void {
@@ -1332,9 +1933,13 @@ export class PantryComponent implements OnInit {
   saveIngredient(): void {
     this.formErrors.name.set('');
     this.formErrors.quantity.set('');
-    if (!this.formData.name) { this.formErrors.name.set(this.i18n.t('pantry.el_nombre_es_requerido')); return; }
+    if (!this.formData.name) {
+      this.formErrors.name.set(this.i18n.t('pantry.el_nombre_es_requerido'));
+      return;
+    }
     if (!this.formData.quantity || this.formData.quantity <= 0) {
-      this.formErrors.quantity.set(this.i18n.t('pantry.la_cantidad_debe_ser')); return;
+      this.formErrors.quantity.set(this.i18n.t('pantry.la_cantidad_debe_ser'));
+      return;
     }
     this.isSaving.set(true);
     const data = { ...this.formData, expirationDate: this.formData.expirationDate || undefined };
@@ -1344,9 +1949,13 @@ export class PantryComponent implements OnInit {
     obs.subscribe({
       next: () => {
         this.toastService.success(
-          this.editingIngredient() ? this.i18n.t('ai_config.actualizado') : this.i18n.t('pantry.agregado'),
+          this.editingIngredient()
+            ? this.i18n.t('ai_config.actualizado')
+            : this.i18n.t('pantry.agregado'),
           this.i18n.t(
-            this.editingIngredient() ? 'pantry.ingrediente_actualizado' : 'pantry.ingrediente_agregado',
+            this.editingIngredient()
+              ? 'pantry.ingrediente_actualizado'
+              : 'pantry.ingrediente_agregado',
             { name: this.formData.name }
           )
         );
@@ -1377,20 +1986,26 @@ export class PantryComponent implements OnInit {
         );
         void this.recargarInventario();
       },
-      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_eliminar'))
+      error: () =>
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_eliminar'))
     });
   }
 
   // Utensils
   toggleUtensil(u: Utensil): void {
     this.pantryService.updateUtensil(u.id, { available: !u.available }).subscribe({
-      next: () => this.toastService.success(
-        u.available ? this.i18n.t('pantry.quitado') : this.i18n.t('pantry.anadido'),
-        u.available
-          ? this.i18n.t('pantry.utensilio_quitado', { name: u.name })
-          : this.i18n.t('pantry.utensilio_anadido', { name: u.name })
-      ),
-      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('household.no_se_pudo_actualizar'))
+      next: () =>
+        this.toastService.success(
+          u.available ? this.i18n.t('pantry.quitado') : this.i18n.t('pantry.anadido'),
+          u.available
+            ? this.i18n.t('pantry.utensilio_quitado', { name: u.name })
+            : this.i18n.t('pantry.utensilio_anadido', { name: u.name })
+        ),
+      error: () =>
+        this.toastService.error(
+          this.i18n.t('ui.error'),
+          this.i18n.t('household.no_se_pudo_actualizar')
+        )
     });
   }
 
@@ -1403,11 +2018,13 @@ export class PantryComponent implements OnInit {
     if (!accepted) return;
 
     this.pantryService.deleteUtensil(u.id).subscribe({
-      next: () => this.toastService.success(
-        this.i18n.t('pantry.eliminado'),
-        this.i18n.t('pantry.nombre_eliminado', { name: u.name })
-      ),
-      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_eliminar'))
+      next: () =>
+        this.toastService.success(
+          this.i18n.t('pantry.eliminado'),
+          this.i18n.t('pantry.nombre_eliminado', { name: u.name })
+        ),
+      error: () =>
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_eliminar'))
     });
   }
 
@@ -1434,7 +2051,7 @@ export class PantryComponent implements OnInit {
 
     const duplicated = this.pantryService
       .utensils()
-      .some(u => u.name.trim().toLowerCase() === name.toLowerCase());
+      .some((u) => u.name.trim().toLowerCase() === name.toLowerCase());
     if (duplicated) {
       this.utensilFormError.set(this.i18n.t('pantry.ya_existe_un_utensilio'));
       return;
@@ -1442,29 +2059,37 @@ export class PantryComponent implements OnInit {
 
     this.utensilFormError.set('');
     this.isSavingUtensil.set(true);
-    this.pantryService.createUtensil({
-      name,
-      category: this.utensilForm.category,
-      available: this.utensilForm.available
-    }).subscribe({
-      next: created => {
-        this.toastService.success(this.i18n.t('pantry.anadido'), this.i18n.t('pantry.utensilio_anadido', { name }));
-        this.closeUtensilModal();
-        this.isSavingUtensil.set(false);
-        // La tabla pagina, asi que «dejarlo a la vista» ahora es buscarlo: el filtro revela la fila al
-        // instante (## 12ab; antes se saltaba al tramo donde habia caido).
-        this.utensiliosQ.set(name);
-      },
-      error: () => {
-        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_anadir'));
-        this.isSavingUtensil.set(false);
-      }
-    });
+    this.pantryService
+      .createUtensil({
+        name,
+        category: this.utensilForm.category,
+        available: this.utensilForm.available
+      })
+      .subscribe({
+        next: (created) => {
+          this.toastService.success(
+            this.i18n.t('pantry.anadido'),
+            this.i18n.t('pantry.utensilio_anadido', { name })
+          );
+          this.closeUtensilModal();
+          this.isSavingUtensil.set(false);
+          // La tabla pagina, asi que «dejarlo a la vista» ahora es buscarlo: el filtro revela la fila al
+          // instante (## 12ab; antes se saltaba al tramo donde habia caido).
+          this.utensiliosQ.set(name);
+        },
+        error: () => {
+          this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('pantry.no_se_pudo_anadir'));
+          this.isSavingUtensil.set(false);
+        }
+      });
   }
 
   getLocationIcon(location: string): string {
     const icons: Record<string, string> = {
-      fridge: '🧊', freezer: '❄️', pantry: '📦', counter: '🍳'
+      fridge: '🧊',
+      freezer: '❄️',
+      pantry: '📦',
+      counter: '🍳'
     };
     return icons[location] || '📦';
   }
@@ -1476,21 +2101,30 @@ export class PantryComponent implements OnInit {
    * La etiqueta del dia de caducidad, ya en el idioma de quien mira. Se resuelve aqui y no en la plantilla
    * porque la frase lleva el numero dentro, y `'{days}d'` partido en dos trozos no se traduce en nadie.
    */
-  getExpirationStatus(ingredient: Ingredient): { variant: 'error' | 'warning' | 'success'; label: string } | null {
+  getExpirationStatus(
+    ingredient: Ingredient
+  ): { variant: 'error' | 'warning' | 'success'; label: string } | null {
     const days = daysUntil(ingredient.expirationDate);
     if (days === null) return null;
     if (days < 0) return { variant: 'error', label: this.i18n.t('pantry.caducado') };
     if (days === 0) return { variant: 'warning', label: this.i18n.t('pantry.caduca_hoy') };
-    if (days <= 3) return { variant: 'warning', label: this.i18n.t('pantry.caduca_en_dias', { days }) };
+    if (days <= 3)
+      return { variant: 'warning', label: this.i18n.t('pantry.caduca_en_dias', { days }) };
     return null;
   }
-  trackById(_i: number, item: Ingredient | Utensil): string { return item.id; }
+  trackById(_i: number, item: Ingredient | Utensil): string {
+    return item.id;
+  }
 
   private resetForm(): void {
     this.formData = {
-      name: '', quantity: 0, unit: 'g' as MeasurementUnit,
-      category: 'other', location: 'pantry',
-      expirationDate: '', notes: ''
+      name: '',
+      quantity: 0,
+      unit: 'g' as MeasurementUnit,
+      category: 'other',
+      location: 'pantry',
+      expirationDate: '',
+      notes: ''
     };
     this.formErrors.name.set('');
     this.formErrors.quantity.set('');

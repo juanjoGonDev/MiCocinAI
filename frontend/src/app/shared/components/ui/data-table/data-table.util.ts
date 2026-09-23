@@ -113,7 +113,8 @@ function comparar(a: unknown, b: unknown, tipo: TipoColumna, dir: DireccionOrden
   if (sa === null) return 1;
   if (sb === null) return -1;
   let r = 0;
-  if (tipo === 'numero') r = (sa as number) < (sb as number) ? -1 : (sa as number) > (sb as number) ? 1 : 0;
+  if (tipo === 'numero')
+    r = (sa as number) < (sb as number) ? -1 : (sa as number) > (sb as number) ? 1 : 0;
   else if (tipo === 'booleano') r = Number(sa as boolean) - Number(sb as boolean);
   else r = colacion.compare(String(sa), String(sb));
   return dir === 'asc' ? r : -r;
@@ -132,7 +133,12 @@ export function ordenar<T>(
   if (orden.length === 0) return [...filas];
   return [...filas].sort((a, b) => {
     for (const criterio of orden) {
-      const r = comparar(leedor(a, criterio.clave), leedor(b, criterio.clave), tipoDe(criterio.clave), criterio.dir);
+      const r = comparar(
+        leedor(a, criterio.clave),
+        leedor(b, criterio.clave),
+        tipoDe(criterio.clave),
+        criterio.dir
+      );
       if (r !== 0) return r;
     }
     return 0;
@@ -185,9 +191,12 @@ export function filtroFechaActivo(filtro: FiltroFecha | undefined): boolean {
 export function filtroActivo(filtro: FiltroColumna | undefined): boolean {
   if (!filtro) return false;
   switch (filtro.tipo) {
-    case 'valores': return filtroValoresActivo(filtro);
-    case 'numero': return filtroNumeroActivo(filtro);
-    case 'fecha': return filtroFechaActivo(filtro);
+    case 'valores':
+      return filtroValoresActivo(filtro);
+    case 'numero':
+      return filtroNumeroActivo(filtro);
+    case 'fecha':
+      return filtroFechaActivo(filtro);
   }
 }
 
@@ -208,9 +217,12 @@ function pasaNumero(filtro: FiltroNumero, valor: unknown): boolean {
   const a = filtro.a;
   const b = filtro.b;
   switch (filtro.modo) {
-    case 'igual': return a !== null && n === a;
-    case 'mayor': return a !== null && n > a;
-    case 'menor': return a !== null && n < a;
+    case 'igual':
+      return a !== null && n === a;
+    case 'mayor':
+      return a !== null && n > a;
+    case 'menor':
+      return a !== null && n < a;
     case 'entre':
       if (a !== null && n < a) return false;
       if (b !== null && n > b) return false;
@@ -222,11 +234,16 @@ function pasaFecha(filtro: FiltroFecha, valor: unknown, hoy: string): boolean {
   const dia = claveDeDia(valor);
   if (dia === null) return false;
   switch (filtro.modo) {
-    case 'hoy': return dia === hoy;
-    case 'siete': return dia >= hoy && dia <= sumarDias(hoy, 7);
-    case 'vencidos': return dia < hoy;
-    case 'antes': return filtro.a !== null && dia < filtro.a;
-    case 'despues': return filtro.a !== null && dia > filtro.a;
+    case 'hoy':
+      return dia === hoy;
+    case 'siete':
+      return dia >= hoy && dia <= sumarDias(hoy, 7);
+    case 'vencidos':
+      return dia < hoy;
+    case 'antes':
+      return filtro.a !== null && dia < filtro.a;
+    case 'despues':
+      return filtro.a !== null && dia > filtro.a;
     case 'entre':
       if (filtro.a !== null && dia < filtro.a) return false;
       if (filtro.b !== null && dia > filtro.b) return false;
@@ -266,9 +283,12 @@ export function pasarFiltros<T>(
   return filas.filter((fila) =>
     filtros.every(({ columna, tipo, filtro }) => {
       switch (filtro.tipo) {
-        case 'valores': return pasaValores(filtro, cuboDe(leedor(fila, columna)));
-        case 'numero': return pasaNumero(filtro, leedor(fila, columna));
-        case 'fecha': return pasaFecha(filtro, leedor(fila, columna), hoy);
+        case 'valores':
+          return pasaValores(filtro, cuboDe(leedor(fila, columna)));
+        case 'numero':
+          return pasaNumero(filtro, leedor(fila, columna));
+        case 'fecha':
+          return pasaFecha(filtro, leedor(fila, columna), hoy);
       }
     })
   );
@@ -296,5 +316,64 @@ export function paginar<T>(
   const efectiva = Math.min(Math.max(1, Math.trunc(pagina) || 1), ultima);
   const desde = (efectiva - 1) * tamano;
   const cortadas = filas.slice(desde, desde + tamano);
-  return { filas: cortadas, desde: total === 0 ? 0 : desde + 1, hasta: desde + cortadas.length, total, ultima };
+  return {
+    filas: cortadas,
+    desde: total === 0 ? 0 : desde + 1,
+    hasta: desde + cortadas.length,
+    total,
+    ultima
+  };
+}
+
+/**
+ * El tramo de indices entre dos posiciones, inclusivo y en orden ascendente (## 12ad, seleccion con Shift).
+ * El componente lo aplica sobre la lista de ids visibles; aqui solo vive la aritmetica, que es lo que se
+ * prueba sin arbol de Angular.
+ */
+export function tramoDeIndices(a: number, b: number): number[] {
+  const [desde, hasta] = a <= b ? [a, b] : [b, a];
+  const tramo: number[] = [];
+  for (let i = desde; i <= hasta; i++) tramo.push(i);
+  return tramo;
+}
+
+/**
+ * Que pagina conservar al cambiar el tamano para que la primera fila de la pagina actual siga a la vista
+ * (## 12ad). Se cuenta sobre la fila, no sobre la pagina: `floor((pagina-1)*viejo/nuevo)+1`.
+ */
+export function reanclarPagina(pagina: number, tamanoViejo: number, tamanoNuevo: number): number {
+  if (tamanoNuevo <= 0 || tamanoViejo <= 0) return 1;
+  const primeraFila = Math.max(0, (pagina - 1) * tamanoViejo);
+  return Math.max(1, Math.floor(primeraFila / tamanoNuevo) + 1);
+}
+
+/**
+ * La hilera del paginador (## 12ad): primera y ultima siempre, ventana de +-1 sobre la actual, y los huecos
+ * con sus marcas. Un hueco de UNA sola pagina se imprime como numero —un «…» por una pagina ausente miente
+ * sobre cuanto queda—; dos huecos que se solapan se fusionan, y si al final no queda nada entre los bloques,
+ * las marcas desaparecen.
+ */
+export function tramoDePaginas(actual: number, ultima: number): (number | 'ini' | 'fin')[] {
+  if (ultima <= 0) return [];
+  if (ultima <= 7) return Array.from({ length: ultima }, (_, i) => i + 1);
+  const centro = Math.min(Math.max(actual, 1), ultima);
+  const visibles = new Set<number>([1, ultima, centro - 1, centro, centro + 1]);
+  const paginas = [...visibles].filter((p) => p >= 1 && p <= ultima).sort((x, y) => x - y);
+  const salida: (number | 'ini' | 'fin')[] = [];
+  let anterior = 0;
+  for (const p of paginas) {
+    const hueco = p - anterior - 1;
+    if (anterior === 0) {
+      /* primera pagina, sin hueco que contar */
+    } else if (hueco === 1) {
+      salida.push(p - 1);
+    } else if (hueco > 1) {
+      salida.push(p === ultima ? 'fin' : 'ini');
+      // un hueco entre medias de dos bloques que NO son el extremo es «ini» por la izquierda y «fin» por la
+      // derecha: la marca unica que dibuja el navegador es una sola, y va en el primer salto que aparece.
+    }
+    salida.push(p);
+    anterior = p;
+  }
+  return salida;
 }

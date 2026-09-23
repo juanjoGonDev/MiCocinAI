@@ -23,6 +23,7 @@ import {
   filtroActivo
 } from './data-table.util';
 import type { FiltroColumna, OrdenTabla, TipoColumna } from './data-table.types';
+import { reanclarPagina, tramoDeIndices, tramoDePaginas } from './data-table.util';
 
 type Fila = Record<string, unknown>;
 const leer = (fila: unknown, clave: string): unknown => (fila as Fila)[clave];
@@ -67,7 +68,14 @@ describe('rotarOrden (el ciclo del encabezado, ## 12ab)', () => {
 
   it('el clic suelto reemplaza el multi por esa columna sola', () => {
     expect(
-      rotarOrden([{ clave: 'cat', dir: 'asc' }, { clave: 'nombre', dir: 'desc' }], 'cantidad', false)
+      rotarOrden(
+        [
+          { clave: 'cat', dir: 'asc' },
+          { clave: 'nombre', dir: 'desc' }
+        ],
+        'cantidad',
+        false
+      )
     ).toEqual([{ clave: 'cantidad', dir: 'asc' }]);
   });
 
@@ -116,7 +124,12 @@ describe('ordenar (multi-clave, con huecos al final)', () => {
 
   it('fecha: el dia manda, no el instante', () => {
     const salida = ordenar(filas, [{ clave: 'caducidad', dir: 'asc' }], leer, () => 'fecha');
-    expect(salida.map((f) => f['caducidad'])).toEqual(['2026-10-01', '2026-10-02', '2027-01-15', null]);
+    expect(salida.map((f) => f['caducidad'])).toEqual([
+      '2026-10-01',
+      '2026-10-02',
+      '2027-01-15',
+      null
+    ]);
   });
 
   it('booleano: falso antes que verdadero en asc', () => {
@@ -155,28 +168,66 @@ describe('pasarFiltros (la intersección de columnas)', () => {
   const val = (activos: string[] | null): FiltroColumna => ({ tipo: 'valores', activos });
 
   it('casillas de texto: solo las seleccionadas; vacio real = nada', () => {
-    expect(pasarFiltros(filas, [{ columna: 'cat', tipo: 'texto', filtro: val(['verduras']) }], leer).length).toBe(2);
-    expect(pasarFiltros(filas, [{ columna: 'cat', tipo: 'texto', filtro: val([]) }], leer).length).toBe(0);
-    expect(pasarFiltros(filas, [{ columna: 'cat', tipo: 'texto', filtro: val(null) }], leer).length).toBe(4);
+    expect(
+      pasarFiltros(filas, [{ columna: 'cat', tipo: 'texto', filtro: val(['verduras']) }], leer)
+        .length
+    ).toBe(2);
+    expect(
+      pasarFiltros(filas, [{ columna: 'cat', tipo: 'texto', filtro: val([]) }], leer).length
+    ).toBe(0);
+    expect(
+      pasarFiltros(filas, [{ columna: 'cat', tipo: 'texto', filtro: val(null) }], leer).length
+    ).toBe(4);
   });
 
   it('el cubo SIN_VALOR es filtrable como un valor mas', () => {
-    const salida = pasarFiltros(filas, [{ columna: 'cantidad', tipo: 'numero', filtro: val([SIN_VALOR]) }], leer);
+    const salida = pasarFiltros(
+      filas,
+      [{ columna: 'cantidad', tipo: 'numero', filtro: val([SIN_VALOR]) }],
+      leer
+    );
     expect(salida.map((f) => f['nombre'])).toEqual(['Manzana']);
   });
 
   it('numero: mayor/menor/entre con un extremo o con los dos, e igual exacto', () => {
     expect(
-      pasarFiltros(filas, [{ columna: 'cantidad', tipo: 'numero', filtro: { tipo: 'numero', modo: 'mayor', a: 4, b: null } }], leer)
-        .map((f) => f['cantidad'])
+      pasarFiltros(
+        filas,
+        [
+          {
+            columna: 'cantidad',
+            tipo: 'numero',
+            filtro: { tipo: 'numero', modo: 'mayor', a: 4, b: null }
+          }
+        ],
+        leer
+      ).map((f) => f['cantidad'])
     ).toEqual([5, 12]);
     expect(
-      pasarFiltros(filas, [{ columna: 'cantidad', tipo: 'numero', filtro: { tipo: 'numero', modo: 'entre', a: 4, b: 6 } }], leer)
-        .map((f) => f['cantidad'])
+      pasarFiltros(
+        filas,
+        [
+          {
+            columna: 'cantidad',
+            tipo: 'numero',
+            filtro: { tipo: 'numero', modo: 'entre', a: 4, b: 6 }
+          }
+        ],
+        leer
+      ).map((f) => f['cantidad'])
     ).toEqual([5]);
     expect(
-      pasarFiltros(filas, [{ columna: 'cantidad', tipo: 'numero', filtro: { tipo: 'numero', modo: 'entre', a: 12, b: null } }], leer)
-        .map((f) => f['cantidad'])
+      pasarFiltros(
+        filas,
+        [
+          {
+            columna: 'cantidad',
+            tipo: 'numero',
+            filtro: { tipo: 'numero', modo: 'entre', a: 12, b: null }
+          }
+        ],
+        leer
+      ).map((f) => f['cantidad'])
     ).toEqual([12]);
     // Sin ningun extremo escrito, el filtro no esta: «entre vacio» no es «cero filas», es «todavia no he dicho»
     expect(filtroActivo({ tipo: 'numero', modo: 'entre', a: null, b: null })).toBe(false);
@@ -190,12 +241,55 @@ describe('pasarFiltros (la intersección de columnas)', () => {
       { d: '2026-10-09' },
       { d: '2026-09-30' }
     ];
-    expect(pasarFiltros(conFecha, [{ columna: 'd', tipo: 'fecha', filtro: { tipo: 'fecha', modo: 'hoy', a: null, b: null } }], leer, hoy).length).toBe(1);
-    expect(pasarFiltros(conFecha, [{ columna: 'd', tipo: 'fecha', filtro: { tipo: 'fecha', modo: 'siete', a: null, b: null } }], leer, hoy).length).toBe(2);
-    expect(pasarFiltros(conFecha, [{ columna: 'd', tipo: 'fecha', filtro: { tipo: 'fecha', modo: 'vencidos', a: null, b: null } }], leer, hoy).length).toBe(1);
     expect(
-      pasarFiltros(conFecha, [{ columna: 'd', tipo: 'fecha', filtro: { tipo: 'fecha', modo: 'entre', a: '2026-10-02', b: '2026-10-06' } }], leer, hoy)
-        .map((f) => f['d'])
+      pasarFiltros(
+        conFecha,
+        [{ columna: 'd', tipo: 'fecha', filtro: { tipo: 'fecha', modo: 'hoy', a: null, b: null } }],
+        leer,
+        hoy
+      ).length
+    ).toBe(1);
+    expect(
+      pasarFiltros(
+        conFecha,
+        [
+          {
+            columna: 'd',
+            tipo: 'fecha',
+            filtro: { tipo: 'fecha', modo: 'siete', a: null, b: null }
+          }
+        ],
+        leer,
+        hoy
+      ).length
+    ).toBe(2);
+    expect(
+      pasarFiltros(
+        conFecha,
+        [
+          {
+            columna: 'd',
+            tipo: 'fecha',
+            filtro: { tipo: 'fecha', modo: 'vencidos', a: null, b: null }
+          }
+        ],
+        leer,
+        hoy
+      ).length
+    ).toBe(1);
+    expect(
+      pasarFiltros(
+        conFecha,
+        [
+          {
+            columna: 'd',
+            tipo: 'fecha',
+            filtro: { tipo: 'fecha', modo: 'entre', a: '2026-10-02', b: '2026-10-06' }
+          }
+        ],
+        leer,
+        hoy
+      ).map((f) => f['d'])
     ).toEqual(['2026-10-05']);
   });
 
@@ -223,12 +317,18 @@ describe('pasarFiltros (la intersección de columnas)', () => {
 
 describe('recortarFiltro, filtroActivo y companeros menores', () => {
   it('recortar deja lo elegido; null se convierte en «nada marcado», no en «sin filtro»', () => {
-    expect(recortarFiltro({ tipo: 'valores', activos: ['a', 'b'] })).toEqual({ tipo: 'valores', activos: ['a', 'b'] });
+    expect(recortarFiltro({ tipo: 'valores', activos: ['a', 'b'] })).toEqual({
+      tipo: 'valores',
+      activos: ['a', 'b']
+    });
     // El «Recortar» sobre un filtro sin activar deja la seleccion VACIA (0 filas), que es leer la intencion:
     // «que se quede lo que veo marcado ahora mismo» —y ahora mismo no hay nada marcado, que equivale a todo.
     // El menu de Excel marca implicitamente todo al desactivar el filtro, asi que el componente nunca llama
     // a esto con `activos: null`; el util, por si acaso, toma la lectura literal.
-    expect(recortarFiltro({ tipo: 'valores', activos: null })).toEqual({ tipo: 'valores', activos: [] });
+    expect(recortarFiltro({ tipo: 'valores', activos: null })).toEqual({
+      tipo: 'valores',
+      activos: []
+    });
   });
 
   it('filtroActivo dice lo que el embudo pinta', () => {
@@ -286,7 +386,49 @@ describe('paginar (el pie de la tabla)', () => {
     expect(paginar(muchas, 99, 10).ultima).toBe(3);
     expect(paginar(muchas, 99, 10).filas.map((f) => f.n)).toEqual([21, 22, 23, 24, 25]);
     const vacia = paginar([], 5, 10);
-    expect([vacia.filas.length, vacia.desde, vacia.hasta, vacia.total, vacia.ultima]).toEqual([0, 0, 0, 0, 1]);
+    expect([vacia.filas.length, vacia.desde, vacia.hasta, vacia.total, vacia.ultima]).toEqual([
+      0, 0, 0, 0, 1
+    ]);
     expect(paginar(muchas, 0, 10).desde).toBe(1);
+  });
+});
+
+// ── tanda 32 (## 12ad): tramos de seleccion, re-anclado de pagina y paginador ──
+
+describe('tramoDeIndices (## 12ad)', () => {
+  it('es inclusivo y en orden ascendente, caiga como caiga el click', () => {
+    expect(tramoDeIndices(4, 7)).toEqual([4, 5, 6, 7]);
+    expect(tramoDeIndices(7, 4)).toEqual([4, 5, 6, 7]);
+    expect(tramoDeIndices(5, 5)).toEqual([5]);
+  });
+});
+
+describe('reanclarPagina (## 12ad)', () => {
+  it('mantiene la primera fila visible al cambiar de tamano', () => {
+    // Con 24 por pagina y la pagina 3 (filas 49-72), a 10 la fila 49 vive en la pagina 5.
+    expect(reanclarPagina(3, 24, 10)).toBe(5);
+    expect(reanclarPagina(1, 24, 50)).toBe(1);
+    expect(reanclarPagina(2, 10, 50)).toBe(1);
+  });
+  it('nunca devuelve una pagina inferior a uno', () => {
+    expect(reanclarPagina(0, 24, 10)).toBe(1);
+  });
+});
+
+describe('tramoDePaginas (## 12ad)', () => {
+  it('pinta primera, ultima y ventana de +-1, y marca los huecos con marcas', () => {
+    expect(tramoDePaginas(6, 39)).toEqual([1, 'ini', 5, 6, 7, 'fin', 39]);
+    expect(tramoDePaginas(1, 10)).toEqual([1, 2, 'fin', 10]);
+    expect(tramoDePaginas(2, 10)).toEqual([1, 2, 3, 'fin', 10]);
+    expect(tramoDePaginas(10, 10)).toEqual([1, 'ini', 9, 10]);
+  });
+  it('un hueco de UNA sola pagina se imprime como numero, no como marca', () => {
+    expect(tramoDePaginas(3, 6)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(tramoDePaginas(5, 8)).toEqual([1, 'ini', 4, 5, 6, 7, 8]);
+  });
+  it('con poca distancia (<= 7 paginas) no hay marcas en absoluto', () => {
+    expect(tramoDePaginas(1, 1)).toEqual([1]);
+    expect(tramoDePaginas(1, 5)).toEqual([1, 2, 3, 4, 5]);
+    expect(tramoDePaginas(4, 7)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 });

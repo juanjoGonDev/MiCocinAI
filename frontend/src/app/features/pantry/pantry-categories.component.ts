@@ -13,15 +13,31 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { TagComponent } from '../../shared/components/ui/tag/tag.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
-import { PickerComponent, type PickerOption } from '../../shared/components/ui/picker/picker.component';
+import {
+  PickerComponent,
+  type PickerOption
+} from '../../shared/components/ui/picker/picker.component';
 import { PantryCategoryLabelPipe } from '../../shared/pipes/pantry-category-label.pipe';
-import { DataTableComponent, DataTableCellDirective } from '../../shared/components/ui/data-table/data-table.component';
+import {
+  DataTableComponent,
+  DataTableCellDirective
+} from '../../shared/components/ui/data-table/data-table.component';
 import type { DataTableColumna } from '../../shared/components/ui/data-table/data-table.types';
 import { pantryCategoryLabel } from '../../core/i18n/labels';
 import type { PantryCategory, PantryCategoryView } from '../../shared/models/pantry.model';
-import { cargarTodasLasPaginas, clavesNoElegiblesComoPadre, coincideGestor, colorDeCategoria, valorDeQuery } from './pantry-gestor.util';
+import {
+  cargarTodasLasPaginas,
+  clavesNoElegiblesComoPadre,
+  coincideGestor,
+  colorDeCategoria,
+  valorDeQuery
+} from './pantry-gestor.util';
 
-type FilaCategoria = PantryCategory & { productos: number; subarbol: number; subcategorias: number };
+type FilaCategoria = PantryCategory & {
+  productos: number;
+  subarbol: number;
+  subcategorias: number;
+};
 
 /**
  * La fila de la tabla: la categoria con sus tres cifras proyectadas. No es burocracia —`app-data-table` lee
@@ -65,7 +81,12 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
   template: `
     <div class="gestor">
       <header class="gestor__header">
-        <button type="button" class="gestor__back" (click)="volver()" data-test="gestor-categorias-volver">
+        <button
+          type="button"
+          class="gestor__back"
+          (click)="volver()"
+          data-test="gestor-categorias-volver"
+        >
           <app-icon name="chevron_left" [size]="20" [label]="null" />
           <span>{{ 'pantry.volver_al_inventario' | t }}</span>
         </button>
@@ -87,17 +108,12 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
             }
           </div>
 
-          <app-input
-            class="gestor__buscar"
-            id="gestor-categorias-q"
-            name="gestor-categorias-q"
-            type="search"
-            [placeholder]="'pantry.buscar_categorias' | t"
-            [ngModel]="q()"
-            (ngModelChange)="buscar($event)"
-          ></app-input>
-
-          <button type="button" class="gestor__nueva" (click)="abrirNueva()" data-test="gestor-categorias-nueva">
+          <button
+            type="button"
+            class="gestor__nueva"
+            (click)="abrirNueva()"
+            data-test="gestor-categorias-nueva"
+          >
             <app-icon name="add" [size]="18" [label]="null" />
             <span>{{ 'pantry.nueva_categoria' | t }}</span>
           </button>
@@ -106,7 +122,9 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
         @if (cargando) {
           <p class="gestor__estado">{{ 'common.loading' | t }}</p>
         } @else if (lista().length === 0) {
-          <p class="gestor__estado" data-test="gestor-categorias-vacia">{{ 'pantry.categorias_vacias' | t }}</p>
+          <p class="gestor__estado" data-test="gestor-categorias-vacia">
+            {{ 'pantry.categorias_vacias' | t }}
+          </p>
         } @else {
           <app-data-table
             #tablaCats
@@ -117,13 +135,26 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
             [etiquetaDeFila]="etiquetaFila"
             (seleccionChange)="seleccion.set($event)"
           >
+            <div data-tabla-buscar>
+              <app-input
+                class="gestor__buscar"
+                id="gestor-categorias-q"
+                name="gestor-categorias-q"
+                type="search"
+                [placeholder]="'pantry.buscar_categorias' | t"
+                [ngModel]="q()"
+                (ngModelChange)="buscar($event)"
+              ></app-input>
+            </div>
             <div data-tabla-lote>
               @if (seleccion().length > 0) {
                 <div class="lote" data-test="gestor-categorias-lote">
                   <span class="lote__cta">
                     {{ 'pantry.seleccionados' | t: { n: seleccion().length } }}
                     @if (noBorrables() > 0) {
-                      <span class="lote__nota">{{ 'pantry.categorias_lote_saltan' | t: { n: noBorrables() } }}</span>
+                      <span class="lote__nota">{{
+                        'pantry.categorias_lote_saltan' | t: { n: noBorrables() }
+                      }}</span>
                     }
                   </span>
                   <span class="lote__acciones">
@@ -138,17 +169,32 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
                         {{ 'pantry.borrar_seleccionados' | t }}
                       </button>
                     }
-                    <button type="button" class="lote__btn" (click)="loteAnular()" data-test="gestor-categorias-lote-anular">
-                      {{ 'pantry.lote_anular' | t }}
+                    <button
+                      type="button"
+                      class="lote__x"
+                      (click)="loteAnular()"
+                      data-test="gestor-categorias-lote-anular"
+                      [attr.aria-label]="'pantry.lote_anular' | t"
+                      [title]="'pantry.lote_anular' | t"
+                    >
+                      <app-icon name="close" [size]="16" [label]="null" />
                     </button>
                   </span>
                 </div>
+                <div class="lote__empuje" aria-hidden="true"></div>
               }
             </div>
 
             <ng-template appDataTableCell="nombre" let-fila>
-              <span class="celda celda--nombre" [attr.data-test]="'gestor-categorias-fila-' + fila.key">
-                <span class="celda__punto" [style.background]="colorDeCategoria(fila)" aria-hidden="true"></span>
+              <span
+                class="celda celda--nombre"
+                [attr.data-test]="'gestor-categorias-fila-' + fila.key"
+              >
+                <span
+                  class="celda__punto"
+                  [style.background]="colorDeCategoria(fila)"
+                  aria-hidden="true"
+                ></span>
                 <span class="celda__nombre">{{ fila | category }}</span>
                 @if (fila.protected) {
                   <app-badge [size]="'sm'">{{ 'pantry.categoria_reservada_corta' | t }}</app-badge>
@@ -180,7 +226,9 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
                   type="button"
                   class="celda__accion celda__accion--peligro"
                   [attr.aria-label]="'pantry.eliminar_categoria' | t"
-                  [attr.title]="fila.canDelete ? ('pantry.eliminar_categoria' | t) : ('pantry.error_en_uso' | t)"
+                  [attr.title]="
+                    fila.canDelete ? ('pantry.eliminar_categoria' | t) : ('pantry.error_en_uso' | t)
+                  "
                   [disabled]="!fila.canDelete || guardando"
                   (click)="borrar(fila)"
                   [attr.data-test]="'gestor-categorias-borrar-' + fila.key"
@@ -193,7 +241,9 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
         }
       } @else {
         <section class="ficha" data-test="gestor-categorias-ficha">
-          <h2 class="ficha__titulo">{{ (esNueva ? 'pantry.nueva_categoria' : 'pantry.editar_categoria') | t }}</h2>
+          <h2 class="ficha__titulo">
+            {{ (esNueva ? 'pantry.nueva_categoria' : 'pantry.editar_categoria') | t }}
+          </h2>
           @if (ficha.protected) {
             <p class="ficha__aviso" data-test="gestor-categorias-reservada">
               <app-icon name="error_outline" [size]="16" [label]="null" />
@@ -245,12 +295,17 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
               [options]="opcionesPadre()"
               [value]="formulario.parentKey || null"
               (valueChange)="elegirPadre($event)"
-              [placeholder]="('pantry.sin_padre' | t)"
+              [placeholder]="'pantry.sin_padre' | t"
               [disabled]="ficha.protected"
               data-test="gestor-categorias-campo-padre"
             />
             @if (formulario.parentKey) {
-              <button type="button" class="ficha__enlace" (click)="quitarPadre()" data-test="gestor-categorias-quitar-padre">
+              <button
+                type="button"
+                class="ficha__enlace"
+                (click)="quitarPadre()"
+                data-test="gestor-categorias-quitar-padre"
+              >
                 {{ 'pantry.sin_padre' | t }}
               </button>
             }
@@ -290,7 +345,12 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
                 {{ 'pantry.eliminar_categoria' | t }}
               </button>
             }
-            <button type="button" class="boton" (click)="volver()" data-test="gestor-categorias-cancelar">
+            <button
+              type="button"
+              class="boton"
+              (click)="volver()"
+              data-test="gestor-categorias-cancelar"
+            >
               {{ 'common.cancel' | t }}
             </button>
           </div>
@@ -298,195 +358,521 @@ type FilaCategoria = PantryCategory & { productos: number; subarbol: number; sub
       }
     </div>
   `,
-  styles: [`
-    :host { display: block; }
+  styles: [
+    `
+      :host {
+        display: block;
+      }
 
-    /* La pantalla entera se acota y se respira: lo que heredo de la despensa vecina (max-width de 1000px,
+      /* La pantalla entera se acota y se respira: lo que heredo de la despensa vecina (max-width de 1000px,
        padding del sistema y margen automatico) es lo que hace que al cambiar de pantalla nada salte de
        ancho. Un gestor sin contenedor, en un monitor de 27 pulgadas, es una linea de 2400px de larga y
        ninguna columna vuelve a cuadrar con la de arriba. */
-    .gestor {
-      display: flex; flex-direction: column; gap: var(--space-4);
-      box-sizing: border-box; width: 100%; max-width: 1000px; margin: 0 auto;
-      padding: var(--space-4) var(--space-4) var(--space-16);
-    }
-    @media (min-width: 768px) {
-      .gestor { gap: var(--space-6); padding: var(--space-6) var(--space-6) var(--space-20); }
-    }
+      .gestor {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+        box-sizing: border-box;
+        width: 100%;
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: var(--space-4) var(--space-4) var(--space-16);
+      }
+      @media (min-width: 768px) {
+        .gestor {
+          gap: var(--space-6);
+          padding: var(--space-6) var(--space-6) var(--space-20);
+        }
+      }
 
-    /* Cabecera con su propio aire y una linea de separacion: el titulo, la ayuda y el volver son tres cosas
+      /* Cabecera con su propio aire y una linea de separacion: el titulo, la ayuda y el volver son tres cosas
        distintas y no pueden ir pegadas. */
-    .gestor__header {
-      display: flex; flex-direction: column; gap: var(--space-1);
-      padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-default);
-    }
-    .gestor__back {
-      display: inline-flex; align-items: center; gap: var(--space-1);
-      align-self: flex-start; margin: 0 0 var(--space-2); padding: var(--space-1) var(--space-2) var(--space-1) 0;
-      font: inherit; font-size: var(--text-xs); color: var(--text-secondary);
-      background: none; border: none; border-radius: var(--radius-sm); cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .gestor__back:hover { color: var(--text-primary); }
-    .gestor__back:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .gestor__title {
-      margin: 0; font-family: var(--font-display); font-size: var(--text-xl);
-      font-weight: var(--font-bold); line-height: var(--leading-tight); letter-spacing: var(--tracking-tight);
-      color: var(--text-primary);
-    }
-    .gestor__ayuda {
-      margin: var(--space-1) 0 0; max-width: 66ch; color: var(--text-secondary);
-      font-size: var(--text-sm); line-height: var(--leading-relaxed);
-    }
-    @media (min-width: 768px) {
-      .gestor__title { font-size: var(--text-2xl); }
-      .gestor__ayuda { font-size: var(--text-base); }
-    }
+      .gestor__header {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-1);
+        padding-bottom: var(--space-4);
+        border-bottom: 1px solid var(--border-default);
+      }
+      .gestor__back {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-1);
+        align-self: flex-start;
+        margin: 0 0 var(--space-2);
+        padding: var(--space-1) var(--space-2) var(--space-1) 0;
+        font: inherit;
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        background: none;
+        border: none;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .gestor__back:hover {
+        color: var(--text-primary);
+      }
+      .gestor__back:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .gestor__title {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
+        font-weight: var(--font-bold);
+        line-height: var(--leading-tight);
+        letter-spacing: var(--tracking-tight);
+        color: var(--text-primary);
+      }
+      .gestor__ayuda {
+        margin: var(--space-1) 0 0;
+        max-width: 66ch;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        line-height: var(--leading-relaxed);
+      }
+      @media (min-width: 768px) {
+        .gestor__title {
+          font-size: var(--text-2xl);
+        }
+        .gestor__ayuda {
+          font-size: var(--text-base);
+        }
+      }
 
-    /* La barra de trabajo es una superficie, no tres controles sueltos flotando en la pagina: se alinea por
+      /* La barra de trabajo es una superficie, no tres controles sueltos flotando en la pagina: se alinea por
        su linea de base (align-items al final) para que buscador, filtros y boton compartan alturas. */
-    .gestor__toolbar {
-      display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-3);
-      padding: var(--space-3) var(--space-4);
-      background: var(--bg-secondary); border: 1px solid var(--border-default); border-radius: var(--radius-xl);
-    }
-    .gestor__vistas {
-      display: flex; flex-wrap: wrap; gap: var(--space-1); align-items: center;
-      margin-right: auto; padding: var(--space-1);
-      background: var(--bg-tertiary); border-radius: var(--radius-full);
-    }
-    .gestor__buscar { flex: 1 1 220px; min-width: 180px; }
-    .gestor__nueva {
-      display: inline-flex; align-items: center; gap: var(--space-2);
-      padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: var(--font-semibold);
-      color: var(--bg-secondary); background: var(--primary); border: 1px solid transparent;
-      border-radius: var(--radius-full); cursor: pointer; transition: var(--transition-fast);
-    }
-    .gestor__nueva:hover { filter: brightness(1.06); }
-    .gestor__nueva:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+      .gestor__toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+      }
+      .gestor__vistas {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1);
+        align-items: center;
+        margin-right: auto;
+        padding: var(--space-1);
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-full);
+      }
+      .gestor__buscar {
+        flex: 1 1 220px;
+        min-width: 180px;
+      }
+      .gestor__nueva {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        font: inherit;
+        font-size: var(--text-sm);
+        font-weight: var(--font-semibold);
+        color: var(--bg-secondary);
+        background: var(--primary);
+        border: 1px solid transparent;
+        border-radius: var(--radius-full);
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .gestor__nueva:hover {
+        filter: brightness(1.06);
+      }
+      .gestor__nueva:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
 
-    .gestor__estado {
-      margin: 0; padding: var(--space-5) var(--space-4); text-align: center;
-      color: var(--text-secondary); font-size: var(--text-sm);
-      background: var(--bg-secondary); border: 1px dashed var(--border-default); border-radius: var(--radius-xl);
-    }
+      .gestor__estado {
+        margin: 0;
+        padding: var(--space-5) var(--space-4);
+        text-align: center;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        background: var(--bg-secondary);
+        border: 1px dashed var(--border-default);
+        border-radius: var(--radius-xl);
+      }
 
+      .ficha {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+        padding: var(--space-4);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-2xl);
+      }
+      @media (min-width: 768px) {
+        .ficha {
+          gap: var(--space-6);
+          padding: var(--space-6);
+        }
+      }
+      .ficha__titulo {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: var(--text-lg);
+        font-weight: var(--font-semibold);
+        line-height: var(--leading-snug);
+      }
+      .ficha__etiqueta {
+        font-size: var(--text-xs);
+        font-weight: var(--font-semibold);
+        letter-spacing: var(--tracking-wide);
+        text-transform: uppercase;
+        color: var(--text-tertiary);
+      }
+      .ficha__campo {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        min-width: 0;
+      }
+      .form-row {
+        display: grid;
+        gap: var(--space-4);
+      }
+      @media (min-width: 720px) {
+        .form-row {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+      .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        min-width: 0;
+      }
 
-    .ficha {
-      display: flex; flex-direction: column; gap: var(--space-5);
-      padding: var(--space-4); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-2xl);
-    }
-    @media (min-width: 768px) { .ficha { gap: var(--space-6); padding: var(--space-6); } }
-    .ficha__titulo {
-      margin: 0; font-family: var(--font-display); font-size: var(--text-lg); font-weight: var(--font-semibold);
-      line-height: var(--leading-snug);
-    }
-    .ficha__etiqueta {
-      font-size: var(--text-xs); font-weight: var(--font-semibold); letter-spacing: var(--tracking-wide);
-      text-transform: uppercase; color: var(--text-tertiary);
-    }
-    .ficha__campo { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
-    .form-row { display: grid; gap: var(--space-4); }
-    @media (min-width: 720px) { .form-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-    .form-field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+      .ficha__aviso,
+      .ficha__ayuda,
+      .ficha__error {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--space-2);
+        margin: 0;
+        padding: var(--space-3) var(--space-4);
+        font-size: var(--text-sm);
+        line-height: var(--leading-relaxed);
+        border-radius: var(--radius-lg);
+        border-left: 3px solid var(--border-strong);
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+      }
+      .ficha__aviso {
+        border-left-color: var(--warning);
+        background: var(--warning-subtle);
+      }
+      .ficha__error {
+        border-left-color: var(--error);
+        background: var(--error-subtle);
+        color: var(--error);
+      }
 
-    .ficha__aviso, .ficha__ayuda, .ficha__error {
-      display: flex; align-items: flex-start; gap: var(--space-2); margin: 0;
-      padding: var(--space-3) var(--space-4); font-size: var(--text-sm); line-height: var(--leading-relaxed);
-      border-radius: var(--radius-lg); border-left: 3px solid var(--border-strong);
-      background: var(--bg-tertiary); color: var(--text-primary);
-    }
-    .ficha__aviso { border-left-color: var(--warning); background: var(--warning-subtle); }
-    .ficha__error { border-left-color: var(--error); background: var(--error-subtle); color: var(--error); }
+      .ficha__acciones {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2) var(--space-3);
+        padding-top: var(--space-4);
+        border-top: 1px solid var(--border-default);
+      }
+      .ficha__enlace {
+        align-self: flex-start;
+        padding: var(--space-1) 0;
+        font: inherit;
+        font-size: var(--text-sm);
+        color: var(--primary);
+        background: none;
+        border: none;
+        cursor: pointer;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .ficha__enlace:hover {
+        color: var(--text-primary);
+      }
+      .ficha__enlace:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+        border-radius: var(--radius-sm);
+      }
 
-    .ficha__acciones {
-      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3);
-      padding-top: var(--space-4); border-top: 1px solid var(--border-default);
-    }
-    .ficha__enlace {
-      align-self: flex-start; padding: var(--space-1) 0; font: inherit; font-size: var(--text-sm);
-      color: var(--primary); background: none; border: none; cursor: pointer; text-decoration: underline;
-      text-underline-offset: 2px;
-    }
-    .ficha__enlace:hover { color: var(--text-primary); }
-    .ficha__enlace:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: var(--radius-sm); }
+      .boton {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-4);
+        font: inherit;
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        color: var(--text-primary);
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-full);
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .boton:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .boton--primario {
+        color: var(--bg-secondary);
+        background: var(--primary);
+        border-color: transparent;
+        font-weight: var(--font-semibold);
+        margin-inline-start: auto;
+      }
+      .boton--peligro {
+        color: var(--error);
+        border-color: color-mix(in srgb, var(--error) 45%, transparent);
+      }
 
-    .boton {
-      display: inline-flex; align-items: center; gap: var(--space-2);
-      padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: var(--font-medium);
-      color: var(--text-primary); background: var(--bg-tertiary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .boton:disabled { opacity: 0.5; cursor: not-allowed; }
-    .boton--primario { color: var(--bg-secondary); background: var(--primary); border-color: transparent; font-weight: var(--font-semibold); margin-inline-start: auto; }
-    .boton--peligro { color: var(--error); border-color: color-mix(in srgb, var(--error) 45%, transparent); }
-
-
-
-    /* El color se elige tocandolo, y el hex se escribe: las dos cosas necesitan su hueco para no parecer un
+      /* El color se elige tocandolo, y el hex se escribe: las dos cosas necesitan su hueco para no parecer un
        solo control apretujado. */
-    .swatches { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
-    .swatch {
-      width: 28px; height: 28px; padding: 0; background-clip: padding-box;
-      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .swatch:hover { transform: scale(1.08); }
-    .swatch:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .swatch--activa { box-shadow: 0 0 0 2px var(--bg-secondary), 0 0 0 4px var(--text-primary); }
+      .swatches {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2);
+      }
+      .swatch {
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        background-clip: padding-box;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-full);
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .swatch:hover {
+        transform: scale(1.08);
+      }
+      .swatch:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .swatch--activa {
+        box-shadow:
+          0 0 0 2px var(--bg-secondary),
+          0 0 0 4px var(--text-primary);
+      }
 
-    /* Que un boton se pueda pulsar se nota sin tocarlo: hover y foco visible en todo lo que acepta un click
+      /* Que un boton se pueda pulsar se nota sin tocarlo: hover y foco visible en todo lo que acepta un click
        (regla 8 del sistema), incluido el boton primario, que si no parece deshabilitado junto al resto. */
-    .boton:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-secondary); }
-    .boton:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .boton--primario:hover:not(:disabled) { filter: brightness(1.06); background: var(--primary); }
-    .boton--primario:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .boton--peligro:hover:not(:disabled) { color: var(--bg-secondary); background: var(--error); border-color: var(--error); }
-    .boton--peligro:focus-visible { outline: 2px solid var(--error); outline-offset: 2px; }
+      .boton:hover:not(:disabled) {
+        border-color: var(--border-strong);
+        background: var(--bg-secondary);
+      }
+      .boton:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .boton--primario:hover:not(:disabled) {
+        filter: brightness(1.06);
+        background: var(--primary);
+      }
+      .boton--primario:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .boton--peligro:hover:not(:disabled) {
+        color: var(--bg-secondary);
+        background: var(--error);
+        border-color: var(--error);
+      }
+      .boton--peligro:focus-visible {
+        outline: 2px solid var(--error);
+        outline-offset: 2px;
+      }
 
-    /* El lote (## 12ac): la barra de acciones sobre la seleccion, con el aviso de lo que no se puede. */
-    .lote {
-      display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
-      flex-wrap: wrap; padding: var(--space-2) var(--space-3);
-      background: var(--primary-subtle); border-radius: var(--radius-md);
-    }
-    .lote__cta { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-primary); }
-    .lote__nota { font-weight: var(--font-normal); color: var(--text-secondary); }
-    .lote__acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-    .lote__btn {
-      font: inherit; font-size: var(--text-xs); padding: 6px 12px; cursor: pointer;
-      background: var(--bg-primary); color: var(--text-primary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-md);
-      transition: var(--transition-fast);
-    }
-    .lote__btn:hover:not(:disabled) { border-color: var(--primary); }
-    .lote__btn:disabled { opacity: 0.45; cursor: not-allowed; }
-    .lote__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .lote__btn--peligro { color: var(--error); border-color: color-mix(in srgb, var(--error) 45%, transparent); }
-    .lote__btn--peligro:hover:not(:disabled) { color: var(--bg-secondary); background: var(--error); border-color: var(--error); }
-    @media (max-width: 959px) {
-      /* En movil el lote se queda pegado abajo: la seleccion no puede desaparecer al recorrer la tabla. */
-      .lote { position: sticky; bottom: var(--space-2); box-shadow: var(--shadow-md); }
-    }
+      /* El lote (## 12ac): la barra de acciones sobre la seleccion, con el aviso de lo que no se puede. */
+      /* Lote flotante (## 12ad, regla F): centrado abajo, por encima de la tarjeta y por debajo de la hoja
+       de filtros (55/60). El «empuje» reserva la altura para que la ultima fila jamas quede tapada. */
+      .lote {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
+        z-index: 45;
+        width: min(calc(100% - 2 * var(--space-4)), 1000px);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-3);
+        flex-wrap: wrap;
+        padding: var(--space-2) var(--space-4);
+        background: var(--bg-secondary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-lg);
+      }
+      /* Con la barra de navegacion inferior (<=1023px), el lote sube por encima, como los toasts. */
+      @media (max-width: 1023px) {
+        .lote {
+          bottom: calc(
+            var(--space-4) + var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px)
+          );
+        }
+      }
+      .lote__empuje {
+        height: 76px;
+      }
+      .lote__x {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        background: none;
+        color: var(--text-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: var(--transition-fast);
+      }
+      .lote__x:hover {
+        color: var(--error);
+        border-color: var(--error);
+        background: var(--error-subtle);
+      }
+      .lote__x:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .gestor__buscar-tabla {
+        max-width: 480px;
+      }
+      .lote__cta {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+        font-size: var(--text-xs);
+        font-weight: var(--font-semibold);
+        color: var(--text-primary);
+      }
+      .lote__nota {
+        font-weight: var(--font-normal);
+        color: var(--text-secondary);
+      }
+      .lote__acciones {
+        display: flex;
+        gap: var(--space-2);
+        flex-wrap: wrap;
+      }
+      .lote__btn {
+        font: inherit;
+        font-size: var(--text-xs);
+        padding: 6px 12px;
+        cursor: pointer;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        transition: var(--transition-fast);
+      }
+      .lote__btn:hover:not(:disabled) {
+        border-color: var(--primary);
+      }
+      .lote__btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .lote__btn:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .lote__btn--peligro {
+        color: var(--error);
+        border-color: color-mix(in srgb, var(--error) 45%, transparent);
+      }
+      .lote__btn--peligro:hover:not(:disabled) {
+        color: var(--bg-secondary);
+        background: var(--error);
+        border-color: var(--error);
+      }
+      @media (max-width: 959px) {
+        /* En movil el lote se queda pegado abajo: la seleccion no puede desaparecer al recorrer la tabla. */
+        .lote {
+          position: sticky;
+          bottom: var(--space-2);
+          box-shadow: var(--shadow-md);
+        }
+      }
 
-    /* Las celdas proyectadas: punto, nombre, reserva y los botones de fila. */
-    .celda--nombre { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
-    .celda__punto { flex: none; width: 10px; height: 10px; border-radius: var(--radius-full); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
-    .celda__nombre { font-weight: var(--font-medium); color: var(--text-primary); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-    .celda--padre { color: var(--text-secondary); font-size: var(--text-sm); }
-    .celda__grupo { display: inline-flex; gap: var(--space-1); }
-    .celda__accion {
-      display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
-      color: var(--text-secondary); background: none; border: none; cursor: pointer; border-radius: var(--radius-md);
-      transition: var(--transition-fast);
-    }
-    .celda__accion:hover:not(:disabled) { color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
-    .celda__accion:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .celda__accion:disabled { opacity: 0.35; cursor: not-allowed; }
-    .celda__accion--peligro:hover:not(:disabled) { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
-  `]
+      /* Las celdas proyectadas: punto, nombre, reserva y los botones de fila. */
+      .celda--nombre {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2);
+        min-width: 0;
+      }
+      .celda__punto {
+        flex: none;
+        width: 10px;
+        height: 10px;
+        border-radius: var(--radius-full);
+        box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+      }
+      .celda__nombre {
+        font-weight: var(--font-medium);
+        color: var(--text-primary);
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .celda--padre {
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+      }
+      .celda__grupo {
+        display: inline-flex;
+        gap: var(--space-1);
+      }
+      .celda__accion {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        color: var(--text-secondary);
+        background: none;
+        border: none;
+        cursor: pointer;
+        border-radius: var(--radius-md);
+        transition: var(--transition-fast);
+      }
+      .celda__accion:hover:not(:disabled) {
+        color: var(--primary);
+        background: color-mix(in srgb, var(--primary) 10%, transparent);
+      }
+      .celda__accion:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .celda__accion:disabled {
+        opacity: 0.35;
+        cursor: not-allowed;
+      }
+      .celda__accion--peligro:hover:not(:disabled) {
+        color: var(--error);
+        background: color-mix(in srgb, var(--error) 10%, transparent);
+      }
+    `
+  ]
 })
 export class PantryCategoriesComponent implements OnInit {
   private readonly pantry = inject(PantryService);
@@ -498,7 +884,16 @@ export class PantryCategoriesComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly colorDeCategoria = colorDeCategoria;
-  protected readonly muestras = ['#4CAF50', '#B26A00', '#E05A5A', '#4FA3D1', '#6C8AE4', '#C99A2E', '#8E5AC8', '#2FA79B'];
+  protected readonly muestras = [
+    '#4CAF50',
+    '#B26A00',
+    '#E05A5A',
+    '#4FA3D1',
+    '#6C8AE4',
+    '#C99A2E',
+    '#8E5AC8',
+    '#2FA79B'
+  ];
 
   /** El catalogo de la casa completo, una sola vez: la tabla filtra, ordena y pagina sobre esto (## 12ac). */
   protected readonly lista = signal<PantryCategory[]>([]);
@@ -531,29 +926,43 @@ export class PantryCategoriesComponent implements OnInit {
     let filas = this.lista();
     if (vista === 'without-products') filas = filas.filter((fila) => fila.counts.products === 0);
     else if (vista === 'with-children') filas = filas.filter((fila) => fila.counts.children > 0);
-    if (consulta.trim()) filas = filas.filter((fila) => coincideGestor([fila.name, fila.key], consulta));
+    if (consulta.trim())
+      filas = filas.filter((fila) => coincideGestor([fila.name, fila.key], consulta));
     return filas;
   });
 
   protected readonly borrables = computed<PantryCategory[]>(() =>
     this.seleccion().filter((fila): fila is FilaCategoria => (fila as FilaCategoria).canDelete)
   );
-  protected readonly noBorrables = computed<number>(() => this.seleccion().length - this.borrables().length);
+  protected readonly noBorrables = computed<number>(
+    () => this.seleccion().length - this.borrables().length
+  );
 
   protected readonly columnas = computed<DataTableColumna[]>(() => {
     this.i18n.changeTick();
     return [
       { clave: 'name', etiqueta: this.i18n.t('pantry.columna_nombre'), celda: 'nombre' },
       {
-        clave: 'parentKey', etiqueta: this.i18n.t('pantry.padre_categoria'), celda: 'padre',
+        clave: 'parentKey',
+        etiqueta: this.i18n.t('pantry.padre_categoria'),
+        celda: 'padre',
         etiquetaValor: (v) => this.etiquetaClave(String(v))
       },
       { clave: 'productos', etiqueta: this.i18n.t('pantry.columna_productos'), tipo: 'numero' },
       { clave: 'subarbol', etiqueta: this.i18n.t('pantry.columna_subarbol'), tipo: 'numero' },
-      { clave: 'subcategorias', etiqueta: this.i18n.t('pantry.columna_subcategorias'), tipo: 'numero' },
       {
-        clave: 'acciones', etiqueta: this.i18n.t('pantry.acciones'), celda: 'acciones',
-        ordenable: false, filtrable: false, alineacion: 'end', ancho: '88px'
+        clave: 'subcategorias',
+        etiqueta: this.i18n.t('pantry.columna_subcategorias'),
+        tipo: 'numero'
+      },
+      {
+        clave: 'acciones',
+        etiqueta: this.i18n.t('pantry.acciones'),
+        celda: 'acciones',
+        ordenable: false,
+        filtrable: false,
+        alineacion: 'end',
+        ancho: '88px'
       }
     ];
   });
@@ -563,7 +972,13 @@ export class PantryCategoriesComponent implements OnInit {
     return pantryCategoryLabel(cat, (key) => this.i18n.t(key));
   };
 
-  protected get vistas(): { value: PantryCategoryView; clave: 'pantry.categorias_todas' | 'pantry.categorias_sin_productos' | 'pantry.categorias_con_subcategorias' }[] {
+  protected get vistas(): {
+    value: PantryCategoryView;
+    clave:
+      | 'pantry.categorias_todas'
+      | 'pantry.categorias_sin_productos'
+      | 'pantry.categorias_con_subcategorias';
+  }[] {
     return [
       { value: 'all', clave: 'pantry.categorias_todas' },
       { value: 'without-products', clave: 'pantry.categorias_sin_productos' },
@@ -576,7 +991,9 @@ export class PantryCategoriesComponent implements OnInit {
     // Lo mismo que en productos: la query es el estado, y al entrar se lee. `view` es el nombre que comparte con
     // el servidor para las vistas, no un detalle interno de la URL. `?offset=` se jubilo con el paginador server.
     const query = this.route.snapshot.queryParamMap;
-    this.view.set(valorDeQuery(query, 'view', ['all', 'without-products', 'with-children'] as const, 'all'));
+    this.view.set(
+      valorDeQuery(query, 'view', ['all', 'without-products', 'with-children'] as const, 'all')
+    );
     this.q.set(valorDeQuery(query, 'q', null, ''));
     const id = this.route.snapshot.paramMap.get('id');
     if (id) this.abrirFicha(id);
@@ -686,7 +1103,9 @@ export class PantryCategoriesComponent implements OnInit {
       return;
     }
     this.toast.success(
-      this.i18n.t(borradas === 1 ? 'pantry.categoria_borrada' : 'pantry.n_categorias_borradas', { n: borradas }),
+      this.i18n.t(borradas === 1 ? 'pantry.categoria_borrada' : 'pantry.n_categorias_borradas', {
+        n: borradas
+      }),
       fallidas > 0 ? this.i18n.t('pantry.categorias_lote_fallidas', { n: fallidas }) : undefined
     );
   }
@@ -721,7 +1140,8 @@ export class PantryCategoriesComponent implements OnInit {
       return;
     }
     const catalogo = this.pantry.categories();
-    const encontrada = catalogo.find((fila) => fila.id === id) ?? (await this.buscarEnServidor(id, 0));
+    const encontrada =
+      catalogo.find((fila) => fila.id === id) ?? (await this.buscarEnServidor(id, 0));
     if (!encontrada) {
       await this.router.navigate(['../'], { relativeTo: this.route });
       return;
@@ -744,7 +1164,10 @@ export class PantryCategoriesComponent implements OnInit {
   }
 
   protected opcionesPadre(): PickerOption[] {
-    const prohibidas = clavesNoElegiblesComoPadre(this.pantry.categories(), this.esNueva ? null : this.ficha?.id ?? null);
+    const prohibidas = clavesNoElegiblesComoPadre(
+      this.pantry.categories(),
+      this.esNueva ? null : (this.ficha?.id ?? null)
+    );
     return this.pantry
       .categories()
       .filter((fila) => !prohibidas.has(fila.key))
@@ -752,7 +1175,11 @@ export class PantryCategoriesComponent implements OnInit {
         value: fila.key,
         label: pantryCategoryLabel(fila, (key) => this.i18n.t(key)),
         color: fila.color,
-        group: fila.parentName ? pantryCategoryLabel({ key: fila.parentKey, name: fila.parentName }, (key) => this.i18n.t(key)) : undefined
+        group: fila.parentName
+          ? pantryCategoryLabel({ key: fila.parentKey, name: fila.parentName }, (key) =>
+              this.i18n.t(key)
+            )
+          : undefined
       }));
   }
 
@@ -767,7 +1194,7 @@ export class PantryCategoriesComponent implements OnInit {
   private comprobarFormaDelArbol(): string | null {
     const padre = this.formulario.parentKey.trim();
     if (!padre) return null;
-    const propia = this.esNueva ? null : this.ficha?.key ?? null;
+    const propia = this.esNueva ? null : (this.ficha?.key ?? null);
     if (propia && padre === propia) return this.i18n.t('pantry.error_ciclo');
     let cadena = padre;
     const vistas = new Set<string>();
@@ -778,7 +1205,8 @@ export class PantryCategoriesComponent implements OnInit {
       if (propia && cadena === propia) return this.i18n.t('pantry.error_ciclo');
       cadena = this.pantry.categoryByKey(cadena)?.parentKey ?? '';
     }
-    if (profundidadPadre + this.altura(propia ?? '') > 4) return this.i18n.t('pantry.error_profundidad');
+    if (profundidadPadre + this.altura(propia ?? '') > 4)
+      return this.i18n.t('pantry.error_profundidad');
     return null;
   }
 
@@ -856,7 +1284,9 @@ export class PantryCategoriesComponent implements OnInit {
       this.error = this.frase(resultado.error, resultado.message, color);
       return;
     }
-    this.toast.success(this.i18n.t(this.esNueva ? 'pantry.categoria_creada' : 'pantry.categoria_guardada'));
+    this.toast.success(
+      this.i18n.t(this.esNueva ? 'pantry.categoria_creada' : 'pantry.categoria_guardada')
+    );
     await this.volver();
   }
 
@@ -873,7 +1303,9 @@ export class PantryCategoriesComponent implements OnInit {
       case 'PANTRY_CATEGORY_IN_USE':
         return t('pantry.error_en_uso');
       case 'PANTRY_CATEGORY_INVALID':
-        return !color || /^#[0-9a-fA-F]{6}$/.test(color) ? message || t('ui.datos_de_entrada_invalidos') : t('pantry.error_color_invalido');
+        return !color || /^#[0-9a-fA-F]{6}$/.test(color)
+          ? message || t('ui.datos_de_entrada_invalidos')
+          : t('pantry.error_color_invalido');
       case 'NETWORK':
         return t('ui.sin_conexion');
       default:
@@ -905,7 +1337,10 @@ export class PantryCategoriesComponent implements OnInit {
     if (!aceptado) return;
     const resultado = await this.pantry.deleteCategory(fila.id);
     if (!resultado.ok) {
-      this.toast.error(this.i18n.t('ui.no_se_ha_podido'), this.frase(resultado.error, resultado.message, ''));
+      this.toast.error(
+        this.i18n.t('ui.no_se_ha_podido'),
+        this.frase(resultado.error, resultado.message, '')
+      );
       return;
     }
     this.toast.success(this.i18n.t('pantry.categoria_borrada'));

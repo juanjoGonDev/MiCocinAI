@@ -19,7 +19,8 @@ export const uiEs = {
   'ui.eso_no_es_una': 'Eso no es una foto (png, jpg o webp).',
   'ui.ha_ocurrido_un_error': 'Ha ocurrido un error inesperado',
   'ui.solicitud_incorrecta': 'Solicitud incorrecta',
-  'ui.la_sesion_que_guarda': 'La sesion que guarda este navegador ya no vale. Cierra sesion y vuelve a entrar.',
+  'ui.la_sesion_que_guarda':
+    'La sesion que guarda este navegador ya no vale. Cierra sesion y vuelve a entrar.',
   'ui.no_tienes_permiso': 'No tienes permiso para realizar esta acción',
   'ui.recurso_no_encontrado': 'Recurso no encontrado',
   'ui.conflicto_con_el_recurso': 'Conflicto con el recurso',
@@ -31,7 +32,8 @@ export const uiEs = {
   'ui.sesion_caducada': 'Sesion caducada',
   'ui.error': 'Error',
   'ui.el_servidor_te_esta': 'El servidor te esta frenando. Se puede seguir en {s} s.',
-  'ui.se_borran_lista_y_lineas': 'Se borran "{name}" y sus {n} lineas. Los precios guardados se conservan.',
+  'ui.se_borran_lista_y_lineas':
+    'Se borran "{name}" y sus {n} lineas. Los precios guardados se conservan.',
   'ui.lista_pasa_al_historial': '"{name}" pasa al historial.',
   'ui.lista_vuelve_a_activas': '"{name}" vuelve a activas.',
   'ui.nuevas_y_sumadas': '{nuevas} nuevas, {sumadas} sumadas a lo que ya estaba{resto}.',
@@ -150,7 +152,10 @@ export const uiEs = {
   'ui.tabla_orden_multiple': 'Para combinar columnas en el orden, clic con Mayus',
   'ui.tabla_rango': '{desde}-{hasta} de {total}',
   'ui.tabla_por_pagina': 'por pagina',
-  'ui.tabla_pagina': 'Pagina {pagina} de {ultima}',
+  'ui.tabla_filas_pagina': '{n} por página',
+  'ui.tabla_ir_pagina': 'Ir a la página {pagina}',
+  'ui.tabla_paginacion': 'Paginación',
+  'ui.tabla_pagina': 'Página {pagina} de {ultima}',
   'ui.tabla_siguiente': 'Siguiente',
   'ui.tabla_nada_coincide': 'Ningun resultado coincide con los filtros',
   'ui.tabla_lista_vacia': 'Aqui no hay nada todavia',
@@ -172,7 +177,7 @@ export const uiEs = {
   'ui.tabla_proximos_7': 'Proximos 7 dias',
   'ui.tabla_vencidos': 'Vencidos',
   'ui.tabla_antes_de': 'Antes de',
-  'ui.tabla_despues_de': 'Despues de',
+  'ui.tabla_despues_de': 'Despues de'
 } as const;
 
 export const uiEn: Record<keyof typeof uiEs, string> = {
@@ -183,7 +188,8 @@ export const uiEn: Record<keyof typeof uiEs, string> = {
   'ui.eso_no_es_una': 'That is not a photo (png, jpg or webp).',
   'ui.ha_ocurrido_un_error': 'An unexpected error occurred',
   'ui.solicitud_incorrecta': 'Bad request',
-  'ui.la_sesion_que_guarda': 'The session saved in this browser is no longer valid. Sign out and sign in again.',
+  'ui.la_sesion_que_guarda':
+    'The session saved in this browser is no longer valid. Sign out and sign in again.',
   'ui.no_tienes_permiso': 'You do not have permission to perform this action',
   'ui.recurso_no_encontrado': 'Resource not found',
   'ui.conflicto_con_el_recurso': 'Conflict with the resource',
@@ -214,7 +220,8 @@ export const uiEn: Record<keyof typeof uiEs, string> = {
   'ui.n_lineas_quitadas': '{n} lines removed',
   'ui.repetidas_ignoradas': '{n} repeated or empty lines were skipped.',
   'ui.n_lineas_anadidas': '{n} lines added',
-  'ui.linea_sin_precio_varios': '{n} purchased lines have no price. Open the list to write them down.',
+  'ui.linea_sin_precio_varios':
+    '{n} purchased lines have no price. Open the list to write them down.',
   'ui.linea_sin_precio_uno': '{n} purchased line has no price. Open the list to write it down.',
   'ui.el_historial_de_precios': 'The price history is untouched.',
   'ui.lista_borrada': 'List deleted',
@@ -313,6 +320,9 @@ export const uiEn: Record<keyof typeof uiEs, string> = {
   'ui.tabla_orden_multiple': 'Shift-click to combine columns in the sort',
   'ui.tabla_rango': '{desde}–{hasta} of {total}',
   'ui.tabla_por_pagina': 'per page',
+  'ui.tabla_filas_pagina': '{n} per page',
+  'ui.tabla_ir_pagina': 'Go to page {pagina}',
+  'ui.tabla_paginacion': 'Pagination',
   'ui.tabla_pagina': 'Page {pagina} of {ultima}',
   'ui.tabla_siguiente': 'Next',
   'ui.tabla_nada_coincide': 'No result matches the filters',
@@ -335,5 +345,5 @@ export const uiEn: Record<keyof typeof uiEs, string> = {
   'ui.tabla_proximos_7': 'Next 7 days',
   'ui.tabla_vencidos': 'Expired',
   'ui.tabla_antes_de': 'Before',
-  'ui.tabla_despues_de': 'After',
+  'ui.tabla_despues_de': 'After'
 };

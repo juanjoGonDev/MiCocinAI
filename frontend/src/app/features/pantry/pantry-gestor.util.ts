@@ -1,5 +1,10 @@
 import type { PantryCategory } from '../../shared/models/pantry.model';
-import { claveDeDia, hoyLocal, quitarAcentos, sumarDias } from '../../shared/components/ui/data-table/data-table.util';
+import {
+  claveDeDia,
+  hoyLocal,
+  quitarAcentos,
+  sumarDias
+} from '../../shared/components/ui/data-table/data-table.util';
 
 /**
  * Lo que las dos pantallas del gestor calculan sin tocar el DOM (HOGARIA-SPEC ## 12x).
@@ -18,7 +23,10 @@ import { claveDeDia, hoyLocal, quitarAcentos, sumarDias } from '../../shared/com
  * articulos por rama —que se calcula bajando por el arbol— no acabaria nunca. El server lo rechaza igualmente
  * (`assertPlacement`), pero la pantalla puede simplemente no ofrecer la opcion, y eso es mejor que un error.
  */
-export function clavesNoElegiblesComoPadre(categorias: PantryCategory[], idPropio: string | null): Set<string> {
+export function clavesNoElegiblesComoPadre(
+  categorias: PantryCategory[],
+  idPropio: string | null
+): Set<string> {
   // Al crear no hay nada prohibido: la categoria todavia no tiene descendientes.
   if (!idPropio) return new Set();
   const clavePropia = categorias.find((categoria) => categoria.id === idPropio)?.key;
@@ -42,7 +50,9 @@ export function clavesNoElegiblesComoPadre(categorias: PantryCategory[], idPropi
 /** El color con el que se pinta una fila: el punto de la categoria, o gris de reserva si no trae ninguno. */
 export const COLOR_RESERVA = '#8A8F98';
 
-export function colorDeCategoria(categoria: Pick<PantryCategory, 'color'> | null | undefined): string {
+export function colorDeCategoria(
+  categoria: Pick<PantryCategory, 'color'> | null | undefined
+): string {
   const valor = (categoria?.color ?? '').trim().toUpperCase();
   return /^#[0-9A-F]{6}$/.test(valor) ? valor : COLOR_RESERVA;
 }
@@ -59,16 +69,24 @@ export function normalizarAlias(
   nombre: string,
   existentes: string[]
 ): { valor: string } | { error: 'vacio' | 'repetido' | 'es-el-nombre' } | null {
-  const valor = String(entrada ?? '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  const valor = String(entrada ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
   if (!valor) return { error: 'vacio' };
-  if (nombre && valor.toLowerCase() === nombre.trim().toLowerCase()) return { error: 'es-el-nombre' };
-  if (existentes.some((previo) => previo.toLowerCase() === valor.toLowerCase())) return { error: 'repetido' };
+  if (nombre && valor.toLowerCase() === nombre.trim().toLowerCase())
+    return { error: 'es-el-nombre' };
+  if (existentes.some((previo) => previo.toLowerCase() === valor.toLowerCase()))
+    return { error: 'repetido' };
   if (existentes.length >= 20) return null;
   return { valor };
 }
 
 /** Lo que se pinta en la fila: los tres primeros alias y un «+n» con el resto, para que la lista no baile. */
-export function aliasVisibles(aliases: string[], maximo = 3): { visibles: string[]; ocultos: number } {
+export function aliasVisibles(
+  aliases: string[],
+  maximo = 3
+): { visibles: string[]; ocultos: number } {
   if (aliases.length <= maximo) return { visibles: aliases, ocultos: 0 };
   return { visibles: aliases.slice(0, maximo), ocultos: aliases.length - maximo };
 }
@@ -139,7 +157,11 @@ export function clavesSubarbolDe(
 }
 
 /** La pagina tal y como la devuelven los tres endpoints de lista del gestor; `null` es «no llego». */
-export type PaginaGestor<T> = { data: readonly T[]; meta?: { total?: number } | null; hasMore?: boolean } | null;
+export type PaginaGestor<T> = {
+  data: readonly T[];
+  meta?: { total?: number } | null;
+  hasMore?: boolean;
+} | null;
 
 /**
  * Todas las filas de una consulta, de pagina en pagina (HOGARIA-SPEC ## 12ac).
@@ -189,8 +211,49 @@ export function caducaEnTresDias(valor: unknown, hoy: string = hoyLocal()): bool
  * pantalla nombre (el producto encuentra el alias; la categoria, la clave; el catalogo, solo el nombre, que
  * es lo que buscaba `buscarProductos` del server). Con la caja vacia lo deja pasar todo.
  */
-export function coincideGestor(campos: readonly (string | null | undefined)[], consulta: string): boolean {
+export function coincideGestor(
+  campos: readonly (string | null | undefined)[],
+  consulta: string
+): boolean {
   const q = quitarAcentos(consulta.trim().toLowerCase());
   if (!q) return true;
   return campos.some((campo) => !!campo && quitarAcentos(campo.toLowerCase()).includes(q));
+}
+
+/**
+ * La clave con la que el server dice «esta ficha ya es de la casa» (`normalizeProductName`,
+ * `server/src/utils/product-key.ts`), portada al cliente para que el lote del catálogo pueda resolver el
+ * ingrediente por la MISMA regla que pintó el «en casa» (## 12ad). Es un espejo, no una reinterpretación: las
+ * unidades abreviadas, la puntuación de sobra y los rellenos se tratan igual; si el server cambia, cambia
+ * aqui (el test de arriba es el candado). Se traduce la lectura, no la comparación.
+ */
+const UNIDADES_PORTUGUES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/\b(?:kilogramos?|kilos?|kgs?)\b/g, 'kg'],
+  [/\b(?:gramos?|grs?)\b/g, 'g'],
+  [/\b(?:litros?|lts?|ls)\b/g, 'l'],
+  [/\b(?:mililitros?|mls?)\b/g, 'ml'],
+  [/\b(?:unidades?|uds?|pzas?)\b/g, 'ud'],
+  [/\b(?:packs?|paquetes?)\b/g, 'pack'],
+  [/\b(?:botellas?|botellines?)\b/g, 'botella'],
+  [/\b(?:botes?|tarros?|frascos?)\b/g, 'bote']
+];
+const RUIDO_PORTUGUES: readonly RegExp[] = [
+  /\bx\s*\d+\b/g,
+  /\(\d+(?:[.,]\d+)?\s*[a-zç-ž]*\)/g,
+  /[.,;:!?]+/g
+];
+
+export function claveDeProductoCasa(nombre: string | null | undefined): string {
+  const raw = (nombre ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  if (!raw) return '';
+  let clave = raw;
+  for (const patron of RUIDO_PORTUGUES) clave = clave.replace(patron, ' ');
+  for (const [patron, reemplazo] of UNIDADES_PORTUGUES)
+    clave = clave.replace(patron, ` ${reemplazo} `);
+  clave = clave.replace(/\b(?:de|del|la|el|los|las)\b/g, ' ');
+  return clave.replace(/\s+/g, ' ').trim();
 }

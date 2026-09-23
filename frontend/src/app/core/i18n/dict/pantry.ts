@@ -13,7 +13,8 @@ export const pantryEs = {
   // del fichero estan `pantry.categoria_*`) y solo mientras sigan teniendo el nombre de fabrica.
   // ── El catalogo del super (## 12aa): pre-registro con su pasillo y su padre. ──
   'pantry.catalogo_titulo': 'Catálogo del supermercado',
-  'pantry.catalogo_ayuda': 'Lo que se compra en un súper español, pre-registrado con su categoría. Añadir no compra nada: deja el producto en tu inventario con una unidad.',
+  'pantry.catalogo_ayuda':
+    'Lo que se compra en un súper español, pre-registrado con su categoría. Añadir no compra nada: deja el producto en tu inventario con una unidad.',
   'pantry.catalogo_buscar': 'Buscar en el catálogo',
   'pantry.catalogo_todas': 'Todos los pasillos',
   'pantry.catalogo_pasillos': 'Pasillos del catálogo',
@@ -26,15 +27,27 @@ export const pantryEs = {
   'pantry.catalogo_anadidos': '{n} productos añadidos a tu inventario',
   'pantry.catalogo_ya_estaba': '1 ya estaba en la casa',
   'pantry.catalogo_ya_estaban': '{n} ya estaban en la casa',
+  'pantry.catalogo_lote_quitar': 'Quitar {n} del inventario',
+  'pantry.catalogo_lote_quitar_info':
+    'Quita de la casa las existencias de los productos elegidos; la ficha del catálogo no se toca.',
+  'pantry.catalogo_lote_quitar_titulo': '¿Quitar del inventario?',
+  'pantry.catalogo_lote_quitar_pregunta':
+    'Se borrarán las existencias en casa de {n} productos. Las fichas del catálogo seguirán existiendo.',
+  'pantry.catalogo_lote_quitar_confirmar': 'Quitar del inventario',
+  'pantry.catalogo_lote_quitar_perdidos': '{n} ya no estaban en la casa',
+  'pantry.catalogo_lote_quitar_perdidos_detalle':
+    'Alguien los habría terminado mientras; la tabla queda al día.',
   'pantry.catalogo_nada_que_anadir': 'Todo lo visible ya está en casa',
   'pantry.quitar_unidad': 'Quitar una unidad',
   'pantry.anadir_unidad': 'Añadir una unidad',
   'pantry.gestion_del_inventario': 'Gestionar el inventario',
   'pantry.volver_al_inventario': 'Volver al inventario',
   'pantry.gestor_categorias': 'Categorías del inventario',
-  'pantry.gestor_categorias_ayuda': 'Lo que tu casa usa para agrupar su inventario. El nombre es lo que se lee; el color, lo que se reconoce en la fila.',
+  'pantry.gestor_categorias_ayuda':
+    'Lo que tu casa usa para agrupar su inventario. El nombre es lo que se lee; el color, lo que se reconoce en la fila.',
   'pantry.gestor_productos': 'Productos principales',
-  'pantry.gestor_productos_ayuda': 'Lo que tu casa conoce, tenga ahora mismo o no. Registrar un producto no mete nada en la nevera: solo lo pone en el catálogo.',
+  'pantry.gestor_productos_ayuda':
+    'Lo que tu casa conoce, tenga ahora mismo o no. Registrar un producto no mete nada en la nevera: solo lo pone en el catálogo.',
   'pantry.nueva_categoria': 'Categoría nueva',
   'pantry.editar_categoria': 'Editar categoría',
   'pantry.nombre_categoria': 'Nombre',
@@ -52,12 +65,14 @@ export const pantryEs = {
   'pantry.columna_productos': 'Productos',
   'pantry.columna_subarbol': 'En subárbol',
   'pantry.columna_subcategorias': 'Subcategorías',
-  'pantry.categorias_lote_pregunta': 'Se borrarán {n} categorías vacías; después no hay vuelta atrás.',
+  'pantry.categorias_lote_pregunta':
+    'Se borrarán {n} categorías vacías; después no hay vuelta atrás.',
   'pantry.categorias_lote_saltan': '{n} no se pueden borrar ahora y se dejarán intactas',
   'pantry.categorias_lote_fallidas': '{n} no se han podido borrar',
   'pantry.n_categorias_borradas': '{n} categorías borradas',
   'pantry.categoria_reservada_corta': 'Reserva',
-  'pantry.categoria_reservada': 'Aquí cae lo que no encaja: se puede pintar y anotar, pero no renombrar, mover ni borrar.',
+  'pantry.categoria_reservada':
+    'Aquí cae lo que no encaja: se puede pintar y anotar, pero no renombrar, mover ni borrar.',
   'pantry.crear_categoria': 'Crear categoría',
   'pantry.categoria_creada': 'Categoría creada',
   'pantry.categoria_guardada': 'Categoría guardada',
@@ -83,11 +98,13 @@ export const pantryEs = {
   'pantry.ficha_producto': 'Ficha del producto',
   'pantry.producto_nombre': 'Nombre',
   'pantry.aliases': 'Cómo lo llamáis en casa',
-  'pantry.aliases_ayuda': 'Sirven para buscar y para reconocerlo. Lo que apunta a la cesta sigue siendo el nombre.',
+  'pantry.aliases_ayuda':
+    'Sirven para buscar y para reconocerlo. Lo que apunta a la cesta sigue siendo el nombre.',
   'pantry.anadir_alias': 'Añadir alias',
   'pantry.unidad_producto': 'Unidad por defecto',
   'pantry.cantidad_inicial': 'Cantidad al registrar',
-  'pantry.cantidad_inicial_ayuda': 'Con 0 queda como producto principal sin stock; si le pones unidades, entra en el inventario.',
+  'pantry.cantidad_inicial_ayuda':
+    'Con 0 queda como producto principal sin stock; si le pones unidades, entra en el inventario.',
   'pantry.caducidad_producto': 'Caducidad',
   'pantry.notas_producto': 'Nota',
   'pantry.guardar_producto': 'Guardar producto',
@@ -99,14 +116,17 @@ export const pantryEs = {
   'pantry.editar_producto': 'Editar producto',
   'pantry.eliminar_producto': 'Eliminar producto',
   'pantry.confirmar_borrar_producto': '¿Borrar «{name}» del catálogo de tu casa?',
-  'pantry.impacto_borrar_producto': 'Se borra la ficha, no lo que pasó: las líneas de la cesta y las observaciones de precio se quedan.',
+  'pantry.impacto_borrar_producto':
+    'Se borra la ficha, no lo que pasó: las líneas de la cesta y las observaciones de precio se quedan.',
   'pantry.producto_borrado': 'Producto borrado',
-  'pantry.error_en_despensa': 'Tiene {cantidad} dentro del inventario: quítalo del inventario primero.',
+  'pantry.error_en_despensa':
+    'Tiene {cantidad} dentro del inventario: quítalo del inventario primero.',
   'pantry.error_alias_de_otro': '«{alias}» ya es el nombre de otro producto de tu casa.',
   'pantry.error_categoria_desconocida': 'Esa categoría ya no existe en tu casa.',
   'pantry.seleccionados': '{n} seleccionados',
   'pantry.borrar_seleccionados': 'Borrar seleccionados',
-  'pantry.error_lote_bloqueado': '{n} de los seleccionados tienen stock dentro: el lote no se ejecuta.',
+  'pantry.error_lote_bloqueado':
+    '{n} de los seleccionados tienen stock dentro: el lote no se ejecuta.',
   'pantry.n_productos_borrados': '{n} productos borrados',
   'pantry.productos_vacios': 'Vuestra casa todavía no tiene productos registrados.',
   'pantry.ver_en_la_despensa': 'Ver en el inventario',
@@ -134,8 +154,10 @@ export const pantryEs = {
   'pantry.agregar_primer_ingrediente': 'Agregar primer ingrediente',
   'pantry.agregar_utensilio': 'Agregar Utensilio',
   'pantry.agregar': 'Agregar',
-  'pantry.anade_los_que_no': 'Añade los que no estén en el catálogo (sous vide, panificadora, gofrera...) y la IA los tendrá en cuenta.',
-  'pantry.anade_los_que_uses': 'Añade los que uses en casa: con ellos la IA descarta recetas que no puedes preparar.',
+  'pantry.anade_los_que_no':
+    'Añade los que no estén en el catálogo (sous vide, panificadora, gofrera...) y la IA los tendrá en cuenta.',
+  'pantry.anade_los_que_uses':
+    'Añade los que uses en casa: con ellos la IA descarta recetas que no puedes preparar.',
   'pantry.anadir_utensilio_personalizado': 'Añadir utensilio personalizado',
   'pantry.anadir_utensilio': 'Añadir utensilio',
   'pantry.buscar_ingredientes': 'Buscar ingredientes...',
@@ -158,7 +180,8 @@ export const pantryEs = {
   'pantry.kilogramos_kg': 'Kilogramos (kg)',
   'pantry.litros_l': 'Litros (l)',
   'pantry.lo_tengo_en_casa': 'Lo tengo en casa (se marcará en el catálogo)',
-  'pantry.marca_los_utensilios_y': 'Marca los utensilios y electrodomésticos que tienes en casa, sección a sección. La IA los tendrá en cuenta al sugerirte recetas.',
+  'pantry.marca_los_utensilios_y':
+    'Marca los utensilios y electrodomésticos que tienes en casa, sección a sección. La IA los tendrá en cuenta al sugerirte recetas.',
   'pantry.mililitros_ml': 'Mililitros (ml)',
   'pantry.nevera': '🧊 Nevera',
   'pantry.no_encuentras_un_utensilio': '➕ ¿No encuentras un utensilio?',
@@ -172,8 +195,8 @@ export const pantryEs = {
   'pantry.unidad': 'Unidad',
   'pantry.unidades': 'Unidades',
   'pantry.utensilios': '🍳 Utensilios',
-  'pantry.la_cantidad_debe_ser': "La cantidad debe ser mayor a 0",
-  'pantry.el_nombre_es_requerido': "El nombre es requerido",
+  'pantry.la_cantidad_debe_ser': 'La cantidad debe ser mayor a 0',
+  'pantry.el_nombre_es_requerido': 'El nombre es requerido',
   'pantry.mas_agregar_utensilio': '+ Agregar utensilio',
   'pantry.mas_agregar': '+ Agregar',
   'pantry.categoria_alimentos': 'Alimentos',
@@ -341,23 +364,24 @@ export const pantryEs = {
   'pantry.lote_anular': 'Anular seleccion',
   'pantry.lote_titulo_vaciar': '¿Vaciar los articulos elegidos?',
   'pantry.lote_titulo_borrar': '¿Borrar los articulos elegidos?',
-  'pantry.lote_pregunta_vaciar': 'Se pondran a 0 {n} articulos: saldran del inventario, y la casa seguira conociendolos.',
+  'pantry.lote_pregunta_vaciar':
+    'Se pondran a 0 {n} articulos: saldran del inventario, y la casa seguira conociendolos.',
   'pantry.lote_pregunta_borrar': 'Se borraran {n} articulos del inventario de la casa.',
   'pantry.lote_vaciados': '{n} articulos vaciados',
   'pantry.lote_borrados': '{n} articulos borrados',
   'pantry.lote_disponibles': 'Marcar como disponibles',
   'pantry.lote_no_disponibles': 'Marcar como no disponibles',
   'pantry.lote_utensilios_actualizados': '{n} utensilios actualizados',
-  'pantry.buscar_utensilios': 'Buscar utensilios…',
+  'pantry.buscar_utensilios': 'Buscar utensilios…'
 } as const;
 
 export const pantryEn: Record<keyof typeof pantryEs, string> = {
-
   // The pantry managers (HOGARIA-SPEC ## 12x). The category NAMES are not translated anywhere: they are
   // household data that also goes into the AI prompt. Only the factory ones have a dictionary label, and only
   // while they still carry their factory name.
   'pantry.catalogo_titulo': 'Supermarket catalog',
-  'pantry.catalogo_ayuda': 'The usual Spanish supermarket shelves, pre-registered with their category. Adding buys nothing: it leaves the product in your inventory with one unit.',
+  'pantry.catalogo_ayuda':
+    'The usual Spanish supermarket shelves, pre-registered with their category. Adding buys nothing: it leaves the product in your inventory with one unit.',
   'pantry.catalogo_buscar': 'Search the catalog',
   'pantry.catalogo_todas': 'All aisles',
   'pantry.catalogo_pasillos': 'Catalog aisles',
@@ -370,15 +394,27 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   'pantry.catalogo_anadidos': '{n} products added to your inventory',
   'pantry.catalogo_ya_estaba': '1 was already in the household',
   'pantry.catalogo_ya_estaban': '{n} were already in the household',
+  'pantry.catalogo_lote_quitar': 'Remove {n} from the inventory',
+  'pantry.catalogo_lote_quitar_info':
+    'Removes the selected products from the household stock; the catalog record is kept.',
+  'pantry.catalogo_lote_quitar_titulo': 'Remove from the inventory?',
+  'pantry.catalogo_lote_quitar_pregunta':
+    'This deletes the household stock of {n} products. The catalog records will remain.',
+  'pantry.catalogo_lote_quitar_confirmar': 'Remove from inventory',
+  'pantry.catalogo_lote_quitar_perdidos': '{n} were no longer in the household',
+  'pantry.catalogo_lote_quitar_perdidos_detalle':
+    'Someone finished them meanwhile; the table is up to date.',
   'pantry.catalogo_nada_que_anadir': 'Everything visible is already in the household',
   'pantry.quitar_unidad': 'Remove one unit',
   'pantry.anadir_unidad': 'Add one unit',
   'pantry.gestion_del_inventario': 'Manage the inventory',
   'pantry.volver_al_inventario': 'Back to the inventory',
   'pantry.gestor_categorias': 'Inventory categories',
-  'pantry.gestor_categorias_ayuda': 'How your household groups its inventory. The name is what you read; the color is what you spot in the row.',
+  'pantry.gestor_categorias_ayuda':
+    'How your household groups its inventory. The name is what you read; the color is what you spot in the row.',
   'pantry.gestor_productos': 'Staple products',
-  'pantry.gestor_productos_ayuda': 'What your household knows about, in stock or not. Registering a product puts nothing in the fridge: it only adds it to the catalogue.',
+  'pantry.gestor_productos_ayuda':
+    'What your household knows about, in stock or not. Registering a product puts nothing in the fridge: it only adds it to the catalogue.',
   'pantry.nueva_categoria': 'New category',
   'pantry.editar_categoria': 'Edit category',
   'pantry.nombre_categoria': 'Name',
@@ -401,7 +437,8 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   'pantry.categorias_lote_fallidas': '{n} could not be deleted',
   'pantry.n_categorias_borradas': '{n} categories deleted',
   'pantry.categoria_reservada_corta': 'Fallback',
-  'pantry.categoria_reservada': 'This is where anything that does not fit falls: you can color it and note it, but not rename, move or delete it.',
+  'pantry.categoria_reservada':
+    'This is where anything that does not fit falls: you can color it and note it, but not rename, move or delete it.',
   'pantry.crear_categoria': 'Create category',
   'pantry.categoria_creada': 'Category created',
   'pantry.categoria_guardada': 'Category saved',
@@ -427,11 +464,13 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   'pantry.ficha_producto': 'Product card',
   'pantry.producto_nombre': 'Name',
   'pantry.aliases': 'What your household calls it',
-  'pantry.aliases_ayuda': 'They are for searching and for recognizing it. What points to the basket is still the name.',
+  'pantry.aliases_ayuda':
+    'They are for searching and for recognizing it. What points to the basket is still the name.',
   'pantry.anadir_alias': 'Add alias',
   'pantry.unidad_producto': 'Default unit',
   'pantry.cantidad_inicial': 'Quantity when registering',
-  'pantry.cantidad_inicial_ayuda': 'With 0 it stays a staple out of stock; give it units and it enters the inventory.',
+  'pantry.cantidad_inicial_ayuda':
+    'With 0 it stays a staple out of stock; give it units and it enters the inventory.',
   'pantry.caducidad_producto': 'Best before',
   'pantry.notas_producto': 'Note',
   'pantry.guardar_producto': 'Save product',
@@ -443,9 +482,11 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   'pantry.editar_producto': 'Edit product',
   'pantry.eliminar_producto': 'Delete product',
   'pantry.confirmar_borrar_producto': 'Delete "{name}" from this household catalogue?',
-  'pantry.impacto_borrar_producto': 'The card goes, not what happened: basket lines and price observations stay.',
+  'pantry.impacto_borrar_producto':
+    'The card goes, not what happened: basket lines and price observations stay.',
   'pantry.producto_borrado': 'Product deleted',
-  'pantry.error_en_despensa': 'It has {cantidad} inside your inventory: take it out of your inventory first.',
+  'pantry.error_en_despensa':
+    'It has {cantidad} inside your inventory: take it out of your inventory first.',
   'pantry.error_alias_de_otro': '"{alias}" is already another product name in your household.',
   'pantry.error_categoria_desconocida': 'That category no longer exists in your household.',
   'pantry.seleccionados': '{n} selected',
@@ -478,8 +519,10 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   'pantry.agregar_primer_ingrediente': 'Add first ingredient',
   'pantry.agregar_utensilio': 'Add Utensil',
   'pantry.agregar': 'Add',
-  'pantry.anade_los_que_no': 'Add the ones missing from the catalogue (sous vide, bread maker, waffle iron…) and the AI will take them into account.',
-  'pantry.anade_los_que_uses': 'Add what you use at home: with them the AI discards recipes you cannot cook.',
+  'pantry.anade_los_que_no':
+    'Add the ones missing from the catalogue (sous vide, bread maker, waffle iron…) and the AI will take them into account.',
+  'pantry.anade_los_que_uses':
+    'Add what you use at home: with them the AI discards recipes you cannot cook.',
   'pantry.anadir_utensilio_personalizado': 'Add your own utensil',
   'pantry.anadir_utensilio': 'Add utensil',
   'pantry.buscar_ingredientes': 'Search ingredients...',
@@ -502,10 +545,11 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   'pantry.kilogramos_kg': 'Kilograms (kg)',
   'pantry.litros_l': 'Litres (l)',
   'pantry.lo_tengo_en_casa': 'I have it at home (it will be ticked in the catalogue)',
-  'pantry.marca_los_utensilios_y': 'Tick the utensils and appliances you have at home, section by section. The AI takes them into account when suggesting recipes.',
+  'pantry.marca_los_utensilios_y':
+    'Tick the utensils and appliances you have at home, section by section. The AI takes them into account when suggesting recipes.',
   'pantry.mililitros_ml': 'Millilitres (ml)',
   'pantry.nevera': '🧊 Fridge',
-  'pantry.no_encuentras_un_utensilio': '➕ Can\'t find a utensil?',
+  'pantry.no_encuentras_un_utensilio': "➕ Can't find a utensil?",
   'pantry.por_caducar': 'About to expire',
   'pantry.sugerencias_comunes': '💡 Common suggestions',
   'pantry.tazas': 'Cups',
@@ -516,8 +560,8 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   'pantry.unidad': 'Unit',
   'pantry.unidades': 'Units',
   'pantry.utensilios': '🍳 Utensils',
-  'pantry.la_cantidad_debe_ser': "The quantity must be greater than 0",
-  'pantry.el_nombre_es_requerido': "The name is required",
+  'pantry.la_cantidad_debe_ser': 'The quantity must be greater than 0',
+  'pantry.el_nombre_es_requerido': 'The name is required',
   'pantry.mas_agregar_utensilio': '+ Add utensil',
   'pantry.mas_agregar': '+ Add',
 
@@ -685,12 +729,13 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   'pantry.lote_anular': 'Clear selection',
   'pantry.lote_titulo_vaciar': 'Empty the selected items?',
   'pantry.lote_titulo_borrar': 'Delete the selected items?',
-  'pantry.lote_pregunta_vaciar': '{n} items will be set to 0: they leave the inventory, and the house still knows them.',
+  'pantry.lote_pregunta_vaciar':
+    '{n} items will be set to 0: they leave the inventory, and the house still knows them.',
   'pantry.lote_pregunta_borrar': '{n} items will be deleted from the household inventory.',
   'pantry.lote_vaciados': '{n} items emptied',
   'pantry.lote_borrados': '{n} items deleted',
   'pantry.lote_disponibles': 'Mark as available',
   'pantry.lote_no_disponibles': 'Mark as unavailable',
   'pantry.lote_utensilios_actualizados': '{n} utensils updated',
-  'pantry.buscar_utensilios': 'Search utensils…',
+  'pantry.buscar_utensilios': 'Search utensils…'
 };

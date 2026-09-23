@@ -1,4 +1,16 @@
-import { Component, ElementRef, EventEmitter, Input, OnDestroy, OnInit, Output, ViewChild, computed, inject, signal } from '@angular/core';
+import {
+  Component,
+  ElementRef,
+  EventEmitter,
+  Input,
+  OnDestroy,
+  OnInit,
+  Output,
+  ViewChild,
+  computed,
+  inject,
+  signal
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../icon/icon.component';
@@ -44,9 +56,7 @@ export type PickerRow =
 @Component({
   selector: 'app-picker',
   standalone: true,
-  imports: [
-    TranslatePipe,
-    CommonModule, FormsModule, IconComponent],
+  imports: [TranslatePipe, CommonModule, FormsModule, IconComponent],
   template: `
     <div class="picker" #root [class.picker--up]="flipped()">
       <button
@@ -66,13 +76,23 @@ export type PickerRow =
         }
         <span class="picker__value">{{ selectedLabel || placeholderText }}</span>
         @if (selectedOption()?.color) {
-          <span class="picker__dot" [style.background]="selectedOption()?.color" aria-hidden="true"></span>
+          <span
+            class="picker__dot"
+            [style.background]="selectedOption()?.color"
+            aria-hidden="true"
+          ></span>
         }
         <app-icon class="picker__caret" name="expand_more" [size]="20" [label]="null" />
       </button>
 
       @if (open()) {
-        <div class="picker__panel" [id]="listId()" role="listbox" [attr.aria-label]="labelText" (keydown)="onListKeys($event, false)">
+        <div
+          class="picker__panel"
+          [id]="listId()"
+          role="listbox"
+          [attr.aria-label]="labelText"
+          (keydown)="onListKeys($event, false)"
+        >
           @if (options.length > filterFrom) {
             <div class="picker__search">
               <app-icon name="search" [size]="16" [label]="null" />
@@ -89,7 +109,12 @@ export type PickerRow =
           }
           <ul class="picker__list">
             @if (allowCustom && query.trim() && !exactMatch) {
-              <li class="picker__option picker__option--custom" role="option" [attr.aria-selected]="active() === -1" (click)="useCustom()">
+              <li
+                class="picker__option picker__option--custom"
+                role="option"
+                [attr.aria-selected]="active() === -1"
+                (click)="useCustom()"
+              >
                 <app-icon name="add" [size]="18" [label]="null" />
                 <span>{{ query.trim() }}</span>
                 <span class="picker__tag">{{ 'ui.usar_este_texto' | t }}</span>
@@ -111,14 +136,23 @@ export type PickerRow =
                   (mouseenter)="active.set(row.index)"
                 >
                   @if (row.option.color) {
-                    <span class="picker__dot" [style.background]="row.option.color" aria-hidden="true"></span>
+                    <span
+                      class="picker__dot"
+                      [style.background]="row.option.color"
+                      aria-hidden="true"
+                    ></span>
                   }
                   <span class="picker__label">{{ row.option.label }}</span>
                   @if (row.option.hint) {
                     <span class="picker__hint">{{ row.option.hint }}</span>
                   }
                   @if (isSelected(row.option)) {
-                    <app-icon class="picker__check" name="check" [size]="18" [label]="'ui.selected_option' | t:{option: row.option.label}" />
+                    <app-icon
+                      class="picker__check"
+                      name="check"
+                      [size]="18"
+                      [label]="'ui.selected_option' | t: { option: row.option.label }"
+                    />
                   }
                 </li>
               }
@@ -365,7 +399,10 @@ export class PickerComponent implements OnInit, OnDestroy {
     const wanted = this.query.trim().toLowerCase();
     if (!wanted) return this.options;
     return this.options.filter(
-      (option) => option.label.toLowerCase().includes(wanted) || option.value.toLowerCase().includes(wanted) || (option.hint ?? '').toLowerCase().includes(wanted)
+      (option) =>
+        option.label.toLowerCase().includes(wanted) ||
+        option.value.toLowerCase().includes(wanted) ||
+        (option.hint ?? '').toLowerCase().includes(wanted)
     );
   });
 
@@ -494,7 +531,9 @@ export class PickerComponent implements OnInit, OnDestroy {
       }
       case 'Enter':
       case ' ': {
-        if (fromTrigger) {
+        // Desde el gatillo: cerrado, Enter/espacio abren; ABIERTO, confirman la opcion activa. Sin esta
+        // segunda pata, el teclado del picker no podia elegir nada cuando la lista no lleva buscador.
+        if (fromTrigger && !this.open()) {
           event.preventDefault();
           this.toggle();
           return;
@@ -503,6 +542,9 @@ export class PickerComponent implements OnInit, OnDestroy {
         if (option) {
           event.preventDefault();
           this.choose(option);
+        } else if (fromTrigger) {
+          event.preventDefault();
+          this.close();
         }
         break;
       }
