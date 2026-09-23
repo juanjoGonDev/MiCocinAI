@@ -15,13 +15,13 @@ calendar, external calendars, Home Assistant. `MiCocinAI` becomes the historical
 The two apps share the interesting surface: a dish knows its ingredients, ingredients cost money at
 a store, the pantry knows what is already bought, and the receipt is the evidence. Absorbing gives:
 
-| Joint capability | Feeds from |
-| --- | --- |
-| Approximate cost of a dish / of a week's plan | `price_observations` + recipe ingredients |
-| "Add to shopping list" from a recipe, a plan or the pantry | `shopping_list_items`, `canonical_products` |
-| Receipt scan fills the pantry (with expiry dates) | `receipt_items` → `ingredients` |
-| Expiry pressure reorders the weekly plan | `ingredients.expiration_date` + planner |
-| Pantry stock reduces the estimated basket | `ingredients.quantity` vs `shopping_list_items` |
+| Joint capability                                           | Feeds from                                      |
+| ---------------------------------------------------------- | ----------------------------------------------- |
+| Approximate cost of a dish / of a week's plan              | `price_observations` + recipe ingredients       |
+| "Add to shopping list" from a recipe, a plan or the pantry | `shopping_list_items`, `canonical_products`     |
+| Receipt scan fills the pantry (with expiry dates)          | `receipt_items` → `ingredients`                 |
+| Expiry pressure reorders the weekly plan                   | `ingredients.expiration_date` + planner         |
+| Pantry stock reduces the estimated basket                  | `ingredients.quantity` vs `shopping_list_items` |
 
 ## 2. Product shape
 
@@ -57,7 +57,7 @@ ambitions, no payments, no marketplace, no scraping services — the same non-go
   `x-session-affinity`, `x-session-affinity-keep-open: true`, and `x-session-affinity-final: true`
   on the final turn.
 - Body: `{ model, messages: [{role:'system',content},{role:'user',content}], response_format:
-  { type: 'json_schema', json_schema: { name, strict: true, schema } }, reasoning?: { effort } }`.
+{ type: 'json_schema', json_schema: { name, strict: true, schema } }, reasoning?: { effort } }`.
 - Attachments (images/PDF) ⇒ `multipart/form-data` with `request` = the JSON above and each
   attachment appended as `files`; enforce a JSON-body byte ceiling and fail with
   `AI_ATTACHMENT_TOO_LARGE` (`413`) instead of silently truncating.
@@ -103,8 +103,8 @@ Reference: `src/infrastructure/shopping-estimate.ts` + offers/optimization.
 Reference: `src/receipts/durable-job-store.ts` + `durable-runner.ts`.
 
 - Table `ai_jobs`: `id, kind, payload_json, status(queued|running|completed|failed|cancelled),
-  attempts, max_attempts, run_after, lease_expires_at, response_id, remote_status, error_code,
-  error_message, created_at, updated_at, finished_at`.
+attempts, max_attempts, run_after, lease_expires_at, response_id, remote_status, error_code,
+error_message, created_at, updated_at, finished_at`.
 - Transitions: `queued → running` takes a lease with a deadline; a worker that dies leaves
   `running` rows which are swept at startup to `failed` + `RECEIPT_EXTRACTION_INTERRUPTED` (or
   re-queued when attempts remain) — recovery is automatic, never manual.
@@ -143,7 +143,7 @@ the joint behaviour the user asked for:
 - On confirm: price observations (immutable, with the ticket's store), catalog projection, and —
   new — `pantry` writes: any line whose product resolves to a pantry ingredient type inserts or
   tops up stock with `expiration_date` from the receipt (`Best before`, `Use by`, `Consumir antes
-  de`, `CAD`, `FECHA DE CONSUMO PREFERENTE`), and shows what was added.
+de`, `CAD`, `FECHA DE CONSUMO PREFERENTE`), and shows what was added.
 - Deleting a capture from a draft never deletes stored evidence unless it is unreferenced.
 
 ## 4. Everything from the UI, nothing from env
@@ -154,27 +154,27 @@ masking of secrets).
 
 Target list for MiCocinAI — every one of these stops being read from `process.env`:
 
-| Key | Default | Bounds |
-| --- | --- | --- |
-| `listenPort` | `3000` | 1–65535, applied on restart |
-| `corsOrigins` | same-origin | list, blank disables |
-| `jwtSecret` | generated on first boot, stored | never returned to the client |
-| `jwtExpiresIn`, `refreshTokenExpiresIn` | `15m`, `30d` | duration strings |
-| `bcryptRounds` | `10` | 8–15 |
-| `rateLimitEnabled`, `rateLimitWindowMs`, `rateLimitMax` | on, `60000`, `300` | used by CI/e2e via API |
-| `aiBaseUrl`, `aiApiKey`, `aiModel` | empty | validated URLs, key masked (`••••abcd`) |
-| `aiTimeoutMs`, `aiMaxRetries` | `30000`, `1` | 1–10 retries |
-| `aiQueueConcurrency`, `aiJobMaxAttempts`, `aiJobBackoffMs` | `1`, `3`, `5000` | bounded |
-| `ocrEnabled`, `ocrLanguage` | on, `spa` | |
-| `maxBodyBytes` | `32 MiB` | 1 KiB–512 MiB |
-| `dbWalMode`, `dbCacheSizeKb`, `dbBusyTimeoutMs` | on, `-64000`, `5000` | |
-| `memoryWarnMb`, `memoryCriticalMb`, `memoryCheckMs` | thresholds | |
-| `logMaxLines`, `logMaxBytes`, `logRetentionDays`, `logLevel` | `10000`, `40 MiB`, `7`, `info` | |
-| `syncIntervalMs`, `syncRetryBackoffMs`, `outboxMaxItems` | `15000`, `2000`, `500` | |
-| `pwaCacheName` | derived from version | read-only, shown in UI |
-| `offlineEnabled`, `featureShopping`, `featureReceipts`, `featurePrices`, `featureTasks` | on | kill-switches |
-| `supportRepoUrl` | `https://github.com/juanjoGonDev/MiCocinAI` | used by report-a-bug |
-| `currency`, `locale` | `EUR`, `es-ES` | |
+| Key                                                                                     | Default                                     | Bounds                                  |
+| --------------------------------------------------------------------------------------- | ------------------------------------------- | --------------------------------------- |
+| `listenPort`                                                                            | `3000`                                      | 1–65535, applied on restart             |
+| `corsOrigins`                                                                           | same-origin                                 | list, blank disables                    |
+| `jwtSecret`                                                                             | generated on first boot, stored             | never returned to the client            |
+| `jwtExpiresIn`, `refreshTokenExpiresIn`                                                 | `15m`, `30d`                                | duration strings                        |
+| `bcryptRounds`                                                                          | `10`                                        | 8–15                                    |
+| `rateLimitEnabled`, `rateLimitWindowMs`, `rateLimitMax`                                 | on, `60000`, `300`                          | used by CI/e2e via API                  |
+| `aiBaseUrl`, `aiApiKey`, `aiModel`                                                      | empty                                       | validated URLs, key masked (`••••abcd`) |
+| `aiTimeoutMs`, `aiMaxRetries`                                                           | `30000`, `1`                                | 1–10 retries                            |
+| `aiQueueConcurrency`, `aiJobMaxAttempts`, `aiJobBackoffMs`                              | `1`, `3`, `5000`                            | bounded                                 |
+| `ocrEnabled`, `ocrLanguage`                                                             | on, `spa`                                   |                                         |
+| `maxBodyBytes`                                                                          | `32 MiB`                                    | 1 KiB–512 MiB                           |
+| `dbWalMode`, `dbCacheSizeKb`, `dbBusyTimeoutMs`                                         | on, `-64000`, `5000`                        |                                         |
+| `memoryWarnMb`, `memoryCriticalMb`, `memoryCheckMs`                                     | thresholds                                  |                                         |
+| `logMaxLines`, `logMaxBytes`, `logRetentionDays`, `logLevel`                            | `10000`, `40 MiB`, `7`, `info`              |                                         |
+| `syncIntervalMs`, `syncRetryBackoffMs`, `outboxMaxItems`                                | `15000`, `2000`, `500`                      |                                         |
+| `pwaCacheName`                                                                          | derived from version                        | read-only, shown in UI                  |
+| `offlineEnabled`, `featureShopping`, `featureReceipts`, `featurePrices`, `featureTasks` | on                                          | kill-switches                           |
+| `supportRepoUrl`                                                                        | `https://github.com/juanjoGonDev/MiCocinAI` | used by report-a-bug                    |
+| `currency`, `locale`                                                                    | `EUR`, `es-ES`                              |                                         |
 
 Only **bootstrap** may come from the environment, and only for values needed before the database can
 be opened: `DATABASE_PATH` (default `./data/hogaria.sqlite` — the existing file is adopted on first
@@ -214,7 +214,7 @@ The rule: **the device is a first-class store; the server is the arbiter.**
    takes `"serviceWorker": "ngsw-config.json"` (a **path**, not a boolean) and writes
    `ngsw-worker.js`, `safety-worker.js`, `worker-basic.min.js` and `ngsw.json` (v1: `index`,
    `assetGroups`, `dataGroups`, `hashTable`, `navigationUrls`, `navigationRequestStrategy:
-   performance`) into `dist/browser`. `SwUpdate` surfaces "new version available" with **Activate
+performance`) into `dist/browser`. `SwUpdate` surfaces "new version available" with **Activate
    now** (activate + clear + reload); a Settings toggle controls silent auto-activation. Because the
    cache name only changes when an asset changes, releases must bump `version` in
    `frontend/package.json`, mirrored in `environments/environment.ts` until a build-time injection
@@ -237,15 +237,15 @@ the SSE viewer) becomes the **only** logging surface:
   but routes `window.onerror` and `unhandledrejection` in as `error` events.
 - Client events persist to `hogar:logs:v1` (bounded ring, newest first) so an offline crash is still
   reportable; they are POSTed to the server in batches (existing `/api/logs` ingest + `GET /api/logs`
-  + SSE) which validates the closed schema and drops anything unknown — server and client events end
-  up in one queryable stream with a `source` field, rotation by line/byte ceilings and oldest-archive
-  removal.
+  - SSE) which validates the closed schema and drops anything unknown — server and client events end
+    up in one queryable stream with a `source` field, rotation by line/byte ceilings and oldest-archive
+    removal.
 - The viewer (`/logs`) keeps its filters (level, source, pause, autoscroll) and gains: saved views,
   `only errors`, and a per-line expand for `data`.
 - **Report a bug** is its own section (`/report`): it composes the markdown (version, build, UA,
   viewport, online/offline, settings hash, last N log lines, reproduction notes as written by the
-  user), then offers *Open issue* (`{supportRepoUrl}/issues/new?title=…&body=…`, which works for a
-  signed-in GitHub user against the public repo) and *Copy to clipboard* as the always-available
+  user), then offers _Open issue_ (`{supportRepoUrl}/issues/new?title=…&body=…`, which works for a
+  signed-in GitHub user against the public repo) and _Copy to clipboard_ as the always-available
   fallback (`navigator.clipboard` with a `execCommand` fallback and a "copied" confirmation). The
   report never contains the AI key, tokens, or other members' emails (asserted by a test).
 
@@ -312,7 +312,7 @@ cooking-only question no longer describes the user. The concept moves, it does n
   (`/multiple` too) uses it **only when the request omits `detailLevel`**: an explicit choice from the
   recipe UI still wins. That is the whole point of asking.
 - Modules drive what HogarIA highlights (dashboard cards, which sections the tour mentions); the three
-  not shipped yet are listed with a *pronto/soon* mark so the picker is honest about the roadmap.
+  not shipped yet are listed with a _pronto/soon_ mark so the picker is honest about the roadmap.
 
 **Where it lives**
 
@@ -321,7 +321,7 @@ cooking-only question no longer describes the user. The concept moves, it does n
   short questions, skippable, editable later.
 - **Preferencias › Perfil** is the section to change it later (first tab, `?tab=profile`), with the
   same controls, the derived AI detail level shown as text, and the standard dirty/discard/save
-  behaviour of that page. `detailLevel` itself remains in Settings: the profile only *suggests* it.
+  behaviour of that page. `detailLevel` itself remains in Settings: the profile only _suggests_ it.
 
 **Acceptance**
 
@@ -335,12 +335,13 @@ cooking-only question no longer describes the user. The concept moves, it does n
 - Skipping the tour keeps defaults (`beginner`, no modules) and never blocks the dashboard.
 
 ### Checklist for this feature
+
 - [x] Server: `none` in every enum (one definition in `utils/taste-profile`, imported by the auth and
       household schemas), `profile.modules` validated, `profile` in the response,
       `detailLevelForCookingLevel` used by the two AI routes, six unit tests.
 - [x] Client: single `home-profile.ts` model (`user.model` and `household.model` re-export the level so
       the three copies cannot drift), shared `app-home-profile-picker`, service patch.
-- [x] Signup without the level block (note about what comes next); tour step *Perfil* first, 5 steps,
+- [x] Signup without the level block (note about what comes next); tour step _Perfil_ first, 5 steps,
       copy and logo about the house, progressive save guarded by the initial load.
 - [x] Preferencias › Perfil as the default tab, dirty tracking/save/discard covering the profile.
 - [x] e2e re-linked (5 steps, default tab, two tests now explicit about `?tab=allergies`) + the
@@ -362,19 +363,19 @@ Two rules the user set, and they are binding for everything that follows:
    in **Configuración** (`/settings`), next to theme and language. Kitchen and body — cooking level,
    allergies, tastes, goal — live in **Preferencias** (`/preferences`).
 
-| Pregunta del tour | Dónde se cambia después | Dueño del dato |
-| --- | --- | --- |
-| Qué secciones quieres llevar (módulos) | **Configuración › Módulos** | `users.preferences.profile.modules` (flag de la app, por cuenta) |
-| Nivel de cocina | **Preferencias › Perfil** | `users.cooking_level` |
-| Alergias e intolerancias | Preferencias › Alergias | `preferences.taste.allergies` |
-| Gustos y aversiones | Preferencias › Gustos | `preferences.taste.likes/dislikes` |
-| Objetivo | Preferencias › Objetivo | `preferences.taste.goal` |
-| Con qué utensilios cuentas | **Despensa › Utensilios** (marcar es editar; el tour solo enlaza) | `utensils.available` |
+| Pregunta del tour                      | Dónde se cambia después                                           | Dueño del dato                                                   |
+| -------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Qué secciones quieres llevar (módulos) | **Configuración › Módulos**                                       | `users.preferences.profile.modules` (flag de la app, por cuenta) |
+| Nivel de cocina                        | **Preferencias › Perfil**                                         | `users.cooking_level`                                            |
+| Alergias e intolerancias               | Preferencias › Alergias                                           | `preferences.taste.allergies`                                    |
+| Gustos y aversiones                    | Preferencias › Gustos                                             | `preferences.taste.likes/dislikes`                               |
+| Objetivo                               | Preferencias › Objetivo                                           | `preferences.taste.goal`                                         |
+| Con qué utensilios cuentas             | **Despensa › Utensilios** (marcar es editar; el tour solo enlaza) | `utensils.available`                                             |
 
 `app.name` and the header mark are the brand; the preferences section icon stops being a salad bowl
 (🥗) because the section is not about food any more: it is the person's profile (👤). Where a section
 is a household-wide switch (`theme`, `language`, `modules`) it belongs to Configuración; where it
-describes one diner, to Preferencias. If a future question is about the *house*, it gets its own tab
+describes one diner, to Preferencias. If a future question is about the _house_, it gets its own tab
 in Configuración, never a new page.
 
 ### Activation without reloading
@@ -385,9 +386,9 @@ in Configuración, never a new page.
   re-renders the nav and the section entries immediately. **No reload, no re-navigation, no toast
   required.**
 - `available: Record<HomeModule, boolean>` — what this build actually ships. Enabling a module that is
-  not available is legal and persisted (that is what *pronto* means: switch it on today, it appears by
+  not available is legal and persisted (that is what _pronto_ means: switch it on today, it appears by
   itself when the build that contains it is activated). Nav shows it only while `!available && enabled`
-  as a *pronto* row, never a 404.
+  as a _pronto_ row, never a 404.
 - `visible(path)` — the gate used by the sidebar and the dashboard cards. Rule that keeps the app
   usable: **an empty selection means "everything available"**. Nobody loses `Recetas` or `Despensa`
   because they skipped the tour; a non-empty selection filters.
@@ -451,13 +452,13 @@ supermarket are the only grouping, and `Otros` always lands last.
 
 **Gestures (and their visible twins).**
 
-| Gesture | Effect | Twin for anyone who does not swipe |
-| --- | --- | --- |
-| swipe left, up to 56 px | the rail peeks out: `Editar · Quitar` | the ⋯ button on every row |
-| swipe left past **60 %** of the row | runs `Quitar` on release | `Quitar` inside the sheet |
-| swipe right ≥ max(56 px, 35 %) | `+1` unit | the quantity stepper in the sheet |
-| long press **350 ms** | multi-select mode with a contextual toolbar | `Seleccionar todo` + tapping rows |
-| tap the row | toggles the check | the checkbox itself, 30 px |
+| Gesture                             | Effect                                      | Twin for anyone who does not swipe |
+| ----------------------------------- | ------------------------------------------- | ---------------------------------- |
+| swipe left, up to 56 px             | the rail peeks out: `Editar · Quitar`       | the ⋯ button on every row          |
+| swipe left past **60 %** of the row | runs `Quitar` on release                    | `Quitar` inside the sheet          |
+| swipe right ≥ max(56 px, 35 %)      | `+1` unit                                   | the quantity stepper in the sheet  |
+| long press **350 ms**               | multi-select mode with a contextual toolbar | `Seleccionar todo` + tapping rows  |
+| tap the row                         | toggles the check                           | the checkbox itself, 30 px         |
 
 Vertical movement wins over horizontal: if the finger goes down the page, that is a scroll and the
 row must not move. A tap that followed a long press is swallowed (250 ms window), or every "select"
@@ -466,13 +467,13 @@ would also toggle a check.
 **Undo.** Anything that removes rows answers with a bottom bar carrying `Deshacer` and a countdown
 that drains over exactly `duration` ms (the same number the timer uses, so the bar cannot lie). The
 window is **6 s**; the endpoint behind it is `POST …/items/:itemId/restore` — items die with
-`deleted_at`, which is why this is cheap. Deleting a *list* is not undoable (its rows are gone) so it
+`deleted_at`, which is why this is cheap. Deleting a _list_ is not undoable (its rows are gone) so it
 asks first, through `ConfirmService`, never a native dialog.
 
 **A gesture is not a tap.** Chrome fires a `click` on whatever is under the finger when a drag ends,
 so the row that was just swiped would also be toggled, opened or marked. The directive answers with
-two mechanisms that are not interchangeable: a `swipeRemove` that *committed* makes the row deaf to the
-pointer for 250 ms (`pointer-events: none`, removed by a timer), and a swipe that only *revealed* the
+two mechanisms that are not interchangeable: a `swipeRemove` that _committed_ makes the row deaf to the
+pointer for 250 ms (`pointer-events: none`, removed by a timer), and a swipe that only _revealed_ the
 rail raises a one-use flag the component's own tap handler consumes. Timers are never the discriminator
 — 200 ms and 250 ms windows both lost in CI, because the click can arrive later than the gesture by an
 amount that depends on how fast the runner is. A swipe may also start **on** a row button (the far right
@@ -517,7 +518,7 @@ number that ever adds across lines.
 ## 8f. Round 6: the list becomes a tool, and the calendar becomes the house's
 
 Five things asked for, all of them the same complaint seen from different sides: the shopping list
-works, but it is not yet *efficient* on a phone with one hand and it does not exploit the width a
+works, but it is not yet _efficient_ on a phone with one hand and it does not exploit the width a
 desktop offers. And the calendar is still "the meal plan" when the house has a lot more to put in it.
 
 ### Icon button rule (small beats wordy)
@@ -526,7 +527,7 @@ desktop offers. And the calendar is still "the meal plan" when the house has a l
 row content, and half the row is left unusable. The rule now:
 
 > **If a control's meaning is a gesture everyone knows, it is an icon, not a word.** 18 px glyph,
-> 40 px hit area, `aria-label` + `title` mandatory. If the meaning is *not* universal (quitar,
+> 40 px hit area, `aria-label` + `title` mandatory. If the meaning is _not_ universal (quitar,
 > terminar, vaciar carro) the icon travels **with** its word, or the row reveals it in the rail.
 
 Emoji are out for controls: `⋯` and `✎` are typographic, drawn by whatever font the device has, and they
@@ -556,14 +557,14 @@ and who touched it. Sorting is on the header (name / importe / tocada), directio
 Filters, all of them **server-side** (`GET /lists?q=&store=&minTotal=&from=&to=&status=&sort=&dir=&limit=&offset=`
 answering `{ data, page: { total, limit, offset } }`):
 
-| Filtro | Control | URL |
-| --- | --- | --- |
-| Texto en nombre o línea | input con ✕ para limpiar | `q` |
-| Supermercado (local) | `app-ui-dropdown` de los que existen en datos | `store` |
-| Importe mínimo | input de €. Mismo parser de dinero que una línea | `min` |
-| Toca/hasta | dos `input type=date` | `from`, `to` |
-| Estado | tabs Activas / Terminadas (ya existía) | `tab` |
-| Página y tamaño | ‹ › + 10/20/50, el tamaño se recuerda en `localStorage` | `page`, `size` |
+| Filtro                  | Control                                                 | URL            |
+| ----------------------- | ------------------------------------------------------- | -------------- |
+| Texto en nombre o línea | input con ✕ para limpiar                                | `q`            |
+| Supermercado (local)    | `app-ui-dropdown` de los que existen en datos           | `store`        |
+| Importe mínimo          | input de €. Mismo parser de dinero que una línea        | `min`          |
+| Toca/hasta              | dos `input type=date`                                   | `from`, `to`   |
+| Estado                  | tabs Activas / Terminadas (ya existía)                  | `tab`          |
+| Página y tamaño         | ‹ › + 10/20/50, el tamaño se recuerda en `localStorage` | `page`, `size` |
 
 On a phone the filter row collapses to one `Filtros` icon button with a count badge, opening a sheet
 with the same controls and `Aplicar` / `Borrar todo`. Nothing lives twice: the URL is the state, the
@@ -596,7 +597,7 @@ One `Descuentos` section per list, collapsed by default, with a header chip stat
 `/estimate` grows a `discount` block: `subtotalMinor` (as today), `offerSavingsMinor`, `discountMinor`,
 `totalMinor`. Rounding is half-up on cents at the **total**, never per line (per line it would leak a
 cent and make the sum disagree with the visible numbers). A total can never go below 0 and a discount
-above the subtotal is clamped and *says so* in the UI instead of silently eating the difference. Money
+above the subtotal is clamped and _says so_ in the UI instead of silently eating the difference. Money
 rules from §8e hold: cents on the wire, comma decimal on the keyboard.
 
 ### Adding by photo, with the AI as the clerk
@@ -647,7 +648,7 @@ in month cells the pills overflow into `+2 más` with the hidden ones listed on 
 household-visible by default (that is the point of a house calendar) and per-member ownership is kept on
 the row, painted as the author's initial in week/day views.
 
-Recurrence, availability, ICS sync and "who cooks" stay in §13 — this round makes the calendar *general*,
+Recurrence, availability, ICS sync and "who cooks" stay in §13 — this round makes the calendar _general_,
 not a scheduler.
 
 ## 9. Data model additions
@@ -719,7 +720,7 @@ Two rules, and the second one only exists because of how the first was broken on
 
 **Budget.** No job may run over five minutes, so the work that is not testing happens once:
 `install` runs `pnpm install --frozen-lockfile` plus `playwright install --with-deps chromium` and
-*publishes* `node_modules` and `~/.cache/ms-playwright` through `actions/cache/save@v4`. Every other
+_publishes_ `node_modules` and `~/.cache/ms-playwright` through `actions/cache/save@v4`. Every other
 job restores those keys and only falls back to installing when the restore missed (`if:
 steps.nm.outputs.cache-hit != 'true'`). The key carries `hashFiles('pnpm-lock.yaml')`,
 `github.run_id` and `github.run_attempt`, so a cache is never reused across commits and a retry never
@@ -728,7 +729,7 @@ count is hardcoded in the matrix, see below — and the dev-server cold compile 
 `globalSetup`, not per test. Per-test timeout is 90 s in CI: 120 s turned five real failures into
 sixty-nine waiting ones.
 
-**No silence.** A workflow file GitHub cannot *validate* does not fail red: it produces a 0-second run
+**No silence.** A workflow file GitHub cannot _validate_ does not fail red: it produces a 0-second run
 named after the file path and **no checks on the pull request at all**. That is how a broken CI passed
 for several pushes. `make ci:yaml` (`scripts/check-workflows.mjs`, dependency-free) is the guard, and
 it checks the three things that actually hurt:
@@ -744,7 +745,7 @@ it checks the three things that actually hurt:
 `test-results/` (trace plus `error-context.md`), but the artifact store is not reachable from every
 environment — `gh run download` against the blob endpoint dies with an EOF that no retry fixes. The
 channel that always arrives is the annotation the reporter publishes, so a gesture test puts its
-evidence *inside the assertion message*: the row's text, the visible toasts, the last handful of
+evidence _inside the assertion message_: the row's text, the visible toasts, the last handful of
 `/api/shopping` responses and any `pageerror` Angular threw. That is what turned three
 «element(s) not found» into one sentence: a `PATCH` where a `DELETE` belonged.
 
@@ -763,6 +764,7 @@ manifest.
 Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
 
 ### P0 · Groundwork, branding, foundations
+
 - [ ] Spec committed and PR updated (this document).
 - [x] Branding rename: `appName`, `index.html` (title, description, apple/application name),
       `manifest.json` (name, id, description, shortcuts), auth layout title, global stylesheet header,
@@ -779,9 +781,9 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
 - [ ] `LogService` is the only funnel: levels, stamp, redaction, size cap, localStorage ring,
       `window.onerror`/`unhandledrejection` bridge, batched POST to `/api/logs`.
 - [ ] Log viewer: level + source filters, only-errors, pause, expandable payload, saved view.
-- [ ] New **Support** section (`/report`): generated markdown report, *Open issue*, *Copy to
-      clipboard* fallback, redaction assertion in tests, nav entry, tabs in URL.
-- [ ] `SwUpdate` prompt with *Activate now* + Settings auto-activate toggle (delivered with the
+- [ ] New **Support** section (`/report`): generated markdown report, _Open issue_, _Copy to
+      clipboard_ fallback, redaction assertion in tests, nav entry, tabs in URL.
+- [ ] `SwUpdate` prompt with _Activate now_ + Settings auto-activate toggle (delivered with the
       Support section, next commit).
 - [ ] `GET /api/meta` (version, build, serverTime, ready, cacheName) + About card showing
       version/uptime, no per-second polling.
@@ -791,6 +793,7 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
 - [ ] Animation tokens documented and a `from`/`to`-only lint note in DESIGN-SYSTEM.md.
 
 ### P1 · Runtime configuration (no env)
+
 - [ ] `runtime_settings` table + typed defaults + validators + `runtime_settings.spec.ts`.
 - [ ] `GET|PUT /api/settings` with masked secrets, `configured` flags, `restartRequired` state.
 - [ ] Server reads nothing but `DATABASE_PATH`; every other `process.env` reference removed.
@@ -804,6 +807,7 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
       `runtime_settings` — decision recorded here, then executed.
 
 ### P2 · Catalog, prices, stores
+
 - [ ] Migrations for retailers/stores/canonical_products/variants/aliases/categories/
       retailer_listings/price_observations/external_evidence.
 - [ ] Repositories + routes; FTS5 search for products, hierarchy-aware category list with the
@@ -819,6 +823,7 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
       attribution, nothing persisted until confirmed.
 
 ### P3 · Shopping lists
+
 - [x] `shopping_lists` / `shopping_list_items` with `version`, `completed`, `completed_at`,
       `quantity` fraction, `unit` — plus `product_key` for merging lines and a soft `deleted_at` that
       is what makes "Undo" a call and not a resurrection. (`exact|substitutable` and the variant link
@@ -835,6 +840,7 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
       switcher and the "what the pantry already covers" reduction are not.
 
 ### P4 · Receipts, OCR and the queue
+
 - [ ] `ai_jobs` + durable runner (lease, attempts, startup sweep) + REST + SSE progress.
 - [ ] `receipts*` tables and the evidence file store (type/size/signature validation).
 - [ ] OCR provider abstraction, ephemeral, Spanish; failure keeps the draft and says so.
@@ -848,6 +854,7 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
       detail with evidence, "re-open for review" without losing corrections.
 
 ### P5 · Joint features (the reason to merge)
+
 - [ ] Dish cost: recipe/plan line shows `≈ 3,40 €` from ingredient prices, with the observation dates
       used on hover; never presented as a quote.
 - [ ] "Add missing ingredients to the shopping list" from a recipe, a planned meal, or the whole
@@ -859,6 +866,7 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
 - [ ] Queue view: running/queued/failed with retry, filters and pagination.
 
 ### P6 · Offline, sync, resilience
+
 - [ ] localStorage cache layer with budgets, eviction rules and quota warnings.
 - [ ] Outbox: enqueue on mutation, flush on online/visibility/timer, keep-until-acked, idempotency
       keys, no overlapping sends per entity.
@@ -869,6 +877,7 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
 - [ ] Read-only offline modes for every section, with the "pending sync" badge.
 
 ### P7 · Hardening and polish
+
 - [ ] Log rotation server-side with the same caps as the client; retention from Settings.
 - [ ] Redaction tests for both sides; no secret in any log, URL or error payload.
 - [ ] Accessibility pass: focus order in sheets, `aria-current`, gesture equivalents, contrast in the
@@ -881,6 +890,7 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
       `CHANGELOG.md`.
 
 ### P8 · Rename completion
+
 - [ ] Workspace package names + every `pnpm --filter`, script, Dockerfile, Makefile and workflow
       updated in one commit.
 - [ ] `data/hogaria.sqlite` default with adoption of the previous file.
@@ -935,16 +945,16 @@ state). The suite runs on `chromium` in CI for wall-time reasons; all three proj
 
 - [x] Spec: this text (parity table, sections, live activation, rename, icons, reporter, coverage).
 - [x] `ModulesService` + `home-profile` model at 100 % coverage, unit tests with the edges above
-      (16 tests: optimistic toggle, rollback + `MODULE_SAVE_FAILED`, *pronto* not linked, `canSwitchOff`,
+      (16 tests: optimistic toggle, rollback + `MODULE_SAVE_FAILED`, _pronto_ not linked, `canSwitchOff`,
       `resetSelection`, registry consistency).
-- [x] Configuración: **Módulos** section (available on/off, *pronto* ones pre-enableable, live nav);
+- [x] Configuración: **Módulos** section (available on/off, _pronto_ ones pre-enableable, live nav);
       Preferencias › Perfil keeps only the cooking level; preferences icon → 👤; `.settings-group`
       count and the section i18n updated (6 keys × 2 languages).
 - [x] `tools/reporters/hogaria-e2e-reporter.js` + `E2E_SEED` plumbing + reporter list in the config; run
       header, per-test lines, failure concentration, summary, `test-results/hogaria-run.json`.
       Shipped as **CommonJS**, not `.mjs`: Playwright `require`s reporter files and the repo has no
       `"type": "module"`; an ESM reporter would need a build step for one file.
-- [x] Coverage: `perFile: true` at 70 % for the four metrics (a per-file floor *implies* the global one,
+- [x] Coverage: `perFile: true` at 70 % for the four metrics (a per-file floor _implies_ the global one,
       and it is the one that was hiding `database.ts` at 41 % of branches); reporters text+html+lcov+
       json-summary; CI runs `test:coverage` and uploads `server/coverage/` even when the gate fails; the
       three files under the floor got tests instead of an exclusion (memory-monitor 100 %, seed-data 100/96,
@@ -959,7 +969,7 @@ state). The suite runs on `chromium` in CI for wall-time reasons; all three proj
       maskable variant at 80 %, `purpose: any|maskable` split, `index.html` links, dead `shortcuts`/
       `screenshots` references removed. **`icon.svg` is not wired**: without `potrace`/`inkscape` in the
       project, a hand-made SVG would be a second, almost-but-not-quite logo; that is now a Coming-soon item.
-- [x] e2e: modules toggle visible in the nav without reload; pre-enabling a *pronto* module persists
+- [x] e2e: modules toggle visible in the nav without reload; pre-enabling a _pronto_ module persists
       and does not create a route; the Configuración tabs travel in the URL; the tour's parity
       assertions (each answer readable in its section). New `tests/e2e/pwa-assets.spec.ts` also asserts that
       every declared manifest icon is served **and** that its PNG measures what `sizes` claims.
@@ -983,7 +993,7 @@ state). The suite runs on `chromium` in CI for wall-time reasons; all three proj
 - [x] Toasts grew `action` + `countdown` + `position`; the countdown bar animates over the same
       `duration` the dismissal timer uses, and the bottom stack is where an `Deshacer` lives.
 - [x] Module flipped to available with its real path, navigation entry (sidebar and bottom bar), i18n
-      keys for both languages, and the e2e that used `shopping` as the *pronto* example moved to
+      keys for both languages, and the e2e that used `shopping` as the _pronto_ example moved to
       `receipts` so the "activating what does not exist" rule keeps being tested.
 - [x] `tests/e2e/shopping-lists.spec.ts`: 14 cases × 3 projects driving real pointer drags (reveal,
       commit-at-60 %, +1 to the right, long press into multi-select) and the undo bar.
@@ -1011,26 +1021,26 @@ Same rule as every other box: `[x]` only when its tests are green in CI, and the
 round is this checklist. What changed while building it is written next to the box, not hidden: the
 spec is the record, including of where reality disagreed with it.
 
-- [x] `app-ui-icon` (`ui/icon/icon-paths.ts` + `IconComponent`): 68 Material *baseline* glyphs as path
+- [x] `app-ui-icon` (`ui/icon/icon-paths.ts` + `IconComponent`): 68 Material _baseline_ glyphs as path
       data in TS, `currentColor`, generated by `scripts/icons.mjs` from `@material-icons/svg` and it
-      refuses to write an empty file. `name` is a *type*, so a wrong icon name does not compile. No new
+      refuses to write an empty file. `name` is a _type_, so a wrong icon name does not compile. No new
       runtime dependency, no font, nothing to fetch — which is what makes it survive offline. Detail
       tabs, `Seleccionar todo`, `⋯`, `✎`, the back arrow, the pending/cart mark and every tray action
       are icons now, inside `app-icon-button` (32/40/48 px hit area, `:active` scale, `aria-label` +
       `<title>` from the same `label`).
-- [x] Inline rename owns its lifecycle: ✓ and ✕ buttons, Enter commits, Escape cancels *and undoes the
-      auto-saved text*, blur commits only when dirty. Detail header and tray rows. The tray no longer
+- [x] Inline rename owns its lifecycle: ✓ and ✕ buttons, Enter commits, Escape cancels _and undoes the
+      auto-saved text_, blur commits only when dirty. Detail header and tray rows. The tray no longer
       has a swipe rail (its two actions are the icons in the row), so there is no gesture to suppress
       there; in the detail, gestures live on the row face and never on the title.
 - [x] Custom picker, not a native `select`: `app-picker` — colour per option, type-to-filter above 8
       options, `allowCustom` so a unit that is not in the catalogue is a value and not a lost keystroke,
       listbox/option roles with `aria-selected`, arrows/Enter/Escape/Home/End, click-outside, and the
       trigger always showing what is inside. Used by units (15 formats), sections, photo mode, page size
-      and the tray filters. *Not* `shared/models/units.ts` with recents: the catalogue lives with the
+      and the tray filters. _Not_ `shared/models/units.ts` with recents: the catalogue lives with the
       screen that owns it and recents went to §13 — a `localStorage` list of units is a guess about how
       people shop that we have not earned yet.
 - [x] Tray as a table: Lista / Tienda / Progreso / Total / Actualizado / acciones, header sorting with
-      `aria-sort`, filters (text across lists *and* items, store, importe ≥, desde/hasta, estado) and
+      `aria-sort`, filters (text across lists _and_ items, store, importe ≥, desde/hasta, estado) and
       10/25/50 pagination **all in the URL**, resolved in SQL with `COUNT(*) OVER ()` for the total; the
       `Filtros` button carries an active-count badge and the whole row reflows into a two-line card below
       720 px with `data-label` as the inline caption.
@@ -1041,7 +1051,7 @@ spec is the record, including of where reality disagreed with it.
       spec said `appliesTo: 'upToQuantity'`; the code is `scope: 'firstUnits'` because `scope` is what the
       items PATCH already used for "que se aplica a", and `firstUnits` says what the number counts.
 - [x] Photo ingestion: `POST /lists/:id/photo/analyze` (prompt carries the household catalogue as JSON —
-      name *and* colour — and the exact reply shape; `photoLinesSchema` validates; cents in `priceMinor`;
+      name _and_ colour — and the exact reply shape; `photoLinesSchema` validates; cents in `priceMinor`;
       "no inventes precios"; nothing is written) → review sheet (checkbox per line, editable name/qty/price,
       proposed section, `baja confianza`, warnings) → `POST /lists/:id/items/apply` (creates the category
       when the model asks, merges through the same rule as a manual add). Four errors with four answers:
@@ -1050,10 +1060,10 @@ spec is the record, including of where reality disagreed with it.
 - [x] Categories as data: `shopping_categories` (name, `key`, colour, position) seeded from what the UI had
       hard-coded, `GET/POST /categories`, household-wide once it exists, colour painted on the group headers,
       the chips, the picker and the photo review. `utils/photo-prompt.spec.ts` asserts that the example shown
-      to the model *parses with the schema that validates the answer*.
+      to the model _parses with the schema that validates the answer_.
 - [x] Live + authorship: `added_by`/`updated_by` (a merge paints who merged), `shopping_list_events` +
       `describeEvent` (the sentence is the server's), `GET /lists/:id/events`, SSE `GET /api/shopping/stream/
-      lists/:id` and `/stream/tray` with `?access_token=` accepted *only* there and masked in the log, 15 s
+    lists/:id` and `/stream/tray` with `?access_token=` accepted _only_ there and masked in the log, 15 s
       heartbeats, cap of 24 listeners with eviction; the client refetches on invalidation (it never paints
       the payload), the row shows the author's initials with the name in the tooltip, and "Quién ha tocado
       qué" is a sheet with avatars.
@@ -1071,18 +1081,18 @@ spec is the record, including of where reality disagreed with it.
       moving the total and being removable, the photo sheet refusing to write without an AI config (and
       pointing at it), the calendar layers with a created event, a discount aimed at one product, and a calendar
       that must not ask for the same window of events twice. Not covered: drag reorder, picker recents
-      (neither exists yet) — and note these specs could not be *executed* in this sandbox (no Chrome binary),
-      so CI is the place where they turn green or red. Every `data-test` they use is now *checked* by
+      (neither exists yet) — and note these specs could not be _executed_ in this sandbox (no Chrome binary),
+      so CI is the place where they turn green or red. Every `data-test` they use is now _checked_ by
       `scripts/check-ui.mjs` rather than trusted.
 - [x] §13 updated: recurrence and availability stay out, plus what this round consciously left behind.
 
 ## 12e. Round 7 checklist — the things that were quietly wrong
 
 Round 6 shipped with three bugs that only show up on a phone or on the second click, plus a vocabulary
-mismatch. The rule stays: `[x]` when the test is green, and here also *how* it was verified, because in
+mismatch. The rule stays: `[x]` when the test is green, and here also _how_ it was verified, because in
 this sandbox the frontend runner does not exist and pretending otherwise is how a box lies.
 
-- [x] "Ver todas" in the tray showed nothing. `status=all` is a *filter* value, not a value of the column,
+- [x] "Ver todas" in the tray showed nothing. `status=all` is a _filter_ value, not a value of the column,
       and the query was asking for `l.status = 'all'`. The schema now carries `LIST_STATUSES | 'all'` and the
       route has the three branches written out: no status → active+archived, a status → that one, `all` → no
       condition at all. Route test `la pestaña «todas» mezcla activas y terminadas` (server, green).
@@ -1097,15 +1107,15 @@ this sandbox the frontend runner does not exist and pretending otherwise is how 
       has always closed them, but "swipe away somewhere" is not an affordance you can see.
 - [x] `app-checkbox` (`ui/checkbox/`): `button[role=checkbox]` with `aria-checked`, the Material check inside a
       box, `disabled`, and a 40 px hit area. It replaces the two bare `<input type=checkbox>` of the event sheet;
-      the bare `<select>` of the event *kind* became an `app-picker`, so the type of an event carries its colour
+      the bare `<select>` of the event _kind_ became an `app-picker`, so the type of an event carries its colour
       like everything else. Frontend spec written (`checkbox.component.spec.ts`), not executed here.
 - [x] `app-picker` opens **upwards** when it does not fit below: inside a sheet with `overflow-y: auto` the panel
       was cut at the bottom edge and the last options of the list were physically unreachable. `flipForRoom()`
       measures on open and again once the search box has focus, because that is when a sheet may have scrolled.
 - [x] Discount per product or per section — the shape of the signs in a real aisle («2 € de descuento en jamón»).
       `scope: 'all' | 'firstUnits' | 'product' | 'category'` + `target`; `MoneyLine` gains `productKey` and
-      `category`, `isEligibleForDiscount()` compares *normalised* keys (NFD, no accents, lowercase) so "Jamón"
-      and "jamon" are the same product, the base of the maths *and* the split both shrink to the matching lines,
+      `category`, `isEligibleForDiscount()` compares _normalised_ keys (NFD, no accents, lowercase) so "Jamón"
+      and "jamon" are the same product, the base of the maths _and_ the split both shrink to the matching lines,
       and a promised discount with no line that matches says `reason: 'noMatchingLine'` instead of pretending.
       `describeDiscount` writes "… en Jamon Serrano". The schema requires `target` (`DiscountTargetRequired`) the
       moment a scope promises a target, and the sheet refuses to save before asking the server.
@@ -1124,14 +1134,13 @@ this sandbox the frontend runner does not exist and pretending otherwise is how 
       select, all of them pre-existing screens — that may only shrink: when a file stops offending, the guard
       says so in the log and the entry is deleted in the same commit. Verified by breaking things on purpose.
 - [ ] `tests/e2e/shopping-round6.spec.ts` still cannot be executed in this sandbox (no Chromium), and the two
-      new tests in it (the product discount and the request count) are therefore *read-and-checked*, not run.
+      new tests in it (the product discount and the request count) are therefore _read-and-checked_, not run.
       The first CI run is the one that turns them green.
-
 
 ## 12f. Round 8 checklist — why the app locked itself out
 
-The user's report was one sentence with two halves: *still* too many requests, and *I cannot test
-anything or see the logs in the UI*. Both are the same bug with two faces, and neither was in the
+The user's report was one sentence with two halves: _still_ too many requests, and _I cannot test
+anything or see the logs in the UI_. Both are the same bug with two faces, and neither was in the
 calendar: it was the request budget of the whole API, the only layer with no test —the e2e suite runs
 with the limiter switched off, and the middleware lived in the same file that opens the port.
 
@@ -1176,7 +1185,7 @@ with the limiter switched off, and the middleware lived in the same file that op
       not exist —the failure the author wanted to label has been unlabeled ever since.
 - [x] `server/src/app.spec.ts` (9) and `server/src/utils/log-store.spec.ts` (3) are the first tests of
       those two layers; `pnpm --filter @hogaria/server test` is green at 202.
-- [ ] The four full-stack specs could not be *executed* here (no Chromium in the sandbox); what was
+- [ ] The four full-stack specs could not be _executed_ here (no Chromium in the sandbox); what was
       executed is the same thing by hand with `curl` against the built server: HTML at `/`, 200 for a real
       chunk, JSON 404 for a missing one, `index.html` for `/shopping/una-lista`, SSE with the live marker,
       the 600-per-minute cut with `Retry-After: 47`, and `/api/health` + `/api/logs` answering the whole
@@ -1184,13 +1193,12 @@ with the limiter switched off, and the middleware lived in the same file that op
 - [ ] Limits are still configured with env, not from `/settings` —there is no `runtime_settings` table
       yet (§10), and a rate limit is the wrong first consumer of a feature that does not exist.
 
-
 ## 12g. Round 9 checklist — a discount that can name several products, and a purchase that cannot close without prices
 
 Three things from the user, and only one of them was cosmetic: the agenda under the calendar had a second
 add button and no styling at all; the discount still could not say "2,50 € on these four products"; and
 closing a purchase was free to invent nothing and learn nothing — you could mark a list as paid with lines
-that had no price, and the price that *was* recorded did not know which shop it belonged to, although the
+that had no price, and the price that _was_ recorded did not know which shop it belonged to, although the
 same milk has another name and another price at Mercadona than at Lidl.
 
 - [x] `shopping_list_discounts.targets` (JSON array of product keys or section names) next to the legacy
@@ -1208,10 +1216,10 @@ same milk has another name and another price at Mercadona than at Lidl.
       One editor, three ways in — the sheet is not where the discount is decided, the aisle is.
 - [x] `POST /lists/:id/complete` refuses what it cannot learn from: if a bought line has no price, 409
       `PRICES_MISSING` with the offending lines (id, name, quantity, unit) and the count. Not a warning in
-      the toast — the app has been asked to *remember prices* by closing the list, and closing it with holes
+      the toast — the app has been asked to _remember prices_ by closing the list, and closing it with holes
       is how the next estimate comes back wrong.
-- [x] Prices can arrive *with* the close: `POST /lists/:id/complete { prices: [{ itemId, priceMinor,
-      quantity?, store?, productName? }] }` writes each one onto its line and records the observation in the
+- [x] Prices can arrive _with_ the close: `POST /lists/:id/complete { prices: [{ itemId, priceMinor,
+    quantity?, store?, productName? }] }` writes each one onto its line and records the observation in the
       same transaction, so "pago y apunto lo que he pagado" is one tap and not a race between two calls.
       `quantity`/`productName` exist because a receipt says what was paid for what was carried, under the
       name the shop printed.
@@ -1221,7 +1229,7 @@ same milk has another name and another price at Mercadona than at Lidl.
 - [x] `estimate` resolves the observed price **for the list's shop first**, then falls back to the most
       recent one from any shop and marks the line `otherStore` with the shop's name. Two rows in
       `price_observations` for one `product_key` are the point of the table, and reading `ORDER BY
-      observed_at DESC LIMIT 1` across all of them was silently pricing the house's milk with Lidl money.
+    observed_at DESC LIMIT 1` across all of them was silently pricing the house's milk with Lidl money.
 - [x] Same product, different name: `PATCH /lists/:id/items/:itemId` accepts `productKey`, so a line can
       declare itself to be the product the house already tracks, whatever the shelf calls it. `GET /prices`
       filters by `store`/`productKey`, and `GET /prices/products?q=` returns the known products with their
@@ -1239,11 +1247,10 @@ same milk has another name and another price at Mercadona than at Lidl.
       table. A `stores` table with its own name per product (and a barcode) is the next step, and it
       is in §13 rather than here because it needs a UI of its own.
 - [ ] The four money flows in `tests/e2e/full-stack/shopping-money.spec.ts` typecheck (`pnpm run
-      typecheck:e2e`) but were not *executed* here —no Chromium in the sandbox—, so CI is where they
+    typecheck:e2e`) but were not _executed_ here —no Chromium in the sandbox—, so CI is where they
       turn green. What was executed: the 22 new vitest cases (224 green in total), the prod build,
       `tsc` of app and spec, `check-ui` at 126 files with the removed `discount-row` caught by the
       guard itself, and the discount/multi-target behaviour read back from the API by hand.
-
 
 ## 12h. Round 10 checklist — one control per decision, a discount that belongs to the line, and clocks that mean what they say
 
@@ -1274,8 +1281,8 @@ Four things from the screenshot of the line sheet, and the fourth was app-wide.
       them for the header in one pass, and a blob has to be parsed per row to do arithmetic.
 - [x] `applyLineDiscount` in `utils/list-discount.ts`, applied **after** the offer and **before**
       the basket coupon, which is the order a till uses: `3x2 → -10 % sobre 2 unidades → -2,50 €
-      de la cesta`. Applied in the other order, the same receipt gives a different number, and
-      there is no way to argue with it afterwards. The percent is taken on what is *paid* (with a
+    de la cesta`. Applied in the other order, the same receipt gives a different number, and
+      there is no way to argue with it afterwards. The percent is taken on what is _paid_ (with a
       3x2 on six units, 5 % of four units' worth), because that is what the sign at the shelf
       means.
 - [x] Percent or amount over the first N units (`disc_units`) exists because that is a real sign
@@ -1298,13 +1305,13 @@ Four things from the screenshot of the line sheet, and the fourth was app-wide.
       questions and they stack exactly like at a till. The row shows a chip with the discount so it
       is not only visible while the sheet is open, and the breakdown strikes the old price.
 - [x] Closing the purchase separates the two numbers: `paidMinor` subtracts the line discount (that
-      is what left the wallet), while the price the household *learns* is the shelf price —learning
+      is what left the wallet), while the price the household _learns_ is the shelf price —learning
       0,75 today would make next week's estimate lie.
 
 ### Clocks — done
 
 - [x] The server stored UTC in a column without saying so: `2026-09-20 09:44:18` has no zone, so
-      the browser read it as *local* and everything moved by the offset —in Madrid, two hours: a
+      the browser read it as _local_ and everything moved by the offset —in Madrid, two hours: a
       list saved a second ago said «hace 2 horas» and the log viewer printed tomorrow's
       timestamps. The fix is at the boundary: `timestamp.middleware.ts` rewrites naive
       `YYYY-MM-DD HH:MM:SS` (and `T…` without zone) into ISO with `Z` on the way out, for JSON
@@ -1326,12 +1333,12 @@ Four things from the screenshot of the line sheet, and the fourth was app-wide.
       instant (`toISOString().split('T')[0]`), and its «Caducado» badge counted milliseconds, so
       at 23:00 on the expiry day the yoghurt was already expired.
 - [x] The same day-vs-instant mistake was in the pantry's **SQL**, and it was worse:
-    `expiration_date >= datetime('now')` compares `2026-09-20` with `2026-09-20 10:50:08`
-    lexicographically, so what expires today counted as *expired* from the first hour of the
-    morning and never showed up in «next 3 days». The filters now compare `date()` to `date()`.
-    And the two pantry filter flags were declared `z.boolean()` in a query schema, which never
-    parses a URL —every «solo caducados» from the app was a 500 with a ZodError. There is now a
-    `queryFlag` that takes `true`/`1`/`false`/`0`, and a route spec that pins both behaviors.
+      `expiration_date >= datetime('now')` compares `2026-09-20` with `2026-09-20 10:50:08`
+      lexicographically, so what expires today counted as _expired_ from the first hour of the
+      morning and never showed up in «next 3 days». The filters now compare `date()` to `date()`.
+      And the two pantry filter flags were declared `z.boolean()` in a query schema, which never
+      parses a URL —every «solo caducados» from the app was a 500 with a ZodError. There is now a
+      `queryFlag` that takes `true`/`1`/`false`/`0`, and a route spec that pins both behaviors.
 - [x] Tests: the middleware on a Hono app (naive → Z, date-only untouched, JSON of the real API
       checked in the shopping routes suite, non-JSON left alone), the engine table for line
       discounts (order, clamp, per-units slice, merge, removal), `time.spec.ts` for
@@ -1377,7 +1384,7 @@ Feedback on the screenshots of the line sheet, plus one thing that was visible o
 
 ### The person, in every history line
 
-- [x] Wherever a line says *who* did something, it shows the **same icon**: the shopping row
+- [x] Wherever a line says _who_ did something, it shows the **same icon**: the shopping row
       (it printed bare initials letters), the tray, the audit trail (already an avatar) and the
       household agenda (which computed initials by hand in two places). `app-avatar` is the only
       implementation of "a person as a circle".
@@ -1393,19 +1400,19 @@ Feedback on the screenshots of the line sheet, plus one thing that was visible o
 
 - The group titles live in `PickerOption.group`, and `rows()` returns a discriminated union
   (`kind: 'header' | 'option'`). Two `@if (row.kind === …)` blocks, not `@if/@else`: the AOT
-  compiler does not narrow a union in an `@else` branch and fails the *build* with NG1
+  compiler does not narrow a union in an `@else` branch and fails the _build_ with NG1
   «Object is possibly 'null'» even though `tsc -p tsconfig.app.json` is happy —`ng build` is
   the gate that catches this class of template bug.
 - The unit field's caption under the trigger ("Peso") went with the row descriptions: the icon
   in the trigger already says the family, and two descriptions of the same thing in a 320 px
   column is one too many.
-- A comment with markdown backticks inside `styles` broke the *client* and nothing else: the
-      first backtick closes the literal, the CSS after it becomes code, `styles` ends up an
-      array of several entries and the AOT reports `Failed to resolve styles at position 1 —
-      Value could not be determined statically` (NG1010). `tsc` is happy with it, since the
-      result is still valid text for the type checker. Rule 7 of `check-ui`
-      (`backtick-cierra-el-literal`) is that trap: no backticks inside a comment that lives in
-      `template`/`styles` —and no, `ng build` is not optional in a round that touches them.
+- A comment with markdown backticks inside `styles` broke the _client_ and nothing else: the
+  first backtick closes the literal, the CSS after it becomes code, `styles` ends up an
+  array of several entries and the AOT reports `Failed to resolve styles at position 1 —
+    Value could not be determined statically` (NG1010). `tsc` is happy with it, since the
+  result is still valid text for the type checker. Rule 7 of `check-ui`
+  (`backtick-cierra-el-literal`) is that trap: no backticks inside a comment that lives in
+  `template`/`styles` —and no, `ng build` is not optional in a round that touches them.
 - `check-ui` grew rule 6 (`atributo-como-texto`) and prints its rule count; it flags the broken
   drop zone, stays quiet on the fixed one and on `a > b ? "x" : "y"`. `main-layout` left the
   emoji debt list (20 files left) and the icon set is 85 names.
@@ -1517,7 +1524,7 @@ that runs; what only a pair of eyes can decide says so.
       colour at 84 % over the ink, and the letter in the colour that clears WCAG contrast against
       that specific disc (`contrastRatio ≥ 4.5`, asserted for all eight and for a smiley-name
       surrogate pair). `avatar-palette.spec.ts` runs it in the pure-test bridge — no browser, so the
-      numbers are the verification; how it *looks* is the preview's.
+      numbers are the verification; how it _looks_ is the preview's.
 - [x] `app-avatar` is the only place a face is drawn, so fixing it fixes the header, the sidebar
       chip, the household list and the line sheets. `ink` is a getter, not a `computed`: with plain
       `@Input()` fields a `computed` keeps a stale value when a row is reused.
@@ -1533,17 +1540,17 @@ that runs; what only a pair of eyes can decide says so.
       avatar, so the account is what should be there when they arrive. The tab strip became a loop
       over a `tabs` list with `app-icon`s — four emojis out, `preferences.component.ts` out of the
       `sin-emoji` debt list in `scripts/check-ui.mjs`, and the footer button that saves the
-      *comensal* profile is hidden on this tab because this tab saves itself.
+      _comensal_ profile is hidden on this tab because this tab saves itself.
 - [x] `uploads.ts`: files on disk next to the database, `dirname(DATABASE_PATH)/uploads` (and a
       per-process temp dir under `:memory:`, which is what keeps the suite out of the repo). The
-      stored value is the *path* — a base64 avatar in `users.avatar` would be paid per row in the
+      stored value is the _path_ — a base64 avatar in `users.avatar` would be paid per row in the
       shopping and calendar subqueries that decorate every line with its author's face.
 - [x] The filename is the server's, never the client's: `storeImage` sanitises the owner id and adds
       a random suffix, and `uploads.spec.ts` proves that a `../../etc/passwd` id comes out as one
       safe component inside `avatars/`. `resolveUploadUrl` refuses anything that escapes the kind
       directory, and `deleteUpload` reports whether there was something to delete (`rmSync` with
       `force` does not throw on absence, so answering `true` there would be a lie).
-- [x] `GET /api/uploads/:kind/:file` is mounted next to the API routes and is *not* behind the
+- [x] `GET /api/uploads/:kind/:file` is mounted next to the API routes and is _not_ behind the
       token — an `<img>` cannot send one — which is why the random suffix is the whole permission.
       `auth.routes.spec.ts` uploads a real PNG, reads it back through the public URL and checks the
       profile carries the path.
@@ -1580,10 +1587,10 @@ that runs; what only a pair of eyes can decide says so.
       usable, the avatar disc readable, the photo visible in both menus and served by the public
       route, and the two removal chips. `tests/e2e/preferences.spec.ts` covers renaming, the photo
       and the three password fields against the real API.
-- [ ] Not verified here, and it cannot be: whether the tint reads as *nice* rather than merely legal,
+- [ ] Not verified here, and it cannot be: whether the tint reads as _nice_ rather than merely legal,
       and how the crop behaves on a face that is not centred. That is the preview's job.
 
-## 12l. Round 13 checklist — the person gets a page, the history says *now*, and the filter keeps its distance
+## 12l. Round 13 checklist — the person gets a page, the history says _now_, and the filter keeps its distance
 
 ### The layer row was flush against the card
 
@@ -1598,7 +1605,7 @@ that runs; what only a pair of eyes can decide says so.
       exists. Round 11 froze the name "so a rename cannot rewrite history"; in a household feed a
       stale first name on your own line is not history, it is a bug — the audit trail keeps the
       snapshot, the screen resolves it.
-- [x] The client paints its *own* rows from the live session (`auditFace` in the shopping model, with
+- [x] The client paints its _own_ rows from the live session (`auditFace` in the shopping model, with
       a pure spec): a rename or an uploaded photo must show in the history without a refetch, or the
       success toast lied.
 - [x] `ha anadido` / `lineas anadidas` — the ñ and the accents were missing in the two server
@@ -1609,7 +1616,7 @@ that runs; what only a pair of eyes can decide says so.
 - [x] `/account` is its own page with three sub-sections — **Cuenta** (name, photo), **Seguridad**
       (password, ending this session) and **Información** (what the app keeps in this browser, the
       version, the id, the household link) — reached by tapping the face in the sidebar. Preferences
-      goes back to being about the *diner*: perfil, alergias, gustos, objetivo.
+      goes back to being about the _diner_: perfil, alergias, gustos, objetivo.
 - [x] The tab travels in the URL (`?tab=security`) with the default left clean, as everywhere else,
       and `/account` is core: no module switch hides your own account.
 - [x] The account state is seeded from the session signal through an `effect`, not once in the
@@ -1618,7 +1625,7 @@ that runs; what only a pair of eyes can decide says so.
 ### The dev database was a test dependency
 
 - [x] `calendar.routes.spec.ts` imported its routes statically, so `app.config.js` was evaluated
-      *before* its own `process.env.DATABASE_PATH = ':memory:'` line: the spec ran on
+      _before_ its own `process.env.DATABASE_PATH = ':memory:'` line: the spec ran on
       `server/data/hogaria.sqlite`. Any local use of the app (a registration seeds
       `shopping_categories`) then broke its `DELETE FROM users` cleanup with an FK error — nine red
       tests whose only cause was that somebody had used the product. Dynamic import, like its
@@ -1627,7 +1634,7 @@ that runs; what only a pair of eyes can decide says so.
 ### Tests
 
 - [x] `tests/e2e/account.spec.ts`: entering through the sidebar face, the three tabs in the URL,
-      renaming visible in the menu *and* in the history line without a reload, uploading a real PNG
+      renaming visible in the menu _and_ in the history line without a reload, uploading a real PNG
       and reading it back through the public route, the ring around the photo, the password rules and
       the Cancelar that wipes the fields, and the storage inventory.
 - [x] `preferences.spec.ts` asserts the opposite: the account is not there any more.
@@ -1682,7 +1689,7 @@ just answered `200`.
 
 Verified against the real server, both ways: `POST` → `GET` returns 200 with the bytes, and with
 `chmod 0500 data/uploads/avatars` the same `POST` returns `500 UPLOAD_WRITE_FAILED` naming the path
-and the profile still holds the previous photo. The reproduction of the reported symptom as a *silent*
+and the profile still holds the previous photo. The reproduction of the reported symptom as a _silent_
 404 could not be completed here — in this sandbox the flow answers 200 end to end, and the report's
 own log shows the process writing to one filesystem while reading another (`server/data/` had been
 replaced underneath the running server, which is also why the avatar from the previous session was
@@ -1714,7 +1721,7 @@ remaining environment question is answerable in one line.
 ### The ghost session is the bug the user actually hit
 
 - [x] Evidence: the account in the browser (`IA4IeB_2YdLBjcQSyaHpX`) does not exist in the database
-      the API has open, and its avatar file is nowhere on disk; `server/data/` (DB *and*
+      the API has open, and its avatar file is nowhere on disk; `server/data/` (DB _and_
       `uploads/`) had been replaced under the running process by the sandbox reset. The screen kept
       showing the cached name and the cached photo URL, and every write answered 401.
 - [x] That state was **silent**: the error interceptor excluded 401 from its toast, so an app on a
@@ -1763,6 +1770,7 @@ remaining environment question is answerable in one line.
 - Not verified by eye: no Chromium in this sandbox, so the drag, the wheel and the 128x128 result
   are asserted by unit tests on the geometry and by an `e2e` case that has not been executed. The
   preview is the reviewer.
+
 ## 12o. Round 14 checklist — optional means optional, and the day has an hour axis
 
 Reported by the user in one breath, and each part is a separate promise below: the calendar answers
@@ -1779,8 +1787,8 @@ snack; the grid should read like Google's hours, showing only the window that ha
       reading «Expected string, received null» —an error about the shape of the request, shown to
       someone who had done nothing wrong.
 - [x] New `server/src/schemas/form.ts`: `formText(max)`, `formTime()`, `formDate()`, `formColor()`,
-      `formNumber(...)` accept all four shapes, and normalise blank to `null`. `null` is *cleared*,
-      absence is *untouched* —that difference is what makes PATCH able to remove a value, and it is
+      `formNumber(...)` accept all four shapes, and normalise blank to `null`. `null` is _cleared_,
+      absence is _untouched_ —that difference is what makes PATCH able to remove a value, and it is
       documented in the helper, because the next person will reach for `.optional()` again.
 - [x] Every request schema a route parses is converted to those helpers where the UI can leave the
       field empty. Required stays required: `title` on an event, `date`, `name` on a product.
@@ -1800,7 +1808,7 @@ snack; the grid should read like Google's hours, showing only the window that ha
       `…Schema.safeParse` has no row in the table. That is the part that keeps it true in three months:
       a new form cannot skip the contract, and the failure message says exactly what to add.
 - [x] Route level, where a schema can pass and the SQL still break on `undefined`: `POST
-      /api/calendar/events` with `{title, date}` only → `201` and the optional columns are NULL in the
+    /api/calendar/events` with `{title, date}` only → `201` and the optional columns are NULL in the
       row that comes back; the same for `PATCH` clearing `notes` with `null`; plus a minimal-payload
       case in the existing `pantry`, `shopping` and `auth` route specs.
 - [x] `tests/e2e/calendar.spec.ts` creates an event typing only the title, and asserts the dialog
@@ -1818,7 +1826,7 @@ snack; the grid should read like Google's hours, showing only the window that ha
 
 - [x] New pure module `frontend/src/app/core/calendar-grid.ts`, tested before the component (TDD within
       the bridge's limits): minute↔hour helpers, the conventional hour of an untimed meal (`desayuno
-      08:30 · almuerzo 14:00 · merienda 17:30 · cena 21:00` —a position, never a printed claim), the
+    08:30 · almuerzo 14:00 · merienda 17:30 · cena 21:00` —a position, never a printed claim), the
       visible window from the items of the range with padding, and the overlap layout (side-by-side
       columns, same rule Google uses: groups of items that collide share the width).
 - [x] `app-calendar-timeline` renders the day/week grid: hour gutter, a column per day, blocks placed
@@ -1858,7 +1866,6 @@ snack; the grid should read like Google's hours, showing only the window that ha
 - [x] No claim about how the grid looks is made from a build: the sandbox has no Chromium. What is
       asserted here is geometry (numbers), placement data, and the dialogs' behaviour.
 
-
 ### What actually landed (measured, not promised)
 
 - **Server**: the vitest run in `server/` → 21 files, **542 tests** green, with `tsc --noEmit` clean.
@@ -1876,7 +1883,7 @@ snack; the grid should read like Google's hours, showing only the window that ha
   the 30-minute click snap and the auto-scroll. `calendar-week.component.ts` and
   `calendar-day.component.ts` are deleted, not deprecated: day and week are one component now.
 - **`scripts/check-ui.mjs` grew a rule and a fix.** Rule 4 (orphan selectors) previously matched
-  `data-test` names *by common prefix in either direction*, so when the week grid was deleted its
+  `data-test` names _by common prefix in either direction_, so when the week grid was deleted its
   `meal-chip` handle still «existed» —and the e2e specs asking for it would have gone quietly vacuous,
   because Playwright does not fail on a locator that matches nothing. It is now exact-match, with the
   only exception being the dynamic attributes the frontend builds by concatenation (`'layer-' + kind`).
@@ -1899,7 +1906,7 @@ snack; the grid should read like Google's hours, showing only the window that ha
   the two vitest suites, `check-ui` and the production build. Fixing the lint setup is its own round —
   flat config plus a decision about template linting— and pretending to have run it would be worse than
   leaving it broken and said.
-- **Not claimed**: the sandbox has no Chromium, so nothing here asserts how the grid *looks*. The window
+- **Not claimed**: the sandbox has no Chromium, so nothing here asserts how the grid _looks_. The window
   trimming, the block placement and the scroll position are asserted as numbers, and the click and dialog
   behaviour as events. `calendar.component.ts` keeps a pre-existing component-CSS budget warning
   (13.32 kB against a 10 kB budget); its own styles are 12.6 kB of agenda and dialog CSS that predates
@@ -1966,7 +1973,7 @@ own dialog (round 12) and every path below goes through it.
       never «¿Estás seguro?».
 - [x] Deliberate exceptions, each with its reason written in the rule file: «quitar la foto» of the
       account (it is a decision inside the avatar modal, already a two-choice step, and re-uploading
-      undoes it), the PWA's local-cache discard, and anything the server itself treats as a *setting*
+      undoes it), the PWA's local-cache discard, and anything the server itself treats as a _setting_
       rather than a deletion (a `null` that clears a field is not a delete of a row).
 - [x] Cancelling does nothing at all: no toast, no optimistic removal from a local list, no refetch. And
       the confirm dialog already has its own cancel —the rule «todo control editable necesita forma de
@@ -1984,7 +1991,7 @@ own dialog (round 12) and every path below goes through it.
 - [x] The **tour** asks the same question as its own step, prefilled with the defaults, and saving the
       step is the same PATCH the preferences page uses. Skipping the tour must not lose the schedule:
       the defaults stay.
-- [x] The hour grid uses them: an untimed meal is *placed* at the house's hour for its type, and the
+- [x] The hour grid uses them: an untimed meal is _placed_ at the house's hour for its type, and the
       anchors that `core/calendar-grid.ts` tests (08:30/14:00/17:30/21:00) become the shipped defaults
       only as `MEAL_TIME_DEFAULTS`, imported by nothing else. Placement, the click-to-add prefill and
       the `+` in the day header read the configured values.
@@ -2031,14 +2038,14 @@ own dialog (round 12) and every path below goes through it.
 - **The grid kept an anchor of its own.** The bullet above says the shipped hours become
   `MEAL_TIME_DEFAULTS` «imported by nothing else»; that turned out to be wrong in a useful way.
   `MEAL_ANCHOR_MINUTES` (08:30 / 14:00 / 17:30 / 21:00) stays in `core/calendar-grid.ts` as what the
-  grid paints *before* the profile answers, and `mealAnchors()` falls back to it per key. Without it,
+  grid paints _before_ the profile answers, and `mealAnchors()` falls back to it per key. Without it,
   every untimed meal is placed at midnight for the ~200 ms the taste profile takes, which is a worse
   calendar than a slightly recoloked one. The two sets mean different things and say so in their
   comments: one is «what the app ships as a normal day», the other is «where an untimed block sits».
 - **Blank and absent are different inside `mealTimes`.** `mealTimes: { dinner: '' }` deletes the dinner
   key (next read answers the default); `mealTimes: { dinner: '22:00' }` leaves the other three alone;
   no `mealTimes` at all touches nothing. That is the same absent/null contract the rest of the API
-  uses, one level deeper, and it is why the Preferences tab and the tour send a patch of *changed*
+  uses, one level deeper, and it is why the Preferences tab and the tour send a patch of _changed_
   keys (`mealTimesPatch`) instead of the four visible ones —otherwise «look at the default» silently
   becomes «have the default saved», and a future change of the shipped hour would stop reaching houses
   that never chose anything.
@@ -2093,7 +2100,7 @@ own dialog (round 12) and every path below goes through it.
 Two sentences of feedback from the user, and they are the same complaint seen from both ends: the app
 described a behaviour with the word for an empty canvas («en blanco») instead of the word for what
 happens («por defecto»), and controls that do nothing when you hover them do not look like controls. The
-first is copy; the second is the reason the copy had to exist at all — a field whose empty state *means*
+first is copy; the second is the reason the copy had to exist at all — a field whose empty state _means_
 something needs either a button or a sentence, and here it had a sentence that used the wrong word.
 
 ### A. «En blanco» is a pixel, not a meaning
@@ -2105,7 +2112,7 @@ something needs either a button or a sentence, and here it had a sentence that u
       Hecho: Sobrecumplido: la frase ya no existe en ninguna de las dos pantallas. El control hace lo que la
       frase explicaba (un boton «Por defecto» por fila tocada), y la cadena que quedaba se la llevo
       `app-meal-hours`.
-- [x] Where empty really does mean *nothing* — the hour of a single meal in the meal dialog, which round
+- [x] Where empty really does mean _nothing_ — the hour of a single meal in the meal dialog, which round
       14 made clearable — the control and its copy say «quitar la hora». «En blanco» is not used for
       either case anywhere in the UI.
       Hecho: El dialog de la comida habla de «sin hora» y esa es la otra acepcion: no hay valor. Cero cadenas
@@ -2117,13 +2124,13 @@ something needs either a button or a sentence, and here it had a sentence that u
       Hecho: Escrita, con la maquina de estados que se salta comentarios, y con los `.spec.ts` exentos: un
       test puede escribir la palabra para prohibirla.
 - [x] `DESIGN-SYSTEM.md` gets the two words and when they are allowed, so the next empty-state copy is
-      not a coin flip: *vacío / sin valor* for «no value», *por defecto* for «the value the app ships».
+      not a coin flip: _vacío / sin valor_ for «no value», _por defecto_ for «the value the app ships».
       Hecho: Dos subapartados: «Estados de interaccion» (tabla hover/focus/disabled) y «Vaciar un campo no es
       dejarlo en blanco».
 
 ### B. Everything you can press looks pressable
 
-- [x] Global baseline in `styles.scss`: `button { border: none; background: none }` is a *reset*, and it
+- [x] Global baseline in `styles.scss`: `button { border: none; background: none }` is a _reset_, and it
       was also the whole story for any button that did not opt into a component skin — the origin of «esto
       no parece un botón». From now on: a bare `<button>` (no class of its own) gets the design-system
       skin (border, background, padding, radius, hover, focus ring); every `label:has(input)` is
@@ -2175,7 +2182,7 @@ something needs either a button or a sentence, and here it had a sentence that u
       modelo compartido porque un componente del design system no importa de `core/`.
 - [x] The reset is an action, not a sentence: «Por defecto» writes the shipped hour into the form (which
       is the same thing as emptying it, but visible and reversible before saving), and it does not mark
-      the row as changed when the value already *is* the default — the dirty state and `mealTimesPatch`
+      the row as changed when the value already _is_ the default — the dirty state and `mealTimesPatch`
       stay the single source of what gets sent.
       Hecho: El boton existe solo en la fila tocada; en la que vale lo de siempre no hay nada que deshacer.
 - [x] The hour input has a minimum width and height of its own. A bare `type="time"` shrinks to the width
@@ -2206,7 +2213,7 @@ background and inherited colour. Which is exactly the screen the user is complai
       Hecho: Nueve arreglados: cuatro del campo de hora (borrados con el bloque duplicado), `--color-warning`
       en logs (que tenia un fallback tapandolo), dos `--duration-fast`, `--primary-alpha`, `--primary-soft`,
       `--color-warning-400`.
-- [x] The tokens the app *should* have and does not: `--surface` and friends were invented because the
+- [x] The tokens the app _should_ have and does not: `--surface` and friends were invented because the
       names in use (`--bg-secondary`, `--text-primary`) do not say which is on top of which. Renaming is
       not this round (160 definitions, every screen); the rule is what stops the pile growing.
       Hecho: Sin renombrar nada, como decia el punto: 160 definiciones y todas las pantallas. La regla 12 es
@@ -2259,7 +2266,7 @@ la clave de reutilizacion— en lugar de prohibir getters, que es una preferenci
 - Hover-only affordances need a touch answer: the sidebar and the row actions already show their controls
   on small screens; a systematic `@media (hover: none)` pass across the 47 components is a round of its
   own, and doing it halfway would leave a different app on a phone than on a laptop.
-- Making the *global* skin the only way to paint a button (component CSS keeps 144 hand-written
+- Making the _global_ skin the only way to paint a button (component CSS keeps 144 hand-written
   variants). The rule now refuses a control with no state; collapsing the skins into tokens is the next
   step and it touches every screen.
 
@@ -2292,7 +2299,7 @@ dejaba la capa e2e entera sin verificar durante ocho tandas.
       (`page.locator('#ob-allergies').locator(...)`) y no al revés.
 - [ ] 1 es un **click que no llega**: «Siguiente →» en el paso de gustos —hay que mirar si el boton esta
       deshabilitado por una validacion del propio paso o si hay un overlay; el log dice `waiting for element
-      to be visible, enabled and stable`, que es lo que separa un test mal escrito de una pantalla que
+    to be visible, enabled and stable`, que es lo que separa un test mal escrito de una pantalla que
       bloquea.
 - [ ] 6 son del **job full-stack**, y su causa es el entorno: `429` esperado y `404` recibido (los limites
       no se aplican igual cuando el server arranca con otra config), `results.json` que no se escribe, el
@@ -2341,12 +2348,12 @@ donde sale texto a la pantalla, y dejar una regla que no permita volver a escrib
 ### A. Qué es texto de la interfaz y qué es dato
 
 - [ ] **Traducible**: lo que la app dice —títulos, botones, pistas, placeholders, `aria-label`, `title`,
-      estados vacíos, avisos (`toast`), confirmaciones, nombres de comidas y de secciones cuando se *enseñan*.
+      estados vacíos, avisos (`toast`), confirmaciones, nombres de comidas y de secciones cuando se _enseñan_.
 - [ ] **Dato, no se toca**: lo que el usuario escribe o guarda (nombre de una categoría de la cesta, un
       alimento propio, una receta generada por la IA) y lo que viaja en un contrato: `MEAL_TYPE_LABELS` y
       `MEAL_TIME_META` siguen en español porque el server parsea la respuesta del modelo por esas cadenas
-      (`taste-profile.ts` hace `formTime('Desayuno')`). Donde esas constantes se *pintan*, la pantalla usa
-      `t('meal.<tipo>')`; donde se *envían*, siguen mandando el literal del contrato. Un refactor que
+      (`taste-profile.ts` hace `formTime('Desayuno')`). Donde esas constantes se _pintan_, la pantalla usa
+      `t('meal.<tipo>')`; donde se _envían_, siguen mandando el literal del contrato. Un refactor que
       tradujera el dato cambiaría el prompt de la IA.
 - [ ] **Se queda como está, declarado**: lo que contesta el server (`error.message` del API, que se muestra
       tal cual en el toast) y el contenido generado por la IA. Traducir eso es `Accept-Language` en el
@@ -2506,7 +2513,7 @@ Pedidos por la persona que usa la app, los dos con su caso detras:
 ### R. Recurrencia de los eventos de la casa
 
 - [ ] **El dato, dos columnas**: `calendar_events.recurrence` (`'none' | 'daily' | 'weekly'`, `NOT NULL DEFAULT
-      'none'`) y `calendar_events.exceptions` (JSON de fechas `YYYY-MM-DD`, `DEFAULT '[]'`). Se anaden con el
+    'none'`) y `calendar_events.exceptions` (JSON de fechas `YYYY-MM-DD`, `DEFAULT '[]'`). Se anaden con el
       helper de `config/database.ts` que ya existe (`addColumnIfMissing`), sin tabla nueva y sin rebuild: una
       fila vieja es `'none'`, que es lo que era.
 - [ ] **Una fila, no una fila por dia**. La serie vive en una fila y las ocurrencias se materializan al leer.
@@ -2562,7 +2569,6 @@ Pedidos por la persona que usa la app, los dos con su caso detras:
       decision de que pasa con las ocurrencias pasadas. §13.
 - [ ] El bloqueo en el tour de bienvenida (añadiria una pregunta a las seis prometidas) y un «silenciar este
       dia» que no sea borrar la ocurrencia. §13.
-
 
 ## 12t-R. Como ha quedado la tanda (recurrencia) y el cierre de i18n
 
@@ -2666,7 +2672,7 @@ arreglar, no la lista.
 **La causa, en una frase: un catálogo pinta lo que lleva dentro.** `tabs = [{ label: 'Todas' }, …]` y en la
 plantilla `{{ tab.label }}`. Como el texto está en el `.ts` y el `{{ }}` no lleva ni clave ni `| t`, las tres
 pruebas de la ronda 20 pasan de largo: la 2 mira el argumento del `t()`, la 3 la llamada de servicio, la 14 el
-texto *plano* de la plantilla. Afecta a varias pantallas de golpe porque el catálogo es un `shared/models/*.ts`
+texto _plano_ de la plantilla. Afecta a varias pantallas de golpe porque el catálogo es un `shared/models/*.ts`
 (`MEAL_TYPE_META`, `OFFER_PRESETS`, `unit-families`) o una lista de columnas, y eso lo pintan a la vez el
 calendario, la lista, el detalle y el modal.
 
@@ -2779,9 +2785,6 @@ escrita en el código, así que el `| t` añade una vuelta y no una reescritura,
 español siguen assertando lo mismo. Lo que **no** he podido comprobar aquí: el render (no hay navegador en el
 sandbox; `ng test` necesita ChromeHeadless y `ng lint` no puede correr porque `frontend/package.json` declara
 `ng lint` sin tener `@angular-eslint/builder` entre sus dependencias —deuda apuntada en `## 13`).
-
-
-
 
 **Y despues del 0, nueve mas (ampliar la regla 14).** Con el texto de nodo ya medido, la regla 14 —«toda
 cadena en negrita o titulo de bloque va por clave»— tenia un angulo ciego: perdonaba cualquier nodo cuyo
@@ -2925,7 +2928,7 @@ cinco palabras y `cookingLevel` devolviendo clave + `'Sin marcar'`), `household`
       que una clave rota **no falla, se pinta**, y eso es exactamente lo que muestra la captura del parte.
 - [x] Gates, todos ejecutados en la tanda: `check-ui` 176/20/0 · `tsc` de app limpio · `typecheck:e2e` limpio ·
       puente vitest **14 ficheros / 126 pruebas** · suite del server **23 / 592** · `ng build --configuration
-      production` sin un error nuevo. El puente ha crecido en dos ficheros: `home-profile.spec.ts` estaba excluido
+    production` sin un error nuevo. El puente ha crecido en dos ficheros: `home-profile.spec.ts` estaba excluido
       solo por usar `toBeTrue()`/`toBeFalse()` (matchers de Jasmine que chai no tiene), y cambiarlos por
       `toBe(true)`/`toBe(false)` lo ha devuelto a la ejecución —mismo test, ahora corre también aquí. Y ese mismo puente ha enseñado una regla de escritura: un spec que corre en los dos
       arneses no puede usar `expect(valor, mensaje)` —en Karma ese segundo sitio no existe, alli el contexto se
@@ -3036,7 +3039,7 @@ vez—.
   deshabilitado con una nota al lado (`#category-protected-note`). No es un aviso: es un dato que la app sabe que
   necesita.
 - **Borrar bloqueado mientras quede algo encima.** `canDelete` exige `productCount === 0 && childCount === 0`, y
-  el 409 lleva el impacto en el cuerpo para que el diálogo pueda decir *por qué* no, con números.
+  el 409 lleva el impacto en el cuerpo para que el diálogo pueda decir _por qué_ no, con números.
 - **Lista jerárquica aplanada y paginada**: hijo indentado dentro del padre, `childCount` / `productCount` /
   `descendantProductCount` por fila, «1-2 de 2» y «10 por página», con `total` = **el total filtrado** (un pager
   que dice «10» sobre 3 filtrados miente).
@@ -3050,7 +3053,7 @@ vez—.
 ### Checklist
 
 - [x] **Migration `pantry_categories`**: `id, user_id, household_id, key, name, color, description, parent_key,
-      position, created_at, updated_at`, única por casa y `key`, índice por `position`. `key` es **el dato** que ya
+    position, created_at, updated_at`, única por casa y `key`, índice por `position`. `key` es **el dato** que ya
       guardan `ingredients.category` y el prompt de la IA: las doce claves de fábrica se siembran con su `name` en
       castellano y su color, y `other` nace protegida. Se siembra desde `backfillHouseholdSeeds` de forma
       idempotente: las casas ya creadas reciben el catálogo **sin migrar una sola fila de `ingredients`**.
@@ -3074,7 +3077,7 @@ vez—.
       forma: ya valían con cualquier clave.
 - [x] **Gestor de productos principales** sobre lo que ya existe: `staples` = filas con `quantity = 0`. Rutas
       `GET /api/pantry/products` (búsqueda `q` por nombre, alias, `barcode` y `notes`; `filter=all|staples|in-pantry|
-      expiring` —`staples`, sin stock, es la pestaña con la que abre la pantalla—; `sort=name|recent`; paginado
+    expiring` —`staples`, sin stock, es la pestaña con la que abre la pantalla—; `sort=name|recent`; paginado
       `limit`/`offset` con `meta.total` filtrado y `hasMore`), `POST`, `PATCH /:id`,
       `GET /:id/delete-impact`, `DELETE /:id`, y `POST /products/bulk-delete-impact` + `POST /products/bulk-delete`
       (máximo 100, todo-o-nada dentro de una transacción). Borrar un producto principal **borra la sugerencia, no
@@ -3170,18 +3173,18 @@ se queda escrito, no se toca a ciegas.
 
 ### Lo que dice la anotación de CI, y con qué se casa
 
-| prueba | qué esperaba | qué salió | veredicto |
-| --- | --- | --- | --- |
-| `auth.spec.ts` — «should show login form» | `h2` con `Iniciar Sesión` | `Iniciar sesión` | prueba vieja: la ronda de i18n pasó los títulos a minúscula de frase; `household.spec.ts` ya busca `/Iniciar sesión/` |
-| `account.spec.ts` — «informacion dice lo que la app guarda» | `account-email` con `@hogaria.test` | `e2e-r…a1s1-1-…@example.com` | prueba vieja: `registerAndGoto` **devuelve el email que crea** y el dominio del arnés es `@example.com` |
-| `onboarding.spec.ts` — desmarcar la merienda y la cena | `[data-test="gen-meal-snack"] input[type="checkbox"]` | 45 s esperando el localizador | prueba vieja: `app-checkbox` es un `button[role="checkbox"]` —**no hay input dentro que marcar**— y el `data-test` está en el propio `<app-checkbox>` |
-| los textos en español que salieron en inglés (`10 % en 2 units`) | chip en castellano | chip en inglés | **el arnés estaba roto**: `fixtures.ts` anclaba el idioma escribiendo `hogaria.language`, y la app lee `STORAGE_KEYS.language` = `hogar:v1:language`. La clave no existía para nadie: quien cambiaba de idioma en otro sitio se llevaba el `auto` del navegador (en CI, `en-US`) |
-| `calendar.spec.ts` (`.cal-event` a 0, hover esperando) | eventos en la rejilla | ninguno | **no se toca**: la clase existe (`calendar-event.component.ts`, `class: 'cal-event'`), así que es dato/tiempo, y sin navegador no se decide si es del test o del planificador |
-| `recipes.spec.ts` y `ai-goal.spec.ts` (`.modal__title` vacío) | título del modal | cadena vacía | **no se toca**: `.modal__title` sigue en el sistema (2 ficheros); o el modal no estaba abierto en el assert o el `[title]` no llega —hay que verlo— |
-| `shopping-round6.spec.ts` — oferta `3x2`, `selection-toolbar`, `add-input`, `discount-amount` | 3x2 / toolbar visible | `3x1` / no aparece | **no se toca**: todos los `data-test` existen en la app; la pinta de cascada (un paso anterior no hizo lo que el test creía) |
-| `shopping-round10.spec.ts` — «bote de 400 g» en el picker | la medida escrita a mano | `Sin unidad` | **no se toca** por el mismo motivo, y puede que lo arregle el anclaje del idioma |
-| `shopping-round6.spec.ts` — hoja de foto sin IA | `/Falta configurar la IA/i` | `El modelo no esta disponible ahora mismo.` | **no se toca**: las dos frases están en el diccionario (`ui.falta_configurar_la_ia`, `ui.el_modelo_no_esta`) y son condiciones distintas —cuál toca depende del estado del arnés |
-| `Full-stack E2E` | `test-results/results.json` | «Playwright no llegó a escribir resultados (posible fallo al arrancar el webServer)» | **no se toca**: es el job de proceso único (build de producción + servidor), y su fallo es de arranque, no de ningún assert |
+| prueba                                                                                        | qué esperaba                                          | qué salió                                                                            | veredicto                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `auth.spec.ts` — «should show login form»                                                     | `h2` con `Iniciar Sesión`                             | `Iniciar sesión`                                                                     | prueba vieja: la ronda de i18n pasó los títulos a minúscula de frase; `household.spec.ts` ya busca `/Iniciar sesión/`                                                                                                                                                            |
+| `account.spec.ts` — «informacion dice lo que la app guarda»                                   | `account-email` con `@hogaria.test`                   | `e2e-r…a1s1-1-…@example.com`                                                         | prueba vieja: `registerAndGoto` **devuelve el email que crea** y el dominio del arnés es `@example.com`                                                                                                                                                                          |
+| `onboarding.spec.ts` — desmarcar la merienda y la cena                                        | `[data-test="gen-meal-snack"] input[type="checkbox"]` | 45 s esperando el localizador                                                        | prueba vieja: `app-checkbox` es un `button[role="checkbox"]` —**no hay input dentro que marcar**— y el `data-test` está en el propio `<app-checkbox>`                                                                                                                            |
+| los textos en español que salieron en inglés (`10 % en 2 units`)                              | chip en castellano                                    | chip en inglés                                                                       | **el arnés estaba roto**: `fixtures.ts` anclaba el idioma escribiendo `hogaria.language`, y la app lee `STORAGE_KEYS.language` = `hogar:v1:language`. La clave no existía para nadie: quien cambiaba de idioma en otro sitio se llevaba el `auto` del navegador (en CI, `en-US`) |
+| `calendar.spec.ts` (`.cal-event` a 0, hover esperando)                                        | eventos en la rejilla                                 | ninguno                                                                              | **no se toca**: la clase existe (`calendar-event.component.ts`, `class: 'cal-event'`), así que es dato/tiempo, y sin navegador no se decide si es del test o del planificador                                                                                                    |
+| `recipes.spec.ts` y `ai-goal.spec.ts` (`.modal__title` vacío)                                 | título del modal                                      | cadena vacía                                                                         | **no se toca**: `.modal__title` sigue en el sistema (2 ficheros); o el modal no estaba abierto en el assert o el `[title]` no llega —hay que verlo—                                                                                                                              |
+| `shopping-round6.spec.ts` — oferta `3x2`, `selection-toolbar`, `add-input`, `discount-amount` | 3x2 / toolbar visible                                 | `3x1` / no aparece                                                                   | **no se toca**: todos los `data-test` existen en la app; la pinta de cascada (un paso anterior no hizo lo que el test creía)                                                                                                                                                     |
+| `shopping-round10.spec.ts` — «bote de 400 g» en el picker                                     | la medida escrita a mano                              | `Sin unidad`                                                                         | **no se toca** por el mismo motivo, y puede que lo arregle el anclaje del idioma                                                                                                                                                                                                 |
+| `shopping-round6.spec.ts` — hoja de foto sin IA                                               | `/Falta configurar la IA/i`                           | `El modelo no esta disponible ahora mismo.`                                          | **no se toca**: las dos frases están en el diccionario (`ui.falta_configurar_la_ia`, `ui.el_modelo_no_esta`) y son condiciones distintas —cuál toca depende del estado del arnés                                                                                                 |
+| `Full-stack E2E`                                                                              | `test-results/results.json`                           | «Playwright no llegó a escribir resultados (posible fallo al arrancar el webServer)» | **no se toca**: es el job de proceso único (build de producción + servidor), y su fallo es de arranque, no de ningún assert                                                                                                                                                      |
 
 ### Checklist
 
@@ -3191,7 +3194,7 @@ se queda escrito, no se toca a ciegas.
       fixture, es decoración.
 - [x] `auth.spec.ts`: el título se busca como lo pinta la app (`Iniciar sesión`).
 - [x] `account.spec.ts`: se afirma contra el email que el propio helper registró (`const email = await
-      registerAndGoto(...)`), no contra un dominio que el arnés ya no usa.
+    registerAndGoto(...)`), no contra un dominio que el arnés ya no usa.
 - [x] `onboarding.spec.ts`: las casillas se pulsan por su rol (`[role="checkbox"]`) y se comprueban por
       `aria-checked`, como hace `pantry-managers.spec.ts` desde la tanda 25. Nadie marca un input que no existe.
 - [x] `corepack pnpm run typecheck:e2e` en 0 tras los cuatro cambios (es la única puerta que el sandbox puede
@@ -3215,7 +3218,7 @@ arranque del proceso único, no un assert) y los shards. Las anotaciones dan par
 clasifican incluye **lo mío**:
 
 - **La tanda 25 tenía un bug, y lo encontró un e2e que nadie había ejecutado.** `un producto principal se
-  registra sin meter nada en la despensa` esperaba el campo del nombre y no aparecía: `abrirFicha('new')` ponía
+registra sin meter nada en la despensa` esperaba el campo del nombre y no aparecía: `abrirFicha('new')` ponía
   `ficha = null`, y la plantilla decide «lista o ficha» con `@if (!ficha)` —el botón de crear, por tanto, volvía a
   pintar la lista; el formulario del alta no existía—. Las categorías lo hacían bien (ficha en blanco) y productos
   no; se repara con la misma forma (ficha en blanco con `impact` a ceros), y lo que de una fila inexistente no se
@@ -3242,7 +3245,7 @@ clasifican incluye **lo mío**:
 Checklist de esta segunda mitad, medida contra las anotaciones:
 
 - [x] Ficha en blanco en el alta de productos (el bug de arriba), con `build:prod` y `tsc -p
-      tsconfig.app.json` volviendo a decir 0.
+    tsconfig.app.json` volviendo a decir 0.
 - [x] Los cinco localizadores míos corregidos (`#id`, sin ` input`), el `gestor-productos-ficha` visible antes de
       rellenar la ficha —si alguien vuelve a romper el alta, el fallo dice eso, no «timeout»—, y el plazo en el
       assert del borrado.
@@ -3251,14 +3254,13 @@ Checklist de esta segunda mitad, medida contra las anotaciones:
       pictograma de ubicación va delante).
 - [x] `fixtures.ts`: el anclaje solo cuando no hay preferencia.
 - [x] Puertas: `check-ui` en 0 · `tsc` app **y** `-p tsconfig.spec.json` en 0 · `corepack pnpm run
-      typecheck:e2e` en 0 · `--filter @hogaria/web build:prod` completo. La suite del server no se vuelve a correr:
+    typecheck:e2e` en 0 · `--filter @hogaria/web build:prod` completo. La suite del server no se vuelve a correr:
       ningún fichero de `server/` cambia en este tramo.
-  Y **se sigue sin tocar** lo que necesita navegador para juzgarse (`.cal-event` a 0, `.modal__title` vacio,
+      Y **se sigue sin tocar** lo que necesita navegador para juzgarse (`.cal-event` a 0, `.modal__title` vacio,
       `offer-chip` 3x2/3x1, `unit-picker` «Sin unidad», los timeouts en cascada de `shopping-round6`, el
       `photo-error` con las dos frases del diccionario, y el arranque del `Full-stack E2E`): seis filas, cada una
       con su anotación, esperando alguien con Playwright delante. Lo que sí se espera es que al anclar el idioma
       varias se alineen solas; si lo hacen, se borran de esta lista con la medición, no a ojo.
-
 
 ### La segunda tanda del CI (mismo método: las anotaciones mandan)
 
@@ -3285,7 +3287,6 @@ estaba mirando no era del filtro pedido).
 - **La regla, esta vez en condiciones**: escribir el estado en la URL y no leerlo al montar es lo mismo que no
   escribirlo. Cualquier pantalla que prometa «el F5 conserva» tiene que tener su lectura en el `ngOnInit`, y eso
   se prueba en el util —sin navegador— con un valor desconocido, una ausencia y un número sucio.
-
 
 ### Tercer bucle: lo que queda abierto, dicho como esta
 
@@ -3335,9 +3336,9 @@ superficie para la barra de trabajo y sin columnas —los colores y las piezas e
 - **Espaciado solo del tipo de espaciado** (`--space-*`): donde hace falta un 2px se pone `--space-1` y se
   reordena la tipografía, no se escribe `2px`. Lo que queda de `padding: 0` son ceros de reset, que no cuentan.
 - **La barra de trabajo es una superficie** (`--bg-secondary`, borde de 1px, `--radius-xl`, `padding: --space-3
-  --space-4`) y `align-items: end`, para que buscador, filtros, orden y botón compartan línea de base. El grupo
+--space-4`) y `align-items: end`, para que buscador, filtros, orden y botón compartan línea de base. El grupo
   de vistas vive dentro de una píldora `--bg-tertiary`: tres filtros dentro de un fondo común se leen como
-  *elegir vista*, tres sueltos se leen como tres botones.
+  _elegir vista_, tres sueltos se leen como tres botones.
 - **La lista es una tarjeta con filas**, no fichitas separadas 2px: `--radius-xl` + `overflow: hidden`,
   `border-bottom` de 1px entre filas, `padding: --space-4` en cada una y `gap: --space-2 --space-4` entre piezas.
 - **Alineación con `grid`, declarada por pantalla**: desde 860px `.fila__cuerpo` es grid con las pistas de cada
@@ -3347,7 +3348,7 @@ superficie para la barra de trabajo y sin columnas —los colores y las piezas e
 - **La jerarquía se ve**: las filas hijas llevan `.fila--anidada` (sangrado a `--space-8` con un hilo de 1px).
   El server ya devolvía el árbol aplanado; pintarlo plano sin decir nada era medio contrato roto.
 - **Los datos de la fila son etiquetas**: `--radius-full`, `--space-1 --space-2`, `font-variant-numeric:
-  tabular-nums`; `--success-subtle` cuando hay existencias y `--warning-subtle` cuando caduca en días, y los
+tabular-nums`; `--success-subtle` cuando hay existencias y `--warning-subtle` cuando caduca en días, y los
   alias con borde discontinuo para que se distingan de los datos duros sin añadir un icono.
 - **La ficha es un formulario**: `--radius-2xl`, `padding: --space-4`/`--space-6`, microetiqueta en `--text-xs` +
   `uppercase` + `--tracking-wide` (el patrón de etiquetas de la app), `.form-row` en dos columnas desde 720px,
@@ -3378,7 +3379,6 @@ superficie para la barra de trabajo y sin columnas —los colores y las piezas e
       `--headed`, o simplemente abrir `/pantry/categories` y `/pantry/products` en el dev, es lo que falta para
       decir que la tanda está cerrada; puede que quede algún `--space-6` de más o de menos, y eso solo se ve
       mirando.
-
 
 ### Y un boton que se pinta en dos pantallas necesita dos destinos
 
@@ -3441,7 +3441,7 @@ Tres decisiones de modelo, escritas antes de tocar código:
   que guarda la casa es el nombre, no el id. Reordenar el fichero no rompe ninguna casa, a lo sumo cambia el
   id con el que alguien llamó dos minutos antes. El test de invariantes exige claves únicas dentro de la hoja.
 - **La relación producto-categoría y categoría-padre se respeta al añadir, no solo al pintar.** `POST
-  /catalog/add` crea en la casa la hoja que falte con su nombre y su color **y su padre en orden**
+/catalog/add` crea en la casa la hoja que falte con su nombre y su color **y su padre en orden**
   (`alimentos` antes que `charcuteria`), reutilizando `createCategory` —techo de profundidad, clave única
   y reserva de `other` incluidos—. Un catálogo sin padre sería la lista de la compra; con padre es el árbol
   que el gestor de categorías ya sabe pintar.
@@ -3470,7 +3470,7 @@ los `zod` correspondientes):
   fila de nadie que ya las reorganizó. Se llama desde el backfill de arranque, que es donde viven las
   migraciones de dato en este repo.
 - **Filtrar por categoría incluye el subárbol** en `GET /products` y `GET /ingredients`. Con `category =
-  'alimentos'`, el `category = ?` exacto devolvía cero filas: un botón pintado que no encuentra nada es el
+'alimentos'`, el `category = ?` exacto devolvía cero filas: un botón pintado que no encuentra nada es el
   botón de la ronda 28 repetido en el sitio del lado equivocado. El conteo del padre en los chips del visor
   pasa a ser `descendantProducts`, que es lo que la fila del padre promete.
 - La etiqueta de fábrica `alimentos` entra en los dos mapas de `labels.ts` (`pantry.categoria_alimentos`,
@@ -3488,7 +3488,7 @@ mismo vocabulario de superficies que sus dos vecinas:
 - **PC (≥ 960px)**: dos columnas `220px minmax(0,1fr)`. A la izquierda, el árbol en riel `position: sticky`:
   las seis padres como microetiquetas y sus hojas debajo con sangrado y contador `tabular-nums`. A la derecha,
   la barra de trabajo (buscador, «Añadir lo visible») y la lista: filas en `.lista` con grid `minmax(0,1fr)
-  auto auto` —nombre + punto de color, etiqueta de categoría, botón de acción—.
+auto auto` —nombre + punto de color, etiqueta de categoría, botón de acción—.
 - **Móvil**: las mismas filas del árbol se vuelven un scroller horizontal de píldoras (un único DOM, que el
   CSS es el que cambia el reflujo: dos piezas por medio = dos `data-test` iguales = strict-mode en la primera
   prueba que pase por ahí); las filas, apiladas, con el botón de añadir a 44px de diana.
@@ -3557,7 +3557,6 @@ Cambios sobre `pantry.component.ts` sin tocar ningún `data-test` ni clase que p
 - [ ] Mirar las dos pantallas en la preview (`/pantry` y `/pantry/catalogo`, y el gestor de categorías para
       ver el padre) — el punto que quedó abierto en la ## 12z y que el sandbox ahora sí permite.
 
-
 ## 12ab. Tanda 30 — todas las listas de la pantalla de inventario pasan a tabla profesional
 
 El veredicto del usuario sobre el visor tras la ## 12aa: «varias cosas» — el filtro de categorías pintado como
@@ -3583,8 +3582,8 @@ filtrado, paginación y selección. Contrato:
     «Seleccionar todo»/«Ninguno», casillas; «Limpiar filtro» en el pie.
   - `numero`: condiciones (`igual a`, `mayor que`, `menor que`, `entre`) con campos `app-input type=number`.
   - `fecha`: `antes de`, `después de`, `entre`, más los atajos `hoy`, `próximos 7 días`, `caducados`.
-  El filtro activo se marca en el embudo (punto + `aria-pressed`) y su estado vive en la tabla, no en la URL:
-  lo que comparte una pantalla es la búsqueda y la categoría, no cada casilla pulsada.
+    El filtro activo se marca en el embudo (punto + `aria-pressed`) y su estado vive en la tabla, no en la URL:
+    lo que comparte una pantalla es la búsqueda y la categoría, no cada casilla pulsada.
 - **Paginación** del lado cliente: tamaños 10/24/50/100, «desde–hasta de total», anterior/siguiente. La tabla
   itera el dataset completo de la pantalla; por eso el visor carga las filas de una vez (§B).
 - **Selección múltiple**: columna de casillas (`app-checkbox`), cabecera con «todas las filas visibles» (y su
@@ -3678,7 +3677,7 @@ propio spec para no mezclar 3 reescrituras e2e más en el lote de CI de esta.
 - [x] e2e en la misma tanda: `pantry.spec` y `utensils.spec` reescritos (más el test de móvil de la hoja);
       ningún botón pintado sin destino verificado en la plantilla tocada.
 - [x] Puertas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration
-      production` completo · suite del server (intacta, pero verde por si el picker cambia algo).
+    production` completo · suite del server (intacta, pero verde por si el picker cambia algo).
 - [x] Run de CI como juez de los e2e y su bucle de fixes —tres bucles, y verde. Bucle 1: el velo tapaba el
       popover del cabezal (el th sticky apila aparte), los botones de modo se imprimían la clave cruda y la
       búsqueda no bajaba a minúsculas. Bucle 2: dos promesas del test estaban escritas al revés de lo firmado
@@ -3719,7 +3718,7 @@ pantallas cambian de modelo de datos:
   - Categorías: `sin productos` ⇔ `counts.products === 0`; `con subcategorías` ⇔ `counts.children > 0`; la
     búsqueda casa `name` normalizado o `key` (igual que `pantryCategoryKey` del server, aplicada en cliente).
   - Productos: `staples` ⇔ `quantity === 0`; `in-pantry` ⇔ `quantity > 0`; `expiring` ⇔ `hoy <= caducidad <=
-    hoy+3` **por día** (`claveDeDia` + `sumarDias`, el error del instante ya corregido en el server); `q` casa
+hoy+3` **por día** (`claveDeDia` + `sumarDias`, el error del instante ya corregido en el server); `q` casa
     `name` o cualquier alias (el server hacía LIKE sobre name y sobre el JSON de aliases; aquí se comparan las
     cadenas del array, que es el mismo dato sin el JSON).
   - Catálogo: el pasillo filtra por **subárbol de hojas** del árbol del catálogo (38 filas, `listCatalogCategories()`
@@ -3792,7 +3791,7 @@ pantallas cambian de modelo de datos:
 - **Selección múltiple + lote**: «Añadir a la despensa» de las filas seleccionadas usa `POST /catalog/add` con
   los ids (es la ruta de la fila suelta, con su validación todo-o-nada y sus contadores `added/skipped`); un
   toast con el recuento y recarga. La fila individual mantiene su botón `+` idéntico (misma `data-test
-  catalogo-anadir-<id>`). «Añadir lo visible» **cambia de significado con honestidad**: pasa a añadir **lo que
+catalogo-anadir-<id>`). «Añadir lo visible» **cambia de significado con honestidad**: pasa a añadir **lo que
   la tabla muestra tras filtros** (las filas del dataset filtrado, no la página) —el botón se llama como lo que
   hace: «Añadir lo de la pantalla» (`pantry.catalogo_anadir_filtrados`, nueva clave; la vieja se borra con su
   value). Con filtro «solo fuera de casa» activo, el botón hace exactamente lo que el usuario acaba de pedir.
@@ -3868,7 +3867,7 @@ pantallas cambian de modelo de datos:
       selección-lote sin confirmación, alta que sale en el gestor). Verdes íntegros en escritorio y en
       mobile-chrome local.
 - [x] Puertas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration
-      production` 0 · karma de lo tocado 49/49 · suite del server intacta (no se tocó).
+    production` 0 · karma de lo tocado 49/49 · suite del server intacta (no se tocó).
 - [x] Run de CI como juez (`35846007180`): las dos suites reescritas, verdes; el conjunto de rojos finales es
       el mismo que en el run de la tanda anterior (deuda preexistente: account, calendar, ai-goal, shopping ×3
       familias, recipes, y el «sin results.json» del job full-stack, ya rojo igual en `a2a5125`). Un detalle
@@ -3921,7 +3920,7 @@ visita, como el orden interno de la tabla.
 ### D. Paginador con selección intermedia de páginas
 
 El «‹ 1/39 ›» se convierte en el paginador de la captura: `‹ Anterior · 1 … 5 6 7 … 39 · Siguiente ›`,
- themed con los tokens de la casa (mismo `.pag` actual, la página activa con `--on` y `aria-current="true"`).
+themed con los tokens de la casa (mismo `.pag` actual, la página activa con `--on` y `aria-current="true"`).
 Reglas del tramo (`tramoDePaginas(actual, ultima): (number | 'hueco-ini' | 'hueco-fin')[]`, con test):
 primera y última siempre; ventana de ±1 alrededor de la actual; un hueco de UN solo número se imprime como
 número (nada de «1, …, 2»); dos huecos se fusionan si se solapan. Cada número es botón
@@ -3992,6 +3991,36 @@ la persistencia del tamaño en URL/localstorage no se añade «porque sí» —s
 preferencias si el usuario la pide—; los `alt` en iconos son `aria-label` de botón, que es como funciona la
 casa desde la tanda 8.
 
+## 12ae — Revivir el job full-stack (y el SSE de logs que tapaba)
+
+**A. El config, cargable.** `playwright.full-stack.config.ts` no puede usar `import.meta` (ni `__dirname`):
+la raiz no declara `type: module` y Playwright carga el fichero como CJS, con lo que el job moria en un
+segundo sin escribir ni `results.json`. Regla: el config solo usa rutas relativas (`testDir`, `globalSetup`,
+`webServer.cwd` por defecto = la carpeta del config) y `process.env`. El `DATABASE_PATH` del webServer queda
+relativo a la raiz (`server/data/hogaria-e2e-full-stack-<puerto>.sqlite`).
+
+**B. `E2E_CHROME_BIN`.** Opcional y solo local: si existe, los dos proyectos pasan `launchOptions.executablePath`.
+En CI no se define y manda el navegador de Playwright. Sirve para entornos sin acceso al CDN de navegadores.
+
+**C. El stream de logs habla SSE de verdad.** `GET /api/logs/stream` debe responder `Content-Type:
+text/event-stream` —`EventSource` aborta con cualquier otro MIME—. `stream()` de Hono construye su propia
+Response con `text/plain` (y `stream()` devuelve una Promise: retoñar cabeceras «sobre la respuesta» no
+hace nada); la ruta pasa a `streamSSE` —lo que ya hacia el stream de las cestas— conservando
+`X-Accel-Buffering: no`, el encuadre `: connected` / `data: {"type":"connected",...}` / `: ping` y la
+limpieza por abort. Regresion fijada en `src/app.spec.ts`, leyendo el primer frame `connected` del propio
+proceso.
+
+**D. Lo que NO toca esta ronda.** Con el job vivo aparecen los rojos que nunca llego a contar: rachas de
+`GET /api/shopping/lists/:id` dobles/triples y los selectores de `shopping-money` —la familia de deuda de
+shopping (rondas 6/10/listas), declarada intocable—. El job se deja correr y reportar esos rojos con nombre
+y apellidos; no se reescriben los umbrales del presupuesto ni se maquillan los specs para que cuadren.
+
+**Checklist.** [x] config sin `import.meta` (verificado con `--list` limpio y el job entero en local) ·
+[x] `E2E_CHROME_BIN` opcional · [x] ruta a `streamSSE` + test en `app.spec.ts` · [x] suite del server
+731/731 · [x] full-stack local: `served-app` 5/5, `rate-limit` 3/3, `logs-live` 4/4 (movil incluido);
+restantes rojos = familia shopping (documentada en D) · [x] `check:ui`, karma y builds intactos (frontend
+no cambia).
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
@@ -4044,7 +4073,7 @@ casa desde la tanda 8.
 
 - **Store catalog with aliases and barcodes**: `stores` as a table (not a column of names), one product
   with several shelf names per shop, EAN lookup. Today the link is the product key, chosen by hand in
-  the line sheet, and that is enough to remember prices per shop —it is not enough to *suggest* them.
+  the line sheet, and that is enough to remember prices per shop —it is not enough to _suggest_ them.
 - **Photo price tags teaching observations**: a photographed shelf price still only sets the line. When
   it also writes `price_observations` (with the store, `source: 'photo'`), the photographed shop starts
   being one of the shops whose prices the app already knows.
