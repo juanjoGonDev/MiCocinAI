@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -7,37 +7,43 @@ import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
 import { I18nService } from '../../core/services/i18n.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { pantryCategoryLabel } from '../../core/i18n/labels';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
-import { PantryCategoryLabelPipe } from '../../shared/pipes/pantry-category-label.pipe';
-import { colorDeCategoria, offsetDeQuery, valorDeQuery } from './pantry-gestor.util';
+import { PickerComponent, type PickerOption } from '../../shared/components/ui/picker/picker.component';
+import {
+  DataTableComponent,
+  DataTableCellDirective
+} from '../../shared/components/ui/data-table/data-table.component';
+import type { DataTableColumna } from '../../shared/components/ui/data-table/data-table.types';
 import type { PantryCatalogCategory, PantryCatalogProduct } from '../../shared/models/pantry.model';
+import { cargarTodasLasPaginas, clavesSubarbolDe, coincideGestor, colorDeCategoria, valorDeQuery } from './pantry-gestor.util';
 
 /**
- * El visor del catálogo pre-registrado (HOGARIA-SPEC ## 12aa).
+ * El visor del catálogo pre-registrado (HOGARIA-SPEC ## 12aa, tabla en la ## 12ac).
  *
  * La idea que da forma a esta pantalla es que **el catálogo no es una lista para mirar, es una para tocar**:
- * cuarenta y siete pasillos y cuatrocientas setenta y una filas no se recorren de arriba abajo, se filtran por
- * pasillo y se añade con un clic desde la propia fila. De ahí las tres decisiones que la distinguen del gestor
- * de productos:
+ * cuatro pasillos troncales, decenas de hojas y cerca de un millar de filas no se recorren de arriba abajo,
+ * se filtran y se añaden con un clic desde la propia fila. Tres cosas cambian con la tanda 31, y las tres
+ * persiguen lo mismo:
  *
- *  - **añadir no compra nada.** La fila del catálogo que se toca deja el producto en el inventario con una
- *    unidad, y la propia fila avisa en cuanto eso ya ha pasado: `inHousehold` viene del server por clave, así
- *    que «Leche entera» en casa apaga el botón de «Leche entera» en el catálogo pero no el de «Leche
- *    semidesnatada»;
- *  - **el pasillo padre filtra su subárbol.** Tocarlo no es una decoración del rail: el server responde todas
- *    sus hojas, y por eso el conteo del padre es la suma de las hijas —rail y lista cuentan igual—;
- *  - **el estado viaja en la URL** (`?cat=&q=&offset=`), como en los dos gestores: un F5 o compartir el enlace
- *    de «Lacteos» tiene que volver a pintar «Lacteos».
+ *  - **la lista es `app-data-table`**: orden por columna con Shift, menús de filtro estilo Excel, paginación
+ *    y selección múltiple gratis;
+ *  - **el conjunto completo, en cliente**: la pantalla carga TODAS las filas del catálogo (de 100 en 100,
+ *    con el tope del visor) y busca/filtra sobre ellas —filtrar la página de 24 de antes era exactamente la
+ *    mentira que la casa corrigió en el visor (## 12ab)—;
+ *  - **el riel de pasillos se minimiza**: se convierte en el mismo `app-picker` del filtro de categorías del
+ *    inventario, con la cuenta del subárbol y el color del pasillo.
  *
- * PC y móvil compiten por el mismo DOM: el rail de pasillos es scroller horizontal en móvil y columna de
- * grupos en escritorio, y la fila pasa de dos líneas a tres columnas cuadradas a partir de 860px —mismo
- * criterio que las listas del gestor—.
+ * Lo que no cambia es el alma de la pantalla: **añadir no compra nada** —la fila deja el producto en casa con
+ * una unidad y la propia fila avisa en cuanto eso ya ha pasado (`inHousehold`, por clave, no por parecidos)—,
+ * el pasillo padre sigue respondiendo por todo su subárbol, y el estado (`?q=`, `?cat=`) viaja en la URL. La
+ * página server-side (`?offset=`) queda jubilada: la tabla pagina en cliente.
  */
 @Component({
   selector: 'app-pantry-catalog',
   standalone: true,
-  imports: [CommonModule, FormsModule, TranslatePipe, IconComponent, InputComponent, PantryCategoryLabelPipe],
+  imports: [CommonModule, FormsModule, TranslatePipe, IconComponent, InputComponent, PickerComponent, DataTableComponent, DataTableCellDirective],
   template: `
     <div class="gestor">
       <header class="gestor__header">
@@ -49,49 +55,6 @@ import type { PantryCatalogCategory, PantryCatalogProduct } from '../../shared/m
         <p class="gestor__ayuda">{{ 'pantry.catalogo_ayuda' | t }}</p>
       </header>
 
-      <div class="cuerpo">
-      <nav class="pasillos" [attr.aria-label]="'pantry.catalogo_pasillos' | t" data-test="catalogo-pasillos">
-        <button
-          type="button"
-          class="pasillo"
-          [class.pasillo--activa]="cat === ''"
-          (click)="filtrar('')"
-          data-test="catalogo-filtro-todas"
-        >
-          <app-icon name="storefront" [size]="16" [label]="null" />
-          <span>{{ 'pantry.catalogo_todas' | t }}</span>
-        </button>
-        @for (grupo of grupos; track grupo.padre.key) {
-          <div class="pasillo__grupo">
-            <button
-              type="button"
-              class="pasillo pasillo--padre"
-              [class.pasillo--activa]="cat === grupo.padre.key"
-              (click)="filtrar(grupo.padre.key)"
-              [attr.data-test]="'catalogo-filtro-' + grupo.padre.key"
-            >
-              <span class="pasillo__punto" [style.background]="grupo.padre.color" aria-hidden="true"></span>
-              <span class="pasillo__nombre">{{ grupo.padre.name | category }}</span>
-              <span class="pasillo__cuenta">{{ grupo.total }}</span>
-            </button>
-            @for (hoja of grupo.hijas; track hoja.key) {
-              <button
-                type="button"
-                class="pasillo pasillo--hoja"
-                [class.pasillo--activa]="cat === hoja.key"
-                (click)="filtrar(hoja.key)"
-                [attr.data-test]="'catalogo-filtro-' + hoja.key"
-              >
-                <span class="pasillo__punto" [style.background]="hoja.color" aria-hidden="true"></span>
-                <span class="pasillo__nombre">{{ hoja.name | category }}</span>
-                <span class="pasillo__cuenta">{{ hoja.productCount }}</span>
-              </button>
-            }
-          </div>
-        }
-      </nav>
-
-      <div class="trabajo">
       <section class="gestor__toolbar">
         <app-input
           class="gestor__buscar"
@@ -99,19 +62,29 @@ import type { PantryCatalogCategory, PantryCatalogProduct } from '../../shared/m
           name="catalogo-q"
           type="search"
           [placeholder]="'pantry.catalogo_buscar' | t"
-          [(ngModel)]="q"
-          (ngModelChange)="buscar()"
+          [ngModel]="q()"
+          (ngModelChange)="escribirBusqueda($event)"
           data-test="catalogo-q"
         ></app-input>
+        <div class="toolbar__picker">
+          <app-picker
+            [options]="opcionesPasillo()"
+            [value]="cat()"
+            [placeholder]="'pantry.catalogo_todas' | t"
+            [label]="'pantry.catalogo_pasillos' | t"
+            data-test="catalogo-filtro-pasillo"
+            (valueChange)="elegirPasillo($event)"
+          />
+        </div>
         <button
           type="button"
           class="gestor__nueva"
-          [disabled]="guardando || paginables === 0"
-          (click)="anadirVisibles()"
-          data-test="catalogo-anadir-visibles"
+          [disabled]="guardando || anadibles().length === 0"
+          (click)="anadirFiltrados()"
+          data-test="catalogo-anadir-filtrados"
         >
           <app-icon name="add_shopping_cart" [size]="18" [label]="null" />
-          <span>{{ 'pantry.catalogo_anadir_visibles' | t: { n: paginables } }}</span>
+          <span>{{ 'pantry.catalogo_anadir_filtrados' | t: { n: anadibles().length } }}</span>
         </button>
       </section>
 
@@ -121,58 +94,72 @@ import type { PantryCatalogCategory, PantryCatalogProduct } from '../../shared/m
 
       @if (cargando) {
         <p class="gestor__estado">{{ 'common.loading' | t }}</p>
-      } @else if (lista.length === 0) {
+      } @else if (lista().length === 0) {
         <p class="gestor__estado" data-test="catalogo-vacia">{{ 'pantry.catalogo_vacio' | t }}</p>
       } @else {
-        <p class="lista__cifra" data-test="catalogo-resultados">{{ 'pantry.catalogo_resultados' | t: { n: total } }}</p>
-        <ul class="lista">
-          @for (fila of lista; track fila.id) {
-            <li class="fila" [attr.data-test]="'catalogo-fila-' + fila.id">
-              <div class="fila__cuerpo">
-                <!-- El punto va pegado al nombre, como en el gestor: es el pasillo pintado, no un adorno. -->
-                <span class="fila__nombre">
-                  <span class="fila__punto" [style.background]="colorDe(fila)" aria-hidden="true"></span>
-                  {{ fila.name }}
-                </span>
-                <span class="fila__meta">
-                  <span class="fila__categoria">{{ fila.categoryLabel | category }}</span>
-                  <span class="fila__unidad">{{ fila.unit }}</span>
+        <p class="lista__cifra" data-test="catalogo-resultados">{{ 'pantry.catalogo_resultados' | t: { n: resultado().length } }}</p>
+        <app-data-table
+          #tablaCat
+          data-test="catalogo-tabla"
+          [filas]="filtradas()"
+          [columnas]="columnas()"
+          [seleccionable]="true"
+          [etiquetaDeFila]="etiquetaFila"
+          (seleccionChange)="seleccion.set($event)"
+          (resultadoChange)="resultado.set($event)"
+        >
+          <div data-tabla-lote>
+            @if (seleccion().length > 0) {
+              <div class="lote" data-test="catalogo-lote">
+                <span class="lote__cta">{{ 'pantry.seleccionados' | t: { n: seleccion().length } }}</span>
+                <span class="lote__acciones">
+                  <button type="button" class="lote__btn" (click)="anadirSeleccion()" data-test="catalogo-lote-anadir">
+                    {{ 'pantry.catalogo_anadir' | t }}
+                  </button>
+                  <button type="button" class="lote__btn" (click)="loteAnular()" data-test="catalogo-lote-anular">
+                    {{ 'pantry.lote_anular' | t }}
+                  </button>
                 </span>
               </div>
-              @if (fila.inHousehold) {
-                <span class="fila__en-casa" data-test="catalogo-en-casa">
-                  <app-icon name="check_circle" [size]="18" [label]="null" />
-                  <span>{{ 'pantry.catalogo_en_casa' | t }}</span>
-                </span>
-              } @else {
-                <button
-                  type="button"
-                  class="fila__accion"
-                  [attr.aria-label]="'pantry.catalogo_anadir' | t"
-                  [attr.title]="'pantry.catalogo_anadir' | t"
-                  [disabled]="guardando"
-                  (click)="anadir(fila)"
-                  [attr.data-test]="'catalogo-anadir-' + fila.id"
-                >
-                  <app-icon name="add" [size]="18" [label]="null" />
-                </button>
-              }
-            </li>
-          }
-        </ul>
+            }
+          </div>
 
-        <nav class="paginador">
-          <button type="button" (click)="mover(-1)" [disabled]="offset === 0" data-test="catalogo-anterior">
-            {{ 'common.anterior' | t }}
-          </button>
-          <span class="paginador__cifra">{{ rango }} / {{ total }}</span>
-          <button type="button" (click)="mover(1)" [disabled]="offset + limit >= total" data-test="catalogo-siguiente">
-            {{ 'pantry.siguiente' | t }}
-          </button>
-        </nav>
+          <ng-template appDataTableCell="nombre" let-fila>
+            <span class="celda celda--nombre">
+              <span class="celda__punto" [style.background]="colorDe(fila)" aria-hidden="true"></span>
+              {{ fila.name }}
+            </span>
+          </ng-template>
+
+          <ng-template appDataTableCell="pasillo" let-fila>
+            <span class="celda celda--pasillo">
+              <span class="celda__punto" [style.background]="colorDe(fila)" aria-hidden="true"></span>
+              {{ etiquetaPasillo(fila.category) }}
+            </span>
+          </ng-template>
+
+          <ng-template appDataTableCell="acciones" let-fila>
+            @if (fila.inHousehold) {
+              <span class="celda__en-casa" data-test="catalogo-en-casa">
+                <app-icon name="check_circle" [size]="18" [label]="null" />
+                <span>{{ 'pantry.catalogo_en_casa' | t }}</span>
+              </span>
+            } @else {
+              <button
+                type="button"
+                class="celda__accion"
+                [attr.aria-label]="'pantry.catalogo_anadir' | t"
+                [attr.title]="'pantry.catalogo_anadir' | t"
+                [disabled]="guardando"
+                (click)="anadir(fila)"
+                [attr.data-test]="'catalogo-anadir-' + fila.id"
+              >
+                <app-icon name="add" [size]="18" [label]="null" />
+              </button>
+            }
+          </ng-template>
+        </app-data-table>
       }
-      </div>
-      </div>
     </div>
   `,
   styles: [`
@@ -208,128 +195,67 @@ import type { PantryCatalogCategory, PantryCatalogProduct } from '../../shared/m
     }
     .gestor__ayuda { margin: 0; max-width: 62ch; font-size: var(--text-sm); line-height: var(--leading-relaxed); color: var(--text-secondary); }
 
-    .gestor__toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); }
-    .gestor__buscar { flex: 1 1 240px; min-width: 0; }
-    .gestor__nueva {
-      display: inline-flex; align-items: center; gap: var(--space-2);
-      padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: var(--font-semibold);
-      color: var(--bg-secondary); background: var(--primary); border: 1px solid transparent;
-      border-radius: var(--radius-full); cursor: pointer; transition: var(--transition-fast); white-space: nowrap;
+    .gestor__toolbar {
+      display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3) var(--space-4);
     }
-    .gestor__nueva:hover:not(:disabled) { filter: brightness(1.06); }
+    .gestor__buscar { flex: 1 1 280px; min-width: 0; }
+    /* El pasillo minimizado (## 12ac): el mismo picker del filtro de categorias del visor, no un riel. */
+    .toolbar__picker { flex: 0 1 280px; min-width: 200px; }
+    .gestor__nueva {
+      display: inline-flex; align-items: center; gap: var(--space-1);
+      padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm); font-weight: var(--font-semibold);
+      color: var(--bg-secondary); background: var(--primary);
+      border: none; border-radius: var(--radius-full); cursor: pointer;
+      transition: var(--transition-fast); white-space: nowrap;
+    }
+    .gestor__nueva:hover:not(:disabled) { background: var(--primary-dark); }
     .gestor__nueva:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     .gestor__nueva:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    /* PC y movil del mismo DOM (## 12aa, spec D): por debajo de 960px, el grupo es display:contents y sus
-       dos piezas se convierten en píldoras dentro de un scroller horizontal; a partir de 960px, el cuerpo se
-       abre en dos columnas y el rail se queda a la izquierda —sticky, con su propio scroll— como una lista de
-       seis microetiquetas con las hojas sangradas debajo. */
-    .cuerpo { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
-    @media (min-width: 960px) {
-      .cuerpo { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--space-6); align-items: start; }
-    }
-    .trabajo { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
-
-    .pasillos {
-      display: flex; flex-wrap: nowrap; gap: var(--space-2);
-      overflow-x: auto; scrollbar-width: thin; -webkit-overflow-scrolling: touch; padding-bottom: 2px;
-    }
-    .pasillo {
-      display: inline-flex; align-items: center; gap: var(--space-2); flex: none; min-height: 36px;
-      padding: var(--space-2) var(--space-3); font: inherit; font-size: var(--text-sm);
-      color: var(--text-secondary); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
-      transition: var(--transition-fast); white-space: nowrap;
-    }
-    .pasillo:hover { border-color: var(--border-strong); background: var(--bg-tertiary); color: var(--text-primary); }
-    .pasillo:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .pasillo--activa { color: var(--primary); border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--bg-secondary)); }
-    .pasillo__punto { flex: none; width: 10px; height: 10px; border-radius: var(--radius-full); }
-    .pasillo__nombre { overflow: hidden; text-overflow: ellipsis; }
-    .pasillo__cuenta { font-variant-numeric: tabular-nums; font-size: var(--text-xs); color: var(--text-tertiary); }
-    .pasillo__grupo { display: contents; }
-    @media (min-width: 960px) {
-      .pasillos {
-        display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; overflow: auto;
-        position: sticky; top: var(--space-4); max-height: calc(100vh - var(--space-16)); gap: var(--space-1);
-        padding: var(--space-3); background: var(--bg-secondary);
-        border: 1px solid var(--border-default); border-radius: var(--radius-xl);
-      }
-      .pasillo__grupo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-      .pasillo__grupo + .pasillo__grupo { margin-top: var(--space-2); }
-      .pasillos .pasillo { border-color: transparent; background: none; justify-content: flex-start; }
-      .pasillo--padre {
-        font-size: var(--text-xs); font-weight: var(--font-bold); text-transform: uppercase; letter-spacing: 0.04em;
-        color: var(--text-tertiary);
-      }
-      .pasillo--padre:hover { color: var(--text-primary); }
-      .pasillo--padre.pasillo--activa { color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
-      .pasillo--hoja { padding-left: var(--space-6); font-size: var(--text-sm); min-height: 32px; }
-      .pasillo__nombre { overflow: hidden; text-overflow: ellipsis; }
-    }
-
     .lista__cifra { margin: 0; font-size: var(--text-xs); color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
-
     .gestor__estado {
       margin: 0; padding: var(--space-6); text-align: center; font-size: var(--text-sm); color: var(--text-secondary);
       background: var(--bg-secondary); border: 1px dashed var(--border-default); border-radius: var(--radius-xl);
     }
     .gestor__estado--error { color: var(--error); border-color: var(--error); border-style: solid; }
 
-    /* Una sola tarjeta con filas separadas por un hilo, igual que en los gestores: el ojo recorre la columna
-       sin perder el sitio. */
-    .lista {
-      display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none;
-      background: var(--bg-secondary); border: 1px solid var(--border-default);
-      border-radius: var(--radius-xl); overflow: hidden;
-    }
-    .fila {
-      display: flex; align-items: stretch; gap: 0;
-      border-bottom: 1px solid var(--border-default); transition: var(--transition-fast);
-    }
-    .fila:last-child { border-bottom: none; }
-    .fila:hover { background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent); }
-    .fila__cuerpo {
-      flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start;
-      gap: var(--space-1); padding: var(--space-3) var(--space-4);
-    }
-    .fila__nombre { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); font-weight: var(--font-semibold); color: var(--text-primary); min-width: 0; }
-    .fila__meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-secondary); }
-    .fila__punto { flex: none; width: 8px; height: 8px; border-radius: var(--radius-full); }
-    .fila__unidad { padding: 1px var(--space-2); border: 1px solid var(--border-default); border-radius: var(--radius-full); font-variant-numeric: tabular-nums; }
-    .fila__en-casa {
-      flex: none; display: inline-flex; align-items: center; gap: var(--space-1); padding: 0 var(--space-3);
-      font-size: var(--text-xs); color: var(--success); background: var(--success-subtle);
-      border-left: 1px solid var(--border-default);
-    }
-    .fila__accion {
-      flex: none; display: grid; place-items: center; width: 48px; min-height: 44px; padding: 0;
-      color: var(--text-secondary); background: none; border: none; cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .fila__accion:hover:not(:disabled) { color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
-    .fila__accion:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; border-radius: var(--radius-md); }
-    .fila__accion:disabled { opacity: 0.35; cursor: not-allowed; }
-    @media (min-width: 860px) {
-      .fila__cuerpo { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--space-6); }
-    }
-
-    .paginador {
-      display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
-      gap: var(--space-3); padding: 0 var(--space-1);
-      font-size: var(--text-sm); color: var(--text-secondary);
-    }
-    .paginador button {
+    .celda--nombre { display: inline-flex; align-items: center; gap: var(--space-2); font-weight: var(--font-semibold); color: var(--text-primary); }
+    .celda--pasillo { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); }
+    .celda__punto { flex: none; width: 8px; height: 8px; border-radius: var(--radius-full); }
+    .celda__en-casa {
       display: inline-flex; align-items: center; gap: var(--space-1);
-      padding: var(--space-2) var(--space-3); font: inherit; font-size: var(--text-sm);
-      color: var(--text-primary); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
+      font-size: var(--text-xs); color: var(--success); background: var(--success-subtle);
+      border-radius: var(--radius-full); padding: 2px var(--space-2); white-space: nowrap;
+    }
+    .celda__accion {
+      display: grid; place-items: center; width: 36px; height: 36px; padding: 0; margin-inline-start: auto;
+      color: var(--text-secondary); background: none; border: none; cursor: pointer; border-radius: var(--radius-md);
       transition: var(--transition-fast);
     }
-    .paginador button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-tertiary); }
-    .paginador button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .paginador button:disabled { opacity: 0.45; cursor: not-allowed; }
-    .paginador__cifra { font-variant-numeric: tabular-nums; }
+    .celda__accion:hover:not(:disabled) { color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+    .celda__accion:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .celda__accion:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* El lote (## 12ac): la barra de acciones sobre la seleccion, anclada en la cabecera de la tabla. */
+    .lote {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+      flex-wrap: wrap; padding: var(--space-2) var(--space-3);
+      background: var(--primary-subtle); border-radius: var(--radius-md);
+    }
+    .lote__cta { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-primary); }
+    .lote__acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    .lote__btn {
+      font: inherit; font-size: var(--text-xs); padding: 6px 12px; cursor: pointer;
+      background: var(--bg-primary); color: var(--text-primary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-md);
+      transition: var(--transition-fast);
+    }
+    .lote__btn:hover { border-color: var(--primary); }
+    .lote__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    @media (max-width: 959px) {
+      /* En movil el lote se queda pegado abajo: la seleccion no puede desaparecer al recorrer la lista. */
+      .lote { position: sticky; bottom: var(--space-2); box-shadow: var(--shadow-md); }
+    }
   `]
 })
 export class PantryCatalogComponent implements OnInit {
@@ -339,118 +265,160 @@ export class PantryCatalogComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  protected lista: PantryCatalogProduct[] = [];
-  protected cat = '';
-  protected q = '';
-  protected total = 0;
-  protected limit = 24;
-  protected offset = 0;
+  /** El catalogo completo en memoria: ~un millar de filas, todas leidas de una vez (## 12ac). */
+  protected readonly lista = signal<PantryCatalogProduct[]>([]);
+  protected readonly catalogo = signal<PantryCatalogCategory[]>([]);
+  protected readonly q = signal('');
+  protected readonly cat = signal('');
+  protected readonly seleccion = signal<readonly unknown[]>([]);
+  /** Lo que la tabla deja en pie tras sus propios menus: la cuenta del boton de lote y del pie. */
+  protected readonly resultado = signal<readonly unknown[]>([]);
   protected cargando = true;
   protected guardando = false;
   protected error = '';
 
-  private catalogo: PantryCatalogCategory[] = [];
+  private readonly tablaCat = viewChild<DataTableComponent>('tablaCat');
 
-  /** Los seis grupos, con el conteo del padre sumado a mano para que rail y lista nunca discrepen. */
-  protected get grupos(): { padre: PantryCatalogCategory; hijas: PantryCatalogCategory[]; total: number }[] {
-    const padres = this.catalogo.filter((fila) => fila.parent === null);
-    return padres.map((padre) => {
-      const hijas = this.catalogo.filter((fila) => fila.parent === padre.key);
-      const total = hijas.reduce((suma, hoja) => suma + hoja.productCount, 0);
-      return { padre, hijas, total: total || padre.productCount };
-    });
-  }
+  /** Las filas del conjunto, por pasillo (subarbol) y por busqueda normalizada. El resto lo ve la tabla. */
+  protected readonly filtradas = computed<PantryCatalogProduct[]>(() => {
+    const consulta = this.q();
+    const raiz = this.cat();
+    let filas = this.lista();
+    if (raiz) {
+      const permitidas = clavesSubarbolDe(this.catalogo().map((c) => ({ key: c.key, parentKey: c.parent })), raiz);
+      filas = filas.filter((fila) => permitidas.has(fila.category));
+    }
+    if (consulta.trim()) filas = filas.filter((fila) => coincideGestor([fila.name], consulta));
+    return filas;
+  });
 
-  /** Lo que «añadir lo visible» puede añadir: la página actual sin lo que la casa ya tiene. */
-  protected get paginables(): number {
-    return this.lista.filter((fila) => !fila.inHousehold).length;
-  }
+  /** Lo que el boton de pantalla puede añadir de verdad: sin lo que ya es de la casa. */
+  protected readonly anadibles = computed<PantryCatalogProduct[]>(() =>
+    (this.resultado() as PantryCatalogProduct[]).filter((fila) => !fila.inHousehold)
+  );
 
-  protected get rango(): string {
-    if (this.total === 0) return '0';
-    return `${this.offset + 1}-${Math.min(this.offset + this.limit, this.total)}`;
-  }
+  /** El picker del pasillo: «Todos», los troncales con su suma y las hojas agrupadas bajo su padre. */
+  protected readonly opcionesPasillo = computed<PickerOption[]>(() => {
+    this.i18n.changeTick();
+    const filas = this.catalogo();
+    const cuentaViva = (clave: string): number => {
+      if (filas.length === 0) return 0;
+      const permitidas = clavesSubarbolDe(filas.map((c) => ({ key: c.key, parentKey: c.parent })), clave);
+      return this.lista().filter((fila) => permitidas.has(fila.category)).length;
+    };
+    const etiqueta = (fila: PantryCatalogCategory): string =>
+      pantryCategoryLabel({ key: fila.key, name: fila.name }, (k) => this.i18n.t(k));
+    const opciones: PickerOption[] = [{ value: '', label: this.i18n.t('pantry.catalogo_todas') }];
+    for (const padre of filas.filter((fila) => fila.parent === null)) {
+      opciones.push({
+        value: padre.key,
+        label: `${etiqueta(padre)} · ${cuentaViva(padre.key) || padre.productCount}`,
+        color: padre.color
+      });
+    }
+    for (const hoja of filas.filter((fila) => fila.parent !== null)) {
+      const padre = filas.find((fila) => fila.key === hoja.parent);
+      opciones.push({
+        value: hoja.key,
+        label: `${etiqueta(hoja)}`,
+        color: hoja.color,
+        group: padre ? etiqueta(padre) : undefined
+      });
+    }
+    return opciones;
+  });
+
+  protected readonly columnas = computed<DataTableColumna[]>(() => {
+    this.i18n.changeTick();
+    return [
+      { clave: 'name', etiqueta: this.i18n.t('pantry.columna_nombre'), celda: 'nombre' },
+      {
+        clave: 'category', etiqueta: this.i18n.t('pantry.columna_pasillo'), celda: 'pasillo',
+        etiquetaValor: (v) => this.etiquetaPasillo(String(v))
+      },
+      { clave: 'unit', etiqueta: this.i18n.t('pantry.unidad') },
+      { clave: 'acciones', etiqueta: this.i18n.t('pantry.acciones'), celda: 'acciones', ordenable: false, filtrable: false, alineacion: 'end', ancho: '64px' }
+    ];
+  });
+
+  protected readonly etiquetaFila = (fila: unknown): string => (fila as PantryCatalogProduct).name ?? '';
 
   ngOnInit(): void {
-    // Como en los gestores: el estado es la query, y aquí la query vuelve a ser estado (F5, enlace compartido).
+    // El estado viajero es la query; la pagina server-side murio con la tabla, y con ella `?offset=`.
     const query = this.route.snapshot.queryParamMap;
-    this.cat = valorDeQuery(query, 'cat', null, '');
-    this.q = valorDeQuery(query, 'q', null, '');
-    this.offset = offsetDeQuery(query);
-    void this.pantry.listCatalogCategories().then((filas) => {
-      this.catalogo = filas;
-    });
-    void this.refrescar();
+    this.cat.set(valorDeQuery(query, 'cat', null, ''));
+    this.q.set(valorDeQuery(query, 'q', null, ''));
+    void this.pantry.listCatalogCategories().then((filas) => this.catalogo.set(filas));
+    void this.cargar();
   }
 
   protected colorDe(fila: PantryCatalogProduct): string {
-    return colorDeCategoria(this.catalogo.find((cat) => cat.key === fila.category));
+    return colorDeCategoria(this.catalogo().find((cat) => cat.key === fila.category));
   }
 
-  private async refrescar(): Promise<void> {
+  protected etiquetaPasillo(clave: string): string {
+    const fila = this.catalogo().find((cat) => cat.key === clave);
+    return pantryCategoryLabel(fila ?? { key: clave }, (k) => this.i18n.t(k));
+  }
+
+  /** Carga el catalogo entero de 100 en 100: la tabla filtra y ordena sobre el conjunto, no sobre una pagina. */
+  private async cargar(): Promise<void> {
     this.cargando = true;
     this.error = '';
-    const resultado = await this.pantry.listCatalog({
-      q: this.q || undefined,
-      category: this.cat || undefined,
-      limit: this.limit,
-      offset: this.offset
-    });
-    if (!resultado) {
+    const filas = await cargarTodasLasPaginas<PantryCatalogProduct>(
+      (offset, tamano) => this.pantry.listCatalog({ limit: tamano, offset }),
+      100,
+      2000
+    );
+    if (filas === null) {
       this.error = this.i18n.t('ui.ha_ocurrido_un_error');
-      this.lista = [];
-      this.total = 0;
+      this.lista.set([]);
     } else {
-      this.lista = resultado.data;
-      this.total = resultado.meta.total;
+      this.lista.set(filas);
     }
     this.cargando = false;
   }
 
-  protected filtrar(clave: string): void {
-    this.cat = clave;
-    this.offset = 0;
+  protected escribirBusqueda(valor: string): void {
+    this.q.set(valor ?? '');
     void this.escribirUrl();
   }
 
-  protected buscar(): void {
-    this.offset = 0;
-    void this.escribirUrl();
-  }
-
-  protected mover(paso: number): void {
-    const siguiente = Math.max(0, this.offset + paso * this.limit);
-    if (paso > 0 && siguiente + 1 > this.total) return;
-    this.offset = siguiente;
+  protected elegirPasillo(valor: string | null): void {
+    this.cat.set(valor ?? '');
     void this.escribirUrl();
   }
 
   private async escribirUrl(): Promise<void> {
     await this.router.navigate(['.'], {
       relativeTo: this.route,
-      queryParams: {
-        cat: this.cat || null,
-        q: this.q || null,
-        offset: this.offset || null
-      },
-      queryParamsHandling: 'merge',
+      queryParams: { cat: this.cat() || null, q: this.q().trim() || null },
       replaceUrl: true
     });
-    await this.refrescar();
   }
 
   protected anadir(fila: PantryCatalogProduct): void {
     void this.anadirIds([fila.id], fila.name);
   }
 
-  protected anadirVisibles(): void {
-    void this.anadirIds(this.lista.filter((fila) => !fila.inHousehold).map((fila) => fila.id));
+  protected anadirFiltrados(): void {
+    void this.anadirIds(this.anadibles().map((fila) => fila.id));
+  }
+
+  protected anadirSeleccion(): void {
+    const ids = (this.seleccion() as PantryCatalogProduct[]).filter((fila) => !fila.inHousehold).map((fila) => fila.id);
+    void this.anadirIds(ids);
+  }
+
+  protected loteAnular(): void {
+    this.seleccion.set([]);
+    this.tablaCat()?.limpiarSeleccion();
   }
 
   /**
-   * El alta es siempre el mismo POST, con un id o con la página entera: `added`/`skipped` los decide el server,
-   * que es quien sabe si la ficha ya existía con cero unidades (sube a 1, cuenta como añadido) o con stock
-   * (se respeta, cuenta como saltado). Aquí solo se traduce ese par de números al aviso.
+   * El alta es siempre el mismo POST, con un id o con el lote: `added`/`skipped` los decide el server, que es
+   * quien sabe si la ficha ya existía con cero unidades (sube a 1, cuenta como añadido) o con stock (se
+   * respeta, cuenta como saltado). Aquí solo se traduce ese par de números al aviso.
    */
   private async anadirIds(ids: string[], nombre?: string): Promise<void> {
     if (ids.length === 0) return;
@@ -471,10 +439,12 @@ export class PantryCatalogComponent implements OnInit {
       // Las categorias de la casa acaban de poder cambiar (una hoja nueva y su padre); el inventario que se
       // vea al volver tiene que traerlas, y `loadCategories` es la cache compartida de ambas pantallas.
       this.pantry.loadCategories(true);
-      await this.refrescar();
+      this.loteAnular();
+      await this.cargar();
     } else {
       this.toast.info(this.i18n.t(skipped === 1 ? 'pantry.catalogo_ya_estaba' : 'pantry.catalogo_ya_estaban', { n: skipped }), this.i18n.t('pantry.catalogo_nada_que_anadir'));
-      await this.refrescar();
+      this.loteAnular();
+      await this.cargar();
     }
   }
 

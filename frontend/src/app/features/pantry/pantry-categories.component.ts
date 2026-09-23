@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -15,10 +15,18 @@ import { TagComponent } from '../../shared/components/ui/tag/tag.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { PickerComponent, type PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { PantryCategoryLabelPipe } from '../../shared/pipes/pantry-category-label.pipe';
+import { DataTableComponent, DataTableCellDirective } from '../../shared/components/ui/data-table/data-table.component';
+import type { DataTableColumna } from '../../shared/components/ui/data-table/data-table.types';
 import { pantryCategoryLabel } from '../../core/i18n/labels';
 import type { PantryCategory, PantryCategoryView } from '../../shared/models/pantry.model';
-import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQuery } from './pantry-gestor.util';
+import { cargarTodasLasPaginas, clavesNoElegiblesComoPadre, coincideGestor, colorDeCategoria, valorDeQuery } from './pantry-gestor.util';
 
+type FilaCategoria = PantryCategory & { productos: number; subarbol: number; subcategorias: number };
+
+/**
+ * La fila de la tabla: la categoria con sus tres cifras proyectadas. No es burocracia —`app-data-table` lee
+ * campos para ordenar y para poblar los menus de filtro—; `counts` anidado no se ordena solo (## 12ac).
+ */
 /**
  * El gestor de categorias del inventario (HOGARIA-SPEC ## 12x).
  *
@@ -29,8 +37,10 @@ import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQue
  * paginada arriba, ficha con su impacto de borrado abajo, y todo lo que borra pasa por el dialogo de la app.
  *
  * Lo que se delega y por que:
- *  - el filtro, la busqueda y los recuentos los hace el **server** (`?view=&q=&limit=&offset=`), porque el
- *    recuento de articulos por categoria necesita la tabla entera, no lo que hay en memoria;
+ *  - los recuentos los hace el **server** (`counts` de cada fila), porque el numero de articulos por categoria
+ *    necesita la tabla entera; pero la lista, la vista y la busqueda viven EN LA PANTALLA sobre el catalogo
+ *    completo (## 12ac): `app-data-table` con menus por columna, paginacion propia y lote, como el visor;
+ *  - la URL sigue siendo el estado (`?view=&q=`), jubilando `?limit=&offset=`, que era el paginador server-side;
  *  - lo que se puede elegir como padre lo decide aqui `clavesNoElegiblesComoPadre`, para no ofrecer una opcion
  *    que el server va a rechazar con 400;
  *  - y los codigos de error se traducen aqui, no se pinta el `message` del server: el server habla en castellano
@@ -48,7 +58,9 @@ import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQue
     TagComponent,
     BadgeComponent,
     PickerComponent,
-    PantryCategoryLabelPipe
+    PantryCategoryLabelPipe,
+    DataTableComponent,
+    DataTableCellDirective
   ],
   template: `
     <div class="gestor">
@@ -66,7 +78,7 @@ import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQue
           <div class="gestor__vistas">
             @for (opcion of vistas; track opcion.value) {
               <app-tag
-                [selected]="view === opcion.value"
+                [selected]="view() === opcion.value"
                 (onClick)="cambiarVista(opcion.value)"
                 [attr.data-test]="'gestor-categorias-vista-' + opcion.value"
               >
@@ -81,8 +93,8 @@ import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQue
             name="gestor-categorias-q"
             type="search"
             [placeholder]="'pantry.buscar_categorias' | t"
-            [(ngModel)]="q"
-            (ngModelChange)="buscar()"
+            [ngModel]="q()"
+            (ngModelChange)="buscar($event)"
           ></app-input>
 
           <button type="button" class="gestor__nueva" (click)="abrirNueva()" data-test="gestor-categorias-nueva">
@@ -93,63 +105,91 @@ import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQue
 
         @if (cargando) {
           <p class="gestor__estado">{{ 'common.loading' | t }}</p>
-        } @else if (lista.length === 0) {
+        } @else if (lista().length === 0) {
           <p class="gestor__estado" data-test="gestor-categorias-vacia">{{ 'pantry.categorias_vacias' | t }}</p>
         } @else {
-          <ul class="lista">
-            @for (fila of lista; track fila.id) {
-              <li
-                class="fila"
-                [class.fila--anidada]="!!fila.parentKey"
-                [attr.data-test]="'gestor-categorias-fila-' + fila.key"
-              >
-                <button type="button" class="fila__cuerpo" (click)="abrir(fila)">
-                  <span class="fila__punto" [style.background]="colorDeCategoria(fila)" aria-hidden="true"></span>
-                  <span class="fila__nombres">
-                    <span class="fila__nombre">{{ fila | category }}</span>
-                    @if (fila.parentKey) {
-                      <span class="fila__padre">{{ etiquetaClave(fila.parentKey) }}</span>
+          <app-data-table
+            #tablaCats
+            data-test="gestor-categorias-tabla"
+            [filas]="filasTabla()"
+            [columnas]="columnas()"
+            [seleccionable]="true"
+            [etiquetaDeFila]="etiquetaFila"
+            (seleccionChange)="seleccion.set($event)"
+          >
+            <div data-tabla-lote>
+              @if (seleccion().length > 0) {
+                <div class="lote" data-test="gestor-categorias-lote">
+                  <span class="lote__cta">
+                    {{ 'pantry.seleccionados' | t: { n: seleccion().length } }}
+                    @if (noBorrables() > 0) {
+                      <span class="lote__nota">{{ 'pantry.categorias_lote_saltan' | t: { n: noBorrables() } }}</span>
                     }
                   </span>
-                  <span class="fila__cifras">
-                    <span class="fila__cifra">{{ cuenta(fila) }}</span>
-                    @if (fila.counts.children > 0) {
-                      <span class="fila__cifra fila__cifra--suave">{{ cuentaHijos(fila) }}</span>
+                  <span class="lote__acciones">
+                    @if (borrables().length > 0) {
+                      <button
+                        type="button"
+                        class="lote__btn lote__btn--peligro"
+                        [disabled]="guardando"
+                        (click)="borrarLote()"
+                        data-test="gestor-categorias-lote-borrar"
+                      >
+                        {{ 'pantry.borrar_seleccionados' | t }}
+                      </button>
                     }
+                    <button type="button" class="lote__btn" (click)="loteAnular()" data-test="gestor-categorias-lote-anular">
+                      {{ 'pantry.lote_anular' | t }}
+                    </button>
                   </span>
-                  @if (fila.protected) {
-                    <app-badge [size]="'sm'">{{ 'pantry.categoria_reservada_corta' | t }}</app-badge>
-                  }
+                </div>
+              }
+            </div>
+
+            <ng-template appDataTableCell="nombre" let-fila>
+              <span class="celda celda--nombre" [attr.data-test]="'gestor-categorias-fila-' + fila.key">
+                <span class="celda__punto" [style.background]="colorDeCategoria(fila)" aria-hidden="true"></span>
+                <span class="celda__nombre">{{ fila | category }}</span>
+                @if (fila.protected) {
+                  <app-badge [size]="'sm'">{{ 'pantry.categoria_reservada_corta' | t }}</app-badge>
+                }
+              </span>
+            </ng-template>
+
+            <ng-template appDataTableCell="padre" let-fila>
+              @if (fila.parentKey) {
+                <span class="celda celda--padre">{{ etiquetaClave(fila.parentKey) }}</span>
+              } @else {
+                <span class="celda celda--guion" aria-hidden="true">—</span>
+              }
+            </ng-template>
+
+            <ng-template appDataTableCell="acciones" let-fila>
+              <span class="celda__grupo">
+                <button
+                  type="button"
+                  class="celda__accion"
+                  [attr.aria-label]="'pantry.editar_categoria' | t"
+                  [attr.title]="'pantry.editar_categoria' | t"
+                  (click)="abrir(fila)"
+                  [attr.data-test]="'gestor-categorias-editar-' + fila.key"
+                >
+                  <app-icon name="edit" [size]="16" [label]="null" />
                 </button>
                 <button
                   type="button"
-                  class="fila__accion"
+                  class="celda__accion celda__accion--peligro"
                   [attr.aria-label]="'pantry.eliminar_categoria' | t"
-                  [attr.title]="'pantry.eliminar_categoria' | t"
-                  [disabled]="!fila.canDelete"
+                  [attr.title]="fila.canDelete ? ('pantry.eliminar_categoria' | t) : ('pantry.error_en_uso' | t)"
+                  [disabled]="!fila.canDelete || guardando"
                   (click)="borrar(fila)"
                   [attr.data-test]="'gestor-categorias-borrar-' + fila.key"
                 >
-                  <app-icon name="delete" [size]="18" [label]="null" />
+                  <app-icon name="delete" [size]="16" [label]="null" />
                 </button>
-              </li>
-            }
-          </ul>
-
-          <nav class="paginador">
-            <button type="button" (click)="mover(-1)" [disabled]="offset === 0" data-test="gestor-categorias-anterior">
-              {{ 'common.anterior' | t }}
-            </button>
-            <span class="paginador__cifra">{{ rango }} / {{ total }}</span>
-            <button
-              type="button"
-              (click)="mover(1)"
-              [disabled]="offset + limit >= total"
-              data-test="gestor-categorias-siguiente"
-            >
-              {{ 'pantry.siguiente' | t }}
-            </button>
-          </nav>
+              </span>
+            </ng-template>
+          </app-data-table>
         }
       } @else {
         <section class="ficha" data-test="gestor-categorias-ficha">
@@ -331,58 +371,7 @@ import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQue
       background: var(--bg-secondary); border: 1px dashed var(--border-default); border-radius: var(--radius-xl);
     }
 
-    /* Una sola tarjeta con filas separadas por un hilo, en vez de fichitas con dos pixeles de hueco: es lo que
-       hace que el ojo recorra la columna de numeros sin perder el sitio. */
-    .lista {
-      display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none;
-      background: var(--bg-secondary); border: 1px solid var(--border-default);
-      border-radius: var(--radius-xl); overflow: hidden;
-    }
-    .fila {
-      display: flex; align-items: stretch; gap: 0;
-      border-bottom: 1px solid var(--border-default); transition: var(--transition-fast);
-    }
-    .fila:last-child { border-bottom: none; }
-    .fila:hover { background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent); }
-    .fila__cuerpo {
-      flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center;
-      gap: var(--space-2) var(--space-4); padding: var(--space-4);
-      font: inherit; color: inherit; text-align: left; background: none; border: none; cursor: pointer;
-    }
-    .fila__cuerpo:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; border-radius: var(--radius-md); }
-    .fila__accion {
-      flex: none; display: grid; place-items: center; width: 48px; padding: 0;
-      color: var(--text-secondary); background: none; border: none; cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .fila__accion:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; border-radius: var(--radius-md); }
-    .fila__accion:disabled { opacity: 0.35; cursor: not-allowed; }
 
-    @media (min-width: 860px) {
-      /* Y a partir de aqui, columnas de verdad: los numeros se alinean entre filas porque el grid las declara,
-         no porque a cada texto le quepa su hueco. */
-      .fila__cuerpo { display: grid; flex-wrap: nowrap; gap: var(--space-6); }
-    }
-
-    .paginador {
-      display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
-      gap: var(--space-3); padding: 0 var(--space-1);
-      font-size: var(--text-sm); color: var(--text-secondary);
-    }
-    .paginador button {
-      display: inline-flex; align-items: center; gap: var(--space-1);
-      padding: var(--space-2) var(--space-3); font: inherit; font-size: var(--text-sm);
-      color: var(--text-primary); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .paginador button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-tertiary); }
-    .paginador button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .paginador button:disabled { opacity: 0.45; cursor: not-allowed; }
-    .paginador__cifra { font-variant-numeric: tabular-nums; }
-
-    /* La ficha es un formulario, no una lista de campos pegados: una tarjeta con padding generoso, campos con
-    su microetiqueta y dos columnas cuando el ancho lo permite. */
     .ficha {
       display: flex; flex-direction: column; gap: var(--space-5);
       padding: var(--space-4); background: var(--bg-secondary);
@@ -434,37 +423,7 @@ import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQue
     .boton--primario { color: var(--bg-secondary); background: var(--primary); border-color: transparent; font-weight: var(--font-semibold); margin-inline-start: auto; }
     .boton--peligro { color: var(--error); border-color: color-mix(in srgb, var(--error) 45%, transparent); }
 
-    /* Pistas de la fila: punto, nombres, cifras y el distintivo de la reserva. Se declaran aqui y no en la
-       hoja comun porque cada pantalla metio dentro lo que le hacia falta, y cuadricular mal es peor que no
-       cuadricular: el ultimo hijo se iba a una segunda linea. */
-    @media (min-width: 860px) {
-      .fila__cuerpo { grid-template-columns: auto minmax(0, 1fr) auto auto; }
-    }
 
-    /* La lista esta aplanada y el arbol se tiene que VER: un hijo entra con un sangrado y un hilo a la
-       izquierda, que es como Basketra deja claro quien cuelga de quien sin necesidad de un acordeon. */
-    .fila--anidada .fila__cuerpo { padding-left: var(--space-8); position: relative; }
-    .fila--anidada .fila__cuerpo::before {
-      content: ""; position: absolute; left: var(--space-5); top: 50%; width: var(--space-3); height: 1px;
-      background: var(--border-strong);
-    }
-
-    .fila__punto {
-      flex: none; width: 12px; height: 12px; border-radius: var(--radius-full);
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
-    }
-    .fila__nombres { display: flex; flex-direction: column; min-width: 0; gap: var(--space-1); flex: 1 1 200px; }
-    .fila__nombre {
-      font-size: var(--text-base); font-weight: var(--font-medium); color: var(--text-primary);
-      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-    }
-    .fila__padre { font-size: var(--text-xs); color: var(--text-secondary); }
-    .fila__cifras {
-      display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1);
-      margin-left: auto; text-align: right;
-    }
-    .fila__cifra { font-size: var(--text-sm); font-variant-numeric: tabular-nums; color: var(--text-secondary); }
-    .fila__cifra--suave { font-size: var(--text-xs); opacity: 0.8; }
 
     /* El color se elige tocandolo, y el hex se escribe: las dos cosas necesitan su hueco para no parecer un
        solo control apretujado. */
@@ -480,14 +439,53 @@ import { clavesNoElegiblesComoPadre, colorDeCategoria, offsetDeQuery, valorDeQue
 
     /* Que un boton se pueda pulsar se nota sin tocarlo: hover y foco visible en todo lo que acepta un click
        (regla 8 del sistema), incluido el boton primario, que si no parece deshabilitado junto al resto. */
-    .fila__cuerpo:hover { background: color-mix(in srgb, var(--bg-tertiary) 40%, transparent); }
-    .fila__accion:hover:not(:disabled) { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
     .boton:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-secondary); }
     .boton:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     .boton--primario:hover:not(:disabled) { filter: brightness(1.06); background: var(--primary); }
     .boton--primario:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     .boton--peligro:hover:not(:disabled) { color: var(--bg-secondary); background: var(--error); border-color: var(--error); }
     .boton--peligro:focus-visible { outline: 2px solid var(--error); outline-offset: 2px; }
+
+    /* El lote (## 12ac): la barra de acciones sobre la seleccion, con el aviso de lo que no se puede. */
+    .lote {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+      flex-wrap: wrap; padding: var(--space-2) var(--space-3);
+      background: var(--primary-subtle); border-radius: var(--radius-md);
+    }
+    .lote__cta { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-primary); }
+    .lote__nota { font-weight: var(--font-normal); color: var(--text-secondary); }
+    .lote__acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    .lote__btn {
+      font: inherit; font-size: var(--text-xs); padding: 6px 12px; cursor: pointer;
+      background: var(--bg-primary); color: var(--text-primary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-md);
+      transition: var(--transition-fast);
+    }
+    .lote__btn:hover:not(:disabled) { border-color: var(--primary); }
+    .lote__btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .lote__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .lote__btn--peligro { color: var(--error); border-color: color-mix(in srgb, var(--error) 45%, transparent); }
+    .lote__btn--peligro:hover:not(:disabled) { color: var(--bg-secondary); background: var(--error); border-color: var(--error); }
+    @media (max-width: 959px) {
+      /* En movil el lote se queda pegado abajo: la seleccion no puede desaparecer al recorrer la tabla. */
+      .lote { position: sticky; bottom: var(--space-2); box-shadow: var(--shadow-md); }
+    }
+
+    /* Las celdas proyectadas: punto, nombre, reserva y los botones de fila. */
+    .celda--nombre { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; }
+    .celda__punto { flex: none; width: 10px; height: 10px; border-radius: var(--radius-full); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+    .celda__nombre { font-weight: var(--font-medium); color: var(--text-primary); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+    .celda--padre { color: var(--text-secondary); font-size: var(--text-sm); }
+    .celda__grupo { display: inline-flex; gap: var(--space-1); }
+    .celda__accion {
+      display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+      color: var(--text-secondary); background: none; border: none; cursor: pointer; border-radius: var(--radius-md);
+      transition: var(--transition-fast);
+    }
+    .celda__accion:hover:not(:disabled) { color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+    .celda__accion:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .celda__accion:disabled { opacity: 0.35; cursor: not-allowed; }
+    .celda__accion--peligro:hover:not(:disabled) { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
   `]
 })
 export class PantryCategoriesComponent implements OnInit {
@@ -502,23 +500,68 @@ export class PantryCategoriesComponent implements OnInit {
   protected readonly colorDeCategoria = colorDeCategoria;
   protected readonly muestras = ['#4CAF50', '#B26A00', '#E05A5A', '#4FA3D1', '#6C8AE4', '#C99A2E', '#8E5AC8', '#2FA79B'];
 
-  protected lista: PantryCategory[] = [];
+  /** El catalogo de la casa completo, una sola vez: la tabla filtra, ordena y pagina sobre esto (## 12ac). */
+  protected readonly lista = signal<PantryCategory[]>([]);
+  protected readonly view = signal<PantryCategoryView>('all');
+  protected readonly q = signal('');
+  protected readonly seleccion = signal<readonly unknown[]>([]);
   protected ficha: PantryCategory | null = null;
   protected esNueva = false;
-  protected view: PantryCategoryView = 'all';
-  protected q = '';
-  protected total = 0;
-  protected limit = 10;
-  protected offset = 0;
   protected cargando = true;
   protected guardando = false;
   protected error = '';
   protected formulario = { name: '', color: '', description: '', parentKey: '' };
 
-  protected get rango(): string {
-    if (this.total === 0) return '0';
-    return `${this.offset + 1}-${Math.min(this.offset + this.limit, this.total)}`;
-  }
+  private readonly tablaCats = viewChild<DataTableComponent>('tablaCats');
+
+  /** La cuenta se proyecta en la fila porque la tabla lee campos, no metodos: el menu de columna es honesto. */
+  protected readonly filasTabla = computed<FilaCategoria[]>(() =>
+    this.filtradas().map((fila) => ({
+      ...fila,
+      productos: fila.counts.products,
+      subarbol: fila.counts.descendantProducts,
+      subcategorias: fila.counts.children
+    }))
+  );
+
+  /** Vista y busqueda en memoria, con la semantica exacta del server: `q` casa nombre o clave normalizados. */
+  protected readonly filtradas = computed<PantryCategory[]>(() => {
+    const vista = this.view();
+    const consulta = this.q();
+    let filas = this.lista();
+    if (vista === 'without-products') filas = filas.filter((fila) => fila.counts.products === 0);
+    else if (vista === 'with-children') filas = filas.filter((fila) => fila.counts.children > 0);
+    if (consulta.trim()) filas = filas.filter((fila) => coincideGestor([fila.name, fila.key], consulta));
+    return filas;
+  });
+
+  protected readonly borrables = computed<PantryCategory[]>(() =>
+    this.seleccion().filter((fila): fila is FilaCategoria => (fila as FilaCategoria).canDelete)
+  );
+  protected readonly noBorrables = computed<number>(() => this.seleccion().length - this.borrables().length);
+
+  protected readonly columnas = computed<DataTableColumna[]>(() => {
+    this.i18n.changeTick();
+    return [
+      { clave: 'name', etiqueta: this.i18n.t('pantry.columna_nombre'), celda: 'nombre' },
+      {
+        clave: 'parentKey', etiqueta: this.i18n.t('pantry.padre_categoria'), celda: 'padre',
+        etiquetaValor: (v) => this.etiquetaClave(String(v))
+      },
+      { clave: 'productos', etiqueta: this.i18n.t('pantry.columna_productos'), tipo: 'numero' },
+      { clave: 'subarbol', etiqueta: this.i18n.t('pantry.columna_subarbol'), tipo: 'numero' },
+      { clave: 'subcategorias', etiqueta: this.i18n.t('pantry.columna_subcategorias'), tipo: 'numero' },
+      {
+        clave: 'acciones', etiqueta: this.i18n.t('pantry.acciones'), celda: 'acciones',
+        ordenable: false, filtrable: false, alineacion: 'end', ancho: '88px'
+      }
+    ];
+  });
+
+  protected readonly etiquetaFila = (fila: unknown): string => {
+    const cat = fila as PantryCategory;
+    return pantryCategoryLabel(cat, (key) => this.i18n.t(key));
+  };
 
   protected get vistas(): { value: PantryCategoryView; clave: 'pantry.categorias_todas' | 'pantry.categorias_sin_productos' | 'pantry.categorias_con_subcategorias' }[] {
     return [
@@ -531,11 +574,10 @@ export class PantryCategoriesComponent implements OnInit {
   ngOnInit(): void {
     this.pantry.loadCategories();
     // Lo mismo que en productos: la query es el estado, y al entrar se lee. `view` es el nombre que comparte con
-    // el servidor para las vistas, no un detalle interno de la URL.
+    // el servidor para las vistas, no un detalle interno de la URL. `?offset=` se jubilo con el paginador server.
     const query = this.route.snapshot.queryParamMap;
-    this.view = valorDeQuery(query, 'view', ['all', 'without-products', 'with-children'] as const, 'all');
-    this.q = valorDeQuery(query, 'q', null, '');
-    this.offset = offsetDeQuery(query);
+    this.view.set(valorDeQuery(query, 'view', ['all', 'without-products', 'with-children'] as const, 'all'));
+    this.q.set(valorDeQuery(query, 'q', null, ''));
     const id = this.route.snapshot.paramMap.get('id');
     if (id) this.abrirFicha(id);
     else void this.refrescar();
@@ -543,23 +585,44 @@ export class PantryCategoriesComponent implements OnInit {
 
   // ── lista ──
 
+  /**
+   * Carga el arbol entero de 100 en 100 (tope 2.000, el mismo del visor). Los recuentos los pone el server en
+   * cada fila, asi que «todo en memoria» no significa calcular aqui lo que no se puede saber desde aqui.
+   */
   private async refrescar(): Promise<void> {
     this.cargando = true;
-    const resultado = await this.pantry.listCategories(this.view, this.q, this.limit, this.offset);
-    this.lista = resultado?.data ?? [];
-    this.total = resultado?.meta.total ?? 0;
+    const filas = await cargarTodasLasPaginas<PantryCategory>(
+      (offset, tamano) => this.pantry.listCategories('all', '', tamano, offset),
+      100,
+      2000
+    );
+    if (filas === null) {
+      // Media lista mudaria mentiria mas que un error a la cara: se dice, y no se pinta tabla.
+      this.error = this.i18n.t('ui.ha_ocurrido_un_error');
+      this.lista.set([]);
+    } else {
+      this.error = '';
+      this.lista.set(filas);
+    }
+    this.seleccion.set([]);
     this.cargando = false;
   }
 
+  /** Cambiar de vista es mirar otra vez lo mismo: no hay recarga, la filtro yo en memoria. */
   protected cambiarVista(value: PantryCategoryView): void {
-    this.view = value;
-    this.offset = 0;
+    this.view.set(value);
+    this.loteAnular();
     void this.escribirUrl();
   }
 
-  protected buscar(): void {
-    this.offset = 0;
+  protected buscar(valor: string): void {
+    this.q.set(valor ?? '');
     void this.escribirUrl();
+  }
+
+  protected loteAnular(): void {
+    this.seleccion.set([]);
+    this.tablaCats()?.limpiarSeleccion();
   }
 
   /**
@@ -575,18 +638,9 @@ export class PantryCategoriesComponent implements OnInit {
     // pasa por aqui desde la Tanda 28.
     await this.router.navigate(['/pantry/categories'], {
       relativeTo: this.route,
-      queryParams: { view: this.view === 'all' ? null : this.view, q: this.q || null, offset: this.offset || null },
-      queryParamsHandling: 'merge',
+      queryParams: { view: this.view() === 'all' ? null : this.view(), q: this.q().trim() || null },
       replaceUrl: this.ficha === null
     });
-    await this.refrescar();
-  }
-
-  protected mover(paso: number): void {
-    const siguiente = Math.max(0, this.offset + paso * this.limit);
-    if (siguiente + 1 > this.total && paso > 0) return;
-    this.offset = siguiente;
-    void this.escribirUrl();
   }
 
   protected etiquetaClave(clave: string | null): string {
@@ -595,16 +649,46 @@ export class PantryCategoriesComponent implements OnInit {
     return pantryCategoryLabel(fila ?? { key: clave }, (key) => this.i18n.t(key));
   }
 
-  protected cuenta(fila: PantryCategory): string {
-    // `descendantProducts` es lo que se pinta cuando hay ramas: «2 articulos» en una categoria con una hija
-    // llena dejaria de pie que la fila esta vacia cuando no lo esta.
-    const n = fila.counts.children > 0 ? fila.counts.descendantProducts : fila.counts.products;
-    if (n === 0) return this.i18n.t('pantry.cuenta_sin_articulos');
-    return this.i18n.t(fila.counts.children > 0 ? 'pantry.cuenta_articulos_descendientes' : 'pantry.cuenta_articulos', { n });
-  }
-
-  protected cuentaHijos(fila: PantryCategory): string {
-    return this.i18n.t('pantry.cuenta_subcategorias', { n: fila.counts.children });
+  /**
+   * El lote de categorias es un bucle de DELETE con la regla del server por delante: solo se intentan las
+   * `canDelete`, las demas se anuncian en la propia confirmacion (el «no» se ensena antes de pulsar, no
+   * despues), y el recuento de lo que se borro y de lo que fallo sale en el mismo toast. Cada DELETE es
+   * individual porque `other` (reservada) y las categorias con contenido tienen vetos distintos que solo el
+   * server sabe aplicar; un lote no puede esconderlos detras de un todo-o-nada que no existe en la API.
+   */
+  protected async borrarLote(): Promise<void> {
+    const objetivo = this.borrables();
+    if (objetivo.length === 0) return;
+    const saltan = this.noBorrables();
+    const aceptado = await this.confirm.confirm({
+      title: this.i18n.t('pantry.borrar_seleccionados'),
+      message:
+        this.i18n.t('pantry.categorias_lote_pregunta', { n: objetivo.length }) +
+        (saltan > 0 ? ` ${this.i18n.t('pantry.categorias_lote_saltan', { n: saltan })}` : ''),
+      confirmText: this.i18n.t('common.delete'),
+      cancelText: this.i18n.t('common.cancel'),
+      variant: 'danger'
+    });
+    if (!aceptado) return;
+    this.guardando = true;
+    let borradas = 0;
+    let fallidas = 0;
+    for (const fila of objetivo) {
+      const resultado = await this.pantry.deleteCategory(fila.id);
+      if (resultado.ok) borradas++;
+      else fallidas++;
+    }
+    this.guardando = false;
+    this.pantry.loadCategories(true);
+    await this.refrescar();
+    if (borradas === 0) {
+      this.toast.error(this.i18n.t('ui.no_se_ha_podido'));
+      return;
+    }
+    this.toast.success(
+      this.i18n.t(borradas === 1 ? 'pantry.categoria_borrada' : 'pantry.n_categorias_borradas', { n: borradas }),
+      fallidas > 0 ? this.i18n.t('pantry.categorias_lote_fallidas', { n: fallidas }) : undefined
+    );
   }
 
   // ── ficha ──

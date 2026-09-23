@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -11,19 +11,16 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { TagComponent } from '../../shared/components/ui/tag/tag.component';
-import { CheckboxComponent } from '../../shared/components/ui/checkbox/checkbox.component';
+import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { PickerComponent, type PickerOption } from '../../shared/components/ui/picker/picker.component';
-import { PantryCategoryLabelPipe } from '../../shared/pipes/pantry-category-label.pipe';
+import { DataTableComponent, DataTableCellDirective } from '../../shared/components/ui/data-table/data-table.component';
+import type { DataTableColumna } from '../../shared/components/ui/data-table/data-table.types';
 import { pantryCategoryLabel } from '../../core/i18n/labels';
 import { daysUntil } from '../../core/time';
-import type {
-  MeasurementUnit,
-  PantryProduct,
-  PantryProductFilter,
-  PantryProductSort,
-  PantryRequest
-} from '../../shared/models/pantry.model';
-import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorDeQuery } from './pantry-gestor.util';
+import type { MeasurementUnit, PantryProduct, PantryProductFilter, PantryRequest } from '../../shared/models/pantry.model';
+import { aliasVisibles, cargarTodasLasPaginas, caducaEnTresDias, coincideGestor, colorDeCategoria, normalizarAlias, valorDeQuery } from './pantry-gestor.util';
+
+type FilaProducto = PantryProduct & { listLines: number };
 
 /**
  * El gestor de productos principales (HOGARIA-SPEC ## 12x).
@@ -39,8 +36,10 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
  *    propia copia del nombre y de la clave, asi que se puede quitar un basico del catalogo sin perder el martes
  *    en que se compro; lo que si bloquea el borrado es tener unidades dentro, y eso se dice con el numero.
  *
- * Como el de las categorias, son dos rutas y una clase: la lista filtra y pagina en el server, y la ficha vive
- * en su URL para que un F5 no la desperdicie.
+ * Como el de las categorias, son dos rutas y una clase, y la ficha vive en su URL para que un F5 no la
+ * desperdicie. La lista, desde la tanda 31 (## 12ac), es la `app-data-table` del visor sobre el catalogo
+ * completo en memoria: los chips de vista y la busqueda se aplican aqui —con la semantica del server, que es la
+ * que la casa prometi6—, y `?sort=` y el paginador server-side se jubilan: ordenar y paginar es cosa de la tabla.
  */
 @Component({
   selector: 'app-pantry-products',
@@ -52,9 +51,10 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
     IconComponent,
     InputComponent,
     TagComponent,
-    CheckboxComponent,
+    BadgeComponent,
     PickerComponent,
-    PantryCategoryLabelPipe
+    DataTableComponent,
+    DataTableCellDirective
   ],
   template: `
     <div class="gestor">
@@ -72,7 +72,7 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
           <div class="gestor__vistas">
             @for (opcion of filtros; track opcion.value) {
               <app-tag
-                [selected]="filtro === opcion.value"
+                [selected]="filtro() === opcion.value"
                 (onClick)="cambiarFiltro(opcion.value)"
                 [attr.data-test]="'gestor-productos-filtro-' + opcion.value"
               >
@@ -87,17 +87,9 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
             name="gestor-productos-q"
             type="search"
             [placeholder]="'pantry.buscar_productos' | t"
-            [(ngModel)]="q"
-            (ngModelChange)="buscar()"
+            [ngModel]="q()"
+            (ngModelChange)="buscar($event)"
           ></app-input>
-
-          <app-picker
-            class="gestor__orden"
-            [options]="opcionesOrden"
-            [value]="orden"
-            (valueChange)="cambiarOrden($event)"
-            [label]="''"
-          />
 
           <button type="button" class="gestor__nueva" (click)="abrirNueva()" data-test="gestor-productos-nueva">
             <app-icon name="add" [size]="18" [label]="null" />
@@ -107,77 +99,106 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
 
         @if (cargando) {
           <p class="gestor__estado">{{ 'common.loading' | t }}</p>
-        } @else if (lista.length === 0) {
+        } @else if (lista().length === 0) {
           <p class="gestor__estado" data-test="gestor-productos-vacia">{{ 'pantry.productos_vacios' | t }}</p>
         } @else {
-          <ul class="lista">
-            @for (fila of lista; track fila.id) {
-              <li class="fila" [attr.data-test]="'gestor-productos-fila-' + fila.id">
-                <app-checkbox
-                  class="fila__marca"
-                  [checked]="marcado(fila.id)"
-                  [hideLabel]="true"
-                  [label]="fila.name"
-                  (onChange)="marcar(fila.id, $event)"
-                />
-                <button type="button" class="fila__cuerpo" (click)="abrir(fila)">
-                  <span class="fila__nombre">{{ fila.name }}</span>
-                  <span class="fila__meta">
-                    <span class="fila__punto" [style.background]="colorDeCategoria(catalogo.get(fila.category))" aria-hidden="true"></span>
-                    <span class="fila__categoria">{{ fila.categoryName | category }}</span>
-                    @if (fila.inPantry) {
-                      <span class="fila__stock">{{ fila.quantity }} {{ fila.unit }}</span>
-                    }
-                    @if (fila.expirationDate) {
-                      <span class="fila__caduca" [class.fila__caduca--cerca]="caducaPronto(fila)">{{ caducidad(fila) }}</span>
-                    }
-                    @for (alias of aliasVisibles(fila.aliases).visibles; track alias) {
-                      <span class="fila__alias">{{ alias }}</span>
-                    }
-                    @if (aliasVisibles(fila.aliases).ocultos > 0) {
-                      <span class="fila__alias fila__alias--mas">+{{ aliasVisibles(fila.aliases).ocultos }}</span>
-                    }
+          <app-data-table
+            #tablaProd
+            data-test="gestor-productos-tabla"
+            [filas]="filasTabla()"
+            [columnas]="columnas()"
+            [seleccionable]="true"
+            [etiquetaDeFila]="etiquetaFila"
+            (seleccionChange)="seleccion.set($event)"
+          >
+            <div data-tabla-lote>
+              @if (seleccion().length > 0) {
+                <div class="lote" data-test="gestor-productos-lote">
+                  <span class="lote__cta">{{ 'pantry.seleccionados' | t: { n: seleccion().length } }}</span>
+                  <span class="lote__acciones">
+                    <button
+                      type="button"
+                      class="lote__btn lote__btn--peligro"
+                      [disabled]="guardando"
+                      (click)="borrarLote()"
+                      data-test="gestor-productos-lote-borrar"
+                    >
+                      {{ 'pantry.borrar_seleccionados' | t }}
+                    </button>
+                    <button type="button" class="lote__btn" (click)="loteAnular()" data-test="gestor-productos-lote-anular">
+                      {{ 'pantry.lote_anular' | t }}
+                    </button>
                   </span>
-                  @if (fila.impact.listLines > 0) {
-                    <span class="fila__impacto">{{ 'pantry.lineas_de_cesta' | t: { n: fila.impact.listLines } }}</span>
+                </div>
+              }
+            </div>
+
+            <ng-template appDataTableCell="nombre" let-fila>
+              <span class="celda celda--nombre" [attr.data-test]="'gestor-productos-fila-' + fila.id">
+                <span class="celda__nombre">{{ fila.name }}</span>
+                @for (alias of aliasVisibles(fila.aliases).visibles; track alias) {
+                  <span class="celda__alias">{{ alias }}</span>
+                }
+                @if (aliasVisibles(fila.aliases).ocultos > 0) {
+                  <span class="celda__alias celda__alias--mas">+{{ aliasVisibles(fila.aliases).ocultos }}</span>
+                }
+              </span>
+            </ng-template>
+
+            <ng-template appDataTableCell="categoria" let-fila>
+              <span class="celda celda--categoria">
+                <span class="celda__punto" [style.background]="colorDeCategoria(catalogo.get(fila.category))" aria-hidden="true"></span>
+                {{ etiquetaCategoria(fila.category) }}
+              </span>
+            </ng-template>
+
+            <ng-template appDataTableCell="stock" let-fila>
+              @if (fila.inPantry) {
+                <span class="celda celda--stock">{{ fila.quantity }} {{ fila.unit }}</span>
+              } @else {
+                <span class="celda celda--guion" aria-hidden="true">—</span>
+              }
+            </ng-template>
+
+            <ng-template appDataTableCell="caducidad" let-fila>
+              @if (fila.expirationDate) {
+                <span class="celda-caducidad">
+                  <span class="celda">{{ fila.expirationDate | date: 'dd/MM/yyyy' }}</span>
+                  @if (estado(fila); as e) {
+                    <app-badge [variant]="e.variant" size="sm">{{ e.label }}</app-badge>
                   }
+                </span>
+              } @else {
+                <span class="celda celda--guion" aria-hidden="true">—</span>
+              }
+            </ng-template>
+
+            <ng-template appDataTableCell="acciones" let-fila>
+              <span class="celda__grupo">
+                <button
+                  type="button"
+                  class="celda__accion"
+                  [attr.aria-label]="'pantry.editar_producto' | t"
+                  [attr.title]="'pantry.editar_producto' | t"
+                  (click)="abrir(fila)"
+                  [attr.data-test]="'gestor-productos-editar-' + fila.id"
+                >
+                  <app-icon name="edit" [size]="16" [label]="null" />
                 </button>
                 <button
                   type="button"
-                  class="fila__accion"
+                  class="celda__accion celda__accion--peligro"
                   [attr.aria-label]="'pantry.eliminar_producto' | t"
-                  [attr.title]="'pantry.eliminar_producto' | t"
-                  [disabled]="fila.inPantry"
+                  [attr.title]="fila.inPantry ? ('pantry.error_en_despensa' | t: { cantidad: fila.quantity }) : ('pantry.eliminar_producto' | t)"
+                  [disabled]="fila.inPantry || guardando"
                   (click)="borrar(fila)"
                   [attr.data-test]="'gestor-productos-borrar-' + fila.id"
                 >
-                  <app-icon name="delete" [size]="18" [label]="null" />
+                  <app-icon name="delete" [size]="16" [label]="null" />
                 </button>
-              </li>
-            }
-          </ul>
-
-          <div class="lote" *ngIf="seleccion.length > 0" data-test="gestor-productos-lote">
-            <span>{{ 'pantry.seleccionados' | t: { n: seleccion.length } }}</span>
-            <button type="button" class="boton boton--peligro" (click)="borrarLote()">
-              {{ 'pantry.borrar_seleccionados' | t }}
-            </button>
-          </div>
-
-          <nav class="paginador">
-            <button type="button" (click)="mover(-1)" [disabled]="offset === 0" data-test="gestor-productos-anterior">
-              {{ 'common.anterior' | t }}
-            </button>
-            <span class="paginador__cifra">{{ rango }} / {{ total }}</span>
-            <button
-              type="button"
-              (click)="mover(1)"
-              [disabled]="offset + limit >= total"
-              data-test="gestor-productos-siguiente"
-            >
-              {{ 'pantry.siguiente' | t }}
-            </button>
-          </nav>
+              </span>
+            </ng-template>
+          </app-data-table>
         }
       } @else {
         <section class="ficha" data-test="gestor-productos-ficha">
@@ -392,30 +413,6 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
 
     /* Una sola tarjeta con filas separadas por un hilo, en vez de fichitas con dos pixeles de hueco: es lo que
        hace que el ojo recorra la columna de numeros sin perder el sitio. */
-    .lista {
-      display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none;
-      background: var(--bg-secondary); border: 1px solid var(--border-default);
-      border-radius: var(--radius-xl); overflow: hidden;
-    }
-    .fila {
-      display: flex; align-items: stretch; gap: 0;
-      border-bottom: 1px solid var(--border-default); transition: var(--transition-fast);
-    }
-    .fila:last-child { border-bottom: none; }
-    .fila:hover { background: color-mix(in srgb, var(--bg-tertiary) 55%, transparent); }
-    .fila__cuerpo {
-      flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center;
-      gap: var(--space-2) var(--space-4); padding: var(--space-4);
-      font: inherit; color: inherit; text-align: left; background: none; border: none; cursor: pointer;
-    }
-    .fila__cuerpo:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; border-radius: var(--radius-md); }
-    .fila__accion {
-      flex: none; display: grid; place-items: center; width: 48px; padding: 0;
-      color: var(--text-secondary); background: none; border: none; cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .fila__accion:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; border-radius: var(--radius-md); }
-    .fila__accion:disabled { opacity: 0.35; cursor: not-allowed; }
 
     @media (min-width: 860px) {
       /* Y a partir de aqui, columnas de verdad: los numeros se alinean entre filas porque el grid las declara,
@@ -423,22 +420,6 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
       .fila__cuerpo { display: grid; flex-wrap: nowrap; gap: var(--space-6); }
     }
 
-    .paginador {
-      display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
-      gap: var(--space-3); padding: 0 var(--space-1);
-      font-size: var(--text-sm); color: var(--text-secondary);
-    }
-    .paginador button {
-      display: inline-flex; align-items: center; gap: var(--space-1);
-      padding: var(--space-2) var(--space-3); font: inherit; font-size: var(--text-sm);
-      color: var(--text-primary); background: var(--bg-secondary);
-      border: 1px solid var(--border-default); border-radius: var(--radius-full); cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .paginador button:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-tertiary); }
-    .paginador button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-    .paginador button:disabled { opacity: 0.45; cursor: not-allowed; }
-    .paginador__cifra { font-variant-numeric: tabular-nums; }
 
     /* La ficha es un formulario, no una lista de campos pegados: una tarjeta con padding generoso, campos con
     su microetiqueta y dos columnas cuando el ancho lo permite. */
@@ -499,47 +480,11 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
       .fila__cuerpo { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.6fr) auto; }
     }
 
-    /* La casilla de lote abre la fila: 48px de ancho y centrada, para que el punto de toque no se solape con
-       el nombre y las filas con y sin casilla cuadren igual. */
-    .fila__marca { flex: none; display: grid; place-items: center; width: 48px; padding-left: var(--space-2); }
 
-    .fila__nombre {
-      min-width: 0; font-size: var(--text-base); font-weight: var(--font-medium); color: var(--text-primary);
-      overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-    }
-    .fila__meta {
-      display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2);
-      min-width: 0; color: var(--text-secondary); font-size: var(--text-xs);
-    }
-    .fila__punto {
-      flex: none; width: 10px; height: 10px; border-radius: var(--radius-full);
-      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
-    }
     /* Cada dato de la fila es una etiqueta, y las etiquetas se pintan igual en las dos pantallas: relleno
        redondeado, numero tabular y un hueco constante entre ellas. */
-    .fila__categoria, .fila__stock, .fila__caduca, .fila__alias, .fila__impacto {
-      padding: var(--space-1) var(--space-2); border-radius: var(--radius-full); background: var(--bg-tertiary);
-      font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap;
-    }
-    .fila__categoria { color: var(--text-secondary); }
-    .fila__stock { color: var(--success); background: var(--success-subtle); }
-    .fila__caduca { color: var(--text-secondary); }
-    .fila__caduca--cerca { color: var(--warning); background: var(--warning-subtle); }
-    .fila__alias { color: var(--text-secondary); background: none; border: 1px dashed var(--border-default); }
-    .fila__alias--mas { opacity: 0.7; }
-    .fila__impacto { margin-left: auto; color: var(--text-tertiary); background: none; }
     @media (min-width: 860px) { .fila__impacto { margin-left: 0; } }
 
-    /* La barra de lote se queda pegada abajo mientras se marca: es el unico sitio donde tiene sentido que
-       aparezca una accion destructiva, y no debe tapar la fila que se esta mirando. */
-    .lote {
-      position: sticky; bottom: var(--space-3); z-index: 5;
-      display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3);
-      padding: var(--space-3) var(--space-4);
-      background: var(--bg-secondary); border: 1px solid var(--border-strong);
-      border-radius: var(--radius-full); box-shadow: var(--shadow-lg);
-      font-size: var(--text-sm);
-    }
 
     .ficha__cabecera {
       display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-2) var(--space-4);
@@ -563,14 +508,59 @@ import { aliasVisibles, colorDeCategoria, normalizarAlias, offsetDeQuery, valorD
 
     /* Que un boton se pueda pulsar se nota sin tocarlo: hover y foco visible en todo lo que acepta un click
        (regla 8 del sistema), incluido el boton primario, que si no parece deshabilitado junto al resto. */
-    .fila__cuerpo:hover { background: color-mix(in srgb, var(--bg-tertiary) 40%, transparent); }
-    .fila__accion:hover:not(:disabled) { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
     .boton:hover:not(:disabled) { border-color: var(--border-strong); background: var(--bg-secondary); }
     .boton:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     .boton--primario:hover:not(:disabled) { filter: brightness(1.06); background: var(--primary); }
     .boton--primario:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
     .boton--peligro:hover:not(:disabled) { color: var(--bg-secondary); background: var(--error); border-color: var(--error); }
     .boton--peligro:focus-visible { outline: 2px solid var(--error); outline-offset: 2px; }
+
+    /* El lote (## 12ac): igual que en el visor y en categorias —una sola barra, tres gestores—. */
+    .lote {
+      display: flex; align-items: center; justify-content: space-between; gap: var(--space-3);
+      flex-wrap: wrap; padding: var(--space-2) var(--space-3);
+      background: var(--primary-subtle); border-radius: var(--radius-md);
+    }
+    .lote__cta { font-size: var(--text-xs); font-weight: var(--font-semibold); color: var(--text-primary); }
+    .lote__acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+    .lote__btn {
+      font: inherit; font-size: var(--text-xs); padding: 6px 12px; cursor: pointer;
+      background: var(--bg-primary); color: var(--text-primary);
+      border: 1px solid var(--border-default); border-radius: var(--radius-md);
+      transition: var(--transition-fast);
+    }
+    .lote__btn:hover:not(:disabled) { border-color: var(--primary); }
+    .lote__btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    .lote__btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .lote__btn--peligro { color: var(--error); border-color: color-mix(in srgb, var(--error) 45%, transparent); }
+    .lote__btn--peligro:hover:not(:disabled) { color: var(--bg-secondary); background: var(--error); border-color: var(--error); }
+    @media (max-width: 959px) {
+      /* En movil el lote se queda pegado abajo: la seleccion no puede desaparecer al recorrer la tabla. */
+      .lote { position: sticky; bottom: var(--space-2); box-shadow: var(--shadow-md); }
+    }
+
+    /* Las celdas proyectadas: nombre con alias, categoria con punto, stock, caducidad y acciones de fila. */
+    .celda--nombre { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; flex-wrap: wrap; }
+    .celda__nombre { font-weight: var(--font-medium); color: var(--text-primary); }
+    .celda__alias {
+      font-size: var(--text-xs); color: var(--text-secondary); background: var(--bg-tertiary);
+      border-radius: var(--radius-full); padding: 1px var(--space-2); white-space: nowrap;
+    }
+    .celda__alias--mas { background: none; padding: 0; }
+    .celda--categoria { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); }
+    .celda__punto { flex: none; width: 8px; height: 8px; border-radius: var(--radius-full); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12); }
+    .celda--stock { font-variant-numeric: tabular-nums; color: var(--text-primary); }
+    .celda-caducidad { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+    .celda__grupo { display: inline-flex; gap: var(--space-1); }
+    .celda__accion {
+      display: grid; place-items: center; width: 32px; height: 32px; padding: 0;
+      color: var(--text-secondary); background: none; border: none; cursor: pointer; border-radius: var(--radius-md);
+      transition: var(--transition-fast);
+    }
+    .celda__accion:hover:not(:disabled) { color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+    .celda__accion:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+    .celda__accion:disabled { opacity: 0.35; cursor: not-allowed; }
+    .celda__accion--peligro:hover:not(:disabled) { color: var(--error); background: color-mix(in srgb, var(--error) 10%, transparent); }
   `]
 })
 export class PantryProductsComponent implements OnInit {
@@ -585,20 +575,17 @@ export class PantryProductsComponent implements OnInit {
   protected readonly colorDeCategoria = colorDeCategoria;
   protected readonly aliasVisibles = aliasVisibles;
 
-  protected lista: PantryProduct[] = [];
+  /** El catalogo de productos de la casa, completo y una sola vez: la tabla hace el resto (## 12ac). */
+  protected readonly lista = signal<PantryProduct[]>([]);
+  protected readonly filtro = signal<PantryProductFilter>('staples');
+  protected readonly q = signal('');
+  protected readonly seleccion = signal<readonly unknown[]>([]);
   protected ficha: PantryProduct | null = null;
   protected esNueva = false;
-  protected filtro: PantryProductFilter = 'staples';
-  protected orden: PantryProductSort = 'name';
-  protected q = '';
-  protected total = 0;
-  protected limit = 10;
-  protected offset = 0;
   protected cargando = true;
   protected guardando = false;
   protected error = '';
   protected errorNombre = '';
-  protected seleccion: string[] = [];
   protected aliasNuevo = '';
   protected formulario = {
     name: '',
@@ -617,11 +604,6 @@ export class PantryProductsComponent implements OnInit {
     { value: 'expiring', clave: 'pantry.productos_caducan' }
   ];
 
-  protected readonly opcionesOrden: PickerOption[] = [
-    { value: 'name', label: this.i18n.t('pantry.orden_por_nombre') },
-    { value: 'recent', label: this.i18n.t('pantry.orden_recientes') }
-  ];
-
   protected readonly opcionesUnidad: PickerOption[] = [
     { value: 'g', label: this.i18n.t('pantry.gramos_g') },
     { value: 'kg', label: this.i18n.t('pantry.kilogramos_kg') },
@@ -637,21 +619,64 @@ export class PantryProductsComponent implements OnInit {
     return new Map(this.pantry.categories().map((fila) => [fila.key, fila]));
   }
 
-  protected get rango(): string {
-    if (this.total === 0) return '0';
-    return `${this.offset + 1}-${Math.min(this.offset + this.limit, this.total)}`;
+  private readonly tablaProd = viewChild<DataTableComponent>('tablaProd');
+
+  /** Chips y busqueda en memoria; la busqueda, ademas, sin acentos y sobre los alias, como la del visor. */
+  protected readonly filtradas = computed<PantryProduct[]>(() => {
+    const activa = this.filtro();
+    const consulta = this.q();
+    let filas = this.lista();
+    if (activa === 'staples') filas = filas.filter((fila) => fila.quantity === 0);
+    else if (activa === 'in-pantry') filas = filas.filter((fila) => fila.quantity > 0);
+    else if (activa === 'expiring') filas = filas.filter((fila) => caducaEnTresDias(fila.expirationDate));
+    if (consulta.trim()) filas = filas.filter((fila) => coincideGestor([fila.name, ...fila.aliases], consulta));
+    return filas;
+  });
+
+  /** La linea de la cesta se proyecta: la tabla ordena y filtra por campos, y `impact` viene anidado. */
+  protected readonly filasTabla = computed<FilaProducto[]>(() =>
+    this.filtradas().map((fila) => ({ ...fila, listLines: fila.impact?.listLines ?? 0 }))
+  );
+
+  protected readonly columnas = computed<DataTableColumna[]>(() => {
+    this.i18n.changeTick();
+    return [
+      { clave: 'name', etiqueta: this.i18n.t('pantry.columna_nombre'), celda: 'nombre' },
+      {
+        clave: 'category', etiqueta: this.i18n.t('pantry.categoria'), celda: 'categoria',
+        etiquetaValor: (v) => this.etiquetaCategoria(String(v))
+      },
+      { clave: 'unit', etiqueta: this.i18n.t('pantry.unidad') },
+      {
+        clave: 'inPantry', etiqueta: this.i18n.t('pantry.en_despensa'), tipo: 'booleano',
+        etiquetaValor: (v) => this.i18n.t(String(v) === 'true' ? 'pantry.productos_con_stock' : 'pantry.productos_sin_stock')
+      },
+      { clave: 'quantity', etiqueta: this.i18n.t('pantry.cantidad'), tipo: 'numero', celda: 'stock', alineacion: 'start' },
+      { clave: 'expirationDate', etiqueta: this.i18n.t('pantry.caducidad_producto'), tipo: 'fecha', celda: 'caducidad' },
+      { clave: 'listLines', etiqueta: this.i18n.t('pantry.columna_cesta'), tipo: 'numero' },
+      {
+        clave: 'acciones', etiqueta: this.i18n.t('pantry.acciones'), celda: 'acciones',
+        ordenable: false, filtrable: false, alineacion: 'end', ancho: '88px'
+      }
+    ];
+  });
+
+  protected readonly etiquetaFila = (fila: unknown): string => (fila as PantryProduct).name ?? '';
+
+  /** La etiqueta de una clave de categoria: la de fabrica, traducida; la renombrada, tal cual la escribio la casa. */
+  protected etiquetaCategoria(clave: string): string {
+    const cat = this.catalogo.get(clave);
+    return cat ? pantryCategoryLabel(cat, (key) => this.i18n.t(key)) : clave;
   }
 
   ngOnInit(): void {
     this.pantry.loadCategories();
     // El estado de la lista es la query, y aqui es donde la query vuelve a ser estado: entrar por
-    // `/pantry/products?filter=in-pantry` o sobrevivir a un F5 tiene que pintar el filtro, la busqueda y la
-    // pagina que dice la URL. Sin esto se ignoraba y la pantalla caia al de fabrica —el bug que encontro el CI—.
+    // `/pantry/products?filter=in-pantry` o sobrevivir a un F5 tiene que pintar el filtro y la busqueda que
+    // dice la URL. `?sort=` y `?offset=` se jubilaron con la tabla: ordena y corta ella, en memoria.
     const query = this.route.snapshot.queryParamMap;
-    this.filtro = valorDeQuery(query, 'filter', ['all', 'staples', 'in-pantry', 'expiring'] as const, 'staples');
-    this.orden = valorDeQuery(query, 'sort', ['name', 'recent'] as const, 'name');
-    this.q = valorDeQuery(query, 'q', null, '');
-    this.offset = offsetDeQuery(query);
+    this.filtro.set(valorDeQuery(query, 'filter', ['all', 'staples', 'in-pantry', 'expiring'] as const, 'staples'));
+    this.q.set(valorDeQuery(query, 'q', null, ''));
     const id = this.route.snapshot.paramMap.get('id');
     if (id) this.abrirFicha(id);
     else void this.refrescar();
@@ -659,35 +684,43 @@ export class PantryProductsComponent implements OnInit {
 
   // ── lista ──
 
+  /**
+   * Carga los productos todos de 100 en 100 (tope 2.000, el del visor). La vista `filter` se pide entera y se
+   * aplica aqui: si el filtro viaja al server, la tabla vuelve a mentir con sus menus, que es el pecado que la
+   * casa perdono una vez y no piensa perdonar dos.
+   */
   private async refrescar(): Promise<void> {
     this.cargando = true;
-    const resultado = await this.pantry.listProducts({
-      filter: this.filtro,
-      sort: this.orden,
-      q: this.q || undefined,
-      limit: this.limit,
-      offset: this.offset
-    });
-    this.lista = resultado?.data ?? [];
-    this.total = resultado?.meta.total ?? 0;
+    const filas = await cargarTodasLasPaginas<PantryProduct>(
+      (offset, tamano) => this.pantry.listProducts({ filter: 'all', limit: tamano, offset }),
+      100,
+      2000
+    );
+    if (filas === null) {
+      this.error = this.i18n.t('ui.ha_ocurrido_un_error');
+      this.lista.set([]);
+    } else {
+      this.error = '';
+      this.lista.set(filas);
+    }
+    this.seleccion.set([]);
     this.cargando = false;
   }
 
   protected cambiarFiltro(value: PantryProductFilter): void {
-    this.filtro = value;
-    this.offset = 0;
-    this.seleccion = [];
+    this.filtro.set(value);
+    this.loteAnular();
     void this.escribirUrl();
   }
 
-  protected cambiarOrden(value: string | null): void {
-    this.orden = value === 'recent' ? 'recent' : 'name';
+  protected buscar(valor: string): void {
+    this.q.set(valor ?? '');
     void this.escribirUrl();
   }
 
-  protected buscar(): void {
-    this.offset = 0;
-    void this.escribirUrl();
+  protected loteAnular(): void {
+    this.seleccion.set([]);
+    this.tablaProd()?.limpiarSeleccion();
   }
 
   /** Lo mismo que en las categorias: el estado de la pantalla esta en la URL, no solo en el componente. */
@@ -699,42 +732,19 @@ export class PantryProductsComponent implements OnInit {
     // pasa por aqui desde la Tanda 28.
     await this.router.navigate(['/pantry/products'], {
       relativeTo: this.route,
-      queryParams: {
-        filter: this.filtro === 'staples' ? null : this.filtro,
-        sort: this.orden === 'name' ? null : this.orden,
-        q: this.q || null,
-        offset: this.offset || null
-      },
-      queryParamsHandling: 'merge',
+      queryParams: { filter: this.filtro() === 'staples' ? null : this.filtro(), q: this.q().trim() || null },
       replaceUrl: true
     });
-    await this.refrescar();
   }
 
-  protected mover(paso: number): void {
-    const siguiente = Math.max(0, this.offset + paso * this.limit);
-    if (paso > 0 && siguiente + 1 > this.total) return;
-    this.offset = siguiente;
-    void this.escribirUrl();
-  }
-
-  protected marcado(id: string): boolean {
-    return this.seleccion.includes(id);
-  }
-
-  protected marcar(id: string, valor: boolean): void {
-    this.seleccion = valor ? [...this.seleccion, id] : this.seleccion.filter((previo) => previo !== id);
-  }
-
-  protected caducaPronto(fila: PantryProduct): boolean {
+  /** El semaforo de la caducidad, el mismo del visor: la fecha se pinta siempre; el aviso, solo si toca. */
+  protected estado(fila: PantryProduct): { variant: 'error' | 'warning'; label: string } | null {
     const dias = this.dias(fila);
-    return dias !== null && dias <= 3;
-  }
-
-  protected caducidad(fila: PantryProduct): string {
-    const dias = this.dias(fila);
-    if (dias === null) return '';
-    return this.i18n.t(dias < 0 ? 'pantry.caducado' : dias === 0 ? 'pantry.caduca_hoy' : 'pantry.caduca_en_dias', { days: dias });
+    if (dias === null) return null;
+    if (dias < 0) return { variant: 'error', label: this.i18n.t('pantry.caducado') };
+    if (dias === 0) return { variant: 'warning', label: this.i18n.t('pantry.caduca_hoy') };
+    if (dias <= 3) return { variant: 'warning', label: this.i18n.t('pantry.caduca_en_dias', { days: dias }) };
+    return null;
   }
 
   private dias(fila: PantryProduct): number | null {
@@ -782,7 +792,7 @@ export class PantryProductsComponent implements OnInit {
     }
     // La ficha viene de la lista que se esta viendo; si se entra directo por URL (F5, enlace) se busca en el
     // server con la busqueda por nombre, que es lo unico que la URL puede transportar.
-    const enLista = this.lista.find((fila) => fila.id === id);
+    const enLista = this.lista().find((fila) => fila.id === id);
     if (enLista) this.usar(enLista);
     else void this.buscarPorId(id);
   }
@@ -930,7 +940,8 @@ export class PantryProductsComponent implements OnInit {
    * dejar una seleccion a medias.
    */
   protected async borrarLote(): Promise<void> {
-    const ids = [...this.seleccion];
+    const ids = this.seleccion().map((fila) => (fila as FilaProducto).id);
+    if (ids.length === 0) return;
     const impacto = await this.pantry.bulkProductImpact(ids);
     if (!impacto) {
       this.toast.error(this.i18n.t('ui.no_se_ha_podido'));
@@ -956,7 +967,6 @@ export class PantryProductsComponent implements OnInit {
       this.toast.error(this.i18n.t('ui.no_se_ha_podido'), this.frase(resultado));
       return;
     }
-    this.seleccion = [];
     this.toast.success(this.i18n.t('pantry.n_productos_borrados', { n: resultado.data.deleted }));
     await this.refrescar();
   }
