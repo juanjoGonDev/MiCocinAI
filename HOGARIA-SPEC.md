@@ -4234,6 +4234,55 @@ ficheros, `build:prod` verde. e2e local: `shopping-sugerencias` 4/4 (la seccion 
 barrida pantry + round12 + shopping-lists + round6 + round10 + utensils + dashboard deja 72 verdes con los 5 rojos de
 siempre de round6 —la deuda documentada del shard 4, ya roja en CI sobre 56679d0—.
 
+## 12ai — La ficha del articulo: caracteristicas, precios por tienda con grafica y su edicion dedicada
+
+**El parte (2026-09-24, ronda 37).** El usuario pidio «una vista dedicada del item de inventario, donde ver sus
+caracteristicas y una tab para ver los precios por store, incluso una grafica donde se vea en el tiempo los
+diferentes precios segun la tienda donde se hayan comprado y registrado. Tambien una vista dedicada a su edicion.
+Hazlo responsive y profesional, cuida el UI al detalle».
+
+**A) La ficha (`/pantry/inventario/:id`).** El nombre de la fila en la tabla del inventario es un enlace de verdad
+(`href` + navegacion propia, el patron de la cesta: boton central y «abrir en pestana nueva» siguen siendo un
+enlace). La pantalla: cabecera con categoria (punto de color y etiqueta), stock, ubicacion y semaforo de caducidad;
+pestañas Detalles / Precios por tienda, en la query (`?tab=precios`, la convencion de `tab-url.ts`). Detalles pinta
+las caracteristicas en tarjetas (categoria, unidad, ubicacion, caducidad, codigo de barras, alias, nota, registrado/
+actualizado) y la huella (lineas de cesta y observaciones de precio que cuelgan de la clave). Un basico sin stock
+dice que lo es, con su aviso.
+
+**B) Los precios por tienda.** `preciosDeProducto(clave)` en el shopping service bucea `/shopping/prices
+?productKey=` hasta agotar paginas. La pestana reparte por tienda (tarjeta: ultimo precio por unidad, media,
+observaciones), dibuja la grafica y lista el historial completo con su boton de quitar (confirm + DELETE, como
+manda la casa). **La grafica es SVG a mano** (`price-chart.component.ts` + `precio-chart.util.ts` con spec): una
+linea por tienda con paleta propia, rejilla con euros, fechas deduplicadas, puntos con `<title>` nativo, y
+`viewBox` al 100% —responsive sin medir nada en JS—. Sin libreria de charts: cuatro escalas y un path no son
+motivo de dependencia. Tres reglas de escala escritas en el spec: el eje Y respira un 8% y no empieza en cero
+cuando vive lejos, un solo precio tiene ±10 centimos de aire, y un solo dia no colapsa el eje X.
+
+**C) La edicion (`/pantry/inventario/:id/editar`).** Pantalla propia con guardar explicito, no un modal. Edita
+nombre, categoria (el catalogo de la casa), unidad, ubicacion, caducidad, codigo de barras, nota y alias (con el
+choque de alias dicho en cristiano). El stock se VE pero no se toca: la regla de la ## 12x —lo que hay dentro se
+mueve desde la despensa, con sus motivos— no se rompe porque haya ficha nueva, y la pantalla lo dice. Salir con
+cambios sin guardar pregunta (ConfirmService, como toda la casa).
+
+**D) El server estira un poco el PATCH de productos.** `GET /products/:id` nuevo (la ficha con su huella, alcance
+de la casa entera) y `updateProductSchema` gana `location` y `barcode` —la ficha edita todo lo que la fila sabe de
+si misma en un solo sitio—. Con spec: la ficha llega entera, el 404 tiene su codigo, y null en la ubicacion vuelve
+a la despensa mientras que en el codigo es «quitar».
+
+**E) Dos lecciones de obra.** (1) `syncTabWithUrl` se llama desde el CONSTRUCTOR y no desde ngOnInit: monta un
+`effect` y `inject`, y eso solo vive en contexto de inyeccion —en ngOnInit explota en silencio y la pantalla se
+queda en «Cargando…» para siempre, que en el e2e fue el primer rojo de la tanda—. (2) El API de precios llega
+DESC: dos observaciones del mismo instante necesitan desempate (gana el que el API conto primero) o el «ultimo
+precio» sale exactamente al reves —lo destapo el e2e, que siembra tres precios seguidos, y ahora es un caso del
+spec de la util.
+
+**El parte de salud.** Server 16/16 (pantry-products). karma 42/42 en las tres specs tocadas (chart util 11,
+dict-simetrico, pantry-gestor). `build:prod` verde, `check:ui` sin incidencias en 196 ficheros. e2e: `pantry-item`
+3/3 (enlace desde la tabla, URL con pestana, tarjetas por tienda, grafica con series/puntos/linea, quitar
+observacion con confirm, edicion que guarda y vuelve) y la barrida pantry + catalog + managers + sugerencias +
+utensils + round12 con 48 verdes y cero rojos nuevos (el unico fallo del primer pase era el desempate del punto E,
+ya cerrado).
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
