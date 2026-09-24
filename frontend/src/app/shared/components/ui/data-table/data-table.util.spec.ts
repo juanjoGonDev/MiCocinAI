@@ -415,29 +415,41 @@ describe('reanclarPagina (## 12ad)', () => {
   });
 });
 
-describe('tramoDePaginas (## 12ad)', () => {
-  it('pinta primera, ultima y ventana de +-1, y marca los huecos con marcas', () => {
-    expect(tramoDePaginas(6, 39)).toEqual([1, 'ini', 5, 6, 7, 'fin', 39]);
-    expect(tramoDePaginas(1, 10)).toEqual([1, 2, 'fin', 10]);
-    expect(tramoDePaginas(2, 10)).toEqual([1, 2, 3, 'fin', 10]);
-    expect(tramoDePaginas(10, 10)).toEqual([1, 'ini', 9, 10]);
+describe('tramoDePaginas (## 12ad, ## 12ah)', () => {
+  it('con mas de siete paginas la hilera ocupa SIEMPRE siete casillas: no respira al navegar', () => {
+    // El contrato de ancho (## 12ah): siete casillas en la primera pagina, en la ultima y en
+    // todas las de medias. Si una sola combinacion devolviera seis u ocho, el pie de la tabla
+    // cambiaria de tamano al pasar pagina —y el parte decia que eso no se hace.
+    for (let ultima = 8; ultima <= 41; ultima++) {
+      for (let centro = 1; centro <= ultima; centro++) {
+        expect(tramoDePaginas(centro, ultima).length).toBe(7);
+      }
+    }
   });
-  it('pegado a un extremo, la hilera se rellena desde el extremo: la ventana progresiva (## 12af)', () => {
-    // El caso del parte: en la 4 de 20, «1 2 3 [4] 5 … 20» —no «1 … 3 4 5 … 20»—, y espejo en el final.
-    expect(tramoDePaginas(3, 20)).toEqual([1, 2, 3, 4, 'fin', 20]);
+  it('al principio se ven 1 2 3 4 5 y el salto a la ultima', () => {
+    expect(tramoDePaginas(1, 10)).toEqual([1, 2, 3, 4, 5, 'fin', 10]);
+    expect(tramoDePaginas(2, 10)).toEqual([1, 2, 3, 4, 5, 'fin', 10]);
     expect(tramoDePaginas(4, 20)).toEqual([1, 2, 3, 4, 5, 'fin', 20]);
-    expect(tramoDePaginas(5, 20)).toEqual([1, 'ini', 4, 5, 6, 'fin', 20]);
-    expect(tramoDePaginas(17, 20)).toEqual([1, 'ini', 16, 17, 18, 19, 20]);
-    expect(tramoDePaginas(16, 20)).toEqual([1, 'ini', 15, 16, 17, 'fin', 20]);
-    expect(tramoDePaginas(20, 20)).toEqual([1, 'ini', 19, 20]);
   });
-  it('un hueco de UNA sola pagina se imprime como numero, no como marca', () => {
-    expect(tramoDePaginas(3, 6)).toEqual([1, 2, 3, 4, 5, 6]);
+  it('en medio, primera y ultima fijas con la ventana de +-1', () => {
+    expect(tramoDePaginas(5, 20)).toEqual([1, 'ini', 4, 5, 6, 'fin', 20]);
+    expect(tramoDePaginas(6, 39)).toEqual([1, 'ini', 5, 6, 7, 'fin', 39]);
+    expect(tramoDePaginas(16, 20)).toEqual([1, 'ini', 15, 16, 17, 'fin', 20]);
+  });
+  it('al final, espejo del principio: la ultima ventana pegada al extremo', () => {
+    expect(tramoDePaginas(17, 20)).toEqual([1, 'ini', 16, 17, 18, 19, 20]);
+    expect(tramoDePaginas(20, 20)).toEqual([1, 'ini', 16, 17, 18, 19, 20]);
+    expect(tramoDePaginas(10, 10)).toEqual([1, 'ini', 6, 7, 8, 9, 10]);
     expect(tramoDePaginas(5, 8)).toEqual([1, 'ini', 4, 5, 6, 7, 8]);
   });
-  it('con poca distancia (<= 7 paginas) no hay marcas en absoluto', () => {
+  it('la pagina pedida se recorta a la ultima viva antes de decidir el tramo', () => {
+    expect(tramoDePaginas(99, 10)).toEqual([1, 'ini', 6, 7, 8, 9, 10]);
+    expect(tramoDePaginas(0, 10)).toEqual([1, 2, 3, 4, 5, 'fin', 10]);
+  });
+  it('con poca distancia (<= 7 paginas) todas y sin marcas', () => {
     expect(tramoDePaginas(1, 1)).toEqual([1]);
     expect(tramoDePaginas(1, 5)).toEqual([1, 2, 3, 4, 5]);
+    expect(tramoDePaginas(3, 6)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(tramoDePaginas(4, 7)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 });

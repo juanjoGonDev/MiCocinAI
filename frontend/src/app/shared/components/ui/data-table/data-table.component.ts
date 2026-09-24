@@ -865,11 +865,14 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
         cursor: default;
       }
       .pag--num {
-        width: auto;
+        /* Casilla fija, no «minimo»: el 1 y el 39 miden lo mismo, que la hilera no respire
+           al cambiar de pagina (## 12ah). Tabular para que ni los digitos muevan el centro. */
+        width: 30px;
         min-width: 30px;
         height: 30px;
-        padding: 0 var(--space-2);
+        padding: 0;
         font-size: var(--text-xs);
+        font-variant-numeric: tabular-nums;
         border-radius: var(--radius-md);
       }
       .pag--on {
@@ -879,9 +882,13 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
         font-weight: var(--font-bold);
       }
       .pag__hueco {
+        /* La marca de salto ocupa la casilla de un numero, no un puntito flotante: siete
+           casillas son siete, con numero o con puntos (## 12ah). */
+        display: inline-grid;
+        place-items: center;
+        width: 30px;
+        height: 30px;
         color: var(--text-tertiary);
-        padding: 0 2px;
-        font-variant-numeric: tabular-nums;
       }
       .pag__cta {
         font-variant-numeric: tabular-nums;

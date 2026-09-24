@@ -357,29 +357,14 @@ export function tramoDePaginas(actual: number, ultima: number): (number | 'ini' 
   if (ultima <= 0) return [];
   if (ultima <= 7) return Array.from({ length: ultima }, (_, i) => i + 1);
   const centro = Math.min(Math.max(actual, 1), ultima);
-  const visibles = new Set<number>([1, ultima, centro - 1, centro, centro + 1]);
-  // Ventana PROGRESIVA al estilo MUI: pegado al extremo, la hilera se rellena del extremo hacia la pagina
-  // actual en vez de dejar un «1 … 3 4 5» con hueco junto a la frontera. Sin esto, el paginador parece
-  // roto en las primeras paginas —«hasta que no avanzas no salen mas hermanos», ## 12af— y el hueco
-  // pegado al 1 no es un hueco, es una costura mal cosida.
-  if (centro <= 4) for (let p = 1; p <= centro + 1; p++) visibles.add(p);
-  if (centro >= ultima - 3) for (let p = centro - 1; p <= ultima; p++) visibles.add(p);
-  const paginas = [...visibles].filter((p) => p >= 1 && p <= ultima).sort((x, y) => x - y);
-  const salida: (number | 'ini' | 'fin')[] = [];
-  let anterior = 0;
-  for (const p of paginas) {
-    const hueco = p - anterior - 1;
-    if (anterior === 0) {
-      /* primera pagina, sin hueco que contar */
-    } else if (hueco === 1) {
-      salida.push(p - 1);
-    } else if (hueco > 1) {
-      salida.push(p === ultima ? 'fin' : 'ini');
-      // un hueco entre medias de dos bloques que NO son el extremo es «ini» por la izquierda y «fin» por la
-      // derecha: la marca unica que dibuja el navegador es una sola, y va en el primer salto que aparece.
-    }
-    salida.push(p);
-    anterior = p;
-  }
-  return salida;
+  // SIEMPRE siete casillas mientras haya mas de siete paginas (## 12ah): la hilera de numeros es lo
+  // unico del pie que cambia al navegar, y si en la pagina 1 pinta cuatro casillas y en la 5 pinta siete,
+  // el pie entero respira con cada clic y la tabla baila debajo. Antes la ventana era «lo que saliera»
+  // («1 2 … 10», «1 … 4 5 6 … 20»): lo que gana en casillas lo pierde el ancho. Siete fijas —la marca
+  // «…» mide exactamente lo que un numero, que para eso el CSS la encaja en la misma casilla— y el
+  // mismo total en la primera pagina que en la ultima.
+  if (centro <= 4) return [1, 2, 3, 4, 5, 'fin', ultima];
+  if (centro >= ultima - 3)
+    return [1, 'ini', ultima - 4, ultima - 3, ultima - 2, ultima - 1, ultima];
+  return [1, 'ini', centro - 1, centro, centro + 1, 'fin', ultima];
 }
