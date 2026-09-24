@@ -41,7 +41,12 @@ export default defineConfig({
     ['list'],
     // Informe aparte: mezclarlo con el de la suite de desarrollo haria imposible saber
     // de que job es un fallo que se abre en el navegador.
-    ['html', { open: 'never', outputFolder: 'playwright-report/full-stack' }]
+    ['html', { open: 'never', outputFolder: 'playwright-report/full-stack' }],
+    // CUARTA CAUSA del job mudo, y la buena: `scripts/ci-e2e-summary.mjs` anota los fallos leyendo este
+    // json, y el config del rescate se quedo sin el reporter —el job corria la suite ENTERA (4 min),
+    // fallaba lo que debia fallar, y el parte decia «no se encontro results.json» como si no hubiera
+    // pasado nada. Mismo fichero y misma ruta que la suite de desarrollo.
+    ['json', { outputFile: 'test-results/results.json' }]
   ],
   use: {
     baseURL: base,
