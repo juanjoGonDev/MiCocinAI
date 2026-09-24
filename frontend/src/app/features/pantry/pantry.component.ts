@@ -343,7 +343,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                       (click)="quitarUnidad(filaIngrediente(fila))"
                       [attr.data-test]="'pantry-stock-menos-' + filaId(fila)"
                     >
-                      <app-icon name="remove" [size]="16" [label]="null" />
+                      <app-icon name="remove" [size]="14" [label]="null" />
                     </button>
                   </app-tooltip>
                   <span class="ingredient-item__quantity">{{ filaCantidad(fila) }}</span>
@@ -355,7 +355,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                       (click)="anadirUnidad(filaIngrediente(fila))"
                       [attr.data-test]="'pantry-stock-mas-' + filaId(fila)"
                     >
-                      <app-icon name="add" [size]="16" [label]="null" />
+                      <app-icon name="add" [size]="14" [label]="null" />
                     </button>
                   </app-tooltip>
                 </span>
@@ -920,13 +920,15 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
       .pantry__stock {
         display: inline-flex;
         align-items: center;
-        gap: var(--space-1);
+        gap: 2px;
       }
+      /* 36px de boton para +/- en cada fila era un ladrillo: la mitad del alto de la fila se iba en el
+         stepper (pedido ## 12af, «empéqueñelos»). 28 sigue siendo un blanco comodo y el icono manda. */
       .stock-btn {
         display: grid;
         place-items: center;
-        width: 36px;
-        height: 36px;
+        width: 28px;
+        height: 28px;
         color: var(--text-secondary);
         background: var(--bg-tertiary);
         border: 1px solid var(--border-default);
