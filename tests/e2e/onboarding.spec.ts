@@ -130,9 +130,18 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     // Los módulos se contestan en el tour, pero su sitio de edicion es Configuracion:
     // Preferencias ya no los pinta (son de la app, no del comensal).
     await page.goto('/settings');
-    await expect(page.locator('[data-module-switch="shopping"]')).toHaveAttribute('aria-checked', 'true');
-    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute('aria-checked', 'true');
-    await expect(page.locator('[data-module-switch="pantry"]')).toHaveAttribute('aria-checked', 'false');
+    await expect(page.locator('[data-module-switch="shopping"]')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    await expect(page.locator('[data-module-switch="pantry"]')).toHaveAttribute(
+      'aria-checked',
+      'false'
+    );
 
     await page.goto('/preferences');
     await page.locator('.tab', { hasText: 'Alergias' }).click();
@@ -223,15 +232,26 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await page.keyboard.press('Escape');
     await expect(page.locator('.onboarding__step-label')).toContainText('Paso 3 de 6 · Gustos');
     // ...y Enter pasa al siguiente, sin cerrar el tour (eso sigue siendo un boton).
-    await page.locator('input[name="chip-select-custom"]').focus();
+    // `.last()`: los pasos ya visitados siguen montados, y el de Alergias trae su propio input libre —el
+    // localizador estricto encontraban dos desde que el tour guarda lo Contestado (## 12af).
+    await page.locator('input[name="chip-select-custom"]').last().focus();
     await page.keyboard.press('Enter');
     await expect(page.locator('.onboarding__step-label')).toContainText('Paso 4 de 6 · Objetivo');
     await expect(page).toHaveURL(/onboarding/);
 
     // Lo que ya estaba contestado no se pierde por saltar otro paso
     await page.locator('.onboarding__goal', { hasText: 'Variada' }).click();
+    // «Guardar y empezar» solo existe en el ULTIMO paso: desde la ronda de los horarios el tour cerraba en
+    // Objetivo y ahora quedan Horarios y Cocina por delante; el spec seguia saltando directo al boton de
+    // otro añares (invisible: su shard se cancela siempre en CI) (## 12af).
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+    await page.getByRole('button', { name: 'Siguiente →' }).click();
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 6 de 6');
     await page.getByRole('button', { name: 'Guardar y empezar' }).click();
-    await expect(page.locator('.toast--success')).toBeVisible();
+    // `.last()`: el alta de arriba aun tiene su toast en pantalla, y el del tour es el que importa —el
+    // texto antes era la clave cruda porque `save` no traducía (arreglado en la ## 12af).
+    await expect(page.locator('.toast--success').last()).toContainText('Listo');
+    await expect(page).toHaveURL(/dashboard/);
   });
 
   test('los horarios del tour y de Preferencias son el mismo ajuste', async ({ page }) => {
@@ -248,7 +268,11 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await expect(page.getByRole('button', { name: 'Por defecto' })).toHaveCount(1);
     await page.getByRole('button', { name: 'Por defecto' }).click();
     await expect(page.locator('#meal-dinner')).toHaveValue('20:30');
-    await expect(page.locator('.preferences__state')).not.toContainText('Hay cambios sin guardar');
+    // El aviso de «sin guardar» no se esconde: deja de existir (el span vive dentro de un *ngIf), asi que se
+    // cuenta, no se le pide texto a un fantasma (## 12af).
+    await expect(
+      page.locator('.preferences__state', { hasText: 'Hay cambios sin guardar' })
+    ).toHaveCount(0);
     await page.fill('#meal-dinner', '22:15');
     await page.getByRole('button', { name: 'Guardar preferencias' }).click();
     await expect(page.locator('.toast--success').filter({ hasText: 'Guardado' })).toBeVisible();
@@ -284,7 +308,8 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     // `app-checkbox` es un `button[role="checkbox"]` con el `data-test` en el propio elemento: no hay ningun
     // input dentro que marcar (esperarlo era esperar 45 segundos a un localizador que no existe). Se pulsa por
     // su rol y se comprueba por `aria-checked`, igual que en `pantry-managers.spec.ts`.
-    const casilla = (comida: string) => page.locator(`[data-test="gen-meal-${comida}"] [role="checkbox"]`);
+    const casilla = (comida: string) =>
+      page.locator(`[data-test="gen-meal-${comida}"] [role="checkbox"]`);
     await casilla('snack').click();
     await casilla('dinner').click();
     await expect(casilla('snack')).toHaveAttribute('aria-checked', 'false');

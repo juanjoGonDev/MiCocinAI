@@ -63,7 +63,10 @@ const PANTALLAS: { ruta: string; es: string; en: string }[] = [
   { ruta: '/dashboard', es: 'Recetas', en: 'Recipes' },
   { ruta: '/recipes', es: 'Filtros', en: 'Filters' },
   { ruta: '/pantry', es: 'Inventario', en: 'Inventory' },
-  { ruta: '/shopping', es: 'Pendientes', en: 'Pending' },
+  // El h1 de la bandeja, no un tab: «Pendientes» vive en la DETALLE de la lista con contador, y una casa
+  // recién registrada no tiene pestaña que ver —el par este estaba inventado (## 12af, visible al correr
+  // el spec fuera del shard 2 cancelado).
+  { ruta: '/shopping', es: 'Lista de la compra', en: 'Shopping list' },
   { ruta: '/calendar', es: 'Calendario', en: 'Calendar' },
   { ruta: '/account', es: 'Configuración', en: 'Settings' },
   { ruta: '/preferences', es: 'Horarios', en: 'Meal times' }
@@ -79,7 +82,11 @@ async function textoVisible(page: Page): Promise<string> {
     nodos
       .map((n) => {
         const e = n as HTMLElement;
-        return [e.getAttribute('placeholder'), e.getAttribute('title'), e.getAttribute('aria-label')]
+        return [
+          e.getAttribute('placeholder'),
+          e.getAttribute('title'),
+          e.getAttribute('aria-label')
+        ]
           .filter(Boolean)
           .join(' · ');
       })
@@ -93,15 +100,19 @@ async function textoVisible(page: Page): Promise<string> {
 function contiene(texto: string, frase: string): boolean {
   // Con limite de palabra y distinguiendo mayusculas: `Add` dentro de `Address`, o `Edit` dentro de
   // `Editing hours` en la hoja de calculo de alguien, no pueden hacer fallar un test de idioma.
-  return new RegExp(`(^|[^A-Za-zÁ-ÿ])${frase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Za-zÁ-ÿ]|$)`).test(
-    texto
-  );
+  return new RegExp(
+    `(^|[^A-Za-zÁ-ÿ])${frase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Za-zÁ-ÿ]|$)`
+  ).test(texto);
 }
 
 async function elegirIdioma(page: Page, opcion: 'English' | 'Español'): Promise<void> {
+  // Por `data-test`, no por el nombre: las etiquetas llevan bandera y se traducen («Spanish» con la app en
+  // inglés), y el acceso exacto por nombre dejó de coincidir el día que los botones ganaron el emoji —la
+  // prueba era ciega y el `exact: true` se quedó esperando 45 s en las dos opciones (## 12af).
+  const clave = opcion === 'English' ? 'en' : 'es';
   await page.goto('/settings');
   await expect(page.locator('.settings-group__title').nth(1)).toBeVisible();
-  await page.getByRole('button', { name: opcion, exact: true }).click();
+  await page.locator(`[data-test="settings-lang-${clave}"]`).click();
 }
 
 test.describe('el idioma llega a toda la app', () => {
@@ -135,18 +146,23 @@ test.describe('el idioma llega a toda la app', () => {
     // es lo que se vuelva a pintar desde cero, y una navegacion lo disimula. Por eso aqui se pulsa EN LA
     // MISMA pantalla y se mira el mismo nodo: 'Recetas' tiene que volverse 'Recipes' sin un solo `goto`.
     await elegirIdioma(page, 'English');
-    const etiqueta = page.locator('.sidebar__label').filter({ hasText: /Recipes|Recetas/ }).first();
+    const etiqueta = page
+      .locator('.sidebar__label')
+      .filter({ hasText: /Recipes|Recetas/ })
+      .first();
     if (!(await isVisibleNow(etiqueta))) {
-      test.skip(true, 'en esta viewport la navegacion no usa .sidebar__label (la cubre el resto de la suite)');
+      test.skip(
+        true,
+        'en esta viewport la navegacion no usa .sidebar__label (la cubre el resto de la suite)'
+      );
     }
     await expect(etiqueta).toHaveText('Recipes');
-    await page.getByRole('button', { name: 'Español', exact: true }).click();
+    await page.locator('[data-test="settings-lang-es"]').click();
     await expect(etiqueta).toHaveText('Recetas');
   });
 
-
-/** En la pagina de Configuracion no hay navegacion: se comprueba el nodo tal cual esta. */
-async function isVisibleNow(locator: import('@playwright/test').Locator): Promise<boolean> {
-  return (await locator.count()) > 0 && locator.first().isVisible();
-}
+  /** En la pagina de Configuracion no hay navegacion: se comprueba el nodo tal cual esta. */
+  async function isVisibleNow(locator: import('@playwright/test').Locator): Promise<boolean> {
+    return (await locator.count()) > 0 && locator.first().isVisible();
+  }
 });
