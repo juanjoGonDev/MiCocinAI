@@ -97,13 +97,11 @@ describe('app-meal-hours', () => {
   });
 
   it('el boton solo existe donde hay algo que deshacer, y eso es lo que pinta la plantilla', () => {
-    // El contrato con la pantalla es este par de funciones: `*ngIf="isDefault(...)"` decide si el boton
-    // existe. Si un refactor las juntaba en una sola, aqui se nota.
+    // El contrato con la pantalla es este par de funciones: `*ngIf="isNotDefault(...)"` decide si el boton
+    // existe —solo en la fila que se ha tocado—. Si un refactor las juntaba en una sola, aqui se nota.
     const component = withTimes({ dinner: '22:15', lunch: '14:00' });
-    expect(component.rows.filter((row) => component.isDefault(row.type)).map((row) => row.type)).toEqual([
-      'breakfast',
-      'lunch',
-      'snack'
-    ]);
+    expect(
+      component.rows.filter((row) => component.isNotDefault(row.type)).map((row) => row.type)
+    ).toEqual(['dinner']);
   });
 });

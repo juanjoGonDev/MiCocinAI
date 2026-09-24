@@ -1,7 +1,13 @@
 import { ChangeDetectionStrategy, Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { MEAL_ORDER, MEAL_TIME_DEFAULTS, MealPlan, MealTimes, MealType } from '../../../models/calendar.model';
+import {
+  MEAL_ORDER,
+  MEAL_TIME_DEFAULTS,
+  MealPlan,
+  MealTimes,
+  MealType
+} from '../../../models/calendar.model';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { MEAL_LABEL_KEYS } from '../../../../core/i18n/labels';
 import type { TranslationKey } from '../../../../core/i18n';
@@ -40,9 +46,7 @@ interface MealHourRow {
 @Component({
   selector: 'app-meal-hours',
   standalone: true,
-  imports: [
-    TranslatePipe,
-    CommonModule, FormsModule, CheckboxComponent],
+  imports: [TranslatePipe, CommonModule, FormsModule, CheckboxComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="meal-hours" role="group" [attr.aria-label]="groupLabel ?? ('ui.meal_hours' | t)">
@@ -58,9 +62,12 @@ interface MealHourRow {
           [ngModel]="times[row.type]"
           (ngModelChange)="write(row.type, $event)"
         />
-        <!-- Vaciar un input de hora no es una decision, asi que aqui no se explica: se pulsa el boton. -->
+        <!-- Vaciar un input de hora no es una decision, asi que aqui no se explica: se pulsa el boton.
+             El boton vive en la fila TOCADA (isNotDefault): donde la hora ya es la de siempre no hay nada
+             que deshacer. (La condicion estuvo al reves desde el nacimiento del componente; lo delataba el
+             registro nuevo con cuatro «Por defecto» en fila, HOGARIA-SPEC ## 12af.) -->
         <button
-          *ngIf="isDefault(row.type)"
+          *ngIf="isNotDefault(row.type)"
           type="button"
           class="meal-hours__reset"
           [attr.data-test]="dataTest ? dataTest + '-reset-' + row.type : null"
@@ -185,11 +192,11 @@ interface MealHourRow {
           transition: none;
         }
       }
-    `,
-  ],
+    `
+  ]
 })
 export class MealHoursComponent {
-  @Input({required: true}) times!: MealTimes;
+  @Input({ required: true }) times!: MealTimes;
   /** Prefijo de los ids: `meal` en Preferencias, `ob-meal` en el tour. */
   @Input() idPrefix = 'meal';
   /** Un `data-test` por fila (`...-<tipo>`), para los e2e que ya existen. */
