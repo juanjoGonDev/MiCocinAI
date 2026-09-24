@@ -5,6 +5,17 @@ export const PANTRY_ROUTES: Routes = [
     path: '',
     loadComponent: () => import('./pantry.component').then(m => m.PantryComponent)
   },
+  // La ficha del articulo de inventario (## 12ai): detalle con sus caracteristicas y su historia
+  // de precios por tienda; la edicion es su propia pantalla, no un modal —pedida asi—. Ambas
+  // viven en su URL para que un F5 o el boton atras signifiquen lo mismo que en el resto.
+  {
+    path: 'inventario/:id/editar',
+    loadComponent: () => import('./pantry-item-edit.component').then(m => m.PantryItemEditComponent)
+  },
+  {
+    path: 'inventario/:id',
+    loadComponent: () => import('./pantry-item.component').then(m => m.PantryItemComponent)
+  },
   // El gestor del inventario (HOGARIA-SPEC ## 12x): dos pantallas enrutadas, cada una con su ficha, para que
   // un F5 a media edicion no la tire y el boton atras del navegador signifique lo que significa en el resto
   // de la app. `new` es el alta, no un modal: misma pantalla, sin fila que editar.

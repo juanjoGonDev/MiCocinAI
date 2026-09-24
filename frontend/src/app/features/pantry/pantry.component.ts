@@ -330,7 +330,17 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                     [style.background]="colorDe(filaCat(fila))"
                     aria-hidden="true"
                   ></span>
-                  <span>{{ filaNombre(fila) | catalog }}</span>
+                  <!-- El nombre es el enlace a la ficha del articulo (## 12ai): href de verdad y
+                       navegacion propia, para que el boton central y «abrir en pestana nueva»
+                       sigan siendo un enlace y no un boton disfrazado (el patron de la cesta). -->
+                  <a
+                    class="celda-nombre__enlace"
+                    [href]="hrefDeItem(fila)"
+                    (click)="abrirItem(fila, $event)"
+                    [attr.aria-label]="'pantry.abrir_articulo' | t: { name: filaNombre(fila) }"
+                    [attr.data-test]="'pantry-item-' + filaId(fila)"
+                    >{{ filaNombre(fila) | catalog }}</a
+                  >
                 </span>
               </ng-template>
               <ng-template appDataTableCell="cantidad" let-fila>
@@ -916,6 +926,18 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
         gap: var(--space-2);
         min-width: 0;
         font-weight: var(--font-medium);
+      }
+      /* El nombre enlaza a la ficha (## 12ai): subrayado solo al pasar, que la tabla ya grita
+         bastante como para andar pintando enlaces por defecto en cada fila. */
+      .celda-nombre__enlace {
+        color: inherit;
+        text-decoration: none;
+        overflow-wrap: anywhere;
+      }
+      .celda-nombre__enlace:hover {
+        text-decoration: underline;
+        text-decoration-color: var(--primary);
+        text-underline-offset: 3px;
       }
       .pantry__stock {
         display: inline-flex;
@@ -1565,6 +1587,18 @@ export class PantryComponent implements OnInit {
   protected filaId(fila: unknown): string {
     return String((fila as { id: string }).id);
   }
+
+  /** El href de la ficha del articulo (## 12ai): de verdad, para que el boton central del raton
+   *  y el «abrir en pestana nueva» sigan siendo un enlace y no un boton disfrazado. */
+  protected hrefDeItem(fila: unknown): string {
+    return `/pantry/inventario/${this.filaId(fila)}`;
+  }
+
+  protected abrirItem(fila: unknown, event: Event): void {
+    event.preventDefault();
+    void this.router.navigate(['/pantry', 'inventario', this.filaId(fila)]);
+  }
+
   protected filaNombre(fila: unknown): string {
     return String((fila as { name: string }).name ?? '');
   }

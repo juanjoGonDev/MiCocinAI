@@ -125,6 +125,21 @@ export class PantryService {
     );
   }
 
+  /**
+   * La ficha de UN articulo, con su huella —lineas de cesta y observaciones de precio que cuelgan
+   * de su clave— (## 12ai). La pantalla de detalle no pagina ni filtra: pide el producto y ya esta.
+   */
+  async getProduct(id: string): Promise<PantryProduct | null> {
+    try {
+      const response = await firstValueFrom(
+        this.http.get<{ data: PantryProduct }>(`${this.apiUrl}/products/${id}`)
+      );
+      return response?.data ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   createIngredient(data: CreateIngredientInput): Observable<Ingredient | null> {
     return this.http.post<any>(`${this.apiUrl}/ingredients`, data).pipe(
       tap(response => {

@@ -1,8 +1,7 @@
 import { Injectable, DestroyRef, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpContext, HttpParams } from '@angular/common/http';
-import { Observable, fromEvent } from 'rxjs';
+import { Observable, fromEvent, of, firstValueFrom } from 'rxjs';
 import { catchError, finalize, map, tap } from 'rxjs/operators';
-import { of } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { openResilientStream } from '../../core/sse';
 import { ToastService } from './toast.service';
@@ -611,6 +610,32 @@ export class ShoppingService {
       .get<{ data: PriceObservation[] }>(`${this.apiUrl}/prices`)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({ next: response => this.prices.set(response.data), error: () => this.prices.set([]) });
+  }
+
+  /**
+   * Las observaciones de precio de UNA clave de producto (## 12ai): la ficha del articulo pinta su
+   * historia por tienda, y la historia no cabe en la pagina de siempre. El filtro es por clave exacta
+   * —el mismo vocabulario con el que la cesta enlaza lineas— y se bucea hasta agotar las paginas,
+   * con el mismo techo de rigor que el visor de la despensa.
+   */
+  async preciosDeProducto(productKey: string): Promise<PriceObservation[]> {
+    const todas: PriceObservation[] = [];
+    const limit = 200;
+    for (let pagina = 0; pagina < 10; pagina++) {
+      const params = new HttpParams()
+        .set('productKey', productKey)
+        .set('limit', String(limit))
+        .set('offset', String(pagina * limit));
+      const response = await firstValueFrom(
+        this.http.get<{ data: PriceObservation[] }>(`${this.apiUrl}/prices`, { params }).pipe(
+          catchError(() => of(null))
+        )
+      );
+      const lote = response?.data ?? [];
+      todas.push(...lote);
+      if (lote.length < limit) break;
+    }
+    return todas;
   }
 
   addPrice(input: {

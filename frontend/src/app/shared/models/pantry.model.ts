@@ -97,6 +97,9 @@ export interface PantryProductInput {
   expirationDate?: string | null;
   notes?: string | null;
   aliases?: string[] | null;
+  /** La ficha del articulo (## 12ai) edita tambien donde vive y su codigo de barras. */
+  location?: StorageLocation | null;
+  barcode?: string | null;
 }
 
 /**
