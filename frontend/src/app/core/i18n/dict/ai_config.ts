@@ -27,10 +27,12 @@ export const aiConfigEs = {
   'ai_config.conexion_exitosa': '¡Conexión exitosa!',
   'ai_config.activar': '▶️ Activar',
   'ai_config.0_preciso_2_creativo': '0 = Preciso, 2 = Creativo',
-  'ai_config.agrega_un_proveedor_de': 'Agrega un proveedor de IA para empezar a generar recetas',
+  'ai_config.agrega_un_proveedor_de':
+    'Agrega un proveedor de IA para que el planificador y las sugerencias funcionen',
   'ai_config.agregar_configuracion': '+ Agregar configuración',
   'ai_config.api_key': 'API Key',
-  'ai_config.conecta_tu_proveedor_de': 'Conecta tu proveedor de IA para generar recetas personalizadas. Soporta cualquier API compatible con OpenAI.',
+  'ai_config.conecta_tu_proveedor_de':
+    'Conecta tu proveedor de IA para que la app proponga recetas, menús y cestas a tu medida. Soporta cualquier API compatible con OpenAI.',
   'ai_config.configuracion_ia': '🤖 Configuración IA',
   'ai_config.custom_openai_like': 'Custom (OpenAI-like)',
   'ai_config.editar': '✏️ Editar',
@@ -52,7 +54,7 @@ export const aiConfigEs = {
   'ai_config.no_se_pudo_conectar': 'Couldn’t connect',
   'ai_config.n_configuraciones_uno': '{count} configuración',
   'ai_config.n_configuraciones_varios': '{count} configuraciones',
-  'ai_config.pendiente': 'Pendiente',
+  'ai_config.pendiente': 'Pendiente'
 } as const;
 
 export const aiConfigEn: Record<keyof typeof aiConfigEs, string> = {
@@ -80,10 +82,12 @@ export const aiConfigEn: Record<keyof typeof aiConfigEs, string> = {
   'ai_config.conexion_exitosa': 'Connection test passed!',
   'ai_config.activar': '▶️ Activate',
   'ai_config.0_preciso_2_creativo': '0 = Precise, 2 = Creative',
-  'ai_config.agrega_un_proveedor_de': 'Add an AI provider to start generating recipes',
+  'ai_config.agrega_un_proveedor_de':
+    'Add an AI provider so the planner and the suggestions start working',
   'ai_config.agregar_configuracion': '+ Add configuration',
   'ai_config.api_key': 'API Key',
-  'ai_config.conecta_tu_proveedor_de': 'Connect your AI provider to generate personalised recipes. Any OpenAI-compatible API works.',
+  'ai_config.conecta_tu_proveedor_de':
+    'Connect your AI provider so the app can tailor recipes, menus and baskets to you. Any OpenAI-compatible API works.',
   'ai_config.configuracion_ia': '🤖 AI Settings',
   'ai_config.custom_openai_like': 'Custom (OpenAI-like)',
   'ai_config.editar': '✏️ Edit',
@@ -107,5 +111,5 @@ export const aiConfigEn: Record<keyof typeof aiConfigEs, string> = {
   'ai_config.no_se_pudo_conectar': 'No se pudo conectar',
   'ai_config.n_configuraciones_uno': '{count} config',
   'ai_config.n_configuraciones_varios': '{count} configs',
-  'ai_config.pendiente': 'Not run yet',
+  'ai_config.pendiente': 'Not run yet'
 };

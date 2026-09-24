@@ -18,10 +18,10 @@ export const dashboardEs = {
   'dashboard.pantry': 'Mi Inventario',
   'dashboard.plan': 'Planificar',
   'dashboard.planNow': 'Planificar ahora',
-  'dashboard.subtitle': '¿Qué vamos a cocinar hoy?',
+  'dashboard.subtitle': 'Tu casa, de un vistazo',
   'dashboard.suggested': 'Recetas sugeridas',
   'dashboard.todayMeals': 'Comidas de hoy',
-  'dashboard.viewAll': 'Ver todo →',
+  'dashboard.viewAll': 'Ver todo →'
 } as const;
 
 export const dashboardEn: Record<keyof typeof dashboardEs, string> = {
@@ -36,8 +36,8 @@ export const dashboardEn: Record<keyof typeof dashboardEs, string> = {
   'dashboard.pantry': 'My Inventory',
   'dashboard.plan': 'Plan',
   'dashboard.planNow': 'Plan now',
-  'dashboard.subtitle': 'What are we cooking today?',
+  'dashboard.subtitle': 'Your home at a glance',
   'dashboard.suggested': 'Suggested recipes',
-  'dashboard.todayMeals': 'Today\'s meals',
-  'dashboard.viewAll': 'See all →',
+  'dashboard.todayMeals': "Today's meals",
+  'dashboard.viewAll': 'See all →'
 };

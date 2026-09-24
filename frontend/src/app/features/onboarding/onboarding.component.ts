@@ -54,8 +54,9 @@ import { I18nService } from '../../core/services/i18n.service';
     ChipSelectComponent,
     MealHoursComponent,
     HomeProfilePickerComponent,
-    LoadingComponent
-  , CatalogLabelPipe],
+    LoadingComponent,
+    CatalogLabelPipe
+  ],
   template: `
     <div class="onboarding">
       <div class="onboarding__card" (keydown)="onCardKeydown($event)">
@@ -63,7 +64,7 @@ import { I18nService } from '../../core/services/i18n.service';
           <span class="onboarding__logo">🏠</span>
           <h1 class="onboarding__title">{{ 'onboarding.configura_tu_hogaria' | t }}</h1>
           <p class="onboarding__subtitle">
-            {{ 'onboarding.preguntas_cortas' | t:{n: steps.length} }}
+            {{ 'onboarding.preguntas_cortas' | t: { n: steps.length } }}
           </p>
         </header>
 
@@ -74,7 +75,9 @@ import { I18nService } from '../../core/services/i18n.service';
           <span class="onboarding__bar" aria-hidden="true">
             <span class="onboarding__bar-fill" [style.width.%]="progress()"></span>
           </span>
-          <button type="button" class="onboarding__skip" (click)="skip()">{{ 'onboarding.saltar_por_ahora' | t }}</button>
+          <button type="button" class="onboarding__skip" (click)="skip()">
+            {{ 'onboarding.saltar_por_ahora' | t }}
+          </button>
         </div>
 
         <section class="onboarding__step" [ngSwitch]="steps[stepIndex()]">
@@ -82,7 +85,7 @@ import { I18nService } from '../../core/services/i18n.service';
           <ng-container *ngSwitchCase="'profile'">
             <h2 class="onboarding__step-title">{{ 'preferences.tu_perfil' | t }}</h2>
             <p class="onboarding__step-hint">
-              {{ 'onboarding.hogaria_es_cocina_y' | t }}
+              {{ 'onboarding.hogaria_es_tu_dia_a_dia' | t }}
             </p>
             <app-home-profile-picker
               [(profile)]="profile"
@@ -218,7 +221,10 @@ import { I18nService } from '../../core/services/i18n.service';
               {{ 'onboarding.lo_que_no_marques' | t }}
             </p>
 
-            <app-loading *ngIf="isLoadingUtensils()" [message]="'onboarding.cargando_utensilios' | t"></app-loading>
+            <app-loading
+              *ngIf="isLoadingUtensils()"
+              [message]="'onboarding.cargando_utensilios' | t"
+            ></app-loading>
 
             <div class="utensil-grid" *ngIf="!isLoadingUtensils()">
               <label
@@ -659,7 +665,11 @@ export class OnboardingComponent implements OnInit {
 
   toggleUtensil(utensil: Utensil): void {
     this.pantryService.updateUtensil(utensil.id, { available: !utensil.available }).subscribe({
-      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('onboarding.no_se_pudo_guardar'))
+      error: () =>
+        this.toastService.error(
+          this.i18n.t('ui.error'),
+          this.i18n.t('onboarding.no_se_pudo_guardar')
+        )
     });
   }
 
@@ -690,7 +700,8 @@ export class OnboardingComponent implements OnInit {
     const inputType = (target as HTMLInputElement | null)?.type;
 
     if (event.key === 'Enter') {
-      if (tag === 'TEXTAREA' || tag === 'BUTTON' || target?.getAttribute('role') === 'button') return;
+      if (tag === 'TEXTAREA' || tag === 'BUTTON' || target?.getAttribute('role') === 'button')
+        return;
       // Y no acaba el tour: terminar y guardar tiene que ser un boton, no una tecla que se pulsa sola.
       event.preventDefault();
       this.next();
@@ -745,17 +756,18 @@ export class OnboardingComponent implements OnInit {
   private save(status: 'done' | 'skipped', title: TranslationKey, body: TranslationKey): void {
     this.isSaving.set(true);
 
-    this.tasteService
-      .save(this.taste, status, this.profile, this.mealTimesPatch())
-      .subscribe({
+    this.tasteService.save(this.taste, status, this.profile, this.mealTimesPatch()).subscribe({
       next: () => {
         this.isSaving.set(false);
-        this.toastService.success(title, body);
+        this.toastService.success(this.i18n.t(title), this.i18n.t(body));
         this.router.navigate(['/dashboard']);
       },
       error: () => {
         this.isSaving.set(false);
-        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('ai_config.no_se_pudo_guardar'));
+        this.toastService.error(
+          this.i18n.t('ui.error'),
+          this.i18n.t('ai_config.no_se_pudo_guardar')
+        );
       }
     });
   }
