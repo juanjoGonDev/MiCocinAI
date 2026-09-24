@@ -6,6 +6,7 @@ import { formatDateTime } from '../../core/time';
 import { listCategoryLabelKey } from '../../core/i18n/labels';
 import { UnitPickerComponent } from './unit-picker.component';
 import { canonicalUnit, isKnownUnit } from './unit-families';
+import { seccionDeLista } from './seccion-de-catalogo';
 import {
   auditFace,
   describeLineDiscount,
@@ -2863,8 +2864,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (!raw) return;
     this.draftItem = '';
     // Si la ultima accion sobre el campo fue elegir una sugerencia, la linea se crea con el nombre del
-    // catalogo (que es lo que enlaza precio y ficha), la cantidad que el usuario dejo escrita y la unidad
-    // canonica del catalogo si el usuario no puso ninguna. Escribirlo a mano sigue valiendo igual.
+    // catalogo (que es lo que enlaza precio y ficha), la cantidad que el usuario dejo escrita, la unidad
+    // canonica del catalogo si el usuario no puso ninguna y la seccion de su pasillo: la hoja del super
+    // ya dice donde se compra y la linea no deberia esperar a que alguien la clasifique a mano (## 12ah).
+    // Escribirlo a mano sigue valiendo igual.
     const sug = this.sugElegida;
     this.sugElegida = null;
     this.cerrarSugerencias();
@@ -2873,7 +2876,8 @@ export class ShoppingListDetailComponent implements OnDestroy {
       ? {
           name: sug.producto.name,
           quantity: parsed.quantity,
-          unit: parsed.unit ?? sug.producto.unit
+          unit: parsed.unit ?? sug.producto.unit,
+          category: seccionDeLista(sug.producto.category)
         }
       : parsed;
     await this.shopping.addItem(this.listId, input);
