@@ -4021,6 +4021,111 @@ y apellidos; no se reescriben los umbrales del presupuesto ni se maquillan los s
 restantes rojos = familia shopping (documentada en D) · [x] `check:ui`, karma y builds intactos (frontend
 no cambia).
 
+## 12af — De cocina a casa: copy generico, pistas en popover y buscador que respira
+
+**El parte (2026-09-23, ronda 34).** Tres cosas del usuario, una detras de otra: (1) «Tu asistente de cocina
+inteligente» ya no vale —la app es generica—, y lo mismo «¿Que vamos a cocinar hoy?» nada mas entrar; busca las
+demas frases asi. (2) «Te dije popover, no alt ni title: eso tarda en salir». (3) El buscador de la tabla «se ve
+pegado por abajo», quiere padding continuo.
+
+**A) Las frases de solo-cocina, fuera (diccionario ES e INGLAES, y el `index.html`).** La regla que se extrae:
+**el copy que posiciona la app entera no puede ser de cocina**; si la frase vive dentro de un modulo y habla del
+modulo (el nivel de cocina del onboarding, los utensilios de la despensa, el filtro de recetas), es literal y se
+queda. Los cambios, clave renombrada cuando la clave era la frase vieja:
+
+- `auth.tu_asistente_de_cocina` → `auth.tu_asistente_del_hogar`: «Tu asistente para tener la casa a punto» /
+  «Your assistant for keeping the home in order». Era el subtitulo del login y de crear cuenta.
+- `dashboard.subtitle`: «¿Que vamos a cocinar hoy?» → «Tu casa, de un vistazo» / «Your home at a glance».
+- `onboarding.hogaria_es_cocina_y` → `onboarding.hogaria_es_tu_dia_a_dia`: «HogarIA es el dia a dia de tu
+  casa: dinos como andas de cocina...» — la pregunta sigue siendo de cocina, la definicion de la app ya no.
+- `ai_config` (dos): el proveedor de IA ya no es «para generar recetas» a secas —«para que el planificador y
+  las sugerencias funcionen», y «recetas, menus y cestas a tu medida»—, que la IA de HogarIA es una sola para
+  todo.
+- `pantry.agrega_ingredientes_para_empezar`: el vacio del inventario no «empieza a generar recetas», empieza
+  por «contar que tienes en casa: la IA lo tendra en cuenta».
+- `pantry.quitar_del_catalogo`: el catalogo NO es «de tu cocina», es `de tu hogar` (el dialogo lo confirmaba,
+  y el EN decia «kitchen catalogue»).
+- `index.html <title>`: «Cocina, compra y hogar con IA» → «Tu casa, organizada con IA». La meta description ya
+  era generica desde la absorcion de Basketra.
+
+  Y lo que encontro la auditoria de placeholders era mas gordo que un token: trece claves de `onboarding`
+  entraron cruzadas de idioma en el diccionario en d9d1dc5 —en el bloque `es`, el ingles entero; en el `en`,
+  el espanol—. Nadie lo leyo nunca: el shard 2, el que contiene los specs de `onboarding` e `i18n-idioma`,
+  esta cancelado desde que existe el job. El arreglo es el intercambio de las 13 parejas (las claves ya estaban
+  en ambos bloques) y, de paso, `{title}`→`{titulo}`, que si era del codigo. Verificado con una sonda de
+  playwright-core —4 segundos de navegador— antes y despues del cambio: la cabecera del tour en ingles ya
+  no pinta el literal, y el espanol dice «Paso 5 de 6 · Horarios».
+
+**B) Las pistas son popover, no el title nativo (reincidente, y con razon).** El `title` de HTML tarda ~1 s en
+aparecer, no se puede estilizar y desaparece al pulsar; el `alt` ni es tooltip. El proyecto YA tenia
+`app-tooltip` (shared/ui) y nadie lo usaba: se usaba como pista-hover unica en toda la tanda de tablas:
+
+- Sale AL INSTANTE (`:hover` y `:focus-within` del wrapper, fade de 150 ms), y con el foco por teclado, que el
+  `title` no cubria.
+- Texto largo (el catalogo detras de un chip de sugerencia) se parte en varias lineas con tope de 280 px en vez
+  de desbordar la tarjeta — el `nowrap` del popover viejo estaba pensado para pistas cortas.
+- Migran sus `title`/`[attr.title]` al popover: el paginador de la tabla («por pagina» en el picker de tamano e
+  «Ir a la pagina N» en cada numero), la X de «Anular seleccion» de las cuatro barras de lote, el boton
+  «Quitar N del inventario» del catalogo (pista `..._quitar_info`), los iconos de fila (alta en casa, ±unidad,
+  editar, borrar —incluidas las pistas CONDICIONALES «en uso»/«en despensa» de categorias y productos—), el
+  borrado de utensilios y los chips de sugerencia del visor. El `aria-label` se queda donde estaba: el popover
+  es lo que se VE, el label es lo que se LEE.
+- Los `alt=""` de imagenes decorativas no se tocan: eso es accesibilidad, no pista. Y `app-modal` tiene un
+  `@Input() title` que no tiene nada que ver con tooltips.
+
+**C) El buscador de la tabla respira.** `.tabla__buscar` llevaba `padding: var(--space-3) var(--space-4) 0` —el
+cero de abajo dejaba el campo pegado a la cabecera de la tabla—. pasa a `var(--space-3) var(--space-4)`: padding
+continuo, la caja de busqueda es ahora un bloque con la misma holgura arriba y abajo dentro de la tarjeta.
+
+**D) Dos bugs de la app que salieron en el triaje, y que habria sido mentir tapar con los specs.** (1) _Horarios
+del tour al reves_: desde 528d2e3 el boton «Por defecto» de cada fila estaba atado a `*ngIf="isDefault(row.type)"`
+—aparecia cuando la hora NO estaba tocada y desaparecia al tocarla, o sea justo al reves de su funcion: no habia
+forma de deshacer—. Queda `isNotDefault`, el span de «estado por defecto» seguia bien, y el contrato de karma
+pide ahora `filter(isNotDefault)` → `['dinner']` con una fila tocada. (2) _El guardado del tour tosteaba la clave_:
+`save` del componente de onboarding comenta que traduce titulo y cuerpo al pintarlos, pero llamaba a
+`toastService.success(title, body)` en crudo —el toast salia literal «onboarding.listo» en los dos idiomas, y el
+`skip` igual con «onboarding.guardado»—. Ahora pasa `i18n.t(...)` y el e2e exige el texto «Listo», no solo
+que el toast exista.
+
+**E) El job full-stack corria pero no anotaba resultados.** Tras d787634 el E2E se ejecutaba de verdad (4,5 min
+en el run 35920837815) y el resumen seguia diciendo «sin resultados»: `playwright.full-stack.config.ts` no
+llevaba el reporter `json`, asi que nunca se escribia el `test-results/results.json` que lee
+`scripts/ci-e2e-summary.mjs` (el config de dev si lo lleva; nadie habia cruzado los dos). Anadido; verificado en
+local corriendo el pipeline sin flags `--reporter` (mandarlos a pelo en CLI pisa los del config): annotations con
+los 8 rojos reales de la tanda, con nombre y apellidos.
+
+**F) Los specs ciegos del shard 2, uno a uno.** Nadie los habia ejecutado nunca y se nota: `i18n-idioma` clicaba
+`getByRole('button', {name:'English', exact:true})` sobre botones que desde la migracion de banderas dicen
+«🇬🇧 English» —el `exact` jamas casaba; los 15 rojos del spec eran eso—, y para seleccionar idioma por test
+se han anadido `data-test="settings-lang-{auto,es,en}"` a los botones de Preferencias. `onboarding` pedia
+`toContainText` a un span `.preferences__state` que vive dentro de un `*ngIf` (no existe cuando no hay cambios: se
+cuenta con `toHaveCount(0)`, no se le pide texto al fantasma), localizaba el custom de gustos sin `.last()` y
+empataba entre dos pasos montados, y su test de «se puede saltar un paso» se habia quedado a mitad de tour —ahora
+llega al Paso 6 y pulsa «Guardar y empezar». Y el de `/shopping` esperaba una cabecera «Pendientes» que no
+existe: la bandeja vacia titula «Lista de la compra» / «Shopping list», que es el par que comprueba ahora. Regla
+que se queda: **correr los shards huerfanos en local con `--workers=1` antes de fiarse de un rojo o un verde de
+CI**.
+
+**G) Los rojos de movil no son de esta ronda.** Bajo `mobile-chrome` en esta maquina fallan seis tests (pantry:
+hoja de orden/filtro, chip de sugerencia, flechas del paginador; utensilios: el modal de alta) con «pointer
+events intercepted» por elementos vecinos. Reproducidos identicos sobre el arbol con `git stash` (sin ningun
+cambio de la ronda), es la excentricidad de hit-testing del emulador con overlays fijos ya anotada en la ronda 32;
+el CI no los cubria (shard 2 cancelado / specs posteriores al ultimo shard en pie). Quedan como deuda conocida,
+sin tocar.
+
+**H) Fuera de alcance, como siempre:** los rojos de deuda conocida (shopping, calendar, ai-goal, account,
+recipes, cancel-shard) no se tocan; el copy de los modulos que habla de su modulo sigue en su sitio.
+
+**Checklist.** [x] copies genericos en el diccionario (ES+EN) y en `index.html` · [x] ~19 pistas a `app-tooltip`,
+ningun `title`/`alt` de pista sobreviviente; `check:ui` 189 ficheros / 20 reglas / 0 incidencias · [x] padding
+continuo en `.tabla__buscar` (medido en e2e: arriba == abajo > 0) · [x] swap de `onboarding.ts` y toast con clave
+cruda, verificados con sonda y con e2e exigiendo texto traducido · [x] flip de meal-hours con contrato karma nuevo
+(karma dirigido: 186/188, los 2 rojos son checkbox/modal de siempre) · [x] reporter `json` en full-stack y
+`ci-e2e-summary` funcionando en local · [x] e2e tocados en verde: `onboarding` 6/6, `i18n-idioma` 16/16,
+`settings-theme-i18n` 6/6, `pantry`+familia+`preferences` 47/48 (el rojo, interference cross-spec bajo
+workers=2; en solitario verde) · [x] `build` de produccion, `typecheck:e2e` y dist al dia · [ ] los seis moviles
+de G, deuda nueva documentada.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
