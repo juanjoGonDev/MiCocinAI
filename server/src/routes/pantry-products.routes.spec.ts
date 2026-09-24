@@ -125,7 +125,6 @@ describe('GET /products', () => {
     const creada = await call('POST', '/products', { name: 'Tomate de colgar', category: 'vegetables', aliases: ['de rama', 'perita'] });
     expect(creada.payload.data.aliases).toEqual(['de rama', 'perita']);
   });
-
   it('la pagina dice cuantas hay, y el orden por nombre es por etiqueta traducible, no por clave', async () => {
     for (let i = 0; i < 12; i++) await call('POST', '/products', { name: `Producto ${String(i).padStart(2, '0')}`, category: 'other' });
     const primera = await call('GET', '/products?filter=staples&sort=name&limit=5');
@@ -133,6 +132,45 @@ describe('GET /products', () => {
     expect(primera.payload.meta.total).toBe(12);
     expect(primera.payload.data[0].name).toBe('Producto 00');
     expect(primera.payload.hasMore).toBe(true);
+  });
+});
+
+describe('GET /products/:id (## 12ai)', () => {
+  it('la ficha de un articulo llega entera, con la huella de su clave: cesta y precios', async () => {
+    const creada = await call('POST', '/products', {
+      name: 'Leche entera',
+      category: 'dairy',
+      quantity: 4,
+      unit: 'unit',
+      location: 'fridge',
+      barcode: '8480000123456',
+      aliases: ['la de siempre'],
+      notes: 'Entera, no semi'
+    });
+    expect(creada.status).toBe(201);
+    await anadirLineaDeCesta('Leche entera');
+    const ficha = await call('GET', `/products/${creada.payload.data.id}`);
+    expect(ficha.status).toBe(200);
+    expect(ficha.payload.data).toMatchObject({
+      id: creada.payload.data.id,
+      name: 'Leche entera',
+      category: 'dairy',
+      quantity: 4,
+      unit: 'unit',
+      inPantry: true,
+      location: 'fridge',
+      barcode: '8480000123456',
+      aliases: ['la de siempre'],
+      notes: 'Entera, no semi'
+    });
+    // La huella cuenta por clave de producto: una linea en la cesta y (de momento) ningun precio.
+    expect(ficha.payload.data.impact).toMatchObject({ listLines: 1, priceObservations: 0 });
+  });
+
+  it('lo que no existe (o no es de esta casa) es un 404 con su codigo, no un 500', async () => {
+    const ausente = await call('GET', '/products/no-existe');
+    expect(ausente.status).toBe(404);
+    expect(ausente.payload.error).toBe('PANTRY_PRODUCT_NOT_FOUND');
   });
 });
 
@@ -176,6 +214,17 @@ describe('PATCH y borrado', () => {
     expect(vaciada.status).toBe(200);
     expect(vaciada.payload.data.notes).toBeNull();
     expect(vaciada.payload.data.aliases).toEqual([]);
+  });
+
+  it('la ficha edita tambien la ubicacion y el codigo de barras, y null los devuelve a su sitio (## 12ai)', async () => {
+    const producto = await crearProducto('Yogur griego', { category: 'dairy', location: 'fridge', barcode: '8480000999999' });
+    const cambiada = await call('PATCH', `/products/${producto.id}`, { location: 'counter', barcode: '1234' });
+    expect(cambiada.status).toBe(200);
+    expect(cambiada.payload.data).toMatchObject({ location: 'counter', barcode: '1234' });
+    // La ubicacion no tiene «ninguna»: null vuelve a la despensa. El codigo si se quita de verdad.
+    const relajada = await call('PATCH', `/products/${producto.id}`, { location: null, barcode: null });
+    expect(relajada.status).toBe(200);
+    expect(relajada.payload.data).toMatchObject({ location: 'pantry', barcode: null });
   });
 
   it('renombrar no reescribe la historia: las lineas de cesta guardan la clave con la que se escribieron', async () => {

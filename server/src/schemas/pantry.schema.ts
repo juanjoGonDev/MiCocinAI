@@ -111,7 +111,12 @@ export const createProductSchema = z.object({
   quantity: formDefault(formNumber({ min: 0, max: 100000 }), 0),
   expirationDate: optionalDate('caducidad'),
   notes: formText(500, 'nota'),
-  aliases: formField(z.array(z.string().trim().min(1).max(60)).max(20))
+  aliases: formField(z.array(z.string().trim().min(1).max(60)).max(20)),
+  // La ficha del articulo (## 12ai) edita TODO lo que la fila sabe de si misma en un solo PUT
+  // semantico: la ubicacion y el codigo de barras tambien viajan por aqui. `null` en la ubicacion
+  // no significa «sin ubicacion» sino la de siempre (despensa), y en el codigo si es «quitar».
+  location: formField(storageLocationEnum),
+  barcode: formField(z.string().trim().max(32))
 });
 
 export const updateProductSchema = formPartial(createProductSchema);

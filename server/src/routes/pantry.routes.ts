@@ -901,6 +901,27 @@ pantryRoutes.get('/products', async (c) => {
   return c.json({ success: true, data, meta: { total, limit: q.limit, offset: q.offset }, hasMore: q.offset + data.length < total });
 });
 
+/**
+ * La ficha de UN articulo (## 12ai): la pantalla de detalle del inventario pide el producto con su
+ * huella —cuantas lineas de cesta y cuantas observaciones de precio cuelgan de su clave—, no la
+ * pagina entera filtrada en el cliente. Mismo alcance que el listado: la casa entera ve la ficha.
+ */
+pantryRoutes.get('/products/:id', async (c) => {
+  const db = getDatabase();
+  const casa = scopeDePantry(c.get('userId'));
+  const fila = productoO404(db, casa, c.req.param('id'));
+  if (!fila) return falla(c, 404, 'El producto no existe en esta casa', 'PANTRY_PRODUCT_NOT_FOUND');
+  const nombres = new Map(listCategories(db, casa).map((categoria) => [categoria.key, categoria.name]));
+  const impacto = impactoProducto(db, fila);
+  return c.json({
+    success: true,
+    data: {
+      ...productoDe(fila, nombres),
+      impact: { listLines: impacto.listLines, priceObservations: impacto.priceObservations }
+    }
+  });
+});
+
 pantryRoutes.post('/products', async (c) => {
   const db = getDatabase();
   const userId = c.get('userId');
@@ -923,7 +944,7 @@ pantryRoutes.post('/products', async (c) => {
   const id = nanoid();
   db.prepare(
     `INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit, expiration_date, location, image, barcode, notes, aliases)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pantry', NULL, NULL, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`
   ).run(
     id,
     userId,
@@ -933,6 +954,8 @@ pantryRoutes.post('/products', async (c) => {
     input.quantity ?? 0,
     input.unit ?? 'unit',
     input.expirationDate ?? null,
+    input.location ?? 'pantry',
+    input.barcode?.trim() || null,
     input.notes ?? null,
     JSON.stringify(alias)
   );
@@ -983,6 +1006,16 @@ pantryRoutes.patch('/products/:id', async (c) => {
   if (input.expirationDate !== undefined) {
     updates.push('expiration_date = ?');
     values.push(input.expirationDate ?? null);
+  }
+  // Ubicacion y codigo de barras (## 12ai): la ficha del articulo los edita aqui. La ubicacion no
+  // tiene «ninguna» —null vuelve a la de siempre, la despensa— y el codigo si se quita con null.
+  if (input.location !== undefined) {
+    updates.push('location = ?');
+    values.push(input.location ?? 'pantry');
+  }
+  if (input.barcode !== undefined) {
+    updates.push('barcode = ?');
+    values.push(input.barcode ? String(input.barcode).trim() : null);
   }
   if (updates.length === 0) return falla(c, 400, 'No hay nada que actualizar', 'PANTRY_PRODUCT_NOTHING_TO_UPDATE');
 
