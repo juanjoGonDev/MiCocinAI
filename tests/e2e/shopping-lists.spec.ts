@@ -34,7 +34,9 @@ async function addItem(page: Page, text: string): Promise<void> {
 }
 
 function row_(page: Page, name: string): Locator {
-  return page.locator('[data-test="item-row"]', { has: page.locator('.detail__name', { hasText: name }) });
+  return page.locator('[data-test="item-row"]', {
+    has: page.locator('.detail__name', { hasText: name })
+  });
 }
 
 function faceOf(row: Locator): Locator {
@@ -42,7 +44,13 @@ function faceOf(row: Locator): Locator {
 }
 
 /** Arrastre horizontal de la cara de la fila, de `fromRatio` a `toRatio` del ancho. */
-async function dragRow(page: Page, row: Locator, fromRatio: number, toRatio: number, holdMs = 0): Promise<void> {
+async function dragRow(
+  page: Page,
+  row: Locator,
+  fromRatio: number,
+  toRatio: number,
+  holdMs = 0
+): Promise<void> {
   const box = await faceOf(row).boundingBox();
   if (!box) throw new Error('La fila no tiene caja: no se puede arrastrar');
   const y = box.y + box.height / 2;
@@ -67,21 +75,24 @@ async function dragRow(page: Page, row: Locator, fromRatio: number, toRatio: num
  */
 function watchApi(page: Page): () => string {
   const lines: string[] = [];
-  page.on('response', response => {
+  page.on('response', (response) => {
     const url = response.url();
     if (url.includes('/api/shopping')) {
-      lines.push(`${response.request().method()} ${response.status()} ${new URL(url).pathname.replace('/api/shopping', '')}`);
+      lines.push(
+        `${response.request().method()} ${response.status()} ${new URL(url).pathname.replace('/api/shopping', '')}`
+      );
     }
   });
-  page.on('requestfailed', request => {
-    if (request.url().includes('/api/')) lines.push(`FALLO ${request.method()} ${new URL(request.url()).pathname}`);
+  page.on('requestfailed', (request) => {
+    if (request.url().includes('/api/'))
+      lines.push(`FALLO ${request.method()} ${new URL(request.url()).pathname}`);
   });
   return () => (lines.length > 0 ? lines.slice(-6).join(' | ') : 'ni una llamada a /api/shopping');
 }
 
 function watchPageErrors(page: Page): () => string {
   const errors: string[] = [];
-  page.on('pageerror', event => errors.push(String(event.message).split('\n')[0]));
+  page.on('pageerror', (event) => errors.push(String(event.message).split('\n')[0]));
   return () => (errors.length > 0 ? errors.join(' | ') : 'sin errores de pagina');
 }
 
@@ -141,7 +152,10 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await expect(row).toHaveCount(1);
 
     await row.locator('[data-test="check"]').click();
-    const face = await row.locator('.detail__face').innerText().catch(() => 'fila fuera de pantalla');
+    const face = await row
+      .locator('.detail__face')
+      .innerText()
+      .catch(() => 'fila fuera de pantalla');
     const toasts = JSON.stringify(await page.locator('.toast').allInnerTexts());
 
     // Marcar NO es dejar la linea donde estaba: se va del tab de pendientes, que es
@@ -162,7 +176,9 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
   });
 
-  test('un arrastre corto descubre el riel y un arrastre del todo quita la línea', async ({ page }) => {
+  test('un arrastre corto descubre el riel y un arrastre del todo quita la línea', async ({
+    page
+  }) => {
     await openNewList(page, 'shop-swipe-rail');
     await addItem(page, 'Tomates');
     const row = row_(page, 'Tomates');
@@ -189,7 +205,15 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     // El arrastre nace en 0.86 y no en el borde derecho: ahi vive el ⋯, y empezar
     // sobre un boton es otra intencion (abrir la hoja), no este gesto.
     await dragRow(page, row, 0.86, 0.08);
-    await expect(page.locator('[data-test="item-row"]'), `${echo()} · llamadas: ${api()}`).toHaveCount(0);
+    // Quitar una linea pasa por el dialogo de la app (## 12ae): el arrastre pide confirmacion, y
+    // aceptarla es parte del gesto que se esta probando, no un extra del test.
+    const quitar = page.locator('.modal-overlay');
+    await expect(quitar.locator('.modal__title')).toContainText('Quitar de la lista');
+    await quitar.getByRole('button', { name: 'Quitar' }).click();
+    await expect(
+      page.locator('[data-test="item-row"]'),
+      `${echo()} · llamadas: ${api()}`
+    ).toHaveCount(0);
 
     const bar = page.locator('.toast-container--bottom .toast');
     await expect(
@@ -240,7 +264,9 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await expect(page.locator('[data-test="tab-todo"]')).toContainText('Pendientes (0)');
   });
 
-  test('quitar en selección múltiple deja una barra que devuelve las dos líneas', async ({ page }) => {
+  test('quitar en selección múltiple deja una barra que devuelve las dos líneas', async ({
+    page
+  }) => {
     await openNewList(page, 'shop-selection-remove');
     await addItem(page, 'Cervezas');
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
@@ -252,7 +278,9 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     await page.locator('[data-test="bulk-remove"]').click();
 
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(0);
-    await expect(page.locator('.toast-container--bottom .toast')).toContainText('2 lineas quitadas');
+    await expect(page.locator('.toast-container--bottom .toast')).toContainText(
+      '2 lineas quitadas'
+    );
 
     await page.locator('[data-test="toast-action"]').click();
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(2);
@@ -323,6 +351,10 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
 
     await first.locator('[data-test="check"]').click();
     await page.getByRole('button', { name: /Vaciar carro/i }).click();
+    // Y vaciar confirma antes de barrer: el carro comprado se va con un si explicito (## 12ae).
+    const vaciar = page.locator('.modal-overlay');
+    await expect(vaciar.locator('.modal__title')).toContainText('Vaciar lo comprado');
+    await vaciar.getByRole('button', { name: 'Vaciar' }).click();
 
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(1);
     // acotado a la fila: con dos lineas en pantalla `.detail__name` seria ambiguo,

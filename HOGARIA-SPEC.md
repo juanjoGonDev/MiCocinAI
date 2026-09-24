@@ -1063,7 +1063,7 @@ spec is the record, including of where reality disagreed with it.
       to the model _parses with the schema that validates the answer_.
 - [x] Live + authorship: `added_by`/`updated_by` (a merge paints who merged), `shopping_list_events` +
       `describeEvent` (the sentence is the server's), `GET /lists/:id/events`, SSE `GET /api/shopping/stream/
-    lists/:id` and `/stream/tray` with `?access_token=` accepted _only_ there and masked in the log, 15 s
+  lists/:id` and `/stream/tray` with `?access_token=` accepted _only_ there and masked in the log, 15 s
       heartbeats, cap of 24 listeners with eviction; the client refetches on invalidation (it never paints
       the payload), the row shows the author's initials with the name in the tooltip, and "Quién ha tocado
       qué" is a sheet with avatars.
@@ -1219,7 +1219,7 @@ same milk has another name and another price at Mercadona than at Lidl.
       the toast — the app has been asked to _remember prices_ by closing the list, and closing it with holes
       is how the next estimate comes back wrong.
 - [x] Prices can arrive _with_ the close: `POST /lists/:id/complete { prices: [{ itemId, priceMinor,
-    quantity?, store?, productName? }] }` writes each one onto its line and records the observation in the
+  quantity?, store?, productName? }] }` writes each one onto its line and records the observation in the
       same transaction, so "pago y apunto lo que he pagado" is one tap and not a race between two calls.
       `quantity`/`productName` exist because a receipt says what was paid for what was carried, under the
       name the shop printed.
@@ -1229,7 +1229,7 @@ same milk has another name and another price at Mercadona than at Lidl.
 - [x] `estimate` resolves the observed price **for the list's shop first**, then falls back to the most
       recent one from any shop and marks the line `otherStore` with the shop's name. Two rows in
       `price_observations` for one `product_key` are the point of the table, and reading `ORDER BY
-    observed_at DESC LIMIT 1` across all of them was silently pricing the house's milk with Lidl money.
+  observed_at DESC LIMIT 1` across all of them was silently pricing the house's milk with Lidl money.
 - [x] Same product, different name: `PATCH /lists/:id/items/:itemId` accepts `productKey`, so a line can
       declare itself to be the product the house already tracks, whatever the shelf calls it. `GET /prices`
       filters by `store`/`productKey`, and `GET /prices/products?q=` returns the known products with their
@@ -1247,7 +1247,7 @@ same milk has another name and another price at Mercadona than at Lidl.
       table. A `stores` table with its own name per product (and a barcode) is the next step, and it
       is in §13 rather than here because it needs a UI of its own.
 - [ ] The four money flows in `tests/e2e/full-stack/shopping-money.spec.ts` typecheck (`pnpm run
-    typecheck:e2e`) but were not _executed_ here —no Chromium in the sandbox—, so CI is where they
+  typecheck:e2e`) but were not _executed_ here —no Chromium in the sandbox—, so CI is where they
       turn green. What was executed: the 22 new vitest cases (224 green in total), the prod build,
       `tsc` of app and spec, `check-ui` at 126 files with the removed `discount-row` caught by the
       guard itself, and the discount/multi-target behaviour read back from the API by hand.
@@ -1281,7 +1281,7 @@ Four things from the screenshot of the line sheet, and the fourth was app-wide.
       them for the header in one pass, and a blob has to be parsed per row to do arithmetic.
 - [x] `applyLineDiscount` in `utils/list-discount.ts`, applied **after** the offer and **before**
       the basket coupon, which is the order a till uses: `3x2 → -10 % sobre 2 unidades → -2,50 €
-    de la cesta`. Applied in the other order, the same receipt gives a different number, and
+  de la cesta`. Applied in the other order, the same receipt gives a different number, and
       there is no way to argue with it afterwards. The percent is taken on what is _paid_ (with a
       3x2 on six units, 5 % of four units' worth), because that is what the sign at the shelf
       means.
@@ -1409,7 +1409,7 @@ Feedback on the screenshots of the line sheet, plus one thing that was visible o
 - A comment with markdown backticks inside `styles` broke the _client_ and nothing else: the
   first backtick closes the literal, the CSS after it becomes code, `styles` ends up an
   array of several entries and the AOT reports `Failed to resolve styles at position 1 —
-    Value could not be determined statically` (NG1010). `tsc` is happy with it, since the
+  Value could not be determined statically` (NG1010). `tsc` is happy with it, since the
   result is still valid text for the type checker. Rule 7 of `check-ui`
   (`backtick-cierra-el-literal`) is that trap: no backticks inside a comment that lives in
   `template`/`styles` —and no, `ng build` is not optional in a round that touches them.
@@ -1808,7 +1808,7 @@ snack; the grid should read like Google's hours, showing only the window that ha
       `…Schema.safeParse` has no row in the table. That is the part that keeps it true in three months:
       a new form cannot skip the contract, and the failure message says exactly what to add.
 - [x] Route level, where a schema can pass and the SQL still break on `undefined`: `POST
-    /api/calendar/events` with `{title, date}` only → `201` and the optional columns are NULL in the
+  /api/calendar/events` with `{title, date}` only → `201` and the optional columns are NULL in the
       row that comes back; the same for `PATCH` clearing `notes` with `null`; plus a minimal-payload
       case in the existing `pantry`, `shopping` and `auth` route specs.
 - [x] `tests/e2e/calendar.spec.ts` creates an event typing only the title, and asserts the dialog
@@ -1826,7 +1826,7 @@ snack; the grid should read like Google's hours, showing only the window that ha
 
 - [x] New pure module `frontend/src/app/core/calendar-grid.ts`, tested before the component (TDD within
       the bridge's limits): minute↔hour helpers, the conventional hour of an untimed meal (`desayuno
-    08:30 · almuerzo 14:00 · merienda 17:30 · cena 21:00` —a position, never a printed claim), the
+  08:30 · almuerzo 14:00 · merienda 17:30 · cena 21:00` —a position, never a printed claim), the
       visible window from the items of the range with padding, and the overlap layout (side-by-side
       columns, same rule Google uses: groups of items that collide share the width).
 - [x] `app-calendar-timeline` renders the day/week grid: hour gutter, a column per day, blocks placed
@@ -2299,7 +2299,7 @@ dejaba la capa e2e entera sin verificar durante ocho tandas.
       (`page.locator('#ob-allergies').locator(...)`) y no al revés.
 - [ ] 1 es un **click que no llega**: «Siguiente →» en el paso de gustos —hay que mirar si el boton esta
       deshabilitado por una validacion del propio paso o si hay un overlay; el log dice `waiting for element
-    to be visible, enabled and stable`, que es lo que separa un test mal escrito de una pantalla que
+  to be visible, enabled and stable`, que es lo que separa un test mal escrito de una pantalla que
       bloquea.
 - [ ] 6 son del **job full-stack**, y su causa es el entorno: `429` esperado y `404` recibido (los limites
       no se aplican igual cuando el server arranca con otra config), `results.json` que no se escribe, el
@@ -2513,7 +2513,7 @@ Pedidos por la persona que usa la app, los dos con su caso detras:
 ### R. Recurrencia de los eventos de la casa
 
 - [ ] **El dato, dos columnas**: `calendar_events.recurrence` (`'none' | 'daily' | 'weekly'`, `NOT NULL DEFAULT
-    'none'`) y `calendar_events.exceptions` (JSON de fechas `YYYY-MM-DD`, `DEFAULT '[]'`). Se anaden con el
+  'none'`) y `calendar_events.exceptions` (JSON de fechas `YYYY-MM-DD`, `DEFAULT '[]'`). Se anaden con el
       helper de `config/database.ts` que ya existe (`addColumnIfMissing`), sin tabla nueva y sin rebuild: una
       fila vieja es `'none'`, que es lo que era.
 - [ ] **Una fila, no una fila por dia**. La serie vive en una fila y las ocurrencias se materializan al leer.
@@ -2928,7 +2928,7 @@ cinco palabras y `cookingLevel` devolviendo clave + `'Sin marcar'`), `household`
       que una clave rota **no falla, se pinta**, y eso es exactamente lo que muestra la captura del parte.
 - [x] Gates, todos ejecutados en la tanda: `check-ui` 176/20/0 · `tsc` de app limpio · `typecheck:e2e` limpio ·
       puente vitest **14 ficheros / 126 pruebas** · suite del server **23 / 592** · `ng build --configuration
-    production` sin un error nuevo. El puente ha crecido en dos ficheros: `home-profile.spec.ts` estaba excluido
+  production` sin un error nuevo. El puente ha crecido en dos ficheros: `home-profile.spec.ts` estaba excluido
       solo por usar `toBeTrue()`/`toBeFalse()` (matchers de Jasmine que chai no tiene), y cambiarlos por
       `toBe(true)`/`toBe(false)` lo ha devuelto a la ejecución —mismo test, ahora corre también aquí. Y ese mismo puente ha enseñado una regla de escritura: un spec que corre en los dos
       arneses no puede usar `expect(valor, mensaje)` —en Karma ese segundo sitio no existe, alli el contexto se
@@ -3053,7 +3053,7 @@ vez—.
 ### Checklist
 
 - [x] **Migration `pantry_categories`**: `id, user_id, household_id, key, name, color, description, parent_key,
-    position, created_at, updated_at`, única por casa y `key`, índice por `position`. `key` es **el dato** que ya
+  position, created_at, updated_at`, única por casa y `key`, índice por `position`. `key` es **el dato** que ya
       guardan `ingredients.category` y el prompt de la IA: las doce claves de fábrica se siembran con su `name` en
       castellano y su color, y `other` nace protegida. Se siembra desde `backfillHouseholdSeeds` de forma
       idempotente: las casas ya creadas reciben el catálogo **sin migrar una sola fila de `ingredients`**.
@@ -3077,7 +3077,7 @@ vez—.
       forma: ya valían con cualquier clave.
 - [x] **Gestor de productos principales** sobre lo que ya existe: `staples` = filas con `quantity = 0`. Rutas
       `GET /api/pantry/products` (búsqueda `q` por nombre, alias, `barcode` y `notes`; `filter=all|staples|in-pantry|
-    expiring` —`staples`, sin stock, es la pestaña con la que abre la pantalla—; `sort=name|recent`; paginado
+  expiring` —`staples`, sin stock, es la pestaña con la que abre la pantalla—; `sort=name|recent`; paginado
       `limit`/`offset` con `meta.total` filtrado y `hasMore`), `POST`, `PATCH /:id`,
       `GET /:id/delete-impact`, `DELETE /:id`, y `POST /products/bulk-delete-impact` + `POST /products/bulk-delete`
       (máximo 100, todo-o-nada dentro de una transacción). Borrar un producto principal **borra la sugerencia, no
@@ -3194,7 +3194,7 @@ se queda escrito, no se toca a ciegas.
       fixture, es decoración.
 - [x] `auth.spec.ts`: el título se busca como lo pinta la app (`Iniciar sesión`).
 - [x] `account.spec.ts`: se afirma contra el email que el propio helper registró (`const email = await
-    registerAndGoto(...)`), no contra un dominio que el arnés ya no usa.
+  registerAndGoto(...)`), no contra un dominio que el arnés ya no usa.
 - [x] `onboarding.spec.ts`: las casillas se pulsan por su rol (`[role="checkbox"]`) y se comprueban por
       `aria-checked`, como hace `pantry-managers.spec.ts` desde la tanda 25. Nadie marca un input que no existe.
 - [x] `corepack pnpm run typecheck:e2e` en 0 tras los cuatro cambios (es la única puerta que el sandbox puede
@@ -3245,7 +3245,7 @@ registra sin meter nada en la despensa` esperaba el campo del nombre y no aparec
 Checklist de esta segunda mitad, medida contra las anotaciones:
 
 - [x] Ficha en blanco en el alta de productos (el bug de arriba), con `build:prod` y `tsc -p
-    tsconfig.app.json` volviendo a decir 0.
+  tsconfig.app.json` volviendo a decir 0.
 - [x] Los cinco localizadores míos corregidos (`#id`, sin ` input`), el `gestor-productos-ficha` visible antes de
       rellenar la ficha —si alguien vuelve a romper el alta, el fallo dice eso, no «timeout»—, y el plazo en el
       assert del borrado.
@@ -3254,7 +3254,7 @@ Checklist de esta segunda mitad, medida contra las anotaciones:
       pictograma de ubicación va delante).
 - [x] `fixtures.ts`: el anclaje solo cuando no hay preferencia.
 - [x] Puertas: `check-ui` en 0 · `tsc` app **y** `-p tsconfig.spec.json` en 0 · `corepack pnpm run
-    typecheck:e2e` en 0 · `--filter @hogaria/web build:prod` completo. La suite del server no se vuelve a correr:
+  typecheck:e2e` en 0 · `--filter @hogaria/web build:prod` completo. La suite del server no se vuelve a correr:
       ningún fichero de `server/` cambia en este tramo.
       Y **se sigue sin tocar** lo que necesita navegador para juzgarse (`.cal-event` a 0, `.modal__title` vacio,
       `offer-chip` 3x2/3x1, `unit-picker` «Sin unidad», los timeouts en cascada de `shopping-round6`, el
@@ -3677,7 +3677,7 @@ propio spec para no mezclar 3 reescrituras e2e más en el lote de CI de esta.
 - [x] e2e en la misma tanda: `pantry.spec` y `utensils.spec` reescritos (más el test de móvil de la hoja);
       ningún botón pintado sin destino verificado en la plantilla tocada.
 - [x] Puertas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration
-    production` completo · suite del server (intacta, pero verde por si el picker cambia algo).
+  production` completo · suite del server (intacta, pero verde por si el picker cambia algo).
 - [x] Run de CI como juez de los e2e y su bucle de fixes —tres bucles, y verde. Bucle 1: el velo tapaba el
       popover del cabezal (el th sticky apila aparte), los botones de modo se imprimían la clave cruda y la
       búsqueda no bajaba a minúsculas. Bucle 2: dos promesas del test estaban escritas al revés de lo firmado
@@ -3867,7 +3867,7 @@ catalogo-anadir-<id>`). «Añadir lo visible» **cambia de significado con hones
       selección-lote sin confirmación, alta que sale en el gestor). Verdes íntegros en escritorio y en
       mobile-chrome local.
 - [x] Puertas: `check-ui` 0 · `tsc -p tsconfig.app.json` 0 · `typecheck:e2e` 0 · `ng build --configuration
-    production` 0 · karma de lo tocado 49/49 · suite del server intacta (no se tocó).
+  production` 0 · karma de lo tocado 49/49 · suite del server intacta (no se tocó).
 - [x] Run de CI como juez (`35846007180`): las dos suites reescritas, verdes; el conjunto de rojos finales es
       el mismo que en el run de la tanda anterior (deuda preexistente: account, calendar, ai-goal, shopping ×3
       familias, recipes, y el «sin results.json» del job full-stack, ya rojo igual en `a2a5125`). Un detalle
@@ -4136,6 +4136,66 @@ rojo restante = la deuda documentada al pelo (account×5, calendar×3, ai-goal×
 shopping×9 en el 4; shopping-money + request-budget en full-stack), sin un solo rojo nuevo y con las
 disminuciones legitimas (i18n, onboarding, meal-hours, pantry paginar y los dos selects ciegos) explicadas en
 sus commits.
+
+## 12ag — Paginador con saltos, sugerencias del catalogo, vaciar con vuelta a casa y autoguardado que no pierde el ultimo tecleo
+
+**El parte (2026-09-24, ronda 35).** Cuatro cosas del usuario: (1) el paginador de las tablas solo puede ir de uno
+en uno —quiere saltar al principio y al final—; (2) al aadir producto a la compra, que sugiera los del catalogo
+antes de escribir; (3) un boton «Vaciar carro» que saque lo comprado de la lista y lo vuelque al inventario, con
+deshacer; (4) «si cierro el editor justo cuando guarda, se pierde el ultimo cambio». Y de propina, el CI segua
+rojo de `round10` por dos tests que no eran del test: estaban cruzados.
+
+**A) Paginador.** `tramoDePaginas(actual, total)` en `data-table.util.ts` (con spec propio) decide que numeros se
+pintan —`[1, '...', 4, 5, 6, '...', 20]` con la ventana de siempre— y a los lados dos botones nuevos:
+`first_page`/`last_page` duplicados en SVG (`icon-paths.ts`) con tooltip `ui.tabla_primera_pagina` /
+`tabla_ultima_pagina`, ES y EN. Salta a 1 y a `totalPaginas`, no «un paso grande»: llegar a la pagina 20 de 20
+en un clic o no ir.
+
+**B) Stepper unificado.** El `+`/`-` de la despensa eran `app-icon-button` con icono de 18 y el de la tabla de
+44/20; ahora todo 28 px de boton con icono de 14 —la norma queda escrita en `pantry.component.ts` y replicada en
+la fila de la compra.
+
+**C) Sugerencias del catalogo en la hoja de aadir.** Panel `.detail__sug` bajo el input: busca en el catalogo
+mientras se teclea (secuencia `sugSeq` para que una respuesta vieja no pinte sobre una nueva), cada sugerencia
+trae la ultima compra y si ya esta en casa; aadir desde ahi reutiliza el alta normal. Copy nuevo en
+`shopping_list_detail` (`sugerencias_del_catalogo`, `ya_en_casa`...) y la imagen que no carga o el modelo que
+tarda tienen frase propia en vez de silencio.
+
+**D) Vaciar carro = vuelco al inventario.** El boton vive en la barra de acciones; en movil es solo icono
+(`app-icon-button`), en escritorio solo texto —`detail__bar-actions` decide por `min/max-width` y uno de los dos
+se oculta, un solo boton real—. Abre `app-confirm-dialog` («Vaciar lo comprado»), y al confirmar: PATCH de la
+lista con `checked: false` para los pendientes (que se quedan) y los comprados se van; el servidor (route
+`shopping.routes.ts`, con spec en `shopping.routes.spec.ts`) los sube al inventario haciendo SUMAR si la linea
+existe y CREAR si no —`pantryMoved`/`pantryMerged` en `shopping.model.ts` cuentan cada caso— y el toast dice
+«1 articulo ha ido al inventario» o «N articulos: X nuevos, Y sumados» con Deshacer que baja otra vez a la lista
+de pendientes.
+
+**E) Autoguardado sin perdida.** `closeEdit()` ahora hace `flush('item:'+id)` ANTES de cerrar: el debounce
+cancelado se ejecuta en vez de tirarse (los `debouncedRuns` guardan el cierre por clave). El precio en la fila
+manda un unico payload `linePatch(priceMinor)` y `commitPrice` solo lanza su PATCH si no habia nada pendiente,
+para no doblar la escritura. Quitar item pide confirmacion y el toast con Deshacer sale pase lo que pase con la
+red.
+
+**F) El diccionario estaba cruzado y el test lo gritaba.** En `shopping_list_detail.ts` el bloque ES llevaba
+`'unidad': 'unit'` y el EN `'unidad': 'unidad'` a la inversa —por eso `round10:80` (chip «en 2 units») era rojo en
+CI y verde aqui: el CI corre con el ES del remoto, vicio de la tanda 12af al mover claves. Descruzado y
+comprobado clave a clave contra el remoto: cero perdidas, cuatro anadidos (los de sugerencias).
+
+**G) Dos lecciones de obra, cara cada una.** (1) **El presupuesto de CSS por componente no se esquiva sacando el
+CSS a `styleUrls`: el `check:ui` esta ciego a esos ficheros y `boton-sin-afecto` salta** —lo que vale es un
+array `styles: [principal, panel]` con dos literales en el propio `.component.ts`, cada uno por debajo de 20k;
+y jamas backticks dentro, ni en un comentario: rompen el template literal con un errorcito «position 1» que no
+seala nada—. (2) **El postinstall del raiz corre `prettier --write .`**: tras un `pnpm install`, un `git add -A`
+recoge medio repo en formato y uno cree que su diff es de 13 ficheros cuando son 300. Regla: `prettier --write`
+solo a los ficheros del diff, y `git status --porcelain` antes de commitear. Y los `input#search` «rotos» que
+aparecian con `git stash` montado eran el arbol viejo del stash, no un fallo: no experimentar con el stash
+mientras se mide un rojo.
+
+**El parte de salud.** `shopping-lists` 14/14 (los dos dialogos de confirmacion tienen su clic en el spec, que
+sin el el carro se quedaba vaciado a medias), `shopping-sugerencias` 3/3, `round10` 8/8, karma diana 64/64
+(modelo, simetria del dict, tramo del paginador, picker), suite e2e completa 176/22/1 —los 22 son los rojos
+historicos de account/calendar/recipes y compaia, mi saldo neto contra el run 35969357522 es de cuatro rojos
+menos—, `build:prod` verde y `check:ui` sin incidencias en 189 ficheros.
 
 ## 13. Coming soon (deliberately not in this program)
 
