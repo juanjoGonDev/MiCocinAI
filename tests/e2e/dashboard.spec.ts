@@ -38,8 +38,16 @@ test.describe('Dashboard (new user) — empty states', () => {
     await page.getByRole('button', { name: '+ Agregar' }).click();
     await page.fill('input#ingredientName', 'Tomate');
     await page.fill('input#quantity', '500');
-    await page.selectOption('select[name="category"]', 'vegetables');
-    await page.selectOption('select[name="location"]', 'fridge');
+    // Categoria y ubicacion son app-picker desde la ## 12x —el select nativo que estas lineas clicaban
+    // murio alli y el spec, en el shard 2 cancelado, nunca se entero (## 12af).
+    for (const [testDelPicker, opcion] of [
+      ['pantry-picker-categoria', 'Verduras'],
+      ['pantry-picker-ubicacion', 'Nevera']
+    ] as const) {
+      const caja = page.locator(`[data-test="${testDelPicker}"]`);
+      await caja.locator('.picker__trigger').click();
+      await caja.locator('.picker__option').filter({ hasText: opcion }).first().click();
+    }
     await page.locator('app-modal button[type="submit"]').click();
     await expect(page.locator('.ingredient-item', { hasText: 'Tomate' })).toHaveCount(1);
 

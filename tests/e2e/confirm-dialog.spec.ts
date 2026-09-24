@@ -95,8 +95,15 @@ test.describe('Confirmaciones sin diálogos nativos', () => {
     await page.getByRole('button', { name: '+ Agregar' }).click();
     await page.fill('input#ingredientName', 'Tomate');
     await page.fill('input#quantity', '500');
-    await page.selectOption('select[name="category"]', 'vegetables');
-    await page.selectOption('select[name="location"]', 'fridge');
+    // Mismo cadaver que en dashboard.spec.ts: categoria y ubicacion son app-picker desde la ## 12af/12x.
+    for (const [testDelPicker, opcion] of [
+      ['pantry-picker-categoria', 'Verduras'],
+      ['pantry-picker-ubicacion', 'Nevera']
+    ] as const) {
+      const caja = page.locator(`[data-test="${testDelPicker}"]`);
+      await caja.locator('.picker__trigger').click();
+      await caja.locator('.picker__option').filter({ hasText: opcion }).first().click();
+    }
     await page.locator('app-modal button[type="submit"]').click();
 
     await expect(page.locator('.ingredient-item', { hasText: 'Tomate' })).toHaveCount(1);
@@ -181,7 +188,9 @@ test.describe('Confirmaciones sin diálogos nativos', () => {
 
     await page.getByRole('button', { name: /Salir del hogar/ }).click();
     const dialog = confirmDialog(page);
-    await expect(dialog.locator('.modal__title')).toHaveText('Salir del hogar');
+    // El titulo real lleva la bandera de la puerta: 'household.salir_del_hogar' es «🚪 Salir del hogar» y el
+    // emoji se quita en su propia tanda (deuda perdonada del check-ui, ## 12af). Contenido, no exacto.
+    await expect(dialog.locator('.modal__title')).toContainText('Salir del hogar');
     await expect(dialog.getByRole('button', { name: 'Salir' })).toBeVisible();
     await dialog.getByRole('button', { name: 'Cancelar' }).click();
 
