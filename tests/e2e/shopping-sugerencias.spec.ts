@@ -10,6 +10,11 @@ import { registerAndGoto } from './helpers/auth';
  * debounce y el catalogo global se ponen de acuerdo, y la ficha que nace al cerrar la compra sale
  * de una transaccion del server que el frontend solo sabe contar. Por eso el primer test teclea
  * «lech» de verdad y el segundo cierra una compra y baja a la despensa a comprobar la fila.
+ *
+ * Ronda 36 (## 12ah) anade dos probechas del mismo sitio: la sugerencia elegida arrastra su
+ * seccion (la linea nace clasificada, no «sin clase»), y el confirm de quitar linea se abre POR
+ * ENCIMA de la hoja de edicion —se mide el z-index de los dos y se pulsa el dialogo con la hoja
+ * abierta, que es lo que antes no podia hacerse—.
  */
 
 async function openNewList(page: Page, seed: string, store?: string): Promise<void> {
@@ -61,6 +66,13 @@ test.describe('el anadido sugiere del catalogo', () => {
 
     await page.locator('[data-test="add-submit"]').click();
     await expect(row_(page, 'Leche semidesnatada')).toHaveCount(1);
+
+    // Y nace ya clasificada (## 12ah): la hoja del catalogo (dairy) arrastra su seccion, la
+    // linea no espera a que alguien la reclasifique a mano.
+    const lacteos = page.locator('.detail__group', {
+      has: page.locator('.detail__group-title', { hasText: 'Lacteos' })
+    });
+    await expect(lacteos.locator('[data-test="item-row"]')).toHaveCount(1);
   });
 
   test('sin tocar ninguna hoja, Enter manda lo tecleado tal cual', async ({ page }) => {
@@ -96,5 +108,43 @@ test.describe('cerrar la compra baja el carro a la despensa', () => {
     await expect(
       page.locator('[data-test="pantry-tabla-inventario"]').getByText('Pan de pueblo')
     ).toBeVisible({ timeout: 10000 });
+  });
+});
+
+test.describe('el confirm de quitar queda POR ENCIMA de la hoja de linea', () => {
+  test('quitar desde la hoja: el dialogo se ve, se pulsa y la linea se va (## 12ah)', async ({
+    page
+  }) => {
+    await openNewList(page, 'r36-encima');
+    await page.locator('[data-test="add-input"]').fill('Pan de pueblo');
+    await page.locator('[data-test="add-submit"]').click();
+    await expect(row_(page, 'Pan de pueblo')).toHaveCount(1);
+
+    // La hoja de edicion abierta, y desde ella el «Quitar linea» de siempre.
+    await row_(page, 'Pan de pueblo').locator('.detail__more').click();
+    const hoja = page.locator('[data-test="edit-sheet"]');
+    await expect(hoja).toBeVisible();
+    await hoja.getByRole('button', { name: 'Quitar linea' }).click();
+
+    // El dialogo de confirmacion tiene que quedar POR ENCIMA del backdrop de la hoja: antes
+    // la hoja iba a 1200 y el modal de la app a 1000, y el confirm nacia detras del oscuro,
+    // inalcanzable. Se mide el z-index real de los dos, no solo que «existen los dos».
+    const confirmacion = page.locator('app-confirm-dialog');
+    await expect(confirmacion.locator('.modal')).toBeVisible();
+    const capas = await page.evaluate(() => {
+      const hoja = document.querySelector('.detail__sheet-backdrop');
+      const confirmacion = document.querySelector('app-confirm-dialog .modal-overlay');
+      return {
+        hoja: hoja ? Number(getComputedStyle(hoja).zIndex) : -1,
+        confirmacion: confirmacion ? Number(getComputedStyle(confirmacion).zIndex) : -1
+      };
+    });
+    expect(capas.confirmacion).toBeGreaterThan(capas.hoja);
+
+    // Y el clic llega al dialogo, no al backdrop de la hoja: la linea desaparece. (Con la hoja
+    // por encima, este mismo clic cerraba la hoja y la linea se quedaba.)
+    await confirmacion.getByRole('button', { name: 'Quitar', exact: true }).click();
+    await expect(confirmacion.locator('.modal')).toHaveCount(0);
+    await expect(row_(page, 'Pan de pueblo')).toHaveCount(0);
   });
 });
