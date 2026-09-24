@@ -2285,7 +2285,11 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       .detail__sheet-backdrop {
         position: fixed;
         inset: 0;
-        z-index: 1200;
+        /* Debajo del modal de la app, no encima (## 12ah): el confirm de quitar linea es un
+           app-modal (z-index 1000) y con la hoja a 1200 se pintaba DETRAS del backdrop
+           oscurecido, inalcanzable. La escalera completa: popovers de pagina (45) < hoja (900)
+           < modal/confirm (1000). */
+        z-index: 900;
         background: rgba(0, 0, 0, 0.45);
         display: flex;
         align-items: flex-end;
