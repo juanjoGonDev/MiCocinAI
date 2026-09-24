@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  // Los specs de `full-stack/` piden el stack de produccion (build servido por el binario, limits ON):
+  // el dev shard no se los puede cargar sin pintar rojos estructurales —los cinco del run de la ## 12af
+  // eran eso, no codigo roto—, y los corre su propio job con su config (`playwright.full-stack.config.ts`).
+  testIgnore: '**/full-stack/**',
   // Fija la semilla del run antes que nada: la ven workers, reporter y backend.
   globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: true,
@@ -41,21 +45,21 @@ export default defineConfig({
     // Acotados, pero con margen: recortar esto a 15/20s convirtio 5 fallos
     // reales en 69 (la compilacion en frio del dev server de CI no da abasto).
     actionTimeout: 45000,
-    navigationTimeout: 60000,
+    navigationTimeout: 60000
   },
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: { ...devices['Desktop Chrome'] }
     },
     {
       name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] },
+      use: { ...devices['Pixel 5'] }
     },
     {
       name: 'mobile-safari',
-      use: { ...devices['iPhone 13'] },
-    },
+      use: { ...devices['iPhone 13'] }
+    }
   ],
   webServer: {
     command: 'npm run dev',
@@ -69,6 +73,6 @@ export default defineConfig({
       DISABLE_RATE_LIMIT: '1',
       // Para poder cruzar los logs del backend con la semilla del run.
       E2E_SEED: process.env.E2E_SEED ?? ''
-    },
-  },
+    }
+  }
 });
