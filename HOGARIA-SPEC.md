@@ -4126,6 +4126,17 @@ cruda, verificados con sonda y con e2e exigiendo texto traducido · [x] flip de 
 workers=2; en solitario verde) · [x] `build` de produccion, `typecheck:e2e` y dist al dia · [ ] los seis moviles
 de G, deuda nueva documentada.
 
+**Veredicto del CI (runs 35965898182 → 35968622851).** Con el reporter json vivo, el job full-stack anoto por
+fin los suyos y el triaje de CI sumo dos cadaveres mas del propio shard 2: el `selectOption` de `dashboard.spec`
+y `confirm-dialog.spec` sobre los selects de alta que enterraron los app-picker en la ## 12x (el titulo «🚪 Salir
+del hogar» tampoco casaba con `toHaveText` —el emoji se quita en su tanda—), y cinco rojos estructurales de los
+specs de `full-stack/` que el shard de desarrollo se tragaba por ser `tests/e2e` recursivo: `testIgnore` los
+devuelve a su job. Despues de `52f800e`: **shard 2 verde por primera vez en la historia del repo** y el conjunto
+rojo restante = la deuda documentada al pelo (account×5, calendar×3, ai-goal×1 en el 1; recipes×2 en el 3;
+shopping×9 en el 4; shopping-money + request-budget en full-stack), sin un solo rojo nuevo y con las
+disminuciones legitimas (i18n, onboarding, meal-hours, pantry paginar y los dos selects ciegos) explicadas en
+sus commits.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
