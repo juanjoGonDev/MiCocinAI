@@ -124,6 +124,10 @@ test.describe('el idioma llega a toda la app', () => {
     test(`en ingles, ${pantalla.ruta} no tiene restos de espanol`, async ({ page }) => {
       await elegirIdioma(page, 'English');
       await page.goto(pantalla.ruta);
+      // El texto esperado se aguarda con asercion retryable ANTES de leer el cuerpo: `textoVisible` es de
+      // un solo tiro y con el chunk perezoso sin compilar (ng serve frio, workers=2 en CI) leia el vacio
+      // y pintaba «falta el texto» estando el test verde en local (## 12af).
+      await expect(page.locator('body')).toContainText(pantalla.en);
       const texto = await textoVisible(page);
       expect(contiene(texto, pantalla.en), `falta el texto en ingles «${pantalla.en}»`).toBe(true);
       const restos = SOLO_ESPANOL.filter((frase) => contiene(texto, frase));
@@ -134,6 +138,7 @@ test.describe('el idioma llega a toda la app', () => {
       await elegirIdioma(page, 'English');
       await elegirIdioma(page, 'Español');
       await page.goto(pantalla.ruta);
+      await expect(page.locator('body')).toContainText(pantalla.es); // mismo retiro a la lectura ciega
       const texto = await textoVisible(page);
       expect(contiene(texto, pantalla.es), `falta el texto en espanol «${pantalla.es}»`).toBe(true);
       const restos = SOLO_INGLES.filter((frase) => contiene(texto, frase));
