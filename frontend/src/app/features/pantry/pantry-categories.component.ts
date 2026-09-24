@@ -10,6 +10,7 @@ import { ConfirmService } from '../../core/services/confirm.service';
 import { I18nService } from '../../core/services/i18n.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { TooltipComponent } from '../../shared/components/ui/tooltip/tooltip.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { TagComponent } from '../../shared/components/ui/tag/tag.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
@@ -75,6 +76,7 @@ type FilaCategoria = PantryCategory & {
     BadgeComponent,
     PickerComponent,
     PantryCategoryLabelPipe,
+    TooltipComponent,
     DataTableComponent,
     DataTableCellDirective
   ],
@@ -169,16 +171,17 @@ type FilaCategoria = PantryCategory & {
                         {{ 'pantry.borrar_seleccionados' | t }}
                       </button>
                     }
-                    <button
-                      type="button"
-                      class="lote__x"
-                      (click)="loteAnular()"
-                      data-test="gestor-categorias-lote-anular"
-                      [attr.aria-label]="'pantry.lote_anular' | t"
-                      [title]="'pantry.lote_anular' | t"
-                    >
-                      <app-icon name="close" [size]="16" [label]="null" />
-                    </button>
+                    <app-tooltip position="top" [text]="'pantry.lote_anular' | t">
+                      <button
+                        type="button"
+                        class="lote__x"
+                        (click)="loteAnular()"
+                        data-test="gestor-categorias-lote-anular"
+                        [attr.aria-label]="'pantry.lote_anular' | t"
+                      >
+                        <app-icon name="close" [size]="16" [label]="null" />
+                      </button>
+                    </app-tooltip>
                   </span>
                 </div>
                 <div class="lote__empuje" aria-hidden="true"></div>
@@ -212,29 +215,34 @@ type FilaCategoria = PantryCategory & {
 
             <ng-template appDataTableCell="acciones" let-fila>
               <span class="celda__grupo">
-                <button
-                  type="button"
-                  class="celda__accion"
-                  [attr.aria-label]="'pantry.editar_categoria' | t"
-                  [attr.title]="'pantry.editar_categoria' | t"
-                  (click)="abrir(fila)"
-                  [attr.data-test]="'gestor-categorias-editar-' + fila.key"
-                >
-                  <app-icon name="edit" [size]="16" [label]="null" />
-                </button>
-                <button
-                  type="button"
-                  class="celda__accion celda__accion--peligro"
-                  [attr.aria-label]="'pantry.eliminar_categoria' | t"
-                  [attr.title]="
+                <app-tooltip position="top" [text]="'pantry.editar_categoria' | t">
+                  <button
+                    type="button"
+                    class="celda__accion"
+                    [attr.aria-label]="'pantry.editar_categoria' | t"
+                    (click)="abrir(fila)"
+                    [attr.data-test]="'gestor-categorias-editar-' + fila.key"
+                  >
+                    <app-icon name="edit" [size]="16" [label]="null" />
+                  </button>
+                </app-tooltip>
+                <app-tooltip
+                  position="top"
+                  [text]="
                     fila.canDelete ? ('pantry.eliminar_categoria' | t) : ('pantry.error_en_uso' | t)
                   "
-                  [disabled]="!fila.canDelete || guardando"
-                  (click)="borrar(fila)"
-                  [attr.data-test]="'gestor-categorias-borrar-' + fila.key"
                 >
-                  <app-icon name="delete" [size]="16" [label]="null" />
-                </button>
+                  <button
+                    type="button"
+                    class="celda__accion celda__accion--peligro"
+                    [attr.aria-label]="'pantry.eliminar_categoria' | t"
+                    [disabled]="!fila.canDelete || guardando"
+                    (click)="borrar(fila)"
+                    [attr.data-test]="'gestor-categorias-borrar-' + fila.key"
+                  >
+                    <app-icon name="delete" [size]="16" [label]="null" />
+                  </button>
+                </app-tooltip>
               </span>
             </ng-template>
           </app-data-table>

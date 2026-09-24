@@ -11,6 +11,7 @@ import { I18nService } from '../../core/services/i18n.service';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { pantryCategoryLabel } from '../../core/i18n/labels';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { TooltipComponent } from '../../shared/components/ui/tooltip/tooltip.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import {
   PickerComponent,
@@ -62,6 +63,7 @@ import {
     IconComponent,
     InputComponent,
     PickerComponent,
+    TooltipComponent,
     DataTableComponent,
     DataTableCellDirective
   ],
@@ -151,27 +153,29 @@ import {
                     {{ 'pantry.catalogo_anadir' | t }}
                   </button>
                   @if (seleccionQuitar().length > 0) {
+                    <app-tooltip position="top" [text]="'pantry.catalogo_lote_quitar_info' | t">
+                      <button
+                        type="button"
+                        class="lote__btn lote__btn--peligro"
+                        [disabled]="guardando"
+                        (click)="quitarSeleccion()"
+                        data-test="catalogo-lote-quitar"
+                      >
+                        {{ 'pantry.catalogo_lote_quitar' | t: { n: seleccionQuitar().length } }}
+                      </button>
+                    </app-tooltip>
+                  }
+                  <app-tooltip position="top" [text]="'pantry.lote_anular' | t">
                     <button
                       type="button"
-                      class="lote__btn lote__btn--peligro"
-                      [disabled]="guardando"
-                      [title]="'pantry.catalogo_lote_quitar_info' | t"
-                      (click)="quitarSeleccion()"
-                      data-test="catalogo-lote-quitar"
+                      class="lote__x"
+                      (click)="loteAnular()"
+                      data-test="catalogo-lote-anular"
+                      [attr.aria-label]="'pantry.lote_anular' | t"
                     >
-                      {{ 'pantry.catalogo_lote_quitar' | t: { n: seleccionQuitar().length } }}
+                      <app-icon name="close" [size]="16" [label]="null" />
                     </button>
-                  }
-                  <button
-                    type="button"
-                    class="lote__x"
-                    (click)="loteAnular()"
-                    data-test="catalogo-lote-anular"
-                    [attr.aria-label]="'pantry.lote_anular' | t"
-                    [title]="'pantry.lote_anular' | t"
-                  >
-                    <app-icon name="close" [size]="16" [label]="null" />
-                  </button>
+                  </app-tooltip>
                 </span>
               </div>
               <div class="lote__empuje" aria-hidden="true"></div>
@@ -207,17 +211,18 @@ import {
                 <span>{{ 'pantry.catalogo_en_casa' | t }}</span>
               </span>
             } @else {
-              <button
-                type="button"
-                class="celda__accion"
-                [attr.aria-label]="'pantry.catalogo_anadir' | t"
-                [attr.title]="'pantry.catalogo_anadir' | t"
-                [disabled]="guardando"
-                (click)="anadir(fila)"
-                [attr.data-test]="'catalogo-anadir-' + fila.id"
-              >
-                <app-icon name="add" [size]="18" [label]="null" />
-              </button>
+              <app-tooltip position="top" [text]="'pantry.catalogo_anadir' | t">
+                <button
+                  type="button"
+                  class="celda__accion"
+                  [attr.aria-label]="'pantry.catalogo_anadir' | t"
+                  [disabled]="guardando"
+                  (click)="anadir(fila)"
+                  [attr.data-test]="'catalogo-anadir-' + fila.id"
+                >
+                  <app-icon name="add" [size]="18" [label]="null" />
+                </button>
+              </app-tooltip>
             }
           </ng-template>
         </app-data-table>

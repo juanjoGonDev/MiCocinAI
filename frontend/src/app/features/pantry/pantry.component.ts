@@ -22,6 +22,7 @@ import { quitarAcentos, valorTipado } from '../../shared/components/ui/data-tabl
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { TooltipComponent } from '../../shared/components/ui/tooltip/tooltip.component';
 import { clavesSubarbolDe, colorDeCategoria } from './pantry-gestor.util';
 import {
   Ingredient,
@@ -69,6 +70,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
     ModalComponent,
     LoadingComponent,
     CheckboxComponent,
+    TooltipComponent,
     DataTableComponent,
     DataTableCellDirective,
     CatalogLabelPipe,
@@ -238,21 +240,22 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                 <p class="suggestions__hint">{{ 'pantry.toca_para_anadirlas_a' | t }}</p>
                 <div class="suggestions__chips">
                   @for (s of suggestions(); track s.id) {
-                    <button
-                      type="button"
-                      class="chip"
-                      (click)="quickAddSuggestion(s)"
-                      [title]="s.name | catalog"
-                      [attr.data-test]="'pantry-sugerencia-' + s.id"
-                    >
-                      <span
-                        class="chip__punto"
-                        [style.background]="colorDe(s.category)"
-                        aria-hidden="true"
-                      ></span>
-                      <span class="chip__name">{{ s.name | catalog }}</span>
-                      <span class="chip__plus">+</span>
-                    </button>
+                    <app-tooltip position="top" [text]="s.name | catalog">
+                      <button
+                        type="button"
+                        class="chip"
+                        (click)="quickAddSuggestion(s)"
+                        [attr.data-test]="'pantry-sugerencia-' + s.id"
+                      >
+                        <span
+                          class="chip__punto"
+                          [style.background]="colorDe(s.category)"
+                          aria-hidden="true"
+                        ></span>
+                        <span class="chip__name">{{ s.name | catalog }}</span>
+                        <span class="chip__plus">+</span>
+                      </button>
+                    </app-tooltip>
                   }
                 </div>
               }
@@ -304,16 +307,17 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                       >
                         {{ 'pantry.lote_borrar' | t }}
                       </button>
-                      <button
-                        type="button"
-                        class="lote__x"
-                        (click)="loteAnular()"
-                        data-test="pantry-lote-anular"
-                        [attr.aria-label]="'pantry.lote_anular' | t"
-                        [title]="'pantry.lote_anular' | t"
-                      >
-                        <app-icon name="close" [size]="16" [label]="null" />
-                      </button>
+                      <app-tooltip position="top" [text]="'pantry.lote_anular' | t">
+                        <button
+                          type="button"
+                          class="lote__x"
+                          (click)="loteAnular()"
+                          data-test="pantry-lote-anular"
+                          [attr.aria-label]="'pantry.lote_anular' | t"
+                        >
+                          <app-icon name="close" [size]="16" [label]="null" />
+                        </button>
+                      </app-tooltip>
                     </span>
                   </div>
                   <div class="lote__empuje" aria-hidden="true"></div>
@@ -331,27 +335,29 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
               </ng-template>
               <ng-template appDataTableCell="cantidad" let-fila>
                 <span class="pantry__stock">
-                  <button
-                    type="button"
-                    class="stock-btn"
-                    [attr.aria-label]="'pantry.quitar_unidad' | t"
-                    [attr.title]="'pantry.quitar_unidad' | t"
-                    (click)="quitarUnidad(filaIngrediente(fila))"
-                    [attr.data-test]="'pantry-stock-menos-' + filaId(fila)"
-                  >
-                    <app-icon name="remove" [size]="16" [label]="null" />
-                  </button>
+                  <app-tooltip position="top" [text]="'pantry.quitar_unidad' | t">
+                    <button
+                      type="button"
+                      class="stock-btn"
+                      [attr.aria-label]="'pantry.quitar_unidad' | t"
+                      (click)="quitarUnidad(filaIngrediente(fila))"
+                      [attr.data-test]="'pantry-stock-menos-' + filaId(fila)"
+                    >
+                      <app-icon name="remove" [size]="16" [label]="null" />
+                    </button>
+                  </app-tooltip>
                   <span class="ingredient-item__quantity">{{ filaCantidad(fila) }}</span>
-                  <button
-                    type="button"
-                    class="stock-btn"
-                    [attr.aria-label]="'pantry.anadir_unidad' | t"
-                    [attr.title]="'pantry.anadir_unidad' | t"
-                    (click)="anadirUnidad(filaIngrediente(fila))"
-                    [attr.data-test]="'pantry-stock-mas-' + filaId(fila)"
-                  >
-                    <app-icon name="add" [size]="16" [label]="null" />
-                  </button>
+                  <app-tooltip position="top" [text]="'pantry.anadir_unidad' | t">
+                    <button
+                      type="button"
+                      class="stock-btn"
+                      [attr.aria-label]="'pantry.anadir_unidad' | t"
+                      (click)="anadirUnidad(filaIngrediente(fila))"
+                      [attr.data-test]="'pantry-stock-mas-' + filaId(fila)"
+                    >
+                      <app-icon name="add" [size]="16" [label]="null" />
+                    </button>
+                  </app-tooltip>
                 </span>
               </ng-template>
               <ng-template appDataTableCell="caducidad" let-fila>
@@ -366,26 +372,28 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
               </ng-template>
               <ng-template appDataTableCell="acciones" let-fila>
                 <span class="ingrediente-acciones">
-                  <button
-                    type="button"
-                    class="action-btn"
-                    [attr.aria-label]="'pantry.editar_ingrediente' | t"
-                    [attr.title]="'pantry.editar_ingrediente' | t"
-                    (click)="editIngredient(filaIngrediente(fila))"
-                    [attr.data-test]="'pantry-editar-' + filaId(fila)"
-                  >
-                    <app-icon name="edit" [size]="16" [label]="null" />
-                  </button>
-                  <button
-                    type="button"
-                    class="action-btn action-btn--danger"
-                    [attr.aria-label]="'pantry.eliminar_ingrediente' | t"
-                    [attr.title]="'pantry.eliminar_ingrediente' | t"
-                    (click)="deleteIngredient(filaIngrediente(fila))"
-                    [attr.data-test]="'pantry-eliminar-' + filaId(fila)"
-                  >
-                    <app-icon name="delete" [size]="16" [label]="null" />
-                  </button>
+                  <app-tooltip position="top" [text]="'pantry.editar_ingrediente' | t">
+                    <button
+                      type="button"
+                      class="action-btn"
+                      [attr.aria-label]="'pantry.editar_ingrediente' | t"
+                      (click)="editIngredient(filaIngrediente(fila))"
+                      [attr.data-test]="'pantry-editar-' + filaId(fila)"
+                    >
+                      <app-icon name="edit" [size]="16" [label]="null" />
+                    </button>
+                  </app-tooltip>
+                  <app-tooltip position="top" [text]="'pantry.eliminar_ingrediente' | t">
+                    <button
+                      type="button"
+                      class="action-btn action-btn--danger"
+                      [attr.aria-label]="'pantry.eliminar_ingrediente' | t"
+                      (click)="deleteIngredient(filaIngrediente(fila))"
+                      [attr.data-test]="'pantry-eliminar-' + filaId(fila)"
+                    >
+                      <app-icon name="delete" [size]="16" [label]="null" />
+                    </button>
+                  </app-tooltip>
                 </span>
               </ng-template>
             </app-data-table>
@@ -476,16 +484,17 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                       >
                         {{ 'pantry.lote_no_disponibles' | t }}
                       </button>
-                      <button
-                        type="button"
-                        class="lote__x"
-                        (click)="loteUtensiliosAnular()"
-                        data-test="utensilios-lote-anular"
-                        [attr.aria-label]="'pantry.lote_anular' | t"
-                        [title]="'pantry.lote_anular' | t"
-                      >
-                        <app-icon name="close" [size]="16" [label]="null" />
-                      </button>
+                      <app-tooltip position="top" [text]="'pantry.lote_anular' | t">
+                        <button
+                          type="button"
+                          class="lote__x"
+                          (click)="loteUtensiliosAnular()"
+                          data-test="utensilios-lote-anular"
+                          [attr.aria-label]="'pantry.lote_anular' | t"
+                        >
+                          <app-icon name="close" [size]="16" [label]="null" />
+                        </button>
+                      </app-tooltip>
                     </span>
                   </div>
                   <div class="lote__empuje" aria-hidden="true"></div>
@@ -507,16 +516,17 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
               </ng-template>
               <ng-template appDataTableCell="acciones" let-fila>
                 <span class="ingrediente-acciones">
-                  <button
-                    type="button"
-                    class="action-btn action-btn--danger utensil-card__delete"
-                    [attr.aria-label]="'common.delete' | t"
-                    [attr.title]="'common.delete' | t"
-                    (click)="deleteUtensil(filaUtensil(fila))"
-                    [attr.data-test]="'utensil-borrar-' + filaId(fila)"
-                  >
-                    <app-icon name="delete" [size]="16" [label]="null" />
-                  </button>
+                  <app-tooltip position="top" [text]="'common.delete' | t">
+                    <button
+                      type="button"
+                      class="action-btn action-btn--danger utensil-card__delete"
+                      [attr.aria-label]="'common.delete' | t"
+                      (click)="deleteUtensil(filaUtensil(fila))"
+                      [attr.data-test]="'utensil-borrar-' + filaId(fila)"
+                    >
+                      <app-icon name="delete" [size]="16" [label]="null" />
+                    </button>
+                  </app-tooltip>
                 </span>
               </ng-template>
             </app-data-table>

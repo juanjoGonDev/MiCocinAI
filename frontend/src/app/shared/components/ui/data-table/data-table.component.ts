@@ -23,6 +23,7 @@ import { IconComponent } from '../icon/icon.component';
 import { CheckboxComponent } from '../checkbox/checkbox.component';
 import { PickerComponent, type PickerOption } from '../picker/picker.component';
 import { InputComponent } from '../input/input.component';
+import { TooltipComponent } from '../tooltip/tooltip.component';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { I18nService } from '../../../../core/services/i18n.service';
 import type { TranslationKey } from '../../../../core/i18n';
@@ -100,6 +101,7 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
     CheckboxComponent,
     InputComponent,
     PickerComponent,
+    TooltipComponent,
     TranslatePipe
   ],
   template: `
@@ -289,15 +291,18 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
           }}
         </span>
         <div class="pie__tam">
-          <app-picker
-            class="pie__tam-picker"
-            [options]="opcionesTamano()"
-            [value]="tamanoValor()"
-            [label]="''"
-            [attr.title]="'ui.tabla_por_pagina' | t"
-            data-test="tabla-tamano"
-            (valueChange)="elegirTamano($event)"
-          />
+          <!-- La pista va en popover propio: el title nativo tarda un segundo en salir, y la burbuja de
+               diseno es lo pedido (## 12af). -->
+          <app-tooltip position="top" [text]="'ui.tabla_por_pagina' | t">
+            <app-picker
+              class="pie__tam-picker"
+              [options]="opcionesTamano()"
+              [value]="tamanoValor()"
+              [label]="''"
+              data-test="tabla-tamano"
+              (valueChange)="elegirTamano($event)"
+            />
+          </app-tooltip>
         </div>
         <nav class="pie__pag" [attr.aria-label]="'ui.tabla_paginacion' | t">
           <button
@@ -315,17 +320,18 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
               @if (p === 'ini' || p === 'fin') {
                 <span class="pag__hueco" aria-hidden="true">…</span>
               } @else {
-                <button
-                  type="button"
-                  class="pag pag--num"
-                  [class.pag--on]="p === paginaEnVista()"
-                  [attr.aria-current]="p === paginaEnVista() ? 'true' : null"
-                  [attr.title]="'ui.tabla_ir_pagina' | t: { pagina: p }"
-                  (click)="irA(p)"
-                  [attr.data-test]="'tabla-pagina-' + p"
-                >
-                  {{ p }}
-                </button>
+                <app-tooltip position="top" [text]="'ui.tabla_ir_pagina' | t: { pagina: p }">
+                  <button
+                    type="button"
+                    class="pag pag--num"
+                    [class.pag--on]="p === paginaEnVista()"
+                    [attr.aria-current]="p === paginaEnVista() ? 'true' : null"
+                    (click)="irA(p)"
+                    [attr.data-test]="'tabla-pagina-' + p"
+                  >
+                    {{ p }}
+                  </button>
+                </app-tooltip>
               }
             }
           </span>
@@ -576,7 +582,9 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
         display: none;
       }
       .tabla__buscar {
-        padding: var(--space-3) var(--space-4) 0;
+        /* Padding continuo: la caja de busqueda respira igual por arriba y por abajo; con el de abajo a
+           cero, el buscador se veia pegado a la tabla (## 12af). */
+        padding: var(--space-3) var(--space-4);
       }
       /* El lote se proyecta al pie de la tarjeta: la barra en si es position:fixed (regla F de la ## 12ad,
        estilo del cascon que la pinta); aqui solo se reserva el hueco para que la ultima fila jamas quede tapada. */

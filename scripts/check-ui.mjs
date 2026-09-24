@@ -38,9 +38,7 @@ const LEGACY = {
   // «Quitar la foto» NO pregunta: el propio modal de la foto es ya un paso con dos decisiones
   // (sustituir / quitar) y su boton de cancelar, y quitar la foto se deshace volviendo a subirla. Un
   // confirm dentro de un dialogo que ya es una confirmacion es preguntar dos veces por lo mismo.
-  'sin-confirmar-borrado': [
-    'frontend/src/app/features/account/account.component.ts'
-  ],
+  'sin-confirmar-borrado': ['frontend/src/app/features/account/account.component.ts'],
   'sin-emoji': [
     // La deuda de emoji va detras de la clave: al migrar la plantilla al diccionario se llevaban los
     // pictogramas consigo, asi que los ficheros que estaban aqui perdonados ahora lo estan ahi dentro.
@@ -74,8 +72,7 @@ const LEGACY = {
     'frontend/src/app/shared/components/ui/card/card.component.ts',
     'frontend/src/app/shared/components/ui/dropdown/dropdown.component.ts',
     'frontend/src/app/shared/components/ui/progress/progress.component.ts',
-    'frontend/src/app/shared/components/ui/rating/rating.component.ts',
-    'frontend/src/app/shared/components/ui/tooltip/tooltip.component.ts'
+    'frontend/src/app/shared/components/ui/rating/rating.component.ts'
   ],
   // Tanda 20: el diccionario aun no es el unico camino para el texto en estas 22 pantallas. La lista es la
   // cuenta de lo que queda de esta tanda, NO un «ya llegara»: cada commit la acorta, y el objetivo es
@@ -85,7 +82,7 @@ const LEGACY = {
     'frontend/src/app/features/calendar/calendar.component.ts',
     'frontend/src/app/features/logs/logs.component.ts',
     'frontend/src/app/features/pantry/pantry.component.ts',
-    'frontend/src/app/features/recipes/recipes.component.ts',
+    'frontend/src/app/features/recipes/recipes.component.ts'
   ]
 };
 
@@ -117,7 +114,8 @@ function walk(dir, filter) {
   return out.sort();
 }
 
-const isFrontendSource = (path) => path.endsWith('.ts') || path.endsWith('.html') || path.endsWith('.css');
+const isFrontendSource = (path) =>
+  path.endsWith('.ts') || path.endsWith('.html') || path.endsWith('.css');
 const sourceFiles = walk(FRONTEND, isFrontendSource);
 // El mismo texto, entero, para las reglas que preguntan «existe esta cadena en la interfaz».
 const frontendSource = sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
@@ -138,7 +136,10 @@ const EMOJI =
 for (const file of sourceFiles) {
   const text = readFileSync(file, 'utf8');
   for (const match of text.matchAll(new RegExp(EMOJI, 'gu'))) {
-    const snippet = text.slice(Math.max(0, match.index - 40), match.index + 40).replace(/\s+/g, ' ').trim();
+    const snippet = text
+      .slice(Math.max(0, match.index - 40), match.index + 40)
+      .replace(/\s+/g, ' ')
+      .trim();
     // Un emoji DENTRO de un comentario tampoco vale: manana alguien lo copia.
     fail(file, lineOf(text, match.index), 'sin-emoji', `"${match[0]}" en: ${snippet}`);
   }
@@ -156,7 +157,12 @@ for (const file of sourceFiles) {
   if (file.replace(/\\/g, '/').startsWith(UI_DIR)) continue;
   const text = readFileSync(file, 'utf8');
   for (const match of text.matchAll(/<select[\s>]/g)) {
-    fail(file, lineOf(text, match.index), 'sin-select-nativo', 'usar <app-picker> (o mover el nativo a shared/components/ui)');
+    fail(
+      file,
+      lineOf(text, match.index),
+      'sin-select-nativo',
+      'usar <app-picker> (o mover el nativo a shared/components/ui)'
+    );
   }
 }
 
@@ -219,7 +225,8 @@ const known = [...dataTestInFrontend];
 const dynamicPrefixes = known.filter((candidate) => candidate.endsWith('-'));
 // Un prefijo dinamico puede coincidir por las dos bandas: `household-event` se guarda como
 // `household-event-` al construirlo, y un e2e puede preguntar por la base sin sufijo.
-const matchesPrefix = (name, prefix) => name.startsWith(prefix) || `${name}-` === prefix || name === prefix.replace(/-$/, '');
+const matchesPrefix = (name, prefix) =>
+  name.startsWith(prefix) || `${name}-` === prefix || name === prefix.replace(/-$/, '');
 const matchesAnything = (name) =>
   dataTestInFrontend.has(name) || dynamicPrefixes.some((prefix) => matchesPrefix(name, prefix));
 
@@ -229,7 +236,12 @@ if (existsSync(E2E_DIR)) {
     for (const match of text.matchAll(/data-test="([a-z0-9-]+)"/g)) {
       if (match[1].startsWith('api-') || match[1].startsWith('mock-')) continue;
       if (!matchesAnything(match[1])) {
-        fail(file, lineOf(text, match.index), 'data-test-inventado', `"${match[1]}" no aparece en ${FRONTEND}`);
+        fail(
+          file,
+          lineOf(text, match.index),
+          'data-test-inventado',
+          `"${match[1]}" no aparece en ${FRONTEND}`
+        );
       }
     }
   }
@@ -252,7 +264,12 @@ if (existsSync(E2E_DIR)) {
       const cls = match[1];
       // Un prefijo construido en el front (poco comun, pero `.tab-` + valor) tambien vale.
       if (!new RegExp(`\\b${cls}\\b`).test(frontendSource)) {
-        fail(file, lineOf(text, match.index), 'clase-huerfana', `.${cls} no aparece en ${FRONTEND}`);
+        fail(
+          file,
+          lineOf(text, match.index),
+          'clase-huerfana',
+          `.${cls} no aparece en ${FRONTEND}`
+        );
       }
     }
   }
@@ -265,14 +282,20 @@ if (existsSync(E2E_DIR)) {
 // nada de clave en el navegador, que es un sitio publico). Un `fetch` a
 // api.openai.com desde una pantalla es una clave filtrada, no un atajo.
 // ---------------------------------------------------------------------------
-const PROVIDER = /(api\.openai\.com|generativelanguage\.googleapis\.com|api\.anthropic\.com|openrouter\.ai|xai\.com|dashscope\.aliyuncs\.com)/;
+const PROVIDER =
+  /(api\.openai\.com|generativelanguage\.googleapis\.com|api\.anthropic\.com|openrouter\.ai|xai\.com|dashscope\.aliyuncs\.com)/;
 for (const file of sourceFiles) {
   const text = readFileSync(file, 'utf8');
   // Un placeholder con `https://api.openai.com/v1` en un campo de texto esta bien: es
   // EL SITIO DONDE SE ESCRIBE esa URL. Lo que no puede haber es el frontend llamando.
   if (!/\bfetch\s*\(|XMLHttpRequest|new HttpRequest/.test(text)) continue;
   for (const match of text.matchAll(new RegExp(PROVIDER.source, 'g'))) {
-    fail(file, lineOf(text, match.index), 'clave-en-el-navegador', `llamada directa al proveedor (${match[1]}); pasa por /api`);
+    fail(
+      file,
+      lineOf(text, match.index),
+      'clave-en-el-navegador',
+      `llamada directa al proveedor (${match[1]}); pasa por /api`
+    );
   }
 }
 
@@ -291,7 +314,12 @@ for (const file of sourceFiles) {
   for (const match of text.matchAll(LEAKED_ATTRIBUTE)) {
     // Un `>` de cierre de expresion dentro del propio atributo (`a > b ? "x" : "y"`) no
     // pega con este patron porque exige la comilla de cierre justo antes del `>` final.
-    fail(file, lineOf(text, match.index), 'atributo-como-texto', `texto suelto: "${match[0].trim()}"`);
+    fail(
+      file,
+      lineOf(text, match.index),
+      'atributo-como-texto',
+      `texto suelto: "${match[0].trim()}"`
+    );
   }
 }
 
@@ -309,7 +337,8 @@ for (const file of sourceFiles) {
 const DESTRUCTIVE = /(?:^|\.)(?:delete|remove|discard|clear)[A-Z][A-Za-z0-9]*\s*\(/;
 const NOT_A_DELETION =
   /confirmService|localStorage|sessionStorage|classList|removeEventListener|clearTimeout|clearInterval|unsubscribe|removeAllRanges|removeRange|removeChild|clearGenerated|\babort\(|draft\.|this\.eventsError\.set/;
-const METHOD_HEAD = /^  (?:(?:public|protected|private|readonly)\s+)*(?:async\s+)?([a-zA-Z][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?::\s*[^{]+)?\{\s*$/;
+const METHOD_HEAD =
+  /^  (?:(?:public|protected|private|readonly)\s+)*(?:async\s+)?([a-zA-Z][A-Za-z0-9_]*)\s*\([^)]*\)\s*(?::\s*[^{]+)?\{\s*$/;
 
 for (const file of sourceFiles) {
   if (!/\.component\.ts$/.test(file)) continue;
@@ -338,7 +367,9 @@ for (const file of sourceFiles) {
       .map((m) => m[1])
       .filter((target) => target !== name)
       .some((target) => {
-        const start = lines.findIndex((line) => new RegExp(`^  (?:(?:public|protected|private|async)\\s+)*${target}\\s*\\(`).test(line));
+        const start = lines.findIndex((line) =>
+          new RegExp(`^  (?:(?:public|protected|private|async)\\s+)*${target}\\s*\\(`).test(line)
+        );
         if (start < 0) return false;
         let depth = 0;
         let inner = '';
@@ -350,7 +381,12 @@ for (const file of sourceFiles) {
         return /confirm(?:Service)?\.confirm\(/.test(inner);
       });
     if (delegated) continue;
-    fail(file, i + 1, 'sin-confirmar-borrado', `${name}() llama a un metodo destructor sin pasar por el dialogo de confirmacion`);
+    fail(
+      file,
+      i + 1,
+      'sin-confirmar-borrado',
+      `${name}() llama a un metodo destructor sin pasar por el dialogo de confirmacion`
+    );
   }
 }
 
@@ -425,7 +461,12 @@ for (const file of sourceFiles) {
     // Un comentario de una linea dentro de la plantilla tampoco es texto del usuario.
     const code = trimmed.replace(/\/\*[\s\S]*?\*\//g, '').replace(/<!--[\s\S]*?-->/g, '');
     if (BLANCO.test(code)) {
-      fail(file, i + 1, 'texto-sin-en-blanco', 'di «por defecto» (lo que la app usa) o «vacio / sin valor» (lo que no hay): «en blanco» no dice que pasa');
+      fail(
+        file,
+        i + 1,
+        'texto-sin-en-blanco',
+        'di «por defecto» (lo que la app usa) o «vacio / sin valor» (lo que no hay): «en blanco» no dice que pasa'
+      );
     }
   }
 }
@@ -507,14 +548,19 @@ for (const file of sourceFiles) {
     }
   }
 
-  for (const match of template.matchAll(/<(label|div|span|li|tr|td)\b([^>]*\((?:click|mousedown)\)="[^"]*"[^>]*)>/g)) {
+  for (const match of template.matchAll(
+    /<(label|div|span|li|tr|td)\b([^>]*\((?:click|mousedown)\)="[^"]*"[^>]*)>/g
+  )) {
     const classAttr = /(?:^|\s)class="([^"]*)"/.exec(match[2]);
     if (!classAttr || /[[{]/.test(classAttr[1])) continue;
     const cls = classAttr[1].split(/\s+/)[0];
     const blocks = styleBlocks(styles, cls);
     if (blocks.some((block) => /cursor:\s*(pointer|inherit)/.test(block))) continue;
     // Si el contenedor tiene un control nativo dentro, el puntero ya lo pone ese control.
-    if (/<(?:input|button|a|select|textarea)\b/.test(template.slice(match.index, match.index + 900))) continue;
+    if (
+      /<(?:input|button|a|select|textarea)\b/.test(template.slice(match.index, match.index + 900))
+    )
+      continue;
     reportOnce(
       `${file}#${cls}#cursor`,
       file,
@@ -534,7 +580,12 @@ for (const [what, re] of [
   ['`label:has(input)` con puntero', /label:has\(input\)\s*\{[^}]*cursor:\s*pointer/s]
 ]) {
   if (!re.test(GLOBAL_STYLES)) {
-    fail('frontend/src/styles.scss', 1, 'boton-sin-afecto', `falta el baseline ${what}, y la regla confía en él`);
+    fail(
+      'frontend/src/styles.scss',
+      1,
+      'boton-sin-afecto',
+      `falta el baseline ${what}, y la regla confía en él`
+    );
   }
 }
 
@@ -557,7 +608,8 @@ for (const file of styleFiles) {
     if (!definedTokens.has(match[1])) definedTokens.set(match[1], file);
   }
   // `[style.--hour-px]="…"`, `style="--x: …"` y `setProperty('--x', …)`: tres formas de definirlo.
-  const inline = /\[style\.(--[\w-]+)\]|style="[^"]*(--[\w-]+)\s*:|setProperty\(\s*'(--[\w-]+)'\s*,/g;
+  const inline =
+    /\[style\.(--[\w-]+)\]|style="[^"]*(--[\w-]+)\s*:|setProperty\(\s*'(--[\w-]+)'\s*,/g;
   for (const match of text.matchAll(inline)) {
     for (const group of match.slice(1)) if (group) runtimeTokens.add(group);
   }
@@ -679,15 +731,37 @@ const VISIBLE_ATTRS = [
 // usuario lo vio en castellano con la app en ingles. Un nombre de atributo se reconoce por el sufijo —
 // normalizado de camelCase a kebab, que es como se escriben los dos— y la lista de arriba se queda como
 // documentacion de los casos que empujaron la regla, no como filtro.
-const ATRIBUTO_DE_TEXTO = /(?:^|[-_.])(label|title|heading|message|hint|placeholder|text|subtitle|description|question|tooltip|alt)$/i;
-const esAtributoDeTexto = (nombre) => ATRIBUTO_DE_TEXTO.test(nombre.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase());
+const ATRIBUTO_DE_TEXTO =
+  /(?:^|[-_.])(label|title|heading|message|hint|placeholder|text|subtitle|description|question|tooltip|alt)$/i;
+const esAtributoDeTexto = (nombre) =>
+  ATRIBUTO_DE_TEXTO.test(nombre.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase());
 // Unidades, simbolos y tokens tecnicos: se escriben igual en los dos idiomas. Anadir aqui es una
 // decision de producto, no la forma de callar a la regla.
-const NOT_TEXT = new Set(['g', 'kg', 'mg', 'lb', 'ml', 'l', 'cl', 'dl', 'ud', 'u', 'un', 'x', '%', '€', 'kcal', 'kj']);
+const NOT_TEXT = new Set([
+  'g',
+  'kg',
+  'mg',
+  'lb',
+  'ml',
+  'l',
+  'cl',
+  'dl',
+  'ud',
+  'u',
+  'un',
+  'x',
+  '%',
+  '€',
+  'kcal',
+  'kj'
+]);
 
 /** Lo que hay entre dos etiquetas se lee, salvo que sea una url, una ruta, una hora o una clase. */
 const esProsaDeNodo = (raw) => {
-  const s = raw.replace(/\{\{[\s\S]*?\}\}/g, ' ').replace(/\s+/g, ' ').trim();
+  const s = raw
+    .replace(/\{\{[\s\S]*?\}\}/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (!s || NOT_TEXT.has(s.toLowerCase())) return false;
   if (!/[a-záéíóúüñ]{2,}/.test(s)) return false; // «OK», «×», «42»
   if (/:\/\/|[.:/]|^\W|\W$|--|__/.test(s)) return false; // url, hora, ruta, clave, nombre de clase
@@ -751,7 +825,11 @@ for (const file of sourceFiles) {
   // un nombre de clase), que no son frases.
   for (const match of tpl.matchAll(/'([^'\n]+)'/g)) {
     const value = match[1];
-    if (value.includes('{{') || /\|\s*t\b/.test(tpl.slice(match.index + match[0].length, match.index + match[0].length + 6))) continue;
+    if (
+      value.includes('{{') ||
+      /\|\s*t\b/.test(tpl.slice(match.index + match[0].length, match.index + match[0].length + 6))
+    )
+      continue;
     // `[class]="'chip chip--' + tono"`: son clases, no frases. Se excluye por el atributo que lo envuelve,
     // no por el contenido, que «Ver el » tambien es minusculas y si que es texto.
     const antes = tpl.slice(Math.max(0, match.index - 48), match.index);
@@ -849,7 +927,10 @@ const dictPairs = (text, ident) => {
   const match = text.match(new RegExp(`const ${ident}[^{]*\\{([\\s\\S]*?)\\n\\}`));
   if (!match) return new Map();
   const out = new Map();
-  for (const kv of match[1].matchAll(/'([^']+)':\s*(?:'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\")/g)) out.set(kv[1], (kv[2] ?? kv[3]).replace(/\\'/g, "'"));
+  for (const kv of match[1].matchAll(
+    /'([^']+)':\s*(?:'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\")/g
+  ))
+    out.set(kv[1], (kv[2] ?? kv[3]).replace(/\\'/g, "'"));
   return out;
 };
 
@@ -864,19 +945,35 @@ for (const file of dictFiles) {
     for (const [key, value] of es) {
       esKeys.add(key);
       if (!en.has(key)) {
-        fail(file, lineOf(text, 0), 'clave-sin-traduccion', `${key} esta en espanol y no en ingles (el tipo lo pilla, pero el mensaje utile es este)`);
+        fail(
+          file,
+          lineOf(text, 0),
+          'clave-sin-traduccion',
+          `${key} esta en espanol y no en ingles (el tipo lo pilla, pero el mensaje utile es este)`
+        );
       } else if (en.get(key).trim() === '') {
-        fail(file, lineOf(text, 0), 'clave-sin-traduccion', `${key} tiene el ingles vacio: la pantalla sale en blanco en ese idioma`);
+        fail(
+          file,
+          lineOf(text, 0),
+          'clave-sin-traduccion',
+          `${key} tiene el ingles vacio: la pantalla sale en blanco en ese idioma`
+        );
       }
     }
     for (const key of en.keys()) {
-      if (!es.has(key)) fail(file, lineOf(text, 0), 'clave-sin-traduccion', `${key} solo existe en ingles: sobra, o falta en el espanol`);
+      if (!es.has(key))
+        fail(
+          file,
+          lineOf(text, 0),
+          'clave-sin-traduccion',
+          `${key} solo existe en ingles: sobra, o falta en el espanol`
+        );
     }
   }
 }
 
 // Las claves admiten guion (`nav.ai-config`), que es justo lo que hizo la regla cuando «no la invocaba
-      // nadie» siendo obvia: un patrón de claves que no coincide con las claves reales no detecta nada.
+// nadie» siendo obvia: un patrón de claves que no coincide con las claves reales no detecta nada.
 const KEY_LITERAL = /'([a-z][a-z0-9_.-]*\.[a-z0-9_.-]+)'/gi;
 const usedKeys = new Set();
 for (const file of sourceFiles) {
@@ -896,7 +993,12 @@ for (const file of sourceFiles) {
     const antes = text.slice(Math.max(0, match.index - 60), match.index);
     const key = antes.match(/'([a-z][\w.-]*)'\s*$/i)?.[1];
     if (key && !esKeys.has(key) && key.includes('.')) {
-      fail(file, lineOf(text, match.index), 'clave-sin-traduccion', `«${key}» no existe en core/i18n/dict: cae al fallback y se ve la clave en pantalla`);
+      fail(
+        file,
+        lineOf(text, match.index),
+        'clave-sin-traduccion',
+        `«${key}» no existe en core/i18n/dict: cae al fallback y se ve la clave en pantalla`
+      );
     }
   }
 }
@@ -906,7 +1008,12 @@ for (const file of dictFiles) {
     if (esKeys.has(match[1]) && !usedKeys.has(match[1])) {
       const enBlock = /En:/.test(text.slice(0, match.index));
       if (enBlock) continue;
-      fail(file, lineOf(text, match.index), 'clave-sin-traduccion', `«${match[1]}» no la invoca nadie: o se usa o se borra`);
+      fail(
+        file,
+        lineOf(text, match.index),
+        'clave-sin-traduccion',
+        `«${match[1]}» no la invoca nadie: o se usa o se borra`
+      );
     }
   }
 }
@@ -927,7 +1034,12 @@ for (const file of sourceFiles) {
   if (!/\|\s*t\b/.test(block[1])) continue;
   const imports = text.match(/imports:\s*\[([\s\S]*?)\]/);
   if (imports && /TranslatePipe/.test(imports[1])) continue;
-  fail(file, lineOf(text, block.index), 'pipe-sin-importar', 'la plantilla usa `| t` y el componente no importa TranslatePipe: `ng build` lo para, y aqui se ve en 40 ms');
+  fail(
+    file,
+    lineOf(text, block.index),
+    'pipe-sin-importar',
+    'la plantilla usa `| t` y el componente no importa TranslatePipe: `ng build` lo para, y aqui se ve en 40 ms'
+  );
 }
 
 // --------------------------------------------------------------------------------
@@ -954,7 +1066,12 @@ for (const file of sourceFiles) {
       const nombre = match[1];
       if (literales.has(nombre)) continue;
       if (prefijos.some((prefijo) => nombre.startsWith(prefijo))) continue;
-      fail(file, lineOf(text, match.index), 'data-test-huerfano', `el e2e pregunta por «${nombre}» y ese atributo no lo pinta ningun componente: Playwright espera 30s y falla, aqui se ve al instante`);
+      fail(
+        file,
+        lineOf(text, match.index),
+        'data-test-huerfano',
+        `el e2e pregunta por «${nombre}» y ese atributo no lo pinta ningun componente: Playwright espera 30s y falla, aqui se ve al instante`
+      );
     }
   }
 }
@@ -1078,7 +1195,8 @@ function literalesDe(texto, ini, fin, saltarTraducidas = true) {
         continue;
       }
       const antes = texto.slice(Math.max(ini, j - 30), j);
-      if (!(saltarTraducidas && /(?:i18n\s*\.\s*)?\bt\s*\(\s*$/.test(antes))) out.push([j, k, texto.slice(j, k)]);
+      if (!(saltarTraducidas && /(?:i18n\s*\.\s*)?\bt\s*\(\s*$/.test(antes)))
+        out.push([j, k, texto.slice(j, k)]);
       j = k;
       continue;
     }
@@ -1143,7 +1261,11 @@ function literalesDe(texto, ini, fin, saltarTraducidas = true) {
           else if (c === '}' || c === ']' || c === ')') nivel--;
           else if (nivel <= 1) {
             for (const campo of CAMPOS_DE_TEXTO) {
-              if (cuerpo.startsWith(campo, j) && /[\s,{]/.test(cuerpo[j - 1] ?? ' ') && /^\s*:/.test(cuerpo.slice(j + campo.length))) {
+              if (
+                cuerpo.startsWith(campo, j) &&
+                /[\s,{]/.test(cuerpo[j - 1] ?? ' ') &&
+                /^\s*:/.test(cuerpo.slice(j + campo.length))
+              ) {
                 const valor = /^\s*:\s*/.exec(cuerpo.slice(j + campo.length));
                 const desde = j + campo.length + (valor ? valor[0].length : 0);
                 let fin = desde;
@@ -1178,7 +1300,9 @@ function literalesDe(texto, ini, fin, saltarTraducidas = true) {
         if (raw[0] === '`') {
           // En una plantilla se mira todo lo que NO es interpolacion, y adentro: `t()` ya perdonado.
           const fijas = trozo.replace(/\$\{[\s\S]*?\}/g, ' ');
-          sucio = esProsa(fijas) || literalesDe(trozo, 0, trozo.length).some(([, , r]) => esProsa(r.slice(1, -1)));
+          sucio =
+            esProsa(fijas) ||
+            literalesDe(trozo, 0, trozo.length).some(([, , r]) => esProsa(r.slice(1, -1)));
         } else {
           sucio = esProsa(trozo);
         }
@@ -1230,15 +1354,17 @@ const textoDesnudo = (text) => {
   // Fuera comentarios de linea y de bloque, y fuera el interior de las plantillas entre backticks: ahi la
   // prosa es asunto de la regla 14. Se cambian por espacios del mismo largo, asi que los desplazamientos
   // siguen siendo los del fichero crudo y la linea que se imprime en el aviso es la de verdad.
-  const sinComentarios = text.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '));
+  const sinComentarios = text.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m) =>
+    m.replace(/[^\n]/g, ' ')
+  );
   return sinComentarios.replace(/`(?:[^`\\]|\\[\s\S])*`/g, (m) => m.replace(/[^\n]/g, ' '));
 };
 
-  // Un valor se pinta: lleva la inicial en mayusculas (la convencion de la casa) o una tilde, y no es una
-  // clave tecnica. `danger`, `var(--primary)` y `tray__row--head` no se leen; «Miembro» y «Caducado» si.
-  const looksDisplayText = (v) =>
-    /^[A-ZÁÉÍÓÚÜÑ][\wÁÉÍÓÚÜÑáéíóúüñ'’ -]{2,}$/.test(v.trim()) ||
-    (/[áéíóúüñ]/.test(v) && /^[A-Za-záéíóúüñÁÉÍÓÚÜÑ0-9 .,'’()/-]{3,}$/.test(v.trim()));
+// Un valor se pinta: lleva la inicial en mayusculas (la convencion de la casa) o una tilde, y no es una
+// clave tecnica. `danger`, `var(--primary)` y `tray__row--head` no se leen; «Miembro» y «Caducado» si.
+const looksDisplayText = (v) =>
+  /^[A-ZÁÉÍÓÚÜÑ][\wÁÉÍÓÚÜÑáéíóúüñ'’ -]{2,}$/.test(v.trim()) ||
+  (/[áéíóúüñ]/.test(v) && /^[A-Za-záéíóúüñÁÉÍÓÚÜÑ0-9 .,'’()/-]{3,}$/.test(v.trim()));
 
 {
   // Una clave del diccionario, una unidad o un token tecnico: no es texto que haya que traducir.
@@ -1270,7 +1396,12 @@ const textoDesnudo = (text) => {
       const valor = (lit[1] ?? lit[2]).replace(/\\'/g, "'");
       if (!isProse(valor) || exenta(valor)) continue;
       if (/\bt\s*\(\s*$/.test(text.slice(Math.max(0, desde - 16), desde))) continue;
-      avisa(file, text, desde + lit[0].indexOf(valor), `${m[1]}: '${valor}' — el catalogo lleva la frase dentro y se pinta tal cual; va en el diccionario (labelKey + | t, o t() en un getter)`);
+      avisa(
+        file,
+        text,
+        desde + lit[0].indexOf(valor),
+        `${m[1]}: '${valor}' — el catalogo lleva la frase dentro y se pinta tal cual; va en el diccionario (labelKey + | t, o t() en un getter)`
+      );
     }
 
     // 19b) El getter que devuelve la frase en vez de la clave.
@@ -1283,7 +1414,12 @@ const textoDesnudo = (text) => {
         const valor = (r[1] ?? r[2]).replace(/\\'/g, "'");
         if (!isProse(valor) || exenta(valor)) continue;
         if (/\bt\s*\(/.test(cuerpo.slice(0, r.index))) continue; // ya pasa por el diccionario
-        avisa(file, text, cuerpoInicio + r.index, `${m[1]}() devuelve '${valor}' — un modulo o un getter sin acceso al idioma devuelve CLAVE, y la pantalla traduce`);
+        avisa(
+          file,
+          text,
+          cuerpoInicio + r.index,
+          `${m[1]}() devuelve '${valor}' — un modulo o un getter sin acceso al idioma devuelve CLAVE, y la pantalla traduce`
+        );
       }
     }
 
@@ -1293,16 +1429,21 @@ const textoDesnudo = (text) => {
     // suelto es config, y un `color: 'var(--primary)'` ya lo perdona `exenta`.
     for (const obj of text.matchAll(/=\s*\{([^{}]*)\}/g)) {
       const cuerpo = obj[1];
-      const entradas = [...cuerpo.matchAll(
-        /^\s*'?([A-Za-z_$][\w$]*)'?\s*:\s*'([^'\n]+)'/gm
-      )].filter((e) => {
+      const entradas = [
+        ...cuerpo.matchAll(/^\s*'?([A-Za-z_$][\w$]*)'?\s*:\s*'([^'\n]+)'/gm)
+      ].filter((e) => {
         const v = e[2].replace(/\\'/g, "'");
         return looksDisplayText(v) && !exenta(v) && isProse(v) && !CLAVE_DE_DICC.test(v);
       });
       const total = [...cuerpo.matchAll(/^\s*'?([A-Za-z_$][\w$]*)'?\s*:/gm)].length;
       if (entradas.length < 2 || entradas.length * 2 < total) continue;
       for (const e of entradas) {
-        avisa(file, text, obj.index + 4 + e.index, `record con '${e[2]}' en ${e[1]}: la etiqueta va por clave, y eso no lo alcanza ningun idioma; deja ${e[1]}Key y traduce en el punto de pintura`);
+        avisa(
+          file,
+          text,
+          obj.index + 4 + e.index,
+          `record con '${e[2]}' en ${e[1]}: la etiqueta va por clave, y eso no lo alcanza ningun idioma; deja ${e[1]}Key y traduce en el punto de pintura`
+        );
       }
     }
   }
@@ -1328,10 +1469,50 @@ const textoDesnudo = (text) => {
 // mentir sobre lo que devuelve, y la regla 14 ya se ocupa de que quien pinte esa clave la traduzca.
 // --------------------------------------------------------------------------------
 {
-  const PALABRAS_DE_CODIGO = new Set(['if','for','while','switch','case','return','const','let','var','else','null','true','false','new','typeof','await','async','function','catch','try','do','throw','delete','in','of','this','super','break','continue','default','export','import','from','extends','as','void','yield']);
+  const PALABRAS_DE_CODIGO = new Set([
+    'if',
+    'for',
+    'while',
+    'switch',
+    'case',
+    'return',
+    'const',
+    'let',
+    'var',
+    'else',
+    'null',
+    'true',
+    'false',
+    'new',
+    'typeof',
+    'await',
+    'async',
+    'function',
+    'catch',
+    'try',
+    'do',
+    'throw',
+    'delete',
+    'in',
+    'of',
+    'this',
+    'super',
+    'break',
+    'continue',
+    'default',
+    'export',
+    'import',
+    'from',
+    'extends',
+    'as',
+    'void',
+    'yield'
+  ]);
 
-  const TRADUCE = /(?:this\s*\.\s*i18n\s*\.\s*t|\bthis\s*\.\s*t|\bi18n\s*\.\s*t|\bthis\s*\.\s*i18n\s*\.\s*plural|\bplural)\s*\(/;
-  const NOMBRE_DE_TEXTO = /^(?:get\s+|set\s+)?[A-Za-z_$][\w$]*(?:[Ll]abel|[Tt]itle|[Mm]ensaje|[Mm]essage|[Hh]int|[Pp]laceholder|[Ss]ubtitle|[Dd]escription|[Qq]uestion|[Tt]ext)[A-Za-z_$0-9]*$/;
+  const TRADUCE =
+    /(?:this\s*\.\s*i18n\s*\.\s*t|\bthis\s*\.\s*t|\bi18n\s*\.\s*t|\bthis\s*\.\s*i18n\s*\.\s*plural|\bplural)\s*\(/;
+  const NOMBRE_DE_TEXTO =
+    /^(?:get\s+|set\s+)?[A-Za-z_$][\w$]*(?:[Ll]abel|[Tt]itle|[Mm]ensaje|[Mm]essage|[Hh]int|[Pp]laceholder|[Ss]ubtitle|[Dd]escription|[Qq]uestion|[Tt]ext)[A-Za-z_$0-9]*$/;
   const ES_PROSA = (v) => isProse(v) && !NOT_TEXT.has(v.toLowerCase()) && !CLAVE_DE_DICC.test(v);
 
   for (const file of sourceFiles) {
@@ -1385,7 +1566,10 @@ const textoDesnudo = (text) => {
     // que de verdad importa: que en ese miembro alguien llama al traductor.
     const declaraciones = [];
     for (let n = 0; n < lineas.length; n++) {
-      const decl = /^  (?:(?:public|private|protected|readonly|static|get|set)\s+)*([A-Za-z_$][\w$]*)\s*(?:\(|=|:)/.exec(lineas[n]);
+      const decl =
+        /^  (?:(?:public|private|protected|readonly|static|get|set)\s+)*([A-Za-z_$][\w$]*)\s*(?:\(|=|:)/.exec(
+          lineas[n]
+        );
       if (!decl || PALABRAS_DE_CODIGO.has(decl[1])) continue;
       declaraciones.push({ nombre: decl[1], desde: n });
     }

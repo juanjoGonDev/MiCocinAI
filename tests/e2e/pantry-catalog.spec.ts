@@ -191,4 +191,36 @@ test.describe('El catálogo del supermercado', () => {
       .filter({ has: page.locator('[data-test="gestor-categorias-fila-grains"]') });
     await expect(granos.locator('.celda--padre')).toHaveText('Alimentos');
   });
+
+  test('las pistas del lote salen al instante (popover, no title) y el buscador respira por abajo', async ({
+    page
+  }) => {
+    await page.goto('/pantry/catalogo?q=espinaca');
+
+    // ## 12af C: padding continuo del slot — arriba y abajo igual, que la caja no quede pegada a la tabla.
+    const holgura = await page
+      .locator('.tabla__buscar')
+      .first()
+      .evaluate((el) => {
+        const s = getComputedStyle(el);
+        return { arriba: s.paddingTop, abajo: s.paddingBottom };
+      });
+    expect(parseFloat(holgura.abajo)).toBeGreaterThan(0);
+    expect(holgura.abajo).toBe(holgura.arriba);
+
+    // ## 12af B: el icono sin texto lleva popover propio, no el title nativo que tarda un segundo.
+    await filaDe(page, /espinaca/i)
+      .first()
+      .locator('[data-test^="tabla-marcar-"]')
+      .locator('button[role="checkbox"]')
+      .click();
+    const anular = page.locator('[data-test="catalogo-lote-anular"]');
+    await expect(anular).toBeVisible();
+    await expect(anular).not.toHaveAttribute('title');
+    const burbuja = page.locator('app-tooltip:has([data-test="catalogo-lote-anular"]) .tooltip');
+    await expect(burbuja).toHaveCSS('opacity', '0');
+    await anular.hover();
+    await expect(burbuja).toHaveCSS('opacity', '1');
+    await expect(burbuja).toContainText('Anular seleccion');
+  });
 });
