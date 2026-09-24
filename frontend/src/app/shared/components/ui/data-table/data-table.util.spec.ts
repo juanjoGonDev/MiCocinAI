@@ -422,6 +422,15 @@ describe('tramoDePaginas (## 12ad)', () => {
     expect(tramoDePaginas(2, 10)).toEqual([1, 2, 3, 'fin', 10]);
     expect(tramoDePaginas(10, 10)).toEqual([1, 'ini', 9, 10]);
   });
+  it('pegado a un extremo, la hilera se rellena desde el extremo: la ventana progresiva (## 12af)', () => {
+    // El caso del parte: en la 4 de 20, «1 2 3 [4] 5 … 20» —no «1 … 3 4 5 … 20»—, y espejo en el final.
+    expect(tramoDePaginas(3, 20)).toEqual([1, 2, 3, 4, 'fin', 20]);
+    expect(tramoDePaginas(4, 20)).toEqual([1, 2, 3, 4, 5, 'fin', 20]);
+    expect(tramoDePaginas(5, 20)).toEqual([1, 'ini', 4, 5, 6, 'fin', 20]);
+    expect(tramoDePaginas(17, 20)).toEqual([1, 'ini', 16, 17, 18, 19, 20]);
+    expect(tramoDePaginas(16, 20)).toEqual([1, 'ini', 15, 16, 17, 'fin', 20]);
+    expect(tramoDePaginas(20, 20)).toEqual([1, 'ini', 19, 20]);
+  });
   it('un hueco de UNA sola pagina se imprime como numero, no como marca', () => {
     expect(tramoDePaginas(3, 6)).toEqual([1, 2, 3, 4, 5, 6]);
     expect(tramoDePaginas(5, 8)).toEqual([1, 'ini', 4, 5, 6, 7, 8]);

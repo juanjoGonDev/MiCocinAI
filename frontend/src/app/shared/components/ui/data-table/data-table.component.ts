@@ -305,6 +305,21 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
           </app-tooltip>
         </div>
         <nav class="pie__pag" [attr.aria-label]="'ui.tabla_paginacion' | t">
+          <!-- Salto de canto: «ir a la primera» con el boton doble, y su pista en popover (## 12af: los
+               hints van todos por ahi). El aria-label dice lo mismo que la burbuja: se ve «Primera pagina»,
+               se lee «Primera pagina». -->
+          <app-tooltip position="top" [text]="'ui.tabla_primera_pagina' | t">
+            <button
+              type="button"
+              class="pag pag--canto"
+              [disabled]="pagina() <= 1"
+              (click)="irA(1)"
+              [attr.aria-label]="'ui.tabla_primera_pagina' | t"
+              data-test="tabla-primera"
+            >
+              <app-icon name="first_page" [size]="18" [label]="null" />
+            </button>
+          </app-tooltip>
           <button
             type="button"
             class="pag"
@@ -348,6 +363,18 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
           >
             <app-icon name="chevron_right" [size]="18" [label]="null" />
           </button>
+          <app-tooltip position="top" [text]="'ui.tabla_ultima_pagina' | t">
+            <button
+              type="button"
+              class="pag pag--canto"
+              [disabled]="pagina() >= vista().ultima"
+              (click)="irA(vista().ultima)"
+              [attr.aria-label]="'ui.tabla_ultima_pagina' | t"
+              data-test="tabla-ultima"
+            >
+              <app-icon name="last_page" [size]="18" [label]="null" />
+            </button>
+          </app-tooltip>
         </nav>
       </div>
 
@@ -809,17 +836,19 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
       .pie__pag {
         display: inline-flex;
         align-items: center;
-        gap: var(--space-2);
+        gap: var(--space-1);
       }
       .pag {
         display: inline-grid;
         place-items: center;
-        width: 34px;
-        height: 34px;
+        width: 30px;
+        height: 30px;
         color: var(--text-secondary);
         background: var(--bg-tertiary);
         border: 1px solid var(--border-default);
-        border-radius: var(--radius-full);
+        /* El radio de las flechas era radius-full y el de los numeros radius-md: la hilera parecia dos
+           piezas cosidas por separado. Un solo rectangulo para todo, como en la referencia pedida (## 12af). */
+        border-radius: var(--radius-md);
         cursor: pointer;
         transition: var(--transition-fast);
       }
@@ -859,7 +888,8 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
       }
       /* En el movil estrecho el paginador se pliega: flechas + «Pagina x de y», sin la hilera de numeros (D). */
       @media (max-width: 640px) {
-        .pag__numeros {
+        .pag__numeros,
+        .pag--canto {
           display: none;
         }
       }

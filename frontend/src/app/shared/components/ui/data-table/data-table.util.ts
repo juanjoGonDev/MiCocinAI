@@ -358,6 +358,12 @@ export function tramoDePaginas(actual: number, ultima: number): (number | 'ini' 
   if (ultima <= 7) return Array.from({ length: ultima }, (_, i) => i + 1);
   const centro = Math.min(Math.max(actual, 1), ultima);
   const visibles = new Set<number>([1, ultima, centro - 1, centro, centro + 1]);
+  // Ventana PROGRESIVA al estilo MUI: pegado al extremo, la hilera se rellena del extremo hacia la pagina
+  // actual en vez de dejar un «1 … 3 4 5» con hueco junto a la frontera. Sin esto, el paginador parece
+  // roto en las primeras paginas —«hasta que no avanzas no salen mas hermanos», ## 12af— y el hueco
+  // pegado al 1 no es un hueco, es una costura mal cosida.
+  if (centro <= 4) for (let p = 1; p <= centro + 1; p++) visibles.add(p);
+  if (centro >= ultima - 3) for (let p = centro - 1; p <= ultima; p++) visibles.add(p);
   const paginas = [...visibles].filter((p) => p >= 1 && p <= ultima).sort((x, y) => x - y);
   const salida: (number | 'ini' | 'fin')[] = [];
   let anterior = 0;
