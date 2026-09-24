@@ -14,6 +14,8 @@ import {
   type ListEvent
 } from '../../shared/models/shopping.model';
 import { ShoppingService } from '../../core/services/shopping.service';
+import { PantryService } from '../../core/services/pantry.service';
+import type { PantryCatalogProduct } from '../../shared/models/pantry.model';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -34,7 +36,7 @@ import {
   OFFER_PRESETS,
   CompletePriceInput,
   DiscountInput,
-  PhotoLine,
+  PhotoLine
 } from '../../shared/models/shopping.model';
 import { LongPressDirective, SwipeRowDirective } from '../../shared/directives/swipe-row.directive';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
@@ -78,7 +80,9 @@ function trimNumber(value: number): string {
 }
 
 function parsePositive(raw: string | number | null | undefined): number | null {
-  const text = String(raw ?? '').trim().replace(',', '.');
+  const text = String(raw ?? '')
+    .trim()
+    .replace(',', '.');
   if (!text) return null;
   const value = Number(text);
   if (!Number.isFinite(value) || value <= 0) return null;
@@ -100,7 +104,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
   standalone: true,
   imports: [
     TranslatePipe,
-    
+
     CommonModule,
     FormsModule,
     RouterLink,
@@ -110,12 +114,18 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
     IconButtonComponent,
     PickerComponent,
     UnitPickerComponent,
-    AvatarComponent
-  , CatalogLabelPipe],
+    AvatarComponent,
+    CatalogLabelPipe
+  ],
   template: `
     <div class="detail">
       <header class="detail__head">
-        <a class="detail__back" routerLink="/shopping" [attr.aria-label]="'shopping_list_detail.volver_a_las_listas' | t" data-test="back">
+        <a
+          class="detail__back"
+          routerLink="/shopping"
+          [attr.aria-label]="'shopping_list_detail.volver_a_las_listas' | t"
+          data-test="back"
+        >
           <app-icon name="chevron_left" [size]="22" [label]="null" />
         </a>
         <div class="detail__heading">
@@ -133,23 +143,46 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 data-test="rename-input"
                 autofocus
               />
-              <app-icon-button icon="check" [label]="'account.guardar_el_nombre' | t" size="sm" variant="primary" (onClick)="commitRename()" />
-              <app-icon-button icon="close" [label]="'common.cancel' | t" size="sm" variant="ghost" (onClick)="cancelRename()" />
+              <app-icon-button
+                icon="check"
+                [label]="'account.guardar_el_nombre' | t"
+                size="sm"
+                variant="primary"
+                (onClick)="commitRename()"
+              />
+              <app-icon-button
+                icon="close"
+                [label]="'common.cancel' | t"
+                size="sm"
+                variant="ghost"
+                (onClick)="cancelRename()"
+              />
             </div>
           } @else {
-            <h1 class="detail__title" (click)="startRename()" [attr.title]="'shopping_list_detail.renombrar_la_lista' | t">
+            <h1
+              class="detail__title"
+              (click)="startRename()"
+              [attr.title]="'shopping_list_detail.renombrar_la_lista' | t"
+            >
               {{ list()?.name ?? ('shopping_list_detail.lista' | t) }}
               <app-icon class="detail__pencil" name="edit" [size]="14" [label]="null" />
             </h1>
           }
           <p class="detail__meta">
-            <span>{{ 'shopping_list_detail.compradas_de' | t:{checked: checkedCount(), total: totalCount()} }}</span>
+            <span>{{
+              'shopping_list_detail.compradas_de'
+                | t: { checked: checkedCount(), total: totalCount() }
+            }}</span>
             @if (list()?.store) {
               <span class="detail__chip">{{ list()?.store }}</span>
             }
-            <span class="detail__chip detail__chip--money">{{ money(estimate()?.totalMinor ?? 0) }}</span>
+            <span class="detail__chip detail__chip--money">{{
+              money(estimate()?.totalMinor ?? 0)
+            }}</span>
             @if (unpricedCount() > 0) {
-              <span class="detail__chip detail__chip--warn">{{ 'shopping_list_detail.sin_precio' | t:{n: unpricedCount()} }}</span>
+              <span class="detail__chip detail__chip--warn">{{
+                'shopping_list_detail.sin_precio' | t: { n: unpricedCount() }
+              }}</span>
             }
           </p>
         </div>
@@ -159,16 +192,63 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       </header>
 
       <form class="detail__add" (ngSubmit)="addItem()">
-        <input
-          class="detail__add-input"
-          data-test="add-input"
-          name="newItem"
-          [(ngModel)]="draftItem"
-          [placeholder]="'shopping_list_detail.anadir_2_leche_1kg' | t"
-          autocomplete="off"
-          enterkeyhint="done"
-        />
-        <button type="submit" class="detail__add-btn" data-test="add-submit" [disabled]="!draftItem.trim()">
+        <div class="detail__add-campo">
+          <input
+            class="detail__add-input"
+            data-test="add-input"
+            name="newItem"
+            [(ngModel)]="draftItem"
+            [placeholder]="'shopping_list_detail.anadir_2_leche_1kg' | t"
+            autocomplete="off"
+            enterkeyhint="done"
+            role="combobox"
+            aria-autocomplete="list"
+            [attr.aria-expanded]="sugAbiertas()"
+            (input)="onDraftInput($any($event.target).value)"
+            (keydown)="onDraftKeys($event)"
+            (blur)="cerrarSugerencias()"
+          />
+          @if (sugAbiertas() && sugerencias().length) {
+            <!-- Las sugerencias del catalogo pre-registrado: teclear «lech» y ver «Leche semidesnatada ·
+                 Lacteos · l», sin escribirla entera ni deletrearla. Es listbox con flechas porque quien
+                 teclea no quiere soltar el teclado; el raton tambien vale (## 12ag). -->
+            <ul
+              class="detail__sugs"
+              role="listbox"
+              data-test="add-sugerencias"
+              [attr.aria-label]="'shopping_list_detail.sugerencias_del_catalogo' | t"
+              (mousedown)="$event.preventDefault()"
+            >
+              @for (s of sugerencias(); track s.id; let idx = $index) {
+                <li role="option" [attr.aria-selected]="idx === sugActivo">
+                  <button
+                    type="button"
+                    class="detail__sug"
+                    [class.detail__sug--on]="idx === sugActivo"
+                    [attr.data-test]="'add-sug-' + s.id.replace(':', '-')"
+                    (click)="aplicarSugerencia(idx)"
+                  >
+                    <span class="detail__sug-nombre">{{ s.name }}</span>
+                    <span class="detail__sug-meta">
+                      {{ s.categoryLabel }} · {{ s.unit }}
+                      @if (s.inHousehold) {
+                        <span class="detail__sug-casa">{{
+                          'shopping_list_detail.ya_en_casa' | t
+                        }}</span>
+                      }
+                    </span>
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        </div>
+        <button
+          type="submit"
+          class="detail__add-btn"
+          data-test="add-submit"
+          [disabled]="!draftItem.trim()"
+        >
           <app-icon name="add" [size]="18" [label]="null" />
           <span>{{ 'ui.anadir' | t }}</span>
         </button>
@@ -209,8 +289,16 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             [placeholder]="'shopping_list_detail.2_leche_1kg_tomates' | t"
           ></textarea>
           <div class="detail__paste-actions">
-            <span class="detail__hint">{{ 'shopping_list_detail.una_linea_por_producto' | t }}</span>
-            <button type="button" class="detail__primary" data-test="paste-submit" (click)="paste()" [disabled]="!draftPaste.trim()">
+            <span class="detail__hint">{{
+              'shopping_list_detail.una_linea_por_producto' | t
+            }}</span>
+            <button
+              type="button"
+              class="detail__primary"
+              data-test="paste-submit"
+              (click)="paste()"
+              [disabled]="!draftPaste.trim()"
+            >
               {{ 'shopping_list_detail.anadir_a_la_lista' | t }}
             </button>
           </div>
@@ -226,7 +314,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           (click)="selectTab('todo')"
         >
           <app-icon name="radio_button_unchecked" [size]="16" [label]="null" />
-          <span>{{ 'shopping_list_detail.pendientes_n' | t:{n: pendingCount()} }}</span>
+          <span>{{ 'shopping_list_detail.pendientes_n' | t: { n: pendingCount() } }}</span>
         </button>
         <button
           type="button"
@@ -236,12 +324,16 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           (click)="selectTab('checked')"
         >
           <app-icon name="shopping_cart" [size]="16" [label]="null" />
-          <span>{{ 'shopping_list_detail.en_el_carro_n' | t:{n: checkedCount()} }}</span>
+          <span>{{ 'shopping_list_detail.en_el_carro_n' | t: { n: checkedCount() } }}</span>
         </button>
         <span class="detail__tabs-spacer"></span>
         <app-icon-button
           [icon]="selection().length > 0 ? 'close' : 'select_all'"
-          [label]="selection().length > 0 ? ('shopping_list_detail.quitar_la_seleccion' | t) : ('shopping_list_detail.seleccionar_todo' | t)"
+          [label]="
+            selection().length > 0
+              ? ('shopping_list_detail.quitar_la_seleccion' | t)
+              : ('shopping_list_detail.seleccionar_todo' | t)
+          "
           size="sm"
           variant="soft"
           data-test="select-all"
@@ -264,7 +356,11 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           @for (group of groups(); track group.category) {
             <li class="detail__group">
               <h2 class="detail__group-title">
-                <span class="detail__group-dot" [style.background]="colorOf(group.category)" aria-hidden="true"></span>
+                <span
+                  class="detail__group-dot"
+                  [style.background]="colorOf(group.category)"
+                  aria-hidden="true"
+                ></span>
                 {{ etiquetaCategoria(group.category) }}
               </h2>
               <ul class="detail__rows">
@@ -280,7 +376,12 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     data-test="item-row"
                   >
                     <div class="detail__rail" aria-hidden="true">
-                      <button type="button" class="detail__rail-btn" data-test="rail-edit" (click)="openEdit(item)">
+                      <button
+                        type="button"
+                        class="detail__rail-btn"
+                        data-test="rail-edit"
+                        (click)="openEdit(item)"
+                      >
                         <app-icon name="edit" [size]="18" [label]="null" />
                         <span>{{ 'common.edit' | t }}</span>
                       </button>
@@ -308,7 +409,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                         data-gesture-stop
                         role="checkbox"
                         [attr.aria-checked]="item.checked === 1"
-                        [attr.aria-label]="'shopping_list_detail.marcar_nombre' | t:{name: item.name}"
+                        [attr.aria-label]="
+                          'shopping_list_detail.marcar_nombre' | t: { name: item.name }
+                        "
                         (click)="toggle(item); $event.stopPropagation()"
                       >
                         <app-icon
@@ -326,7 +429,10 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                           type="button"
                           class="detail__offer"
                           data-test="offer-chip"
-                          [attr.title]="'shopping_list_detail.oferta_detalle' | t:{desc: describeOffer(offer)}"
+                          [attr.title]="
+                            'shopping_list_detail.oferta_detalle'
+                              | t: { desc: describeOffer(offer) }
+                          "
                           (click)="setOffer(item, null); $event.stopPropagation()"
                         >
                           {{ describeOffer(offer) }}
@@ -340,14 +446,20 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                           type="button"
                           class="detail__offer detail__offer--discount"
                           data-test="line-discount-chip"
-                          [attr.title]="'shopping_list_detail.descuento_linea_detalle' | t:{desc: describeDiscount(lineDiscount)}"
+                          [attr.title]="
+                            'shopping_list_detail.descuento_linea_detalle'
+                              | t: { desc: describeDiscount(lineDiscount) }
+                          "
                           (click)="openEdit(item); $event.stopPropagation()"
                         >
                           <app-icon name="discount" [size]="12" [label]="null" />
                           {{ describeDiscount(lineDiscount) }}
                         </button>
                       }
-                      <span class="detail__price" [class.detail__price--none]="item.price_minor === null">
+                      <span
+                        class="detail__price"
+                        [class.detail__price--none]="item.price_minor === null"
+                      >
                         {{ money(item.price_minor) }}
                       </span>
                       @if (item.updated_by_name || item.added_by_name) {
@@ -355,7 +467,12 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                              sueltas que cada cual interpretaba como queria. Es el mismo icono
                              que en la auditoria y en la agenda —la foto de la persona, y su
                              inicial dentro del circulo si no tiene foto. -->
-                        <span class="detail__who" [attr.title]="'shopping_list_detail.ultimo_cambio' | t:{name: whoName(item)}">
+                        <span
+                          class="detail__who"
+                          [attr.title]="
+                            'shopping_list_detail.ultimo_cambio' | t: { name: whoName(item) }
+                          "
+                        >
                           <app-avatar [name]="whoName(item)" [src]="whoAvatar(item)" size="xs" />
                         </span>
                       }
@@ -378,9 +495,15 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
       <footer class="detail__bar">
         <div class="detail__totals">
-          <span class="detail__totals-money" data-test="total">{{ money(estimate()?.totalMinor ?? 0) }}</span>
+          <span class="detail__totals-money" data-test="total">{{
+            money(estimate()?.totalMinor ?? 0)
+          }}</span>
           <button type="button" class="detail__link" (click)="estimateOpen.set(!estimateOpen())">
-            {{ estimateOpen() ? ('shopping_list_detail.ocultar_desglose' | t) : ('shopping_list_detail.ver_desglose' | t) }}
+            {{
+              estimateOpen()
+                ? ('shopping_list_detail.ocultar_desglose' | t)
+                : ('shopping_list_detail.ver_desglose' | t)
+            }}
           </button>
         </div>
         <!-- Un boton con texto, no un icono suelto: «el porcentaje» es el ultimo sitio donde
@@ -405,10 +528,17 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             [disabled]="checkedCount() === 0"
             (onClick)="clearChecked()"
           />
-          <button type="button" class="detail__ghost detail__ghost--text" (click)="clearChecked()" [disabled]="checkedCount() === 0">
+          <button
+            type="button"
+            class="detail__ghost detail__ghost--text"
+            (click)="clearChecked()"
+            [disabled]="checkedCount() === 0"
+          >
             {{ 'shopping_list_detail.vaciar_carro' | t }}
           </button>
-          <button type="button" class="detail__primary" data-test="complete" (click)="complete()">{{ 'shopping_list_detail.terminar_compra' | t }}</button>
+          <button type="button" class="detail__primary" data-test="complete" (click)="complete()">
+            {{ 'shopping_list_detail.terminar_compra' | t }}
+          </button>
         </div>
       </footer>
 
@@ -427,14 +557,22 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 @if (line.lineDiscountMinor) {
                   <s class="detail__estimate-was">{{ money(line.lineTotalMinor) }}</s>
                 }
-                {{ money(line.lineDiscountMinor ? (line.lineTotalMinor ?? 0) - line.lineDiscountMinor : line.lineTotalMinor) }}
+                {{
+                  money(
+                    line.lineDiscountMinor
+                      ? (line.lineTotalMinor ?? 0) - line.lineDiscountMinor
+                      : line.lineTotalMinor
+                  )
+                }}
               </span>
             </li>
           }
           @if (data.lineDiscountMinor) {
             <li class="detail__estimate-row detail__estimate-row--sum">
               <span>{{ 'shopping_list_detail.descuentos_de_linea' | t }}</span>
-              <span class="detail__estimate-src">{{ 'shopping_list_detail.lineas_antes_del_cupon' | t:{n: discountedLineCount()} }}</span>
+              <span class="detail__estimate-src">{{
+                'shopping_list_detail.lineas_antes_del_cupon' | t: { n: discountedLineCount() }
+              }}</span>
               <span class="detail__estimate-money">-{{ money(data.lineDiscountMinor ?? 0) }}</span>
             </li>
           }
@@ -442,21 +580,54 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       }
 
       @if (selection().length > 0) {
-        <div class="detail__selection" data-test="selection-toolbar" role="toolbar" [attr.aria-label]="'shopping_list_detail.acciones_de_la_seleccion' | t">
-          <span class="detail__selection-count">{{ 'shopping_list_detail.seleccionadas' | t: { count: selection().length } }}</span>
-          <button type="button" class="detail__ghost" data-test="bulk-check" (click)="bulkCheck(true)">{{ 'shopping_list_detail.marcar_comprado' | t }}</button>
-          <button type="button" class="detail__ghost" data-test="bulk-remove" (click)="bulkRemove()">{{ 'shopping_list_detail.quitar' | t }}</button>
-          <button type="button" class="detail__ghost" data-test="bulk-discount" (click)="openDiscountForSelection()">
+        <div
+          class="detail__selection"
+          data-test="selection-toolbar"
+          role="toolbar"
+          [attr.aria-label]="'shopping_list_detail.acciones_de_la_seleccion' | t"
+        >
+          <span class="detail__selection-count">{{
+            'shopping_list_detail.seleccionadas' | t: { count: selection().length }
+          }}</span>
+          <button
+            type="button"
+            class="detail__ghost"
+            data-test="bulk-check"
+            (click)="bulkCheck(true)"
+          >
+            {{ 'shopping_list_detail.marcar_comprado' | t }}
+          </button>
+          <button
+            type="button"
+            class="detail__ghost"
+            data-test="bulk-remove"
+            (click)="bulkRemove()"
+          >
+            {{ 'shopping_list_detail.quitar' | t }}
+          </button>
+          <button
+            type="button"
+            class="detail__ghost"
+            data-test="bulk-discount"
+            (click)="openDiscountForSelection()"
+          >
             <app-icon name="percent" [size]="16" [label]="null" />
             {{ 'shopping_list_detail.descuento' | t }}
           </button>
-          <button type="button" class="detail__ghost" (click)="selection.set([])">{{ 'common.cancel' | t }}</button>
+          <button type="button" class="detail__ghost" (click)="selection.set([])">
+            {{ 'common.cancel' | t }}
+          </button>
         </div>
       }
 
       @if (editing(); as item) {
         <div class="detail__sheet-backdrop" (click)="closeEdit()">
-          <section class="detail__sheet" data-test="edit-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.editar_linea' | t">
+          <section
+            class="detail__sheet"
+            data-test="edit-sheet"
+            (click)="$event.stopPropagation()"
+            [attr.aria-label]="'shopping_list_detail.editar_linea' | t"
+          >
             <h2 class="detail__sheet-title">{{ item.name | catalog }}</h2>
             <!-- No dice «Cancelar», y no es un olvido: aqui todo se guarda al tocar, asi que el
                  boton cierra y punto. Prometer que deshace seria mentir. -->
@@ -499,13 +670,12 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 <span class="detail__field-label">{{ 'pantry.unidad' | t }}</span>
                 <!-- UN control para UNA decision. Estaba el chip y el desplegable debajo, y al
                      tocar el chip el desplegable seguia diciendo «Otra unidad…». -->
-                <app-unit-picker
-                  [value]="draft.unit"
-                  (valueChange)="patch({ unit: $event })"
-                />
+                <app-unit-picker [value]="draft.unit" (valueChange)="patch({ unit: $event })" />
               </div>
               <div class="detail__field">
-                <span class="detail__field-label">{{ 'shopping_list_detail.seccion_de_la_tienda' | t }}</span>
+                <span class="detail__field-label">{{
+                  'shopping_list_detail.seccion_de_la_tienda' | t
+                }}</span>
                 <app-picker
                   [label]="'shopping_list_detail.seccion' | t"
                   [options]="categoryOptions()"
@@ -519,8 +689,14 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               </div>
             </div>
             <div class="detail__field">
-              <span class="detail__field-label">{{ 'shopping_list_detail.oferta_de_la_tienda' | t }}</span>
-              <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.ofertas' | t">
+              <span class="detail__field-label">{{
+                'shopping_list_detail.oferta_de_la_tienda' | t
+              }}</span>
+              <div
+                class="detail__chips"
+                role="group"
+                [attr.aria-label]="'shopping_list_detail.ofertas' | t"
+              >
                 @for (preset of offerPresets; track preset.label) {
                   <button
                     type="button"
@@ -536,14 +712,24 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   </button>
                 }
                 @if (draftOffer()) {
-                  <button type="button" class="detail__chip-btn detail__chip-btn--clear" data-test="offer-clear" (click)="setDraftOffer(null)">
+                  <button
+                    type="button"
+                    class="detail__chip-btn detail__chip-btn--clear"
+                    data-test="offer-clear"
+                    (click)="setDraftOffer(null)"
+                  >
                     <app-icon name="close" [size]="14" [label]="null" />
                     {{ 'shopping_list_detail.sin_oferta' | t }}
                   </button>
                 }
               </div>
               <p class="detail__hint">
-                {{ draftOffer() ? ('shopping_list_detail.se_pagan_de_cada' | t:{paid: draftOffer()!.buy - draftOffer()!.take, buy: draftOffer()!.buy}) : ('shopping_list_detail.sin_oferta_pago_unitario' | t) }}
+                {{
+                  draftOffer()
+                    ? ('shopping_list_detail.se_pagan_de_cada'
+                      | t: { paid: draftOffer()!.buy - draftOffer()!.take, buy: draftOffer()!.buy })
+                    : ('shopping_list_detail.sin_oferta_pago_unitario' | t)
+                }}
               </p>
             </div>
             <div class="detail__field" data-test="line-discount">
@@ -551,12 +737,20 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 <app-icon name="discount" [size]="14" [label]="null" />
                 {{ 'shopping_list_detail.descuento_en_esta_linea' | t }}
               </span>
-              <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.tipo_de_descuento_de' | t:{name: item.name}">
+              <div
+                class="detail__chips"
+                role="group"
+                [attr.aria-label]="
+                  'shopping_list_detail.tipo_de_descuento_de' | t: { name: item.name }
+                "
+              >
                 @for (kind of lineKinds; track kind.value) {
                   <button
                     type="button"
                     class="detail__chip-btn"
-                    [class.detail__chip-btn--active]="lineKind() === kind.value && kind.value !== 'none'"
+                    [class.detail__chip-btn--active]="
+                      lineKind() === kind.value && kind.value !== 'none'
+                    "
                     [class.detail__chip-btn--clear]="kind.value === 'none'"
                     [attr.aria-pressed]="kind.value === 'none' ? null : lineKind() === kind.value"
                     data-test="line-discount-kind"
@@ -607,8 +801,15 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     />
                   </label>
                 </div>
-                <p class="detail__hint" data-test="line-discount-preview">{{ lineDiscountHint() }}</p>
-                <button type="button" class="detail__link" data-test="line-discount-clear" (click)="setLineKind('none')">
+                <p class="detail__hint" data-test="line-discount-preview">
+                  {{ lineDiscountHint() }}
+                </p>
+                <button
+                  type="button"
+                  class="detail__link"
+                  data-test="line-discount-clear"
+                  (click)="setLineKind('none')"
+                >
                   <app-icon name="close" [size]="14" [label]="null" />
                   {{ 'shopping_list_detail.quitar_el_descuento_de' | t }}
                 </button>
@@ -635,8 +836,17 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               </span>
               @if (item.product_key && item.product_key !== keyOf(item.name)) {
                 <div class="detail__chips">
-                  <span class="detail__chip detail__chip--linked" data-test="product-link-current">{{ item.product_key }}</span>
-                  <button type="button" class="detail__link" data-test="product-link-clear" (click)="unlinkProduct(item)">
+                  <span
+                    class="detail__chip detail__chip--linked"
+                    data-test="product-link-current"
+                    >{{ item.product_key }}</span
+                  >
+                  <button
+                    type="button"
+                    class="detail__link"
+                    data-test="product-link-clear"
+                    (click)="unlinkProduct(item)"
+                  >
                     <app-icon name="link_off" [size]="14" [label]="null" />
                     {{ 'shopping_list_detail.quitar_el_enlace' | t }}
                   </button>
@@ -657,8 +867,16 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               }
             </div>
             <div class="detail__sheet-actions">
-              <button type="button" class="detail__ghost detail__ghost--danger" (click)="remove(item)">{{ 'shopping_list_detail.quitar_linea' | t }}</button>
-              <button type="button" class="detail__primary" (click)="closeEdit()">{{ 'shopping_list_detail.hecho' | t }}</button>
+              <button
+                type="button"
+                class="detail__ghost detail__ghost--danger"
+                (click)="remove(item)"
+              >
+                {{ 'shopping_list_detail.quitar_linea' | t }}
+              </button>
+              <button type="button" class="detail__primary" (click)="closeEdit()">
+                {{ 'shopping_list_detail.hecho' | t }}
+              </button>
             </div>
             <p class="detail__hint">{{ 'shopping_list_detail.los_cambios_se_guardan' | t }}</p>
           </section>
@@ -667,13 +885,32 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
       @if (discountOpen()) {
         <div class="detail__sheet-backdrop" (click)="discountOpen.set(false)">
-          <section class="detail__sheet" data-test="discount-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.descuento_de_la_lista' | t">
-            <h2 class="detail__sheet-title">{{ 'shopping_list_detail.descuento_de_la_lista' | t }}</h2>
-<app-icon-button class="detail__sheet-x" icon="close" [label]="'shopping_list_detail.cerrar_sin_cambiar_el' | t" size="sm" variant="ghost" data-test="discount-close" (onClick)="discountOpen.set(false)" />
+          <section
+            class="detail__sheet"
+            data-test="discount-sheet"
+            (click)="$event.stopPropagation()"
+            [attr.aria-label]="'shopping_list_detail.descuento_de_la_lista' | t"
+          >
+            <h2 class="detail__sheet-title">
+              {{ 'shopping_list_detail.descuento_de_la_lista' | t }}
+            </h2>
+            <app-icon-button
+              class="detail__sheet-x"
+              icon="close"
+              [label]="'shopping_list_detail.cerrar_sin_cambiar_el' | t"
+              size="sm"
+              variant="ghost"
+              data-test="discount-close"
+              (onClick)="discountOpen.set(false)"
+            />
             <p class="detail__hint">
               {{ 'shopping_list_detail.el_importe_o_el' | t }}
             </p>
-            <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.tipo_de_descuento' | t">
+            <div
+              class="detail__chips"
+              role="group"
+              [attr.aria-label]="'shopping_list_detail.tipo_de_descuento' | t"
+            >
               @for (kind of discountKinds; track kind.value) {
                 <button
                   type="button"
@@ -689,7 +926,11 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             </div>
             <div class="detail__sheet-grid">
               <label class="detail__field">
-                <span>{{ discountDraft().kind === 'percent' ? ('shopping_list_detail.porcentaje' | t) : ('shopping_list_detail.importe_euros' | t) }}</span>
+                <span>{{
+                  discountDraft().kind === 'percent'
+                    ? ('shopping_list_detail.porcentaje' | t)
+                    : ('shopping_list_detail.importe_euros' | t)
+                }}</span>
                 @if (discountDraft().kind === 'percent') {
                   <app-picker
                     [label]="'shopping_list_detail.porcentaje' | t"
@@ -725,8 +966,14 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               </label>
             </div>
             <div class="detail__field">
-              <span class="detail__field-label">{{ 'shopping_list_detail.a_que_se_aplica' | t }}</span>
-              <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.alcance_del_descuento' | t">
+              <span class="detail__field-label">{{
+                'shopping_list_detail.a_que_se_aplica' | t
+              }}</span>
+              <div
+                class="detail__chips"
+                role="group"
+                [attr.aria-label]="'shopping_list_detail.alcance_del_descuento' | t"
+              >
                 @for (scope of discountScopes; track scope.value) {
                   <button
                     type="button"
@@ -743,20 +990,39 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               @if (discountDraft().scope === 'product' || discountDraft().scope === 'category') {
                 <div class="detail__targets" data-test="discount-targets">
                   <div class="detail__targets-head">
-                    <span>{{ discountDraft().scope === 'category' ? ('shopping_list_detail.que_pasillos_entran' | t) : ('shopping_list_detail.que_lineas_entran' | t) }}</span>
-                    <button type="button" class="detail__link" data-test="discount-targets-all" (click)="toggleAllTargets()">
-                      {{ allTargetsSelected() ? ('shopping_list_detail.quitar_todas' | t) : ('shopping_list_detail.elegir_todas' | t) }}
+                    <span>{{
+                      discountDraft().scope === 'category'
+                        ? ('shopping_list_detail.que_pasillos_entran' | t)
+                        : ('shopping_list_detail.que_lineas_entran' | t)
+                    }}</span>
+                    <button
+                      type="button"
+                      class="detail__link"
+                      data-test="discount-targets-all"
+                      (click)="toggleAllTargets()"
+                    >
+                      {{
+                        allTargetsSelected()
+                          ? ('shopping_list_detail.quitar_todas' | t)
+                          : ('shopping_list_detail.elegir_todas' | t)
+                      }}
                     </button>
                   </div>
 
                   @if (discountDraft().targets.length) {
-                    <div class="detail__chips" role="list" [attr.aria-label]="'shopping_list_detail.elegidas' | t">
+                    <div
+                      class="detail__chips"
+                      role="list"
+                      [attr.aria-label]="'shopping_list_detail.elegidas' | t"
+                    >
                       @for (target of discountDraft().targets; track target) {
                         <button
                           type="button"
                           class="detail__chip-btn detail__chip-btn--active"
                           role="listitem"
-                          [attr.aria-label]="'shopping_list_detail.quitar_del_descuento' | t:{name: target}"
+                          [attr.aria-label]="
+                            'shopping_list_detail.quitar_del_descuento' | t: { name: target }
+                          "
                           [attr.data-test]="'discount-target-chip-' + target"
                           (click)="toggleTarget(target)"
                         >
@@ -768,7 +1034,11 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   }
 
                   @if (discountDraft().scope === 'category') {
-                    <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.secciones_de_la_lista' | t">
+                    <div
+                      class="detail__chips"
+                      role="group"
+                      [attr.aria-label]="'shopping_list_detail.secciones_de_la_lista' | t"
+                    >
                       @for (option of discountTargetOptions(); track option.value) {
                         <button
                           type="button"
@@ -798,18 +1068,27 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                             (click)="toggleTarget(option.label)"
                           >
                             <app-icon
-                              [name]="isTargetSelected(option.label) ? 'check_box' : 'check_box_outline_blank'"
+                              [name]="
+                                isTargetSelected(option.label)
+                                  ? 'check_box'
+                                  : 'check_box_outline_blank'
+                              "
                               [size]="20"
                               [label]="null"
                             />
-                            <span class="detail__target-dot" [style.background]="option.color ?? 'transparent'"></span>
+                            <span
+                              class="detail__target-dot"
+                              [style.background]="option.color ?? 'transparent'"
+                            ></span>
                             <span class="detail__target-name">{{ option.label }}</span>
                             <span class="detail__target-hint">{{ option.hint }}</span>
                           </button>
                         </li>
                       }
                       @if (!discountTargetOptions().length) {
-                        <li class="detail__target-empty">{{ 'shopping_list_detail.la_lista_esta_vacia' | t }}</li>
+                        <li class="detail__target-empty">
+                          {{ 'shopping_list_detail.la_lista_esta_vacia' | t }}
+                        </li>
                       }
                     </ul>
                   }
@@ -844,7 +1123,13 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 <div class="detail__first-units">
                   <span>{{ 'shopping_list_detail.primeras_unidades' | t }}</span>
                   <div class="detail__stepper">
-                    <app-icon-button icon="remove" [label]="'shopping_list_detail.quitar_una_unidad' | t" size="sm" variant="soft" (onClick)="bumpFirstUnits(-1)" />
+                    <app-icon-button
+                      icon="remove"
+                      [label]="'shopping_list_detail.quitar_una_unidad' | t"
+                      size="sm"
+                      variant="soft"
+                      (onClick)="bumpFirstUnits(-1)"
+                    />
                     <input
                       name="firstUnits"
                       type="number"
@@ -854,19 +1139,37 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       (ngModelChange)="setFirstUnits($event)"
                       data-test="discount-first-units"
                     />
-                    <app-icon-button icon="add" [label]="'shopping_list_detail.anadir_una_unidad' | t" size="sm" variant="soft" (onClick)="bumpFirstUnits(1)" />
+                    <app-icon-button
+                      icon="add"
+                      [label]="'shopping_list_detail.anadir_una_unidad' | t"
+                      size="sm"
+                      variant="soft"
+                      (onClick)="bumpFirstUnits(1)"
+                    />
                   </div>
                 </div>
               }
             </div>
             <div class="detail__sheet-actions">
               @if (list()?.discount) {
-                <button type="button" class="detail__ghost detail__ghost--danger" data-test="discount-remove" (click)="removeDiscount()">
+                <button
+                  type="button"
+                  class="detail__ghost detail__ghost--danger"
+                  data-test="discount-remove"
+                  (click)="removeDiscount()"
+                >
                   <app-icon name="delete" [size]="16" [label]="null" />
                   {{ 'shopping_list_detail.quitar_descuento' | t }}
                 </button>
               }
-              <button type="button" class="detail__primary" data-test="discount-save" (click)="saveDiscount()">{{ 'common.save' | t }}</button>
+              <button
+                type="button"
+                class="detail__primary"
+                data-test="discount-save"
+                (click)="saveDiscount()"
+              >
+                {{ 'common.save' | t }}
+              </button>
             </div>
           </section>
         </div>
@@ -874,7 +1177,12 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
       @if (payOpen()) {
         <div class="detail__sheet-backdrop" (click)="closePay()">
-          <section class="detail__sheet detail__sheet--wide" data-test="pay-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.precios_pagados_por_tienda' | t">
+          <section
+            class="detail__sheet detail__sheet--wide"
+            data-test="pay-sheet"
+            (click)="$event.stopPropagation()"
+            [attr.aria-label]="'shopping_list_detail.precios_pagados_por_tienda' | t"
+          >
             <h2 class="detail__sheet-title">{{ 'shopping_list_detail.cuanto_has_pagado' | t }}</h2>
             <app-icon-button
               class="detail__sheet-x"
@@ -895,7 +1203,11 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 {{ 'shopping_list_detail.establecimiento' | t }}
               </span>
               @if (storeChips().length) {
-                <div class="detail__chips" role="group" [attr.aria-label]="'shopping_list_detail.tiendas_de_esta_casa' | t">
+                <div
+                  class="detail__chips"
+                  role="group"
+                  [attr.aria-label]="'shopping_list_detail.tiendas_de_esta_casa' | t"
+                >
                   @for (store of storeChips(); track store) {
                     <button
                       type="button"
@@ -926,10 +1238,15 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
             <ul class="detail__pay">
               @for (line of payLines(); track line.itemId) {
-                <li class="detail__pay-row" [class.detail__pay-row--empty]="!payValue(line.itemId).trim()">
+                <li
+                  class="detail__pay-row"
+                  [class.detail__pay-row--empty]="!payValue(line.itemId).trim()"
+                >
                   <div class="detail__pay-head">
                     <span class="detail__pay-name">{{ line.name }}</span>
-                    <span class="detail__pay-qty">{{ line.quantity }}{{ line.unit ? ' ' + line.unit : '' }}</span>
+                    <span class="detail__pay-qty"
+                      >{{ line.quantity }}{{ line.unit ? ' ' + line.unit : '' }}</span
+                    >
                   </div>
                   @if (paySuggestion(line.itemId); as hint) {
                     <button
@@ -946,13 +1263,26 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   <div class="detail__pay-money">
                     <input
                       inputmode="decimal"
-                      [placeholder]="payMode(line.itemId) === 'unit' ? ('shopping_list_detail.pago_por_unidad' | t) : ('shopping_list_detail.pago_en_total' | t)"
+                      [placeholder]="
+                        payMode(line.itemId) === 'unit'
+                          ? ('shopping_list_detail.pago_por_unidad' | t)
+                          : ('shopping_list_detail.pago_en_total' | t)
+                      "
                       [ngModel]="payValue(line.itemId)"
                       (ngModelChange)="setPayValue(line.itemId, $event)"
                       [attr.data-test]="'pay-price-' + line.itemId"
                     />
-                    <button type="button" class="detail__link" [attr.data-test]="'pay-mode-' + line.itemId" (click)="togglePayMode(line.itemId)">
-                      {{ payMode(line.itemId) === 'unit' ? ('shopping_list_detail.eur_por_unidad' | t) : ('shopping_list_detail.total_pagado' | t) }}
+                    <button
+                      type="button"
+                      class="detail__link"
+                      [attr.data-test]="'pay-mode-' + line.itemId"
+                      (click)="togglePayMode(line.itemId)"
+                    >
+                      {{
+                        payMode(line.itemId) === 'unit'
+                          ? ('shopping_list_detail.eur_por_unidad' | t)
+                          : ('shopping_list_detail.total_pagado' | t)
+                      }}
                     </button>
                   </div>
                   <input
@@ -969,7 +1299,14 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             </ul>
 
             <div class="detail__sheet-actions">
-              <button type="button" class="detail__ghost" data-test="pay-cancel" (click)="closePay()">{{ 'common.cancel' | t }}</button>
+              <button
+                type="button"
+                class="detail__ghost"
+                data-test="pay-cancel"
+                (click)="closePay()"
+              >
+                {{ 'common.cancel' | t }}
+              </button>
               <button
                 type="button"
                 class="detail__primary"
@@ -983,7 +1320,14 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             </div>
             <p class="detail__hint" data-test="pay-foot">
               @if (payMissing() > 0) {
-                Faltan {{ payMissing() }} {{ (payMissing() === 1 ? 'shopping_list_detail.linea_uno' : 'shopping_list_detail.lineas_varios') | t }} por anotar ·
+                Faltan {{ payMissing() }}
+                {{
+                  (payMissing() === 1
+                    ? 'shopping_list_detail.linea_uno'
+                    : 'shopping_list_detail.lineas_varios'
+                  ) | t
+                }}
+                por anotar ·
               }
               total {{ money(payTotal()) }} · lo que no se escribe aqui no entra en el historial.
             </p>
@@ -993,15 +1337,38 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
       @if (photoOpen()) {
         <div class="detail__sheet-backdrop" (click)="closePhoto()">
-          <section class="detail__sheet detail__sheet--wide" data-test="photo-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.anadir_desde_una_foto_2' | t">
+          <section
+            class="detail__sheet detail__sheet--wide"
+            data-test="photo-sheet"
+            (click)="$event.stopPropagation()"
+            [attr.aria-label]="'shopping_list_detail.anadir_desde_una_foto_2' | t"
+          >
             <h2 class="detail__sheet-title">{{ 'shopping_list_detail.desde_una_foto' | t }}</h2>
-<app-icon-button class="detail__sheet-x" icon="close" [label]="'shopping_list_detail.cerrar_la_foto' | t" size="sm" variant="ghost" data-test="photo-close" (onClick)="closePhoto()" />
+            <app-icon-button
+              class="detail__sheet-x"
+              icon="close"
+              [label]="'shopping_list_detail.cerrar_la_foto' | t"
+              size="sm"
+              variant="ghost"
+              data-test="photo-close"
+              (onClick)="closePhoto()"
+            />
             <p class="detail__hint">
               {{ 'shopping_list_detail.la_foto_la_mira' | t }}
             </p>
 
-            <label class="detail__photo-drop" [class.detail__photo-drop--ready]="photoPreview()" data-test="photo-drop">
-              <input type="file" accept="image/png,image/jpeg,image/webp" capture="environment" name="photoFile" (change)="onPhotoFile($event)" />
+            <label
+              class="detail__photo-drop"
+              [class.detail__photo-drop--ready]="photoPreview()"
+              data-test="photo-drop"
+            >
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                capture="environment"
+                name="photoFile"
+                (change)="onPhotoFile($event)"
+              />
               @if (photoPreview()) {
                 <img [src]="photoPreview()" [alt]="'shopping_list_detail.foto_que_se_va' | t" />
               } @else {
@@ -1012,8 +1379,16 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
             <div class="detail__sheet-grid">
               <div class="detail__field">
-                <span class="detail__field-label">{{ 'shopping_list_detail.que_es_la_foto' | t }}</span>
-                <app-picker [label]="'shopping_list_detail.modo' | t" [options]="photoModes()" [value]="photoMode()" (valueChange)="setPhotoMode($event)" data-test="photo-mode" />
+                <span class="detail__field-label">{{
+                  'shopping_list_detail.que_es_la_foto' | t
+                }}</span>
+                <app-picker
+                  [label]="'shopping_list_detail.modo' | t"
+                  [options]="photoModes()"
+                  [value]="photoMode()"
+                  (valueChange)="setPhotoMode($event)"
+                  data-test="photo-mode"
+                />
               </div>
               <label class="detail__field">
                 <span>{{ 'shopping_list_detail.nota_para_el_modelo' | t }}</span>
@@ -1032,13 +1407,19 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 <app-icon name="error_outline" [size]="18" [label]="null" />
                 <span>{{ photoError() }}</span>
                 @if (photoRedirect()) {
-                  <a class="detail__link" [routerLink]="photoRedirect()">{{ 'shopping_list_detail.configurar_la_ia' | t }}</a>
+                  <a class="detail__link" [routerLink]="photoRedirect()">{{
+                    'shopping_list_detail.configurar_la_ia' | t
+                  }}</a>
                 }
               </p>
             }
 
             @if (photoBusy()) {
-              <p class="detail__photo-busy" role="status"><app-icon name="refresh" [size]="16" [label]="null" />{{ 'shopping_list_detail.mirando_la_foto' | t }}</p>
+              <p class="detail__photo-busy" role="status">
+                <app-icon name="refresh" [size]="16" [label]="null" />{{
+                  'shopping_list_detail.mirando_la_foto' | t
+                }}
+              </p>
             }
 
             @if (photoResult(); as result) {
@@ -1050,13 +1431,33 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       class="detail__photo-keep"
                       role="checkbox"
                       [attr.aria-checked]="line.keep"
-                      [attr.aria-label]="'shopping_list_detail.anadir_nombre' | t:{name: line.name}"
+                      [attr.aria-label]="
+                        'shopping_list_detail.anadir_nombre' | t: { name: line.name }
+                      "
                       (click)="line.keep = !line.keep"
                     >
-                      <app-icon [name]="line.keep ? 'check_circle' : 'radio_button_unchecked'" [size]="20" [label]="null" />
+                      <app-icon
+                        [name]="line.keep ? 'check_circle' : 'radio_button_unchecked'"
+                        [size]="20"
+                        [label]="null"
+                      />
                     </button>
-                    <input class="detail__photo-name" name="photoName{{ $index }}" [ngModel]="line.name" (ngModelChange)="line.name = $event" maxlength="80" />
-                    <input class="detail__photo-qty" name="photoQty{{ $index }}" type="number" min="0" step="0.1" [ngModel]="line.quantity" (ngModelChange)="setLineQuantity(line, $event)" />
+                    <input
+                      class="detail__photo-name"
+                      name="photoName{{ $index }}"
+                      [ngModel]="line.name"
+                      (ngModelChange)="line.name = $event"
+                      maxlength="80"
+                    />
+                    <input
+                      class="detail__photo-qty"
+                      name="photoQty{{ $index }}"
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      [ngModel]="line.quantity"
+                      (ngModelChange)="setLineQuantity(line, $event)"
+                    />
                     <input
                       class="detail__photo-price"
                       name="photoPrice{{ $index }}"
@@ -1068,11 +1469,17 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     <span class="detail__photo-cat" [style.color]="colorOf(line.category)">
                       {{ line.category ?? ('shopping_list_detail.sin_seccion' | t) }}
                       @if (line.createCategory) {
-                        <span class="detail__photo-new">{{ 'shopping_list_detail.nueva_2' | t }}</span>
+                        <span class="detail__photo-new">{{
+                          'shopping_list_detail.nueva_2' | t
+                        }}</span>
                       }
                     </span>
                     @if (line.confidence !== undefined && line.confidence < 0.6) {
-                      <span class="detail__photo-doubt" [attr.title]="'shopping_list_detail.la_ia_no_esta' | t">{{ 'shopping_list_detail.baja_confianza' | t }}</span>
+                      <span
+                        class="detail__photo-doubt"
+                        [attr.title]="'shopping_list_detail.la_ia_no_esta' | t"
+                        >{{ 'shopping_list_detail.baja_confianza' | t }}</span
+                      >
                     }
                   </li>
                 }
@@ -1085,7 +1492,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 </ul>
               }
               <div class="detail__sheet-actions">
-                <button type="button" class="detail__ghost" (click)="analyzePhoto()">{{ 'shopping_list_detail.otro_intento' | t }}</button>
+                <button type="button" class="detail__ghost" (click)="analyzePhoto()">
+                  {{ 'shopping_list_detail.otro_intento' | t }}
+                </button>
                 <button
                   type="button"
                   class="detail__primary"
@@ -1093,13 +1502,27 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   [disabled]="keptPhotoLines().length === 0 || photoApplying()"
                   (click)="applyPhoto()"
                 >
-                  {{ photoApplying() ? ('shopping_list_detail.anadiendo' | t) : ('shopping_list_detail.anadir_lineas' | t:{n: keptPhotoLines().length}) }}
+                  {{
+                    photoApplying()
+                      ? ('shopping_list_detail.anadiendo' | t)
+                      : ('shopping_list_detail.anadir_lineas' | t: { n: keptPhotoLines().length })
+                  }}
                 </button>
               </div>
             } @else {
               <div class="detail__sheet-actions">
-                <button type="button" class="detail__primary" data-test="photo-analyze" [disabled]="!photoData() || photoBusy()" (click)="analyzePhoto()">
-                  {{ photoData() ? ('shopping_list_detail.analizar_la_foto' | t) : ('shopping_list_detail.elige_una_foto' | t) }}
+                <button
+                  type="button"
+                  class="detail__primary"
+                  data-test="photo-analyze"
+                  [disabled]="!photoData() || photoBusy()"
+                  (click)="analyzePhoto()"
+                >
+                  {{
+                    photoData()
+                      ? ('shopping_list_detail.analizar_la_foto' | t)
+                      : ('shopping_list_detail.elige_una_foto' | t)
+                  }}
                 </button>
               </div>
             }
@@ -1109,9 +1532,24 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
 
       @if (auditOpen()) {
         <div class="detail__sheet-backdrop" (click)="auditOpen.set(false)">
-          <section class="detail__sheet" data-test="audit-sheet" (click)="$event.stopPropagation()" [attr.aria-label]="'shopping_list_detail.quien_ha_tocado_que' | t">
-            <h2 class="detail__sheet-title">{{ 'shopping_list_detail.quien_ha_tocado_que' | t }}</h2>
-<app-icon-button class="detail__sheet-x" icon="close" [label]="'shopping_list_detail.cerrar_el_historial' | t" size="sm" variant="ghost" data-test="audit-close" (onClick)="auditOpen.set(false)" />
+          <section
+            class="detail__sheet"
+            data-test="audit-sheet"
+            (click)="$event.stopPropagation()"
+            [attr.aria-label]="'shopping_list_detail.quien_ha_tocado_que' | t"
+          >
+            <h2 class="detail__sheet-title">
+              {{ 'shopping_list_detail.quien_ha_tocado_que' | t }}
+            </h2>
+            <app-icon-button
+              class="detail__sheet-x"
+              icon="close"
+              [label]="'shopping_list_detail.cerrar_el_historial' | t"
+              size="sm"
+              variant="ghost"
+              data-test="audit-close"
+              (onClick)="auditOpen.set(false)"
+            />
             @if (events().length === 0) {
               <p class="detail__hint">{{ 'shopping_list_detail.todavia_no_hay_nada' | t }}</p>
             } @else {
@@ -1132,12 +1570,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         </div>
       }
     </div>
-
-    `,
+  `,
   styles: [
-
     `
-
       .detail__group-title {
         display: flex;
         align-items: center;
@@ -1266,11 +1701,17 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         font-family: inherit;
         cursor: pointer;
       }
-      .detail__ghost--text {
-        display: none;
+      /* Los dos controles de «vaciar» se turnan por pantalla, no se apilan ni se esconden los dos:
+         en ancha manda el texto (es lo que se lee), en estrecha el boton compacto con su etiqueta
+         accessible. La pareja anterior dejaba el texto con display none en TODO anchor (## 12ag,
+         el rojo viejo de CI en shopping-lists > vaciar el carro). */
+      @media (max-width: 720px) {
+        .detail__ghost--text {
+          display: none;
+        }
       }
       @media (min-width: 721px) {
-        .detail__ghost--text {
+        .detail__bar-actions app-icon-button {
           display: none;
         }
       }
@@ -2137,45 +2578,45 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       /* Los de caja: el borde pasa a color de accion y el fondo se tina un paso. */
       .detail__ghost:hover:not(:disabled),
       .detail__back:hover {
-      border-color: var(--primary);
-      background: var(--primary-subtle);
-      color: var(--primary-dark);
+        border-color: var(--primary);
+        background: var(--primary-subtle);
+        color: var(--primary-dark);
       }
 
       .detail__add-btn:hover:not(:disabled),
       .detail__primary:hover:not(:disabled) {
-      background: var(--primary-dark);
-      box-shadow: var(--shadow-sm);
+        background: var(--primary-dark);
+        box-shadow: var(--shadow-sm);
       }
 
       .detail__ghost--danger:hover:not(:disabled) {
-      border-color: var(--error);
-      background: var(--error-subtle);
-      color: var(--error);
+        border-color: var(--error);
+        background: var(--error-subtle);
+        color: var(--error);
       }
 
       /* Pestanas: sin caja propia no se leia que eran pulsables —la clase activa si tenia fondo, la
       inactiva era texto suelto. Ahora son las dos mitades de la misma pastilla. */
       .detail__tab {
-      padding: var(--space-2) var(--space-3);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-full);
-      background: var(--bg-secondary);
-      color: var(--text-secondary);
-      font-size: var(--text-sm);
-      min-height: 40px;
+        padding: var(--space-2) var(--space-3);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-full);
+        background: var(--bg-secondary);
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        min-height: 40px;
       }
 
       .detail__tab:hover:not(.detail__tab--active) {
-      border-color: var(--primary);
-      color: var(--primary-dark);
-      background: var(--primary-subtle);
+        border-color: var(--primary);
+        color: var(--primary-dark);
+        background: var(--primary-subtle);
       }
 
       .detail__tab--active:hover {
-      background: var(--primary-dark);
-      border-color: var(--primary-dark);
-      color: var(--white);
+        background: var(--primary-dark);
+        border-color: var(--primary-dark);
+        color: var(--white);
       }
 
       /* Sueltos dentro de la fila: el icono sin caja es la unica senal de que la fila tiene acciones. */
@@ -2183,26 +2624,26 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       .detail__more:hover,
       .detail__photo-keep:hover,
       .detail__sheet-x:hover {
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
       }
 
       .detail__check,
       .detail__more,
       .detail__photo-keep,
       .detail__sheet-x {
-      border-radius: var(--radius-full);
-      transition: var(--transition-fast);
+        border-radius: var(--radius-full);
+        transition: var(--transition-fast);
       }
 
       /* Riel de accion de la fila (swipe): la accion se ve en el gesto, asi que el hover se limita a
       aclarar/oscurecer lo que ya esta ahi, sin mover nada. */
       .detail__rail-btn:hover {
-      background: var(--bg-tertiary);
+        background: var(--bg-tertiary);
       }
 
       .detail__rail-btn--danger:hover {
-      background: var(--color-error-600, #b42318);
+        background: var(--color-error-600, #b42318);
       }
 
       /* Chicles de oferta y descuento: mismos dos estados, tinta en lugar de caja. */
@@ -2210,29 +2651,81 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       .detail__offer:hover,
       .detail__offer--discount:hover,
       .detail__discount:hover {
-      border-color: var(--primary);
-      color: var(--primary-dark);
-      background: var(--primary-subtle);
+        border-color: var(--primary);
+        color: var(--primary-dark);
+        background: var(--primary-subtle);
       }
 
       .detail__chip-btn--active:hover {
-      filter: brightness(0.94);
+        filter: brightness(0.94);
       }
 
       .detail__target-row:hover {
-      background: var(--bg-tertiary);
+        background: var(--bg-tertiary);
       }
 
       .detail__link:hover {
-      color: var(--primary-dark);
+        color: var(--primary-dark);
       }
 
       /* La capa detras de la hoja se pulsa para cerrarla: el puntero lo dice, y el hecho de que sea el
       fondo (no un control) se nota en que no se tina de color de accion. */
       .detail__sheet-backdrop {
-      cursor: pointer;
+        cursor: pointer;
       }
+    `,
 
+    /* El presupuesto de estilos por componente (10k de aviso, 20k de corte) se mide por hoja: el panel del
+       autocompletado viaja en la suya, que ademas es CSS de un solo sitio y no necesita el resto. */
+    `
+      /* El panel cuelga del campo, y z-40 lo pone sobre las filas y bajo las hojas (## 12ad). */
+      .detail__add-campo {
+        position: relative;
+        flex: 1;
+        display: flex;
+      }
+      .detail__sugs {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        z-index: 40;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        margin: 0;
+        padding: var(--space-1);
+        max-height: 264px;
+        overflow: auto;
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-md);
+      }
+      .detail__sug {
+        display: flex;
+        justify-content: space-between;
+        gap: var(--space-3);
+        padding: var(--space-2) var(--space-3);
+        border: 0;
+        background: none;
+        color: var(--text-primary);
+        font-size: var(--text-sm);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+      }
+      .detail__sug:hover,
+      .detail__sug--on {
+        background: var(--primary-subtle);
+      }
+      .detail__sug-meta {
+        color: var(--text-secondary);
+        font-size: var(--text-xs);
+        white-space: nowrap;
+      }
+      .detail__sug-casa {
+        color: var(--color-success-600);
+      }
     `
   ]
 })
@@ -2305,7 +2798,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
   readonly items = computed(() => this.shopping.items());
   readonly visibleItems = computed(() => {
     const want = this.tab() === 'checked' ? 1 : 0;
-    return this.items().filter(item => item.checked === want);
+    return this.items().filter((item) => item.checked === want);
   });
   /** La categoria guardada esta en castellano (es un valor, no una etiqueta): aqui se traduce. */
   protected etiquetaCategoria(categoria: string): string {
@@ -2318,8 +2811,8 @@ export class ShoppingListDetailComponent implements OnDestroy {
       ? [{ category: 'En el carro', items: this.visibleItems() }]
       : groupItemsByCategory(this.visibleItems())
   );
-  readonly pendingCount = computed(() => this.items().filter(item => item.checked === 0).length);
-  readonly checkedCount = computed(() => this.items().filter(item => item.checked === 1).length);
+  readonly pendingCount = computed(() => this.items().filter((item) => item.checked === 0).length);
+  readonly checkedCount = computed(() => this.items().filter((item) => item.checked === 1).length);
   readonly totalCount = computed(() => this.items().length);
   readonly unpricedCount = computed(() => this.estimate()?.unpriced.length ?? 0);
 
@@ -2332,7 +2825,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     }
     // En vivo: si otra persona de la casa toca la lista, se vuelve a leer (nunca se pinta
     // el payload del aviso, que es una pista de refresco, no el estado).
-    this.cancelStream = this.shopping.openStream(`lists/${this.listId}`, payload => {
+    this.cancelStream = this.shopping.openStream(`lists/${this.listId}`, (payload) => {
       this.shopping.loadList(this.listId);
       if (this.auditOpen()) this.shopping.loadEvents(this.listId);
       const event = payload as { byName?: string | null; action?: string } | null;
@@ -2344,7 +2837,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
   private cancelingRename = false;
 
   ngOnDestroy(): void {
-    this.timers.forEach(timer => clearTimeout(timer));
+    this.timers.forEach((timer) => clearTimeout(timer));
     this.timers.clear();
     this.cancelStream?.();
     this.cancelStream = null;
@@ -2369,8 +2862,113 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const raw = this.draftItem.trim();
     if (!raw) return;
     this.draftItem = '';
+    // Si la ultima accion sobre el campo fue elegir una sugerencia, la linea se crea con el nombre del
+    // catalogo (que es lo que enlaza precio y ficha), la cantidad que el usuario dejo escrita y la unidad
+    // canonica del catalogo si el usuario no puso ninguna. Escribirlo a mano sigue valiendo igual.
+    const sug = this.sugElegida;
+    this.sugElegida = null;
+    this.cerrarSugerencias();
     const parsed = this.parseLine(raw);
-    await this.shopping.addItem(this.listId, parsed);
+    const input = sug
+      ? {
+          name: sug.producto.name,
+          quantity: parsed.quantity,
+          unit: parsed.unit ?? sug.producto.unit
+        }
+      : parsed;
+    await this.shopping.addItem(this.listId, input);
+  }
+
+  // ── sugerencias del catalogo del super (## 12ag) ──
+  // La casa ya conoce 471 productos con su hoja, su unidad y su etiqueta; escribir «Leche semidesnatada»
+  // entero para que el precio aprendido en la tienda anterior se enganche a la linea es trabajo del
+  // catalogo, no del pulgar del usuario. Se consulta el MISMO endpoint que usa el gestor de la despensa
+  // (`/pantry/catalog/products`, normalizado y paginado) —otra fuente de sugerencias seria otro criterio
+  // de «que existe» que romper la familia—.
+  private readonly pantry = inject(PantryService);
+  readonly sugerencias = signal<PantryCatalogProduct[]>([]);
+  readonly sugAbiertas = signal(false);
+  protected sugActivo = -1;
+  private sugElegida: {
+    producto: PantryCatalogProduct;
+    parsed: { name: string; quantity: number; unit: string | null };
+  } | null = null;
+  private sugSeq = 0;
+
+  /** El texto libre empieza por cantidad+unidad a veces («2kg lec»); se busca por la parte del nombre. */
+  onDraftInput(valor: string): void {
+    this.sugElegida = null; // el borrador ha cambiado: la eleccion anterior ya no representa el texto
+    const nombre = this.parseLine(valor.trim()).name.trim();
+    const pending = this.timers.get('sug:input');
+    if (pending) clearTimeout(pending);
+    if (nombre.length < 2) {
+      // Con una letra cualquier cosa es «cualquier producto»: se cierra el panel y no se dispara nada.
+      this.sugAbiertas.set(false);
+      this.sugerencias.set([]);
+      return;
+    }
+    this.timers.set(
+      'sug:input',
+      setTimeout(() => {
+        this.timers.delete('sug:input');
+        const seq = ++this.sugSeq;
+        void this.pantry.listCatalog({ q: nombre, limit: 6 }).then((resultado) => {
+          if (seq !== this.sugSeq) return; // una respuesta llegada tarde ya no describe el texto actual
+          const lista = resultado?.data ?? [];
+          this.sugerencias.set(lista);
+          this.sugActivo = -1;
+          this.sugAbiertas.set(lista.length > 0);
+        });
+      }, 150)
+    );
+  }
+
+  /** Enter sin nada resaltado manda la linea tecleada (el comportamiento de siempre); con resaltado, elige. */
+  protected onDraftKeys(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.cerrarSugerencias();
+      return;
+    }
+    if (!this.sugAbiertas()) return;
+    const n = this.sugerencias().length;
+    if (n === 0) return;
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      this.sugActivo = (this.sugActivo + 1) % n;
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      this.sugActivo = this.sugActivo <= 0 ? n - 1 : this.sugActivo - 1;
+    } else if (event.key === 'Enter' && this.sugActivo >= 0) {
+      event.preventDefault();
+      this.aplicarSugerencia(this.sugActivo);
+    }
+  }
+
+  protected aplicarSugerencia(indice: number): void {
+    const producto = this.sugerencias()[indice];
+    if (!producto) return;
+    const raw = this.draftItem.trim();
+    const parsed = this.parseLine(raw);
+    // Se cambia SOLO la parte del nombre: el prefijo con cantidad y unidad («2kg ») sigue donde estaba.
+    this.draftItem =
+      parsed.name && raw.endsWith(parsed.name)
+        ? `${raw.slice(0, -parsed.name.length)}${producto.name}`
+        : producto.name;
+    this.sugElegida = { producto, parsed };
+    this.cerrarSugerencias();
+  }
+
+  cerrarSugerencias(): void {
+    // Cerrar es cerrar de verdad: si el retardo del tecleo o una consulta ya en vuelo siguen vivos,
+    // el panel reaparece un latido despues sobre la primera fila de la lista y se come los clics.
+    const pendiente = this.timers.get('sug:input');
+    if (pendiente) {
+      clearTimeout(pendiente);
+      this.timers.delete('sug:input');
+    }
+    this.sugSeq++;
+    this.sugAbiertas.set(false);
+    this.sugActivo = -1;
   }
 
   /** `1kg Tomates` / `2 Leche` -> cantidad + unidad antes de llamar al server. */
@@ -2445,7 +3043,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   pick(id: string): void {
-    this.selection.update(selected => (selected.includes(id) ? selected.filter(entry => entry !== id) : [...selected, id]));
+    this.selection.update((selected) =>
+      selected.includes(id) ? selected.filter((entry) => entry !== id) : [...selected, id]
+    );
   }
 
   toggleSelectAll(): void {
@@ -2453,7 +3053,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
       this.selection.set([]);
       return;
     }
-    this.selection.set(this.visibleItems().map(item => item.id));
+    this.selection.set(this.visibleItems().map((item) => item.id));
   }
 
   async bulkCheck(checked: boolean): Promise<void> {
@@ -2475,7 +3075,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
       position: 'bottom',
       action: {
         label: this.i18n.t('ui.deshacer'),
-        run: () => ids.forEach(id => void this.shopping.restoreItem(this.listId, id))
+        run: () => ids.forEach((id) => void this.shopping.restoreItem(this.listId, id))
       }
     });
   }
@@ -2521,16 +3121,15 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   async clearChecked(): Promise<void> {
-    const items = this.items().filter(item => item.checked === 1);
+    const items = this.items().filter((item) => item.checked === 1);
     if (items.length === 0) return;
     // Es un borrado multiple, y un multiple es el unico sitio donde «le di a sin mirar» cuesta una
     // tarde de reescribir lineas: el aviso cuenta cuantas se van.
     const accepted = await this.confirm.confirm({
       title: this.i18n.t('ui.vaciar_lo_comprado'),
-      message: this.i18n.t(
-        items.length === 1 ? 'ui.vaciar_una_linea' : 'ui.vaciar_varias_lineas',
-        { n: items.length }
-      ),
+      message: this.i18n.t(items.length === 1 ? 'ui.vaciar_una_linea' : 'ui.vaciar_varias_lineas', {
+        n: items.length
+      }),
       confirmText: this.i18n.t('ui.vaciar'),
       variant: 'danger'
     });
@@ -2544,7 +3143,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
       position: 'bottom',
       action: {
         label: this.i18n.t('ui.deshacer'),
-        run: () => items.forEach(item => void this.shopping.restoreItem(this.listId, item.id))
+        run: () => items.forEach((item) => void this.shopping.restoreItem(this.listId, item.id))
       }
     });
   }
@@ -2557,7 +3156,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     void this.shopping.loadKnownProducts();
     // Un ⋯ que llega tarde (el arrastre que lo precedio ya borro la linea) no abre
     // una hoja sobre una fila que ya no existe.
-    if (!this.items().some(candidate => candidate.id === item.id)) return;
+    if (!this.items().some((candidate) => candidate.id === item.id)) return;
     this.editing.set(item);
     this.draft = {
       quantity: item.quantity,
@@ -2571,6 +3170,11 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   closeEdit(): void {
+    // Cerrar la hoja no descarta: lo ultimo tecleado (la unidad suelta, la nota...) puede ir todavia
+    // dentro del retardo del autoguardado. Si al cerrar no se dispara, reabrir muestra el dato viejo y
+    // la impresion es que la app no guardo nada (## 12ag).
+    const item = this.editing();
+    if (item) this.flush(`item:${item.id}`);
     this.editing.set(null);
   }
 
@@ -2590,17 +3194,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
     // contrato la rechaza, y serie ruido de error por cada tecla intermedia.
     if (changes.quantity !== undefined && !(Number(changes.quantity) > 0)) return;
     Object.assign(this.draft, changes);
-    this.commit({
-      quantity: this.draft.quantity,
-      unit: this.draft.unit,
-      category: this.draft.category,
-      note: this.draft.note,
-      priceMinor: parseMoneyToMinor(this.draft.price),
-      // Va en el MISMO envio que lo demas: con dos `debounced` separados, tocar un chip del
-      // descuento reemplazaba el commit del precio que estaba en el tintero, y el precio se
-      // perdía sin avisar.
-      discount: this.draft.discount
-    });
+    // Todo en el MISMO envio: con dos `debounced` separados, tocar un chip del descuento
+    // reemplazaba el commit del precio que estaba en el tintero, y el precio se perdía sin
+    // avisar. Lo mismo aplica al precio desde 12ag: `linePatch` es el unico payload.
+    this.commit(this.linePatch(parseMoneyToMinor(this.draft.price)));
   }
 
   private commit(patch: Partial<CreateItemInput>): void {
@@ -2615,7 +3212,21 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.draft.price = value;
     const minor = parseMoneyToMinor(value);
     if (minor === null && value.trim() !== '') return;
-    this.commit({ priceMinor: value.trim() === '' ? null : minor });
+    // El payload completo, no solo el precio: dos retados distintos sobre la misma linea se
+    // pisaban el uno al otro, y ganaba el ultimo en llegar.
+    this.commit(this.linePatch(minor));
+  }
+
+  /** Lo que se escribe en la hoja, junto: un solo envio, un solo version. */
+  private linePatch(priceMinor: number | null): Partial<CreateItemInput> {
+    return {
+      quantity: this.draft.quantity,
+      unit: this.draft.unit,
+      category: this.draft.category,
+      note: this.draft.note,
+      priceMinor,
+      discount: this.draft.discount
+    };
   }
 
   commitPrice(): void {
@@ -2627,24 +3238,39 @@ export class ShoppingListDetailComponent implements OnDestroy {
       this.toast.warning(this.i18n.t('ui.precio_no_valido'), this.i18n.t('ui.escribe_algo_como_1'));
       return;
     }
+    const hadPending = this.timers.has(`item:${item.id}`);
     this.flush(`item:${item.id}`);
-    this.shopping.updateItem(item.list_id, item, { priceMinor: minor });
+    // Si habia algo en el tintero, `flush` lo ha escrito ya con este precio dentro (patch lo
+    // mete en el payload). Mandarlo otra vez seria un segundo PATCH con el `version` viejo:
+    // el CAS lo rechazaria y el aviso de error mentiria.
+    if (!hadPending) this.shopping.updateItem(item.list_id, item, { priceMinor: minor });
   }
 
   private debounced(key: string, run: () => void): void {
     const pending = this.timers.get(key);
     if (pending) clearTimeout(pending);
-    this.timers.set(key, setTimeout(() => {
+    const disparo = () => {
       this.timers.delete(key);
+      this.debouncedRuns.delete(key);
       run();
-    }, AUTOSAVE_MS));
+    };
+    this.debouncedRuns.set(key, disparo);
+    this.timers.set(key, setTimeout(disparo, AUTOSAVE_MS));
   }
+
+  /** Las ejecuciones aplazadas del retardo, localizables: `flush` es tocar el timbre antes de hora. */
+  private readonly debouncedRuns = new Map<string, () => void>();
 
   private flush(key: string): void {
     const pending = this.timers.get(key);
-    if (!pending) return;
-    clearTimeout(pending);
-    this.timers.delete(key);
+    if (pending) {
+      clearTimeout(pending);
+      this.timers.delete(key);
+    }
+    // Antes `flush` SOLO cancelaba: y cancelar sin ejecutar dejaba en la cuneta el ultimo cambio
+    // (la medida escrita a mano, por ejemplo). El retardo existe para no escribir a cada tecla,
+    // no para tirar lo tecleado (## 12ag).
+    this.debouncedRuns.get(key)?.();
   }
 
   // ------------------------------------------------------------ cabecera
@@ -2658,7 +3284,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const list = this.list();
     const name = this.draftName.trim();
     if (!list || !name || name === list.name) return;
-    this.debounced('list:name', () => void this.shopping.renameList(list.id, { name }, list.version));
+    this.debounced(
+      'list:name',
+      () => void this.shopping.renameList(list.id, { name }, list.version)
+    );
   }
 
   /**
@@ -2672,7 +3301,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (!list) return;
     const result = await this.shopping.complete(list.id);
     if (result.ok) {
-      this.finishCompleteToast(result.paidMinor, result.pricesRecorded, result.store);
+      this.finishCompleteToast(result.paidMinor, result.pricesRecorded, result.store, {
+        moved: result.pantryMoved,
+        merged: result.pantryMerged
+      });
       return;
     }
     if (result.code === 'PRICES_MISSING') {
@@ -2685,29 +3317,49 @@ export class ShoppingListDetailComponent implements OnDestroy {
       return;
     }
     if (result.code === 'STALE_LIST') {
-      this.toast.show({ type: 'info', title: this.i18n.t('ui.la_lista_habia_cambiado'), message: this.i18n.t('ui.se_ha_vuelto_a') });
+      this.toast.show({
+        type: 'info',
+        title: this.i18n.t('ui.la_lista_habia_cambiado'),
+        message: this.i18n.t('ui.se_ha_vuelto_a')
+      });
       this.shopping.loadList(list.id);
     }
   }
 
-  private finishCompleteToast(paidMinor: number, recorded: number, store: string | null): void {
+  private finishCompleteToast(
+    paidMinor: number,
+    recorded: number,
+    store: string | null,
+    pantry = { moved: 0, merged: 0 }
+  ): void {
     const total = this.estimate()?.totalMinor ?? 0;
     const unpriced = this.unpricedCount();
     const partes = [
       store
-        ? this.i18n.t('ui.pagado_en_tienda', { importe: formatMoney(paidMinor || total), tienda: store })
+        ? this.i18n.t('ui.pagado_en_tienda', {
+            importe: formatMoney(paidMinor || total),
+            tienda: store
+          })
         : this.i18n.t('ui.pagado_sin_tienda', { importe: formatMoney(paidMinor || total) }),
-      this.i18n.t(
-        recorded === 1 ? 'ui.precio_apuntado_uno' : 'ui.precios_apuntados_varios',
-        { n: recorded }
-      ),
+      this.i18n.t(recorded === 1 ? 'ui.precio_apuntado_uno' : 'ui.precios_apuntados_varios', {
+        n: recorded
+      })
     ];
+    // Y lo que ha caido en la nevera: el cierre ya no es solo contabilidad, es el puente entre el carro y
+    // el inventario (## 12ag). Se suma una en el recibo del pago, no un segundo toast: una accion, un aviso.
+    const inventario = pantry.moved + pantry.merged;
+    if (inventario > 0) {
+      partes.push(
+        this.i18n.t(inventario === 1 ? 'ui.al_inventario_uno' : 'ui.al_inventario_varias', {
+          n: inventario
+        })
+      );
+    }
     if (unpriced > 0) {
       partes.push(
-        this.i18n.t(
-          unpriced === 1 ? 'ui.linea_pendiente_una' : 'ui.lineas_pendientes_varias',
-          { n: unpriced }
-        )
+        this.i18n.t(unpriced === 1 ? 'ui.linea_pendiente_una' : 'ui.lineas_pendientes_varias', {
+          n: unpriced
+        })
       );
     }
     this.toast.success(this.i18n.t('ui.compra_terminada'), partes.join(' · ') + '.');
@@ -2724,7 +3376,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
   private payModes = new Map<string, 'unit' | 'total'>();
   private payAliases = new Map<string, string>();
 
-  readonly storeChips = computed(() => this.shopping.stores().slice(0, 4).map(entry => entry.store));
+  readonly storeChips = computed(() =>
+    this.shopping
+      .stores()
+      .slice(0, 4)
+      .map((entry) => entry.store)
+  );
 
   /**
    * Se parte de lo que el server ha rechazado, no de toda la lista: las lineas con precio
@@ -2736,7 +3393,8 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.payStoreError.set(false);
     for (const line of missing) {
       const suggested = this.paySuggestion(line.itemId);
-      if (suggested && !this.payValue(line.itemId).trim()) this.payValues.set(line.itemId, formatMoney(suggested.minor));
+      if (suggested && !this.payValue(line.itemId).trim())
+        this.payValues.set(line.itemId, formatMoney(suggested.minor));
     }
     this.payOpen.set(true);
   }
@@ -2781,10 +3439,13 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   paySuggestion(itemId: string): { minor: number; store: string | null } | null {
-    const line = this.estimate()?.lines.find(entry => entry.itemId === itemId);
+    const line = this.estimate()?.lines.find((entry) => entry.itemId === itemId);
     if (!line || line.source === 'unpriced' || line.unitMinor == null) return null;
-    const quantity = this.items().find(item => item.id === itemId)?.quantity ?? 1;
-    return { minor: Math.max(0, Math.round(line.unitMinor * (quantity || 1))), store: line.store ?? null };
+    const quantity = this.items().find((item) => item.id === itemId)?.quantity ?? 1;
+    return {
+      minor: Math.max(0, Math.round(line.unitMinor * (quantity || 1))),
+      store: line.store ?? null
+    };
   }
 
   usePaySuggestion(itemId: string, minor: number): void {
@@ -2793,7 +3454,8 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   payMissing(): number {
-    return this.payLines().filter(line => parseMoneyToMinor(this.payValue(line.itemId)) === null).length;
+    return this.payLines().filter((line) => parseMoneyToMinor(this.payValue(line.itemId)) === null)
+      .length;
   }
 
   payTotal(): number {
@@ -2801,7 +3463,8 @@ export class ShoppingListDetailComponent implements OnDestroy {
     for (const line of this.payLines()) {
       const minor = parseMoneyToMinor(this.payValue(line.itemId));
       if (minor === null) continue;
-      total += this.payMode(line.itemId) === 'unit' ? Math.round(minor * (line.quantity || 1)) : minor;
+      total +=
+        this.payMode(line.itemId) === 'unit' ? Math.round(minor * (line.quantity || 1)) : minor;
     }
     return total;
   }
@@ -2825,13 +3488,26 @@ export class ShoppingListDetailComponent implements OnDestroy {
       prices.push(
         this.payMode(line.itemId) === 'unit'
           ? { itemId: line.itemId, priceMinor: minor, ...(alias ? { productName: alias } : {}) }
-          : { itemId: line.itemId, totalPaidMinor: minor, quantity: line.quantity || 1, ...(alias ? { productName: alias } : {}) }
+          : {
+              itemId: line.itemId,
+              totalPaidMinor: minor,
+              quantity: line.quantity || 1,
+              ...(alias ? { productName: alias } : {})
+            }
       );
     }
     const result = await this.shopping.complete(list.id, { store: store || null, prices });
     if (result.ok) {
       this.payOpen.set(false);
-      this.finishCompleteToast(result.paidMinor, result.pricesRecorded, result.store || store || null);
+      this.finishCompleteToast(
+        result.paidMinor,
+        result.pricesRecorded,
+        result.store || store || null,
+        {
+          moved: result.pantryMoved,
+          merged: result.pantryMerged
+        }
+      );
       return;
     }
     if (result.code === 'PRICES_MISSING') {
@@ -2850,20 +3526,28 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   readonly productLinkOptions = computed<PickerOption[]>(() =>
-    this.shopping.knownProducts().map(product => ({
+    this.shopping.knownProducts().map((product) => ({
       value: product.productKey,
       label: product.name,
-      hint: product.variants.length > 1 ? product.variants.length + ' tiendas' : product.observations + ' precios'
+      hint:
+        product.variants.length > 1
+          ? product.variants.length + ' tiendas'
+          : product.observations + ' precios'
     }))
   );
 
   /** Cuanto cuesta el producto enlazado en cada tienda: la frase que hace saber que el
    *  enlace existe y que los precios no son uno solo. */
   linkVariants(item: ShoppingListItem): string | null {
-    const product = this.shopping.knownProducts().find(entry => entry.productKey === item.product_key);
+    const product = this.shopping
+      .knownProducts()
+      .find((entry) => entry.productKey === item.product_key);
     if (!product?.variants.length) return null;
     return product.variants
-      .map((variant) => `${variant.store ?? this.i18n.t('shopping_list_detail.sin_tienda')} ${formatMoney(variant.unitMinor)}`)
+      .map(
+        (variant) =>
+          `${variant.store ?? this.i18n.t('shopping_list_detail.sin_tienda')} ${formatMoney(variant.unitMinor)}`
+      )
       .join(' · ');
   }
 
@@ -2917,9 +3601,17 @@ export class ShoppingListDetailComponent implements OnDestroy {
   readonly categoryOptions = computed<PickerOption[]>(() => {
     const catalogue = this.shopping.categories();
     if (!catalogue.length) {
-      return LIST_CATEGORIES.map((name, index) => ({ value: name, label: name, color: null as string | null }));
+      return LIST_CATEGORIES.map((name, index) => ({
+        value: name,
+        label: name,
+        color: null as string | null
+      }));
     }
-    return catalogue.map((category) => ({ value: category.name, label: category.name, color: category.color }));
+    return catalogue.map((category) => ({
+      value: category.name,
+      label: category.name,
+      color: category.color
+    }));
   });
 
   setCategory(value: string | null): void {
@@ -3011,7 +3703,11 @@ export class ShoppingListDetailComponent implements OnDestroy {
    * pregunta: la oferta cambia CUANTAS unidades se pagan, este cambia CUANTO se paga por elas,
    * y en caja van uno detras de otro — por eso siguen siendo dos bloques y no un menu unico.
    */
-  readonly lineKinds: { value: LineDiscountKindUi; labelKey: TranslationKey; icon: 'close' | 'percent' | 'payments' }[] = [
+  readonly lineKinds: {
+    value: LineDiscountKindUi;
+    labelKey: TranslationKey;
+    icon: 'close' | 'percent' | 'payments';
+  }[] = [
     { value: 'none', labelKey: 'shopping_list_detail.sin_descuento', icon: 'close' },
     { value: 'percent', labelKey: 'shopping_list_detail.tipo_porcentaje', icon: 'percent' },
     { value: 'amount', labelKey: 'shopping_list_detail.tipo_importe', icon: 'payments' }
@@ -3025,8 +3721,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
   private hydrateLineDiscount(item: ShoppingListItem): void {
     const discount = lineDiscountOfItem(item);
     this.lineKind.set(discount ? discount.kind : 'none');
-    this.linePercent.set(discount?.kind === 'percent' ? trimNumber((discount.percentBps ?? 0) / 100) : '');
-    this.lineAmount.set(discount?.kind === 'amount' ? trimNumber((discount.valueMinor ?? 0) / 100) : '');
+    this.linePercent.set(
+      discount?.kind === 'percent' ? trimNumber((discount.percentBps ?? 0) / 100) : ''
+    );
+    this.lineAmount.set(
+      discount?.kind === 'amount' ? trimNumber((discount.valueMinor ?? 0) / 100) : ''
+    );
     this.lineUnits.set(discount?.units ? trimNumber(discount.units) : '');
   }
 
@@ -3068,7 +3768,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (kind === 'percent') {
       const percent = parsePositive(this.linePercent());
       if (!percent) return null;
-      return { kind: 'percent', percentBps: Math.round(Math.min(percent * 100, 10_000)), valueMinor: null, units };
+      return {
+        kind: 'percent',
+        percentBps: Math.round(Math.min(percent * 100, 10_000)),
+        valueMinor: null,
+        units
+      };
     }
     const amount = parseMoneyToMinor(this.lineAmount());
     if (!amount) return null;
@@ -3086,7 +3791,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const discount = this.draft.discount;
     if (!discount) {
       return this.i18n.t(
-        this.lineKind() === 'none' ? 'shopping_list_detail.pista_sin_descuento' : 'shopping_list_detail.pista_escribe'
+        this.lineKind() === 'none'
+          ? 'shopping_list_detail.pista_sin_descuento'
+          : 'shopping_list_detail.pista_escribe'
       );
     }
     const unitMinor = this.draft.price ? parseMoneyToMinor(this.draft.price) : item.price_minor;
@@ -3096,7 +3803,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const paid = offer ? paidUnitsOf(quantity, offer) : quantity;
     const capped = discount.units && discount.units > 0 ? Math.min(discount.units, paid) : paid;
     const base = Math.round(unitMinor * capped);
-    const raw = discount.kind === 'percent' ? Math.round((base * (discount.percentBps ?? 0)) / 10_000) : (discount.valueMinor ?? 0);
+    const raw =
+      discount.kind === 'percent'
+        ? Math.round((base * (discount.percentBps ?? 0)) / 10_000)
+        : (discount.valueMinor ?? 0);
     const off = Math.min(raw, base);
     const label = this.describeDiscount(discount) ?? this.i18n.t('shopping_list_detail.descuento');
     if (raw <= 0) return this.i18n.t('shopping_list_detail.pista_sin_valor', { label });
@@ -3104,7 +3814,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
       return this.i18n.t('shopping_list_detail.pista_no_llegan', {
         label,
         paid: trimNumber(paid),
-        unidad: this.i18n.t(paid === 1 ? 'shopping_list_detail.unidad' : 'shopping_list_detail.unidades'),
+        unidad: this.i18n.t(
+          paid === 1 ? 'shopping_list_detail.unidad' : 'shopping_list_detail.unidades'
+        ),
         units: trimNumber(discount.units)
       });
     }
@@ -3119,19 +3831,46 @@ export class ShoppingListDetailComponent implements OnDestroy {
   // ------------------------------------------------------------------- descuento
 
   readonly discountOpen = signal(false);
-  readonly discountKinds: { value: 'amount' | 'percent'; labelKey: TranslationKey; icon: 'payments' | 'percent' }[] = [
+  readonly discountKinds: {
+    value: 'amount' | 'percent';
+    labelKey: TranslationKey;
+    icon: 'payments' | 'percent';
+  }[] = [
     { value: 'amount', labelKey: 'shopping_list_detail.tipo_importe', icon: 'payments' },
     { value: 'percent', labelKey: 'shopping_list_detail.tipo_porcentaje', icon: 'percent' }
   ];
   // Los cuatro alcances que se ven en el pasillo de verdad: la oferta de la cesta, la de
   // «los dos primeros», la del producto concretado en la etiqueta y la del pasillo entero.
-  readonly discountScopes: { value: DiscountScope; labelKey: TranslationKey; hintKey: TranslationKey }[] = [
-    { value: 'all', labelKey: 'shopping_list_detail.alcance_cesta', hintKey: 'shopping_list_detail.alcance_cesta_pista' },
-    { value: 'firstUnits', labelKey: 'shopping_list_detail.alcance_primeras', hintKey: 'shopping_list_detail.alcance_primeras_pista' },
-    { value: 'product', labelKey: 'shopping_list_detail.alcance_productos', hintKey: 'shopping_list_detail.alcance_productos_pista' },
-    { value: 'category', labelKey: 'shopping_list_detail.alcance_secciones', hintKey: 'shopping_list_detail.alcance_secciones_pista' }
+  readonly discountScopes: {
+    value: DiscountScope;
+    labelKey: TranslationKey;
+    hintKey: TranslationKey;
+  }[] = [
+    {
+      value: 'all',
+      labelKey: 'shopping_list_detail.alcance_cesta',
+      hintKey: 'shopping_list_detail.alcance_cesta_pista'
+    },
+    {
+      value: 'firstUnits',
+      labelKey: 'shopping_list_detail.alcance_primeras',
+      hintKey: 'shopping_list_detail.alcance_primeras_pista'
+    },
+    {
+      value: 'product',
+      labelKey: 'shopping_list_detail.alcance_productos',
+      hintKey: 'shopping_list_detail.alcance_productos_pista'
+    },
+    {
+      value: 'category',
+      labelKey: 'shopping_list_detail.alcance_secciones',
+      hintKey: 'shopping_list_detail.alcance_secciones_pista'
+    }
   ];
-  readonly percentOptions: PickerOption[] = [5, 10, 15, 20, 25, 50].map((value) => ({ value: String(value), label: value + ' %' }));
+  readonly percentOptions: PickerOption[] = [5, 10, 15, 20, 25, 50].map((value) => ({
+    value: String(value),
+    label: value + ' %'
+  }));
   readonly discountDraft = signal<{
     kind: 'amount' | 'percent';
     scope: DiscountScope;
@@ -3163,11 +3902,19 @@ export class ShoppingListDetailComponent implements OnDestroy {
       // que la hoja no muestre una diana que ya no esta aplicando nada.
       targets:
         discount && (discount.scope === 'product' || discount.scope === 'category')
-          ? [...new Set([...(discount.targets ?? []), discount.target ?? null].filter((v): v is string => !!v))]
+          ? [
+              ...new Set(
+                [...(discount.targets ?? []), discount.target ?? null].filter(
+                  (v): v is string => !!v
+                )
+              )
+            ]
           : [],
       label: discount?.label ?? null
     });
-    this.amountDraft.set(discount?.value_minor ? (discount.value_minor / 100).toFixed(2).replace('.', ',') : '');
+    this.amountDraft.set(
+      discount?.value_minor ? (discount.value_minor / 100).toFixed(2).replace('.', ',') : ''
+    );
     this.percentDraft.set(discount?.percent_bps ? String(discount.percent_bps / 100) : null);
   }
 
@@ -3175,7 +3922,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.discountDraft.update((draft) => ({ ...draft, kind }));
   }
 
-  patchDiscount(changes: Partial<{ scope: DiscountScope; firstUnits: number | null; label: string | null }>): void {
+  patchDiscount(
+    changes: Partial<{ scope: DiscountScope; firstUnits: number | null; label: string | null }>
+  ): void {
     this.discountDraft.update((draft) => ({ ...draft, ...changes }));
     // Cambiar de alcance deja de tener sentido la diana anterior (una seccion no es un
     // producto), y arrastrarla daria un descuento guardado con una nota que no se corresponde.
@@ -3199,7 +3948,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (!clean) return;
     this.discountDraft.update((draft) => ({
       ...draft,
-      targets: draft.targets.includes(clean) ? draft.targets.filter((entry) => entry !== clean) : [...draft.targets, clean]
+      targets: draft.targets.includes(clean)
+        ? draft.targets.filter((entry) => entry !== clean)
+        : [...draft.targets, clean]
     }));
   }
 
@@ -3243,11 +3994,17 @@ export class ShoppingListDetailComponent implements OnDestroy {
       const seen = new Set<string>();
       return lines
         .map((item) => String(item.category ?? '').trim())
-        .filter((name) => name && !seen.has(name.toLocaleLowerCase('es')) && seen.add(name.toLocaleLowerCase('es')))
+        .filter(
+          (name) =>
+            name &&
+            !seen.has(name.toLocaleLowerCase('es')) &&
+            seen.add(name.toLocaleLowerCase('es'))
+        )
         .map((name) => ({
           value: name,
           label: name,
-          hint: String(lines.filter((item) => item.category === name).length) + (name ? ' art.' : '')
+          hint:
+            String(lines.filter((item) => item.category === name).length) + (name ? ' art.' : '')
         }))
         .sort((a, b) => a.label.localeCompare(b.label, 'es'));
     }
@@ -3274,7 +4031,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   bumpFirstUnits(step: number): void {
-    this.discountDraft.update((draft) => ({ ...draft, firstUnits: Math.max(1, (draft.firstUnits ?? 1) + step) }));
+    this.discountDraft.update((draft) => ({
+      ...draft,
+      firstUnits: Math.max(1, (draft.firstUnits ?? 1) + step)
+    }));
   }
 
   async saveDiscount(): Promise<void> {
@@ -3285,21 +4045,29 @@ export class ShoppingListDetailComponent implements OnDestroy {
     if (draft.kind === 'percent') {
       const percent = Number(String(this.percentDraft() ?? '').replace(',', '.'));
       if (!Number.isFinite(percent) || percent <= 0 || percent > 100) {
-        this.toast.warning(this.i18n.t('ui.el_porcentaje_no_cuadra'), this.i18n.t('ui.entre_1_y_100'));
+        this.toast.warning(
+          this.i18n.t('ui.el_porcentaje_no_cuadra'),
+          this.i18n.t('ui.entre_1_y_100')
+        );
         return;
       }
       input.percentBps = Math.round(percent * 100);
     } else {
       const minor = parseMoneyToMinor(this.amountDraft());
       if (!minor || minor <= 0) {
-        this.toast.warning(this.i18n.t('ui.falta_el_importe'), this.i18n.t('ui.escribe_cuanto_descuentan_por'));
+        this.toast.warning(
+          this.i18n.t('ui.falta_el_importe'),
+          this.i18n.t('ui.escribe_cuanto_descuentan_por')
+        );
         return;
       }
       input.valueMinor = minor;
     }
     if (draft.scope === 'firstUnits') input.firstUnits = draft.firstUnits ?? 1;
     if (draft.scope === 'product' || draft.scope === 'category') {
-      const targets = [...new Set(draft.targets.map((entry) => String(entry).trim()).filter(Boolean))];
+      const targets = [
+        ...new Set(draft.targets.map((entry) => String(entry).trim()).filter(Boolean))
+      ];
       if (!targets.length) {
         // Sin diana el server responderia 400, y un 400 despues de pulsar «Guardar» sabe a
         // castigo: se lo decimos antes, con la lista de lineas marcada.
@@ -3312,7 +4080,8 @@ export class ShoppingListDetailComponent implements OnDestroy {
 
     const saved = await this.shopping.setDiscount(list.id, input);
     this.discountOpen.set(false);
-    if (saved) this.toast.success(this.i18n.t('ui.descuento_aplicado'), saved.description ?? undefined);
+    if (saved)
+      this.toast.success(this.i18n.t('ui.descuento_aplicado'), saved.description ?? undefined);
   }
 
   async removeDiscount(): Promise<void> {
@@ -3360,11 +4129,27 @@ export class ShoppingListDetailComponent implements OnDestroy {
   readonly photoModes = computed<PickerOption[]>(() =>
     (
       [
-        { value: 'auto', labelKey: 'shopping_list_detail.foto_no_lo_se', hintKey: 'shopping_list_detail.foto_no_lo_se_pista' },
-        { value: 'ticket', labelKey: 'shopping_list_detail.foto_ticket', hintKey: 'shopping_list_detail.foto_ticket_pista' },
-        { value: 'shelf', labelKey: 'shopping_list_detail.foto_estanteria', hintKey: 'shopping_list_detail.foto_estanteria_pista' }
+        {
+          value: 'auto',
+          labelKey: 'shopping_list_detail.foto_no_lo_se',
+          hintKey: 'shopping_list_detail.foto_no_lo_se_pista'
+        },
+        {
+          value: 'ticket',
+          labelKey: 'shopping_list_detail.foto_ticket',
+          hintKey: 'shopping_list_detail.foto_ticket_pista'
+        },
+        {
+          value: 'shelf',
+          labelKey: 'shopping_list_detail.foto_estanteria',
+          hintKey: 'shopping_list_detail.foto_estanteria_pista'
+        }
       ] as const
-    ).map((mode) => ({ value: mode.value, label: this.i18n.t(mode.labelKey), hint: this.i18n.t(mode.hintKey) }))
+    ).map((mode) => ({
+      value: mode.value,
+      label: this.i18n.t(mode.labelKey),
+      hint: this.i18n.t(mode.hintKey)
+    }))
   );
 
   openDiscount(prefill?: string[]): void {
@@ -3382,7 +4167,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
   }
 
   openDiscountForSelection(): void {
-    const chosen = this.items().filter((item) => this.selection().includes(item.id)).map((item) => item.name);
+    const chosen = this.items()
+      .filter((item) => this.selection().includes(item.id))
+      .map((item) => item.name);
     this.openDiscount(chosen.length ? chosen : undefined);
   }
 
@@ -3430,7 +4217,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.photoBusy.set(true);
     this.photoError.set(null);
     this.photoRedirect.set(null);
-    const outcome = await this.shopping.analyzePhoto(this.listId, data, this.photoMode(), this.photoNote().trim() || undefined);
+    const outcome = await this.shopping.analyzePhoto(
+      this.listId,
+      data,
+      this.photoMode(),
+      this.photoNote().trim() || undefined
+    );
     this.photoBusy.set(false);
     if (outcome.ok) {
       this.photoResult.set({
@@ -3458,15 +4250,30 @@ export class ShoppingListDetailComponent implements OnDestroy {
       AI_TIMEOUT: 'shopping_list_detail.el_modelo_ha_tardado',
       INVALID_PHOTO: 'shopping_list_detail.la_imagen_no_se'
     } as const; // sin `as const` los valores se ensanchan a `string` y `t()` deja de compilar
-    this.photoError.set(this.i18n.t(claves[outcome.message as keyof typeof claves] ?? 'ui.el_modelo_no_esta'));
+    this.photoError.set(
+      this.i18n.t(claves[outcome.message as keyof typeof claves] ?? 'ui.el_modelo_no_esta')
+    );
     if (outcome.message === 'AI_ANSWER_NOT_UNDERSTOOD') this.logSample(outcome.data);
   }
 
   private logSample(data: Record<string, unknown>): void {
     // La muestra del response crudo va al visor de logs: sin ella, un fallo de formato de
     // un modelo concreto es indepurgable desde la pantalla.
-    const sample = typeof (data as { sample?: unknown })?.sample === 'string' ? String((data as { sample?: string }).sample) : '';
-    if (sample) void fetch('/api/logs', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ level: 'warn', scope: 'shopping:photo', message: 'respuesta de IA no parseable', meta: { sample } }) }).catch(() => undefined);
+    const sample =
+      typeof (data as { sample?: unknown })?.sample === 'string'
+        ? String((data as { sample?: string }).sample)
+        : '';
+    if (sample)
+      void fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          level: 'warn',
+          scope: 'shopping:photo',
+          message: 'respuesta de IA no parseable',
+          meta: { sample }
+        })
+      }).catch(() => undefined);
   }
 
   keptPhotoLines(): PhotoLine[] {
@@ -3494,7 +4301,11 @@ export class ShoppingListDetailComponent implements OnDestroy {
       : '';
     this.toast.success(
       this.i18n.t('ui.lineas_anadidas'),
-      this.i18n.t('ui.nuevas_y_sumadas', { nuevas: applied.added, sumadas: applied.merged.length, resto: created })
+      this.i18n.t('ui.nuevas_y_sumadas', {
+        nuevas: applied.added,
+        sumadas: applied.merged.length,
+        resto: created
+      })
     );
   }
 
@@ -3548,4 +4359,3 @@ export class ShoppingListDetailComponent implements OnDestroy {
     return formatDateTime(value);
   }
 }
-

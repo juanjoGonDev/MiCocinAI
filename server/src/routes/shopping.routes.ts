@@ -4,6 +4,10 @@ import { getDatabase } from '../config/database.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { productKeyOf } from '../utils/product-key.js';
 import {
+  PROTECTED_PANTRY_KEY,
+  ensureDefaultCategories as ensurePantryCategories
+} from '../utils/pantry-categories.js';
+import {
   applyLinesSchema,
   bulkItemsSchema,
   completeListSchema,
@@ -31,7 +35,13 @@ import {
 import { buildPhotoPrompt } from '../utils/photo-prompt.js';
 import { AiCallError, callAI, extractJsonObject } from '../utils/ai-client.js';
 import { describeEvent, readEvents, recordEvent } from '../utils/shopping-events.js';
-import { channelForList, channelsForTray, publish, subscribe, type LiveEvent } from '../utils/live-hub.js';
+import {
+  channelForList,
+  channelsForTray,
+  publish,
+  subscribe,
+  type LiveEvent
+} from '../utils/live-hub.js';
 import {
   applyLineDiscount,
   basketMoney,
@@ -72,13 +82,15 @@ type Scope = { clause: string; params: string[]; householdId: string | null };
 function getScope(userId: string): Scope {
   const db = getDatabase();
   const user = db
-    .prepare(
-      `SELECT u.household_id AS hid FROM users u WHERE u.id = ?`
-    )
+    .prepare(`SELECT u.household_id AS hid FROM users u WHERE u.id = ?`)
     .get(userId) as { hid: string | null } | undefined;
 
   if (user?.hid) {
-    return { clause: '(user_id = ? OR household_id = ?)', params: [userId, user.hid], householdId: user.hid };
+    return {
+      clause: '(user_id = ? OR household_id = ?)',
+      params: [userId, user.hid],
+      householdId: user.hid
+    };
   }
   return { clause: 'user_id = ?', params: [userId], householdId: null };
 }
@@ -142,7 +154,8 @@ function announceToTray(
     listId,
     action,
     by: scope.userId,
-    byName: (db.prepare('SELECT name FROM users WHERE id = ?').get(scope.userId) as any)?.name ?? null,
+    byName:
+      (db.prepare('SELECT name FROM users WHERE id = ?').get(scope.userId) as any)?.name ?? null,
     itemName: null,
     at: new Date().toISOString()
   });
@@ -154,7 +167,9 @@ function parseTargets(raw: unknown): string[] | null {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
-    const values = parsed.map((value) => String(value ?? '').trim()).filter((value) => value.length > 0);
+    const values = parsed
+      .map((value) => String(value ?? '').trim())
+      .filter((value) => value.length > 0);
     return values.length ? [...new Set(values)] : null;
   } catch {
     return null;
@@ -182,7 +197,9 @@ function lineDiscountOf(row: {
  * descuento, en vez de un «-0,00 €» que sugiere que algo se aplico y no.
  */
 function readDiscount(db: ReturnType<typeof getDatabase>, listId: string): Discount | null {
-  const row = db.prepare('SELECT * FROM shopping_list_discounts WHERE list_id = ?').get(listId) as any;
+  const row = db
+    .prepare('SELECT * FROM shopping_list_discounts WHERE list_id = ?')
+    .get(listId) as any;
   if (!row) return null;
   return {
     kind: row.kind,
@@ -258,7 +275,9 @@ shoppingRoutes.get('/lists', async (c) => {
 
   // Con el JOIN del agregado, `user_id` a secas seria ambiguo: el ambito se escribe
   // siempre prefijado a la tabla de las listas.
-  const scoped = scope.clause.replace(/user_id/g, 'l.user_id').replace(/household_id/g, 'l.household_id');
+  const scoped = scope.clause
+    .replace(/user_id/g, 'l.user_id')
+    .replace(/household_id/g, 'l.household_id');
   const conditions = [scoped];
   const params = [...scope.params];
 
@@ -419,7 +438,13 @@ shoppingRoutes.get('/lists/:id', async (c) => {
   const discount = readDiscount(db, list.id);
   return c.json({
     success: true,
-    data: { ...list, items, ...listTotals(db, list.id), discount, discountDescription: describeDiscount(discount) }
+    data: {
+      ...list,
+      items,
+      ...listTotals(db, list.id),
+      discount,
+      discountDescription: describeDiscount(discount)
+    }
   });
 });
 
@@ -489,7 +514,12 @@ shoppingRoutes.delete('/lists/:id', async (c) => {
   // El suceso no se guarda: la FK de la auditoria es `ON DELETE CASCADE`, y una
   // auditoria de una lista que ya no existe no tiene donde leerse. Lo que si hace
   // falta es que la bandeja de las demas personas se entere.
-  announceToTray(db, { userId: c.get('userId'), householdId: list.household_id }, 'list.delete', list.id);
+  announceToTray(
+    db,
+    { userId: c.get('userId'), householdId: list.household_id },
+    'list.delete',
+    list.id
+  );
   return c.json({ success: true, data: { id: list.id } });
 });
 
@@ -498,13 +528,20 @@ shoppingRoutes.delete('/lists/:id', async (c) => {
 // ═══════════════════════════════════════════════════════════════════
 
 function nextPosition(db: ReturnType<typeof getDatabase>, listId: string): number {
-  const row = db.prepare('SELECT COALESCE(MAX(position), -1) AS last FROM shopping_list_items WHERE list_id = ?').get(
-    listId
-  ) as { last: number };
+  const row = db
+    .prepare(
+      'SELECT COALESCE(MAX(position), -1) AS last FROM shopping_list_items WHERE list_id = ?'
+    )
+    .get(listId) as { last: number };
   return row.last + 1;
 }
 
-function insertItem(db: ReturnType<typeof getDatabase>, listId: string, input: any, userId: string | null = null) {
+function insertItem(
+  db: ReturnType<typeof getDatabase>,
+  listId: string,
+  input: any,
+  userId: string | null = null
+) {
   const id = nanoid();
   const offer = normalizeOffer(input.offer);
   const discount = normalizeLineDiscount(input.discount);
@@ -546,13 +583,16 @@ shoppingRoutes.post('/lists/:id/items', async (c) => {
 
   const body = createItemSchema.parse(await c.req.json());
   const outcome = upsertLine(db, list, body, c.get('userId'));
-  db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-    list.id
-  );
+  db.prepare(
+    'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(list.id);
   announce(db, list, c.get('userId'), outcome.merged ? 'item.merge' : 'item.add', outcome.row.name);
   // `merged` en el cuerpo, como siempre: la UI tiene que poder distinguir «he creado
   // una fila» de «he sumado a la que habia» para no pintar dos avisos distintos.
-  return c.json({ success: true, data: { ...outcome.row, merged: outcome.merged } }, outcome.merged ? 200 : 201);
+  return c.json(
+    { success: true, data: { ...outcome.row, merged: outcome.merged } },
+    outcome.merged ? 200 : 201
+  );
 });
 
 /**
@@ -609,18 +649,29 @@ function upsertLine(
       body.priceMinor ?? body.price_minor ?? null,
       userId,
       ...(incomingDiscount
-        ? [incomingDiscount.kind, incomingDiscount.valueMinor, incomingDiscount.percentBps, incomingDiscount.units]
+        ? [
+            incomingDiscount.kind,
+            incomingDiscount.valueMinor,
+            incomingDiscount.percentBps,
+            incomingDiscount.units
+          ]
         : []),
       existing.id
     );
 
     // Se relee la fila: responder con la copia leida ANTES del UPDATE devolvria la
     // cantidad vieja y la UI tendria que adivinar el resultado de su propio toque.
-    return { row: db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(existing.id) as any, merged: true };
+    return {
+      row: db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(existing.id) as any,
+      merged: true
+    };
   }
 
   const id = insertItem(db, list.id, body, userId);
-  return { row: db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id) as any, merged: false };
+  return {
+    row: db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(id) as any,
+    merged: false
+  };
 }
 
 /** Pegado de texto: una linea por producto, dedupeando contra lo que ya esta. */
@@ -668,12 +719,14 @@ shoppingRoutes.post('/lists/:id/items/bulk', async (c) => {
         continue;
       }
       added.push(
-        db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(insertItem(db, list.id, line, c.get('userId')))
+        db
+          .prepare('SELECT * FROM shopping_list_items WHERE id = ?')
+          .get(insertItem(db, list.id, line, c.get('userId')))
       );
     }
-    db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-      list.id
-    );
+    db.prepare(
+      'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(list.id);
   });
   transaction();
 
@@ -686,7 +739,10 @@ shoppingRoutes.post('/lists/:id/items/bulk', async (c) => {
   );
 
   return c.json(
-    { success: true, data: { added, merged, skipped, version: (readList(db, scope, list.id) as any).version } },
+    {
+      success: true,
+      data: { added, merged, skipped, version: (readList(db, scope, list.id) as any).version }
+    },
     added.length > 0 ? 201 : 200
   );
 });
@@ -741,7 +797,12 @@ shoppingRoutes.patch('/lists/:id/items/:itemId', async (c) => {
   if (body.discount !== undefined) {
     const next = normalizeLineDiscount(body.discount);
     sets.push('disc_kind = ?', 'disc_value_minor = ?', 'disc_percent_bps = ?', 'disc_units = ?');
-    params.push(next?.kind ?? null, next?.valueMinor ?? null, next?.percentBps ?? null, next?.units ?? null);
+    params.push(
+      next?.kind ?? null,
+      next?.valueMinor ?? null,
+      next?.percentBps ?? null,
+      next?.units ?? null
+    );
   }
   // `offer: null` quita la oferta; `undefined` no la toca. Un `COALESCE` aqui no
   // serviria: haria «quitar» indistinguible de «no decir nada».
@@ -756,10 +817,13 @@ shoppingRoutes.patch('/lists/:id/items/:itemId', async (c) => {
   sets.push('updated_at = CURRENT_TIMESTAMP');
   sets.push('updated_by = ?');
   params.push(c.get('userId'));
-  db.prepare(`UPDATE shopping_list_items SET ${sets.join(', ')} WHERE id = ?`).run(...params, item.id);
-  db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-    list.id
+  db.prepare(`UPDATE shopping_list_items SET ${sets.join(', ')} WHERE id = ?`).run(
+    ...params,
+    item.id
   );
+  db.prepare(
+    'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(list.id);
 
   const updated = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(item.id) as any;
   // El suceso distingue marcar de editar porque la pantalla lo cuenta aparte: «Ana ha
@@ -817,12 +881,15 @@ shoppingRoutes.delete('/lists/:id/items/:itemId', async (c) => {
     .run(c.get('userId'), c.req.param('itemId'), list.id);
 
   if (result.changes === 0) return notFound(c, 'Item');
-  db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-    list.id
-  );
+  db.prepare(
+    'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(list.id);
 
   announce(db, list, c.get('userId'), 'item.remove', before?.name ?? null);
-  return c.json({ success: true, data: { id: c.req.param('itemId'), deletedAt: new Date().toISOString() } });
+  return c.json({
+    success: true,
+    data: { id: c.req.param('itemId'), deletedAt: new Date().toISOString() }
+  });
 });
 
 shoppingRoutes.post('/lists/:id/items/:itemId/restore', async (c) => {
@@ -832,11 +899,15 @@ shoppingRoutes.post('/lists/:id/items/:itemId/restore', async (c) => {
   if (!list) return notFound(c, 'List');
 
   const result = db
-    .prepare(`UPDATE shopping_list_items SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND list_id = ?`)
+    .prepare(
+      `UPDATE shopping_list_items SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND list_id = ?`
+    )
     .run(c.req.param('itemId'), list.id);
   if (result.changes === 0) return notFound(c, 'Item');
 
-  const item = db.prepare('SELECT * FROM shopping_list_items WHERE id = ?').get(c.req.param('itemId')) as any;
+  const item = db
+    .prepare('SELECT * FROM shopping_list_items WHERE id = ?')
+    .get(c.req.param('itemId')) as any;
   announce(db, list, c.get('userId'), 'item.restore', item.name);
   return c.json({ success: true, data: item });
 });
@@ -858,7 +929,11 @@ shoppingRoutes.put('/lists/:id/discount', async (c) => {
   // Las dianas se guardan como las escribe la pantalla (nombres legibles) y deduplicadas:
   // el motor compara por clave normalizada, y lo que se ensena tiene que ser lo que alguien
   // reconozca en el pasillo. `target` se deja intacto para las filas que ya existian.
-  const targets = scoped ? JSON.stringify([...new Set((body.targets ?? []).map((value) => value.trim()).filter(Boolean))]) : null;
+  const targets = scoped
+    ? JSON.stringify([
+        ...new Set((body.targets ?? []).map((value) => value.trim()).filter(Boolean))
+      ])
+    : null;
 
   db.prepare(
     `INSERT INTO shopping_list_discounts
@@ -880,10 +955,10 @@ shoppingRoutes.put('/lists/:id/discount', async (c) => {
   ).run(
     list.id,
     body.kind,
-    body.kind === 'amount' ? body.valueMinor ?? 0 : null,
-    body.kind === 'percent' ? body.percentBps ?? 0 : null,
+    body.kind === 'amount' ? (body.valueMinor ?? 0) : null,
+    body.kind === 'percent' ? (body.percentBps ?? 0) : null,
     body.scope,
-    body.scope === 'firstUnits' ? body.firstUnits ?? null : null,
+    body.scope === 'firstUnits' ? (body.firstUnits ?? null) : null,
     scoped ? body.target?.trim() || null : null,
     // `[]` serializado es una lista vacia, que el motor lee como «sin dianas»: para que
     // el estado «sin lista de dianas» sea la ausencia de dato, se guarda null.
@@ -915,11 +990,13 @@ shoppingRoutes.post('/lists/:id/clear-checked', async (c) => {
   if (!list) return notFound(c, 'List');
 
   const removed = db
-    .prepare('UPDATE shopping_list_items SET deleted_at = CURRENT_TIMESTAMP WHERE list_id = ? AND checked = 1 AND deleted_at IS NULL')
+    .prepare(
+      'UPDATE shopping_list_items SET deleted_at = CURRENT_TIMESTAMP WHERE list_id = ? AND checked = 1 AND deleted_at IS NULL'
+    )
     .run(list.id);
-  db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-    list.id
-  );
+  db.prepare(
+    'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(list.id);
 
   announce(db, list, c.get('userId'), 'list.clear-checked', `${removed.changes} lineas`);
   return c.json({ success: true, data: { removed: removed.changes } });
@@ -941,21 +1018,25 @@ shoppingRoutes.put('/lists/:id/order', async (c) => {
   }
 
   const pending = new Set(
-    (db.prepare('SELECT id FROM shopping_list_items WHERE list_id = ? AND deleted_at IS NULL').all(list.id) as any[]).map(
-      (row) => row.id
-    )
+    (
+      db
+        .prepare('SELECT id FROM shopping_list_items WHERE list_id = ? AND deleted_at IS NULL')
+        .all(list.id) as any[]
+    ).map((row) => row.id)
   );
   const unknown = body.itemIds.filter((id) => !pending.has(id));
   if (unknown.length > 0) {
     return c.json({ success: false, message: 'ITEMS_NOT_IN_LIST', data: { unknown } }, 400);
   }
 
-  const update = db.prepare('UPDATE shopping_list_items SET position = ? WHERE id = ? AND list_id = ?');
+  const update = db.prepare(
+    'UPDATE shopping_list_items SET position = ? WHERE id = ? AND list_id = ?'
+  );
   db.transaction(() => {
     body.itemIds.forEach((id, index) => update.run(index, id, list.id));
-    db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-      list.id
-    );
+    db.prepare(
+      'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(list.id);
   })();
 
   return c.json({ success: true, data: { ordered: body.itemIds.length } });
@@ -990,30 +1071,58 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
   // leche de Mercadona al precio de Lidl, y con dos tiendas en la casa el numero de la
   // pantalla ya no significaba nada.
   const observationAny = db.prepare(`${observationSql} ORDER BY observed_at DESC LIMIT 1`);
-  const observationAtStore = db.prepare(`${observationSql} AND store_name = ? ORDER BY observed_at DESC LIMIT 1`);
+  const observationAtStore = db.prepare(
+    `${observationSql} AND store_name = ? ORDER BY observed_at DESC LIMIT 1`
+  );
   const listStore = String(list.store ?? '').trim();
 
   let totalMinor = 0;
-  const priced: { item: any; unitMinor: number | null; source: 'manual' | 'observed' | 'unpriced'; store: string | null; observedAt: string | null; otherStore?: boolean }[] = [];
+  const priced: {
+    item: any;
+    unitMinor: number | null;
+    source: 'manual' | 'observed' | 'unpriced';
+    store: string | null;
+    observedAt: string | null;
+    otherStore?: boolean;
+  }[] = [];
 
   for (const item of items) {
     if (item.price_minor != null) {
-      priced.push({ item, unitMinor: item.price_minor, source: 'manual', store: null, observedAt: null });
+      priced.push({
+        item,
+        unitMinor: item.price_minor,
+        source: 'manual',
+        store: null,
+        observedAt: null
+      });
       continue;
     }
     // La clave de la linea manda: es el enlace a «el producto que la casa ya conoce», que
     // existe porque el carrito dice «Leche semi» y el ticket decia «Leche semidesnatada».
     const key = String(item.product_key || productKeyOf(item.name));
-    const found = (listStore
-      ? (observationAtStore.get(key, c.get('userId'), list.household_id, listStore) ??
-        (() => {
-          const fallback = observationAny.get(key, c.get('userId'), list.household_id) as
-            | { price_minor: number; quantity: number; store_name: string | null; observed_at: string }
-            | undefined;
-          return fallback ? { ...fallback, __otherStore: true } : undefined;
-        })())
-      : observationAny.get(key, c.get('userId'), list.household_id)) as
-      | { price_minor: number; quantity: number; store_name: string | null; observed_at: string; __otherStore?: boolean }
+    const found = (
+      listStore
+        ? (observationAtStore.get(key, c.get('userId'), list.household_id, listStore) ??
+          (() => {
+            const fallback = observationAny.get(key, c.get('userId'), list.household_id) as
+              | {
+                  price_minor: number;
+                  quantity: number;
+                  store_name: string | null;
+                  observed_at: string;
+                }
+              | undefined;
+            return fallback ? { ...fallback, __otherStore: true } : undefined;
+          })())
+        : observationAny.get(key, c.get('userId'), list.household_id)
+    ) as
+      | {
+          price_minor: number;
+          quantity: number;
+          store_name: string | null;
+          observed_at: string;
+          __otherStore?: boolean;
+        }
       | undefined;
     if (!found) {
       priced.push({ item, unitMinor: null, source: 'unpriced', store: null, observedAt: null });
@@ -1057,7 +1166,8 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
       paidUnits: line?.paidUnits ?? entry.item.quantity ?? 1,
       ...(offer ? { offer } : {})
     };
-    if (entry.source === 'unpriced') return { ...base, source: 'unpriced' as const, lineTotalMinor: null };
+    if (entry.source === 'unpriced')
+      return { ...base, source: 'unpriced' as const, lineTotalMinor: null };
     return {
       ...base,
       source: entry.source,
@@ -1094,7 +1204,9 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
       offerSavingsMinor: money.offerSavingsMinor,
       discountMinor: money.discountMinor,
       lineDiscountMinor: money.lineDiscountMinor,
-      discount: discount ? { ...discount, description: describeDiscount(discount), ...money.discount } : null,
+      discount: discount
+        ? { ...discount, description: describeDiscount(discount), ...money.discount }
+        : null,
       pricedLines: lines.filter((line) => line.lineTotalMinor !== null).length,
       unpriced: lines.filter((line) => line.source === 'unpriced').map((line) => line.name),
       lines
@@ -1135,12 +1247,21 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
   // Un id que no es de esta lista no se ignora «porque no toca»: es otra persona
   // escribiendo en la lista de al lado, y eso se dice (mismo codigo que el reorden).
   const requested = body.prices ?? [];
-  const unknown = [...new Set(requested.map((entry) => entry.itemId))].filter((id) => !byId.has(id));
+  const unknown = [...new Set(requested.map((entry) => entry.itemId))].filter(
+    (id) => !byId.has(id)
+  );
   if (unknown.length) {
     return c.json({ success: false, message: 'ITEMS_NOT_IN_LIST', data: { unknown } }, 400);
   }
 
-  type Typed = { item: any; unitMinor: number; unitsPaid: number; paidMinor: number; store: string; productName: string };
+  type Typed = {
+    item: any;
+    unitMinor: number;
+    unitsPaid: number;
+    paidMinor: number;
+    store: string;
+    productName: string;
+  };
   const typed: Typed[] = [];
   for (const entry of requested) {
     const item = byId.get(entry.itemId);
@@ -1150,8 +1271,11 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
     // El ticket dice lo pagado; la linea guarda precio por unidad. Se convierte una vez,
     // aqui, y el redondeo se queda en la linea: la observacion conserva el total exacto.
     const unitMinor =
-      entry.totalPaidMinor != null ? roundMinor(entry.totalPaidMinor / unitsPaid) : roundMinor(entry.priceMinor ?? 0);
-    const paidMinor = entry.totalPaidMinor != null ? entry.totalPaidMinor : roundMinor(unitMinor * unitsPaid);
+      entry.totalPaidMinor != null
+        ? roundMinor(entry.totalPaidMinor / unitsPaid)
+        : roundMinor(entry.priceMinor ?? 0);
+    const paidMinor =
+      entry.totalPaidMinor != null ? entry.totalPaidMinor : roundMinor(unitMinor * unitsPaid);
     const store = String(entry.store ?? '').trim() || listStore || bodyStore;
     const productName = String(entry.productName ?? '').trim() || item.name;
     typed.push({ item, unitMinor, unitsPaid, paidMinor, store, productName });
@@ -1160,11 +1284,18 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
   // Lo que se aprende es de las lineas COMPRADAS; una linea anotada pero no llevada no es
   // un dato de mercado, es una intencion.
   const bought = items.filter((item) => item.checked === 1);
-  const unitOf = new Map(typed.filter((entry) => entry.item.checked === 1).map((entry) => [entry.item.id, entry]));
+  const unitOf = new Map(
+    typed.filter((entry) => entry.item.checked === 1).map((entry) => [entry.item.id, entry])
+  );
 
   const missing = bought
     .filter((item) => item.price_minor == null && !unitOf.has(item.id))
-    .map((item) => ({ itemId: item.id, name: item.name, quantity: item.quantity, unit: item.unit ?? null }));
+    .map((item) => ({
+      itemId: item.id,
+      name: item.name,
+      quantity: item.quantity,
+      unit: item.unit ?? null
+    }));
   if (missing.length) {
     return c.json(
       {
@@ -1208,6 +1339,10 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
 
   let recorded = 0;
   let paidMinor = 0;
+  // Lo que el cierre volco en la despensa: fichas nuevas o repuestas (moved) y sumas sobre fichas con
+  // stock (merged). Lo lee la respuesta y lo pinta el recibo del toast.
+  let pantryMoved = 0;
+  let pantryMerged = 0;
   db.transaction(() => {
     // Lo escrito en esta llamada acaba primero en la linea: si el cierre se rechaza por
     // cualquier otra comprobacion no habremos llegado aqui, y si se acepta, la lista
@@ -1242,7 +1377,8 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
       // DEL ESTANTE (manana el estante seguira costando lo mismo), y en lo pagado va el
       // descuento de la linea, que es lo que salio de la cartera. Aprender el precio rebajado
       // haria que la proxima semana la app estime 0,75 € un producto de 1,00 €.
-      const lineOff = applyLineDiscount(unitsPaid, item.price_minor, lineDiscountOf(item))?.minor ?? 0;
+      const lineOff =
+        applyLineDiscount(unitsPaid, item.price_minor, lineDiscountOf(item))?.minor ?? 0;
       insertObservation.run(
         nanoid(),
         userId,
@@ -1261,6 +1397,67 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
          store = COALESCE(?, store), version = version + 1, updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`
     ).run(bodyStore || null, list.id);
+
+    // ——— El carro pasa a la nevera (## 12ag) ———.
+    // Lo comprado en caja no puede evaporarse de la app al archivar la lista: cada linea COMPRADA aterriza
+    // en la despensa. La regla de duplicados es la del propio inventario —misma `productKeyOf`, la misma
+    // consulta que `buscarPorClave` del gestor—: si la casa ya tiene la ficha con stock, la compra le SUMA
+    // unidades (dos cartones comprados sobre un cartón en casa = dos, no dos fichas); si la ficha existe a
+    // cero —conocida pero agotada—, se repone; si no existe, se crea bajo «Otros». Lo pendiente se queda
+    // fuera a proposito: la despensa no registra intenciones, registra lo que hay.
+    const casa = { userId, householdId: getScope(userId).householdId ?? null };
+    ensurePantryCategories(db, casa.userId, casa.householdId);
+    // `ingredients.category` es NOT NULL y «other» es la reserva que el ensure de arriba garantiza: la linea
+    // de la compra no trae categoria de despensa que ofrecer —su `category` es la SECCION del carrito, otro
+    // eje—, asi que cae en la reserva igual que un producto del catalogo sin hoja reconocida.
+    const categoria = PROTECTED_PANTRY_KEY;
+    const buscaFicha = db.prepare(
+      `SELECT id, name, quantity FROM ingredients
+       WHERE (user_id = ? OR household_id = ?) AND lower(trim(name)) = lower(trim(?))`
+    );
+    const sumaStock = db.prepare(
+      'UPDATE ingredients SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    );
+    const reponeStock = db.prepare(
+      'UPDATE ingredients SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    );
+    const meteFicha = db.prepare(
+      `INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit, expiration_date, location, image, barcode, notes, aliases)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'pantry', NULL, NULL, NULL, '[]')`
+    );
+    for (const item of bought) {
+      const qty =
+        Number.isFinite(Number(item.quantity)) && Number(item.quantity) > 0
+          ? Number(item.quantity)
+          : 1;
+      const candidatos = buscaFicha.all(casa.userId, casa.householdId, item.name) as {
+        id: string;
+        name: string;
+        quantity: number;
+      }[];
+      const clave = productKeyOf(item.name);
+      const ficha = candidatos.find((fila) => productKeyOf(fila.name) === clave) ?? null;
+      if (ficha) {
+        if (Number(ficha.quantity) > 0) {
+          sumaStock.run(qty, ficha.id);
+          pantryMerged += 1;
+        } else {
+          reponeStock.run(qty, ficha.id);
+          pantryMoved += 1;
+        }
+        continue;
+      }
+      meteFicha.run(
+        nanoid(),
+        userId,
+        casa.householdId,
+        item.name,
+        categoria,
+        qty,
+        item.unit ?? 'unit'
+      );
+      pantryMoved += 1;
+    }
   })();
 
   announce(db, list, userId, 'list.complete', `${recorded} precios`);
@@ -1270,7 +1467,9 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
       pricesRecorded: recorded,
       items: bought.length,
       paidMinor,
-      store: listStore || bodyStore || null
+      store: listStore || bodyStore || null,
+      pantryMoved,
+      pantryMerged
     }
   });
 });
@@ -1283,15 +1482,26 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
  */
 function aiError(c: any, error: unknown) {
   const code = error instanceof AiCallError ? error.code : 'PROVIDER';
-  const detail = error instanceof AiCallError ? (error.detail ?? null) : String(error).slice(0, 200);
+  const detail =
+    error instanceof AiCallError ? (error.detail ?? null) : String(error).slice(0, 200);
   if (code === 'NO_CONFIG') {
-    return c.json({ success: false, message: 'AI_NOT_CONFIGURED', data: { redirect: '/settings/ai' } }, 409);
+    return c.json(
+      { success: false, message: 'AI_NOT_CONFIGURED', data: { redirect: '/settings/ai' } },
+      409
+    );
   }
   if (code === 'BAD_JSON') {
-    return c.json({ success: false, message: 'AI_ANSWER_NOT_UNDERSTOOD', data: { sample: detail } }, 422);
+    return c.json(
+      { success: false, message: 'AI_ANSWER_NOT_UNDERSTOOD', data: { sample: detail } },
+      422
+    );
   }
   return c.json(
-    { success: false, message: code === 'TIMEOUT' ? 'AI_TIMEOUT' : 'AI_UNAVAILABLE', data: { detail } },
+    {
+      success: false,
+      message: code === 'TIMEOUT' ? 'AI_TIMEOUT' : 'AI_UNAVAILABLE',
+      data: { detail }
+    },
     502
   );
 }
@@ -1312,7 +1522,11 @@ shoppingRoutes.post('/lists/:id/photo/analyze', async (c) => {
   const parsed = photoAnalyzeSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) {
     return c.json(
-      { success: false, message: 'INVALID_PHOTO', data: { issues: parsed.error.issues.slice(0, 4) } },
+      {
+        success: false,
+        message: 'INVALID_PHOTO',
+        data: { issues: parsed.error.issues.slice(0, 4) }
+      },
       400
     );
   }
@@ -1419,10 +1633,9 @@ shoppingRoutes.post('/lists/:id/items/apply', async (c) => {
       const outcome = upsertLine(db, list, line, userId);
       (outcome.merged ? merged : added).push(outcome.row);
     }
-    db.prepare('UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?').run(
-      userId,
-      list.id
-    );
+    db.prepare(
+      'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP, updated_by = ? WHERE id = ?'
+    ).run(userId, list.id);
   })();
 
   announce(
@@ -1483,7 +1696,11 @@ shoppingRoutes.get('/prices', async (c) => {
     )
     .all(...params, filter.limit, filter.offset) as any[];
 
-  return c.json({ success: true, data: rows, meta: { limit: filter.limit, offset: filter.offset } });
+  return c.json({
+    success: true,
+    data: rows,
+    meta: { limit: filter.limit, offset: filter.offset }
+  });
 });
 
 /**
@@ -1517,7 +1734,13 @@ shoppingRoutes.get('/prices/products', async (c) => {
 
   const byKey = new Map<
     string,
-    { productKey: string; name: string; lastObservedAt: string; observations: number; variants: any[] }
+    {
+      productKey: string;
+      name: string;
+      lastObservedAt: string;
+      observations: number;
+      variants: any[];
+    }
   >();
   for (const row of rows) {
     const unitMinor = roundMinor(Number(row.price_minor) / (Number(row.quantity) || 1));
@@ -1526,7 +1749,12 @@ shoppingRoutes.get('/prices/products', async (c) => {
       name: row.product_name,
       lastObservedAt: row.observed_at,
       observations: 0,
-      variants: [] as { store: string | null; productName: string; unitMinor: number; observedAt: string }[]
+      variants: [] as {
+        store: string | null;
+        productName: string;
+        unitMinor: number;
+        observedAt: string;
+      }[]
     };
     entry.observations += 1;
     // Una variante por tienda: la ultima vez que se comprando alli es el dato que interesa
@@ -1534,7 +1762,12 @@ shoppingRoutes.get('/prices/products', async (c) => {
     const storeName = String(row.store_name ?? '').trim();
     const seen = entry.variants.find((variant) => variant.store === storeName);
     if (!seen) {
-      entry.variants.push({ store: storeName || null, productName: row.product_name, unitMinor, observedAt: row.observed_at });
+      entry.variants.push({
+        store: storeName || null,
+        productName: row.product_name,
+        unitMinor,
+        observedAt: row.observed_at
+      });
     }
     byKey.set(row.product_key, entry);
   }
@@ -1565,7 +1798,10 @@ shoppingRoutes.post('/prices', async (c) => {
     body.quantity ?? 1
   );
 
-  return c.json({ success: true, data: db.prepare('SELECT * FROM price_observations WHERE id = ?').get(id) }, 201);
+  return c.json(
+    { success: true, data: db.prepare('SELECT * FROM price_observations WHERE id = ?').get(id) },
+    201
+  );
 });
 
 shoppingRoutes.delete('/prices/:id', async (c) => {
@@ -1575,10 +1811,9 @@ shoppingRoutes.delete('/prices/:id', async (c) => {
   // propiedad: un borrado es destructivo y no hay «Deshacer» para una
   // observacion. Dejar que cualquier miembro borre la fila de otra persona es
   // una forma facil de perder el historial de precios por un desliz.
-  const result = db.prepare('DELETE FROM price_observations WHERE id = ? AND user_id = ?').run(
-    c.req.param('id'),
-    userId
-  );
+  const result = db
+    .prepare('DELETE FROM price_observations WHERE id = ? AND user_id = ?')
+    .run(c.req.param('id'), userId);
   if (result.changes === 0) return notFound(c, 'Price');
   return c.json({ success: true, data: { id: c.req.param('id') } });
 });
@@ -1595,7 +1830,10 @@ shoppingRoutes.get('/lists/:id/events', async (c) => {
 
   const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 50));
   const rows = readEvents(db, { listId: list.id, limit });
-  return c.json({ success: true, data: rows.map((row) => ({ ...row, description: describeEvent(row) })) });
+  return c.json({
+    success: true,
+    data: rows.map((row) => ({ ...row, description: describeEvent(row) }))
+  });
 });
 
 const HEARTBEAT_MS = 15_000;
@@ -1636,7 +1874,10 @@ async function pumpStream(stream: any, channels: string[], listId: string | null
   });
 
   try {
-    await stream.writeSSE({ event: 'ready', data: JSON.stringify({ at: new Date().toISOString(), channels }) });
+    await stream.writeSSE({
+      event: 'ready',
+      data: JSON.stringify({ at: new Date().toISOString(), channels })
+    });
     while (!closed) {
       const event = queue.shift();
       if (event) {
@@ -1684,6 +1925,5 @@ shoppingRoutes.get('/stream/tray', async (c) => {
     await pumpStream(stream, channelsForTray({ userId, householdId: scope.householdId }), null);
   });
 });
-
 
 export { shoppingRoutes };

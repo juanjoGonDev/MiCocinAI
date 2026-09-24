@@ -21,13 +21,9 @@ let closeDatabase: () => void;
 /** Usuario nuevo + token firmado, que es lo que hace `authMiddleware`. */
 async function makeUser(email: string, householdId: string | null = null) {
   const id = `u-${email.split('@')[0]}`;
-  db.prepare('INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)').run(
-    id,
-    email,
-    'Comprador',
-    'hash',
-    householdId
-  );
+  db.prepare(
+    'INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(id, email, 'Comprador', 'hash', householdId);
   const config = await import('../config/app.config.js');
   const token = jwt.sign({ sub: id, email }, config.config.auth.jwtSecret, { expiresIn: '1h' });
   return { id, token };
@@ -144,11 +140,15 @@ describe('/lists', () => {
   it('toca el nombre con CAS y rechaza la version rancia', async () => {
     const list = await createList(alice);
 
-    const ok = await data(await call(alice, 'PATCH', `/lists/${list.id}`, { name: 'Compra + pan', version: 1 }));
+    const ok = await data(
+      await call(alice, 'PATCH', `/lists/${list.id}`, { name: 'Compra + pan', version: 1 })
+    );
     expect(ok.version).toBe(2);
 
     // Un body solo se lee una vez: releerlo daria 'Body has already been read'.
-    const stale = await json(await call(alice, 'PATCH', `/lists/${list.id}`, { name: 'Choque', version: 1 }));
+    const stale = await json(
+      await call(alice, 'PATCH', `/lists/${list.id}`, { name: 'Choque', version: 1 })
+    );
     expect(stale.message).toBe('LIST_VERSION_CONFLICT');
     expect(stale.data.currentVersion).toBe(2);
   });
@@ -161,7 +161,9 @@ describe('/lists', () => {
 
   it('borrar la lista se lleva los items y deja los precios aprendidos', async () => {
     const list = await createList(alice);
-    const milk = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', priceMinor: 85 }));
+    const milk = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', priceMinor: 85 })
+    );
     // Solo lo COMPRADO aprende precio: una linea pendiente no es un dato de mercado.
     await call(alice, 'PATCH', `/lists/${list.id}/items/${milk.id}`, { checked: true });
     const completed = await call(alice, 'POST', `/lists/${list.id}/complete`);
@@ -178,8 +180,12 @@ describe('/lists/:id/items', () => {
   it('añade una linea con su clave normalizada y al final del orden', async () => {
     const list = await createList(alice);
 
-    const first = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Tomate', quantity: 2 }));
-    const second = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche' }));
+    const first = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Tomate', quantity: 2 })
+    );
+    const second = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche' })
+    );
 
     expect(first.product_key).toBe('tomate');
     expect(first.position).toBe(0);
@@ -191,7 +197,9 @@ describe('/lists/:id/items', () => {
     const list = await createList(alice);
     await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1 });
 
-    const again = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'LECHE ', quantity: 2 }));
+    const again = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'LECHE ', quantity: 2 })
+    );
     expect(again.merged).toBe(true);
     expect(again.quantity).toBe(3);
 
@@ -202,7 +210,9 @@ describe('/lists/:id/items', () => {
   it('la unidad distingue la linea (1L y 500ml no son el mismo precio)', async () => {
     const list = await createList(alice);
     await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', unit: '1L' });
-    const other = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', unit: '500ml' }));
+    const other = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', unit: '500ml' })
+    );
 
     expect(other.merged).toBe(false);
   });
@@ -211,7 +221,10 @@ describe('/lists/:id/items', () => {
     const list = await createList(alice);
 
     for (const quantity of [0, -1, 'NaN', 99999]) {
-      const response = await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity });
+      const response = await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Leche',
+        quantity
+      });
       expect([400, 500]).toContain(response.status);
     }
   });
@@ -245,7 +258,9 @@ describe('/lists/:id/items', () => {
     const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan' }));
 
     for (const value of [true, 'true', '1', 'on', 1]) {
-      const checked = await data(await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: value }));
+      const checked = await data(
+        await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: value })
+      );
       expect(checked.checked).toBe(1);
     }
     for (const value of [false, 'false', '0', 'off', 0]) {
@@ -257,13 +272,17 @@ describe('/lists/:id/items', () => {
 
     // El 1/0 entero es la forma que la UI reenvia (leyo la columna asi); un 2 no es
     // un «true» generico, es un dato malo, y tiene que decirlo.
-    const nonsense = await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: 2 });
+    const nonsense = await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, {
+      checked: 2
+    });
     expect(nonsense.status).toBe(400);
   });
 
   it('borrar es logico y se puede deshacer', async () => {
     const list = await createList(alice);
-    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Aceitunas' }));
+    const item = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Aceitunas' })
+    );
 
     const removed = await call(alice, 'DELETE', `/lists/${list.id}/items/${item.id}`);
     expect(removed.ok).toBe(true);
@@ -272,7 +291,9 @@ describe('/lists/:id/items', () => {
     expect(visible).toEqual([]);
     expect(db.prepare('SELECT COUNT(*) AS c FROM shopping_list_items').get()).toEqual({ c: 1 });
 
-    const restored = await data(await call(alice, 'POST', `/lists/${list.id}/items/${item.id}/restore`));
+    const restored = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items/${item.id}/restore`)
+    );
     expect(restored.deleted_at).toBeNull();
 
     // Borrar dos veces no es un 500 ni un éxito: es que ya no está.
@@ -308,7 +329,10 @@ describe('/lists/:id/items', () => {
     expect(items.map((i: any) => i.position)).toEqual([0, 1]);
     expect(items[0].name).toBe('Dos');
 
-    const stranger = await call(bob, 'PUT', `/lists/${list.id}/order`, { itemIds: [one.id], version: fresh.version });
+    const stranger = await call(bob, 'PUT', `/lists/${list.id}/order`, {
+      itemIds: [one.id],
+      version: fresh.version
+    });
     expect(stranger.status).toBe(404);
 
     const mixed = await call(alice, 'PUT', `/lists/${list.id}/order`, {
@@ -323,8 +347,16 @@ describe('/lists/:id/items', () => {
 describe('precios y estimacion', () => {
   it('estima con el precio manual por unidad por la cantidad', async () => {
     const list = await createList(alice);
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 2, priceMinor: 85 });
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Aceite', quantity: 1, priceMinor: 650 });
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      quantity: 2,
+      priceMinor: 85
+    });
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Aceite',
+      quantity: 1,
+      priceMinor: 650
+    });
 
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     expect(estimate.totalMinor).toBe(85 * 2 + 650);
@@ -334,11 +366,19 @@ describe('precios y estimacion', () => {
 
   it('usa el ultimo precio observado cuando la linea no lo lleva', async () => {
     const list = await createList(alice);
-    await call(alice, 'POST', `/prices`, { productName: 'Leche semi', priceMinor: 170, quantity: 2 });
+    await call(alice, 'POST', `/prices`, {
+      productName: 'Leche semi',
+      priceMinor: 170,
+      quantity: 2
+    });
     await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'LECHE SEMI', quantity: 3 });
 
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
-    expect(estimate.lines[0]).toMatchObject({ source: 'observed', unitMinor: 85, lineTotalMinor: 255 });
+    expect(estimate.lines[0]).toMatchObject({
+      source: 'observed',
+      unitMinor: 85,
+      lineTotalMinor: 255
+    });
     expect(estimate.totalMinor).toBe(255);
   });
 
@@ -354,7 +394,13 @@ describe('precios y estimacion', () => {
 
   it('completar la compra aprende los precios (pagado = unidad * cantidad)', async () => {
     const list = await createList(alice);
-    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Café', quantity: 3, priceMinor: 210 }));
+    const item = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Café',
+        quantity: 3,
+        priceMinor: 210
+      })
+    );
     await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: true });
 
     const result = await data(await call(alice, 'POST', `/lists/${list.id}/complete`));
@@ -379,7 +425,10 @@ describe('precios y estimacion', () => {
       'Hogar shared',
       `code-${householdId}`
     );
-    alice = await makeUser(`alice-h-${Math.random().toString(36).slice(2)}@test.local`, householdId);
+    alice = await makeUser(
+      `alice-h-${Math.random().toString(36).slice(2)}@test.local`,
+      householdId
+    );
     bob = await makeUser(`bob-h-${Math.random().toString(36).slice(2)}@test.local`, householdId);
 
     const list = await createList(alice, 'Compra compartida');
@@ -418,7 +467,10 @@ describe('categorias: el inventario de secciones (§8f)', () => {
   it('crear una seccion que ya existe por clave no la duplica', async () => {
     await call(alice, 'GET', '/categories'); // sin catalogo todavia no hay nada que reutilizar
     // El nombre esta escrito de otra forma a proposito: lo que compara es la clave.
-    const created = await call(alice, 'POST', '/categories', { name: '  frutas   Y VERDURAS ', color: '#112233' });
+    const created = await call(alice, 'POST', '/categories', {
+      name: '  frutas   Y VERDURAS ',
+      color: '#112233'
+    });
     expect(created.status).toBe(200);
     const rows = await data(await call(alice, 'GET', '/categories'));
     expect(rows.filter((c: any) => c.key === 'frutas y verduras')).toHaveLength(1);
@@ -438,7 +490,10 @@ describe('categorias: el inventario de secciones (§8f)', () => {
   });
 
   it('un color que no es hexadecimal no entra', async () => {
-    const response = await call(alice, 'POST', '/categories', { name: 'Verde que te quiero', color: 'rojo' });
+    const response = await call(alice, 'POST', '/categories', {
+      name: 'Verde que te quiero',
+      color: 'rojo'
+    });
     expect(response.status).toBe(400);
   });
 
@@ -468,7 +523,11 @@ describe('descuentos y ofertas (§8f)', () => {
     expect(item.promo_take).toBe(2);
 
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
-    expect(estimate.lines[0]).toMatchObject({ paidUnits: 4, lineTotalMinor: 400, offerSavingsMinor: 200 });
+    expect(estimate.lines[0]).toMatchObject({
+      paidUnits: 4,
+      lineTotalMinor: 400,
+      offerSavingsMinor: 200
+    });
     expect(estimate.subtotalMinor).toBe(400);
     expect(estimate.totalMinor).toBe(400);
   });
@@ -476,7 +535,11 @@ describe('descuentos y ofertas (§8f)', () => {
   it('una oferta que no ahorra no se guarda como oferta', async () => {
     const list = await createList(alice);
     const item = await data(
-      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Agua', quantity: 4, offer: { buy: 4, take: 4 } })
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Agua',
+        quantity: 4,
+        offer: { buy: 4, take: 4 }
+      })
     );
     expect(item.promo_buy).toBeNull();
     expect(item.promo_take).toBeNull();
@@ -485,7 +548,12 @@ describe('descuentos y ofertas (§8f)', () => {
   it('quitar la oferta es un null explicito, no «no hablar de ella»', async () => {
     const list = await createList(alice);
     const item = await data(
-      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Yogur', quantity: 6, priceMinor: 90, offer: { buy: 3, take: 2 } })
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Yogur',
+        quantity: 6,
+        priceMinor: 90,
+        offer: { buy: 3, take: 2 }
+      })
     );
     await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { offer: null });
 
@@ -499,9 +567,16 @@ describe('descuentos y ofertas (§8f)', () => {
 
   it('el descuento de la lista baja el total y se puede quitar', async () => {
     const list = await createList(alice);
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', quantity: 2, priceMinor: 250 });
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Pan',
+      quantity: 2,
+      priceMinor: 250
+    });
 
-    const created = await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'percent', percentBps: 2000 });
+    const created = await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'percent',
+      percentBps: 2000
+    });
     expect(created.status).toBe(200);
 
     const withDiscount = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
@@ -521,11 +596,25 @@ describe('descuentos y ofertas (§8f)', () => {
 
   it('un descuento mal formado no entra', async () => {
     const list = await createList(alice);
-    expect((await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'percent', percentBps: 20_000 })).status).toBe(400);
-    expect((await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount' })).status).toBe(400);
     expect(
-      (await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 100, scope: 'firstUnits' }))
-        .status
+      (
+        await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+          kind: 'percent',
+          percentBps: 20_000
+        })
+      ).status
+    ).toBe(400);
+    expect(
+      (await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount' })).status
+    ).toBe(400);
+    expect(
+      (
+        await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+          kind: 'amount',
+          valueMinor: 100,
+          scope: 'firstUnits'
+        })
+      ).status
     ).toBe(400);
   });
 
@@ -550,7 +639,10 @@ describe('descuentos y ofertas (§8f)', () => {
 });
 
 describe('bandeja: filtros, orden y paginacion (§8f)', () => {
-  async function listWithItem(name: string, opts: { store?: string; price?: number; quantity?: number } = {}) {
+  async function listWithItem(
+    name: string,
+    opts: { store?: string; price?: number; quantity?: number } = {}
+  ) {
     const list = await data(
       await call(alice, 'POST', '/lists', { name, store: opts.store ?? null })
     );
@@ -570,7 +662,10 @@ describe('bandeja: filtros, orden y paginacion (§8f)', () => {
     await listWithItem('Lidl', { store: 'Lidl', price: 9000 });
 
     const lasDeMercadona = await data(await call(alice, 'GET', '/lists?store=Mercadona'));
-    expect(lasDeMercadona.map((l: any) => l.name).sort()).toEqual(['Mercadona barata', 'Mercadona cara']);
+    expect(lasDeMercadona.map((l: any) => l.name).sort()).toEqual([
+      'Mercadona barata',
+      'Mercadona cara'
+    ]);
 
     // El importe no pregunta por la tienda: Lidl (90 €) tambien pasa de 30 €.
     const caras = await data(await call(alice, 'GET', '/lists?minTotalMinor=3000'));
@@ -600,8 +695,12 @@ describe('bandeja: filtros, orden y paginacion (§8f)', () => {
     // sitio cada vez que corre el reloj de la CI.
     const old = await listWithItem('Vieja');
     const fresh = await listWithItem('Reciente');
-    db.prepare(`UPDATE shopping_lists SET updated_at = '2025-01-05 10:00:00' WHERE id = ?`).run(old.id);
-    db.prepare(`UPDATE shopping_lists SET updated_at = '2025-03-10 09:00:00' WHERE id = ?`).run(fresh.id);
+    db.prepare(`UPDATE shopping_lists SET updated_at = '2025-01-05 10:00:00' WHERE id = ?`).run(
+      old.id
+    );
+    db.prepare(`UPDATE shopping_lists SET updated_at = '2025-03-10 09:00:00' WHERE id = ?`).run(
+      fresh.id
+    );
 
     const marzo = await data(await call(alice, 'GET', '/lists?from=2025-03-01&to=2025-03-31'));
     expect(marzo.map((l: any) => l.name)).toEqual(['Reciente']);
@@ -665,14 +764,21 @@ describe('bandeja: filtros, orden y paginacion (§8f)', () => {
 describe('auditoria y en-vivo (§8f)', () => {
   it('anadir, marcar y quitar dejan rastro de quien fue y en que orden', async () => {
     const list = await createList(alice);
-    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pollo' }));
+    const item = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pollo' })
+    );
     await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: true });
     await call(alice, 'DELETE', `/lists/${list.id}/items/${item.id}`);
 
     const events = await data(await call(alice, 'GET', `/lists/${list.id}/events`));
     // `list.create` tambien esta, al final: la auditoria cuenta todo, incluida la
     // propia creacion de la lista (de donde si no va a salir la primera fila).
-    expect(events.map((e: any) => e.action)).toEqual(['item.remove', 'item.check', 'item.add', 'list.create']);
+    expect(events.map((e: any) => e.action)).toEqual([
+      'item.remove',
+      'item.check',
+      'item.add',
+      'list.create'
+    ]);
     expect(events[0].user_name).toBe('Comprador');
     expect(events[0].item_name).toBe('Pollo');
     // La frase ya viene hecha: la pantalla no concatena textos, que es como se
@@ -683,7 +789,9 @@ describe('auditoria y en-vivo (§8f)', () => {
   it('quien se renombra se renombra tambien en su historial, y la instantanea sigue en la tabla', async () => {
     const list = await createList(alice);
     await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pollo' });
-    expect((await data(await call(alice, 'GET', `/lists/${list.id}/events`)))[0].user_name).toBe('Comprador');
+    expect((await data(await call(alice, 'GET', `/lists/${list.id}/events`)))[0].user_name).toBe(
+      'Comprador'
+    );
 
     // La fila NO se reescribe: `user_name` es la instantanea de cuando paso y ahi se queda. Lo que
     // lee la pantalla es el nombre de hoy (con aquella como reserva si la cuenta desaparece), porque
@@ -693,22 +801,41 @@ describe('auditoria y en-vivo (§8f)', () => {
     const events = await data(await call(alice, 'GET', `/lists/${list.id}/events`));
     expect(events[0].user_name).toBe('Compradora Nueva');
     expect(events[0].description).toContain('Compradora Nueva ha añadido «Pollo»');
-    expect(db.prepare('SELECT user_name FROM shopping_list_events WHERE list_id = ?').get(list.id)).toEqual({
+    expect(
+      db.prepare('SELECT user_name FROM shopping_list_events WHERE list_id = ?').get(list.id)
+    ).toEqual({
       user_name: 'Comprador'
     });
   });
 
   it('el descuento y el vaciado del carro tambien se cuentan', async () => {
     const list = await createList(alice);
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', quantity: 2, priceMinor: 100 });
-    await call(alice, 'PATCH', `/lists/${list.id}/items/${(await data(await call(alice, 'GET', `/lists/${list.id}`))).items[0].id}`, {
-      checked: true
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Pan',
+      quantity: 2,
+      priceMinor: 100
     });
+    await call(
+      alice,
+      'PATCH',
+      `/lists/${list.id}/items/${(await data(await call(alice, 'GET', `/lists/${list.id}`))).items[0].id}`,
+      {
+        checked: true
+      }
+    );
     await call(alice, 'POST', `/lists/${list.id}/clear-checked`);
     await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'percent', percentBps: 500 });
 
-    const actions = (await data(await call(alice, 'GET', `/lists/${list.id}/events`))).map((e: any) => e.action);
-    expect(actions).toEqual(['list.discount', 'list.clear-checked', 'item.check', 'item.add', 'list.create']);
+    const actions = (await data(await call(alice, 'GET', `/lists/${list.id}/events`))).map(
+      (e: any) => e.action
+    );
+    expect(actions).toEqual([
+      'list.discount',
+      'list.clear-checked',
+      'item.check',
+      'item.add',
+      'list.create'
+    ]);
   });
 
   it('la auditoria de otra persona del hogar no se lee desde fuera', async () => {
@@ -719,7 +846,8 @@ describe('auditoria y en-vivo (§8f)', () => {
 
   it('el limite recorta la auditoria', async () => {
     const list = await createList(alice);
-    for (const name of ['A', 'B', 'C']) await call(alice, 'POST', `/lists/${list.id}/items`, { name });
+    for (const name of ['A', 'B', 'C'])
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name });
     const two = await data(await call(alice, 'GET', `/lists/${list.id}/events?limit=2`));
     expect(two).toHaveLength(2);
     expect(two.map((e: any) => e.item_name)).toEqual(['C', 'B']);
@@ -772,14 +900,18 @@ describe('auditoria y en-vivo (§8f)', () => {
 
   it('un cambio real en la lista le llega al stream de otra pantalla', async () => {
     const list = await createList(alice);
-    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche' }));
+    const item = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche' })
+    );
     const bobWatch = await app.request(`/api/shopping/stream/lists/${list.id}`, {
       headers: { authorization: `Bearer ${bob.token}` }
     });
     // Bob no es del hogar de Alice: el stream no le abre la lista a nadie.
     expect(bobWatch.status).toBe(404);
 
-    const aliceWatch = await app.request(`/api/shopping/stream/lists/${list.id}?access_token=${alice.token}`);
+    const aliceWatch = await app.request(
+      `/api/shopping/stream/lists/${list.id}?access_token=${alice.token}`
+    );
     expect(aliceWatch.status).toBe(200);
     await aliceWatch.body!.cancel();
     void item;
@@ -788,7 +920,13 @@ describe('auditoria y en-vivo (§8f)', () => {
   it('el token por URL solo vale en el stream, y solo con GET', async () => {
     expect((await app.request(`/api/shopping/lists?access_token=${alice.token}`)).status).toBe(401);
     expect((await app.request(`/api/shopping/lists?access_token=no-pega`)).status).toBe(401);
-    expect((await app.request(`/api/shopping/lists`, { headers: { authorization: `Bearer ${alice.token}` } })).status).toBe(200);
+    expect(
+      (
+        await app.request(`/api/shopping/lists`, {
+          headers: { authorization: `Bearer ${alice.token}` }
+        })
+      ).status
+    ).toBe(200);
   });
 });
 
@@ -804,11 +942,13 @@ describe('entrada por foto (§8f)', () => {
   }
 
   function answersWith(content: string) {
-    vi.stubGlobal('fetch', async () =>
-      new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' }
-      })
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        })
     );
   }
 
@@ -822,18 +962,38 @@ describe('entrada por foto (§8f)', () => {
     answersWith(
       JSON.stringify({
         lines: [
-          { name: 'Leche semidesnatada', quantity: 2, unit: 'botella', category: 'Lacteos', priceMinor: 95, confidence: 0.9 },
-          { name: 'Pan de pueblo', quantity: 1, unit: 'ud', category: 'Panaderia', priceMinor: null, confidence: 0.6 }
+          {
+            name: 'Leche semidesnatada',
+            quantity: 2,
+            unit: 'botella',
+            category: 'Lacteos',
+            priceMinor: 95,
+            confidence: 0.9
+          },
+          {
+            name: 'Pan de pueblo',
+            quantity: 1,
+            unit: 'ud',
+            category: 'Panaderia',
+            priceMinor: null,
+            confidence: 0.6
+          }
         ],
         warnings: ['El precio del pan no se ve']
       })
     );
     const list = await createList(alice);
 
-    const result = await data(await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE, mode: 'shelf' }));
+    const result = await data(
+      await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE, mode: 'shelf' })
+    );
     expect(result.lines).toHaveLength(2);
     expect(result.warnings).toEqual(['El precio del pan no se ve']);
-    expect(result.lines[0]).toMatchObject({ name: 'Leche semidesnatada', priceMinor: 95, category: 'Lacteos' });
+    expect(result.lines[0]).toMatchObject({
+      name: 'Leche semidesnatada',
+      priceMinor: 95,
+      category: 'Lacteos'
+    });
     // El catalogo va dentro de la respuesta: la hoja de repaso pinta colores sin
     // volver a pedirlo.
     expect(result.categories.map((c: any) => c.name)).toContain('Lacteos');
@@ -847,10 +1007,16 @@ describe('entrada por foto (§8f)', () => {
     let sent = '';
     vi.stubGlobal('fetch', async (_url: string, init: any) => {
       sent = JSON.stringify(init.body);
-      return new Response(JSON.stringify({ choices: [{ message: { content: '{"lines":[]}' } }] }), { status: 200 });
+      return new Response(JSON.stringify({ choices: [{ message: { content: '{"lines":[]}' } }] }), {
+        status: 200
+      });
     });
     const list = await createList(alice);
-    await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE, mode: 'ticket', note: 'es del chino' });
+    await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, {
+      image: IMAGE,
+      mode: 'ticket',
+      note: 'es del chino'
+    });
 
     expect(sent).toContain('Frutas y verduras');
     expect(sent).toContain('priceMinor');
@@ -868,7 +1034,14 @@ describe('entrada por foto (§8f)', () => {
       await call(alice, 'POST', `/lists/${list.id}/items/apply`, {
         lines: [
           { name: 'Leche', unit: 'l', quantity: 2, priceMinor: 120 },
-          { name: 'Tofu', quantity: 1, unit: 'ud', category: 'Refrigerados', createCategory: true, priceMinor: 210 }
+          {
+            name: 'Tofu',
+            quantity: 1,
+            unit: 'ud',
+            category: 'Refrigerados',
+            createCategory: true,
+            priceMinor: 210
+          }
         ]
       })
     );
@@ -886,10 +1059,30 @@ describe('entrada por foto (§8f)', () => {
 
   it('un descuento por producto solo baja ese producto', async () => {
     const list = await createList(alice);
-    const jamon = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Jamon Serrano', quantity: 1, unit: 'kg', priceMinor: 4000 }));
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 2, unit: 'L', priceMinor: 100, category: 'Lacteos' });
+    const jamon = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Jamon Serrano',
+        quantity: 1,
+        unit: 'kg',
+        priceMinor: 4000
+      })
+    );
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      quantity: 2,
+      unit: 'L',
+      priceMinor: 100,
+      category: 'Lacteos'
+    });
 
-    const saved = await data(await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'product', target: 'Jamon Serrano' }));
+    const saved = await data(
+      await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+        kind: 'amount',
+        valueMinor: 500,
+        scope: 'product',
+        target: 'Jamon Serrano'
+      })
+    );
     expect(saved.target).toBe('Jamon Serrano');
     expect(saved.description).toContain('en Jamon Serrano');
 
@@ -908,11 +1101,31 @@ describe('entrada por foto (§8f)', () => {
 
   it('un descuento por seccion entra en todo el pasillo', async () => {
     const list = await createList(alice);
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Manzanas', quantity: 1, priceMinor: 300, category: 'Frutas y verduras' });
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Puerros', quantity: 1, priceMinor: 200, category: 'Frutas y verduras' });
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1, priceMinor: 1000, category: 'Lacteos' });
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Manzanas',
+      quantity: 1,
+      priceMinor: 300,
+      category: 'Frutas y verduras'
+    });
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Puerros',
+      quantity: 1,
+      priceMinor: 200,
+      category: 'Frutas y verduras'
+    });
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      quantity: 1,
+      priceMinor: 1000,
+      category: 'Lacteos'
+    });
 
-    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'percent', percentBps: 1000, scope: 'category', target: 'frutas y verduras' });
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'percent',
+      percentBps: 1000,
+      scope: 'category',
+      target: 'frutas y verduras'
+    });
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     // 10 % de 500 ct = 50 ct, y el reparto solo salpica a las dos lineas de fruta.
     expect(estimate.discountMinor).toBe(50);
@@ -921,24 +1134,52 @@ describe('entrada por foto (§8f)', () => {
 
   it('prometer un descuento sin decir a que es un 400, no un 0 magico', async () => {
     const list = await createList(alice);
-    const response = await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'product' });
+    const response = await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'amount',
+      valueMinor: 500,
+      scope: 'product'
+    });
     expect(response.status).toBe(400);
     expect(JSON.stringify(await response.json())).toContain('DiscountTargetRequired');
   });
 
   it('cambiar de «en jamon» a «toda la cesta» olvida el jamon', async () => {
     const list = await createList(alice);
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Jamon Serrano', quantity: 1, priceMinor: 4000 });
-    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'product', target: 'Jamon Serrano' });
-    const after = await data(await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'all' }));
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Jamon Serrano',
+      quantity: 1,
+      priceMinor: 4000
+    });
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'amount',
+      valueMinor: 500,
+      scope: 'product',
+      target: 'Jamon Serrano'
+    });
+    const after = await data(
+      await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+        kind: 'amount',
+        valueMinor: 500,
+        scope: 'all'
+      })
+    );
     expect(after.target).toBeNull();
     expect(after.scope).toBe('all');
   });
 
   it('sin linea que encaje, el estimate lo dice en vez de fingir un descuento', async () => {
     const list = await createList(alice);
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1, priceMinor: 1000 });
-    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 500, scope: 'product', target: 'Jamon' });
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      quantity: 1,
+      priceMinor: 1000
+    });
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'amount',
+      valueMinor: 500,
+      scope: 'product',
+      target: 'Jamon'
+    });
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     expect(estimate.discountMinor).toBe(0);
     expect(estimate.discount.reason).toBe('noMatchingLine');
@@ -955,7 +1196,10 @@ describe('entrada por foto (§8f)', () => {
     expect(activeOnly.meta.total).toBe(1);
 
     const everything = await json(await call(alice, 'GET', '/lists?status=all'));
-    expect(everything.data.map((l: any) => l.name).sort()).toEqual(['Activa aqui', 'Terminada alla']);
+    expect(everything.data.map((l: any) => l.name).sort()).toEqual([
+      'Activa aqui',
+      'Terminada alla'
+    ]);
     // El total del meta usa los MISMOS filtros: si contara sin filtrar, la paginacion
     // ensenaria «1-2 de 57» en una pantalla con dos filas.
     expect(everything.meta.total).toBe(2);
@@ -988,13 +1232,17 @@ describe('entrada por foto (§8f)', () => {
     giveAi(alice);
     answersWith(JSON.stringify({ lines: [{ name: '', quantity: 1 }] }));
     const list = await createList(alice);
-    expect((await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE })).status).toBe(422);
+    expect(
+      (await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: IMAGE })).status
+    ).toBe(422);
   });
 
   it('una foto que no es imagen no entra, y una enorme tampoco', async () => {
     giveAi(alice);
     const list = await createList(alice);
-    const notAnImage = await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, { image: 'data:text/plain;base64,AAA=' });
+    const notAnImage = await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, {
+      image: 'data:text/plain;base64,AAA='
+    });
     expect(notAnImage.status).toBe(400);
     expect(((await notAnImage.json()) as any).message).toBe('INVALID_PHOTO');
 
@@ -1020,9 +1268,27 @@ describe('descuento sobre varios productos (§12g)', () => {
   /** Cesta con tres lineas con precio: solo dos entran en la promocion del cartel. */
   async function basket() {
     const list = await createList(alice, 'Compra con oferta');
-    const jamon = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Jamon Serrano', quantity: 1, priceMinor: 1200 }));
-    const queso = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Queso Curado', quantity: 1, priceMinor: 600 }));
-    const leche = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1, priceMinor: 100 }));
+    const jamon = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Jamon Serrano',
+        quantity: 1,
+        priceMinor: 1200
+      })
+    );
+    const queso = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Queso Curado',
+        quantity: 1,
+        priceMinor: 600
+      })
+    );
+    const leche = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Leche',
+        quantity: 1,
+        priceMinor: 100
+      })
+    );
     return { list, jamon, queso, leche };
   }
 
@@ -1051,26 +1317,52 @@ describe('descuento sobre varios productos (§12g)', () => {
 
   it('el porcentaje se calcula sobre lo que elegiste, no sobre el carro entero', async () => {
     const { list } = await basket();
-    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'percent', percentBps: 1000, scope: 'product', targets: ['Jamon Serrano'] });
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'percent',
+      percentBps: 1000,
+      scope: 'product',
+      targets: ['Jamon Serrano']
+    });
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     expect(estimate.discountMinor).toBe(120);
   });
 
   it('un alcance que promete producto sin ninguna diana no se guarda', async () => {
     const { list } = await basket();
-    const empty = await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 250, scope: 'product', targets: [] });
+    const empty = await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'amount',
+      valueMinor: 250,
+      scope: 'product',
+      targets: []
+    });
     expect(empty.status).toBe(400);
     // El codigo va en `details[].message` (el envoltorio de zod), no en `message`: es el
     // contrato de todas las validaciones del server, y una hoja nueva no lo cambia.
     expect(JSON.stringify(await json(empty))).toContain('DiscountTargetRequired');
-    const nothing = await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 250, scope: 'category' });
+    const nothing = await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'amount',
+      valueMinor: 250,
+      scope: 'category'
+    });
     expect(nothing.status).toBe(400);
   });
 
   it('guardar otra vez sobre las mismas dianas no duplica ni deja las anteriores', async () => {
     const { list } = await basket();
-    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 250, scope: 'product', targets: ['Jamon Serrano', 'Queso Curado'] });
-    const saved = await data(await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 250, scope: 'product', targets: ['Leche'] }));
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'amount',
+      valueMinor: 250,
+      scope: 'product',
+      targets: ['Jamon Serrano', 'Queso Curado']
+    });
+    const saved = await data(
+      await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+        kind: 'amount',
+        valueMinor: 250,
+        scope: 'product',
+        targets: ['Leche']
+      })
+    );
     expect(saved.targets).toEqual(['Leche']);
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     // 250 sobre una linea de 100 se recorta a 100: no devuelve dinero, y lo dice.
@@ -1080,10 +1372,17 @@ describe('descuento sobre varios productos (§12g)', () => {
 
   it('la forma antigua (una sola diana) sigue leyendose', async () => {
     const { list } = await basket();
-    await call(alice, 'PUT', `/lists/${list.id}/discount`, { kind: 'amount', valueMinor: 200, scope: 'product', target: 'jamon serrano' });
+    await call(alice, 'PUT', `/lists/${list.id}/discount`, {
+      kind: 'amount',
+      valueMinor: 200,
+      scope: 'product',
+      target: 'jamon serrano'
+    });
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     expect(estimate.discountMinor).toBe(200);
-    const stored = db.prepare('SELECT targets FROM shopping_list_discounts WHERE list_id = ?').get(list.id) as any;
+    const stored = db
+      .prepare('SELECT targets FROM shopping_list_discounts WHERE list_id = ?')
+      .get(list.id) as any;
     expect(stored.targets).toBeNull();
   });
 });
@@ -1091,8 +1390,16 @@ describe('descuento sobre varios productos (§12g)', () => {
 describe('cerrar una compra deja el precio por establecimiento (§12g)', () => {
   async function bought(store: string | null = 'Mercadona') {
     const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra dia', store }));
-    const milk = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 3, unit: 'ud' }));
-    const bread = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', quantity: 1, unit: 'ud' }));
+    const milk = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Leche',
+        quantity: 3,
+        unit: 'ud'
+      })
+    );
+    const bread = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', quantity: 1, unit: 'ud' })
+    );
     await call(alice, 'PATCH', `/lists/${list.id}/items/${milk.id}`, { checked: true });
     await call(alice, 'PATCH', `/lists/${list.id}/items/${bread.id}`, { checked: true });
     return { list, milk, bread };
@@ -1106,7 +1413,9 @@ describe('cerrar una compra deja el precio por establecimiento (§12g)', () => {
     expect(refused.status).toBe(409);
     const body = await json(refused);
     expect(body.message).toBe('PRICES_MISSING');
-    expect(body.data.missing).toEqual([{ itemId: expect.any(String), name: 'Pan', quantity: 1, unit: 'ud' }]);
+    expect(body.data.missing).toEqual([
+      { itemId: expect.any(String), name: 'Pan', quantity: 1, unit: 'ud' }
+    ]);
     // Y no lo hace a medias: la lista sigue viva y el precio aportado no se anota como
     // observacion, porque un cierre rechazado no deja huella en el historico de precios.
     expect((await data(await call(alice, 'GET', `/lists/${list.id}`))).status).toBe('active');
@@ -1119,20 +1428,31 @@ describe('cerrar una compra deja el precio por establecimiento (§12g)', () => {
       await call(alice, 'POST', `/lists/${list.id}/complete`, {
         prices: [
           { itemId: milk.id, priceMinor: 95 },
-          { itemId: bread.id, totalPaidMinor: 240, quantity: 2, productName: 'Barra de pan cristal' }
+          {
+            itemId: bread.id,
+            totalPaidMinor: 240,
+            quantity: 2,
+            productName: 'Barra de pan cristal'
+          }
         ]
       })
     );
     expect(closed.pricesRecorded).toBe(2);
 
-    const stored = db.prepare('SELECT * FROM price_observations ORDER BY product_key').all() as any[];
+    const stored = db
+      .prepare('SELECT * FROM price_observations ORDER BY product_key')
+      .all() as any[];
     // El ticket dice «2,40 € por 2 barras»: eso es lo que se guarda, y el precio por
     // unidad (120) se deriva, no se anota a mano dos veces.
-    expect(stored.map((row) => [row.product_key, row.price_minor, row.quantity, row.store_name])).toEqual([
+    expect(
+      stored.map((row) => [row.product_key, row.price_minor, row.quantity, row.store_name])
+    ).toEqual([
       ['leche', 285, 3, 'Mercadona'],
       ['pan', 240, 2, 'Mercadona']
     ]);
-    expect(stored.find((row) => row.product_key === 'pan')!.product_name).toBe('Barra de pan cristal');
+    expect(stored.find((row) => row.product_key === 'pan')!.product_name).toBe(
+      'Barra de pan cristal'
+    );
 
     const items = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items as any[];
     expect(items.find((item) => item.name === 'Leche').price_minor).toBe(95);
@@ -1161,13 +1481,25 @@ describe('cerrar una compra deja el precio por establecimiento (§12g)', () => {
       ]
     });
     expect(ok.ok).toBe(true);
-    expect(db.prepare('SELECT DISTINCT store_name FROM price_observations').get()).toEqual({ store_name: 'Lidl' });
+    expect(db.prepare('SELECT DISTINCT store_name FROM price_observations').get()).toEqual({
+      store_name: 'Lidl'
+    });
   });
 
   it('lo que no se compro no se exige: cerrar con la mitad del carro vacio es legitimo', async () => {
-    const list = await data(await call(alice, 'POST', '/lists', { name: 'Media cesta', store: 'Aldi' }));
-    const boughtItem = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Cafe', quantity: 1, priceMinor: 450 }));
-    await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Aceite', quantity: 1 }));
+    const list = await data(
+      await call(alice, 'POST', '/lists', { name: 'Media cesta', store: 'Aldi' })
+    );
+    const boughtItem = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Cafe',
+        quantity: 1,
+        priceMinor: 450
+      })
+    );
+    await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Aceite', quantity: 1 })
+    );
     await call(alice, 'PATCH', `/lists/${list.id}/items/${boughtItem.id}`, { checked: true });
 
     const closed = await call(alice, 'POST', `/lists/${list.id}/complete`);
@@ -1189,16 +1521,99 @@ describe('cerrar una compra deja el precio por establecimiento (§12g)', () => {
   });
 
   it('una linea sin cantidad pagada razonable no puede multiplicar el precio por cero', async () => {
-    const list = await data(await call(alice, 'POST', '/lists', { name: 'Peso', store: 'Carniceria' }));
-    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Filete', quantity: 0.75, unit: 'kg' }));
+    const list = await data(
+      await call(alice, 'POST', '/lists', { name: 'Peso', store: 'Carniceria' })
+    );
+    const item = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Filete',
+        quantity: 0.75,
+        unit: 'kg'
+      })
+    );
     await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: true });
 
-    await call(alice, 'POST', `/lists/${list.id}/complete`, { prices: [{ itemId: item.id, totalPaidMinor: 890 }] });
+    await call(alice, 'POST', `/lists/${list.id}/complete`, {
+      prices: [{ itemId: item.id, totalPaidMinor: 890 }]
+    });
     const row = db.prepare('SELECT price_minor, quantity FROM price_observations').get() as any;
     // 8,90 € por 0,75 kg: la observacion guarda lo pagado y cuanto llevabas, y la linea
     // acaba con el precio por kilo (1187) que es lo que se recuerda en la proxima lista.
     expect(row).toEqual({ price_minor: 890, quantity: 0.75 });
-    expect((await data(await call(alice, 'GET', `/lists/${list.id}`))).items[0].price_minor).toBe(1187);
+    expect((await data(await call(alice, 'GET', `/lists/${list.id}`))).items[0].price_minor).toBe(
+      1187
+    );
+  });
+
+  it('al cerrar, lo comprado pasa al inventario: fusiona, repone o crea segun la ficha de la casa (## 12ag)', async () => {
+    db.prepare('DELETE FROM ingredients').run();
+    const list = await data(
+      await call(alice, 'POST', '/lists', { name: 'Feria', store: 'Familia' })
+    );
+
+    // Tres estados de la casa frente a tres lineas compradas: existe con stock (se SUMA, no se duplica),
+    // existe agotada (se REPONE hasta lo comprado) y no existe (se CREA la ficha). Y una cuarta linea,
+    // pendiente: lo no comprado no baja a la nevera, que la despensa registra lo que hay, no lo que falta.
+    db.prepare(
+      `INSERT INTO ingredients (id, user_id, name, category, quantity, unit, location)
+       VALUES ('ing-leche', ?, 'leche semidesnatada', 'other', 0.5, 'l', 'pantry'),
+              ('ing-agua', ?, 'Mineral', 'other', 0, 'ud', 'pantry')`
+    ).run(alice.id, alice.id);
+
+    const leche = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Leche semidesnatada',
+        quantity: 2,
+        unit: 'l',
+        priceMinor: 190
+      })
+    );
+    const agua = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Mineral',
+        quantity: 3,
+        unit: 'ud',
+        priceMinor: 150
+      })
+    );
+    const pan = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Pan de pueblo',
+        quantity: 1,
+        unit: 'ud',
+        priceMinor: 240
+      })
+    );
+    await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Aceitunas', quantity: 1 })
+    );
+    for (const item of [leche, agua, pan]) {
+      await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { checked: true });
+    }
+
+    const closed = await data(await call(alice, 'POST', `/lists/${list.id}/complete`));
+    expect({ moved: closed.pantryMoved, merged: closed.pantryMerged }).toEqual({
+      moved: 2,
+      merged: 1
+    });
+
+    const filas = db
+      .prepare('SELECT name, quantity, unit, location, category FROM ingredients ORDER BY name')
+      .all() as any[];
+    expect(filas).toEqual([
+      { name: 'Mineral', quantity: 3, unit: 'ud', location: 'pantry', category: 'other' },
+      { name: 'Pan de pueblo', quantity: 1, unit: 'ud', location: 'pantry', category: 'other' },
+      // La clave es la que compara, no el nombre: «Leche semidesnatada» es la ficha «leche semidesnatada»
+      // que ya estaba en casa, y entra en ella, no al lado.
+      {
+        name: 'leche semidesnatada',
+        quantity: 2.5,
+        unit: 'l',
+        location: 'pantry',
+        category: 'other'
+      }
+    ]);
+    expect(filas.some((fila) => fila.name === 'Aceitunas')).toBe(false);
   });
 });
 
@@ -1212,18 +1627,28 @@ describe('el precio de la tienda, no el ultimo precio (§12g)', () => {
     await observe('Leche', 'Mercadona', 85);
     // El orden importa: se escribe primero el de Lidl para que «ultimo precio» no coincida
     // con «precio de esta tienda» y la eleccion quede probada de verdad.
-    const list = await data(await call(alice, 'POST', '/lists', { name: 'Mercadona', store: 'Mercadona' }));
-    await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 2 }));
+    const list = await data(
+      await call(alice, 'POST', '/lists', { name: 'Mercadona', store: 'Mercadona' })
+    );
+    await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 2 })
+    );
 
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
-    expect(estimate.lines[0]).toMatchObject({ unitMinor: 85, lineTotalMinor: 170, store: 'Mercadona' });
+    expect(estimate.lines[0]).toMatchObject({
+      unitMinor: 85,
+      lineTotalMinor: 170,
+      store: 'Mercadona'
+    });
     expect(estimate.lines[0].otherStore).toBeFalsy();
   });
 
   it('si esa tienda no tiene dato, usa el de otra y lo dice', async () => {
     await observe('Leche', 'Lidl', 100);
     const list = await data(await call(alice, 'POST', '/lists', { name: 'Aldi', store: 'Aldi' }));
-    await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1 }));
+    await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1 })
+    );
 
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     expect(estimate.lines[0]).toMatchObject({ unitMinor: 100, store: 'Lidl', otherStore: true });
@@ -1231,14 +1656,20 @@ describe('el precio de la tienda, no el ultimo precio (§12g)', () => {
 
   it('una linea enlazada a otro producto hereda su precio aunque el nombre sea otro', async () => {
     await observe('Leche semidesnatada', 'Mercadona', 170);
-    const list = await data(await call(alice, 'POST', '/lists', { name: 'Mercadona', store: 'Mercadona' }));
-    const item = await data(await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche semi', quantity: 1 }));
+    const list = await data(
+      await call(alice, 'POST', '/lists', { name: 'Mercadona', store: 'Mercadona' })
+    );
+    const item = await data(
+      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche semi', quantity: 1 })
+    );
 
     // Sin enlazar: «leche semi» no es «leche semidesnatada», y no hay precio.
     const before = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     expect(before.lines[0].source).toBe('unpriced');
 
-    await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { productKey: 'leche semidesnatada' });
+    await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, {
+      productKey: 'leche semidesnatada'
+    });
     const after = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     expect(after.lines[0]).toMatchObject({ source: 'observed', unitMinor: 170 });
 
@@ -1259,7 +1690,9 @@ describe('el precio de la tienda, no el ultimo precio (§12g)', () => {
     const products = await data(await call(alice, 'GET', '/prices/products?q=lech'));
     expect(products).toHaveLength(1);
     expect(products[0].productKey).toBe('leche');
-    expect(products[0].variants.map((v: any) => v.store)).toEqual(expect.arrayContaining(['Lidl', 'Mercadona']));
+    expect(products[0].variants.map((v: any) => v.store)).toEqual(
+      expect.arrayContaining(['Lidl', 'Mercadona'])
+    );
   });
 });
 
@@ -1294,7 +1727,11 @@ describe('descuento propio de una linea (§12h)', () => {
       priceMinor: 250,
       discount: { kind: 'amount', valueMinor: 300 }
     });
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Pan', quantity: 3, priceMinor: 100 });
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Pan',
+      quantity: 3,
+      priceMinor: 100
+    });
 
     const estimate = await data(await call(alice, 'GET', `/lists/${list.id}/estimate`));
     const [jamon, pan] = estimate.lines;
@@ -1363,7 +1800,9 @@ describe('descuento propio de una linea (§12h)', () => {
         discount: { kind: 'amount', valueMinor: 100 }
       })
     );
-    expect((await data(await call(alice, 'GET', `/lists/${list.id}/estimate`))).lineDiscountMinor).toBe(100);
+    expect(
+      (await data(await call(alice, 'GET', `/lists/${list.id}/estimate`))).lineDiscountMinor
+    ).toBe(100);
 
     await call(alice, 'PATCH', `/lists/${list.id}/items/${item.id}`, { discount: null });
     const cleaned = (await data(await call(alice, 'GET', `/lists/${list.id}`))).items[0];
@@ -1393,7 +1832,11 @@ describe('descuento propio de una linea (§12h)', () => {
   it('al fusionar dos lineas del mismo producto, el descuento que llega manda', async () => {
     const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
     const primera = await data(
-      await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Huevas', quantity: 1, priceMinor: 300 })
+      await call(alice, 'POST', `/lists/${list.id}/items`, {
+        name: 'Huevas',
+        quantity: 1,
+        priceMinor: 300
+      })
     );
     expect(primera.merged).toBe(false);
     const segunda = await data(
@@ -1440,7 +1883,11 @@ describe('descuento propio de una linea (§12h)', () => {
 describe('zonas horarias en la salida (§12h)', () => {
   it('ninguna marca temporal sale sin zona: si no, el navegador la lee como hora local', async () => {
     const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra' }));
-    await call(alice, 'POST', `/lists/${list.id}/items`, { name: 'Leche', quantity: 1, priceMinor: 95 });
+    await call(alice, 'POST', `/lists/${list.id}/items`, {
+      name: 'Leche',
+      quantity: 1,
+      priceMinor: 95
+    });
     expect(list.created_at).toMatch(/Z$/);
 
     const fetched = await data(await call(alice, 'GET', `/lists/${list.id}`));
@@ -1458,7 +1905,9 @@ describe('zonas horarias en la salida (§12h)', () => {
 
 describe('cerrar la compra con descuento de linea (§12h)', () => {
   it('lo pagado baja, pero el precio aprendido es el del estante', async () => {
-    const list = await data(await call(alice, 'POST', '/lists', { name: 'Compra', store: 'Mercadona' }));
+    const list = await data(
+      await call(alice, 'POST', '/lists', { name: 'Compra', store: 'Mercadona' })
+    );
     await call(alice, 'POST', `/lists/${list.id}/items`, {
       name: 'Leche',
       quantity: 2,
@@ -1487,14 +1936,22 @@ describe('quien escribio la linea, con cara (§12i)', () => {
     // Hace falta un hogar comun: si no, Luis no ve la lista de Ana y su PATCH acabaria en
     // un 404 silencioso que la prueba no llegaria a notar.
     const hh = 'h-cara-' + Math.random().toString(36).slice(2);
-    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(hh, 'Hogar caras', `code-${hh}`);
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      hh,
+      'Hogar caras',
+      `code-${hh}`
+    );
     const ana = await makeUser(`cara-ana-${hh}@hogaria.test`, hh);
     const luis = await makeUser(`cara-luis-${hh}@hogaria.test`, hh);
-    db.prepare(`UPDATE users SET name = 'Ana', avatar = '/uploads/ana.png' WHERE id = ?`).run(ana.id);
+    db.prepare(`UPDATE users SET name = 'Ana', avatar = '/uploads/ana.png' WHERE id = ?`).run(
+      ana.id
+    );
     db.prepare(`UPDATE users SET name = 'Luis' WHERE id = ?`).run(luis.id); // sin foto, a proposito
 
     const list = (await data(await call(ana, 'POST', '/lists', { name: 'Mercado' }))) as any;
-    const item = (await data(await call(ana, 'POST', `/lists/${list.id}/items`, { name: 'Pan' }))) as any;
+    const item = (await data(
+      await call(ana, 'POST', `/lists/${list.id}/items`, { name: 'Pan' })
+    )) as any;
     expect(item.added_by_avatar).toBeUndefined(); // el alta no presenta a nadie: quien llama ya se sabe
 
     await call(luis, 'PATCH', `/lists/${list.id}/items/${item.id}`, { quantity: 3 });
@@ -1509,9 +1966,15 @@ describe('quien escribio la linea, con cara (§12i)', () => {
 
   it('la bandeja dice de quien es cada lista', async () => {
     const hh = 'h-caras-' + Math.random().toString(36).slice(2);
-    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(hh, 'Hogar bandeja', `code-${hh}`);
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      hh,
+      'Hogar bandeja',
+      `code-${hh}`
+    );
     const ana = await makeUser(`bandeja-ana-${hh}@hogaria.test`, hh);
-    db.prepare(`UPDATE users SET name = 'Ana', avatar = '/uploads/ana.png' WHERE id = ?`).run(ana.id);
+    db.prepare(`UPDATE users SET name = 'Ana', avatar = '/uploads/ana.png' WHERE id = ?`).run(
+      ana.id
+    );
     const list = (await data(await call(ana, 'POST', '/lists', { name: 'Farmacia' }))) as any;
 
     const rows = (await data(await call(ana, 'GET', '/lists?status=all'))) as any[];
@@ -1522,8 +1985,12 @@ describe('quien escribio la linea, con cara (§12i)', () => {
 
   it('la auditoria trae la foto actual, y el nombre congelado', async () => {
     const ana = await makeUser('cara-audit-ana@hogaria.test');
-    const list = (await data(await call(ana, 'POST', '/lists', { name: 'Auditoria con cara' }))) as any;
-    db.prepare(`UPDATE users SET name = 'Ana', avatar = '/uploads/ana-vieja.png' WHERE id = ?`).run(ana.id);
+    const list = (await data(
+      await call(ana, 'POST', '/lists', { name: 'Auditoria con cara' })
+    )) as any;
+    db.prepare(`UPDATE users SET name = 'Ana', avatar = '/uploads/ana-vieja.png' WHERE id = ?`).run(
+      ana.id
+    );
     await call(ana, 'POST', `/lists/${list.id}/items`, { name: 'Leche' });
     // Ana cambia de foto despues del suceso: la auditoria no reescribe quien fue (el nombre
     // instantaneo sigue siendo «Ana»), pero si muestra la persona de hoy.
@@ -1553,11 +2020,17 @@ describe('lo opcional de verdad (HOGARIA-SPEC 12o)', () => {
 
     // Vaciar lo que si se habia escrito: `null` quita, y el resto de la fila se queda.
     const priced = await data(
-      await call(user, 'PATCH', `/lists/${list.id}/items/${item.id}`, { note: 'de la hornilla', priceMinor: 120 })
+      await call(user, 'PATCH', `/lists/${list.id}/items/${item.id}`, {
+        note: 'de la hornilla',
+        priceMinor: 120
+      })
     );
     expect(priced.note ?? null).toBe('de la hornilla');
     const cleared = await data(
-      await call(user, 'PATCH', `/lists/${list.id}/items/${item.id}`, { note: null, priceMinor: null })
+      await call(user, 'PATCH', `/lists/${list.id}/items/${item.id}`, {
+        note: null,
+        priceMinor: null
+      })
     );
     expect(cleared.note ?? null).toBeNull();
     expect(cleared.price_minor ?? cleared.priceMinor ?? null).toBeNull();

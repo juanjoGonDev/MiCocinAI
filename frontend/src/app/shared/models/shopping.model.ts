@@ -134,7 +134,10 @@ export function describeLineDiscount(
           maximumFractionDigits: 2
         })} €`;
   const units = Number(discount.units ?? 0);
-  const cap = units > 0 ? ` en ${units.toLocaleString(dateLocale(), { maximumFractionDigits: 2 })} ${units === 1 ? etiquetas.unidad : etiquetas.unidades}` : '';
+  const cap =
+    units > 0
+      ? ` en ${units.toLocaleString(dateLocale(), { maximumFractionDigits: 2 })} ${units === 1 ? etiquetas.unidad : etiquetas.unidades}`
+      : '';
   return `${core}${cap}`;
 }
 
@@ -143,7 +146,9 @@ function formatPercentBps(bps: number): string {
 }
 
 /** La oferta como dato de UI: solo existe si es valida (take < buy y buy >= 2). */
-export function offerOfItem(item: Pick<ShoppingListItem, 'promo_buy' | 'promo_take'>): LineOffer | null {
+export function offerOfItem(
+  item: Pick<ShoppingListItem, 'promo_buy' | 'promo_take'>
+): LineOffer | null {
   const buy = Number(item.promo_buy ?? 0);
   const take = Number(item.promo_take ?? 0);
   if (!buy || !take || take >= buy || buy < 2) return null;
@@ -240,7 +245,9 @@ export const LIST_CATEGORIES = [
  * seccion no debe colarse en medio del recorrido. Dentro de la seccion se
  * respeta el orden manual (`position`), que es lo que sostiene el arrastrar.
  */
-export function groupItemsByCategory(items: ShoppingListItem[]): { category: string; items: ShoppingListItem[] }[] {
+export function groupItemsByCategory(
+  items: ShoppingListItem[]
+): { category: string; items: ShoppingListItem[] }[] {
   const buckets = new Map<string, ShoppingListItem[]>();
   for (const item of items) {
     const category = item.category && item.category.trim() ? item.category : 'Otros';
@@ -263,7 +270,10 @@ export function groupItemsByCategory(items: ShoppingListItem[]): { category: str
 export function formatMoney(minor: number | null | undefined): string {
   if (minor === null || minor === undefined) return '—';
   const euros = (minor < 0 ? -minor : minor) / 100;
-  const text = euros.toLocaleString(dateLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const text = euros.toLocaleString(dateLocale(), {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
   return `${minor < 0 ? '-' : ''}${text} €`;
 }
 
@@ -326,7 +336,9 @@ export function parseMoneyToMinor(input: string | null | undefined): number | nu
 
 /** `2` + `"kg"` -> `"2 kg"`, `1` + `null` -> `""` (una unidad suelta no se pinta). */
 export function formatQuantity(quantity: number, unit: string | null | undefined): string {
-  const amount = Number.isInteger(quantity) ? String(quantity) : quantity.toLocaleString(dateLocale(), { maximumFractionDigits: 2 });
+  const amount = Number.isInteger(quantity)
+    ? String(quantity)
+    : quantity.toLocaleString(dateLocale(), { maximumFractionDigits: 2 });
   if (!unit) return quantity === 1 ? '' : `${amount}×`;
   return `${amount} ${unit}`;
 }
@@ -439,8 +451,10 @@ export function auditFace(
 ): { name: string; avatar?: string; text: string } {
   const guardado = event.user_name?.trim() ?? '';
   const mine = Boolean(me?.id) && me?.id === event.user_id;
-  const nombre = (mine ? me?.name?.trim() || guardado : guardado) || (voz ? voz.t('list_event.alguien') : 'Alguien');
-  const avatar = (mine ? me?.avatar ?? event.user_avatar : event.user_avatar) ?? undefined;
+  const nombre =
+    (mine ? me?.name?.trim() || guardado : guardado) ||
+    (voz ? voz.t('list_event.alguien') : 'Alguien');
+  const avatar = (mine ? (me?.avatar ?? event.user_avatar) : event.user_avatar) ?? undefined;
   const text = voz ? listEventText(event, nombre, voz) : (event.description ?? '').trim();
   return { name: nombre, avatar, text };
 }
@@ -502,6 +516,10 @@ export interface CompleteReceipt {
   items: number;
   paidMinor: number;
   store: string | null;
+  /** Fichas creadas o repuestas en la despensa al cerrar (## 12ag). */
+  pantryMoved: number;
+  /** Sumas sobre fichas que ya tenian stock; son las mismas, con mas cantidad. */
+  pantryMerged: number;
 }
 
 /** La linea que impide cerrar la compra, en la forma que necesita la hoja de precios. */
@@ -550,7 +568,12 @@ export interface LineOffer {
  * lee igual en los dos idiomas. La pista si que es una frase, y por eso viaja como clave del diccionario —el
  * mismo arreglo que `home-profile.ts` con `hintKey`: un tipo importado, no una dependencia (HOGARIA-SPEC ## 12u).
  */
-export const OFFER_PRESETS: { label: string; buy: number; take: number; hintKey: TranslationKey }[] = [
+export const OFFER_PRESETS: {
+  label: string;
+  buy: number;
+  take: number;
+  hintKey: TranslationKey;
+}[] = [
   { label: '3x2', buy: 3, take: 2, hintKey: 'shopping_list_detail.oferta_pista_3x2' },
   { label: '2x1', buy: 2, take: 1, hintKey: 'shopping_list_detail.oferta_pista_2x1' },
   { label: '4x3', buy: 4, take: 3, hintKey: 'shopping_list_detail.oferta_pista_4x3' },
