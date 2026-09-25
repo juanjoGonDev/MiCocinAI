@@ -4336,10 +4336,20 @@ pipeline y los errores de IA traducidos (NO_CONFIG → «encaja el proveedor en 
 cesta). `ReceiptsService` singleton con la cola en senal: el latido (1s) solo corre mientras alguien mira (icono o
 ficha), y las escrituras fallan con toast, sin cola offline —un ticket no es una edicion de cesta.
 
-**El parte de salud.** Server: `tsc` limpio y 772/772 en vitest (nuevos: `receipts.routes` 11 — subida por firma,
+> **Leccion de obra (la del CI, no la de local).** El primer push rompio TODO el CI, y el fallo raiz era uno solo:
+> `estado()` devolvia `string` y el pipe `t` exige `TranslationKey` — el build de produccion y el `ng serve` de los
+> shards no compilaban, asi que el webServer de Playwright nunca abrio y las shards morian con «0 fallidos / ? tests».
+> En local no se vio porque el dev server en modo watch SIRVE EL ULTIMO BUILD BUENO aunque el actual no compile, y los
+> e2e corrieron contra ese bundle viejo: un verde contra un watch reciclado no dice nada. La regla que queda: despues
+> de tocar plantillas, `ng build --configuration production` ANTES de creerse un e2e. De paso cayeron las otras dos
+> puertas: `check:ui` (tokens CSS inexistentes, fechas con espacio en la plantilla, borrados sin ConfirmService,
+> claves del diccionario sin invocar — 19 incidencias) y la puerta de cobertura del server (`callAIStreaming` sin
+> cubrir dejaba `ai-client.ts` al 53%: seis specs nuevos de stream la suben).
+
+**El parte de salud.** Server: `tsc` limpio y 778/778 en vitest (nuevos: `receipts.routes` 11 — subida por firma,
 NO_CONFIG, stop-all, retry, concurrencia por configuracion, edicion de lineas, confirm con tienda/precios/inventario
 y categoria de la linea, suma de stock en el segundo ticket, categorias inexistentes a la reserva, borrado en
-cascada manual —; `ticket-prompt` 4; `ticket-lines-stream` 7; y el contrato de formularios estirado con las tres
+cascada manual —; `ticket-prompt` 4; `ticket-lines-stream` 7; `ai-client` +6 de stream; y el contrato de formularios estirado con las tres
 schemas nuevas). Frontend: `build:prod` verde (el warning de estilos de calendar es deuda previa). e2e `receipts` 5/5
 (nav y bandeja, rechazo de fichero raro, PDF en cola, rescate manual + confirm con verificacion de inventario y
 tienda por API, parar todo) y `settings-modules` 6/6 retocado a la realidad nueva (cuatro secciones vivas; el «no

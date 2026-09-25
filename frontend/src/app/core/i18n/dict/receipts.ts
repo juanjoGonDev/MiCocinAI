@@ -41,17 +41,14 @@ export const receiptsEs = {
   'receipts.tienda': 'Tienda',
   'receipts.tienda_no_detectada': 'Tienda no detectada',
   'receipts.notas': 'Notas',
-  'receipts.guardar_tienda': 'Guardar tienda',
   'receipts.nombre': 'Nombre',
   'receipts.cantidad': 'Cant.',
   'receipts.unidad': 'Unidad',
   'receipts.categoria': 'Categoría',
   'receipts.precio': 'Precio',
   'receipts.oferta': 'Oferta',
-  'receipts.nota': 'Nota',
   'receipts.anadir_linea': 'Añadir línea',
   'receipts.borrar_linea': 'Quitar la línea',
-  'receipts.confianza': 'Confianza',
   'receipts.total_del_ticket': 'Total del ticket',
   'receipts.suma_de_lineas': 'Suma de líneas',
   'receipts.no_cuadra': 'No cuadra con el total del ticket',
@@ -61,14 +58,10 @@ export const receiptsEs = {
 
   // ── confirmar ──
   'receipts.confirmar': 'Confirmar y subir al inventario',
-  'receipts.confirmando': 'Confirmando…',
   'receipts.confirmado': 'Compra en el inventario',
   'receipts.confirmado_detalle':
     '{precios} precios apuntados · {nuevas} fichas nuevas · {sumadas} fichas que ya estaban',
   'receipts.ver_inventario': 'Ver el inventario',
-  'receipts.hay_que_revisar':
-    'Este ticket tiene que estar en revisión (o rescatado a mano) para confirmarse',
-  'receipts.nada_que_confirmar': 'No hay líneas que confirmar',
 
   // ── parar / reintentar ──
   'receipts.reintentar': 'Volver a leer',
@@ -128,17 +121,14 @@ export const receiptsEn: Record<keyof typeof receiptsEs, string> = {
   'receipts.tienda': 'Store',
   'receipts.tienda_no_detectada': 'Store not detected',
   'receipts.notas': 'Notes',
-  'receipts.guardar_tienda': 'Save store',
   'receipts.nombre': 'Name',
   'receipts.cantidad': 'Qty',
   'receipts.unidad': 'Unit',
   'receipts.categoria': 'Category',
   'receipts.precio': 'Price',
   'receipts.oferta': 'Offer',
-  'receipts.nota': 'Note',
   'receipts.anadir_linea': 'Add line',
   'receipts.borrar_linea': 'Remove line',
-  'receipts.confianza': 'Confidence',
   'receipts.total_del_ticket': 'Receipt total',
   'receipts.suma_de_lineas': 'Sum of lines',
   'receipts.no_cuadra': "Doesn't match the receipt total",
@@ -147,13 +137,10 @@ export const receiptsEn: Record<keyof typeof receiptsEs, string> = {
     'Every line is fully editable: name, quantity, category, price, offer, note.',
 
   'receipts.confirmar': 'Confirm and add to inventory',
-  'receipts.confirmando': 'Confirming…',
   'receipts.confirmado': 'Shopping in the inventory',
   'receipts.confirmado_detalle':
     '{precios} prices recorded · {nuevas} new items · {sumadas} items that already existed',
   'receipts.ver_inventario': 'View inventory',
-  'receipts.hay_que_revisar': 'This receipt must be in review (or rescued by hand) to be confirmed',
-  'receipts.nada_que_confirmar': 'There are no lines to confirm',
 
   'receipts.reintentar': 'Read again',
   'receipts.parar': 'Stop',

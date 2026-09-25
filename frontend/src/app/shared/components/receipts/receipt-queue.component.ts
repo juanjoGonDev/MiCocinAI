@@ -55,7 +55,19 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
           data-test="receipt-queue-panel"
         >
           <header class="rq__panel-head">
-            <span class="rq__panel-title">{{ 'receipts.cola_de_lectura' | t }}</span>
+            <span class="rq__panel-title">
+              {{ 'receipts.cola_de_lectura' | t }}
+              @if (service.queue().counts.queued > 0) {
+                <span class="rq__panel-count">{{
+                  'receipts.en_cola_n' | t: { n: service.queue().counts.queued }
+                }}</span>
+              }
+              @if (service.queue().counts.failed > 0) {
+                <span class="rq__panel-count rq__panel-count--mal">{{
+                  'receipts.fallo_n' | t: { n: service.queue().counts.failed }
+                }}</span>
+              }
+            </span>
             @if (detenibles().length > 0) {
               <app-button
                 variant="ghost"
@@ -248,7 +260,7 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
         z-index: 60;
         width: min(380px, calc(100vw - 32px));
         padding: var(--space-3, 12px);
-        border: 1px solid var(--border-color, #e2e5ea);
+        border: 1px solid var(--border-default, #e2e5ea);
         border-radius: var(--radius-lg, 12px);
         background: var(--bg-primary, #fff);
         box-shadow: var(--shadow-lg, 0 12px 32px rgba(16, 24, 40, 0.16));
@@ -266,6 +278,19 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
         font-size: var(--text-sm, 14px);
         font-weight: var(--font-semibold, 600);
         color: var(--text-primary);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--space-2, 8px);
+      }
+
+      .rq__panel-count {
+        font-size: var(--text-xs, 12px);
+        font-weight: var(--font-medium, 500);
+        color: var(--text-secondary);
+      }
+
+      .rq__panel-count--mal {
+        color: var(--danger, #d64545);
       }
 
       .rq__empty {
@@ -299,7 +324,7 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
         align-items: center;
         gap: var(--space-2, 8px);
         padding: var(--space-2, 8px) 0;
-        border-top: 1px solid var(--border-color, #eef0f3);
+        border-top: 1px solid var(--border-default, #eef0f3);
       }
 
       .rq__job:first-child {

@@ -7,6 +7,7 @@ import { switchMap, takeWhile } from 'rxjs/operators';
 import { ReceiptsService } from '../../core/services/receipts.service';
 import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
 import { I18nService } from '../../core/services/i18n.service';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
@@ -82,7 +83,7 @@ interface LineaEnPantalla extends ReceiptItem {
             </h1>
             <div class="ficha__meta">
               <app-badge [variant]="variante(t.status)">{{ estado(t.status) | t }}</app-badge>
-              <span class="ficha__fecha">{{ t.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+              <span class="ficha__fecha">{{ t.createdAt | date: 'short' }}</span>
               <a class="ficha__fichero" [href]="t.fileUrl" target="_blank" rel="noopener">
                 <app-icon
                   [name]="t.fileKind === 'pdf' ? 'description' : 'receipt_long'"
@@ -488,7 +489,7 @@ interface LineaEnPantalla extends ReceiptItem {
 
       .ficha__avisos {
         padding: var(--space-2, 8px) var(--space-3, 12px);
-        border: 1px solid var(--border-color, #e2e5ea);
+        border: 1px solid var(--border-default, #e2e5ea);
         border-radius: var(--radius-md, 10px);
         font-size: var(--text-sm, 14px);
         color: var(--text-secondary);
@@ -533,7 +534,7 @@ interface LineaEnPantalla extends ReceiptItem {
       }
 
       .ficha__lectura-titulo {
-        font-size: var(--text-md, 16px);
+        font-size: var(--text-base, 16px);
         font-weight: var(--font-medium, 500);
         color: var(--text-primary);
       }
@@ -573,7 +574,7 @@ interface LineaEnPantalla extends ReceiptItem {
       }
 
       .tabla {
-        border: 1px solid var(--border-color, #e2e5ea);
+        border: 1px solid var(--border-default, #e2e5ea);
         border-radius: var(--radius-lg, 12px);
         overflow: hidden;
       }
@@ -597,7 +598,7 @@ interface LineaEnPantalla extends ReceiptItem {
       }
 
       .tabla__fila {
-        border-top: 1px solid var(--border-color, #eef0f3);
+        border-top: 1px solid var(--border-default, #eef0f3);
         background: var(--bg-primary, #fff);
       }
 
@@ -649,7 +650,7 @@ interface LineaEnPantalla extends ReceiptItem {
       }
 
       .linea__input:hover {
-        border-color: var(--border-color, #e2e5ea);
+        border-color: var(--border-default, #e2e5ea);
       }
 
       .linea__input:focus {
@@ -731,7 +732,7 @@ interface LineaEnPantalla extends ReceiptItem {
       }
 
       .ficha__confirmada-titulo {
-        font-size: var(--text-md, 16px);
+        font-size: var(--text-base, 16px);
         font-weight: var(--font-semibold, 600);
         color: var(--text-primary);
       }
@@ -818,6 +819,7 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(ConfirmService);
   private readonly i18n = inject(I18nService);
 
   readonly confirmando = signal(false);
@@ -880,8 +882,8 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
     return ESTADO_VARIANTE[estado];
   }
 
-  estado(estado: ReceiptStatus): string {
-    const claves: Record<ReceiptStatus, string> = {
+  estado(estado: ReceiptStatus): TranslationKey {
+    const claves: Record<ReceiptStatus, TranslationKey> = {
       queued: 'receipts.estado.queued',
       analyzing: 'receipts.estado.analyzing',
       review: 'receipts.estado.review',
@@ -957,6 +959,15 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
   }
 
   async quitarLinea(linea: LineItem): Promise<void> {
+    // Borrar una linea pasa por el dialogo de la casa (regla de check:ui): un clic en la
+    // crucecita no puede perder una lectura de la IA sin pregunta.
+    const aceptado = await this.confirm.confirm({
+      title: this.i18n.t('receipts.borrar_linea'),
+      message: linea.name,
+      confirmText: this.i18n.t('common.delete'),
+      variant: 'danger'
+    });
+    if (!aceptado) return;
     await this.service.deleteLine(this.id, linea.id);
     this.service.loadReceipt(this.id);
   }
@@ -985,6 +996,13 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
   }
 
   async borrar(): Promise<void> {
+    const aceptado = await this.confirm.confirm({
+      title: this.i18n.t('receipts.borrar_el_ticket'),
+      message: this.ticket()?.store ?? this.ticket()?.fileName ?? '',
+      confirmText: this.i18n.t('common.delete'),
+      variant: 'danger'
+    });
+    if (!aceptado) return;
     await this.service.deleteReceipt(this.id);
     this.toast.info(this.i18n.t('receipts.ticket_borrado'));
     void this.router.navigate(['/receipts']);

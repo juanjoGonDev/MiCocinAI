@@ -8,6 +8,7 @@ import { ButtonComponent } from '../../shared/components/ui/button/button.compon
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 import type { Receipt, ReceiptStatus } from '../../shared/models/receipt.model';
 
 /**
@@ -74,7 +75,7 @@ const ESTADO_VARIANTE: Record<
           @if (subiendo()) {
             {{ 'receipts.subiendo' | t }}
           } @else {
-            {{ 'receipts.suelta_el_ticket_aqui' | t }}
+            {{ 'receipts.suelta_el_ticket_aqui' | t }} — {{ 'receipts.o_elige_el_fichero' | t }}
           }
         </span>
         <span class="tickets__drop-hint">{{ 'receipts.formatos_y_tamano' | t }}</span>
@@ -108,7 +109,7 @@ const ESTADO_VARIANTE: Record<
                     ticket.store || ticket.fileName || ('receipts.abrir_ticket' | t)
                   }}</span>
                   <span class="ticket__meta">
-                    {{ ticket.createdAt | date: 'dd/MM/yyyy HH:mm' }} ·
+                    {{ ticket.createdAt | date: 'short' }} ·
                     {{
                       ticket.items === 1
                         ? ('receipts.una_linea' | t)
@@ -166,7 +167,7 @@ const ESTADO_VARIANTE: Record<
         justify-items: center;
         gap: 6px;
         padding: var(--space-6, 28px) var(--space-4, 16px);
-        border: 2px dashed var(--border-color, #d5d9e0);
+        border: 2px dashed var(--border-default, #d5d9e0);
         border-radius: var(--radius-lg, 14px);
         background: var(--bg-secondary, #f7f8fa);
         color: var(--text-secondary);
@@ -197,7 +198,7 @@ const ESTADO_VARIANTE: Record<
       }
 
       .tickets__drop-title {
-        font-size: var(--text-md, 16px);
+        font-size: var(--text-base, 16px);
         font-weight: var(--font-medium, 500);
         color: var(--text-primary);
       }
@@ -224,7 +225,7 @@ const ESTADO_VARIANTE: Record<
       }
 
       .tickets__vacio-title {
-        font-size: var(--text-md, 16px);
+        font-size: var(--text-base, 16px);
         font-weight: var(--font-medium, 500);
         color: var(--text-primary);
       }
@@ -247,7 +248,7 @@ const ESTADO_VARIANTE: Record<
         align-items: center;
         gap: var(--space-3, 12px);
         padding: var(--space-3, 12px);
-        border: 1px solid var(--border-color, #e2e5ea);
+        border: 1px solid var(--border-default, #e2e5ea);
         border-radius: var(--radius-lg, 12px);
         background: var(--bg-primary, #fff);
       }
@@ -281,7 +282,7 @@ const ESTADO_VARIANTE: Record<
       }
 
       .ticket__nombre {
-        font-size: var(--text-md, 16px);
+        font-size: var(--text-base, 16px);
         font-weight: var(--font-medium, 500);
         color: var(--text-primary);
         white-space: nowrap;
@@ -357,8 +358,8 @@ export class ReceiptsComponent implements OnInit, OnDestroy {
     return ESTADO_VARIANTE[estado];
   }
 
-  estado(estado: ReceiptStatus): string {
-    const claves: Record<ReceiptStatus, string> = {
+  estado(estado: ReceiptStatus): TranslationKey {
+    const claves: Record<ReceiptStatus, TranslationKey> = {
       queued: 'receipts.estado.queued',
       analyzing: 'receipts.estado.analyzing',
       review: 'receipts.estado.review',
