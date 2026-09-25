@@ -18,6 +18,7 @@ export const navEs = {
   'nav.pantry': 'Inventario',
   'nav.preferences': 'Preferencias',
   'nav.recipes': 'Recetas',
+  'nav.receipts': 'Tickets',
   'nav.settings': 'Configuración',
   'nav.shopping': 'Compra',
 } as const;
@@ -34,6 +35,7 @@ export const navEn: Record<keyof typeof navEs, string> = {
   'nav.pantry': 'Inventory',
   'nav.preferences': 'Preferences',
   'nav.recipes': 'Recipes',
+  'nav.receipts': 'Receipts',
   'nav.settings': 'Settings',
   'nav.shopping': 'Shopping',
 };

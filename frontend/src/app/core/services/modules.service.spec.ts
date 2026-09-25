@@ -77,7 +77,7 @@ describe('ModulesService', () => {
   it('sin seleccion deja visibles todos los modulos que trae el build', () => {
     configure({ modules: [] });
 
-    expect(service.active()).toEqual(['meals', 'pantry', 'shopping']);
+    expect(service.active()).toEqual(['meals', 'pantry', 'shopping', 'receipts']);
     expect(service.isPathVisible('/calendar')).toBeTrue();
     expect(service.isPathVisible('/recipes')).toBeTrue();
     expect(service.isPathVisible('/pantry')).toBeTrue();
@@ -239,7 +239,7 @@ describe('ModulesService', () => {
         expect(DICTS[idioma][definition.hintKey]).withContext(`${definition.id} (pista) en ${idioma}`).toBeTruthy();
       }
     }
-    expect(MODULE_REGISTRY.filter((definition) => definition.available).length).toBe(3);
+    expect(MODULE_REGISTRY.filter((definition) => definition.available).length).toBe(4);
     // El registro de rutas y las opciones del perfil tienen que decir lo mismo de
     // cada modulo: el picker usa las segundas y la navegacion el primero. Cuando
     // divergen, la app enlaza una pantalla que se marca como «pronto» (o al reves).

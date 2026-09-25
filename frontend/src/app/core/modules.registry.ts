@@ -56,7 +56,7 @@ export const MODULE_REGISTRY: readonly ModuleDefinition[] = [
     id: 'receipts',
     labelKey: 'profile.module.receipts',
     hintKey: 'profile.registryHint.receipts',
-    available: false,
+    available: true,
     paths: ['/receipts']
   },
   {

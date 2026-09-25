@@ -213,6 +213,15 @@ import { I18nService } from '../../core/services/i18n.service';
               placeholder="3"
               [(ngModel)]="formData.retryAttempts"
             ></app-input>
+
+            <app-input
+              id="concurrency"
+              name="concurrency"
+              type="number"
+              [label]="'ai_config.concurrencia' | t"
+              placeholder="1"
+              [(ngModel)]="formData.concurrency"
+            ></app-input>
           </div>
 
           <div class="form-actions">
@@ -545,7 +554,8 @@ export class AiConfigComponent implements OnInit {
     temperature: 0.7,
     maxTokens: 2000,
     timeout: 30000,
-    retryAttempts: 3
+    retryAttempts: 3,
+    concurrency: 1
   };
 
   ngOnInit(): void {
@@ -569,7 +579,8 @@ export class AiConfigComponent implements OnInit {
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       timeout: config.timeout || 30000,
-      retryAttempts: config.retryAttempts || 3
+      retryAttempts: config.retryAttempts || 3,
+      concurrency: config.concurrency || 1
     };
     this.isModalOpen.set(true);
   }
@@ -689,7 +700,8 @@ export class AiConfigComponent implements OnInit {
       temperature: 0.7,
       maxTokens: 2000,
       timeout: 30000,
-      retryAttempts: 3
+      retryAttempts: 3,
+      concurrency: 1
     };
   }
 }

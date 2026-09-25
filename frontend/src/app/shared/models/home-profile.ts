@@ -49,7 +49,7 @@ export const HOME_MODULE_OPTIONS: HomeModuleOption[] = [
   { value: 'meals', labelKey: 'profile.module.meals', hintKey: 'profile.moduleHint.meals', available: true },
   { value: 'pantry', labelKey: 'profile.module.pantry', hintKey: 'profile.moduleHint.pantry', available: true },
   { value: 'shopping', labelKey: 'profile.module.shopping', hintKey: 'profile.moduleHint.shopping', available: true },
-  { value: 'receipts', labelKey: 'profile.module.receipts', hintKey: 'profile.moduleHint.receipts', available: false },
+  { value: 'receipts', labelKey: 'profile.module.receipts', hintKey: 'profile.moduleHint.receipts', available: true },
   { value: 'home', labelKey: 'profile.module.tasks', hintKey: 'profile.moduleHint.tasks', available: false }
 ];
 

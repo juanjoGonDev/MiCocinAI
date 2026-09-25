@@ -11,6 +11,7 @@ import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
+import { ReceiptQueueComponent } from '../../shared/components/receipts/receipt-queue.component';
 import type { TranslationKey } from '../../core/i18n';
 
 interface NavItem {
@@ -27,7 +28,7 @@ interface NavItem {
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, IconComponent, IconButtonComponent, TranslatePipe, ConfirmDialogComponent],
+  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, IconComponent, IconButtonComponent, TranslatePipe, ConfirmDialogComponent, ReceiptQueueComponent],
   template: `
     <div class="layout">
       <!-- Mobile Header -->
@@ -39,6 +40,9 @@ interface NavItem {
           <app-icon name="home" [size]="20" [label]="null" />
           <span class="header__title-text">{{ 'app.name' | t }}</span>
         </span>
+        <!-- La cola de lectura de tickets: gira mientras la IA local lee, rojo si algo
+             fallo, y su clic enseña el progreso y los frenos (## 12aj). -->
+        <app-receipt-queue class="header__queue" />
         <button type="button" class="header__profile" (click)="navigateToProfile()">
           <!-- La foto tambien aqui: era el unico avatar de la app que ignoraba la
                URL del usuario, asi que en el movil se veia la inicial aunque la
@@ -58,6 +62,7 @@ interface NavItem {
             <app-icon name="home" [size]="20" [label]="null" />
             <span>{{ 'app.name' | t }}</span>
           </span>
+          <app-receipt-queue />
           <button type="button" class="sidebar__close" (click)="closeSidebar()">
             <app-icon name="close" [size]="20" [label]="'ui.close_menu' | t" />
           </button>
@@ -171,6 +176,7 @@ interface NavItem {
       padding: 0 var(--space-4);
       background: var(--bg-secondary);
       border-bottom: 1px solid var(--border-default);
+      gap: var(--space-2);
 
       @media (min-width: 1024px) {
         display: none;
@@ -244,6 +250,7 @@ interface NavItem {
       display: flex;
       align-items: center;
       justify-content: space-between;
+      gap: var(--space-2);
       padding: var(--space-4);
       border-bottom: 1px solid var(--border-default);
     }
@@ -471,6 +478,7 @@ export class MainLayoutComponent implements OnInit {
     { path: '/recipes', labelKey: 'nav.recipes', icon: 'menu_book' },
     { path: '/calendar', labelKey: 'nav.calendar', icon: 'calendar_today' },
     { path: '/shopping', labelKey: 'nav.shopping', icon: 'shopping_cart' },
+    { path: '/receipts', labelKey: 'nav.receipts', icon: 'receipt_long' },
     { path: '/household', labelKey: 'nav.household', icon: 'group' },
     { path: '/preferences', labelKey: 'nav.preferences', icon: 'person' },
     { path: '/ai-config', labelKey: 'nav.ai-config', icon: 'smart_toy' },

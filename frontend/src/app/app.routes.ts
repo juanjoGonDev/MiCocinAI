@@ -52,6 +52,10 @@ export const routes: Routes = [
         loadChildren: () => import('./features/shopping/shopping.routes').then(m => m.SHOPPING_ROUTES)
       },
       {
+        path: 'receipts',
+        loadChildren: () => import('./features/receipts/receipts.routes').then(m => m.RECEIPTS_ROUTES)
+      },
+      {
         path: 'calendar',
         loadChildren: () => import('./features/calendar/calendar.routes').then(m => m.CALENDAR_ROUTES)
       },

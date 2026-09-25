@@ -28,6 +28,7 @@ import { dashboardEs, dashboardEn } from './dict/dashboard';
 import { logsEs, logsEn } from './dict/logs';
 import { navEs, navEn } from './dict/nav';
 import { pantryEs, pantryEn } from './dict/pantry';
+import { receiptsEs, receiptsEn } from './dict/receipts';
 import { preferencesEs, preferencesEn } from './dict/preferences';
 import { profileEs, profileEn } from './dict/profile';
 import { recipesEs, recipesEn } from './dict/recipes';
@@ -51,6 +52,7 @@ const es = {
   ...navEs,
   ...pantryEs,
   ...preferencesEs,
+  ...receiptsEs,
   ...profileEs,
   ...recipesEs,
   ...settingsEs,
@@ -75,6 +77,7 @@ const en: Record<keyof typeof es, string> = {
   ...navEn,
   ...pantryEn,
   ...preferencesEn,
+  ...receiptsEn,
   ...profileEn,
   ...recipesEn,
   ...settingsEn,
