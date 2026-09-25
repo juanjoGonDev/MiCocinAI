@@ -12,6 +12,8 @@ export interface AIProviderConfig {
   presencePenalty?: number;
   timeout: number;
   retryAttempts: number;
+  /** La concurrencia de la cola de tickets (## 12aj): por proveedor, default 1. */
+  concurrency: number;
   isActive: boolean;
   lastTested?: Date;
   testStatus?: TestStatus;
@@ -177,8 +179,4 @@ export const AI_PROVIDER_LABELS: Record<AIProvider, string> = {
   custom: 'Custom (OpenAI-like)'
 };
 
-export const DETAIL_LEVEL_LABELS: Record<DetailLevel, string> = {
-  basic: 'Básico',
-  intermediate: 'Intermedio',
-  expert: 'Experto'
-};
+

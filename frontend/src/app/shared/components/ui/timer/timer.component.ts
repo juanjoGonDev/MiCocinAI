@@ -1,13 +1,16 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ButtonComponent } from '../button/button.component';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 
 export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
 
 @Component({
   selector: 'app-timer',
   standalone: true,
-  imports: [CommonModule, ButtonComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, ButtonComponent],
   template: `
     <div [class]="getClasses()">
       <span *ngIf="label" class="timer__label">{{ label }}</span>
@@ -30,7 +33,7 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
           size="sm"
           (onClick)="start()"
         >
-          {{ state === 'paused' ? 'Reanudar' : 'Iniciar' }}
+          {{ (state === 'paused' ? 'ui.reanudar' : 'ui.iniciar') | t }}
         </app-button>
         
         <app-button
@@ -39,7 +42,7 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
           size="sm"
           (onClick)="pause()"
         >
-          Pausar
+          {{ 'ui.pausar' | t }}
         </app-button>
         
         <app-button
@@ -48,7 +51,7 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
           size="sm"
           (onClick)="reset()"
         >
-          Reiniciar
+          {{ 'ui.reiniciar' | t }}
         </app-button>
       </div>
     </div>

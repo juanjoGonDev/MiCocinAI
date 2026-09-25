@@ -1,0 +1,103 @@
+import { defineConfig, devices } from '@playwright/test';
+
+/**
+ * Playwright contra el proyecto ENTERO levantado como en produccion: un unico proceso
+ * node que sirve la API y el `index.html` compilado, con el limitador de peticiones
+ * ENCENDIDO y con el visor de logs por SSE.
+ *
+ * Por que hace falta otra config si ya existe `playwright.config.ts`: porque el job que
+ * esta funcionando usa `npm run dev` (ng serve con proxy + `tsx` en el backend) y apaga
+ * el limitador —`DISABLE_RATE_LIMIT=1`— para que los 381 tests no se pisen el cupo. Es
+ * la decision correcta para esa suite, y deja fuera justo lo que se rompio dos veces: la
+ * interfaz compilada, servida por el mismo proceso que la API, con el limite real
+ * aplicado y con el streaming de logs intacto. Un «todo verde» que no ejercita esa
+ * combinacion no dice nada de ella.
+ *
+ * Local:  `npm run build && npx playwright test -c playwright.full-stack.config.ts`
+ */
+
+// Nada de `import.meta` ni `__dirname`: Playwright carga este fichero como CJS (el package.json de la raiz
+// no declara `type: module`) y ahi `import.meta` es un SyntaxError que tumba el job ANTES de escribir un
+// solo resultado —el fallo que persigue este fix—. `testDir`, `globalSetup` y el `webServer` se resuelven
+// solos contra la carpeta de esta config, que es la raiz del repo.
+const port = Number(process.env.E2E_FULL_STACK_PORT ?? 3100);
+const base = process.env.E2E_BASE_URL ?? `http://localhost:${port}`;
+// El globalSetup comun calienta el `ng serve` del :4200 porque ahi el primer render compila en frio. Aqui no
+// hay nada que calentar —el binario ya esta construido y el propio webServer espera a `/health`—, y en CI el
+// :4200 no escucha: el warmup se comia su presupuesto de 180 s ENTERO y el job reventaba por timeout sin
+// dejar ni results.json. Se le dice a ese warmup que mire a este servidor: responde un 200 al primer bote.
+process.env.E2E_BASE_URL = base;
+
+export default defineConfig({
+  testDir: './tests/e2e/full-stack',
+  // La misma semilla del run: el reporter y el backend tienen que ver lo mismo.
+  globalSetup: './tests/e2e/global-setup.ts',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 1 : 0,
+  workers: process.env.CI ? 2 : 1,
+  timeout: process.env.CI ? 120_000 : 60_000,
+  reporter: [
+    ['list'],
+    // Informe aparte: mezclarlo con el de la suite de desarrollo haria imposible saber
+    // de que job es un fallo que se abre en el navegador.
+    ['html', { open: 'never', outputFolder: 'playwright-report/full-stack' }],
+    // CUARTA CAUSA del job mudo, y la buena: `scripts/ci-e2e-summary.mjs` anota los fallos leyendo este
+    // json, y el config del rescate se quedo sin el reporter —el job corria la suite ENTERA (4 min),
+    // fallaba lo que debia fallar, y el parte decia «no se encontro results.json» como si no hubiera
+    // pasado nada. Mismo fichero y misma ruta que la suite de desarrollo.
+    ['json', { outputFile: 'test-results/results.json' }]
+  ],
+  use: {
+    baseURL: base,
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    actionTimeout: 30_000,
+    navigationTimeout: 45_000
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        // Solo para entornos sin el navegador de Playwright (sandboxes sin acceso a su CDN):
+        // `E2E_CHROME_BIN=/ruta/al/chrome`. En CI la variable no existe y manda el navegador instalado.
+        ...(process.env.E2E_CHROME_BIN
+          ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } }
+          : {})
+      }
+    },
+    {
+      // Movil de verdad: el 429 se manifesto en el telefono, y el SSE del visor de logs
+      // se corta de otra forma cuando el viewport (y el teclado en pantalla) mandan.
+      name: 'mobile-chrome',
+      use: {
+        ...devices['Pixel 5'],
+        ...(process.env.E2E_CHROME_BIN
+          ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } }
+          : {})
+      }
+    }
+  ],
+  webServer: {
+    // Un solo proceso: el `CMD` del Dockerfile, no un montaje de dos servidores.
+    // `PUBLIC_DIR` se deja SIN fijar a proposito: el servidor probe las formas reales
+    // del `dist` (`frontend/dist/browser`, `./public`...), que es lo que hace en el
+    // contenedor, y asi este config tampoco se queda apuntando a una ruta vieja.
+    command: 'node server/dist/index.js',
+    // Sin `cwd`: Playwright la pone en el directorio de esta config (la raiz), que es donde `server/dist`
+    // y `frontend/dist` viven.
+    url: `${base}/health`,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+    env: {
+      PORT: String(port),
+      NODE_ENV: 'production',
+      // BD propia por puerto, para poder tener el server de desarrollo y este a la vez.
+      // Relativo a la raiz del repo (el cwd del webServer): BD propia por puerto, para poder tener el
+      // server de desarrollo y este a la vez.      DATABASE_PATH: `server/data/hogaria-e2e-full-stack-${port}.sqlite`,
+      // El limitador NO se apaga: es lo que se viene a probar aqui.
+      E2E_SEED: process.env.E2E_SEED ?? ''
+    }
+  }
+});

@@ -1,4 +1,4 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -10,10 +10,11 @@ import { CardComponent } from '../../shared/components/ui/card/card.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { ProgressComponent } from '../../shared/components/ui/progress/progress.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import type { TranslationKey } from '../../core/i18n';
 
 interface QuickStat {
   icon: string;
-  labelKey: string;
+  labelKey: TranslationKey;
   value: string | number;
   color: string;
 }
@@ -119,7 +120,7 @@ interface SuggestedRecipe {
             <div class="recipe-card__content">
               <span class="recipe-card__name">{{ recipe.name }}</span>
               <div class="recipe-card__meta">
-                <span class="recipe-card__time">⏱️ {{ recipe.time }}min</span>
+                <span class="recipe-card__time">{{ 'dashboard.minutes_short' | t:{time: recipe.time} }}</span>
                 <app-badge [variant]="getDifficultyVariant(recipe.difficulty)" size="sm">
                   {{ recipe.difficulty }}
                 </app-badge>
@@ -130,7 +131,7 @@ interface SuggestedRecipe {
           <div *ngIf="suggestedRecipes().length === 0 && !isLoading()" class="empty-state">
             <span class="empty-state__icon">📖</span>
             <p class="empty-state__text">{{ 'dashboard.noSuggested' | t }}</p>
-            <a routerLink="/recipes" fragment="ai" class="empty-state__link">{{ 'dashboard.genAIRecipes' | t }}</a>
+            <a routerLink="/recipes" fragment="ai" class="empty-state__link">{{ 'dashboard.genAI' | t }}</a>
           </div>
         </div>
       </section>
@@ -343,10 +344,61 @@ export class DashboardComponent implements OnInit {
   private householdService = inject(HouseholdService);
 
   userName = signal('');
-  quickStats = signal<QuickStat[]>([]);
+
+  /** Comidas del dia de hoy (aun no se exponen desde el calendario). */
   upcomingMeals = signal<UpcomingMeal[]>([]);
-  suggestedRecipes = signal<SuggestedRecipe[]>([]);
-  isLoading = signal(true);
+
+  /** Recetas sugeridas: las 6 mas recientes del listado. */
+  suggestedRecipes = computed<SuggestedRecipe[]>(() =>
+    this.recipeService.recipes().slice(0, 6).map(r => ({
+      id: r.id,
+      name: r.name,
+      time: r.totalTime ?? 0,
+      difficulty: r.difficulty,
+      image: r.image
+    }))
+  );
+
+  /**
+   * Tarjetas de resumen. Son `computed` de las senales de los servicios, de
+   * modo que se actualizan solas cuando cambian los datos (antes se
+   * calculaban una unica vez tras un `setTimeout`, con lo que cualquier
+   * peticion lenta dejaba el dashboard con valores obsoletos o a cero).
+   */
+  quickStats = computed<QuickStat[]>(() => [
+    {
+      icon: '📦',
+      // Ojo: `pantryService.total()` es el total del listado de ingredientes
+      // y cuenta tambien los ~68 sembrados como sugerencia con cantidad 0.
+      // Lo que hay "en despensa" es stats.totalItems (quantity > 0).
+      labelKey: 'dashboard.ingredients',
+      value: this.pantryService.stats()?.totalItems ?? 0,
+      color: 'var(--primary)'
+    },
+    {
+      icon: '📖',
+      labelKey: 'nav.recipes',
+      value: this.recipeService.total(),
+      color: 'var(--secondary)'
+    },
+    {
+      icon: '👨‍👩‍👧‍👦',
+      labelKey: 'dashboard.members',
+      value: this.householdService.household()?.members?.length ?? 0,
+      color: 'var(--info)'
+    },
+    {
+      icon: '🍳',
+      // Sin registro de comidas cocinadas por usuario todavia
+      labelKey: 'dashboard.cooked',
+      value: 0,
+      color: 'var(--warning)'
+    }
+  ]);
+
+  isLoading = computed(
+    () => this.pantryService.isLoading() || this.recipeService.isLoading()
+  );
 
   ngOnInit(): void {
     this.userName.set(this.authService.userName() || 'Chef');
@@ -354,43 +406,16 @@ export class DashboardComponent implements OnInit {
   }
 
   private loadDashboardData(): void {
-    this.isLoading.set(true);
-
-    // Load pantry for stats
+    // Ingredientes y estadisticas de la despensa
     this.pantryService.loadIngredients();
     this.pantryService.loadStats();
 
-    // Load recipes (first 6, sorted by newest)
-    this.recipeService.loadRecipes({ pageSize: 6 } as any);
+    // Recetas (la rejilla muestra las 6 primeras)
+    this.recipeService.loadRecipes();
 
-    // Load calendar / household (best-effort)
-    try { (this.calendarService as any).loadCalendar?.(); } catch { /* ignore */ }
+    // Calendario y hogar: best-effort, el dashboard no debe romperse si fallan
+    try { this.calendarService.loadCalendar(); } catch { /* ignore */ }
     try { this.householdService.loadHousehold(); } catch { /* ignore */ }
-
-    // Combine signals into view models after a tick
-    setTimeout(() => {
-      const pantryTotal = this.pantryService.total();
-      const recipesTotal = this.recipeService.total();
-      const recipes = this.recipeService.recipes().slice(0, 6).map(r => ({
-        id: r.id,
-        name: r.name,
-        time: r.totalTime ?? 0,
-        difficulty: r.difficulty,
-        image: r.image
-      }));
-      this.suggestedRecipes.set(recipes);
-
-      this.quickStats.set([
-        { icon: '📦', labelKey: 'dashboard.ingredients', value: pantryTotal, color: 'var(--primary)' },
-        { icon: '📖', labelKey: 'dashboard.recipes', value: recipesTotal, color: 'var(--secondary)' },
-        { icon: '👨‍👩‍👧‍👦', labelKey: 'dashboard.members', value: 0, color: 'var(--info)' },
-        { icon: '🍳', labelKey: 'dashboard.cooked', value: 0, color: 'var(--warning)' }
-      ]);
-
-      // Upcoming meals: empty until calendar provides them
-      this.upcomingMeals.set([]);
-      this.isLoading.set(false);
-    }, 400);
   }
 
   getDifficultyVariant(difficulty: string): 'success' | 'warning' | 'error' {

@@ -7,7 +7,7 @@ import {
   joinHouseholdSchema
 } from '../schemas/household.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
-import { seedDefaultsForHousehold } from '../utils/seed-data.js';
+import { seedDefaultsForHousehold, adoptPersonalRowsIntoHousehold } from '../utils/seed-data.js';
 
 const householdRoutes = new Hono<AppEnv>();
 
@@ -157,6 +157,10 @@ householdRoutes.post('/', authMiddleware, async (c) => {
 
   db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(id, userId);
 
+  // Lo que el usuario tuviera a nivel personal pasa a ser del hogar (asi no se
+  // duplica el catalogo) y despues se siembra lo que falte.
+  adoptPersonalRowsIntoHousehold(db, id, userId);
+
   // Seed default pantry items and utensils for the household (assigned to admin)
   seedDefaultsForHousehold(db, id, userId);
 
@@ -206,6 +210,12 @@ async function doJoin(c: any, userId: string, inviteCode: string) {
   `).run(nanoid(), household.id, userId, perms);
 
   db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(household.id, userId);
+
+  // El nuevo miembro no debe ver el catálogo duplicado: lo que tuviera a nivel
+  // personal se fusiona con el del hogar (sus marcas pasan al hogar) y se
+  // siembra lo que al hogar le falte.
+  adoptPersonalRowsIntoHousehold(db, household.id, userId);
+  seedDefaultsForHousehold(db, household.id, userId);
 
   return c.json({ success: true, message: 'Joined household' });
 }

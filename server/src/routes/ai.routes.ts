@@ -12,6 +12,19 @@ import {
 } from '../schemas/ai.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 
+import {
+  detailLevelForCookingLevel,
+  hasTasteProfile,
+  MEAL_TYPE_LABELS,
+  plannedMealTypes,
+  readCookingLevel,
+  readMealPlan,
+  readMealTimes,
+  readTasteProfile,
+  tastePromptLines
+} from '../utils/taste-profile.js';
+import { persistWeeklyPlan, resolveMealTypes } from '../utils/weekly-plan.js';
+import { callAI, extractJsonObject } from '../utils/ai-client.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
 
@@ -25,7 +38,7 @@ aiRoutes.get('/configs', async (c) => {
   const db = getDatabase();
 
   const configs = db.prepare(
-    'SELECT id, name, provider, base_url, model, temperature, max_tokens, is_active, last_tested, test_status FROM ai_configs WHERE user_id = ?'
+    'SELECT id, name, provider, base_url, model, temperature, max_tokens, is_active, last_tested, test_status, concurrency FROM ai_configs WHERE user_id = ?'
   ).all(userId);
 
   return c.json({ success: true, data: configs });
@@ -41,12 +54,12 @@ aiRoutes.post('/configs', async (c) => {
   const id = nanoid();
 
   db.prepare(`
-    INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, timeout, retry_attempts)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, timeout, retry_attempts, concurrency)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, userId, input.name, input.provider, input.baseUrl, input.apiKey, input.model,
     input.temperature, input.maxTokens, input.topP, input.frequencyPenalty,
-    input.presencePenalty, input.timeout, input.retryAttempts
+    input.presencePenalty, input.timeout, input.retryAttempts, input.concurrency
   );
 
   const config = db.prepare('SELECT * FROM ai_configs WHERE id = ?').get(id);
@@ -77,6 +90,8 @@ aiRoutes.patch('/configs/:id', async (c) => {
   if (input.temperature !== undefined) { updates.push('temperature = ?'); values.push(input.temperature); }
   if (input.maxTokens !== undefined) { updates.push('max_tokens = ?'); values.push(input.maxTokens); }
   if (input.isActive !== undefined) { updates.push('is_active = ?'); values.push(input.isActive ? 1 : 0); }
+  // La concurrencia de la cola de tickets (## 12aj): por proveedor, y editable en caliente.
+  if (input.concurrency !== undefined) { updates.push('concurrency = ?'); values.push(input.concurrency); }
 
   if (updates.length > 0) {
     updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -177,51 +192,29 @@ aiRoutes.post('/test-connection', async (c) => {
 // AI Generation
 // ═══════════════════════════════════════════════════════════════════
 
-// Helper to call AI API
-async function callAI(userId: string, messages: any[], db: any): Promise<any> {
-  const config = db.prepare('SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1').get(userId) as any;
-
-  if (!config) {
-    throw new Error('No active AI configuration found');
-  }
-
-  const response = await fetch(`${config.base_url}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.api_key}`
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages,
-      temperature: config.temperature,
-      max_tokens: config.max_tokens,
-      top_p: config.top_p,
-      frequency_penalty: config.frequency_penalty,
-      presence_penalty: config.presence_penalty
-    }),
-    signal: AbortSignal.timeout(config.timeout)
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`AI API error: ${error}`);
-  }
-
-  const data = await response.json() as any;
-  return data.choices[0].message.content;
-}
-
 // POST /api/ai/generate-recipe
 aiRoutes.post('/generate-recipe', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.json();
-  const input = generateRecipeSchema.parse(body);
+  // El nivel de cocina del comensal fija cuánto hay que explicar, salvo que la
+  // petición traiga un detalle explícito (lo que elija el formulario manda).
+  const input = generateRecipeSchema.parse({
+    ...body,
+    detailLevel:
+      typeof body?.detailLevel === 'string'
+        ? body.detailLevel
+        : detailLevelForCookingLevel(readCookingLevel(getDatabase(), userId))
+  });
 
   const db = getDatabase();
 
   const ingredientList = input.ingredients.map(i => `${i.quantity} ${i.unit} de ${i.name}`).join(', ');
   const utensilList = input.utensils.filter(u => u.available).map(u => u.name).join(', ');
+
+  // El perfil del comensal (alergias, gustos, objetivo) se añade siempre: lo
+  // respondió en el onboarding y es lo que hace que la receta sea suya.
+  const taste = readTasteProfile(db, userId);
+  const tasteBlock = hasTasteProfile(taste) ? tastePromptLines(taste) : '';
 
   const detailInstructions: Record<string, string> = {
     basic: 'Instrucciones breves y claras.',
@@ -239,6 +232,7 @@ Nivel de detalle: ${input.detailLevel} - ${detailInstructions[input.detailLevel]
 ${input.dietaryRestrictions.length > 0 ? `Restricciones dietéticas: ${input.dietaryRestrictions.join(', ')}` : ''}
 ${input.allergies.length > 0 ? `Alergias: ${input.allergies.join(', ')}` : ''}
 ${input.preferences.length > 0 ? `Preferencias: ${input.preferences.join(', ')}` : ''}
+${tasteBlock}
 ${input.cookingTime ? `Tiempo de cocción: entre ${input.cookingTime.min} y ${input.cookingTime.max} minutos` : ''}
 
 Responde SOLO con un JSON válido con esta estructura:
@@ -268,12 +262,7 @@ Responde SOLO con un JSON válido con esta estructura:
     ], db);
 
     // Parse JSON from response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Invalid AI response format');
-    }
-
-    const recipe = JSON.parse(jsonMatch[0]);
+    const recipe = extractJsonObject(response) as any;
 
     // Save recipe to database
     const id = nanoid();
@@ -297,8 +286,16 @@ Responde SOLO con un JSON válido con esta estructura:
 
 // POST /api/ai/generate-multiple-recipes
 aiRoutes.post('/generate-multiple-recipes', async (c) => {
+  const userId = c.get('userId');
   const body = await c.req.json();
-  const input = generateRecipeSchema.parse({ ...body, generateMultiple: true });
+  const input = generateRecipeSchema.parse({
+    ...body,
+    generateMultiple: true,
+    detailLevel:
+      typeof body?.detailLevel === 'string'
+        ? body.detailLevel
+        : detailLevelForCookingLevel(readCookingLevel(getDatabase(), userId))
+  });
 
   const recipes = [];
 
@@ -348,12 +345,7 @@ Responde SOLO con un JSON válido: {"recommendations": [{"name": "", "reason": "
       { role: 'user', content: prompt }
     ], db);
 
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Invalid AI response format');
-    }
-
-    const result = JSON.parse(jsonMatch[0]);
+    const result = extractJsonObject(response) as any;
     return c.json({ success: true, data: result.recommendations });
   } catch (error: any) {
     return c.json({ success: false, message: error.message }, 500);
@@ -368,13 +360,45 @@ aiRoutes.post('/plan-week', async (c) => {
 
   const db = getDatabase();
 
+  const taste = readTasteProfile(db, userId);
+  const tasteBlock = hasTasteProfile(taste) ? `\n${tastePromptLines(taste)}\n` : '';
+
+  // Las comidas pedidas y las horas de la casa entran en el prompt y en lo que se guarda: si solo
+  // cambian la peticion, el modelo seguiria escribiendo un dia completo que despues habria que tirar.
+  //
+  // Y por encima estan las cuatro palabras de 12t-T: la casa puede tener comidas **bloqueadas** en
+  // Preferencias, y un bloqueo se respeta aqui (el prompt) y en la persistencia. `resolveMealTypes` trata
+  // «vacio» como «las cuatro», asi que el filtro se aplica despues —pedir solo lo bloqueado no puede
+  // acabar planificando la semana entera.
+  const permitidas = plannedMealTypes(readMealPlan(db, userId));
+  const mealTypes = resolveMealTypes(input.mealTypes).filter((type) => permitidas.includes(type));
+  if (mealTypes.length === 0) {
+    return c.json(
+      {
+        success: false,
+        code: 'MEAL_PLAN_ALL_BLOCKED',
+        message: 'Todas las comidas estan bloqueadas en Preferencias: no hay nada que planificar.'
+      },
+      400
+    );
+  }
+  const mealTimes = readMealTimes(db, userId);
+  const mealShape = mealTypes
+    .map((type) => `        "${type}": {"name": "", "ingredients": [], "time": 0}`)
+    .join(',\n');
+  const houseHours = mealTypes
+    .map((type) => `${MEAL_TYPE_LABELS[type].toLowerCase()} a las ${mealTimes[type]}`)
+    .join(', ');
+
   const prompt = `Genera un plan de comidas semanal:
 
 Del ${input.startDate} al ${input.endDate}
 Objetivo: ${input.goals.type}
-${input.goals.caloriesTarget ? `Calorías diarias objetivo: ${input.goals.caloriesTarget}` : ''}
+${input.goals.caloriesTarget ? `Calorías diarias objetivo: ${input.goals.caloriesTarget}` : ''}${input.goals.customInstructions ? `\nIndicaciones del usuario (prioritarias): ${input.goals.customInstructions}` : ''}
 ${input.availableIngredients.length > 0 ? `Ingredientes disponibles: ${input.availableIngredients.join(', ')}` : ''}
-${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}` : ''}
+${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}` : ''}${tasteBlock}
+Planifica SOLO estas comidas: ${mealTypes.join(', ')}. No añadas otras.
+Horarios de esta casa: ${houseHours}. Tenlos en cuenta al elegir plato (no propongas un asado de tres horas para un desayuno de media mañana); el reloj de cada comida lo pone la app, no tú.
 
 Responde SOLO con un JSON válido con esta estructura:
 {
@@ -382,9 +406,7 @@ Responde SOLO con un JSON válido con esta estructura:
     {
       "date": "YYYY-MM-DD",
       "meals": {
-        "breakfast": {"name": "", "ingredients": [], "time": 0},
-        "lunch": {"name": "", "ingredients": [], "time": 0},
-        "dinner": {"name": "", "ingredients": [], "time": 0}
+${mealShape}
       },
       "totalCalories": 0
     }
@@ -398,13 +420,21 @@ Responde SOLO con un JSON válido con esta estructura:
       { role: 'user', content: prompt }
     ], db);
 
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Invalid AI response format');
-    }
+    const plan = extractJsonObject(response) as any;
 
-    const plan = JSON.parse(jsonMatch[0]);
-    return c.json({ success: true, data: plan });
+    // El plan se guarda en la semana pedida: si no, «Planificar con IA» se
+    // quedaba en un toast de éxito sobre un calendario vacío.
+    const saved = persistWeeklyPlan(db, {
+      userId,
+      startDate: input.startDate,
+      endDate: input.endDate,
+      goals: input.goals,
+      plan,
+      mealTypes,
+      mealTimes
+    });
+
+    return c.json({ success: true, data: { ...plan, saved } });
   } catch (error: any) {
     return c.json({ success: false, message: error.message }, 500);
   }

@@ -71,7 +71,10 @@ npm run knip
 
 ## Database
 
-The SQLite database is created automatically at `./data/recipeapp.db`.
+The SQLite database is created automatically at `./data/hogaria.sqlite`.
+Installations that still have `./data/recipeapp.db` (or the older `./data/mi-cocinai.db`) are adopted on
+startup: the file — together with its `-wal`/`-shm` siblings — is renamed before it is opened, and an
+existing `hogaria.sqlite` is never overwritten.
 
 To reset the database:
 ```bash
@@ -85,7 +88,7 @@ npm run dev
 |----------|---------|-------------|
 | `NODE_ENV` | development | Environment mode |
 | `PORT` | 3000 | Server port |
-| `DATABASE_PATH` | ./data/recipeapp.db | SQLite database path |
+| `DATABASE_PATH` | ./data/hogaria.sqlite | SQLite database path (legacy `recipeapp.db` is adopted) |
 | `JWT_SECRET` | (generated) | Secret for JWT tokens |
 | `CORS_ORIGIN` | http://localhost:4200 | Allowed CORS origin |
 

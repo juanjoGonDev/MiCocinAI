@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AiService } from '../../core/services/ai.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { CardComponent } from '../../shared/components/ui/card/card.component';
@@ -10,11 +11,15 @@ import { BadgeComponent } from '../../shared/components/ui/badge/badge.component
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.model';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 @Component({
   selector: 'app-ai-config',
   standalone: true,
   imports: [
+    TranslatePipe,
+    
     CommonModule, FormsModule,
     ButtonComponent, InputComponent, CardComponent, BadgeComponent,
     ModalComponent, LoadingComponent
@@ -24,17 +29,17 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
       <!-- Header -->
       <div class="ai-config__header">
         <div class="ai-config__title-section">
-          <h1 class="ai-config__title">🤖 Configuración IA</h1>
-          <span class="ai-config__count">{{ aiService.configs().length }} configuraciones</span>
+          <h1 class="ai-config__title">{{ 'ai_config.configuracion_ia' | t }}</h1>
+          <span class="ai-config__count">{{ configuracionesLabel() }}</span>
         </div>
         <app-button variant="primary" (onClick)="openAddModal()">
-          + Agregar configuración
+          {{ 'ai_config.agregar_configuracion' | t }}
         </app-button>
       </div>
 
       <!-- Info -->
       <div class="ai-config__info">
-        <p>Conecta tu proveedor de IA para generar recetas personalizadas. Soporta cualquier API compatible con OpenAI.</p>
+        <p>{{ 'ai_config.conecta_tu_proveedor_de' | t }}</p>
       </div>
 
       <!-- Configs List -->
@@ -54,7 +59,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
                 [variant]="config.isActive ? 'success' : 'neutral'"
                 size="sm"
               >
-                {{ config.isActive ? 'Activo' : 'Inactivo' }}
+                {{ (config.isActive ? 'ai_config.activo' : 'ai_config.inactivo') | t }}
               </app-badge>
               <app-badge
                 *ngIf="config.testStatus"
@@ -68,31 +73,31 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
 
           <div class="config-card__details">
             <div class="config-detail">
-              <span class="config-detail__label">URL</span>
+              <span class="config-detail__label">{{ 'ai_config.url' | t }}</span>
               <span class="config-detail__value">{{ config.baseUrl }}</span>
             </div>
             <div class="config-detail">
-              <span class="config-detail__label">Modelo</span>
+              <span class="config-detail__label">{{ 'ai_config.modelo' | t }}</span>
               <span class="config-detail__value">{{ config.model }}</span>
             </div>
             <div class="config-detail">
-              <span class="config-detail__label">Temperatura</span>
+              <span class="config-detail__label">{{ 'ai_config.temperatura' | t }}</span>
               <span class="config-detail__value">{{ config.temperature }}</span>
             </div>
           </div>
 
           <div class="config-card__actions">
             <app-button variant="ghost" size="sm" (onClick)="testConfig(config)">
-              🔌 Probar
+              {{ 'ai_config.probar' | t }}
             </app-button>
             <app-button variant="ghost" size="sm" (onClick)="editConfig(config)">
-              ✏️ Editar
+              {{ 'ai_config.editar' | t }}
             </app-button>
             <app-button variant="ghost" size="sm" (onClick)="toggleActive(config)">
-              {{ config.isActive ? '⏸️ Desactivar' : '▶️ Activar' }}
+              {{ config.isActive ? ('ai_config.desactivar' | t) : ('ai_config.activar' | t) }}
             </app-button>
             <app-button variant="ghost" size="sm" (onClick)="deleteConfig(config)">
-              🗑️ Eliminar
+              {{ 'ai_config.eliminar' | t }}
             </app-button>
           </div>
         </div>
@@ -100,10 +105,10 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
         <!-- Empty State -->
         <div *ngIf="aiService.configs().length === 0" class="empty-state">
           <span class="empty-state__icon">🤖</span>
-          <h3 class="empty-state__title">Sin configuraciones</h3>
-          <p class="empty-state__text">Agrega un proveedor de IA para empezar a generar recetas</p>
+          <h3 class="empty-state__title">{{ 'ai_config.sin_configuraciones' | t }}</h3>
+          <p class="empty-state__text">{{ 'ai_config.agrega_un_proveedor_de' | t }}</p>
           <app-button variant="primary" (onClick)="openAddModal()">
-            + Agregar configuración
+            {{ 'ai_config.agregar_configuracion' | t }}
           </app-button>
         </div>
       </div>
@@ -111,7 +116,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
       <!-- Add/Edit Modal -->
       <app-modal
         [isOpen]="isModalOpen()"
-        [title]="editingConfig() ? 'Editar Configuración' : 'Nueva Configuración'"
+        [title]="editingConfig() ? ('ai_config.editar_configuracion' | t) : ('ai_config.nueva_configuracion' | t)"
         size="lg"
         (onClose)="closeModal()"
       >
@@ -119,25 +124,25 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
           <app-input
             id="name"
             name="configName"
-            label="Nombre"
-            placeholder="Mi proveedor IA"
+            [label]="'auth.name' | t"
+            [placeholder]="'ai_config.mi_proveedor_ia' | t"
             [(ngModel)]="formData.name"
             [required]="true"
           ></app-input>
 
           <div class="form-row">
             <div class="form-field">
-              <label class="form-label">Proveedor</label>
+              <label class="form-label">{{ 'ai_config.proveedor' | t }}</label>
               <select [(ngModel)]="formData.provider" name="provider" class="form-select">
-                <option value="openai">OpenAI</option>
-                <option value="custom">Custom (OpenAI-like)</option>
+                <option value="openai">{{ 'ai_config.openai' | t }}</option>
+                <option value="custom">{{ 'ai_config.custom_openai_like' | t }}</option>
               </select>
             </div>
 
             <app-input
               id="model"
               name="model"
-              label="Modelo"
+              [label]="'ai_config.modelo' | t"
               placeholder="gpt-4o-mini"
               [(ngModel)]="formData.model"
               [required]="true"
@@ -148,7 +153,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
             id="baseUrl"
             name="baseUrl"
             type="url"
-            label="URL Base"
+            [label]="'ai_config.url_base' | t"
             placeholder="https://api.openai.com/v1"
             [(ngModel)]="formData.baseUrl"
             [required]="true"
@@ -159,7 +164,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
             id="apiKey"
             name="apiKey"
             type="password"
-            label="API Key"
+            [label]="'ai_config.api_key' | t"
             placeholder="sk-..."
             [(ngModel)]="formData.apiKey"
             [required]="true"
@@ -167,7 +172,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
 
           <div class="form-row">
             <div class="form-field">
-              <label class="form-label">Temperatura ({{ formData.temperature }})</label>
+              <label class="form-label">{{ 'ai_config.temperatura_valor' | t:{value: formData.temperature} }}</label>
               <input
                 type="range"
                 [(ngModel)]="formData.temperature"
@@ -177,14 +182,14 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
                 step="0.1"
                 class="form-range"
               />
-              <span class="form-hint">0 = Preciso, 2 = Creativo</span>
+              <span class="form-hint">{{ 'ai_config.0_preciso_2_creativo' | t }}</span>
             </div>
 
             <app-input
               id="maxTokens"
               name="maxTokens"
               type="number"
-              label="Max Tokens"
+              [label]="'ai_config.max_tokens' | t"
               placeholder="2000"
               [(ngModel)]="formData.maxTokens"
             ></app-input>
@@ -195,7 +200,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
               id="timeout"
               name="timeout"
               type="number"
-              label="Timeout (ms)"
+              [label]="'ai_config.timeout_ms' | t"
               placeholder="30000"
               [(ngModel)]="formData.timeout"
             ></app-input>
@@ -204,21 +209,30 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
               id="retryAttempts"
               name="retryAttempts"
               type="number"
-              label="Reintentos"
+              [label]="'ai_config.reintentos' | t"
               placeholder="3"
               [(ngModel)]="formData.retryAttempts"
+            ></app-input>
+
+            <app-input
+              id="concurrency"
+              name="concurrency"
+              type="number"
+              [label]="'ai_config.concurrencia' | t"
+              placeholder="1"
+              [(ngModel)]="formData.concurrency"
             ></app-input>
           </div>
 
           <div class="form-actions">
             <app-button variant="ghost" type="button" (onClick)="closeModal()">
-              Cancelar
+              {{ 'common.cancel' | t }}
             </app-button>
             <app-button variant="outline" type="button" (onClick)="testFromForm()">
-              🔌 Probar conexión
+              {{ 'ai_config.probar_conexion' | t }}
             </app-button>
             <app-button variant="primary" type="submit" [loading]="isSaving()">
-              {{ editingConfig() ? 'Guardar' : 'Crear' }}
+              {{ (editingConfig() ? 'common.save' : 'common.create') | t }}
             </app-button>
           </div>
         </form>
@@ -227,7 +241,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
       <!-- Test Result Modal -->
       <app-modal
         [isOpen]="isTestResultOpen()"
-        title="Resultado del Test"
+        [attr.title]="'ai_config.resultado_del_test' | t"
         size="sm"
         (onClose)="closeTestResult()"
       >
@@ -236,13 +250,13 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
             {{ testResult()!.success ? '✅' : '❌' }}
           </div>
           <h3 class="test-result__title">
-            {{ testResult()!.success ? '¡Conexión exitosa!' : 'Error de conexión' }}
+            {{ testResult()!.success ? ('ai_config.conexion_exitosa' | t) : ('ai_config.error_de_conexion' | t) }}
           </h3>
           <p *ngIf="testResult()!.model" class="test-result__detail">
-            Modelo: {{ testResult()!.model }}
+            {{ 'ai_config.modelo_valor' | t:{model: testResult()!.model} }}
           </p>
           <p *ngIf="testResult()!.latency" class="test-result__detail">
-            Latencia: {{ testResult()!.latency }}ms
+            {{ 'ai_config.latencia_valor' | t:{ms: testResult()!.latency} }}
           </p>
           <p *ngIf="testResult()!.error" class="test-result__error">
             {{ testResult()!.error }}
@@ -513,8 +527,17 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
   `]
 })
 export class AiConfigComponent implements OnInit {
+  private readonly i18n = inject(I18nService);
+
+  /** «3 configuraciones» / «1 configuración»: el numero y el sustantivo se eligen a la vez. */
+  configuracionesLabel(): string {
+    const n = this.aiService.configs().length;
+    return this.i18n.plural(n, 'ai_config.n_configuraciones_uno', 'ai_config.n_configuraciones_varios', { count: n });
+  }
+
   aiService = inject(AiService);
   private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmService);
 
   isModalOpen = signal(false);
   editingConfig = signal<AIProviderConfig | null>(null);
@@ -531,7 +554,8 @@ export class AiConfigComponent implements OnInit {
     temperature: 0.7,
     maxTokens: 2000,
     timeout: 30000,
-    retryAttempts: 3
+    retryAttempts: 3,
+    concurrency: 1
   };
 
   ngOnInit(): void {
@@ -555,7 +579,8 @@ export class AiConfigComponent implements OnInit {
       temperature: config.temperature,
       maxTokens: config.maxTokens,
       timeout: config.timeout || 30000,
-      retryAttempts: config.retryAttempts || 3
+      retryAttempts: config.retryAttempts || 3,
+      concurrency: config.concurrency || 1
     };
     this.isModalOpen.set(true);
   }
@@ -581,21 +606,21 @@ export class AiConfigComponent implements OnInit {
     obs.subscribe({
       next: () => {
         this.toastService.success(
-          this.editingConfig() ? 'Actualizado' : 'Creado',
-          'Configuración guardada correctamente'
+          this.editingConfig() ? this.i18n.t('ai_config.actualizado') : this.i18n.t('ai_config.creado'),
+          this.i18n.t('ai_config.configuracion_guardada_correctamente')
         );
         this.closeModal();
         this.isSaving.set(false);
       },
       error: () => {
-        this.toastService.error('Error', 'No se pudo guardar la configuración');
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('ai_config.no_se_pudo_guardar'));
         this.isSaving.set(false);
       }
     });
   }
 
   testConfig(config: AIProviderConfig): void {
-    this.toastService.info('Probando...', 'Conectando con el proveedor');
+    this.toastService.info(this.i18n.t('ai_config.probando'), this.i18n.t('ai_config.conectando_con_el_proveedor'));
 
     this.aiService.testConnection(config.id).subscribe({
       next: (result) => {
@@ -603,7 +628,7 @@ export class AiConfigComponent implements OnInit {
         this.isTestResultOpen.set(true);
       },
       error: () => {
-        this.testResult.set({ success: false, error: 'No se pudo conectar' });
+        this.testResult.set({ success: false, error: this.i18n.t('ai_config.no_se_pudo_conectar') });
         this.isTestResultOpen.set(true);
       }
     });
@@ -611,9 +636,9 @@ export class AiConfigComponent implements OnInit {
 
   testFromForm(): void {
     // Test with current form data
-    this.toastService.info('Probando...', 'Conectando con el proveedor');
+    this.toastService.info(this.i18n.t('ai_config.probando'), this.i18n.t('ai_config.conectando_con_el_proveedor'));
     // For now, just show a message
-    this.toastService.success('Test', 'Configuración válida');
+    this.toastService.success(this.i18n.t('ai_config.test'), this.i18n.t('ai_config.configuracion_valida'));
   }
 
   toggleActive(config: AIProviderConfig): void {
@@ -622,21 +647,26 @@ export class AiConfigComponent implements OnInit {
     } as any).subscribe({
       next: () => {
         this.toastService.success(
-          'Actualizado',
-          config.isActive ? 'Configuración desactivada' : 'Configuración activada'
+          this.i18n.t('ai_config.actualizado'),
+          config.isActive ? this.i18n.t('ai_config.configuracion_desactivada') : this.i18n.t('ai_config.configuracion_activada')
         );
       }
     });
   }
 
-  deleteConfig(config: AIProviderConfig): void {
-    if (confirm(`¿Eliminar la configuración "${config.name}"?`)) {
-      this.aiService.deleteConfig(config.id).subscribe({
-        next: () => {
-          this.toastService.success('Eliminada', 'Configuración eliminada correctamente');
-        }
-      });
-    }
+  async deleteConfig(config: AIProviderConfig): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: this.i18n.t('ai_config.eliminar_configuracion'),
+      message: this.i18n.t('ai_config.eliminar_la_configuracion', { name: config.name }),
+      confirmText: this.i18n.t('common.delete')
+    });
+    if (!accepted) return;
+
+    this.aiService.deleteConfig(config.id).subscribe({
+      next: () => {
+        this.toastService.success(this.i18n.t('ai_config.eliminada'), this.i18n.t('ai_config.configuracion_eliminada_correctamente'));
+      }
+    });
   }
 
   getTestStatusVariant(status: string): 'success' | 'error' | 'warning' {
@@ -650,9 +680,9 @@ export class AiConfigComponent implements OnInit {
   getTestStatusLabel(status: string): string {
     switch (status) {
       case 'success': return 'OK';
-      case 'failed': return 'Error';
-      case 'testing': return 'Probando...';
-      default: return 'Pendiente';
+      case 'failed': return this.i18n.t('ui.error');
+      case 'testing': return this.i18n.t('ai_config.probando');
+      default: return this.i18n.t('ai_config.pendiente');
     }
   }
 
@@ -670,7 +700,8 @@ export class AiConfigComponent implements OnInit {
       temperature: 0.7,
       maxTokens: 2000,
       timeout: 30000,
-      retryAttempts: 3
+      retryAttempts: 3,
+      concurrency: 1
     };
   }
 }

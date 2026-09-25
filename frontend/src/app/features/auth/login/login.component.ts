@@ -7,21 +7,25 @@ import { ToastService } from '../../../core/services/toast.service';
 import { HouseholdService } from '../../../core/services/household.service';
 import { ButtonComponent } from '../../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../../shared/components/ui/input/input.component';
+import { TranslatePipe } from '../../../core/pipes/translate.pipe';
+import { I18nService } from '../../../core/services/i18n.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
   template: `
     <form (ngSubmit)="onSubmit()" class="login-form">
-      <h2 class="login-form__title">Iniciar Sesión</h2>
+      <h2 class="login-form__title">{{ 'auth.login' | t }}</h2>
       
       <app-input
         id="email"
         name="email"
         type="email"
-        label="Email"
-        placeholder="tu@email.com"
+        [label]="'auth.email' | t"
+        [placeholder]="'auth.tu_email_com' | t"
         [(ngModel)]="email"
         [required]="true"
         [error]="emailError()"
@@ -31,7 +35,7 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
         id="password"
         name="password"
         type="password"
-        label="Contraseña"
+        [label]="'auth.password' | t"
         placeholder="••••••••"
         [(ngModel)]="password"
         [required]="true"
@@ -40,7 +44,7 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
 
       <div class="login-form__actions">
         <a routerLink="/auth/forgot-password" class="login-form__link">
-          ¿Olvidaste tu contraseña?
+          {{ 'auth.forgot' | t }}
         </a>
       </div>
 
@@ -51,13 +55,13 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
         [fullWidth]="true"
         [loading]="isLoading()"
       >
-        Iniciar Sesión
+        {{ 'auth.login' | t }}
       </app-button>
 
       <div class="login-form__footer">
-        <span>¿No tienes cuenta?</span>
+        <span>{{ 'auth.noaccount' | t }}</span>
         <a routerLink="/auth/register" class="login-form__link login-form__link--bold">
-          Regístrate
+          {{ 'auth.registrate' | t }}
         </a>
       </div>
     </form>
@@ -108,6 +112,7 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
   `]
 })
 export class LoginComponent {
+  private readonly i18n = inject(I18nService);
   private authService = inject(AuthService);
   private toastService = inject(ToastService);
   private router = inject(Router);
@@ -125,7 +130,7 @@ export class LoginComponent {
     if (code) {
       this.householdService.joinByCode(code).subscribe({
         next: () => {
-          this.toastService.success('¡Unido!', 'Te has unido al hogar');
+          this.toastService.success(this.i18n.t('auth.unido'), this.i18n.t('auth.te_has_unido_al'));
           this.router.navigate(['/household']);
         },
         error: () => this.router.navigate(['/dashboard'])
@@ -140,12 +145,12 @@ export class LoginComponent {
     this.passwordError.set('');
 
     if (!this.email) {
-      this.emailError.set('El email es requerido');
+      this.emailError.set(this.i18n.t('auth.el_email_es_requerido'));
       return;
     }
 
     if (!this.password) {
-      this.passwordError.set('La contraseña es requerida');
+      this.passwordError.set(this.i18n.t('auth.la_contrasena_es_requerida'));
       return;
     }
 
@@ -153,13 +158,13 @@ export class LoginComponent {
 
     this.authService.login({ email: this.email, password: this.password }).subscribe({
       next: () => {
-        this.toastService.success('¡Bienvenido!', 'Has iniciado sesión correctamente');
+        this.toastService.success(this.i18n.t('auth.bienvenido'), this.i18n.t('auth.has_iniciado_sesion_correctamente'));
         this.householdService.loadHousehold();
         this.redirectAfterAuth();
       },
       error: (error) => {
         this.isLoading.set(false);
-        this.toastService.error('Error', error.message || 'Credenciales incorrectas');
+        this.toastService.error(this.i18n.t('ui.error'), error.message || this.i18n.t('auth.credenciales_incorrectas'));
       }
     });
   }

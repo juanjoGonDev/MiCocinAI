@@ -1,0 +1,471 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { join } from 'node:path';
+import { z } from 'zod';
+import { describeIssues, formBool, formColor, formNumber, formText, formTime } from './form.js';
+import {
+  addMealSchema,
+  calendarEventFilterSchema,
+  calendarFilterSchema,
+  createCalendarEventSchema,
+  createCalendarSchema,
+  updateCalendarEventSchema,
+  updateGoalsSchema,
+  updateMealSchema
+} from './calendar.schema.js';
+import {
+  avatarImageSchema,
+  changePasswordSchema,
+  forgotPasswordSchema,
+  loginSchema,
+  refreshTokenSchema,
+  registerSchema,
+  resetPasswordSchema,
+  updateProfileSchema
+} from './auth.schema.js';
+import {
+  createHouseholdSchema,
+  inviteMemberSchema,
+  joinHouseholdSchema,
+  updateHouseholdSchema,
+  updateMemberSchema
+} from './household.schema.js';
+import { updateTasteSchema } from '../utils/taste-profile.js';
+import {
+  createIngredientSchema,
+  createPantryCategorySchema,
+  createProductSchema,
+  createUtensilSchema,
+  ingredientFilterSchema,
+  pantryCategoryFilterSchema,
+  bulkProductIdsSchema,
+  productFilterSchema,
+  catalogAddSchema,
+  catalogFilterSchema,
+  updateIngredientSchema,
+  updatePantryCategorySchema,
+  updateProductSchema,
+  updateUtensilSchema,
+  utensilFilterSchema
+} from './pantry.schema.js';
+import {
+  createRecipeSchema,
+  recipeFilterSchema,
+  updateRecipeSchema
+} from './recipe.schema.js';
+import {
+  applyLinesSchema,
+  bulkItemsSchema,
+  completeListSchema,
+  createCategorySchema,
+  createItemSchema,
+  createListSchema,
+  discountSchema,
+  listFilterSchema,
+  orderSchema,
+  photoLinesSchema,
+  priceFilterSchema,
+  updateItemSchema,
+  updateListSchema
+} from './shopping.schema.js';
+import { createReceiptItemSchema, updateReceiptItemSchema, updateReceiptSchema } from './receipts.schema.js';
+import {
+  createAiConfigSchema,
+  generateRecipeSchema,
+  generateWeeklyPlanSchema,
+  getRecommendationsSchema,
+  testConnectionSchema,
+  updateAiConfigSchema
+} from './ai.schema.js';
+
+/**
+ * EL CONTRATO DE LOS FORMULARIOS: lo opcional tiene que poder no llegar.
+ *
+ * Nacio de un fallo concreto —el calendario respondia 400 cuando el usuario dejaba vacias las notas
+ * o el sitio, porque `.optional()` no acepta el `null` con el que un formulario manda un campo sin
+ * rellenar— y de la única cosa que lo evita de verdad: una prueba por formulario, y un mecanismo que
+ * no deje ninguno fuera. Las filas son los formularios; la regla del final del fichero es el candado.
+ *
+ * Lo que se exige de cada campo opcional, en las cuatro formas que un navegador manda:
+ *   - ausente            -> vale (no tocar)
+ *   - `null`             -> vale y significa «borrado»
+ *   - `''` / `'   '`     -> vale y se convierte en `null` para los de texto
+ * Y además, para que nadie confunda esto con «aceptar cualquier cosa»: los OBLIGATORIOS tienen que
+ * seguir fallando uno a uno.
+ */
+type Row = {
+  /** Nombre exacto del export, que es como lo buscan las rutas y la regla de completud. */
+  name: string;
+  /**
+   * `form` es un cuerpo que escribe; `query` son parametros de URL. La diferencia no es de gusto: de
+   * una URL no puede venir `null` (viene `?x=`, o sea `''`), y en un cuerpo un `<select>` no manda
+   * nunca la cadena vacia porque no tiene opción vacia. Exigir de mas aqui obligaria a aflojar los
+   * schemas sin necesidad, y eso es justamente como se cuela un `enum` con '' en un PATCH.
+   */
+  kind?: 'form' | 'query';
+  schema: z.ZodTypeAny;
+  /**
+   * Payload minimo valido. Se omite cuando el schema no tiene ningun campo obligatorio (los PATCH y
+   * los filtros de consulta): ahi el minimo es `{}` y no hay nada que escribir.
+   */
+  required?: Record<string, unknown>;
+  /** Por que el minimo no es «los required a secas» (un refine que pide una de varias). */
+  note?: string;
+  /**
+   * Claves cuyo hueco el schema rechaza A PROPÓSITO, con el motivo al lado. Un PATCH con el refine
+   * «nada que actualizar» no puede aceptar `{}`, y eso no es el bug que cazamos aqui: el bug es que
+   * un campo OPCIONAL no se pueda dejar vacio, no que un payload vacio no tenga sentido. Se listan
+   * para que la excepcion se lea, no para que se olvide.
+   */
+  except?: Record<string, string>;
+};
+
+/** Filtros de lectura: todo opcional, y el contrato es que `?vacio` no puede dar 400. */
+const query = (name: string, schema: z.ZodTypeAny, required: Record<string, unknown> = {}): Row => ({
+  name,
+  schema,
+  kind: 'query',
+  required
+});
+
+const ROWS: Row[] = [
+  // ── calendario de la casa ──
+  {
+    name: 'createCalendarEventSchema',
+    schema: createCalendarEventSchema,
+    required: { title: 'Carpinteria', date: '2026-03-11' },
+    note: 'Un evento sin dia no existe: `date` es required a sabiendas, y el dialog lo prellena.'
+  },
+  {
+    name: 'updateCalendarEventSchema',
+    schema: updateCalendarEventSchema,
+    required: { title: 'Carpinteria' },
+    note: 'El refine exige al menos un campo.',
+    except: { title: 'Quitar el titulo dejaria el payload vacio, y ahi el refine dice «nada que actualizar» a proposito' }
+  },
+  { name: 'addMealSchema', schema: addMealSchema, required: { date: '2026-03-11', mealType: 'lunch' } },
+  { name: 'updateMealSchema', schema: updateMealSchema },
+  { name: 'updateGoalsSchema', schema: updateGoalsSchema },
+  { name: 'createCalendarSchema', schema: createCalendarSchema, required: { weekStart: '2026-03-09' } },
+  query('calendarFilterSchema', calendarFilterSchema),
+  query('calendarEventFilterSchema', calendarEventFilterSchema, { from: '2026-03-01', to: '2026-03-31' }),
+
+  // ── el gestor del inventario (## 12x) ──
+  {
+    name: 'createPantryCategorySchema',
+    schema: createPantryCategorySchema,
+    required: { name: 'Frutos secos' },
+    note: 'Solo el nombre es obligatorio: el color lo elige la casa y la descripcion y el padre admiten el hueco.'
+  },
+  { name: 'updatePantryCategorySchema', schema: updatePantryCategorySchema },
+  query('pantryCategoryFilterSchema', pantryCategoryFilterSchema),
+  {
+    name: 'createProductSchema',
+    schema: createProductSchema,
+    required: { name: 'Levadura' },
+    note: 'El resto cae en su defecto (other / unit / 0): registrar un basico no puede exigir rellenar medio formulario.'
+  },
+  { name: 'updateProductSchema', schema: updateProductSchema },
+  {
+    name: 'bulkProductIdsSchema',
+    schema: bulkProductIdsSchema,
+    required: { ids: ['pi-1'] },
+    note: 'Un lote vacio no tiene sentido (min 1) y uno de mil tampoco: el techo de 100 es lo que el servidor esta dispuesto a borrar de una vez.'
+  },
+  query('productFilterSchema', productFilterSchema),
+  // ── El catalogo pre-registrado del super (## 12aa) ──
+  query('catalogFilterSchema', catalogFilterSchema),
+  {
+    name: 'catalogAddSchema',
+    schema: catalogAddSchema,
+    required: { ids: ['dairy:0'] },
+    note: 'Igual que el lote de borrado: entre 1 y 100 ids. Un lote vacio no escribe en la casa, y uno de mil tampoco.'
+  },
+
+  // ── casa y perfil ──
+  { name: 'createHouseholdSchema', schema: createHouseholdSchema, required: { name: 'Los del 3B' } },
+  { name: 'updateHouseholdSchema', schema: updateHouseholdSchema },
+  { name: 'joinHouseholdSchema', schema: joinHouseholdSchema, required: { inviteCode: 'ABC123' } },
+  { name: 'inviteMemberSchema', schema: inviteMemberSchema, required: { email: 'ana@hogaria.test' } },
+  { name: 'updateMemberSchema', schema: updateMemberSchema },
+  { name: 'registerSchema', schema: registerSchema, required: { name: 'Ana', email: 'ana@hogaria.test', password: 'Clave1234' } },
+  { name: 'loginSchema', schema: loginSchema, required: { email: 'ana@hogaria.test', password: 'Clave1234' } },
+  { name: 'forgotPasswordSchema', schema: forgotPasswordSchema, required: { email: 'ana@hogaria.test' } },
+  { name: 'resetPasswordSchema', schema: resetPasswordSchema, required: { token: 't', newPassword: 'Clave1234' } },
+  { name: 'changePasswordSchema', schema: changePasswordSchema, required: { oldPassword: 'vieja', newPassword: 'Clave1234' } },
+  { name: 'refreshTokenSchema', schema: refreshTokenSchema, required: { refreshToken: 'r' } },
+  { name: 'updateProfileSchema', schema: updateProfileSchema },
+  { name: 'avatarImageSchema', schema: avatarImageSchema, required: { image: 'data:image/jpeg;base64,AAAA' } },
+  // El onboarding guarda el perfil por partes y «saltarselo» es un PATCH con un solo campo: aqui un
+  // hueco tiene que significar «no tocar», que es justo lo que antes no significaba.
+  { name: 'updateTasteSchema', schema: updateTasteSchema },
+
+  // ── despensa ──
+  {
+    name: 'createIngredientSchema',
+    schema: createIngredientSchema,
+    required: { name: 'Tomate', category: 'vegetables', quantity: 4, unit: 'unit' }
+  },
+  { name: 'updateIngredientSchema', schema: updateIngredientSchema },
+  { name: 'createUtensilSchema', schema: createUtensilSchema, required: { name: 'Horno', category: 'oven' } },
+  { name: 'updateUtensilSchema', schema: updateUtensilSchema },
+  query('ingredientFilterSchema', ingredientFilterSchema),
+  query('utensilFilterSchema', utensilFilterSchema),
+
+  // ── recetas ──
+  {
+    name: 'createRecipeSchema',
+    schema: createRecipeSchema,
+    required: {
+      name: 'Gaspacho',
+      ingredients: [{ name: 'Tomate', quantity: 4, unit: 'unit' }],
+      steps: [{ stepNumber: 1, instruction: 'Triturar' }]
+    }
+  },
+  { name: 'updateRecipeSchema', schema: updateRecipeSchema },
+  query('recipeFilterSchema', recipeFilterSchema),
+
+  // ── compra ──
+  { name: 'createListSchema', schema: createListSchema, required: { name: 'Semana' } },
+  {
+    name: 'updateListSchema',
+    schema: updateListSchema,
+    required: { name: 'Semana', version: 1 },
+    except: { name: 'NothingToUpdate: sin nombre, sin tienda y sin estado no hay PATCH que aplicar' }
+  },
+  { name: 'createItemSchema', schema: createItemSchema, required: { name: 'Pan' } },
+  {
+    name: 'updateItemSchema',
+    schema: updateItemSchema,
+    required: { name: 'Pan', version: 1 },
+    except: { name: 'NothingToUpdate, la misma regla que en la lista' }
+  },
+  { name: 'createCategorySchema', schema: createCategorySchema, required: { name: 'Frutas' } },
+  {
+    name: 'discountSchema',
+    schema: discountSchema,
+    required: { kind: 'amount', valueMinor: 150 },
+    // El refine exige importe O porcentaje segun el `kind`: «sin cifra» no es un hueco opcional, es
+    // un descuento que no descuenta nada.
+    except: {
+      valueMinor: 'con kind=amount la cifra es el descuento; sin ella no hay nada que aplicar',
+      percentBps: 'y con kind=percent manda la otra'
+    }
+  },
+  { name: 'bulkItemsSchema', schema: bulkItemsSchema, required: { lines: 'Pan, Leche' } },
+  { name: 'orderSchema', schema: orderSchema, required: { itemIds: [], version: 1 } },
+  { name: 'completeListSchema', schema: completeListSchema },
+  { name: 'photoLinesSchema', schema: photoLinesSchema, required: { lines: [] } },
+  { name: 'applyLinesSchema', schema: applyLinesSchema, required: { lines: [{ name: 'Pan' }] } },
+  query('listFilterSchema', listFilterSchema),
+  query('priceFilterSchema', priceFilterSchema),
+
+  // ── IA ──
+  {
+    name: 'createAiConfigSchema',
+    schema: createAiConfigSchema,
+    required: { name: 'Local', baseUrl: 'http://localhost:1234/v1', apiKey: 'sk-x', model: 'qwen' }
+  },
+  { name: 'updateAiConfigSchema', schema: updateAiConfigSchema },
+  { name: 'testConnectionSchema', schema: testConnectionSchema },
+  { name: 'generateRecipeSchema', schema: generateRecipeSchema, required: { ingredients: [{ id: 'i', name: 'Tomate', quantity: 1, unit: 'g' }] } },
+  { name: 'generateWeeklyPlanSchema', schema: generateWeeklyPlanSchema, required: { startDate: '2026-03-09', endDate: '2026-03-15', goals: { type: 'balanced' } } },
+  { name: 'getRecommendationsSchema', schema: getRecommendationsSchema },
+
+  // ── La lectura de tickets por IA (## 12aj) ──
+  {
+    name: 'createReceiptItemSchema',
+    schema: createReceiptItemSchema,
+    required: { name: 'Leche entera' },
+    note: 'Una linea escrita a mano durante la revision solo exige el nombre: el resto (categoria, precio, oferta) se puede dejar para despues o para la IA.'
+  },
+  { name: 'updateReceiptItemSchema', schema: updateReceiptItemSchema },
+  { name: 'updateReceiptSchema', schema: updateReceiptSchema }
+];
+
+/** Los demas: se listan con el motivo, y la regla del final no deja esconder un formulario aqui. */
+const EXEMPT: Record<string, string> = {
+  productIndexSchema: 'parametros de busqueda del indice de productos, sin cuerpo de formulario',
+  photoAnalyzeSchema: 'una subida de OCR manda SIEMPRE la imagen: sin imagen no hay peticion que procesar',
+  adjustServingsSchema: 'el ajuste de raciones es un numero o nada, y «nada» se resuelve en el frontend',
+  createPriceSchema: 'alta de precios desde el cierre de lista: los cuatro campos son obligatorios por contrato de negocio'
+};
+
+function shapeOf(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | null {
+  const shape = (schema as { shape?: Record<string, z.ZodTypeAny> }).shape;
+  return shape ?? null;
+}
+
+function optionalKeys(row: Row): string[] {
+  const shape = shapeOf(row.schema);
+  if (!shape) return [];
+  return Object.keys(shape).filter((key) => shape[key]?.isOptional?.() === true);
+}
+
+function requiredKeys(row: Row): string[] {
+  const shape = shapeOf(row.schema);
+  if (!shape) return [];
+  return Object.keys(shape).filter((key) => !optionalKeys(row).includes(key));
+}
+
+/**
+ * `''` solo se exige a lo que un input puede mandar vacio: texto, número y enum de filtro. Un enum
+ * dentro de un cuerpo no: los `<select>` de esta app siempre tienen opción elegida, y aceptar `''` ahi
+ * seria abrir la puerta a escribir un valor que no esta en la lista.
+ */
+function acceptsBlank(schema: z.ZodTypeAny, enumsCount: boolean = true): boolean {
+  const kinds = new Set<string>();
+  const walk = (node: unknown, depth = 0): void => {
+    if (!node || typeof node !== 'object' || depth > 4) return;
+    const def = (node as { _def?: any; def?: any }).def ?? (node as { _def?: any })._def;
+    if (!def) return;
+    if (typeof def.type === 'string') kinds.add(def.type);
+    for (const key of ['innerType', 'in', 'out', 'type', 'schema', 'element', 'options', 'items']) {
+      const next = def[key];
+      if (Array.isArray(next)) next.forEach((item) => walk(item, depth + 1));
+      else if (next) walk(next, depth + 1);
+    }
+  };
+  walk(schema);
+  if (kinds.has('string') || kinds.has('number')) return true;
+  return enumsCount && kinds.has('enum');
+}
+
+describe('contrato de formularios: lo opcional puede no llegar', () => {
+  for (const row of ROWS) {
+    const minimal = row.required ?? {};
+
+    it(`${row.name}: solo los campos obligatorios se acepta`, () => {
+      const parsed = row.schema.safeParse(minimal);
+      expect(parsed.success, JSON.stringify((parsed as { error?: z.ZodError }).error?.issues ?? [])).toBe(true);
+    });
+
+    it(`${row.name}: cada opcional admite las formas del hueco`, () => {
+      const shape = shapeOf(row.schema);
+      const failures: string[] = [];
+      for (const key of optionalKeys(row)) {
+        if (row.except?.[key]) continue;
+        const field = shape?.[key] ?? row.schema;
+        const blankable = acceptsBlank(field, row.kind === 'query');
+        const nullable = row.kind === 'query' ? blankable : true;
+        const variants: unknown[] = [undefined];
+        if (nullable) variants.push(null);
+        if (blankable) variants.push('', '   ');
+        for (const value of variants) {
+          const payload = { ...minimal, [key]: value };
+          if (value === undefined) delete payload[key];
+          const parsed = row.schema.safeParse(payload);
+          if (!parsed.success) {
+            const issue = (parsed.error as z.ZodError).issues[0];
+            failures.push(`${key}=${JSON.stringify(value)}: ${issue?.message ?? 'rechazado'}`);
+          }
+        }
+      }
+      expect(failures, `el formulario manda estas formas y la API las rechaza:\n  ${failures.join('\n  ')}`).toEqual([]);
+    });
+
+    it(`${row.name}: las excepciones del contrato estan justificadas`, () => {
+      // Una excepcion sin motivo escrito es una puerta; con motivo, una decision.
+      for (const key of Object.keys(row.except ?? {})) {
+        expect(row.except![key].length, `${row.name}.${key} sin motivo`).toBeGreaterThan(12);
+        expect(optionalKeys(row), `${row.name}.${key} no es opcional: fuera la excepcion`).toContain(key);
+      }
+    });
+
+    it(`${row.name}: un vacio de texto no se guarda como cadena vacia`, () => {
+      // «Sin valor» tiene que llegar al SQL como NULL: una cadena vacia en la columna de notas se
+      // pinta como una nota existente y vacia, y desde ahi ya no se puede volver a «quitarla».
+      const shape = shapeOf(row.schema);
+      if (!shape) return;
+      const sample = { ...minimal };
+      for (const key of optionalKeys(row)) if (acceptsBlank(shape[key], false)) sample[key] = '   ';
+      const parsed = row.schema.safeParse(sample);
+      if (!parsed.success) return; // schemas sin helpers propios (filters, legacies) no prometen esto
+      const data = parsed.data as Record<string, unknown>;
+      const leftovers = Object.keys(sample).filter((key) => data[key] === '' || (typeof data[key] === 'string' && !data[key]));
+      expect(leftovers, `estos campos se guardarian en blanco en vez de NULL: ${leftovers.join(', ')}`).toEqual([]);
+    });
+
+    it(`${row.name}: y los obligatorios siguen siendo obligatorios`, () => {
+      const missing = requiredKeys(row);
+      for (const key of missing) {
+        const payload = { ...minimal };
+        delete payload[key];
+        expect(row.schema.safeParse(payload).success, `${key} no deberia poder omitirse`).toBe(false);
+      }
+    });
+  }
+
+  it('los helpers de form.ts normalizan null, vacio y espacios', () => {
+    const text = z.object({ v: formText(10, 'Notas') });
+    expect(text.safeParse({}).success).toBe(true);
+    expect((text.parse({ v: null }) as { v: unknown }).v).toBeNull();
+    expect((text.parse({ v: '   ' }) as { v: unknown }).v).toBeNull();
+    expect((text.parse({ v: '  hola  ' }) as { v: string }).v).toBe('hola');
+    expect((text.safeParse({ v: 'x'.repeat(11) }) as { error: z.ZodError }).error.issues[0].message).toContain('maximo 10');
+
+    const time = z.object({ v: formTime('Hora') });
+    expect(time.safeParse({ v: '25:00' }).success).toBe(false);
+    expect((time.parse({ v: '' }) as { v: unknown }).v).toBeNull();
+
+    const color = z.object({ v: formColor() });
+    expect(color.safeParse({ v: 'red' }).success).toBe(false);
+    expect((color.parse({ v: '#4CAF50' }) as { v: string }).v).toBe('#4CAF50');
+
+    const number = z.object({ v: formNumber({ int: true, positive: true }) });
+    expect((number.parse({ v: '' }) as { v: unknown }).v).toBeNull();
+    expect((number.parse({ v: '7' }) as { v: number }).v).toBe(7);
+    expect(number.safeParse({ v: 0 }).success).toBe(false);
+
+    const bool = z.object({ v: formBool() });
+    expect((bool.parse({ v: '1' }) as { v: boolean }).v).toBe(true);
+    expect((bool.parse({ v: 0 }) as { v: boolean }).v).toBe(false);
+    expect(bool.safeParse({ v: null }).success).toBe(true);
+  });
+
+  it('un 400 dice el campo y el motivo, en espanol', () => {
+    const parsed = createCalendarEventSchema.safeParse({ title: '', date: '11-03-2026' });
+    expect(parsed.success).toBe(false);
+    const report = describeIssues((parsed as { error: z.ZodError }).error);
+    expect(report.message).toMatch(/titulo|title/i);
+    expect(report.issues.length).toBeGreaterThan(0);
+    expect(report.issues.every((issue) => !/^(invalid|too |expected)/i.test(issue.message))).toBe(true);
+  });
+});
+
+/**
+ * EL CANDADO. Ningun formulario se queda sin contrato: si una ruta empieza a parsear un schema nuevo,
+ * este test falla hasta que tenga fila en `ROWS` o este en `EXEMPT` con un motivo que se pueda leer.
+ * Y `EXEMPT` no es una puerta de escape: se comprueba que de verdad no tenga campos opcionales, asi
+ * que «me da pereza escribir la fila» no se puede disfrazar de «esto no es un formulario».
+ */
+describe('ningun schema de ruta se queda sin contrato', () => {
+  const routesDir = join(process.cwd(), 'src/routes');
+  const parsed = new Set<string>();
+  for (const file of readdirSync(routesDir).filter((name) => name.endsWith('.routes.ts'))) {
+    const source = readFileSync(join(routesDir, file), 'utf8');
+    for (const match of source.matchAll(/([A-Za-z0-9_]+Schema)\.(?:safe)?[Pp]arse\(/g)) parsed.add(match[1]);
+    for (const match of source.matchAll(/readForm\(c,\s*([A-Za-z0-9_]+Schema)\b/g)) parsed.add(match[1]);
+  }
+
+  const rows = new Map(ROWS.map((row) => [row.name, row]));
+
+  it('todo schema que parsea una ruta tiene su fila o su motivo', () => {
+    const missing = [...parsed]
+      .filter((name) => !rows.has(name) && !EXEMPT[name])
+      .sort();
+    expect(
+      missing,
+      `faltan las filas de: ${missing.join(', ')}. Anade la suya en ROWS con su payload minimo —es el` +
+        ` test que falta cuando un campo nuevo se marca como opcional en la interfaz.`
+    ).toEqual([]);
+  });
+
+  it('las filas existen en el codigo, y los exentos no esconden opcionales', () => {
+    const hidden: string[] = [];
+    for (const name of Object.keys(EXEMPT)) {
+      if (!parsed.has(name) && !rows.has(name)) hidden.push(`${name}: no lo parsea ninguna ruta (fuera la excepcion)`);
+    }
+    expect(hidden).toEqual([]);
+  });
+});

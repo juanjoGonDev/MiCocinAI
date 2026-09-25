@@ -1,10 +1,11 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-rating',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslatePipe],
   template: `
     <div class="rating" [class.rating--disabled]="disabled">
       <button
@@ -15,7 +16,7 @@ import { CommonModule } from '@angular/common';
         (click)="onStarClick(i)"
         (mouseenter)="onStarHover(i)"
         (mouseleave)="onStarLeave()"
-        [attr.aria-label]="'Rate ' + (i + 1) + ' stars'"
+        [attr.aria-label]="(i + 1) === 1 ? ('common.rating_uno' | t) : ('common.rating_varios' | t:{n: i + 1})"
       >
         {{ getStarIcon(i) }}
       </button>
@@ -55,8 +56,12 @@ import { CommonModule } from '@angular/common';
       color: var(--color-warning-500);
     }
 
+    /* 400 no existe en la escala (va 50, 100, 500, 600, 700), y como una declaracion con un color
+       inexistente se descarta en silencio, aqui no pasaba nada: la estrella a punto de elegirse se
+       quedaba en el gris del borde. Un tono por debajo del relleno, para que «voy a pulsar aqui» se vea
+       como eso. */
     .rating__star--hovered {
-      color: var(--color-warning-400);
+      color: var(--color-warning-600);
     }
 
     .rating__value {
