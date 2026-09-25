@@ -364,6 +364,25 @@ describe('precios y estimacion', () => {
     expect(estimate.unpriced).toEqual([]);
   });
 
+  it('dos precios del MISMO segundo: el DESC es determinista, el recien insertado sale primero', async () => {
+    // El sello del API es CURRENT_TIMESTAMP (segundos): dos observaciones seguidas EMPATAN
+    // casi siempre, y sin desempate el orden de un empate lo decide el plan de consulta de
+    // SQLite — el «ultimo precio» de la ficha era una loteria que el CI perdio una vez.
+    // Aqui se siembra con el mismo sello a proposito: el que se inserto despues tiene que
+    // llegar primero, siempre.
+    const mismoInstante = '2026-09-25 19:27:41';
+    const siembra = db.prepare(
+      `INSERT INTO price_observations
+         (id, user_id, household_id, product_key, product_name, store_name, price_minor, quantity, observed_at)
+       VALUES (?, ?, NULL, 'leche-entera', 'Leche entera', 'Mercadona', ?, 1, ?)`
+    );
+    siembra.run('precio-viejo', alice.id, 175, mismoInstante);
+    siembra.run('precio-nuevo', alice.id, 180, mismoInstante);
+
+    const filas = await data(await call(alice, 'GET', '/prices?productKey=leche-entera'));
+    expect(filas.map((fila: any) => fila.price_minor)).toEqual([180, 175]);
+  });
+
   it('usa el ultimo precio observado cuando la linea no lo lleva', async () => {
     const list = await createList(alice);
     await call(alice, 'POST', `/prices`, {

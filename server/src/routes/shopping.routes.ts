@@ -1082,9 +1082,11 @@ shoppingRoutes.get('/lists/:id/estimate', async (c) => {
   // cualquier otra. «El ultimo precio» a secas era un bug con muy buena pinta: ponía la
   // leche de Mercadona al precio de Lidl, y con dos tiendas en la casa el numero de la
   // pantalla ya no significaba nada.
-  const observationAny = db.prepare(`${observationSql} ORDER BY observed_at DESC LIMIT 1`);
+  const observationAny = db.prepare(
+    `${observationSql} ORDER BY observed_at DESC, rowid DESC LIMIT 1`
+  );
   const observationAtStore = db.prepare(
-    `${observationSql} AND store_name = ? ORDER BY observed_at DESC LIMIT 1`
+    `${observationSql} AND store_name = ? ORDER BY observed_at DESC, rowid DESC LIMIT 1`
   );
   const listStore = String(list.store ?? '').trim();
 
@@ -1703,7 +1705,7 @@ shoppingRoutes.get('/prices', async (c) => {
        LEFT JOIN price_observations o ON o.product_key = p.product_key AND o.observed_at >= datetime(p.observed_at, '-180 days')
        ${where}
        GROUP BY p.id
-       ORDER BY p.observed_at DESC
+       ORDER BY p.observed_at DESC, p.rowid DESC
        LIMIT ? OFFSET ?`
     )
     .all(...params, filter.limit, filter.offset) as any[];
