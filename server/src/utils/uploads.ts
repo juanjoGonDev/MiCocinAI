@@ -43,14 +43,15 @@ export function assertWritten(file: string, bytes: number): void {
 export const MAX_AVATAR_BYTES = 512 * 1024;
 export const AVATAR_URL_PREFIX = '/api/uploads/avatars/';
 
-const KINDS = ['avatars'] as const;
+const KINDS = ['avatars', 'receipts'] as const;
 export type UploadKind = (typeof KINDS)[number];
 
 const MIME_BY_EXT: Record<string, string> = {
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
   '.png': 'image/png',
-  '.webp': 'image/webp'
+  '.webp': 'image/webp',
+  '.pdf': 'application/pdf'
 };
 const EXT_BY_MIME: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -106,6 +107,40 @@ export function storeImage(kind: UploadKind, ownerId: string, image: ParsedImage
   // lectura, aqui se sabe —no cuando el navegador ya lleva tres intentos.
   assertWritten(full, image.buffer.byteLength);
   return `/api/uploads/${kind}/${file}`;
+}
+
+/**
+ * Un ticket subido (## 12aj): imagen o PDF, en disco igual que el avatar pero con su propia
+ * carpeta y sin pasar por el parseo de data URL —llega como multipart, con los bytes ya leidos
+ * y el tipo decidido por la FIRMA del fichero (magic bytes), no por lo que diga el formulario.
+ */
+export function storeTicket(ownerId: string, buffer: Buffer, kind: 'png' | 'jpeg' | 'webp' | 'pdf', root = uploadsRoot()): string {
+  const ext = kind === 'jpeg' ? '.jpg' : `.${kind}`;
+  return storeRawFile('receipts', ownerId, buffer, ext, root);
+}
+
+/** Lo de abajo de `storeImage` sin el diccionario de mimes: quien llama ya sabe la extension. */
+function storeRawFile(kind: UploadKind, ownerId: string, buffer: Buffer, ext: string, root: string): string {
+  const dir = join(root, kind);
+  mkdirSync(dir, { recursive: true });
+  const file = `${safe(ownerId)}-${randomBytes(5).toString('hex')}${ext}`;
+  const full = join(dir, file);
+  writeFileSync(full, buffer, { mode: 0o644 });
+  assertWritten(full, buffer.byteLength);
+  return `/api/uploads/${kind}/${file}`;
+}
+
+/**
+ * La firma de un ticket: lo que DICE ser tiene que empezar por sus bytes de siempre. Un
+ * `Content-Type` se falsifica con la misma facilidad con la que se manda, y guardar un .exe
+ * con nombre de foto en la carpeta publica de uploads es un regalo que nadie pidio.
+ */
+export function detectarKindTicket(bytes: Buffer): 'png' | 'jpeg' | 'webp' | 'pdf' | null {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'png';
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'jpeg';
+  if (bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF' && bytes.subarray(8, 12).toString('ascii') === 'WEBP') return 'webp';
+  if (bytes.length >= 5 && bytes.subarray(0, 5).toString('ascii') === '%PDF-') return 'pdf';
+  return null;
 }
 
 /**

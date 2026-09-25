@@ -28,6 +28,8 @@ export interface AiConfigRow {
   frequency_penalty: number | null;
   presence_penalty: number | null;
   timeout: number | null;
+  /** La concurrencia de la cola de tickets (## 12aj): por proveedor, default 1. */
+  concurrency: number | null;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -108,6 +110,90 @@ export async function callAI(userId: string, messages: AiMessage[], db: SqlDb): 
     throw new AiCallError('BAD_JSON', 'Invalid AI response format', JSON.stringify(payload).slice(0, 200));
   }
   return content;
+}
+
+/**
+ * La llamada en STREAMING (## 12aj): misma configuracion, misma forma de error, pero entrega el
+ * texto a medida que el modelo lo escribe. Es lo que hace que las lineas del ticket se vayan
+ * viendo «poco a poco»: quien llama recibe cada trozo y decide que hacer con el.
+ *
+ * Si el proveedor no soporta `stream` (responde un JSON normal, o un 4xx), se lanza el mismo
+ * `AiCallError` de siempre: la cola decide si reintentar sin streaming —el error antes del
+ * primer trozo significa «aqui no hay stream», y caer a `callAI` es un detalle de transporte,
+ * no un cambio de reglas.
+ */
+export async function callAIStreaming(
+  userId: string,
+  messages: AiMessage[],
+  db: SqlDb,
+  onDelta: (texto: string) => void,
+  senal: AbortSignal
+): Promise<string> {
+  const active = activeAiConfig(db, userId);
+  if (!active) {
+    throw new AiCallError('NO_CONFIG', 'No active AI configuration found');
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(endpoint(active.base_url), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${active.api_key}`
+      },
+      body: JSON.stringify({
+        model: active.model,
+        messages,
+        temperature: active.temperature,
+        max_tokens: active.max_tokens,
+        top_p: active.top_p,
+        frequency_penalty: active.frequency_penalty,
+        presence_penalty: active.presence_penalty,
+        stream: true
+      }),
+      signal: senal
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const timedOut = /timeout|abort/i.test(message);
+    throw new AiCallError(timedOut ? 'TIMEOUT' : 'PROVIDER', `AI API error: ${message}`, message);
+  }
+
+  if (!response.ok || !response.body) {
+    const text = await response.text().catch(() => '');
+    throw new AiCallError('PROVIDER', `AI API error: ${text.slice(0, 400)}`, text.slice(0, 400));
+  }
+
+  const decoder = new TextDecoder();
+  let entero = '';
+  let porProcesar = '';
+  for await (const trozo of response.body) {
+    if (senal.aborted) throw new AiCallError('PROVIDER', 'Cancelado', 'CANCELLED');
+    porProcesar += decoder.decode(trozo, { stream: true });
+    // El SSE llega en lineas «data: {...}» separadas por saltos; una linea «data: [DONE]» cierra.
+    const lineas = porProcesar.split('\n');
+    porProcesar = lineas.pop() ?? '';
+    for (const linea of lineas) {
+      const recorte = linea.trim();
+      if (!recorte.startsWith('data:')) continue;
+      const dato = recorte.slice(5).trim();
+      if (!dato || dato === '[DONE]') continue;
+      try {
+        const delta = (JSON.parse(dato) as any)?.choices?.[0]?.delta?.content;
+        if (typeof delta === 'string' && delta) {
+          entero += delta;
+          onDelta(delta);
+        }
+      } catch {
+        // Un trozo que no es JSON: los proveedores mandan comentarios y keep-alives; a otra cosa.
+      }
+    }
+  }
+  if (!entero) {
+    throw new AiCallError('BAD_JSON', 'El stream no trajo nada de texto', '');
+  }
+  return entero;
 }
 
 /**

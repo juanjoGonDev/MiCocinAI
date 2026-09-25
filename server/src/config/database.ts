@@ -476,6 +476,96 @@ async function runMigrations(db: Database.Database): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_shopping_events_list ON shopping_list_events(list_id, created_at);
 
+    -- ═══ Lectura de tickets por IA (HOGARIA-SPEC ## 12aj) ═══
+    -- El ticket sube como imagen o PDF, la IA devuelve la estructura JSON directamente (sin OCR:
+    -- el parte dice que lee mal la imagen y no aporta) y cada fila queda escrita AQUI, lista para
+    -- que la persona la revise antes de tocar el inventario. 'status' es el pipeline:
+    -- queued (en la cola) -> analyzing (el modelo esta leyendo) -> review (a revisar) ->
+    -- confirmed (ya esta en el inventario) | failed | stopped.
+    CREATE TABLE IF NOT EXISTS receipts (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'analyzing', 'review', 'confirmed', 'failed', 'stopped')),
+      store TEXT,
+      currency TEXT,
+      total_minor INTEGER,
+      notes TEXT,
+      file_url TEXT NOT NULL,
+      file_kind TEXT NOT NULL CHECK (file_kind IN ('png', 'jpeg', 'webp', 'pdf')),
+      file_name TEXT,
+      file_bytes INTEGER,
+      error_code TEXT,
+      error_detail TEXT,
+      warnings TEXT NOT NULL DEFAULT '[]',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      confirmed_at DATETIME,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_receipts_user ON receipts(user_id, created_at);
+
+    -- Una linea del ticket: todo editable durante la revision (nombre, cantidad, unidad,
+    -- categoria de la despensa, precio, oferta, nota). 'category' es una clave del catalogo de
+    -- la casa —lo que el «inventario.json» del prompt ensena al modelo— y no la seccion del carrito.
+    CREATE TABLE IF NOT EXISTS receipt_items (
+      id TEXT PRIMARY KEY,
+      receipt_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      quantity REAL NOT NULL DEFAULT 1 CHECK (quantity > 0),
+      unit TEXT,
+      category TEXT NOT NULL DEFAULT 'other',
+      price_minor INTEGER CHECK (price_minor IS NULL OR price_minor >= 0),
+      offer_buy INTEGER,
+      offer_take INTEGER,
+      note TEXT,
+      confidence REAL,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_receipt_items_receipt ON receipt_items(receipt_id, position);
+
+    -- La cola de trabajo de IA (P4 del programa, sin OCR): durable, con intentos y lease, para
+    -- que un reinicio del server no se pierda un ticket a medias (el barrido de arranque devuelve
+    -- a la cola lo que quedo 'running'). Un trabajo por ticket.
+    CREATE TABLE IF NOT EXISTS ai_jobs (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      kind TEXT NOT NULL DEFAULT 'receipt',
+      receipt_id TEXT,
+      status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'done', 'failed', 'stopped')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      lease_until DATETIME,
+      error_code TEXT,
+      error_detail TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      started_at DATETIME,
+      finished_at DATETIME,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_jobs_user ON ai_jobs(user_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_ai_jobs_pick ON ai_jobs(status, created_at);
+
+    -- Las tiendas que la casa conoce: se registran al detectarse en un ticket (o al usarse en
+    -- una lista), y son el vocabulario que el «inventario.json» ensena al modelo para que sepa
+    -- donde compro. Antes las tiendas solo existian como DISTINCT sobre las listas: detectar una
+    -- tienda nueva no podia registrarla porque no habia donde.
+    CREATE TABLE IF NOT EXISTS stores (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      name TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_stores_scope ON stores(user_id, household_id, name);
+
+
     CREATE TABLE IF NOT EXISTS shopping_list_discounts (
       list_id TEXT PRIMARY KEY,
       kind TEXT NOT NULL CHECK (kind IN ('amount', 'percent')),
@@ -549,6 +639,9 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('ingredients', 'aliases', "TEXT NOT NULL DEFAULT '[]'");
   addColumnIfMissing('shopping_list_items', 'promo_buy', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'promo_take', 'INTEGER');
+  // La concurrencia de la cola de IA es por configuracion (por proveedor): default 1, y se
+  // toca desde el apartado de IA (## 12aj).
+  addColumnIfMissing('ai_configs', 'concurrency', 'INTEGER NOT NULL DEFAULT 1');
   addColumnIfMissing('shopping_list_items', 'added_by', 'TEXT');
   addColumnIfMissing('shopping_list_items', 'updated_by', 'TEXT');
   addColumnIfMissing('shopping_lists', 'updated_by', 'TEXT');
