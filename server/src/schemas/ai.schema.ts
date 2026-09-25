@@ -17,7 +17,9 @@ export const createAiConfigSchema = z.object({
   frequencyPenalty: formField(z.number().min(-2).max(2)),
   presencePenalty: formField(z.number().min(-2).max(2)),
   timeout: formDefault(z.number().int().positive().max(120000), 30000),
-  retryAttempts: formDefault(z.number().int().min(0).max(5), 3)
+  retryAttempts: formDefault(z.number().int().min(0).max(5), 3),
+  // La concurrencia de la cola de lectura de tickets (## 12aj): por proveedor, default 1.
+  concurrency: formDefault(z.number().int().min(1).max(8), 1)
 });
 
 export const updateAiConfigSchema = formPartial(createAiConfigSchema).extend({

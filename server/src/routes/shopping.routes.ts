@@ -384,13 +384,25 @@ shoppingRoutes.get('/lists', async (c) => {
 shoppingRoutes.get('/stores', async (c) => {
   const db = getDatabase();
   const scope = getScope(c.get('userId'));
+  // Las tiendas ya no son solo el DISTINCT de las listas (## 12aj): la tabla `stores` guarda las
+  // que la lectura de un ticket registro para la casa, y tambien son vocabulario a la hora de
+  // elegir donde comprar. Las que ya estan en alguna lista no se duplican.
   const rows = db
     .prepare(
-      `SELECT store, COUNT(*) AS lists FROM shopping_lists
-       WHERE ${scope.clause} AND store IS NOT NULL AND TRIM(store) <> ''
-       GROUP BY store ORDER BY lists DESC, store ASC`
+      `SELECT store, SUM(lists) AS lists FROM (
+         SELECT store, COUNT(*) AS lists FROM shopping_lists
+         WHERE ${scope.clause} AND store IS NOT NULL AND TRIM(store) <> ''
+         GROUP BY store
+         UNION ALL
+         SELECT s.name AS store, 0 AS lists FROM stores s
+         WHERE ${scope.clause} AND TRIM(s.name) <> ''
+           AND NOT EXISTS (
+             SELECT 1 FROM shopping_lists l
+             WHERE ${scope.clause} AND l.store = s.name
+           )
+       ) GROUP BY store ORDER BY lists DESC, store ASC`
     )
-    .all(...scope.params) as { store: string; lists: number }[];
+    .all(...scope.params, ...scope.params, ...scope.params) as { store: string; lists: number }[];
   return c.json({ success: true, data: rows });
 });
 

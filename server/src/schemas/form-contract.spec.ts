@@ -68,6 +68,7 @@ import {
   updateItemSchema,
   updateListSchema
 } from './shopping.schema.js';
+import { createReceiptItemSchema, updateReceiptItemSchema, updateReceiptSchema } from './receipts.schema.js';
 import {
   createAiConfigSchema,
   generateRecipeSchema,
@@ -269,7 +270,17 @@ const ROWS: Row[] = [
   { name: 'testConnectionSchema', schema: testConnectionSchema },
   { name: 'generateRecipeSchema', schema: generateRecipeSchema, required: { ingredients: [{ id: 'i', name: 'Tomate', quantity: 1, unit: 'g' }] } },
   { name: 'generateWeeklyPlanSchema', schema: generateWeeklyPlanSchema, required: { startDate: '2026-03-09', endDate: '2026-03-15', goals: { type: 'balanced' } } },
-  { name: 'getRecommendationsSchema', schema: getRecommendationsSchema }
+  { name: 'getRecommendationsSchema', schema: getRecommendationsSchema },
+
+  // ── La lectura de tickets por IA (## 12aj) ──
+  {
+    name: 'createReceiptItemSchema',
+    schema: createReceiptItemSchema,
+    required: { name: 'Leche entera' },
+    note: 'Una linea escrita a mano durante la revision solo exige el nombre: el resto (categoria, precio, oferta) se puede dejar para despues o para la IA.'
+  },
+  { name: 'updateReceiptItemSchema', schema: updateReceiptItemSchema },
+  { name: 'updateReceiptSchema', schema: updateReceiptSchema }
 ];
 
 /** Los demas: se listan con el motivo, y la regla del final no deja esconder un formulario aqui. */

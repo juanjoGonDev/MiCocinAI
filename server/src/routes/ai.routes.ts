@@ -38,7 +38,7 @@ aiRoutes.get('/configs', async (c) => {
   const db = getDatabase();
 
   const configs = db.prepare(
-    'SELECT id, name, provider, base_url, model, temperature, max_tokens, is_active, last_tested, test_status FROM ai_configs WHERE user_id = ?'
+    'SELECT id, name, provider, base_url, model, temperature, max_tokens, is_active, last_tested, test_status, concurrency FROM ai_configs WHERE user_id = ?'
   ).all(userId);
 
   return c.json({ success: true, data: configs });
@@ -54,12 +54,12 @@ aiRoutes.post('/configs', async (c) => {
   const id = nanoid();
 
   db.prepare(`
-    INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, timeout, retry_attempts)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, timeout, retry_attempts, concurrency)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id, userId, input.name, input.provider, input.baseUrl, input.apiKey, input.model,
     input.temperature, input.maxTokens, input.topP, input.frequencyPenalty,
-    input.presencePenalty, input.timeout, input.retryAttempts
+    input.presencePenalty, input.timeout, input.retryAttempts, input.concurrency
   );
 
   const config = db.prepare('SELECT * FROM ai_configs WHERE id = ?').get(id);
@@ -90,6 +90,8 @@ aiRoutes.patch('/configs/:id', async (c) => {
   if (input.temperature !== undefined) { updates.push('temperature = ?'); values.push(input.temperature); }
   if (input.maxTokens !== undefined) { updates.push('max_tokens = ?'); values.push(input.maxTokens); }
   if (input.isActive !== undefined) { updates.push('is_active = ?'); values.push(input.isActive ? 1 : 0); }
+  // La concurrencia de la cola de tickets (## 12aj): por proveedor, y editable en caliente.
+  if (input.concurrency !== undefined) { updates.push('concurrency = ?'); values.push(input.concurrency); }
 
   if (updates.length > 0) {
     updates.push('updated_at = CURRENT_TIMESTAMP');
