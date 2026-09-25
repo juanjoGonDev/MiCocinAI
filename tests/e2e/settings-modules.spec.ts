@@ -16,7 +16,8 @@ test.describe('Configuración — módulos', () => {
     await registerAndGoto(page, '/settings', 'mods-list');
 
     await expect(page.locator('.settings-module')).toHaveCount(5);
-    await expect(page.locator('.settings-module__soon')).toHaveCount(2);
+    // Desde la ## 12aj los tickets llegan en el build: solo queda «pronto» el modulo de tareas.
+    await expect(page.locator('.settings-module__soon')).toHaveCount(1);
 
     // Sin marcar nada, el significado es «todo lo que trae el build»
     await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute('aria-checked', 'true');
@@ -26,9 +27,10 @@ test.describe('Configuración — módulos', () => {
       'aria-checked',
       'true'
     );
+    // Los tickets (## 12aj) ya vienen con el build: encendidos como el resto.
     await expect(page.locator('[data-module-switch="receipts"]')).toHaveAttribute(
       'aria-checked',
-      'false'
+      'true'
     );
 
     // Y lo dice en texto, para que la regla no sea un misterio
@@ -65,20 +67,21 @@ test.describe('Configuración — módulos', () => {
   test('activar por adelantado lo que aún no existe no crea rutas muertas', async ({ page }) => {
     await registerAndGoto(page, '/settings', 'mods-soon');
 
-    await page.locator('[data-module-switch="receipts"]').click();
-    await expect(page.locator('[data-module-switch="receipts"]')).toHaveAttribute(
+    // El modulo de tareas es el que este build aun no trae (los tickets llegaron en la ## 12aj).
+    await page.locator('[data-module-switch="home"]').click();
+    await expect(page.locator('[data-module-switch="home"]')).toHaveAttribute(
       'aria-checked',
       'true'
     );
     // Marcado, pero enlazarlo seria un 404: este build no trae la pantalla
-    await expect(page.locator('a[href="/receipts"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/tasks"]')).toHaveCount(0);
 
     await page.reload();
-    await expect(page.locator('[data-module-switch="receipts"]')).toHaveAttribute(
+    await expect(page.locator('[data-module-switch="home"]')).toHaveAttribute(
       'aria-checked',
       'true'
     );
-    await expect(page.locator('a[href="/receipts"]')).toHaveCount(0);
+    await expect(page.locator('a[href="/tasks"]')).toHaveCount(0);
 
     // Y la que si existe no se cayo al cambiar el resto: sigue enlazada
     await expect(page.locator('a[href="/shopping"]')).not.toHaveCount(0);
@@ -87,10 +90,11 @@ test.describe('Configuración — módulos', () => {
   test('la última sección visible no se apaga, y se puede restablecer', async ({ page }) => {
     await registerAndGoto(page, '/settings', 'mods-last');
 
-    // Hay que apagar las DOS secciones de mas: con tres secciones vivas en este
-    // build, quitar solo una deja dos visibles y ninguna esta en el limite.
+    // Hay que apagar las TRES secciones de mas: con cuatro vivas en este build (los
+    // tickets llegaron en la ## 12aj), quitar dos deja tres visibles y ninguna al limite.
     await page.locator('[data-module-switch="pantry"]').click();
     await page.locator('[data-module-switch="shopping"]').click();
+    await page.locator('[data-module-switch="receipts"]').click();
 
     // Queda una sola: apagarla habria vuelto a encender todas (seleccion vacia)
     await expect(page.locator('[data-module-switch="meals"]')).toBeDisabled();

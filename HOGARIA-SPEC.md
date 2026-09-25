@@ -4283,6 +4283,68 @@ observacion con confirm, edicion que guarda y vuelve) y la barrida pantry + cata
 utensils + round12 con 48 verdes y cero rojos nuevos (el unico fallo del primer pase era el desempate del punto E,
 ya cerrado).
 
+## 12aj — Lectura de tickets por IA: la cola local, la revision linea a linea y el confirm
+
+**El parte (2026-09-25, ronda 38).** El usuario pidio la integracion del modulo de lecturas de tickets: «al contrario
+que basketra vamos a omitir la parte de OCR y que sea la IA la que devuelva la estructura JSON directamente, total el
+OCR no aporta mucho valor pues lee mal la imagen». Como basketra: cargar ticket en PDF o imagen → cola de consumo de
+IA LOCAL (concurrencia default 1, configurable por proveedor desde el apartado de IA), icono animado —circulo de carga
+procesando, borde rojo en error— clicable para ver progreso, parar todo o parar/reintentar uno. «Poco a poco vaya
+mostrando lo que va analizando los items del ticket, detecte la tienda y la registre si no existe». Cada linea editable
+en todas sus propiedades y a meter en el inventario. Novedad: a la IA se le adjunta un JSON «inventario» con tiendas,
+categorias y productos por categoria, para que sepa clasificar.
+
+**A) Sin OCR: el modelo devuelve la estructura.** `ticket-prompt.ts` (con spec) construye el prompt con las reglas de
+dinero de la casa (centimos enteros; el importe de linea es lo PAGADO por la cantidad; no inventar precios; `store` de
+la cabecera; `totalMinor` avisa si no cuadra) y adjunta `inventario.json`: tiendas (`stores` + DISTINCT de listas),
+categorias (`pantry_categories` con clave y nombre) y productos (`ingredients` con categoria y unidad). `category` de
+cada linea es CLAVE del catalogo de la despensa —no la seccion del carrito—, y `createCategory` avisa de lo nuevo. La
+respuesta se valida con `ticketAnswerSchema` (hermana de `photoLinesSchema` con tienda y total).
+
+**B) La cola local (`ticket-queue.ts`).** Trabajos durables en `ai_jobs` (lease 300s, `max_attempts` 3, barrido de
+arranque que devuelve a la cola lo que quedo `running`). Tick de 700ms `unref`; concurrencia POR USUARIO leida de
+`ai_configs.concurrency` (clamp 1..8, default 1, editable en caliente desde Ajustes → IA). `callAIStreaming` (nueva en
+`ai-client.ts`) consume el SSE y `lineasNuevas` (`ticket-lines-stream.ts`, con spec: cadenas, escapes, llaves dentro de
+textos) extrae del JSON parcial cada linea COMPLETA —cada una se inserta en `receipt_items` al momento, que es el
+«poco a poco»—. Si el stream muere antes del primer delta, cae a `callAI`; al final revalida el esquema y reescribe
+las lineas completas (la version incremental era la intencion, la final es la ley). Parada por `AbortController` por
+trabajo → `stopped`; `pararTodo` aborta los corriendo y marca los en cola.
+
+**C) Las rutas (`receipts.routes.ts`, montadas en `/api/receipts`).** Subida multipart que valida la FIRMA de los bytes
+(`detectarKindTicket`: PNG/JPEG/WebP/PDF, 10 MB de techo) —el Content-Type es una opinion—. Pipeline
+`queued → analyzing → review → confirmed | failed | stopped`. La revision: PATCH de cabecera (tienda, notas), POST/
+PATCH/DELETE de cada linea, alta manual incluida (un ticket fallido se rescata a mano, que es la otra mitad del flujo).
+`GET /queue` alimenta el icono; `/stop`, `/retry`, `/queue/stop` y el DELETE cierran el ciclo. **El confirm reusa el
+patron del `/complete`** (misma ficha con stock SUMA, a cero REPONE, sin ficha CREA) pero con dos diferencias
+pedidas: la ficha nueva nace en la categoria DE LA LINEA (no en la reserva `other`), y las observaciones de precio
+llevan la tienda del ticket. La tienda detectada se registra en `stores` (tabla nueva), y `/shopping/stores` hace
+UNION con ella: las tiendas ya no son solo el DISTINCT de las listas.
+
+**D) El frontend.** Modulo `receipts` ya disponible (`available: true` en el registro y en el picker de perfil: la
+pantalla «pronto» de Configuracion pasa a ser la de tareas). Bandeja `/receipts` con arrastrar-y-soltar (imagen o PDF)
+que repinta sola cuando la cola se mueve; ficha `/receipts/:id` con la lectura EN DIRECTO (poll de detalle mientras
+corre, lineas entrando con su animacion, anillo girando), la revision completa por linea (nombre, cantidad, unidad,
+categoria de la despensa con el picker, precio en euros, oferta «3x2», nota) y el confirm con su resumen. En el movil
+la tabla se vuelve una tarjeta por linea (grid-areas, siete columnas no caben). **El icono de la cola**
+(`receipt-queue.component.ts`) vive en la cabecera movil y en el sidebar: anillo girando mientras lee, borde rojo
+quieto si algo fallo, badge con el numero; su panel ensena cada trabajo (lineas leidas, intento n de m) con parar
+todo y parar/reintentar individual. La concurrencia por proveedor se edita en Ajustes → IA («Concurrencia de
+tickets»).
+
+**E) El estado del modulo y su UI.** Diccionario propio (`dict/receipts.ts`, ES/EN pareados) con los estados del
+pipeline y los errores de IA traducidos (NO_CONFIG → «encaja el proveedor en Ajustes → IA», como la foto de la
+cesta). `ReceiptsService` singleton con la cola en senal: el latido (1s) solo corre mientras alguien mira (icono o
+ficha), y las escrituras fallan con toast, sin cola offline —un ticket no es una edicion de cesta.
+
+**El parte de salud.** Server: `tsc` limpio y 772/772 en vitest (nuevos: `receipts.routes` 11 — subida por firma,
+NO_CONFIG, stop-all, retry, concurrencia por configuracion, edicion de lineas, confirm con tienda/precios/inventario
+y categoria de la linea, suma de stock en el segundo ticket, categorias inexistentes a la reserva, borrado en
+cascada manual —; `ticket-prompt` 4; `ticket-lines-stream` 7; y el contrato de formularios estirado con las tres
+schemas nuevas). Frontend: `build:prod` verde (el warning de estilos de calendar es deuda previa). e2e `receipts` 5/5
+(nav y bandeja, rechazo de fichero raro, PDF en cola, rescate manual + confirm con verificacion de inventario y
+tienda por API, parar todo) y `settings-modules` 6/6 retocado a la realidad nueva (cuatro secciones vivas; el «no
+crea rutas muertas» pasa a probarlo con el modulo de tareas). Regresion: shopping-lists + round12 20/20.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
