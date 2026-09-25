@@ -1,3 +1,4 @@
+import { ReadableStream } from 'node:stream/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AiCallError,
@@ -185,11 +186,13 @@ describe('extractJsonObject', () => {
 });
 
 /** Un cuerpo SSE de mentira: lo que devuelve un proveedor en modo stream. */
+// El tsconfig del server no declara los globals de web streams: la clase se importa de
+// node:stream/web, que es de donde sale el objeto de todas formas.
 function sse(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let i = 0;
   return new ReadableStream<Uint8Array>({
-    pull(controller) {
+    pull(controller: { enqueue: (trozo: Uint8Array) => void; close: () => void }) {
       if (i < chunks.length) controller.enqueue(encoder.encode(chunks[i++]));
       else controller.close();
     }
