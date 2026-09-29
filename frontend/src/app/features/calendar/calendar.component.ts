@@ -631,7 +631,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       <!-- ══ Objetivos ══ -->
       <app-modal
         [isOpen]="isGoalsModalOpen()"
-        [attr.title]="'calendar.objetivos_nutricionales' | t"
+        [title]="'calendar.objetivos_nutricionales' | t"
         size="md"
         (onClose)="closeGoalsModal()"
       >
@@ -677,7 +677,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       <!-- ══ Planificar con IA ══ -->
       <app-modal
         [isOpen]="isGenerateModalOpen()"
-        [attr.title]="'calendar.planificar_con_ia' | t"
+        [title]="'calendar.planificar_con_ia' | t"
         size="md"
         (onClose)="closeGenerateModal()"
       >

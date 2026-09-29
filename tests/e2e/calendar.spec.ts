@@ -41,8 +41,12 @@ test.describe('Calendario', () => {
     await expect(page.locator('#cal-view-week')).toHaveAttribute('aria-selected', 'true');
     await expect(page).not.toHaveURL(/view=/);
 
-    // Titulo del periodo: «14 – 20 de septiembre»
-    await expect(page.locator('h1.calendar__title')).toContainText(/\d{1,2} – \d{1,2} de/);
+    // Titulo del periodo: «14 – 20 de septiembre» cuando la semana cabe en un mes,
+    // «28 sept – 4 oct» cuando lo cruza (el formato cruzado es del propio `weekRange`,
+    // no un capricho del runner: la ultima semana de cada mes lo pinta asi).
+    await expect(page.locator('h1.calendar__title')).toContainText(
+      /\d{1,2} – \d{1,2} de |\d{1,2} [a-zñ]{3,4}\.? – \d{1,2} [a-zñ]{3,4}/
+    );
 
     // Siete columnas, y NO las 24 horas: la rejilla se recorta a lo que hay.
     await expect(page.locator('[data-test="timeline-col"]')).toHaveCount(7);

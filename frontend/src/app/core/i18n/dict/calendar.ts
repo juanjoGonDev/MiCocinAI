@@ -155,11 +155,11 @@ export const calendarEs = {
   'household_event.home': 'Casa',
   'household_event.other': 'Otros',
   'household_event.personal': 'Personal',
-  'calendar.alguien': 'Someone',
-  'calendar.lo_apunto_de': 'Added by {name}',
-  'calendar.invitado_de': 'Invited: {name}',
-  'calendar.este_dia': 'this day',
-  'calendar.esta_semana': 'this week',
+  'calendar.alguien': 'Alguien',
+  'calendar.lo_apunto_de': 'Lo apunto {name}',
+  'calendar.invitado_de': 'Invitado: {name}',
+  'calendar.este_dia': 'este día',
+  'calendar.esta_semana': 'esta semana',
 } as const;
 
 export const calendarEn: Record<keyof typeof calendarEs, string> = {
@@ -310,9 +310,9 @@ export const calendarEn: Record<keyof typeof calendarEs, string> = {
   'household_event.home': 'Home',
   'household_event.other': 'Other',
   'household_event.personal': 'Personal',
-  'calendar.alguien': 'Alguien',
-  'calendar.lo_apunto_de': 'Lo apunto {name}',
-  'calendar.invitado_de': 'Invitado: {name}',
-  'calendar.este_dia': 'este día',
-  'calendar.esta_semana': 'esta semana',
+  'calendar.alguien': 'Someone',
+  'calendar.lo_apunto_de': 'Added by {name}',
+  'calendar.invitado_de': 'Invited: {name}',
+  'calendar.este_dia': 'this day',
+  'calendar.esta_semana': 'this week',
 };
