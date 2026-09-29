@@ -27,9 +27,24 @@ export const updateAiConfigSchema = formPartial(createAiConfigSchema).extend({
 });
 
 // Test connection schema
-export const testConnectionSchema = z.object({
-  configId: formField(z.string())
-});
+/**
+ * La prueba de conexion (## 8f, revisada): va contra una config GUARDADA (`configId`, el boton
+ * de su tarjeta) o contra los datos del formulario tal cual estan escritos (baseUrl + apiKey +
+ * model), que es lo que permite «Probar conexion» ANTES de guardar. Una u otra: probar sin
+ * nada en las manos no tiene sentido.
+ */
+export const testConnectionSchema = z
+  .object({
+    configId: formField(z.string()),
+    baseUrl: formField(z.string().url()),
+    apiKey: formField(z.string().min(1)),
+    model: formField(z.string().min(1)),
+    timeout: formField(z.number().int().positive())
+  })
+  .refine(
+    (valor) => Boolean(valor.configId) || (Boolean(valor.baseUrl && valor.apiKey && valor.model)),
+    { message: 'Hace falta un configId o baseUrl, apiKey y model' }
+  );
 
 // Recipe generation schema
 export const generateRecipeSchema = z.object({

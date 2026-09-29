@@ -25,7 +25,7 @@ import {
 } from '../utils/taste-profile.js';
 import { persistWeeklyPlan, resolveMealTypes } from '../utils/weekly-plan.js';
 import { bloqueDeCaducidades } from '../utils/caducidades.js';
-import { callAI, extractJsonObject } from '../utils/ai-client.js';
+import { callAI, extractJsonObject, pingDeConexion } from '../utils/ai-client.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
 
@@ -38,14 +38,42 @@ aiRoutes.get('/configs', async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();
 
-  const configs = db.prepare(
-    'SELECT id, name, provider, base_url, model, temperature, max_tokens, is_active, last_tested, test_status, concurrency FROM ai_configs WHERE user_id = ?'
-  ).all(userId);
+  const configs = db.prepare('SELECT * FROM ai_configs WHERE user_id = ?').all(userId);
 
-  return c.json({ success: true, data: configs });
+  return c.json({ success: true, data: configs.map(row => toClientConfig(row as Record<string, unknown>)) });
 });
 
 // POST /api/ai/configs
+/**
+ * Lo que el cliente ve de una configuracion: camelCase (lo que el formulario y las tarjetas
+ * ya leen) y SIN la api_key. La fila cruda que salia antes tenia las dos culpas de «la IA no
+ * se activa, se queda inactivada»: el badge miraba `isActive` mientras la API devolvia
+ * `is_active` —la configuracion estaba activa en la base desde el primer dia, pero la UI no
+ * lo veia— y la llave viajaba con cada respuesta.
+ */
+function toClientConfig(row: Record<string, unknown>) {
+  return {
+    id: row.id as string,
+    name: row.name as string,
+    provider: row.provider as string,
+    baseUrl: row.base_url as string,
+    model: row.model as string,
+    temperature: (row.temperature as number | null) ?? undefined,
+    maxTokens: (row.max_tokens as number | null) ?? undefined,
+    topP: (row.top_p as number | null) ?? undefined,
+    frequencyPenalty: (row.frequency_penalty as number | null) ?? undefined,
+    presencePenalty: (row.presence_penalty as number | null) ?? undefined,
+    timeout: row.timeout as number | undefined,
+    retryAttempts: row.retry_attempts as number | undefined,
+    concurrency: row.concurrency as number,
+    isActive: row.is_active === 1,
+    lastTested: (row.last_tested as string | null) ?? undefined,
+    testStatus: (row.test_status as string | null) ?? undefined,
+    testError: (row.test_error as string | null) ?? undefined,
+    updatedAt: row.updated_at as string
+  };
+}
+
 aiRoutes.post('/configs', async (c) => {
   const userId = c.get('userId');
   const body = await c.req.json();
@@ -63,8 +91,13 @@ aiRoutes.post('/configs', async (c) => {
     input.presencePenalty, input.timeout, input.retryAttempts, input.concurrency
   );
 
+  // La configuracion recien creada es LA activa, y solo hay una. Si no, la primera fila (la
+  // vieja, por rowid) seguia siendo la que contestaba a todas las llamadas y la IA «no se
+  // activaba nunca» por muchas configuraciones nuevas que se guardaran encima.
+  db.prepare('UPDATE ai_configs SET is_active = 0 WHERE user_id = ? AND id != ?').run(userId, id);
+
   const config = db.prepare('SELECT * FROM ai_configs WHERE id = ?').get(id);
-  return c.json({ success: true, data: config }, 201);
+  return c.json({ success: true, data: toClientConfig(config as Record<string, unknown>) }, 201);
 });
 
 // PATCH /api/ai/configs/:id
@@ -90,6 +123,11 @@ aiRoutes.patch('/configs/:id', async (c) => {
   if (input.model !== undefined) { updates.push('model = ?'); values.push(input.model); }
   if (input.temperature !== undefined) { updates.push('temperature = ?'); values.push(input.temperature); }
   if (input.maxTokens !== undefined) { updates.push('max_tokens = ?'); values.push(input.maxTokens); }
+  if (input.isActive) {
+    // Activar es elegir: solo una configuracion de la casa responde a la vez, y activar una
+    // apaga las demas. (Desactivar la activa es legitimo: ahi la IA simplemente no esta.)
+    db.prepare('UPDATE ai_configs SET is_active = 0 WHERE user_id = ?').run(userId);
+  }
   if (input.isActive !== undefined) { updates.push('is_active = ?'); values.push(input.isActive ? 1 : 0); }
   // La concurrencia de la cola de tickets (## 12aj): por proveedor, y editable en caliente.
   if (input.concurrency !== undefined) { updates.push('concurrency = ?'); values.push(input.concurrency); }
@@ -101,7 +139,7 @@ aiRoutes.patch('/configs/:id', async (c) => {
   }
 
   const config = db.prepare('SELECT * FROM ai_configs WHERE id = ?').get(id);
-  return c.json({ success: true, data: config });
+  return c.json({ success: true, data: toClientConfig(config as Record<string, unknown>) });
 });
 
 // DELETE /api/ai/configs/:id
@@ -129,6 +167,16 @@ aiRoutes.post('/test-connection', async (c) => {
   let config;
   if (input.configId) {
     config = db.prepare('SELECT * FROM ai_configs WHERE id = ? AND user_id = ?').get(input.configId, userId) as any;
+  } else if (input.baseUrl && input.apiKey && input.model) {
+    // La prueba del FORMULARIO: los datos tal cual estan escritos, sin guardar nada. Es lo que
+    // permite descartar una configuracion mala antes de que exista en la bandeja.
+    config = {
+      id: null,
+      base_url: input.baseUrl,
+      api_key: input.apiKey,
+      model: input.model,
+      timeout: input.timeout ?? null
+    };
   } else {
     config = db.prepare('SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1').get(userId) as any;
   }
@@ -137,56 +185,37 @@ aiRoutes.post('/test-connection', async (c) => {
     return c.json({ success: false, message: 'No AI config found' }, 404);
   }
 
-  const startTime = Date.now();
+  // La prueba ya no es un «Hello» a ver que contesta: se le pide al modelo un JSON DADO con
+  // `response_format` de esquema estricto —el mismo contrato que exige el resto de la app, que
+  // parsea JSON en todas sus funciones de IA— y se valida la contestacion. Un proveedor que no
+  // sabe responder esto no sirve para la casa, y es mejor saberlo en Ajustes que en un ticket.
+  const veredicto = await pingDeConexion({
+    base_url: config.base_url,
+    api_key: config.api_key,
+    model: config.model,
+    timeout: config.timeout
+  });
 
-  try {
-    // Test connection with a simple request
-    const response = await fetch(`${config.base_url}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.api_key}`
-      },
-      body: JSON.stringify({
-        model: config.model,
-        messages: [{ role: 'user', content: 'Hello' }],
-        max_tokens: 10
-      }),
-      signal: AbortSignal.timeout(config.timeout)
-    });
+  // El estado de la prueba solo se persiste cuando se prueba una config GUARDADA; la del
+  // formulario se ensena y ya.
+  if (input.configId) {
+    db.prepare('UPDATE ai_configs SET test_status = ?, test_error = ?, last_tested = CURRENT_TIMESTAMP WHERE id = ?').run(
+      veredicto.ok ? 'success' : 'failed',
+      veredicto.ok ? null : veredicto.error,
+      config.id
+    );
+  }
 
-    const latency = Date.now() - startTime;
-
-    if (!response.ok) {
-      const error = await response.text();
-      db.prepare('UPDATE ai_configs SET test_status = ?, test_error = ?, last_tested = CURRENT_TIMESTAMP WHERE id = ?')
-        .run('failed', error, config.id);
-
-      return c.json({
-        success: false,
-        data: { success: false, latency, error }
-      });
-    }
-
-    db.prepare('UPDATE ai_configs SET test_status = ?, test_error = NULL, last_tested = CURRENT_TIMESTAMP WHERE id = ?')
-      .run('success', config.id);
-
-    return c.json({
-      success: true,
-      data: { success: true, model: config.model, latency }
-    });
-  } catch (error: any) {
-    const latency = Date.now() - startTime;
-    const errorMessage = error.message || 'Connection failed';
-
-    db.prepare('UPDATE ai_configs SET test_status = ?, test_error = ?, last_tested = CURRENT_TIMESTAMP WHERE id = ?')
-      .run('failed', errorMessage, config.id);
-
+  if (!veredicto.ok) {
     return c.json({
       success: false,
-      data: { success: false, latency, error: errorMessage }
+      data: { success: false, model: config.model, latency: veredicto.latency, error: veredicto.error }
     });
   }
+  return c.json({
+    success: true,
+    data: { success: true, model: config.model, latency: veredicto.latency, message: veredicto.message }
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════

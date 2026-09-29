@@ -9,6 +9,8 @@
  * JSON), y son tres avisos muy distintos para quien esta delante de la pantalla.
  */
 
+import { z } from 'zod';
+
 export type AiMessagePart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } };
@@ -54,14 +56,41 @@ export class AiCallError extends Error {
 /** La fila activa de `ai_config`: se lee siempre desde la BD, no se guarda en memoria. */
 export function activeAiConfig(db: SqlDb, userId: string) {
   return db
-    .prepare('SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1')
+    .prepare('SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1 ORDER BY updated_at DESC LIMIT 1')
     .get(userId) as AiConfigRow | undefined;
 }
 
-function endpoint(baseUrl: string): string {
-  // Una barra de mas en el `base_url` escrito a mano en Ajustes es lo normal;
-  // normalizar aqui evita que cada llamante tenga que acordarse.
-  return `${String(baseUrl).replace(/\/+$/, '')}/chat/completions`;
+export function endpoint(baseUrl: string): string {
+  // Una barra de mas en el `base_url` escrito a mano en Ajustes es lo normal; normalizar aqui
+  // evita que cada llamante tenga que acordarse. Y el camino: el convenio OpenAI-compatible
+  // (OpenAI, Ollama, LM Studio, vLLM, la webapi de la casa…) sirve en `/v1/chat/completions`,
+  // asi que una base SIN camino (⌜http://host:8000⌋) se completa con el `/v1`; si la base ya
+  // trae su version (⌜…/v1⌋) se respeta; y quien escriba la URL completa tambien. Antes una
+  // base sin `/v1` producia un 404 silencioso y la IA «no se activaba nunca» siendo la
+  // configuracion correcta.
+  const base = String(baseUrl).trim().replace(/\/+$/, '');
+  if (/\/chat\/completions$/.test(base)) return base;
+  if (/\/v\d+[a-z]*$/i.test(base)) return `${base}/chat/completions`;
+  return `${base}/v1/chat/completions`;
+}
+
+/**
+ * El cuerpo de la llamada se construye UNA vez: solo viaja lo que la casa configuro de verdad.
+ * Mandar `temperature: null` (o cualquier parametro que el modelo no admite) es la forma mas
+ * rapida de que un proveedor estricto conteste 400 a una configuracion perfecta.
+ */
+function chatBody(active: AiConfigRow, extra: Record<string, unknown>): Record<string, unknown> {
+  const body: Record<string, unknown> = { model: active.model, ...extra };
+  for (const [campo, valor] of Object.entries({
+    temperature: active.temperature,
+    max_tokens: active.max_tokens,
+    top_p: active.top_p,
+    frequency_penalty: active.frequency_penalty,
+    presence_penalty: active.presence_penalty
+  })) {
+    if (valor !== null && valor !== undefined) body[campo] = valor;
+  }
+  return body;
 }
 
 /**
@@ -82,15 +111,7 @@ export async function callAI(userId: string, messages: AiMessage[], db: SqlDb): 
         'Content-Type': 'application/json',
         Authorization: `Bearer ${active.api_key}`
       },
-      body: JSON.stringify({
-        model: active.model,
-        messages,
-        temperature: active.temperature,
-        max_tokens: active.max_tokens,
-        top_p: active.top_p,
-        frequency_penalty: active.frequency_penalty,
-        presence_penalty: active.presence_penalty
-      }),
+      body: JSON.stringify(chatBody(active, { messages })),
       signal: AbortSignal.timeout(active.timeout ?? DEFAULT_TIMEOUT_MS)
     });
   } catch (error) {
@@ -221,5 +242,108 @@ export function extractJsonObject(raw: string): unknown {
       // imposible es una linea que nadie va a cubrir jamas.
       `${String((error as Error)?.message ?? error)} · ${raw.slice(0, 200)}`
     );
+  }
+}
+
+
+// ── La prueba de conexión (HOGARIA-SPEC ## 8f, revisada a peticion del usuario) ──────────
+
+/** El JSON que se le PIDE al modelo: dado, pequenyo y sin ambiguedad. Un «Hello» probaba que
+ *  el proveedor contestaba cualquier cosa; esto prueba lo que la app necesita de verdad —que
+ *  respete un formato— porque TODAS las funciones de IA de la casa parsean JSON. */
+export const TEST_ANSWER_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['status', 'message'],
+  properties: {
+    status: { type: 'string', enum: ['ok'] },
+    message: { type: 'string' }
+  }
+} as const;
+
+export const testAnswerSchema = z.object({
+  status: z.literal('ok'),
+  message: z.string().min(1)
+});
+
+/**
+ * La prueba: una llamada real con `response_format` de esquema estricto (el mismo contrato que
+ * usa el resto de la app) y validacion de que la contestacion ES el JSON pedido. Devuelve el
+ * veredicto con su latencia; quien llama decide si lo guarda en `ai_configs` (prueba de una
+ * config guardada) o solo lo ensena (prueba desde el formulario, sin tocar nada).
+ */
+export async function pingDeConexion(config: {
+  base_url: string;
+  api_key: string;
+  model: string;
+  timeout?: number | null;
+}): Promise<{ ok: true; latency: number; message: string } | { ok: false; latency: number; error: string }> {
+  const startTime = Date.now();
+  try {
+    const response = await fetch(endpoint(config.base_url), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.api_key}`
+      },
+      // El cuerpo es el minimo del contrato del proveedor: modelo, mensajes y el formato. Nada
+      // de `max_tokens` ni `temperature`, que los modelos de razonamiento rechazan y no aportan
+      // nada a una prueba de un segundo.
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          {
+            role: 'user',
+            content:
+              'Prueba de conexión. Devuelve exactamente este JSON y nada más: {"status":"ok","message":"conexión establecida"}'
+          }
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: {
+            name: 'connection_test',
+            strict: true,
+            schema: TEST_ANSWER_SCHEMA
+          }
+        }
+      }),
+      signal: AbortSignal.timeout(config.timeout ?? DEFAULT_TIMEOUT_MS)
+    });
+
+    const latency = Date.now() - startTime;
+
+    if (!response.ok) {
+      const error = (await response.text().catch(() => '')).slice(0, 400) || `HTTP ${response.status}`;
+      return { ok: false, latency, error };
+    }
+
+    const payload = (await response.json().catch(() => null)) as any;
+    const content = payload?.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') {
+      return { ok: false, latency, error: 'La respuesta del proveedor no tiene la forma esperada (choices[0].message.content)' };
+    }
+    type Veredicto = ReturnType<typeof testAnswerSchema.safeParse>;
+    let contestacion: Veredicto;
+    try {
+      contestacion = testAnswerSchema.safeParse(extractJsonObject(content));
+    } catch {
+      return {
+        ok: false,
+        latency,
+        error: `El modelo no devolvió el JSON pedido: ${content.slice(0, 200)}`
+      };
+    }
+    if (!contestacion.success) {
+      return {
+        ok: false,
+        latency,
+        error: `El modelo no devolvió el JSON pedido: ${content.slice(0, 200)}`
+      };
+    }
+    return { ok: true, latency, message: contestacion.data.message };
+  } catch (error) {
+    const latency = Date.now() - startTime;
+    const mensaje = error instanceof Error ? error.message : String(error);
+    return { ok: false, latency, error: mensaje };
   }
 }

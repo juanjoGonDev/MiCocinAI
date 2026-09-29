@@ -172,6 +172,8 @@ export interface AITestConnectionResponse {
   model: string;
   latency: number;
   error?: string;
+  /** Lo que el modelo contesto cuando la prueba pasa (el JSON pedido, validado en el server). */
+  message?: string;
 }
 
 export const AI_PROVIDER_LABELS: Record<AIProvider, string> = {

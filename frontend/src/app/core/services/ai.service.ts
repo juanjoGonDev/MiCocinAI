@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, map, catchError, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
   AIProviderConfig,
@@ -67,8 +67,21 @@ export class AiService {
     );
   }
 
-  testConnection(configId?: string): Observable<AITestConnectionResponse | null> {
-    return this.http.post<any>(`${this.apiUrl}/test-connection`, { configId }).pipe(
+  /**
+   * La prueba de conexion (## 8f, revisada): contra una config guardada (`configId`) o contra
+   * los datos del formulario tal cual (baseUrl+apiKey+model), que es lo que permite probar
+   * ANTES de guardar. El veredicto llega con la respuesta —hasta entonces no hay nada que
+   * ensenar, y mucho menos un aviso de exito.
+   */
+  testConnection(params: {
+    configId?: string;
+    baseUrl?: string;
+    apiKey?: string;
+    model?: string;
+    timeout?: number;
+  }): Observable<AITestConnectionResponse | null> {
+    return this.http.post<any>(`${this.apiUrl}/test-connection`, params).pipe(
+      map(response => (response as { data?: AITestConnectionResponse })?.data ?? null),
       catchError(() => of(null))
     );
   }

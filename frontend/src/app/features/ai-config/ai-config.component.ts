@@ -87,8 +87,15 @@ import { I18nService } from '../../core/services/i18n.service';
           </div>
 
           <div class="config-card__actions">
-            <app-button variant="ghost" size="sm" (onClick)="testConfig(config)">
-              {{ 'ai_config.probar' | t }}
+            <app-button
+              variant="ghost"
+              size="sm"
+              type="button"
+              [loading]="probandoId() === config.id"
+              (onClick)="testConfig(config)"
+              [attr.data-test]="'probar-' + config.name"
+            >
+              {{ (probandoId() === config.id ? 'ai_config.comprobando' : 'ai_config.probar') | t }}
             </app-button>
             <app-button variant="ghost" size="sm" (onClick)="editConfig(config)">
               {{ 'ai_config.editar' | t }}
@@ -228,8 +235,14 @@ import { I18nService } from '../../core/services/i18n.service';
             <app-button variant="ghost" type="button" (onClick)="closeModal()">
               {{ 'common.cancel' | t }}
             </app-button>
-            <app-button variant="outline" type="button" (onClick)="testFromForm()">
-              {{ 'ai_config.probar_conexion' | t }}
+            <app-button
+              variant="outline"
+              type="button"
+              [loading]="probandoForm()"
+              (onClick)="testFromForm()"
+              data-test="probar-formulario"
+            >
+              {{ (probandoForm() ? 'ai_config.comprobando' : 'ai_config.probar_conexion') | t }}
             </app-button>
             <app-button variant="primary" type="submit" [loading]="isSaving()">
               {{ (editingConfig() ? 'common.save' : 'common.create') | t }}
@@ -544,6 +557,9 @@ export class AiConfigComponent implements OnInit {
   isSaving = signal(false);
   isTestResultOpen = signal(false);
   testResult = signal<any>(null);
+  /** La prueba en curso: UNA a la vez, y el boton bloqueado hasta que llegue el veredicto. */
+  probandoId = signal<string | null>(null);
+  probandoForm = signal(false);
 
   formData = {
     name: '',
@@ -611,6 +627,9 @@ export class AiConfigComponent implements OnInit {
         );
         this.closeModal();
         this.isSaving.set(false);
+        // La lista local no sabe que el server ha apagado las DEMAS configuraciones al crear
+        // (o activar) esta: sin releerla, dos tarjetas dirian «Activo» a la vez.
+        this.aiService.loadConfigs();
       },
       error: () => {
         this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('ai_config.no_se_pudo_guardar'));
@@ -620,25 +639,55 @@ export class AiConfigComponent implements OnInit {
   }
 
   testConfig(config: AIProviderConfig): void {
-    this.toastService.info(this.i18n.t('ai_config.probando'), this.i18n.t('ai_config.conectando_con_el_proveedor'));
+    if (this.probandoId() || this.probandoForm()) return;
+    this.probandoId.set(config.id);
 
-    this.aiService.testConnection(config.id).subscribe({
-      next: (result) => {
-        this.testResult.set(result);
+    this.aiService.testConnection({ configId: config.id }).subscribe({
+      next: result => {
+        this.probandoId.set(null);
+        this.testResult.set(result ?? { success: false, error: this.i18n.t('ai_config.no_se_pudo_conectar') });
         this.isTestResultOpen.set(true);
       },
       error: () => {
+        this.probandoId.set(null);
         this.testResult.set({ success: false, error: this.i18n.t('ai_config.no_se_pudo_conectar') });
         this.isTestResultOpen.set(true);
       }
     });
   }
 
+  /**
+   * Probar lo que esta escrito en el formulario, SIN guardar: el server acepta los datos tal
+   * cual (baseUrl+apiKey+model). Hasta que llegue el veredicto no se enseña nada —el boton se
+   * queda en «Comprobando…» bloqueado— y entonces se abre el resultado, sea el que sea. (Esto
+   * era un stub que soltaba un «Configuración válida» sin haber llamado a nada.)
+   */
   testFromForm(): void {
-    // Test with current form data
-    this.toastService.info(this.i18n.t('ai_config.probando'), this.i18n.t('ai_config.conectando_con_el_proveedor'));
-    // For now, just show a message
-    this.toastService.success(this.i18n.t('ai_config.test'), this.i18n.t('ai_config.configuracion_valida'));
+    if (this.probandoForm() || this.probandoId()) return;
+    const { baseUrl, apiKey, model, timeout } = this.formData;
+    if (!baseUrl.trim() || !apiKey.trim() || !model.trim()) {
+      this.toastService.warning(
+        this.i18n.t('ai_config.test'),
+        this.i18n.t('ai_config.faltan_datos_para_probar')
+      );
+      return;
+    }
+
+    this.probandoForm.set(true);
+    this.aiService
+      .testConnection({ baseUrl: baseUrl.trim(), apiKey: apiKey.trim(), model: model.trim(), timeout })
+      .subscribe({
+        next: result => {
+          this.probandoForm.set(false);
+          this.testResult.set(result ?? { success: false, error: this.i18n.t('ai_config.no_se_pudo_conectar') });
+          this.isTestResultOpen.set(true);
+        },
+        error: () => {
+          this.probandoForm.set(false);
+          this.testResult.set({ success: false, error: this.i18n.t('ai_config.no_se_pudo_conectar') });
+          this.isTestResultOpen.set(true);
+        }
+      });
   }
 
   toggleActive(config: AIProviderConfig): void {
@@ -650,6 +699,10 @@ export class AiConfigComponent implements OnInit {
           this.i18n.t('ai_config.actualizado'),
           config.isActive ? this.i18n.t('ai_config.configuracion_desactivada') : this.i18n.t('ai_config.configuracion_activada')
         );
+        // Activar es exclusivo: el server ha apagado las DEMAS configuraciones de la casa, y
+        // la lista local solo conoce el cambio de esta. Se relee —dos tarjetas con «Activo» a
+        // la vez es una mentira que se ve.
+        this.aiService.loadConfigs();
       }
     });
   }

@@ -4576,3 +4576,55 @@ device — the merge stays theirs.
 - No new runtime dependency without writing down why in this file.
 - The sandbox has no browser: visual verification is the human's preview, functional verification is
   CI. Never claim a look-and-feel change as "verified" on a build alone.
+
+## 12am — La IA que «no se activaba»: la prueba de conexión de verdad, y una sola configuración activa
+
+**El parte (2026-09-29, ronda 41).** Tres reclamaciones del usuario: «La IA no se activa se queda inactivada»; «La
+prueba de hello es ambigua, deberia devolver un formato JSON dado. Incluso pedir que devuelva un schema» (con su
+ejemplo de `POST /v1/chat/completions` con `response_format: {type:'json_schema', json_schema:{name, strict:true,
+schema}}`); «cuando se le pulsa testear muestra inmediatamente una notificación de que está bien cuando en realidad
+no ha recibido respuesta. Debe bloquear el botón y que ponga "comprobando..." y una vez termine da igual el
+resultado se desbloquea. Y debe mostrar luego la notificación del resultado».
+
+**Por qué no se activaba — cuatro causas y ninguna era el modelo.** (1) Un `base_url` sin camino (`http://host:8000`)
+pegaba contra `…/chat/completions`, que no existe en el convenio OpenAI-compatible: 404 silencioso para siempre.
+(2) `callAI` mandaba `temperature: null` y compañía — los proveedores estrictos lo rechazan con 400. (3) No había
+mono-activa: la configuración activa era «la primera por rowid», así que la config VIEJA seguía contestando por
+muchas nuevas que se guardaran encima. (4) La más cruel: la config nueva SÍ nacía activa en la base (`is_active
+DEFAULT 1`) pero `GET /api/ai/configs` devolvía la fila cruda en snake_case — el badge de la UI lee `isActive`,
+veía `undefined`, y la tarjeta decía «Inactivo» aunque la IA estuviera funcionando. La pantalla mentía.
+
+**El arreglo del lado del cliente.** `endpoint()` completa la base: si ya termina en `/chat/completions` se respeta;
+si trae su versión (`/v1`) se añade `/chat/completions`; si no trae nada, se añade `/v1/chat/completions`.
+`chatBody` solo viaja con lo puesto: `temperature`/`maxTokens`/`topP`/… NULOS no se mandan. Y `toClientConfig`
+mapea TODAS las respuestas de configuraciones a camelCase — y nunca devuelve la `api_key` (la fila cruda de
+`SELECT *` la llevaba en cada POST y PATCH).
+
+**Mono-activa.** Crear una configuración la convierte en LA activa y apaga las demás (`UPDATE … WHERE user_id = ?
+AND id != ?`); activar una por PATCH apaga el resto antes. `activeAiConfig` es `is_active = 1 ORDER BY updated_at
+DESC LIMIT 1`. La UI relee la lista tras crear/activar: sin eso, dos tarjetas dicen «Activo» a la vez porque la
+lista local conserva el objeto viejo.
+
+**La prueba de conexión pide un JSON DADO.** Nada de «Hello»: `pingDeConexion` hace POST al endpoint con
+`response_format: {type:'json_schema', json_schema:{name:'connection_test', strict:true, schema}}`, donde el
+schema exige `{status:'ok', message:string}` — el modelo tiene que devolver ESE JSON exacto, sin `max_tokens` ni
+`temperature` que le den pie a recortar la contestación. La respuesta se valida (extracción del JSON + zod): el
+veredicto es `{ok, latency, message}` o `{ok:false, latency, error}` — nunca lanza. `POST /api/ai/test-connection`
+admite dos formas: `{configId}` (config guardada; persiste `test_status`/`test_error`/`last_tested` en la fila) o
+`{baseUrl, apiKey, model, timeout?}` (lo escrito en el formulario; NADA se persiste); sin ninguna → 400. HTTP 200
+en ambos veredictos — el veredicto va en `data.success`.
+
+**El botón no miente.** El `testFromForm()` de antes era un stub: soltaba un toast de «Configuración válida» sin
+haber llamado a nada. Ahora: el botón (tarjeta y formulario) se BLOQUEA con «Comprobando…» (`probandoId`/
+`probandoForm`, señales — una prueba a la vez), no hay toast preventivo, y cuando llega la respuesta —sea la que
+sea— se abre el modal de resultado existente (`test-result`: éxito/error, modelo, latencia, error) con el veredicto
+de verdad. La prueba del formulario valida primero que URL+key+modelo estén escritos (aviso si falta algo) y
+después llama con esos datos SIN guardar.
+
+**Pruebas.** `ai-client.spec.ts` (endpoint ×3, chatBody ×2, ping ×4: 26 en total), `ai.routes.spec.ts` nueva (7:
+mono-activa al crear y al activar, la respuesta no devuelve la `api_key`, el estado de la prueba queda en la fila,
+el modelo que no devuelve el JSON pedido suspende, la vía formulario no toca la fila, sin datos → 400),
+`form-contract.spec.ts` con las excepciones del refine escritas, y e2e `ai-config.spec.ts` (9): la del botón
+intercepta la ruta con 700 ms de retraso y comprueba que el botón está bloqueado en «Comprobando…» SIN toast de
+éxito mientras el proveedor no ha contestado; la mono-activa crea dos configs y verifica que la nueva es la activa
+y que activar la vieja apaga la nueva. Server 837/837, e2e IA 16/16, build de producción y `check-ui` verdes.

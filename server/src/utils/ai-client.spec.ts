@@ -5,7 +5,9 @@ import {
   activeAiConfig,
   callAI,
   callAIStreaming,
-  extractJsonObject
+  endpoint,
+  extractJsonObject,
+  pingDeConexion
 } from './ai-client.js';
 
 /**
@@ -310,5 +312,119 @@ describe('callAIStreaming', () => {
         new AbortController().signal
       )
     ).rejects.toMatchObject({ code: 'TIMEOUT' });
+  });
+});
+
+
+// ── El endpoint tolerante y la prueba de conexion (revision a peticion del usuario) ──────
+
+describe('endpoint', () => {
+  it('la base sin camino se completa con el /v1 del convenio OpenAI-compatible', () => {
+    expect(endpoint('http://localhost:8000')).toBe('http://localhost:8000/v1/chat/completions');
+  });
+
+  it('la base que ya trae su version se respeta, barra final incluida', () => {
+    expect(endpoint('https://api.openai.com/v1')).toBe('https://api.openai.com/v1/chat/completions');
+    expect(endpoint('http://localhost:11434/v1/')).toBe('http://localhost:11434/v1/chat/completions');
+    expect(endpoint('http://x/api/v2')).toBe('http://x/api/v2/chat/completions');
+  });
+
+  it('la URL completa hasta chat/completions se usa tal cual', () => {
+    expect(endpoint('https://x/proxy/chat/completions')).toBe('https://x/proxy/chat/completions');
+  });
+});
+
+describe('callAI: el cuerpo lleva solo lo configurado', () => {
+  it('los parametros en null no viajan: un proveedor estricto no recibe basura', async () => {
+    const db = dbWith({
+      ai_configs: [
+        { ...CONFIG, temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null }
+      ]
+    });
+    let cuerpo: any;
+    vi.stubGlobal(
+      'fetch',
+      async (_url: string, init: RequestInit) => {
+        cuerpo = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 });
+      }
+    );
+    await callAI('u-1', [{ role: 'user', content: 'hola' }], db);
+    vi.unstubAllGlobals();
+    expect(cuerpo).toEqual({ model: CONFIG.model, messages: [{ role: 'user', content: 'hola' }] });
+  });
+
+  it('los parametros con valor si viajan', async () => {
+    const db = dbWith({ ai_configs: [{ ...CONFIG, temperature: 0.2, max_tokens: 500 }] });
+    let cuerpo: any;
+    vi.stubGlobal(
+      'fetch',
+      async (_url: string, init: RequestInit) => {
+        cuerpo = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 });
+      }
+    );
+    await callAI('u-1', [{ role: 'user', content: 'hola' }], db);
+    vi.unstubAllGlobals();
+    expect(cuerpo.temperature).toBe(0.2);
+    expect(cuerpo.max_tokens).toBe(500);
+  });
+});
+
+describe('pingDeConexion', () => {
+  const respuesta = (content: unknown, status = 200) =>
+    new Response(JSON.stringify({ choices: [{ message: { content } }] }), { status });
+
+  it('pide el JSON dado con response_format de esquema estricto, y lo valida', async () => {
+    let cuerpo: any;
+    vi.stubGlobal(
+      'fetch',
+      async (_url: string, init: RequestInit) => {
+        cuerpo = JSON.parse(String(init.body));
+        return respuesta('{"status":"ok","message":"conexión establecida"}');
+      }
+    );
+    const veredicto = await pingDeConexion({ base_url: 'http://x:8000', api_key: 'k', model: 'gpt-5' });
+    vi.unstubAllGlobals();
+    expect(veredicto.ok).toBe(true);
+    // El contrato del proveedor, como el ejemplo del usuario: json_schema estricto.
+    expect(cuerpo.response_format).toEqual({
+      type: 'json_schema',
+      json_schema: { name: 'connection_test', strict: true, schema: expect.any(Object) }
+    });
+    // Y nada de max_tokens ni temperature en una prueba de un segundo.
+    expect(cuerpo.max_tokens).toBeUndefined();
+    expect(cuerpo.temperature).toBeUndefined();
+  });
+
+  it('un «Hello» ambiguo ya no vale: el modelo tiene que devolver el JSON pedido', async () => {
+    vi.stubGlobal('fetch', async () => respuesta('Hello! How can I help you today?'));
+    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    vi.unstubAllGlobals();
+    expect(veredicto.ok).toBe(false);
+    if (!veredicto.ok) expect(veredicto.error).toContain('no devolvió el JSON pedido');
+  });
+
+  it('un 400 del proveedor se cuenta con su texto', async () => {
+    vi.stubGlobal(
+      'fetch',
+      async () => new Response('{"error":"max_tokens is not supported"}', { status: 400 })
+    );
+    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    vi.unstubAllGlobals();
+    expect(veredicto.ok).toBe(false);
+    if (!veredicto.ok) expect(veredicto.error).toContain('max_tokens is not supported');
+  });
+
+  it('la red caida es un veredicto, no una excepcion', async () => {
+    vi.stubGlobal(
+      'fetch',
+      async () => {
+        throw new Error('fetch failed');
+      }
+    );
+    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    vi.unstubAllGlobals();
+    expect(veredicto.ok).toBe(false);
   });
 });

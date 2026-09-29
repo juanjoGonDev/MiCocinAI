@@ -274,7 +274,17 @@ const ROWS: Row[] = [
     required: { name: 'Local', baseUrl: 'http://localhost:1234/v1', apiKey: 'sk-x', model: 'qwen' }
   },
   { name: 'updateAiConfigSchema', schema: updateAiConfigSchema },
-  { name: 'testConnectionSchema', schema: testConnectionSchema },
+  {
+    name: 'testConnectionSchema',
+    schema: testConnectionSchema,
+    required: { baseUrl: 'http://localhost:1234/v1', apiKey: 'sk-x', model: 'qwen' },
+    except: {
+      baseUrl: 'Sin configId, el trio del formulario es todo o nada: un baseUrl hueco es un 400 a proposito (el refine exige configId O baseUrl+apiKey+model).',
+      apiKey: 'El trio del formulario no admite mitades: sin configId ni apiKey no hay prueba que hacer.',
+      model: 'El trio del formulario no admite mitades: sin configId ni model no hay prueba que hacer.'
+    },
+    note: 'La prueba admite dos formas: configId guardado o los datos del formulario (baseUrl+apiKey+model); el refine exige una de las dos, y quien trae configId puede traer el resto hueco.'
+  },
   { name: 'generateRecipeSchema', schema: generateRecipeSchema, required: { ingredients: [{ id: 'i', name: 'Tomate', quantity: 1, unit: 'g' }] } },
   { name: 'generateWeeklyPlanSchema', schema: generateWeeklyPlanSchema, required: { startDate: '2026-03-09', endDate: '2026-03-15', goals: { type: 'balanced' } } },
   { name: 'getRecommendationsSchema', schema: getRecommendationsSchema },
