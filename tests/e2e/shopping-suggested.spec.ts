@@ -94,8 +94,15 @@ test.describe('la lista sugerida por la actividad (## 12al)', () => {
     });
 
     await page.goto('/shopping');
-    const tarjeta = page.locator('[data-test="sugerida-card"]');
+    // La entrada es minimalista: un boton con el carrito y el numero de sugerencias. El
+    // detalle vive en el modal que abre.
+    const abrir = page.locator('[data-test="sugerida-abrir"]');
+    await expect(abrir).toBeVisible();
+    await expect(page.locator('[data-test="sugerida-n"]')).toHaveText('3');
+    await abrir.click();
+    const tarjeta = page.locator('.modal-overlay');
     await expect(tarjeta).toBeVisible();
+    await expect(tarjeta.locator('.modal__title')).toContainText('Sugerencia de compra');
 
     // Tres filas con su motivo y su tienda: la decision ya esta tomada, solo falta pagarla.
     await expect(filaDe(page, 'Pescado fresco')).toContainText('caduca pronto');
@@ -106,8 +113,9 @@ test.describe('la lista sugerida por la actividad (## 12al)', () => {
     // El total solo cuenta lo que tiene precio: 2×10,00 + 2×0,90 = 21,80.
     await expect(page.locator('[data-test="sugerida-total"]')).toContainText('21,80');
 
-    // Crear: la lista aparece en la bandeja con su nombre y sus lineas.
+    // Crear: el modal se cierra y la lista aparece en la bandeja con su nombre y sus lineas.
     await page.locator('[data-test="sugerida-crear"]').click();
+    await expect(page.locator('.modal-overlay')).toHaveCount(0);
     await expect(page.locator('.toast--success .toast__title').last()).toContainText(
       'Lista sugerida creada'
     );
@@ -124,8 +132,10 @@ test.describe('la lista sugerida por la actividad (## 12al)', () => {
       checked: true
     });
 
-    // Dias despues hay registros nuevos: la tarjeta ofrece ACTUALIZAR, y lo comprado se queda.
+    // Dias despues hay registros nuevos: el boton del modal ofrece ACTUALIZAR, y lo comprado
+    // se queda.
     await page.goto('/shopping');
+    await page.locator('[data-test="sugerida-abrir"]').click();
     await expect(page.locator('[data-test="sugerida-actualizar"]')).toBeVisible();
     await expect(page.locator('[data-test="sugerida-abierta"]')).toContainText('pendientes');
     await page.locator('[data-test="sugerida-actualizar"]').click();

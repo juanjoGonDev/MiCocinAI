@@ -4432,10 +4432,14 @@ boton «Actualizar». Sin sugerencias no nace una lista vacia. Las lineas nacen 
 «Mejor en X». El cuerpo es todo opcional (solo el nombre traducido); un POST vacio es valido: el boton no lleva
 formulario.
 
-**C) El frontend (`shopping-suggested.component.ts`).** Tarjeta arriba de la bandeja de `/shopping`: resumen con las 5
-primeras sugerencias (nombre ×cantidad, badge de motivo con su color, «mejor en X» y ≈precio), «y N mas», total
-estimado, y el boton «Crear lista de la compra» que pasa a «Actualizar lista» cuando ya hay una abierta —con texto que
-explica que actualizar no toca lo comprado ni lo manual. Diccionario ES/EN propio (`dict/shopping_suggested.ts`).
+**C) El frontend (`shopping-suggested.component.ts`).** La entrada es minimalista —lo pidio el usuario al ver la
+primera version: «esto es demasiado grande, algo mas minimalista, un boton con algun icono distintivo»—: en la bandeja
+de `/shopping` solo vive UN BOTON pequeño (icono de carrito, que nadie mas usa en esa pantalla, + el numero de
+sugerencias) alineado con las acciones de la cabecera. El detalle vive en el modal que abre: cada fila con su nombre
+×cantidad, badge de motivo con su color, «mejor en X» y ≈precio; total estimado; y el boton «Crear lista de la compra»
+que pasa a «Actualizar lista» cuando ya hay una abierta —con texto que explica que actualizar no toca lo comprado ni lo
+manual. Sin nada que sugerir y sin lista abierta, el boton no aparece. Diccionario ES/EN propio
+(`dict/shopping_suggested.ts`).
 
 **El parte de salud.** Server: `tsc` limpio y 821/821 en vitest (nuevos: `lista-sugerida` 15 — pack-rounding, reposicion
 de lo que caduca, plan con unidades incomparables, mejor tienda por ultimo precio, orden y tope —; `shopping-suggested`

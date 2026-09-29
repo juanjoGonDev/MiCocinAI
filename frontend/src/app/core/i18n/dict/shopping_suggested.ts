@@ -6,12 +6,9 @@ export const shoppingSuggestedEs = {
   'shopping_suggested.titulo': 'Sugerencia de compra',
   'shopping_suggested.subtitulo':
     'Salida de tu ritmo de compra, el stock que queda, lo que caduca y el plan de la semana. Sin IA: solo tus datos.',
+  'shopping_suggested.boton': 'Sugerida',
   'shopping_suggested.crear': 'Crear lista de la compra',
   'shopping_suggested.actualizar': 'Actualizar lista',
-  'shopping_suggested.vacio': 'Tu despensa está en orden: nada que sugerir por ahora.',
-  'shopping_suggested.vacio_hint':
-    'Cuando algo se acabe, caduque o toque por el plan de la semana, aparecerá aquí.',
-  'shopping_suggested.y_n_mas': 'y {n} más',
   'shopping_suggested.total': '≈{total}',
   'shopping_suggested.mejor_en': 'mejor en {tienda}',
   'shopping_suggested.sin_precio': 'sin precio conocido',
@@ -31,12 +28,9 @@ export const shoppingSuggestedEn: Record<keyof typeof shoppingSuggestedEs, strin
   'shopping_suggested.titulo': 'Shopping suggestion',
   'shopping_suggested.subtitulo':
     'Built from your buying rhythm, what is left, what expires and this week’s plan. No AI: just your data.',
+  'shopping_suggested.boton': 'Suggested',
   'shopping_suggested.crear': 'Create shopping list',
   'shopping_suggested.actualizar': 'Update list',
-  'shopping_suggested.vacio': 'Your pantry is in good shape: nothing to suggest right now.',
-  'shopping_suggested.vacio_hint':
-    'When something runs out, expires or the week’s plan calls for it, it will show up here.',
-  'shopping_suggested.y_n_mas': 'and {n} more',
   'shopping_suggested.total': '≈{total}',
   'shopping_suggested.mejor_en': 'best at {tienda}',
   'shopping_suggested.sin_precio': 'no known price',
