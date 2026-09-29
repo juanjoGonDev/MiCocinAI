@@ -397,6 +397,28 @@ describe('pingDeConexion', () => {
     expect(cuerpo.temperature).toBeUndefined();
   });
 
+  it('un 200 con cuerpo que no es JSON (el proxy con su pagina HTML) es veredicto de error, no un vuelco', async () => {
+    vi.stubGlobal('fetch', async () => new Response('<html>Bad Gateway</html>', { status: 200, headers: { 'content-type': 'text/html' } }));
+    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    vi.unstubAllGlobals();
+    expect(veredicto.ok).toBe(false);
+    if (!veredicto.ok) expect(veredicto.error).toContain('no tiene la forma esperada');
+  });
+
+  it('si ni el cuerpo del error se puede leer, el veredicto sigue siendo un error con nombre', async () => {
+    const cuerpoRoto = new ReadableStream({
+      start(control) {
+        control.error(new Error('stream roto'));
+      }
+    });
+    vi.stubGlobal('fetch', async () => new Response(cuerpoRoto, { status: 502 }));
+    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    vi.unstubAllGlobals();
+    expect(veredicto.ok).toBe(false);
+    // Sin cuerpo no hay texto del proveedor: queda el HTTP, que es lo unico cierto.
+    if (!veredicto.ok) expect(veredicto.error).toContain('HTTP 502');
+  });
+
   it('un «Hello» ambiguo ya no vale: el modelo tiene que devolver el JSON pedido', async () => {
     vi.stubGlobal('fetch', async () => respuesta('Hello! How can I help you today?'));
     const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
