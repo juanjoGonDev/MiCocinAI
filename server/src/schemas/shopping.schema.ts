@@ -160,6 +160,15 @@ export const createListSchema = z.object({
 });
 
 /**
+ * La lista sugerida (## 12al) no es un formulario: el cuerpo es todo opcional y lo unico que
+ * acepta es el nombre con el que la casa quiere verla (el frontend lo manda traducido). Sin
+ * cuerpo tambien vale: el server pone «Lista sugerida».
+ */
+export const createSuggestedListSchema = z.object({
+  name: formField(trimmed(80))
+});
+
+/**
  * `version` es el CAS: la app guarda en local y el movil puede estar horas sin
  * red, asi que la unica forma de no pisar lo que otra persona del hogar marco es
  * decir sobre que version se esta escribiendo. Los items no la exigen: marcar una

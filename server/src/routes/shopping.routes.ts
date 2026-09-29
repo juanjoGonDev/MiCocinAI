@@ -18,6 +18,7 @@ import {
   createItemSchema,
   createListSchema,
   createPriceSchema,
+  createSuggestedListSchema,
   listFilterSchema,
   orderSchema,
   parseItemLine,
@@ -56,6 +57,12 @@ import {
 } from '../utils/list-discount.js';
 import { streamSSE } from 'hono/streaming';
 import type { AppEnv } from '../types/hono-env.js';
+import { caducidadesDe, comprasDeLaCasa, hoy } from '../utils/caducidades.js';
+import {
+  necesidadesDelPlan,
+  preciosDeLaCasa,
+  sugerenciasDeCompra
+} from '../utils/lista-sugerida.js';
 
 /**
  * Lista de la compra y precios (esqueleto de P2/P3 del spec).
@@ -1938,6 +1945,149 @@ shoppingRoutes.get('/stream/tray', async (c) => {
   return streamSSE(c, async (stream) => {
     await pumpStream(stream, channelsForTray({ userId, householdId: scope.householdId }), null);
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// La lista sugerida por la actividad de la casa (HOGARIA-SPEC ## 12al) — SIN IA
+//
+// Todo lo que decide esta en `utils/lista-sugerida.ts`; aqui solo la lectura de la base de
+// datos y la escritura de la lista. Dos decisiones de esta pantalla no son negociables:
+//
+//   - La lista sugerida es UNA y se reconoce (`source='sugerida'`, `status='active'`): si ya
+//     hay una abierta, el boton dice «Actualizar» y no nace una segunda lista cada semana.
+//   - Actualizar no toca lo que la casa ya decidio: lo marcado (comprado) y lo escrito a
+//     mano se queda; solo se sustituyen las lineas sugeridas pendientes por las de ahora.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+/** El calculo, compartido por el GET (previsualizar) y el POST (escribir). */
+function cuerpoDeSugerencia(db: ReturnType<typeof getDatabase>, userId: string) {
+  const caducidades = caducidadesDe(db, userId);
+  // La despensa a cero tambien cuenta: aqui es justo lo que falta.
+  const casa = db
+    .prepare('SELECT household_id AS hid FROM users WHERE id = ?')
+    .get(userId) as { hid: string | null } | undefined;
+  const sinStock = db
+    .prepare(
+      `SELECT name, category, unit FROM ingredients
+       WHERE (user_id = ? OR (household_id IS NOT NULL AND household_id = ?)) AND quantity <= 0
+       ORDER BY name ASC`
+    )
+    .all(userId, casa?.hid ?? null) as { name: string; category: string; unit: string | null }[];
+  return sugerenciasDeCompra({
+    caducidades,
+    sinStock,
+    compras: comprasDeLaCasa(db, userId),
+    precios: preciosDeLaCasa(db, userId),
+    plan: necesidadesDelPlan(db, userId, hoy())
+  });
+}
+
+/** La lista sugerida abierta de la casa, si la hay. Solo una: actualizar no es duplicar. */
+function listaSugeridaActiva(db: ReturnType<typeof getDatabase>, scope: Scope) {
+  return db
+    .prepare(
+      `SELECT * FROM shopping_lists WHERE source = 'sugerida' AND status = 'active' AND ${scope.clause}`
+    )
+    .get(...scope.params) as any;
+}
+
+shoppingRoutes.get('/suggested', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const scope = getScope(userId);
+  const lista = listaSugeridaActiva(db, scope);
+  const itemsPendientes = lista
+    ? (db
+        .prepare(
+          `SELECT COUNT(*) AS n FROM shopping_list_items
+           WHERE list_id = ? AND deleted_at IS NULL AND checked = 0`
+        )
+        .get(lista.id) as { n: number }).n
+    : 0;
+  return c.json({
+    success: true,
+    data: {
+      sugerencias: cuerpoDeSugerencia(db, userId),
+      lista: lista
+        ? { id: lista.id, name: lista.name, version: lista.version, itemsPendientes }
+        : null
+    }
+  });
+});
+
+shoppingRoutes.post('/suggested', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const scope = getScope(userId);
+
+  // El cuerpo es todo opcional: la lista se calcula en el server y lo unico que trae es el
+  // nombre traducido. Un POST vacio (el boton, tal cual) tambien es valido.
+  const body = createSuggestedListSchema.parse(await c.req.json().catch(() => ({})));
+  const sugerencias = cuerpoDeSugerencia(db, userId);
+
+  // Nada que sugerir y sin lista abierta: no se crea una lista vacia. (Si ya hay lista, si se
+  // actualiza: retirar lo sugerido pendiente tambien es mantenerla al dia.)
+  if (sugerencias.length === 0) {
+    const abierta = listaSugeridaActiva(db, scope);
+    if (!abierta) {
+      return c.json({ success: true, data: { lista: null, sugeridos: 0 } });
+    }
+  }
+
+  let lista = listaSugeridaActiva(db, scope);
+  const creada = !lista;
+  if (creada) {
+    const id = nanoid();
+    db.prepare(
+      `INSERT INTO shopping_lists (id, user_id, household_id, name, source) VALUES (?, ?, ?, ?, 'sugerida')`
+    ).run(id, userId, scope.householdId, body.name ?? 'Lista sugerida');
+    lista = readList(db, scope, id);
+  } else {
+    // Solo se retiran las sugeridas PENDIENTES: lo comprado y lo anadido a mano es de la casa.
+    db.prepare(
+      `UPDATE shopping_list_items
+         SET deleted_at = CURRENT_TIMESTAMP, updated_by = ?
+       WHERE list_id = ? AND source = 'sugerida' AND checked = 0 AND deleted_at IS NULL`
+    ).run(userId, lista.id);
+  }
+
+  const insertar = db.prepare(
+    `INSERT INTO shopping_list_items
+       (id, list_id, name, product_key, quantity, unit, category, price_minor, note, position, source, added_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'sugerida', ?)`
+  );
+  sugerencias.forEach((fila, indice) => {
+    insertar.run(
+      nanoid(),
+      lista.id,
+      fila.name,
+      productKeyOf(fila.name),
+      fila.quantity,
+      fila.unit,
+      fila.category,
+      fila.precioUnitarioMinor,
+      fila.mejorTienda ? `Mejor en ${fila.mejorTienda}` : null,
+      indice,
+      userId
+    );
+  });
+  db.prepare(
+    'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(lista.id);
+  announce(db, lista, userId, creada ? 'list.create' : 'list.update', null);
+
+  return c.json(
+    {
+      success: true,
+      data: {
+        ...readList(db, scope, lista.id),
+        ...listTotals(db, lista.id),
+        creada,
+        sugeridos: sugerencias.length
+      }
+    },
+    creada ? 201 : 200
+  );
 });
 
 export { shoppingRoutes };

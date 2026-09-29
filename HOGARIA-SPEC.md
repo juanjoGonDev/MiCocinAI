@@ -4404,6 +4404,48 @@ modelo, no un formulario). Frontend: `build:prod` verde, `check:ui` sin incidenc
 toggle, «Estimar» sin IA → NO_CONFIG traducido, aviso del modal de planificar) y regresion pantry + catalogo + ficha +
 calendario + tab-urls 40/40.
 
+## 12al — La lista de la compra que se escribe sola: estadistica de la casa, sin IA
+
+**El parte (2026-09-29, ronda 40).** El usuario: «quiero que esto sea sin IA simplemente por estadistica y teniendo en
+cuenta los alimentos faltantes, frecuencia de consumo, cantidades restantes, fecha de caducidad etc. Te sugiera en la
+seccion de compras una lista de la compra basada en mi actividad, planificacion semanal para abastecerlo, etc. Además te
+indique la mejor tienda donde comprarla, la cantidad etc. Si ya hay una lista pendiente generada por actividad que haya
+un botón que te sugiera actualizarla —la puedes crear dias antes de ir a comprar y haya nuevos registros, cambios etc.
+Si no hay una creada, la creará.»
+
+**A) El motor (`server/src/utils/lista-sugerida.ts`).** Cuatro reglas legibles, cada una con su motivo en pantalla:
+**caduca** (lo que no se consumira a tiempo —caduca en ≤2 dias o ya caduco— se repone: es comida que se tira), **sin
+stock** (se acabo y se compraba → lo que cubre la semana al ritmo de la casa, o el tamano de la ultima compra si el
+ritmo aun no se conoce), **se acaba** (al ritmo de la casa el stock no llega al horizonte de 7 dias → lo que falta,
+redondeado al pack en que se compra: sugerir 5 yogures cuando se venden de 6 es sugerir nada) y **para el plan** (las
+recetas de los proximos 7 dias necesitan mas de lo que hay, escalado a las raciones apuntadas; solo se descuenta el
+stock de la MISMA unidad — 400 g contra 2 ud no se restan). La cantidad es el MAXIMO de las reglas que aplican (no la
+suma: si el plan pide 4 y el ritmo 6, son 6), el motivo es el de la cantidad ganadora, y hay tope de 30 lineas. La
+**mejor tienda** es la mas barata de las que la casa conoce por su ULTIMO precio (el precio de enero no decide el de
+hoy), con el precio estimado de la linea. Reutiliza de la ## 12ak: `caducidadesDe` (fechas y ritmo) y `comprasDeLaCasa`.
+
+**B) Las rutas (`shopping.routes.ts`).** `GET /api/shopping/suggested` previsualiza sin escribir nada (sugerencias +
+lista abierta si la hay). `POST /api/shopping/suggested` crea la lista —o actualiza la que ya este abierta, que se
+reconoce por `source='sugerida'`+`status='active'` (migracion: `source` en listas y lineas)—: las lineas sugeridas
+PENDIENTES se sustituyen por las de ahora y lo comprado (checked) y lo anadido a mano se queda, que es la promesa del
+boton «Actualizar». Sin sugerencias no nace una lista vacia. Las lineas nacen con `price_minor` por unidad y la nota
+«Mejor en X». El cuerpo es todo opcional (solo el nombre traducido); un POST vacio es valido: el boton no lleva
+formulario.
+
+**C) El frontend (`shopping-suggested.component.ts`).** Tarjeta arriba de la bandeja de `/shopping`: resumen con las 5
+primeras sugerencias (nombre ×cantidad, badge de motivo con su color, «mejor en X» y ≈precio), «y N mas», total
+estimado, y el boton «Crear lista de la compra» que pasa a «Actualizar lista» cuando ya hay una abierta —con texto que
+explica que actualizar no toca lo comprado ni lo manual. Diccionario ES/EN propio (`dict/shopping_suggested.ts`).
+
+**El parte de salud.** Server: `tsc` limpio y 821/821 en vitest (nuevos: `lista-sugerida` 15 — pack-rounding, reposicion
+de lo que caduca, plan con unidades incomparables, mejor tienda por ultimo precio, orden y tope —; `shopping-suggested`
+6 — previsualizacion sin escritura, POST vacio crea, actualizar no duplica y conserva checked+manual, caduca+plan
+entran, sin sugerencias no nace lista —; y la fila del contrato de formularios para `createSuggestedListSchema`).
+Frontend: `build:prod` verde, `check:ui` sin incidencias en 210 ficheros. e2e `shopping-suggested` 1/1 (la historia
+completa: siembra por API de pan agotado, pescado caducado y receta de manana; motivos y tiendas a la vista; total;
+crear; nota «Mejor en Lidl» en la linea; comprar el pan; actualizar; lo comprado sigue y la sugerencia del plan renace)
+y regresion shopping-lists + sugerencias + caducidades 19/19.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`

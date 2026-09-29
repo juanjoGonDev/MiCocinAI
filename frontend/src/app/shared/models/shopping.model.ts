@@ -638,3 +638,37 @@ export interface StoreCount {
   store: string;
   lists: number;
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// La lista sugerida por la actividad (HOGARIA-SPEC ## 12al)
+// ═══════════════════════════════════════════════════════════════════
+
+/** Por que se sugiere: cada motivo es una regla del motor estadistico del server. */
+export type MotivoDeSugerencia = 'caduca' | 'sin_stock' | 'se_acaba' | 'para_el_plan';
+
+export interface SugerenciaRow {
+  name: string;
+  unit: string | null;
+  category: string | null;
+  quantity: number;
+  motivo: MotivoDeSugerencia;
+  daysLeft: number | null;
+  cadaDias: number | null;
+  /** La tienda mas barata que la casa conoce, por su ultimo precio. */
+  mejorTienda: string | null;
+  precioUnitarioMinor: number | null;
+  precioEstimadoMinor: number | null;
+}
+
+/** La lista sugerida abierta, si la hay: actualizarla no es duplicarla. */
+export interface SugeridaActiva {
+  id: string;
+  name: string;
+  version: number;
+  itemsPendientes: number;
+}
+
+export interface SugerenciaDeCompra {
+  sugerencias: SugerenciaRow[];
+  lista: SugeridaActiva | null;
+}

@@ -24,6 +24,7 @@ import { accountEs, accountEn } from './dict/account';
 import { uiEs, uiEn } from './dict/ui';
 import { authEs, authEn } from './dict/auth';
 import { caducidadesEs, caducidadesEn } from './dict/caducidades';
+import { shoppingSuggestedEs, shoppingSuggestedEn } from './dict/shopping_suggested';
 import { calendarEs, calendarEn } from './dict/calendar';
 import { dashboardEs, dashboardEn } from './dict/dashboard';
 import { logsEs, logsEn } from './dict/logs';
@@ -48,6 +49,7 @@ const es = {
   ...accountEs,
   ...authEs,
   ...caducidadesEs,
+  ...shoppingSuggestedEs,
   ...calendarEs,
   ...dashboardEs,
   ...logsEs,
@@ -74,6 +76,7 @@ const en: Record<keyof typeof es, string> = {
   ...accountEn,
   ...authEn,
   ...caducidadesEn,
+  ...shoppingSuggestedEn,
   ...calendarEn,
   ...dashboardEn,
   ...logsEn,

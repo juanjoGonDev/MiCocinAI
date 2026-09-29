@@ -60,6 +60,7 @@ import {
   createCategorySchema,
   createItemSchema,
   createListSchema,
+  createSuggestedListSchema,
   discountSchema,
   listFilterSchema,
   orderSchema,
@@ -227,6 +228,12 @@ const ROWS: Row[] = [
 
   // ── compra ──
   { name: 'createListSchema', schema: createListSchema, required: { name: 'Semana' } },
+  {
+    name: 'createSuggestedListSchema',
+    schema: createSuggestedListSchema,
+    required: {},
+    note: 'La lista sugerida (## 12al) se calcula en el server: el cuerpo es todo opcional (solo el nombre traducido) y un POST vacio es valido.'
+  },
   {
     name: 'updateListSchema',
     schema: updateListSchema,

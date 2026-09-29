@@ -656,6 +656,12 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('shopping_list_items', 'disc_percent_bps', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'disc_units', 'REAL');
 
+  // ## 12al: quien escribio cada lista y cada linea. La lista sugerida se reconoce por
+  // source='sugerida' (para poder actualizarla sin tocar las manuales), y sus lineas llevan
+  // la misma marca para que actualizarlas no borre lo que la casa anadio a mano.
+  addColumnIfMissing('shopping_lists', 'source', "TEXT NOT NULL DEFAULT 'manual'");
+  addColumnIfMissing('shopping_list_items', 'source', "TEXT NOT NULL DEFAULT 'manual'");
+
   // weekly_calendars.household_id nacio NOT NULL con FK a households, y las rutas
   // metían '' para las cuentas sin hogar: la FK lo rechaza (foreign_keys = ON),
   // así que la primera comida de la semana devolvía 500. Se reconstruye la tabla

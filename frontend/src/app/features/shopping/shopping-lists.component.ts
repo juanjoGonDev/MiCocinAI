@@ -10,6 +10,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
+import { ShoppingSuggestedComponent } from './shopping-suggested.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
@@ -56,7 +57,8 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
   standalone: true,
   imports: [
     TranslatePipe,
-    CommonModule, FormsModule, IconComponent, IconButtonComponent, PickerComponent, AvatarComponent],
+    CommonModule, FormsModule, IconComponent, IconButtonComponent, PickerComponent, AvatarComponent,
+    ShoppingSuggestedComponent],
   template: `
     <div class="tray">
       <header class="tray__head">
@@ -80,6 +82,9 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
           </button>
         </div>
       </header>
+
+      <!-- ## 12al: la sugerencia de la casa, arriba del todo: se ve antes que el historial. -->
+      <app-shopping-suggested (aplicada)="refresh()" />
 
       @if (creating()) {
         <form class="tray__create" (ngSubmit)="create()">

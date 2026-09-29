@@ -29,7 +29,8 @@ import {
   ShoppingList,
   ShoppingListItem,
   ShoppingListStatus,
-  StoreCount
+  StoreCount,
+  SugerenciaDeCompra
 } from '../../shared/models/shopping.model';
 import { I18nService } from '../../core/services/i18n.service';
 
@@ -75,6 +76,9 @@ export class ShoppingService {
   readonly saving = signal(false);
   readonly listsMeta = signal<ListsMeta>({ total: 0, limit: 25, offset: 0 });
   readonly stores = signal<StoreCount[]>([]);
+  // ## 12al: la sugerencia estadistica y su lista abierta, si ya existe.
+  readonly sugerencia = signal<SugerenciaDeCompra | null>(null);
+  readonly cargandoSugerencia = signal(false);
   readonly categories = signal<ShoppingCategory[]>([]);
   readonly events = signal<ListEvent[]>([]);
   private listsQuery: ListsQuery = {};
@@ -125,6 +129,46 @@ export class ShoppingService {
   /** Repetir la ultima lectura: lo que llama el SSE cuando avisa de un cambio ajeno. */
   reloadLists(): void {
     this.loadLists(this.listsQuery);
+  }
+
+  /**
+   * ## 12al: la previsualizacion de la lista sugerida (ritmo de compra, stock, caducidad y
+   * plan de la semana, SIN IA). Es una lectura: no escribe nada hasta que se pide.
+   */
+  cargarSugerencia(): void {
+    this.cargandoSugerencia.set(true);
+    this.http
+      .get<{ data: SugerenciaDeCompra }>(`${this.apiUrl}/suggested`)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: response => {
+          this.sugerencia.set(response.data);
+          this.cargandoSugerencia.set(false);
+        },
+        error: () => this.cargandoSugerencia.set(false)
+      });
+  }
+
+  /**
+   * Crear la lista sugerida… o actualizar la que ya este abierta: el server decide cual de
+   * las dos toca, y devuelve `creada` para que el aviso diga la verdad.
+   */
+  async aplicarSugerida(): Promise<{ id: string; creada: boolean; sugeridos: number } | null> {
+    const resultado = await this.request<{ id: string; creada: boolean; sugeridos: number }>(() =>
+      this.http
+        .post<{ data: { id: string; creada: boolean; sugeridos: number } }>(
+          `${this.apiUrl}/suggested`,
+          { name: this.i18n.t('shopping_suggested.nombre_lista') }
+        )
+        .pipe(
+          map(response => response.data),
+          tap(() => {
+            this.cargarSugerencia();
+            this.reloadLists();
+          })
+        )
+    );
+    return resultado;
   }
 
   loadStores(): void {
