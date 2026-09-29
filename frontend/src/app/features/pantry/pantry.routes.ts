@@ -8,6 +8,13 @@ export const PANTRY_ROUTES: Routes = [
   // La ficha del articulo de inventario (## 12ai): detalle con sus caracteristicas y su historia
   // de precios por tienda; la edicion es su propia pantalla, no un modal —pedida asi—. Ambas
   // viven en su URL para que un F5 o el boton atras signifiquen lo mismo que en el resto.
+  // Las caducidades (## 12ak): la despensa ordenada por lo que se tira antes, con su grafica
+  // y su ritmo de compra. Pantalla propia, no tab del gestor: se entra desde la despensa y
+  // desde el aviso del planificador, y su URL se puede compartir igual que la ficha.
+  {
+    path: 'caducidades',
+    loadComponent: () => import('./caducidades.component').then(m => m.CaducidadesComponent)
+  },
   {
     path: 'inventario/:id/editar',
     loadComponent: () => import('./pantry-item-edit.component').then(m => m.PantryItemEditComponent)

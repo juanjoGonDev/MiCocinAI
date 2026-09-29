@@ -86,6 +86,14 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
           <h1 class="pantry__title">{{ 'pantry.title' | t }}</h1>
         </div>
         <div class="pantry__header-acciones">
+          <!-- ## 12ak: la despensa ordenada por lo que caduca primero, con su grafica. -->
+          <app-button
+            variant="secondary"
+            (onClick)="irACaducidades()"
+            data-test="pantry-caducidades"
+          >
+            {{ 'pantry.caducidades' | t }}
+          </app-button>
           <!-- ## 12aa: el alta manual sigue, pero la puerta rapida al inventario de la casa es el catalogo. -->
           <app-button
             variant="secondary"
@@ -1787,6 +1795,11 @@ export class PantryComponent implements OnInit {
 
   protected abrirCatalogo(): void {
     void this.router.navigate(['/pantry', 'catalogo']);
+  }
+
+  /** La pantalla de caducidades (## 12ak): misma familia que el catalogo, URL propia. */
+  protected irACaducidades(): void {
+    void this.router.navigate(['/pantry', 'caducidades']);
   }
 
   /** El punto de color de la fila y de la sugerencia: el dato de la categoria, ya cargada, no un emoji por clave. */

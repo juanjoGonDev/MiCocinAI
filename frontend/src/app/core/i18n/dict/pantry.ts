@@ -13,6 +13,7 @@ export const pantryEs = {
   // del fichero estan `pantry.categoria_*`) y solo mientras sigan teniendo el nombre de fabrica.
   // ── El catalogo del super (## 12aa): pre-registro con su pasillo y su padre. ──
   'pantry.catalogo_titulo': 'Catálogo del supermercado',
+  'pantry.caducidades': 'Caducidades',
   'pantry.catalogo_ayuda':
     'Lo que se compra en un súper español, pre-registrado con su categoría. Añadir no compra nada: deja el producto en tu inventario con una unidad.',
   'pantry.catalogo_buscar': 'Buscar en el catálogo',
@@ -424,6 +425,7 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   // household data that also goes into the AI prompt. Only the factory ones have a dictionary label, and only
   // while they still carry their factory name.
   'pantry.catalogo_titulo': 'Supermarket catalog',
+  'pantry.caducidades': 'Expiry',
   'pantry.catalogo_ayuda':
     'The usual Spanish supermarket shelves, pre-registered with their category. Adding buys nothing: it leaves the product in your inventory with one unit.',
   'pantry.catalogo_buscar': 'Search the catalog',

@@ -24,6 +24,7 @@ import {
   tastePromptLines
 } from '../utils/taste-profile.js';
 import { persistWeeklyPlan, resolveMealTypes } from '../utils/weekly-plan.js';
+import { bloqueDeCaducidades } from '../utils/caducidades.js';
 import { callAI, extractJsonObject } from '../utils/ai-client.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
@@ -331,11 +332,16 @@ aiRoutes.post('/recommendations', async (c) => {
 
   const db = getDatabase();
 
+  // Lo que caduca pronto entra en la recomendacion (## 12ak): una sugerencia que ignore que el
+  // pescado caduca manana es una sugerencia que manda tirar comida.
+  const caducan = bloqueDeCaducidades(db, userId);
+
   const prompt = `Basándote en la siguiente información, recomienda ${input.count} recetas:
 
 Comidas recientes: ${input.recentMeals.map(m => `${m.date}: ${m.meal}`).join(', ') || 'Ninguna'}
 Ingredientes disponibles: ${input.availableIngredients.join(', ') || 'Ninguno específico'}
 ${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}, Alergias=${input.householdPreferences.allergies.join(',')}` : ''}
+${caducan ? `${caducan}` : ''}
 
 Responde SOLO con un JSON válido: {"recommendations": [{"name": "", "reason": "", "ingredients": [], "estimatedTime": 0}]}`;
 
@@ -390,12 +396,17 @@ aiRoutes.post('/plan-week', async (c) => {
     .map((type) => `${MEAL_TYPE_LABELS[type].toLowerCase()} a las ${mealTimes[type]}`)
     .join(', ');
 
+  // Lo que caduca pronto viaja con el plan (## 12ak): el planificador tiene que gastar lo
+  // que se tira antes, y eso no lo sabe el cliente —lo sabe la despensa—.
+  const caducan = bloqueDeCaducidades(db, userId);
+
   const prompt = `Genera un plan de comidas semanal:
 
 Del ${input.startDate} al ${input.endDate}
 Objetivo: ${input.goals.type}
 ${input.goals.caloriesTarget ? `Calorías diarias objetivo: ${input.goals.caloriesTarget}` : ''}${input.goals.customInstructions ? `\nIndicaciones del usuario (prioritarias): ${input.goals.customInstructions}` : ''}
 ${input.availableIngredients.length > 0 ? `Ingredientes disponibles: ${input.availableIngredients.join(', ')}` : ''}
+${caducan ? `${caducan}` : ''}
 ${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}` : ''}${tasteBlock}
 Planifica SOLO estas comidas: ${mealTypes.join(', ')}. No añadas otras.
 Horarios de esta casa: ${houseHours}. Tenlos en cuenta al elegir plato (no propongas un asado de tres horas para un desayuno de media mañana); el reloj de cada comida lo pone la app, no tú.

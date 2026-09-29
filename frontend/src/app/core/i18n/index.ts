@@ -23,6 +23,7 @@ import { avatarEditorEs, avatarEditorEn } from './dict/avatar_editor';
 import { accountEs, accountEn } from './dict/account';
 import { uiEs, uiEn } from './dict/ui';
 import { authEs, authEn } from './dict/auth';
+import { caducidadesEs, caducidadesEn } from './dict/caducidades';
 import { calendarEs, calendarEn } from './dict/calendar';
 import { dashboardEs, dashboardEn } from './dict/dashboard';
 import { logsEs, logsEn } from './dict/logs';
@@ -46,6 +47,7 @@ const es = {
   ...avatarEditorEs,
   ...accountEs,
   ...authEs,
+  ...caducidadesEs,
   ...calendarEs,
   ...dashboardEs,
   ...logsEs,
@@ -71,6 +73,7 @@ const en: Record<keyof typeof es, string> = {
   ...avatarEditorEn,
   ...accountEn,
   ...authEn,
+  ...caducidadesEn,
   ...calendarEn,
   ...dashboardEn,
   ...logsEn,

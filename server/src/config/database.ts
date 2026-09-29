@@ -637,6 +637,10 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // eso es una lista en JSON y no una tabla: ninguna consulta necesita una alias suelta. (Mismo acuerdo que
   // `model_params` en `household_ai_config`.)
   addColumnIfMissing('ingredients', 'aliases', "TEXT NOT NULL DEFAULT '[]'");
+  // La vida util estimada por la IA (## 12ak), en dias enteros, para productos SIN fecha
+  // registrada: lo que la IA dijo para ESTE producto concreto. El catalogo de bolsillo de
+  // `caducidades.ts` no se guarda —se consulta—, y la fecha registrada siempre manda.
+  addColumnIfMissing('ingredients', 'estimated_shelf_days', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'promo_buy', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'promo_take', 'INTEGER');
   // La concurrencia de la cola de IA es por configuracion (por proveedor): default 1, y se

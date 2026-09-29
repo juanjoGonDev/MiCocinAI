@@ -47,6 +47,7 @@ import { PickerComponent, PickerOption } from '../../shared/components/ui/picker
 import { CheckboxComponent } from '../../shared/components/ui/checkbox/checkbox.component';
 import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
 import { HouseholdService } from '../../core/services/household.service';
+import { PantryService } from '../../core/services/pantry.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ModulesService } from '../../core/services/modules.service';
 import {
@@ -684,6 +685,11 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           <p class="cal-muted">
             {{ 'calendar.gen_intro' | t:{period: planWeekLabel()} }}
           </p>
+          @if (caducanPronto().length > 0) {
+            <p class="cal-muted cal-caduca" data-test="gen-caducidades">
+              {{ 'calendar.caducan_pronto' | t: { productos: caducanPronto().join(', ') } }}
+            </p>
+          }
 
           <div class="meal-form__field">
             <label for="gen-goal">{{ 'calendar.objetivo' | t }}</label>
@@ -1342,6 +1348,16 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       to { background-position: 420px 0; }
     }
 
+    /* Aviso de caducidades (## 12ak): rojo suave, token de peligro real, sin inventar tokens. */
+    .cal-caduca {
+      margin: 0;
+      padding: var(--space-2, 8px) var(--space-3, 12px);
+      border-radius: var(--radius-md, 10px);
+      background: rgba(220, 38, 38, 0.08);
+      color: var(--danger, #dc2626);
+      font-size: var(--text-sm, 14px);
+    }
+
     /* ── Formularios de los diálogos ── */
     .meal-form,
     .goals-form,
@@ -1628,6 +1644,7 @@ export class CalendarComponent implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
   private readonly householdService = inject(HouseholdService);
+  private readonly pantryService = inject(PantryService);
   private readonly modules = inject(ModulesService);
 
   /**
@@ -1686,6 +1703,19 @@ export class CalendarComponent implements OnInit {
    */
   readonly allowedMeals = computed(() => plannedMealTypes(this.tasteService.mealPlan()));
   readonly blockedMeals = computed(() => MEAL_ORDER.filter((type) => !this.allowedMeals().includes(type)));
+
+  /**
+   * ## 12ak: lo que caduca en 7 dias o menos, en orden de prisa, para avisar en el modal de
+   * planificacion. La IA ya recibe el bloque completo en su prompt (servidor); esto es lo que
+   * el usuario ve de eso: transparencia, no magia.
+   */
+  readonly caducanPronto = computed(() =>
+    this.pantryService
+      .caducidades()
+      .filter(fila => fila.daysLeft !== null && fila.daysLeft <= 7)
+      .slice(0, 5)
+      .map(fila => fila.name)
+  );
   /** Lo que recorre la plantilla del dialogo de IA: el orden del dia, sin las bloqueadas. */
   readonly mealTypesForPicker = this.allowedMeals;
   /** Color y demas meta de cada comida (la plantilla no puede importar el modelo por su cuenta). */
@@ -2178,6 +2208,9 @@ export class CalendarComponent implements OnInit {
   private tasteGoalApplied = false;
 
   openGenerateModal(): void {
+    // ## 12ak: al planificar se mira lo que caduca. La peticion es barata (una lectura) y sin
+    // ella el aviso del modal no apareceria nunca: la despensa no se pasa por aqui por defecto.
+    this.pantryService.loadCaducidades();
     // Las casillas arrancan de lo que la casa dejo abierto: si la cena esta bloqueada esa casilla no
     // existe, y las demas vuelven a estar marcadas (no guardan la eleccion de la semana pasada).
     const permitidas = this.allowedMeals();

@@ -288,7 +288,8 @@ const EXEMPT: Record<string, string> = {
   productIndexSchema: 'parametros de busqueda del indice de productos, sin cuerpo de formulario',
   photoAnalyzeSchema: 'una subida de OCR manda SIEMPRE la imagen: sin imagen no hay peticion que procesar',
   adjustServingsSchema: 'el ajuste de raciones es un numero o nada, y «nada» se resuelve en el frontend',
-  createPriceSchema: 'alta de precios desde el cierre de lista: los cuatro campos son obligatorios por contrato de negocio'
+  createPriceSchema: 'alta de precios desde el cierre de lista: los cuatro campos son obligatorios por contrato de negocio',
+  shelfAnswerSchema: 'la respuesta del modelo al pedirle vidas utiles (## 12ak): la escribe la IA, no un formulario de la interfaz'
 };
 
 function shapeOf(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | null {

@@ -1,5 +1,12 @@
 import { Hono } from 'hono';
 import {
+  CATALOGO_DE_VIDA,
+  buildShelfPrompt,
+  caducidadesDe,
+  shelfAnswerSchema
+} from '../utils/caducidades.js';
+import { AiCallError, callAI, extractJsonObject } from '../utils/ai-client.js';
+import {
   bulkProductIdsSchema,
   catalogAddSchema,
   catalogFilterSchema,
@@ -535,6 +542,87 @@ pantryRoutes.delete('/utensils/:id', async (c) => {
   return c.json({
     success: true,
     message: 'Utensil deleted'
+  });
+});
+
+// ── Las caducidades de la casa (HOGARIA-SPEC ## 12ak) ──
+
+/**
+ * La lista para la pantalla de caducidades: cada producto con stock, su fecha (registrada o
+ * estimada), los dias que le quedan y su ritmo de compra. Sin query params a proposito: el
+ * orden lo decide el servidor (urgencia) y la pantalla reordena en memoria —una lista de
+ * despensa no da para paginar—.
+ */
+pantryRoutes.get('/expiry', (c) => {
+  const filas = caducidadesDe(getDatabase(), c.get('userId'));
+  return c.json({ success: true, data: filas });
+});
+
+/**
+ * Estimar la vida util de lo que no tiene ni fecha ni estimacion: primero el catalogo de
+ * bolsillo (que no gasta IA y cubre el pan y la leche de toda la vida) y el RESTO por la IA
+ * local, que escribe su dias en `estimated_shelf_days`. Sin configuracion de IA no es un
+ * error del servidor: 409 con NO_CONFIG, como la foto de la cesta.
+ */
+pantryRoutes.post('/expiry/estimate', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const casa = scopeDePantry(userId);
+
+  const candidatos = db
+    .prepare(
+      `SELECT id, name, unit, category FROM ingredients
+       WHERE (user_id = ? OR (household_id IS NOT NULL AND household_id = ?))
+         AND quantity > 0 AND expiration_date IS NULL AND estimated_shelf_days IS NULL
+       ORDER BY name ASC LIMIT 60`
+    )
+    .all(casa.userId, casa.householdId) as { id: string; name: string; unit: string | null; category: string }[];
+  if (candidatos.length === 0) {
+    return c.json({ success: true, data: { catalogo: 0, ia: 0, sinEstimar: 0, sinFecha: 0 } });
+  }
+
+  const delCatalogo = candidatos.filter((fila) => CATALOGO_DE_VIDA[productKeyOf(fila.name)]);
+  const paraLaIa = candidatos.filter((fila) => !CATALOGO_DE_VIDA[productKeyOf(fila.name)]);
+
+  let estimadosPorIa = 0;
+  if (paraLaIa.length > 0) {
+    const { system, user } = buildShelfPrompt(paraLaIa);
+    let respuesta: unknown;
+    try {
+      respuesta = extractJsonObject(
+        await callAI(userId, [
+          { role: 'system', content: system },
+          { role: 'user', content: user }
+        ], db)
+      );
+    } catch (error) {
+      if (error instanceof AiCallError) {
+        const estado = error.code === 'NO_CONFIG' ? 409 : error.code === 'BAD_JSON' ? 422 : 502;
+        return falla(c, estado, error.message, error.code);
+      }
+      throw error;
+    }
+    const contestacion = shelfAnswerSchema.parse(respuesta);
+    const porClave = new Map(paraLaIa.map((fila) => [productKeyOf(fila.name), fila.id]));
+    for (const producto of contestacion.products) {
+      const id = porClave.get(productKeyOf(producto.name));
+      if (!id) continue;
+      db.prepare('UPDATE ingredients SET estimated_shelf_days = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+        producto.days,
+        id
+      );
+      estimadosPorIa += 1;
+    }
+  }
+
+  return c.json({
+    success: true,
+    data: {
+      catalogo: delCatalogo.length,
+      ia: estimadosPorIa,
+      sinEstimar: paraLaIa.length - estimadosPorIa,
+      sinFecha: candidatos.length
+    }
   });
 });
 

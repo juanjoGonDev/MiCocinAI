@@ -1,8 +1,8 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpParams, HttpErrorResponse, HttpContext } from '@angular/common/http';
 import { Observable, firstValueFrom, tap, map, catchError, of, throwError } from 'rxjs';
-import { HttpErrorResponse } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import {
   Ingredient,
   Utensil,
@@ -30,6 +30,7 @@ import {
   PantryCatalogAddResult,
   PantryCatalogQuery
 } from '../../shared/models/pantry.model';
+import { CaducidadRow } from '../../shared/models/caducidades.model';
 
 @Injectable({
   providedIn: 'root'
@@ -55,6 +56,63 @@ export class PantryService {
   // ═══════════════════════════════════════════════════════════════
   // Ingredients
   // ═══════════════════════════════════════════════════════════════
+
+  // ═══════════════════════════════════════════════════════════════
+  // Caducidades (HOGARIA-SPEC ## 12ak)
+  // ═══════════════════════════════════════════════════════════════
+
+  /** La despensa ordenada por urgencia, con fechas estimadas y ritmo de compra. */
+  readonly caducidades = signal<CaducidadRow[]>([]);
+  readonly cargandoCaducidades = signal(false);
+
+  loadCaducidades(): void {
+    this.cargandoCaducidades.set(true);
+    this.http
+      .get<{ data: CaducidadRow[] }>(`${this.apiUrl}/expiry`)
+      .pipe(
+        map(response => response.data),
+        catchError(() => of([] as CaducidadRow[]))
+      )
+      .subscribe(filas => {
+        this.caducidades.set(filas);
+        this.cargandoCaducidades.set(false);
+      });
+  }
+
+  /**
+   * Estimar la vida util de lo que no tiene ni fecha ni catalogo: el catalogo es gratis y la
+   * IA local cubre el resto. Los errores de IA se devuelven con su codigo para que la pantalla
+   * diga «configura la IA» y no «error» a secas.
+   */
+  async estimarCaducidades(): Promise<
+    { catalogo: number; ia: number; sinEstimar: number; sinFecha: number } | { error: 'NO_CONFIG' | 'BAD_JSON' | 'ERROR' }
+  > {
+    try {
+      const response = await firstValueFrom(
+        this.http.post<{ data: { catalogo: number; ia: number; sinEstimar: number; sinFecha: number } }>(
+          `${this.apiUrl}/expiry/estimate`,
+          {},
+          // Silencio el toast del interceptor: la pantalla de caducidades traduce el codigo a
+          // su mensaje propio (configura la IA / el modelo no contesto), y dos avisos por un
+          // solo clic es un aviso que se desconfia de si mismo.
+          { context: new HttpContext().set(SILENT_TOAST, true) }
+        )
+      );
+      return response.data;
+    } catch (fallo) {
+      // El interceptor de errores REENVUELVE el fallo ({ status, message, original }); el
+      // HttpErrorResponse de verdad viaja dentro. Hay que mirar ambos: aqui no hay garantia
+      // de quien llega primero.
+      const bruto =
+        fallo instanceof HttpErrorResponse
+          ? fallo
+          : ((fallo as { original?: HttpErrorResponse } | null)?.original ?? null);
+      const codigo = String((bruto?.error as { error?: string } | null | undefined)?.error ?? '');
+      if (codigo === 'NO_CONFIG') return { error: 'NO_CONFIG' };
+      if (codigo === 'BAD_JSON') return { error: 'BAD_JSON' };
+      return { error: 'ERROR' };
+    }
+  }
 
   loadIngredients(filter?: PantryFilter): void {
     this.isLoadingSignal.set(true);

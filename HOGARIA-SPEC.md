@@ -4355,6 +4355,55 @@ schemas nuevas). Frontend: `build:prod` verde (el warning de estilos de calendar
 tienda por API, parar todo) y `settings-modules` 6/6 retocado a la realidad nueva (cuatro secciones vivas; el «no
 crea rutas muertas» pasa a probarlo con el modulo de tareas). Regresion: shopping-lists + round12 20/20.
 
+## 12ak — Caducidades en tiempo real: la despensa ordenada por lo que se tira antes
+
+**El parte (2026-09-29, ronda 39).** El usuario: «calcular en tiempo real cuánto dura cada producto según la frecuencia de
+compra», «gráficas y/o listados de productos ordenables por fecha de caducidad — solo de los registrados», «los que no
+tengan fecha pero sean calculables por la IA (ej.: PAN de barra) que se calculen automáticamente» y que «al gestionar la
+comida semanal o sugerir comidas se tengan en cuenta las caducidades».
+
+**A) Tres fuentes de vida, por precedencia (`server/src/utils/caducidades.ts`).** La fecha registrada
+(`expiration_date`) manda; si no hay, la estimacion de la IA (columna nueva `estimated_shelf_days`); si no, el catalogo
+de bolsillo —`CATALOGO_DE_VIDA`, ~80 productos basicos indexados por `productKeyOf` (leccion de la ronda: 'Pan de
+barra' → 'pan barra', indexar por el nombre normalizado a mano NUNCA matchea)—. El catalogo **no se guarda, se
+consulta**: es gratis y no ocupa columna. La fecha estimada nace de la base (la ultima compra en `price_observations`,
+si no `created_at`) mas los dias de vida.
+
+**B) El ritmo de compra.** Las compras del MISMO dia se funden (SUM de cantidad); con dos dias distintos o mas,
+`cadaDias = tramo/(n-1)`, `diasPorUnidad = cadaDias/unidadesPorCompra` y `duraDias = round(quantity × diasPorUnidad)`:
+cuanto dura el stock actual a ese ritmo. Menos de dos dias distintos no es ritmo, es una compra.
+
+**C) Las rutas (`pantry.routes.ts`).** `GET /api/pantry/expiry` devuelve `CaducidadRow[]` —solo stock > 0, ambito casa,
+orden por urgencia (`daysLeft` asc, lo sin fecha al final)— con fecha, origen (`fecha|ia|catalogo|null`), dias para
+caducar (negativo = caducado), ritmo y duracion. `POST /api/pantry/expiry/estimate`: candidatos = sin fecha Y sin
+estimacion (LIMIT 60); el catalogo cubre lo suyo gratis y el resto va a `callAI` con `buildShelfPrompt` +
+`shelfAnswerSchema`; se guarda `estimated_shelf_days` matcheando por `productKeyOf`. Errores de IA con su codigo
+(NO_CONFIG 409 / BAD_JSON 422 / resto 502). Nada de esto corre en background: se pide al pulsar «Estimar».
+
+**D) El planificador ya mira la nevera.** `bloqueDeCaducidades` coloca en los prompts de `/api/ai/plan-week` y
+`/api/ai/recommendations` lo que caduca en 7 dias o menos (formato «Nombre (3 ud (fecha estimada), caduca en 2
+dia(s))», con tope de 8 y sufijo «; y N mas»), prefijado con «priorizalos en el plan para no tirar comida». Y el modal
+de planificacion del calendario lo ENSENA («La IA priorizará lo que caduca pronto: …») en vez de ser magia: la IA
+prioriza, pero quien planifica ve que se esta priorizando.
+
+**E) El frontend (`/pantry/caducidades`, boton en la cabecera de la despensa).** Resumen con chips (caducados, esta
+semana, estimadas, sin fecha), grafica de barras —una por producto, anchura proporcional al dias-maximo con suelo del
+4%, color del semaforo, `≈` en lo estimado (`barrasDeCaducidad`, con spec)— y tabla ordenable por caduca/nombre/dura
+(el server manda por urgencia; reordenar en memoria, una despensa no da para paginar). El origen de cada vida se ve
+(badge Fecha/IA/Catálogo/Sin estimar) porque una fecha registrada no promete lo mismo que un «≈4 dias». El boton
+«Estimar caducidades» traduce el fallo de IA a su mensaje propio («Falta configurar la IA para estimar lo que no está
+en el catálogo»), silenciando el toast del interceptor — dos avisos por un clic es un aviso que se desconfia de si
+mismo. Diccionario propio ES/EN (`dict/caducidades.ts`).
+
+**El parte de salud.** Server: `tsc` limpio y 795/795 en vitest (nuevos: `caducidades` 11 — precedencia de fuentes,
+fusion de compras del mismo dia, ritmo con 2 dias, funda de clave de catalogo, formato del bloque —; `pantry-expiry`
+5 — orden por urgencia, NO_CONFIG con el catalogo consultandose igualmente, estimacion de IA en SU producto,
+BAD_JSON, vacio —; el `shelfAnswerSchema` de la respuesta de IA al EXEMPT del contrato de formularios: lo escribe un
+modelo, no un formulario). Frontend: `build:prod` verde, `check:ui` sin incidencias, spec del chart 5/5 en karma. e2e
+`pantry-caducidades` 1/1 (orden por prisa con cuatro origenes sembrados, chips, grafica, reorden por nombre con
+toggle, «Estimar» sin IA → NO_CONFIG traducido, aviso del modal de planificar) y regresion pantry + catalogo + ficha +
+calendario + tab-urls 40/40.
+
 ## 13. Coming soon (deliberately not in this program)
 
 - **Las unidades del carro: el ultimo catalogo sin etiqueta.** `UNIT_FAMILIES`
