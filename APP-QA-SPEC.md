@@ -29,9 +29,15 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 - Build de cliente: desde `frontend/`, `node ./node_modules/@angular/cli/bin/ng.js build --configuration production` — pasó con avisos de budget de bundle/estilos y componentes/imports sin uso.
 - `tests/e2e/full-stack/served-app.spec.ts`: 4 pasaron y 1 se omitió (no hay manifest enlazado); Chrome de sistema, SQLite y uploads exclusivos bajo `%TEMP%`, sin vídeo/traza.
 - Suite `tests/e2e/full-stack`: 11 pasaron, 3 fallaron y 1 se omitió; Chrome de sistema, un worker, limitador activo y SQLite temporal. No se llamó al proveedor IA ni se usó una credencial real.
-- Los dos fallos de `request-budget.spec.ts` aún no son defectos de producto confirmados: el observador se instala antes de registro/navegación y el propio escenario crea una lista y añade líneas, lo que genera lecturas SSE esperadas. Repetir midiendo solo la ventana de reposo tras preparación/acciones; si persiste, investigar el ciclo real.
+- Los dos fallos de `request-budget.spec.ts` aún no están clasificados: el observador se instala antes de registro/navegación, el escenario crea una lista y añade líneas, y el cliente vuelve a leer ante invalidaciones SSE. Repetir midiendo reposo tras preparación/acciones para separar una invalidación legítima de un refresh redundante.
 - El fallo de `shopping-money.spec.ts` tampoco confirma un defecto de producto: la captura muestra «Pan de cristal» aún pendiente; `tickAll()` conserva locators por índice mientras la pestaña filtra las líneas marcadas. Corregir el helper para identificar filas por nombre y afirmar el estado de ambas antes de abrir la hoja.
 - Las suites Playwright configuradas con vídeo/traza fallaron al cerrar Chromium en este sandbox (`browserContext.close: spawn EPERM`); desactivar ambos para la ejecución local hizo reproducible el cierre. Esto es una limitación del entorno, no evidencia de un fallo de la app.
+
+## Unidad QA-01 · fiabilidad de medición E2E (pendiente)
+
+- [ ] `request-budget.spec.ts`: preparar usuario/ruta antes de instalar el watcher o resetearlo tras la preparación y tras mutaciones intencionales; medir el intervalo de reposo, seguir detectando bucles y `429`, y comprobar por separado que el stream abre una vez sin reintentos.
+- [ ] `shopping-money.spec.ts`: marcar las líneas por identidad estable, afirmar que ambas están en el carro antes de finalizar y comprobar que la hoja permite guardar ambos precios y que se recuerdan en la siguiente lista.
+- [ ] Ejecutar los specs enfocados en Chromium contra build/servidor real con `DATABASE_PATH` y uploads temporales; registrar resultado antes de atribuir cualquier fallo restante al producto.
 
 ### Discrepancias que requieren prueba/decisión
 
@@ -109,6 +115,6 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Convertir el baseline E2E en mediciones fiables: iniciar el watcher después de la preparación, comprobar reposo tras acciones reales y marcar por nombre los artículos que se pretenden comprar; revalidar contra `request-watch.ts`, SSE y `visibleItems()` antes de cambiar comportamiento de producto.
+1. Cerrar QA-01: revalidar watcher, SSE y `visibleItems()`; corregir primero los tests/helpers que miden setup o usan índices inestables, y cambiar producto solo si persiste un fallo observado en reposo.
 2. Mantener SQLite/uploads aislados y ejecutar la suite completa por navegador; barrer todas las rutas con capturas de consola/red/overflow.
 3. Convertir solo fallos reproducibles en criterios de aceptación pequeños; TDD por unidad y capturas PC/móvil para cada corrección visual.
