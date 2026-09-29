@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** inventario inicial hecho; ejecución exhaustiva pendiente
+- **Estado:** inventario inicial hecho; baseline Chromium parcial; auditoría funcional y móvil pendiente
 - **Actualizado:** 2026-09-30
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -22,6 +22,16 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 - [x] Playwright enumera 636 casos en 31 archivos y configura Chromium escritorio, Pixel 5 y iPhone 13. Se enumeraron, **no se ejecutaron**.
 - [ ] Repetir el barrido con captura de errores de red/console. Google Fonts falló en este entorno restringido (`ERR_NETWORK_ACCESS_DENIED`); determinar si el resto de recursos necesarios funciona y no atribuir este bloqueo a la app sin comprobarlo en un entorno con red.
 - [ ] Capturar evidencia de referencia autenticada en escritorio y móvil después de preparar base de datos aislada.
+
+### Baseline real de Chromium (2026-09-30; hallazgos, no cierre)
+
+- Build de servidor: `node ./node_modules/typescript/bin/tsc -p server/tsconfig.json` — pasó.
+- Build de cliente: desde `frontend/`, `node ./node_modules/@angular/cli/bin/ng.js build --configuration production` — pasó con avisos de budget de bundle/estilos y componentes/imports sin uso.
+- `tests/e2e/full-stack/served-app.spec.ts`: 4 pasaron y 1 se omitió (no hay manifest enlazado); Chrome de sistema, SQLite y uploads exclusivos bajo `%TEMP%`, sin vídeo/traza.
+- Suite `tests/e2e/full-stack`: 11 pasaron, 3 fallaron y 1 se omitió; Chrome de sistema, un worker, limitador activo y SQLite temporal. No se llamó al proveedor IA ni se usó una credencial real.
+- Los dos fallos de `request-budget.spec.ts` aún no son defectos de producto confirmados: el observador se instala antes de registro/navegación y el propio escenario crea una lista y añade líneas, lo que genera lecturas SSE esperadas. Repetir midiendo solo la ventana de reposo tras preparación/acciones; si persiste, investigar el ciclo real.
+- El fallo de `shopping-money.spec.ts` tampoco confirma un defecto de producto: la captura muestra «Pan de cristal» aún pendiente; `tickAll()` conserva locators por índice mientras la pestaña filtra las líneas marcadas. Corregir el helper para identificar filas por nombre y afirmar el estado de ambas antes de abrir la hoja.
+- Las suites Playwright configuradas con vídeo/traza fallaron al cerrar Chromium en este sandbox (`browserContext.close: spawn EPERM`); desactivar ambos para la ejecución local hizo reproducible el cierre. Esto es una limitación del entorno, no evidencia de un fallo de la app.
 
 ### Discrepancias que requieren prueba/decisión
 
@@ -99,6 +109,6 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Aislar una base temporal y revisar la configuración E2E antes de ejecutar flujos que escriben.
-2. Ejecutar la suite existente por navegador y barrer todas las rutas con capturas de consola/red/overflow.
-3. Convertir fallos reproducibles en criterios de aceptación pequeños; corregirlos en unidades atómicas con tests nuevos.
+1. Convertir el baseline E2E en mediciones fiables: iniciar el watcher después de la preparación, comprobar reposo tras acciones reales y marcar por nombre los artículos que se pretenden comprar; revalidar contra `request-watch.ts`, SSE y `visibleItems()` antes de cambiar comportamiento de producto.
+2. Mantener SQLite/uploads aislados y ejecutar la suite completa por navegador; barrer todas las rutas con capturas de consola/red/overflow.
+3. Convertir solo fallos reproducibles en criterios de aceptación pequeños; TDD por unidad y capturas PC/móvil para cada corrección visual.
