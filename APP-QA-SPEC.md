@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** inventario inicial hecho; cola de tickets/Hogar, tarjeta móvil de hogar y comidas pendientes de hoy ya tienen regresiones verificadas; el barrido funcional/responsive del resto de pantallas sigue pendiente
+- **Estado:** inventario inicial hecho; cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario y comidas pendientes de hoy ya tienen regresiones verificadas; el barrido funcional/responsive del resto de pantallas sigue pendiente
 - **Actualizado:** 2026-09-30
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -70,17 +70,23 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 
 **Discrepancias de producto abiertas (no se cierran en esta unidad):** `HOGARIA-SPEC.md` §2/§12al también pide vencimientos, lista abierta/presupuesto semanal y cola IA en Today; `DashboardComponent` actual no renderiza esos bloques. Mantener abierta la checklist general `/dashboard` y decidir cada superficie en su propia unidad, sin atribuirlas a esta corrección de comidas.
 
-## Unidad QA-PANTRY.1 · alta manual accesible en móvil (pendiente)
+## Unidad QA-PANTRY.1 · alta manual accesible en móvil (resuelta)
 
 **Fuente revalidada antes de implementar:** el comentario y `(onClick)="openAddModal()"` de `PantryComponent` definen «+ Agregar» como la acción que abre el modal de alta de la pestaña activa. `.pantry__header` distribuye título y `.pantry__header-acciones` con `flex`, pero la fila de acciones no declara `flex-wrap` ni un reflujo móvil; hay breakpoints cercanos en 480, 600, 768 y 1023 px que deben volver a comprobarse antes de tocar estilos. En Playwright Pixel 5, la prueba existente de Dashboard expiró al pulsar «+ Agregar»; el registro muestra interceptación alternada por `pantry-anadir-catalogo` y el botón de la cola de tickets en `header`. La captura sintética del fallo muestra la fila superior cortada/desplazada. Esto acredita un fallo de interacción real, pero todavía hay que medir límites y solapamientos en viewport, no inferir su geometría solo por la captura.
 
 **Conducta esperada:** los tres controles de acción del encabezado permanecen visibles, no se superponen y son activables por toque/teclado; «+ Agregar» abre el alta de la pestaña activa. A 320 px debe ser posible operar sin overflow horizontal ni un control vecino capturando el puntero.
 
-- [ ] Crear prueba unitaria de los dos destinos del CTA (ingredientes/utensilios) y Playwright de regresión que mida el rectángulo/área de cada acción, overflow del documento y elemento que recibe click; reproducir la obstrucción sin `force`, usar solo fixtures sintéticas y API/DB de prueba aislada.
-- [ ] Medir Chromium escritorio y Pixel 5 en 320×568, 393×851, 479/480/481, 599/600/601, 767/768/769, 1023/1024 y 844×390; volver a localizar breakpoints actuales antes de ajustar CSS. Confirmar acciones dentro del viewport y objetivos ≥44×44 px.
-- [ ] Aplicar solo si se reproduce un reflujo responsive mínimo que conserva las tres acciones, jerarquía/labels, navegación y uso por teclado; verificar modal correcto en ambas pestañas y ausencia de clicks interceptados.
-- [ ] Ejecutar prueba unitaria focal, E2E real Chromium/Pixel 5, build/typecheck y coverage del alcance ≥70 % en las cuatro métricas sin rebajar gates; capturar e inspeccionar PC 1440×900 y móvil 393×851/320×568.
-- [ ] Anotar el resultado exacto y dejar la suite Dashboard completa verde en ambos proyectos; no atribuir los demás hallazgos globales a esta unidad.
+- [x] Crear pruebas unitarias de los dos destinos del CTA (ingredientes/utensilios) y Playwright de regresión que mida rectángulo/área, overflow del documento y elemento que recibe el puntero; reproducir la obstrucción sin `force`, con fixtures sintéticas y DB aislada.
+- [x] Medir Chromium escritorio y Pixel 5 en 320×568, 393×851, 479/480/481, 599/600/601, 767/768/769, 1022/1023/1024 y orientación horizontal 568×320/844×390. Confirmar acciones dentro del viewport, hit testing real y objetivos ≥44×44 px.
+- [x] Refluir solo el encabezado a ≤600 px y permitir que la fila de acciones envuelva; añadir el objetivo táctil opcional de 44 px a `app-button`. Verificar modal correcto por pestaña, activación Enter, destinos de caducidades/catálogo y ausencia de clicks interceptados.
+- [x] Ejecutar prueba unitaria focal, E2E real Chromium/Pixel 5, build/typecheck y cobertura de las unidades de lógica tocadas ≥70 % en las cuatro métricas; conservar gates superiores existentes. Capturar e inspeccionar PC 1440×900 y móvil 393×851/320×568.
+- [x] Repetir la suite Dashboard en ambos proyectos: 7/7 Chromium y 7/7 Pixel 5. No atribuir los demás hallazgos globales a esta unidad.
+
+**TDD rojo (2026-09-30, sin cambio de producción):** Pixel 5 reveló ancho de documento 517 px a viewport 320 px y botones de 32 px de alto; `+ Agregar` falló un click real de 5 s porque el catálogo/cola recibían el puntero. El baseline de `pantry-header-actions.spec.ts` conserva capturas en `.e2e-screenshots/qa-pantry-1/baseline-mobile/`.
+
+**Evidencia verde (2026-09-30):** Karma enfocado Button + Pantry 18/18; coverage HTML de `ButtonComponent` 100/100/100/100 (statements/branches/functions/lines). `PantryComponent.openAddModal()` cubre ambos destinos y las dos salidas de `prefill` (todos sus statements/branches/functions/lines ejecutados); el agregado de Karma de toda la app no representa el alcance y el gate global continúa abierto en QA-04c. Build Angular producción pasó con warnings de presupuesto/imports anotados; `tsc -p tsconfig.e2e.json --noEmit`, Prettier de los tests y `git diff --check` pasan.
+
+Playwright real con `E2E_SCOPE=all`, rate limit activo, servidor de producción efímero, puerto/SQLite/semilla únicos y cleanup: `pantry-header-actions.spec.ts` Chromium 2/2 y Pixel 5 2/2. Pixel 5 recorrió 320×568, 393×851, límites 479/480/481, 599/600/601, 767/768/769, 1022/1023/1024, 568×320 y 844×390; Chromium recorrió 1440×900 y 1022/1023/1024. Sin overflow, solapamiento, acción fuera de viewport ni interceptación; errores JS = 0. Suite Dashboard combinada (`dashboard.spec.ts`, `dashboard-recipe-links.spec.ts`, `dashboard-today-meals.spec.ts`) 7/7 en Chromium y 7/7 en Pixel 5. Capturas inspeccionadas: `.e2e-screenshots/qa-pantry-1/final-desktop/pantry-header-1440x900.png`, `.e2e-screenshots/qa-pantry-1/final-mobile/pantry-header-{393x851,320x568}.png`.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 

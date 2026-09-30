@@ -89,6 +89,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
           <!-- ## 12ak: la despensa ordenada por lo que caduca primero, con su grafica. -->
           <app-button
             variant="secondary"
+            [touchTarget]="true"
             (onClick)="irACaducidades()"
             data-test="pantry-caducidades"
           >
@@ -97,12 +98,13 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
           <!-- ## 12aa: el alta manual sigue, pero la puerta rapida al inventario de la casa es el catalogo. -->
           <app-button
             variant="secondary"
+            [touchTarget]="true"
             (onClick)="abrirCatalogo()"
             data-test="pantry-anadir-catalogo"
           >
             {{ 'pantry.catalogo_anadir' | t }}
           </app-button>
-          <app-button variant="primary" (onClick)="openAddModal()">
+          <app-button variant="primary" [touchTarget]="true" (onClick)="openAddModal()">
             {{ addButtonLabel() }}
           </app-button>
         </div>
@@ -736,8 +738,10 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
 
       .pantry__header {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
+        gap: var(--space-3);
         margin-bottom: var(--space-4);
       }
       .pantry__title-section {
@@ -834,6 +838,9 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
         color: var(--text-secondary);
       }
       @media (max-width: 600px) {
+        .pantry__header-acciones {
+          width: 100%;
+        }
         .pantry__stats {
           grid-template-columns: 1fr;
         }
@@ -851,6 +858,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
 
       .pantry__header-acciones {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--space-2);
       }

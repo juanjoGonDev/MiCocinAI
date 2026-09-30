@@ -70,6 +70,11 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
       aspect-ratio: 1;
     }
 
+    .btn--touch-target {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
     /* Variants */
     .btn--primary {
       background: var(--primary);
@@ -152,6 +157,7 @@ export class ButtonComponent {
   @Input() loading = false;
   @Input() type: 'button' | 'submit' | 'reset' = 'button';
   @Input() fullWidth = false;
+  @Input() touchTarget = false;
 
   @Output() onClick = new EventEmitter<Event>();
 
@@ -159,6 +165,7 @@ export class ButtonComponent {
     const classes = ['btn', `btn--${this.variant}`, `btn--${this.size}`];
     if (this.fullWidth) classes.push('btn--full-width');
     if (this.loading) classes.push('btn--loading');
+    if (this.touchTarget) classes.push('btn--touch-target');
     return classes.join(' ');
   }
 }
