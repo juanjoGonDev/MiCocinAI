@@ -125,18 +125,21 @@ Evidencia final QA-04c.1 (2026-09-30): Karma `shopping.model.spec.ts` 24/24; cob
 
 ### QA-04c.2 · reparar expectativas E2E de cesta (revalidación antes de cambiar tests)
 
-La suite completa aislada `shopping-round6.spec.ts` volvió a dar 7/11; quedan cuatro rojos. El código actual confirma tres desajustes del test, no defectos de producción:
+La suite completa aislada `shopping-round6.spec.ts` dio 8/11 tras corregir tres selectores/acciones del test; quedan tres rojos. El código actual confirma otros dos desajustes del test, no defectos de producción:
 
 - `newList()` (`tests/e2e/shopping-round6.spec.ts`) crea la lista, espera `/shopping/:id` y navega de vuelta a `/shopping`; por eso el `add-input` no debe existir hasta abrir de nuevo la tarjeta creada.
 - `toggleCheck()` mueve la línea marcada fuera de la pestaña «Pendientes»; `visibleItems()` filtra por la pestaña activa y `toggleSelectAll()` selecciona solo esos elementos. La prueba debe pasar a «En el carro» antes de seleccionar todo.
 - El atributo `data-test="discount-amount"` vive en el propio `<input>`, no en un wrapper; el selector `discount-amount input` no puede coincidir.
-- El error de foto sigue pendiente: el E2E observó «El modelo no está disponible ahora mismo» en vez de «Falta configurar la IA», aun cuando su SQLite temporal terminó con 0 filas `ai_configs`. El contrato `HOGARIA-SPEC.md` (sección «Adding by photo») y `shopping.routes.spec.ts` esperan `409 AI_NOT_CONFIGURED` + `data.redirect=/settings/ai`; el handler frontend ya tiene rama para ese código. Capturar status/body exactos en la próxima corrida aislada y determinar la discrepancia runtime/build antes de corregir. No conectar ni llamar a un proveedor real: cualquier escenario con IA se simula.
+- `[data-test="tray-search"]` se renderiza solo con `filtersOpen()`: el control visible `.tray__filter-toggle` abre el panel; el test no lo hacía.
+- El caso de descuento por producto solo asignaba precio `4,00 €` a Jamón y dejaba Leche sin precio; el subtotal aislado era 4,00 €, por eso 2,00 € tras descontar 2 € es correcto. Para esperar 3,00 €, el fixture debe fijar también Leche a 1,00 €.
+- El error de foto confirma un defecto real de presentación: el E2E recibe `409 AI_NOT_CONFIGURED` y `data.redirect=/settings/ai` desde SQLite temporal vacío, pero la UI muestra «El modelo no está disponible ahora mismo». `errorInterceptor` convierte `HttpErrorResponse` en `{ status, message, original }`; `shopping.service.ts::analyzePhoto` lee solo `error.error`, pierde el body bajo `original` y cae a `AI_UNAVAILABLE`. No se llamó al provider.
 
-- [x] Revalidar los cuatro rojos en la suite aislada completa, con servidor/SQLite/puerto/semilla temporales y rate limit activo; registrar 7/11 y los errores concretos sin atribuirlos automáticamente a producción.
+- [x] Revalidar los cuatro rojos iniciales en la suite aislada completa, con servidor/SQLite/puerto/semilla temporales y rate limit activo; registrar 7/11 y luego 8/11 tras aplicar correcciones de expectativas/selectores.
 - [x] Contrastar helper de creación, filtro/selección visible, selector de importe, mensaje frontend y contrato/handler backend con fuente actual.
-- [ ] Corregir solo las expectativas/selectores E2E cuya causa sea del test; conservar acciones verificables, valores/totales, cancelación y ausencia de persistencia indebida.
-- [ ] Capturar el status/body del flujo sin configuración IA usando solo el escenario sin provider; si se prueba provider configurado, stub local y aislado. Corregir en TDD únicamente si la discrepancia se confirma en el runtime reproducible.
-- [ ] Ejecutar la suite `shopping-round6.spec.ts` completa y registrar todos los resultados; medir cada archivo nuevo/cambiado con ≥70 % por métrica de alcance sin rebajar el gate global.
+- [x] Capturar status/body sin provider: `409 AI_NOT_CONFIGURED` y redirect `/settings/ai`; la misma E2E reproduce que la UI pierde el mensaje específico. No se utilizó proveedor externo.
+- [ ] Completar las correcciones test-only (abrir filtro y fijar precio de ambas líneas); conservar cancelación/persistencia y verificar importes explícitos.
+- [ ] TDD: cubrir en unitarias el error directo y el wrapper de `errorInterceptor`; preservar status, `body.message` y `body.data` en `analyzePhoto`, y validar por E2E «Falta configurar la IA» + destino accesible sin escribir artículos.
+- [ ] Ejecutar la suite `shopping-round6.spec.ts` completa en Chromium y Pixel 5 y registrar resultados; medir cada archivo nuevo/cambiado con ≥70 % por métrica de alcance sin rebajar el gate global.
 
 ### QA-04b · hit area táctil de `app-checkbox`
 
