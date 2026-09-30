@@ -60,7 +60,32 @@ describe('IconComponent', () => {
   });
 
   it('el set tiene los iconos con los que la lista se maneja a pulgar', () => {
-    for (const name of ['check', 'close', 'add_shopping_cart', 'shopping_basket', 'select_all', 'delete', 'edit', 'percent', 'local_offer', 'add_a_photo', 'history', 'unfold_more']) {
+    for (const name of [
+      'check',
+      'close',
+      'add_shopping_cart',
+      'shopping_basket',
+      'select_all',
+      'delete',
+      'edit',
+      'percent',
+      'local_offer',
+      'add_a_photo',
+      'history',
+      'unfold_more',
+      'group',
+      'home',
+      'content_copy',
+      'refresh',
+      'link',
+      'logout',
+      'inventory_2',
+      'menu_book',
+      'kitchen',
+      'smart_toy',
+      'calendar_today',
+      'event_note'
+    ]) {
       expect(hasIcon(name)).withContext(name).toBe(true);
     }
   });

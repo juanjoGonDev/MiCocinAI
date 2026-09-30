@@ -43,16 +43,12 @@ const LEGACY = {
     // La deuda de emoji va detras de la clave: al migrar la plantilla al diccionario se llevaban los
     // pictogramas consigo, asi que los ficheros que estaban aqui perdonados ahora lo estan ahi dentro.
     'frontend/src/app/core/i18n/dict/ai_config.ts',
-    'frontend/src/app/core/i18n/dict/dashboard.ts',
-    'frontend/src/app/core/i18n/dict/household.ts',
     'frontend/src/app/core/i18n/dict/invite.ts',
     'frontend/src/app/core/i18n/dict/onboarding.ts',
     'frontend/src/app/core/i18n/dict/pantry.ts',
     'frontend/src/app/core/i18n/dict/recipes.ts',
     'frontend/src/app/core/i18n/dict/settings.ts',
     'frontend/src/app/features/ai-config/ai-config.component.ts',
-    'frontend/src/app/features/dashboard/dashboard.component.ts',
-    'frontend/src/app/features/household/household.component.ts',
     'frontend/src/app/features/invite/invite.component.ts',
     'frontend/src/app/features/onboarding/onboarding.component.ts',
     'frontend/src/app/features/pantry/pantry.component.ts',

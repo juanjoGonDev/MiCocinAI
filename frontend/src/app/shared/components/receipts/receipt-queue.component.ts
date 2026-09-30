@@ -1,4 +1,12 @@
-import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  HostListener,
+  inject,
+  OnDestroy,
+  OnInit,
+  signal
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
@@ -7,6 +15,10 @@ import { IconComponent } from '../ui/icon/icon.component';
 import { ButtonComponent } from '../ui/button/button.component';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import type { ReceiptJob } from '../../../shared/models/receipt.model';
+import {
+  computeReceiptQueuePanelPosition,
+  type ReceiptQueuePanelPosition
+} from './receipt-queue-position';
 
 /**
  * El icono de la cola de lectura de tickets (HOGARIA-SPEC ## 12aj): la única puerta de la app
@@ -28,7 +40,7 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
   standalone: true,
   imports: [CommonModule, RouterLink, IconComponent, ButtonComponent, TranslatePipe],
   template: `
-    <div class="rq" (keydown.escape)="panelOpen.set(false)">
+    <div class="rq" (keydown.escape)="closePanel()">
       <button
         type="button"
         class="rq__button"
@@ -36,7 +48,7 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
         [class.rq__button--error]="conErrores()"
         [attr.aria-label]="'receipts.cola_de_lectura' | t"
         [attr.data-count]="activo()"
-        (click)="togglePanel()"
+        (click)="togglePanel($event)"
         data-test="receipt-queue-icon"
       >
         <!-- El anillo: girando mientras lee, quieto y rojo si algo falló. -->
@@ -52,6 +64,11 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
           class="rq__panel"
           role="dialog"
           [attr.aria-label]="'receipts.cola_de_lectura' | t"
+          [style.left.px]="panelPosition()?.left"
+          [style.top.px]="panelPosition()?.top"
+          [style.bottom.px]="panelPosition()?.bottom"
+          [style.width.px]="panelPosition()?.width"
+          [style.max-height.px]="panelPosition()?.maxHeight"
           data-test="receipt-queue-panel"
         >
           <header class="rq__panel-head">
@@ -105,7 +122,7 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
                     <a
                       class="rq__job-name"
                       [routerLink]="['/receipts', trabajo.receipt_id]"
-                      (click)="panelOpen.set(false)"
+                      (click)="closePanel()"
                     >
                       {{ trabajo.store || trabajo.file_name || ('receipts.titulo' | t) }}
                     </a>
@@ -158,7 +175,7 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
                       size="sm"
                       type="button"
                       [routerLink]="['/receipts', trabajo.receipt_id]"
-                      (onClick)="panelOpen.set(false)"
+                      (onClick)="closePanel()"
                     >
                       {{ 'receipts.abrir' | t }}
                     </app-button>
@@ -183,8 +200,8 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
         border: none;
         border-radius: var(--radius-full, 999px);
         background: transparent;
@@ -254,16 +271,15 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
       }
 
       .rq__panel {
-        position: absolute;
-        top: calc(100% + 8px);
-        right: 0;
+        position: fixed;
         z-index: 60;
-        width: min(380px, calc(100vw - 32px));
+        box-sizing: border-box;
         padding: var(--space-3, 12px);
         border: 1px solid var(--border-default, #e2e5ea);
         border-radius: var(--radius-lg, 12px);
         background: var(--bg-primary, #fff);
         box-shadow: var(--shadow-lg, 0 12px 32px rgba(16, 24, 40, 0.16));
+        overflow-y: auto;
       }
 
       .rq__panel-head {
@@ -315,8 +331,6 @@ import type { ReceiptJob } from '../../../shared/models/receipt.model';
         margin: 0;
         padding: 0;
         display: grid;
-        max-height: 320px;
-        overflow-y: auto;
       }
 
       .rq__job {
@@ -398,6 +412,8 @@ export class ReceiptQueueComponent implements OnInit, OnDestroy {
   private readonly router = inject(Router);
 
   readonly panelOpen = signal(false);
+  readonly panelPosition = signal<ReceiptQueuePanelPosition | null>(null);
+  private activeTrigger: HTMLElement | null = null;
 
   /** Los trabajos que aún cuentan para el badge: en cola, corriendo o con fallo. */
   readonly trabajos = computed(() => this.service.queue().jobs);
@@ -420,8 +436,35 @@ export class ReceiptQueueComponent implements OnInit, OnDestroy {
     this.service.unwatch();
   }
 
-  togglePanel(): void {
-    this.panelOpen.update((abierto) => !abierto);
+  togglePanel(event: MouseEvent): void {
+    if (this.panelOpen()) {
+      this.closePanel();
+      return;
+    }
+
+    this.activeTrigger = event.currentTarget as HTMLElement;
+    this.repositionPanel();
+    this.panelOpen.set(true);
+  }
+
+  @HostListener('window:resize')
+  repositionPanel(): void {
+    if (!this.activeTrigger) return;
+
+    const trigger = this.activeTrigger;
+    const bounds = trigger.getBoundingClientRect();
+    this.panelPosition.set(
+      computeReceiptQueuePanelPosition(
+        { left: bounds.left, top: bounds.top, bottom: bounds.bottom },
+        { width: window.innerWidth, height: window.innerHeight }
+      )
+    );
+  }
+
+  closePanel(): void {
+    this.panelOpen.set(false);
+    this.panelPosition.set(null);
+    this.activeTrigger = null;
   }
 
   async pararTodo(): Promise<void> {

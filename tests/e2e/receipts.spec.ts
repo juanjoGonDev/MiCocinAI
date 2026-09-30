@@ -36,6 +36,22 @@ function pdfDeMentira(): Buffer {
   return Buffer.concat([Buffer.from('%PDF-1.7\n'), Buffer.alloc(64, 0x20)]);
 }
 
+async function abrirTicketsDesdeLaNavegacion(page: Page): Promise<void> {
+  if ((page.viewportSize()?.width ?? 0) < 1024) {
+    await page.locator('.header__menu').click();
+    await page.locator('.sidebar--open .sidebar__nav a[href="/receipts"]').click();
+    return;
+  }
+
+  await page.locator('.sidebar__nav a[href="/receipts"]').click();
+}
+
+function iconoVisibleDeCola(page: Page) {
+  return (page.viewportSize()?.width ?? 0) >= 1024
+    ? page.locator('.sidebar [data-test="receipt-queue-icon"]')
+    : page.locator('.header [data-test="receipt-queue-icon"]');
+}
+
 test.describe('tickets: la cola de lectura (## 12aj)', () => {
   test('la seccion esta en la navegacion y la bandeja sube un ticket que falla sin IA', async ({
     page
@@ -43,14 +59,12 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
     await registerAndGoto(page, '/dashboard');
 
     // El modulo de tickets trae este build: sale en el menu lateral.
-    const enlace = page.locator('a[href="/receipts"]').first();
-    await expect(enlace).toBeVisible();
-    await enlace.click();
+    await abrirTicketsDesdeLaNavegacion(page);
     await expect(page).toHaveURL(/\/receipts$/);
 
     // El icono de la cola existe desde el primer momento, apagado.
     // Hay DOS iconos de la cola (cabecera movil y sidebar): el visible es el del viewport.
-    const icono = page.locator('[data-test="receipt-queue-icon"]:visible');
+    const icono = iconoVisibleDeCola(page);
     await expect(icono).toBeVisible();
 
     // La subida: un PNG valido entra en la cola.
@@ -180,7 +194,7 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
     });
 
     // Hay DOS iconos de la cola (cabecera movil y sidebar): el visible es el del viewport.
-    const icono = page.locator('[data-test="receipt-queue-icon"]:visible');
+    const icono = iconoVisibleDeCola(page);
     await icono.click();
     const panel = page.locator('[data-test="receipt-queue-panel"]');
     await expect(panel).toBeVisible();
