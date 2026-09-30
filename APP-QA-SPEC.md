@@ -158,6 +158,18 @@ La ejecución aislada verificó el contrato POST de foto sin configuración → 
 
 Evidencia: `shopping-http-error.ts` cubre el helper puro al 100 % en las cuatro métricas; el E2E sin configuración verifica status/body, presentación, cero filas añadidas y cero llamadas al provider. La suite actual de `shopping-round6.spec.ts` pasa en ambos proyectos. La cobertura global y el gate intacto se registran en QA-04c.
 
+**Revalidación posterior:** esta unidad verificó que el enlace mostrara el destino del body, pero no lo siguió. El árbol actual declara `/ai-config`; `settings.routes.ts` solo declara `path: ''`; por tanto `/settings/ai` no es una ruta válida y el wildcard conduce a `/dashboard`. Mantener la preservación del mensaje como resuelta y auditar/cambiar el destino por separado en QA-04c.10.
+
+### QA-04c.10 · el error sin IA lleva a la ruta real de configuración (pendiente)
+
+**Decisión basada en la fuente activa:** `app.routes.ts` declara `/ai-config` como área protegida y `main-layout.component.ts` la ofrece en la navegación; `/settings` es una pantalla distinta y no tiene subruta `ai`. El contrato anterior `/settings/ai` estaba obsoleto. La acción de recuperación del error sin proveedor debe llevar a `/ai-config`; no se añadirá un alias ficticio de settings.
+
+- [ ] Actualizar primero el contrato activo y expectativas de backend para `409 AI_NOT_CONFIGURED` → `data.redirect: '/ai-config'`; conservar el estado sin configuración y no llamar al proveedor.
+- [ ] Añadir regresión E2E al flujo real de foto: mostrar error/link accesible, seguirlo en escritorio y Pixel 5, confirmar URL `/ai-config` y encabezado de configuración, y confirmar cero filas creadas.
+- [ ] Reproducir rojo aislado con el link actual `/settings/ai`, y corregir backend más fallback frontend al destino único vigente.
+- [ ] Ejecutar pruebas unitarias de ruta, Playwright desktop/móvil, typecheck/build y verificar coverage del alcance ≥70 % sin bajar gates.
+- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil; actualizar evidencia y solo entonces marcar checklist.
+
 ### QA-04c.4 · matriz móvil de bandeja (revalidada en este alcance)
 
 En la línea base histórica, la suite Chromium pasó 11/11 y Pixel 5 pasó 3/11; tras corregir el CTA móvil, una corrida intermedia pasó 4/11. Cuatro fallos de bandeja compartían un selector helper defectuoso: `[data-test="back"], a[href="/shopping"]` elegía primero un enlace del sidebar fuera del viewport, aunque existía el botón de retorno visible `[data-test="back"]`. Otros tres fallos de cesta eran pointer interception: el botón Añadir quedaba debajo de la lista de autocomplete abierta (`.detail__sugs`). La bandeja es intencionalmente tarjeta móvil: a ≤720 px la cabecera/columnheaders se ocultan y cada celda lleva su etiqueta. `HOGARIA-SPEC.md` §8f especifica la tabla y ordenación de escritorio, filtros compactos en móvil y no exige ordenar desde la tarjeta. El resultado actual de la suite está debajo.
@@ -328,8 +340,9 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 ## Siguiente unidad de trabajo
 
 1. QA-04a: completada con suite `488/488`, regresiones de servicio y Playwright Chromium/Pixel `2/2` por proyecto; el gate de coverage sigue abierto en QA-04c.
-2. QA-04b checkbox: completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-3. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote.
-4. Corregir la configuración permanente de Playwright full-stack: su `DATABASE_PATH` sigue comentado; conservar aislamiento del servidor/DB de uso normal.
-5. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-6. Continuar el barrido de rutas y acciones con capturas de consola/red/overflow. Resolver el destino de Dashboard `/recipes/:id` con conducta actual observada antes de cambiar el router.
+2. QA-04c.10: corregir el destino roto del error «Falta configurar la IA» con prueba real que siga el enlace; no tocar proveedor/token.
+3. QA-04b checkbox: completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote.
+5. Corregir la configuración permanente de Playwright full-stack: su `DATABASE_PATH` sigue comentado; conservar aislamiento del servidor/DB de uso normal.
+6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+7. Continuar el barrido de rutas y acciones con capturas de consola/red/overflow. Resolver el destino de Dashboard `/recipes/:id` con conducta actual observada antes de cambiar el router.

@@ -621,7 +621,7 @@ Two calls, on purpose — a model that misreads must not silently rewrite the li
    duplicate the milk that is already pending.
 
 Errors are specific because the user has to act on them: no active AI config → `409` with
-`data.redirect = '/settings/ai'`; a reply that is not JSON → `422` with the model's first 200 characters
+`data.redirect = '/ai-config'`; a reply that is not JSON → `422` with the model's first 200 characters
 (for the log section, not for the toast); image too big → `413`; a line the model invented a price for
 with no digits → it arrives with `priceMinor: null` and lands in "sin precio", which is honest.
 
@@ -1060,7 +1060,7 @@ spec is the record, including of where reality disagreed with it.
       "no inventes precios"; nothing is written) → review sheet (checkbox per line, editable name/qty/price,
       proposed section, `baja confianza`, warnings) → `POST /lists/:id/items/apply` (creates the category
       when the model asks, merges through the same rule as a manual add). Four errors with four answers:
-      409 + `data.redirect: /settings/ai`, 422 + `sample` (and the sample is forwarded to the log viewer),
+      409 + `data.redirect: /ai-config`, 422 + `sample` (and the sample is forwarded to the log viewer),
       422 + zod issues, 400/413 for the file itself.
 - [x] Categories as data: `shopping_categories` (name, `key`, colour, position) seeded from what the UI had
       hard-coded, `GET/POST /categories`, household-wide once it exists, colour painted on the group headers,
