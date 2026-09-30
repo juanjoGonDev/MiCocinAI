@@ -37,11 +37,34 @@ export type WatchOptions = {
   windowMs?: number;
   /** Repeticiones de una misma URL dentro de la ventana antes de considerar bucle. */
   maxPerUrl?: number;
-  /** Rutas que se ignoran: los assets del bundle y los streams (una conexion viva). */
+  /** Rutas excluidas de la medición, además de los assets estáticos predeterminados. */
   ignore?: RegExp;
 };
 
-const DEFAULTS = { windowMs: 1500, maxPerUrl: 3, ignore: /\.(js|css|svg|png|woff2?|ico|json)(\?|$)/ };
+const DEFAULTS = {
+  windowMs: 1500,
+  maxPerUrl: 3,
+  ignore: /\.(js|css|svg|png|woff2?|ico|json)(\?|$)/
+};
+const SENSITIVE_QUERY_SUFFIX =
+  /(?:token|key|secret|password|credentials?|authorization|signature|jwt)$/;
+
+/** Keep failure diagnostics useful without printing tokens or credential-bearing URLs. */
+export function redactRequestUrl(rawUrl: string): string {
+  try {
+    const prefix = rawUrl.match(/^[A-Z]+\s+/i)?.[0] ?? '';
+    const url = new URL(rawUrl.slice(prefix.length));
+    url.username = '';
+    url.password = '';
+    for (const key of url.searchParams.keys()) {
+      const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (SENSITIVE_QUERY_SUFFIX.test(normalized)) url.searchParams.set(key, 'REDACTED');
+    }
+    return `${prefix}${url.toString()}`;
+  } catch {
+    return rawUrl;
+  }
+}
 
 /**
  * Agrupa por URL y marca los tramos con demasiadas repeticiones seguidas.
@@ -92,11 +115,16 @@ export function watchRequests(page: Page, options: WatchOptions = {}): RequestWa
   const entries: RequestEntry[] = [];
   const pending = new Map<string, RequestEntry>();
 
-  const keyOf = (request: Request) => `${request.method()} ${request.url()} ${request.frame().url()}`;
+  const keyOf = (request: Request) =>
+    `${request.method()} ${request.url()} ${request.frame().url()}`;
 
   page.on('request', (request) => {
     if (ignore.test(request.url())) return;
-    const entry: RequestEntry = { url: `${request.method()} ${request.url()}`, method: request.method(), at: Date.now() };
+    const entry: RequestEntry = {
+      url: `${request.method()} ${redactRequestUrl(request.url())}`,
+      method: request.method(),
+      at: Date.now()
+    };
     entries.push(entry);
     pending.set(keyOf(request), entry);
   });
@@ -120,9 +148,15 @@ export function watchRequests(page: Page, options: WatchOptions = {}): RequestWa
       entries.length = 0;
     },
     describeProblems: (more) => {
-      const problems = [...findBursts(entries, { ...options, ...more }).map((burst) => `${burst.count}x ${burst.url} en ${burst.lastAt - burst.firstAt} ms`), ...entries
-        .filter((entry) => entry.status === 429)
-        .map((entry) => `429 ${entry.url}`)];
+      const problems = [
+        ...findBursts(entries, { ...options, ...more }).map(
+          (burst) =>
+            `${burst.count}x ${redactRequestUrl(burst.url)} en ${burst.lastAt - burst.firstAt} ms`
+        ),
+        ...entries
+          .filter((entry) => entry.status === 429)
+          .map((entry) => `429 ${redactRequestUrl(entry.url)}`)
+      ];
       return problems.length > 0 ? problems.join('\n') : 'sin rachas ni 429';
     }
   };
