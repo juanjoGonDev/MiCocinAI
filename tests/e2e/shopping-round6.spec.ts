@@ -451,8 +451,16 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
       'base64'
     );
     await page.locator('input[name="photoFile"]').setInputFiles({ name: 'ticket.png', mimeType: 'image/png', buffer: png });
+    const photoResponsePromise = page.waitForResponse((response) =>
+      response.url().includes('/photo/analyze') && response.request().method() === 'POST'
+    );
     await page.locator('[data-test="photo-analyze"]').click();
 
+    const photoResponse = await photoResponsePromise;
+    const photoBody = await photoResponse.json() as { message?: string; data?: { redirect?: string } };
+    expect(photoResponse.status(), `photo error code: ${String(photoBody.message)}`).toBe(409);
+    expect(photoBody.message).toBe('AI_NOT_CONFIGURED');
+    expect(photoBody.data?.redirect).toBe('/settings/ai');
     await expect(page.locator('[data-test="photo-error"]')).toContainText(/Falta configurar la IA/i);
     await expect(page.locator('[data-test="photo-error"] a')).toHaveAttribute('href', /\/settings\/ai/);
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(0);

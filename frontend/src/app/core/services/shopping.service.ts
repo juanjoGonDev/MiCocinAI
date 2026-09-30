@@ -7,6 +7,7 @@ import { openResilientStream } from '../../core/sse';
 import { ToastService } from './toast.service';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import { AuthService } from './auth.service';
+import { originalHttpError } from './shopping-http-error';
 import {
   CompletePurchaseInput,
   CompleteReceipt,
@@ -282,8 +283,8 @@ export class ShoppingService {
         .pipe(
           map(response => ({ ok: true, data: response.data }) as PhotoOutcome),
           catchError((error: unknown) => {
-            const response = error as HttpErrorResponse;
-            const body = (response?.error ?? {}) as { message?: string; data?: Record<string, unknown> };
+            const response = originalHttpError(error);
+            const body = (response.error ?? {}) as { message?: string; data?: Record<string, unknown> };
             return of(failure(response?.status ?? 0, body.message ?? 'AI_UNAVAILABLE', body.data ?? {}));
           })
         )
@@ -376,7 +377,7 @@ export class ShoppingService {
       this.loadLists();
       return { ok: true, ...response.data };
     } catch (error) {
-      const original = (error as { original?: HttpErrorResponse })?.original ?? error;
+      const original = originalHttpError(error);
       const status = (original as { status?: number })?.status;
       const payload = ((original as { error?: { message?: string; data?: { missing?: MissingPriceLine[] } } })?.error ??
         {}) as { message?: string; data?: { missing?: MissingPriceLine[] } };
