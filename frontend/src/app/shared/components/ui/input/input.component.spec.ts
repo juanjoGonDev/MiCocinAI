@@ -187,20 +187,27 @@ describe('InputComponent', () => {
   it('labels the password action in the selected language and hides its SVG from assistive technology', () => {
     component.type = 'password';
     const i18n = TestBed.inject(I18nService);
-    i18n.setLang('es');
-    fixture.detectChanges();
+    try {
+      i18n.setLang('es');
+      fixture.detectChanges();
 
-    let toggle: HTMLButtonElement = fixture.nativeElement.querySelector('.input__toggle');
-    expect(toggle.getAttribute('aria-label')).toBe('Mostrar contraseña');
-    expect(toggle.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+      let toggle: HTMLButtonElement = fixture.nativeElement.querySelector('.input__toggle');
+      expect(toggle.getAttribute('aria-label')).toBe('Mostrar contraseña');
+      expect(toggle.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
 
-    toggle.click();
-    fixture.detectChanges();
-    expect(toggle.getAttribute('aria-label')).toBe('Ocultar contraseña');
+      toggle.click();
+      fixture.detectChanges();
+      expect(toggle.getAttribute('aria-label')).toBe('Ocultar contraseña');
 
-    i18n.setLang('en');
-    fixture.detectChanges();
-    expect(toggle.getAttribute('aria-label')).toBe('Hide password');
+      i18n.setLang('en');
+      fixture.detectChanges();
+      expect(toggle.getAttribute('aria-label')).toBe('Hide password');
+    } finally {
+      // I18nService also changes the module-level number/date locale; don't leak English
+      // formatting into later shopping-model unit tests in the shared Karma browser.
+      i18n.setLang('es');
+      fixture.detectChanges();
+    }
   });
 
   it('keeps a disabled password hidden and reflects the visible state in the toggle', () => {

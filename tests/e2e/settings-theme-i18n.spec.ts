@@ -1,7 +1,11 @@
 import { test, expect } from './fixtures';
 import { registerUser } from './helpers/auth';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 test.describe('Settings — theme & i18n', () => {
+  test.use({ serviceWorkers: 'block' });
+
   test.beforeEach(async ({ page }) => {
     await registerUser(page, 'Tester');
     await page.goto('/settings');
@@ -20,14 +24,60 @@ test.describe('Settings — theme & i18n', () => {
     ).toHaveCount(3);
   });
 
+  test('uses clean labels for themes and languages in both locales', async ({ page }, testInfo) => {
+    const visibleText = await page.locator('.settings-title, .settings-group').allTextContents();
+    expect(visibleText.join(' ')).not.toMatch(/\p{Extended_Pictographic}/u);
+    await expect(page.locator('.settings-title app-icon svg')).toBeVisible();
+    await expect(
+      page.locator('.settings-group__title').last().locator('app-icon svg')
+    ).toBeVisible();
+
+    const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+    if (screenshotDirectory) {
+      const isMobile = testInfo.project.name === 'mobile-chrome';
+      mkdirSync(screenshotDirectory, { recursive: true });
+      await page.setViewportSize(
+        isMobile ? { width: 393, height: 852 } : { width: 1440, height: 900 }
+      );
+      await page.screenshot({
+        path: join(screenshotDirectory, `settings-${isMobile ? 'mobile' : 'desktop'}.png`),
+        animations: 'disabled'
+      });
+    }
+
+    await page.getByRole('button', { name: 'English' }).click();
+    await expect(page.locator('.settings-group').nth(1)).toContainText('Language');
+    const englishText = await page.locator('.settings-title, .settings-group').allTextContents();
+    expect(englishText.join(' ')).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
   test('switching to dark theme applies data-theme=dark', async ({ page }) => {
-    await page.getByRole('button', { name: /Oscuro|Dark/ }).click();
+    const darkTheme = page.getByRole('button', { name: /Oscuro|Dark/ });
+    await expect(darkTheme).toHaveAttribute('aria-pressed', 'false');
+    await darkTheme.click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await expect(darkTheme).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('switching to light theme applies data-theme=light', async ({ page }) => {
     await page.getByRole('button', { name: /Claro|Light/ }).click();
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+  });
+
+  test('theme and language options are operable by keyboard and retain their selected state', async ({
+    page
+  }) => {
+    const dark = page.getByRole('button', { name: /Oscuro|Dark/ });
+    await dark.focus();
+    await page.keyboard.press('Space');
+    await expect(dark).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+
+    const english = page.getByRole('button', { name: 'English' });
+    await english.focus();
+    await page.keyboard.press('Enter');
+    await expect(english).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('.settings-group').nth(1)).toContainText('Language');
   });
 
   test('switching language to English translates the settings page', async ({ page }) => {
@@ -36,7 +86,10 @@ test.describe('Settings — theme & i18n', () => {
   });
 
   test('language preference persists across reloads', async ({ page }) => {
-    await page.getByRole('button', { name: /English/ }).click();
+    const english = page.getByRole('button', { name: /English/ });
+    await expect(english).toHaveAttribute('aria-pressed', 'false');
+    await english.click();
+    await expect(english).toHaveAttribute('aria-pressed', 'true');
     await page.reload();
     await expect(page.locator('.settings-group__title').nth(1)).toHaveText('Language');
   });

@@ -42,12 +42,9 @@ const LEGACY = {
   'sin-emoji': [
     // La deuda de emoji va detras de la clave: al migrar la plantilla al diccionario se llevaban los
     // pictogramas consigo, asi que los ficheros que estaban aqui perdonados ahora lo estan ahi dentro.
-    'frontend/src/app/core/i18n/dict/ai_config.ts',
     'frontend/src/app/core/i18n/dict/onboarding.ts',
     'frontend/src/app/core/i18n/dict/pantry.ts',
     'frontend/src/app/core/i18n/dict/recipes.ts',
-    'frontend/src/app/core/i18n/dict/settings.ts',
-    'frontend/src/app/features/ai-config/ai-config.component.ts',
     'frontend/src/app/features/pantry/pantry.component.ts',
     'frontend/src/app/features/recipes/recipes.component.ts',
     'frontend/src/app/shared/components/ui/modal/modal.component.ts',

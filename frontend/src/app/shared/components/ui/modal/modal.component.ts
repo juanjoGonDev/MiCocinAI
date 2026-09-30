@@ -1,19 +1,36 @@
-import { Component, Input, Output, EventEmitter, HostListener } from '@angular/core';
+import {
+  AfterViewChecked,
+  Component,
+  ElementRef,
+  EventEmitter,
+  HostListener,
+  Input,
+  OnChanges,
+  Output,
+  SimpleChanges,
+  ViewChild
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ButtonComponent } from '../button/button.component';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 @Component({
   selector: 'app-modal',
   standalone: true,
-  imports: [
-    TranslatePipe,
-    CommonModule, ButtonComponent],
+  imports: [TranslatePipe, CommonModule],
   template: `
     <div *ngIf="isOpen" class="modal-overlay" (click)="onOverlayClick($event)">
-      <div [class]="getModalClasses()" role="dialog" [attr.aria-label]="title">
+      <div
+        #dialog
+        [class]="getModalClasses()"
+        role="dialog"
+        [attr.aria-label]="title"
+        tabindex="-1"
+      >
         <div class="modal__header">
           <h2 class="modal__title">{{ title }}</h2>
           <button
@@ -26,115 +43,138 @@ export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
             ✕
           </button>
         </div>
-        
+
         <div class="modal__body">
           <ng-content></ng-content>
         </div>
-        
+
         <div *ngIf="showFooter" class="modal__footer">
           <ng-content select="[footer]"></ng-content>
         </div>
       </div>
     </div>
   `,
-  styles: [`
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.5);
-      backdrop-filter: blur(4px);
-      padding: var(--space-4);
-      animation: fadeIn var(--duration-200) var(--ease-out);
-    }
+  styles: [
+    `
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        padding: var(--space-4);
+        animation: fadeIn var(--duration-200) var(--ease-out);
+      }
 
-    .modal {
-      background: var(--bg-secondary);
-      border-radius: var(--radius-2xl);
-      box-shadow: var(--shadow-xl);
-      display: flex;
-      flex-direction: column;
-      max-height: calc(100vh - 2rem);
-      animation: scaleIn var(--duration-200) var(--ease-out);
-    }
+      .modal {
+        background: var(--bg-secondary);
+        border-radius: var(--radius-2xl);
+        box-shadow: var(--shadow-xl);
+        display: flex;
+        flex-direction: column;
+        max-height: calc(100vh - 2rem);
+        animation: scaleIn var(--duration-200) var(--ease-out);
+      }
 
-    .modal--sm { width: 100%; max-width: 400px; }
-    .modal--md { width: 100%; max-width: 500px; }
-    .modal--lg { width: 100%; max-width: 700px; }
-    .modal--xl { width: 100%; max-width: 900px; }
-    .modal--full { width: 95vw; height: 90vh; }
+      .modal--sm {
+        width: 100%;
+        max-width: 400px;
+      }
+      .modal--md {
+        width: 100%;
+        max-width: 500px;
+      }
+      .modal--lg {
+        width: 100%;
+        max-width: 700px;
+      }
+      .modal--xl {
+        width: 100%;
+        max-width: 900px;
+      }
+      .modal--full {
+        width: 95vw;
+        height: 90vh;
+      }
 
-    .modal__header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: var(--space-4) var(--space-6);
-      border-bottom: 1px solid var(--border-default);
-    }
+      .modal__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-4) var(--space-6);
+        border-bottom: 1px solid var(--border-default);
+      }
 
-    .modal__title {
-      font-family: var(--font-display);
-      font-size: var(--text-lg);
-      font-weight: var(--font-semibold);
-      color: var(--text-primary);
-    }
-
-    .modal__close {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      border-radius: var(--radius-lg);
-      background: none;
-      border: none;
-      color: var(--text-tertiary);
-      cursor: pointer;
-      transition: var(--transition-fast);
-      font-size: var(--text-lg);
-
-      &:hover {
-        background: var(--bg-tertiary);
+      .modal__title {
+        font-family: var(--font-display);
+        font-size: var(--text-lg);
+        font-weight: var(--font-semibold);
         color: var(--text-primary);
       }
-    }
 
-    .modal__body {
-      flex: 1;
-      overflow-y: auto;
-      padding: var(--space-6);
-    }
+      .modal__close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        border-radius: var(--radius-lg);
+        background: none;
+        border: none;
+        color: var(--text-tertiary);
+        cursor: pointer;
+        transition: var(--transition-fast);
+        font-size: var(--text-lg);
 
-    .modal__footer {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: var(--space-3);
-      padding: var(--space-4) var(--space-6);
-      border-top: 1px solid var(--border-default);
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-
-    @keyframes scaleIn {
-      from { 
-        opacity: 0; 
-        transform: scale(0.95); 
+        &:hover {
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+        }
       }
-      to { 
-        opacity: 1; 
-        transform: scale(1); 
+
+      .modal__body {
+        flex: 1;
+        overflow-y: auto;
+        padding: var(--space-6);
       }
-    }
-  `]
+
+      .modal__footer {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: var(--space-3);
+        padding: var(--space-4) var(--space-6);
+        border-top: 1px solid var(--border-default);
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes scaleIn {
+        from {
+          opacity: 0;
+          transform: scale(0.95);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
+    `
+  ]
 })
-export class ModalComponent {
+export class ModalComponent implements OnChanges, AfterViewChecked {
+  @ViewChild('dialog') private _dialogRef?: ElementRef<HTMLElement>;
+
   @Input() isOpen = false;
   @Input() title = '';
   @Input() size: ModalSize = 'md';
@@ -145,10 +185,66 @@ export class ModalComponent {
   @Output() isOpenChange = new EventEmitter<boolean>();
   @Output() onClose = new EventEmitter<void>();
 
+  private _previouslyFocusedElement: HTMLElement | null = null;
+  private _focusOnOpen = false;
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (changes['isOpen']?.currentValue === true && changes['isOpen'].previousValue !== true) {
+      const activeElement = document.activeElement;
+      this._previouslyFocusedElement = activeElement instanceof HTMLElement ? activeElement : null;
+      this._focusOnOpen = true;
+    } else if (changes['isOpen']?.currentValue === false) {
+      this._restoreFocus();
+    }
+  }
+
+  ngAfterViewChecked(): void {
+    this._updateAccessibilityAttributes();
+
+    if (this._focusOnOpen && this.isOpen) {
+      this._focusOnOpen = false;
+      this._focusFirstElement();
+    }
+  }
+
   @HostListener('document:keydown.escape')
   onEscapeKey(): void {
-    if (this.closable && this.isOpen) {
+    if (this.closable && this.isOpen && this._isTopmostDialog()) {
       this.close();
+    }
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onTabKey(event: KeyboardEvent): void {
+    if (!this.isOpen || event.key !== 'Tab' || !this._isTopmostDialog()) {
+      return;
+    }
+
+    const dialog = this._dialogRef?.nativeElement;
+    if (!dialog) {
+      return;
+    }
+
+    const focusableElements = this._getFocusableElements(dialog);
+    if (focusableElements.length === 0) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    const focusIsOutsideDialog = !dialog.contains(document.activeElement);
+
+    if (event.shiftKey && (document.activeElement === firstElement || focusIsOutsideDialog)) {
+      event.preventDefault();
+      lastElement.focus();
+    } else if (
+      !event.shiftKey &&
+      (document.activeElement === lastElement || focusIsOutsideDialog)
+    ) {
+      event.preventDefault();
+      firstElement.focus();
     }
   }
 
@@ -156,6 +252,7 @@ export class ModalComponent {
     this.isOpen = false;
     this.isOpenChange.emit(false);
     this.onClose.emit();
+    this._restoreFocus();
   }
 
   onOverlayClick(event: MouseEvent): void {
@@ -166,5 +263,75 @@ export class ModalComponent {
 
   getModalClasses(): string {
     return `modal modal--${this.size}`;
+  }
+
+  private _focusFirstElement(dialog = this._dialogRef?.nativeElement): void {
+    if (!dialog) {
+      return;
+    }
+
+    const [firstElement] = this._getFocusableElements(dialog);
+    (firstElement ?? dialog).focus();
+  }
+
+  private _getFocusableElements(dialog: HTMLElement): HTMLElement[] {
+    return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+      (element) => !element.hasAttribute('hidden') && element.tabIndex >= 0
+    );
+  }
+
+  private _restoreFocus(): void {
+    const previouslyFocusedElement = this._previouslyFocusedElement;
+    this._previouslyFocusedElement = null;
+    const dialog = this._dialogRef?.nativeElement;
+    const closingOverlay = dialog?.closest('.modal-overlay');
+    const remainingOverlays = Array.from(
+      document.querySelectorAll<HTMLElement>('.modal-overlay')
+    ).filter((overlay) => overlay !== closingOverlay);
+    const remainingOverlay = remainingOverlays[remainingOverlays.length - 1];
+    const remainingDialog = remainingOverlay?.querySelector<HTMLElement>('[role="dialog"]');
+
+    if (remainingDialog) {
+      remainingDialog.setAttribute('aria-modal', 'true');
+      remainingDialog.removeAttribute('aria-hidden');
+      remainingDialog.removeAttribute('inert');
+      if (
+        previouslyFocusedElement?.isConnected &&
+        remainingDialog.contains(previouslyFocusedElement)
+      ) {
+        previouslyFocusedElement.focus();
+      } else {
+        this._focusFirstElement(remainingDialog);
+      }
+      return;
+    }
+
+    if (previouslyFocusedElement?.isConnected && !dialog?.contains(previouslyFocusedElement)) {
+      previouslyFocusedElement.focus();
+    }
+  }
+
+  private _isTopmostDialog(): boolean {
+    const dialog = this._dialogRef?.nativeElement;
+    const overlay = dialog?.closest('.modal-overlay');
+    const overlays = document.querySelectorAll('.modal-overlay');
+    if (!overlay) return false;
+    return overlays.length === 0 || overlays[overlays.length - 1] === overlay;
+  }
+
+  private _updateAccessibilityAttributes(): void {
+    const dialog = this._dialogRef?.nativeElement;
+    if (!dialog || !this.isOpen) return;
+
+    if (this._isTopmostDialog()) {
+      dialog.setAttribute('aria-modal', 'true');
+      dialog.removeAttribute('aria-hidden');
+      dialog.removeAttribute('inert');
+      return;
+    }
+
+    dialog.removeAttribute('aria-modal');
+    dialog.setAttribute('aria-hidden', 'true');
+    dialog.setAttribute('inert', '');
   }
 }

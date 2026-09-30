@@ -7,10 +7,15 @@ import { registerAndGoto } from '../helpers/auth';
 test.use({ serviceWorkers: 'block', trace: 'off', screenshot: 'off', video: 'off' });
 
 function isTastePatch(response: import('@playwright/test').Response): boolean {
-  return new URL(response.url()).pathname.endsWith('/api/auth/taste') && response.request().method() === 'PATCH';
+  return (
+    new URL(response.url()).pathname.endsWith('/api/auth/taste') &&
+    response.request().method() === 'PATCH'
+  );
 }
 
-test('un fallo al guardar módulos revierte, desbloquea y permite reintentar', async ({ page }, testInfo) => {
+test('un fallo al guardar módulos revierte, desbloquea y permite reintentar', async ({
+  page
+}, testInfo) => {
   const isMobile = testInfo.project.name === 'mobile-chrome';
   const initialViewport = isMobile ? { width: 390, height: 844 } : { width: 1440, height: 900 };
   await page.setViewportSize(initialViewport);
@@ -23,8 +28,12 @@ test('un fallo al guardar módulos revierte, desbloquea y permite reintentar', a
   let shouldFailNextPatch = true;
   let notifyPatchObserved!: () => void;
   let releaseFailedPatch!: () => void;
-  const patchObserved = new Promise<void>((resolve) => { notifyPatchObserved = resolve; });
-  const failedResponseGate = new Promise<void>((resolve) => { releaseFailedPatch = resolve; });
+  const patchObserved = new Promise<void>((resolve) => {
+    notifyPatchObserved = resolve;
+  });
+  const failedResponseGate = new Promise<void>((resolve) => {
+    releaseFailedPatch = resolve;
+  });
 
   await page.route('**/api/auth/taste*', async (route) => {
     if (route.request().method() === 'PATCH' && shouldFailNextPatch) {
@@ -45,14 +54,17 @@ test('un fallo al guardar módulos revierte, desbloquea y permite reintentar', a
   if (isMobile) await pantrySwitch.tap();
   else await pantrySwitch.click();
   await patchObserved;
-  await expect(pantrySwitch).toBeDisabled();
+  await expect(pantrySwitch).toHaveAttribute('aria-disabled', 'true');
   releaseFailedPatch();
 
   const failedResponse = await failedResponsePromise;
   expect(failedResponse.status()).toBe(500);
   await expect(pantrySwitch).toHaveAttribute('aria-checked', 'true');
+  await expect(pantrySwitch).toHaveAttribute('aria-disabled', 'false');
   await expect(pantrySwitch).toBeEnabled();
   await expect(page.locator('.settings-hint--error')).toBeVisible();
+  await expect(page.locator('.settings-hint--error')).toHaveAttribute('role', 'alert');
+  await expect(page.locator('.settings-hint--error')).toHaveAttribute('aria-atomic', 'true');
 
   const viewports = isMobile
     ? [
@@ -74,8 +86,13 @@ test('un fallo al guardar módulos revierte, desbloquea y permite reintentar', a
       ];
   for (const viewport of viewports) {
     await page.setViewportSize(viewport);
-    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
-    expect(overflow, `Configuración no debe desbordarse a ${viewport.width}×${viewport.height}`).toBe(false);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth
+    );
+    expect(
+      overflow,
+      `Configuración no debe desbordarse a ${viewport.width}×${viewport.height}`
+    ).toBe(false);
     await expect(pantrySwitch).toBeVisible();
     await expect(pantrySwitch).toBeEnabled();
   }
@@ -86,7 +103,10 @@ test('un fallo al guardar módulos revierte, desbloquea y permite reintentar', a
     await page.setViewportSize(initialViewport);
     await pantrySwitch.scrollIntoViewIfNeeded();
     await page.screenshot({
-      path: join(screenshotDirectory, `settings-modules-error-${isMobile ? 'mobile' : 'desktop'}-${Date.now()}.png`),
+      path: join(
+        screenshotDirectory,
+        `settings-modules-error-${isMobile ? 'mobile' : 'desktop'}-${Date.now()}.png`
+      ),
       fullPage: true
     });
   }
@@ -101,5 +121,8 @@ test('un fallo al guardar módulos revierte, desbloquea y permite reintentar', a
   await expect(page.locator('.settings-hint--error')).toHaveCount(0);
 
   await page.reload();
-  await expect(page.locator('[data-module-switch="pantry"]')).toHaveAttribute('aria-checked', 'false');
+  await expect(page.locator('[data-module-switch="pantry"]')).toHaveAttribute(
+    'aria-checked',
+    'false'
+  );
 });

@@ -1,6 +1,8 @@
 import { test, expect } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 
+test.use({ serviceWorkers: 'block' });
+
 /**
  * Los modulos son un flag de la app: se editan en Configuracion (no en
  * Preferencias, que habla del comensal), se aplican sin recargar y lo que este
@@ -20,8 +22,14 @@ test.describe('Configuración — módulos', () => {
     await expect(page.locator('.settings-module__soon')).toHaveCount(1);
 
     // Sin marcar nada, el significado es «todo lo que trae el build»
-    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute('aria-checked', 'true');
-    await expect(page.locator('[data-module-switch="pantry"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    await expect(page.locator('[data-module-switch="pantry"]')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
     // La lista de la compra ya existe: viene encendida con las demas del build.
     await expect(page.locator('[data-module-switch="shopping"]')).toHaveAttribute(
       'aria-checked',
@@ -105,7 +113,10 @@ test.describe('Configuración — módulos', () => {
       'aria-checked',
       'true'
     );
-    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
     await expect(page.locator('[data-modules-reset]')).toHaveCount(0);
   });
 
@@ -122,6 +133,49 @@ test.describe('Configuración — módulos', () => {
     }
   });
 
+  test('los interruptores de módulo responden a Espacio y conservan el foco', async ({ page }) => {
+    await registerAndGoto(page, '/settings', 'mods-keyboard-toggle');
+    const pantrySwitch = page.locator('[data-module-switch="pantry"]');
+    let signalPatch!: () => void;
+    let releasePatch!: () => void;
+    let patchCount = 0;
+    const patchObserved = new Promise<void>((resolve) => {
+      signalPatch = resolve;
+    });
+    const responseGate = new Promise<void>((resolve) => {
+      releasePatch = resolve;
+    });
+
+    await page.route('**/api/auth/taste*', async (route) => {
+      if (route.request().method() !== 'PATCH') return route.continue();
+      patchCount += 1;
+      signalPatch();
+      await responseGate;
+      await route.continue();
+    });
+
+    await pantrySwitch.focus();
+
+    await page.keyboard.press('Space');
+    await patchObserved;
+    await expect(pantrySwitch).toHaveAttribute('aria-checked', 'false');
+    await expect(pantrySwitch).toHaveAttribute('aria-disabled', 'true');
+    await expect(pantrySwitch).toBeFocused();
+
+    // aria-disabled no quita foco, pero el guard evita una segunda escritura.
+    await page.keyboard.press('Space');
+    await expect(pantrySwitch).toHaveAttribute('aria-checked', 'false');
+    await expect(pantrySwitch).toBeFocused();
+    expect(patchCount).toBe(1);
+    releasePatch();
+    await expect(pantrySwitch).toHaveAttribute('aria-disabled', 'false');
+
+    await page.keyboard.press('Space');
+    await expect(pantrySwitch).toHaveAttribute('aria-checked', 'true');
+    await expect(pantrySwitch).toBeFocused();
+    await expect.poll(() => patchCount).toBe(2);
+  });
+
   test('una sección apagada sigue accesible por URL: no se expulsa a nadie', async ({ page }) => {
     await registerAndGoto(page, '/settings', 'mods-direct');
 
@@ -133,5 +187,73 @@ test.describe('Configuración — módulos', () => {
     await expect(page).toHaveURL(/\/pantry/);
     await expect(page.locator('app-pantry')).toHaveCount(1);
     await expect(page.locator('a[href="/pantry"]')).toHaveCount(0);
+  });
+
+  test('restablecer espera a que termine el guardado actual', async ({ page }) => {
+    await registerAndGoto(page, '/settings', 'mods-reset-pending');
+
+    let signalPatch!: () => void;
+    let releasePatch!: () => void;
+    const patchObserved = new Promise<void>((resolve) => {
+      signalPatch = resolve;
+    });
+    const responseGate = new Promise<void>((resolve) => {
+      releasePatch = resolve;
+    });
+
+    await page.route('**/api/auth/taste*', async (route) => {
+      if (route.request().method() !== 'PATCH') return route.continue();
+      const response = await route.fetch();
+      signalPatch();
+      await responseGate;
+      await route.fulfill({ response });
+    });
+
+    const pantrySwitch = page.locator('[data-module-switch="pantry"]');
+    await pantrySwitch.click();
+    await patchObserved;
+
+    const reset = page.locator('[data-modules-reset]');
+    await expect(pantrySwitch).toHaveAttribute('aria-disabled', 'true');
+    await expect(reset).toBeDisabled();
+    releasePatch();
+
+    await expect(pantrySwitch).toHaveAttribute('aria-checked', 'false');
+    await expect(reset).toBeEnabled();
+  });
+
+  test('los interruptores conservan un objetivo táctil de 44 px y el layout cabe en los breakpoints', async ({
+    page
+  }) => {
+    await registerAndGoto(page, '/settings', 'mods-responsive-bounds');
+    const pantrySwitch = page.locator('[data-module-switch="pantry"]');
+
+    for (const viewport of [
+      { width: 320, height: 740 },
+      { width: 393, height: 852 },
+      { width: 480, height: 852 },
+      { width: 481, height: 852 },
+      { width: 600, height: 852 },
+      { width: 601, height: 852 },
+      { width: 767, height: 900 },
+      { width: 768, height: 900 },
+      { width: 769, height: 900 },
+      { width: 852, height: 393 }
+    ]) {
+      await page.setViewportSize(viewport);
+      const bounds = await page.evaluate(() => ({
+        scrollWidth: document.documentElement.scrollWidth,
+        viewportWidth: window.innerWidth
+      }));
+      expect(
+        bounds.scrollWidth,
+        `sin overflow horizontal a ${viewport.width}×${viewport.height}`
+      ).toBeLessThanOrEqual(bounds.viewportWidth);
+      const box = await pantrySwitch.boundingBox();
+      expect(
+        box?.height,
+        `objetivo táctil a ${viewport.width}×${viewport.height}`
+      ).toBeGreaterThanOrEqual(44);
+    }
   });
 });

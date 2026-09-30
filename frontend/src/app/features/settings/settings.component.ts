@@ -3,8 +3,10 @@ import { CommonModule } from '@angular/common';
 import { ThemeService, Theme } from '../../core/services/theme.service';
 import { I18nService, Language } from '../../core/services/i18n.service';
 import { ModulesService } from '../../core/services/modules.service';
+import type { HomeModule } from '../../shared/models/home-profile';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import type { TranslationKey } from '../../core/i18n';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 
 interface Option<T extends string> {
   value: T;
@@ -14,10 +16,13 @@ interface Option<T extends string> {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, TranslatePipe],
+  imports: [CommonModule, TranslatePipe, IconComponent],
   template: `
     <div class="settings-page">
-      <h1 class="settings-title">{{ 'settings.title' | t }}</h1>
+      <h1 class="settings-title">
+        <app-icon name="settings" [size]="24" [label]="null" />
+        {{ 'settings.title' | t }}
+      </h1>
 
       <section class="settings-group">
         <h2 class="settings-group__title">{{ 'settings.theme' | t }}</h2>
@@ -27,6 +32,7 @@ interface Option<T extends string> {
             type="button"
             class="settings-option"
             [class.settings-option--active]="themeService.theme() === opt.value"
+            [attr.aria-pressed]="themeService.theme() === opt.value"
             (click)="setTheme(opt.value)"
           >
             {{ opt.labelKey | t }}
@@ -53,6 +59,7 @@ interface Option<T extends string> {
             type="button"
             class="settings-option"
             [class.settings-option--active]="i18n.lang() === opt.value"
+            [attr.aria-pressed]="i18n.lang() === opt.value"
             [attr.data-test]="'settings-lang-' + opt.value"
             (click)="setLang(opt.value)"
           >
@@ -62,7 +69,10 @@ interface Option<T extends string> {
       </section>
 
       <section class="settings-group">
-        <h2 class="settings-group__title">{{ 'settings.modules' | t }}</h2>
+        <h2 class="settings-group__title">
+          <app-icon name="tune" [size]="18" [label]="null" />
+          {{ 'settings.modules' | t }}
+        </h2>
         <p class="settings-hint">{{ 'settings.modulesHint' | t }}</p>
 
         <ul class="settings-modules">
@@ -87,9 +97,10 @@ interface Option<T extends string> {
               [attr.data-module-switch]="def.id"
               [attr.aria-checked]="modules.isEnabled(def.id)"
               [attr.aria-label]="def.labelKey | t"
-              [disabled]="modules.isSaving() || !modules.canSwitchOff(def.id)"
+              [disabled]="!modules.canSwitchOff(def.id)"
+              [attr.aria-disabled]="modules.isSaving() || !modules.canSwitchOff(def.id)"
               [attr.data-on]="modules.isEnabled(def.id)"
-              (click)="modules.toggle(def.id)"
+              (click)="toggleModule(def.id)"
             >
               <span class="settings-module__knob" aria-hidden="true"></span>
             </button>
@@ -103,12 +114,18 @@ interface Option<T extends string> {
           type="button"
           class="settings-modules__reset"
           *ngIf="modules.selected().length > 0"
+          [disabled]="modules.isSaving()"
           (click)="modules.resetSelection()"
           data-modules-reset
         >
           {{ 'settings.modulesReset' | t }}
         </button>
-        <p class="settings-hint settings-hint--error" *ngIf="modules.lastError()">
+        <p
+          class="settings-hint settings-hint--error"
+          role="alert"
+          aria-atomic="true"
+          *ngIf="modules.lastError()"
+        >
           {{ 'settings.modulesFailed' | t }}
         </p>
       </section>
@@ -124,9 +141,14 @@ interface Option<T extends string> {
      * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
      * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
      */
-      .settings-modules__reset:hover {
+      .settings-modules__reset:hover:not(:disabled) {
         color: var(--primary-dark);
         background: var(--primary-subtle);
+      }
+
+      .settings-modules__reset:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
       }
 
       .settings-page {
@@ -213,13 +235,14 @@ interface Option<T extends string> {
       }
 
       .settings-module__switch {
+        position: relative;
         flex: none;
         width: 46px;
-        height: 26px;
+        height: 44px;
         padding: 2px;
-        border: 1px solid var(--border-default);
-        border-radius: 999px;
-        background: var(--bg-tertiary);
+        border: 0;
+        border-radius: 0;
+        background: transparent;
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -228,9 +251,23 @@ interface Option<T extends string> {
           border-color var(--duration-150) ease;
       }
 
-      .settings-module__switch[aria-checked='true'] {
+      .settings-module__switch::before {
+        position: absolute;
+        inset: 50% 0 auto;
+        height: 26px;
+        transform: translateY(-50%);
+        content: '';
+        border: 1px solid var(--border-default);
+        border-radius: 999px;
+        background: var(--bg-tertiary);
+      }
+
+      .settings-module__switch[aria-checked='true']::before {
         background: var(--primary);
         border-color: var(--primary);
+      }
+
+      .settings-module__switch[aria-checked='true'] {
         justify-content: flex-end;
       }
 
@@ -239,12 +276,21 @@ interface Option<T extends string> {
         outline-offset: 2px;
       }
 
-      .settings-module__switch:disabled {
-        cursor: progress;
+      .settings-module__switch:disabled,
+      .settings-module__switch[aria-disabled='true'] {
         opacity: 0.6;
       }
 
+      .settings-module__switch:disabled {
+        cursor: not-allowed;
+      }
+
+      .settings-module__switch[aria-disabled='true']:not(:disabled) {
+        cursor: progress;
+      }
+
       .settings-module__knob {
+        position: relative;
         width: 20px;
         height: 20px;
         border-radius: 50%;
@@ -297,6 +343,7 @@ interface Option<T extends string> {
       }
 
       .settings-option {
+        min-height: 44px;
         padding: var(--space-3) var(--space-4);
         background: var(--bg-secondary);
         border: 2px solid var(--border-default);
@@ -352,5 +399,10 @@ export class SettingsComponent {
 
   setLang(l: Language): void {
     this.i18n.setLang(l);
+  }
+
+  toggleModule(id: HomeModule): void {
+    if (this.modules.isSaving() || !this.modules.canSwitchOff(id)) return;
+    this.modules.toggle(id);
   }
 }
