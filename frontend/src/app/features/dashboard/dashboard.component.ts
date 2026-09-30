@@ -111,7 +111,8 @@ interface SuggestedRecipe {
         <div class="recipes-grid">
           <a
             *ngFor="let recipe of suggestedRecipes()"
-            [routerLink]="['/recipes', recipe.id]"
+            routerLink="/recipes"
+            [queryParams]="{ recipe: recipe.id }"
             class="recipe-card"
           >
             <div class="recipe-card__image">

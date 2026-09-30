@@ -186,25 +186,25 @@ El E2E full-stack usa el runner aislado `%TEMP%\hogaria-e2e-runner-audit.mjs`, `
 
 **Hallazgos TDD durante la integración:** el primer test rojo reprodujo que el click original acababa en `/dashboard`; al reencaminarlo, la modal de detalle aparece pero la ficha queda vacía porque `RecipeService.getRecipe()` devuelve `{ success, data }` como si fuese `Recipe`. El modal IA también conserva un `h2` vacío: el template asigna `[attr.title]` en vez del `@Input() title` de `app-modal`, dejando al diálogo sin nombre accesible. La prueba unitaria de servicio red (3/8 fallos) destapó además que `createRecipe()` y `deleteRecipe()` filtran el envelope de API hacia fuera pese a que sus firmas prometen `Recipe | null` y `boolean`; esta unidad normaliza ambos retornos.
 
-**Hallazgo responsive adicional (Pixel 5 estrecho 320×568):** el E2E midió 302 px de contenido de acciones en 240 px disponibles: el segundo botón de `.ai-form__actions` quedaba cortado horizontalmente porque la regla móvil solo apilaba los campos. Las acciones ahora se apilan, ambos botones se miden dentro de la fila y viewport y el test espera una vista estable antes de capturar.
+**Hallazgo responsive adicional (Pixel 5 estrecho 320×568):** el E2E midió 302 px de contenido de acciones en 240 px disponibles: el segundo botón de `.ai-form__actions` queda cortado horizontalmente porque la regla móvil solo apila los campos. El reflujo y la medición real de ambos botones son la unidad pendiente.
 
 **Hallazgo responsive de la ficha (Pixel 5 320×568):** tras abrir el deep link a 320 px en un documento nuevo, `.recipe-detail__actions` también desborda: la fila mide 332 px de contenido dentro de 240 px disponibles. El primer intento de E2E se detuvo ante esta aserción y dejó el fixture sintético sin borrar; el siguiente caso falló en cascada por encontrar esa receta. La prueba debe limpiar su receta propia en `finally`, incluso si una aserción falla.
 
-- [ ] TDD E2E con receta sintética creada por API en SQLite temporal: la tarjeta sugerida del Dashboard abre la receta concreta en desktop y Pixel 5; recargar el deep link conserva modal/contenido; cerrar vuelve a `/recipes` y quita `recipe`.
-- [ ] TDD E2E del CTA principal y del estado vacío: seguir `#ai` abre el formulario accesible tanto al navegar desde Dashboard como al cargar `/recipes#ai`; cerrar limpia el fragmento y no llama a IA.
+- [x] TDD E2E con receta sintética creada por API en SQLite temporal: la tarjeta sugerida del Dashboard abre la receta concreta en desktop y Pixel 5; recargar el deep link conserva modal/contenido; cerrar vuelve a `/recipes` y quita `recipe`.
+- [x] TDD E2E del CTA principal y del estado vacío: seguir `#ai` abre el formulario accesible tanto al navegar desde Dashboard como al cargar `/recipes#ai`; cerrar limpia el fragmento y no llama a IA.
 - [ ] Refluir las acciones de la modal IA a 320 px y medir ambos botones completos dentro del viewport; mantener scroll vertical usable y comprobar 393×851/320×568.
 - [ ] Refluir también las acciones de la ficha a 320 px; medir «Cocinar ahora» y «Añadir a favoritos» completos en su contenedor y viewport, con espacio bajo los botones.
-- [ ] Limpiar siempre la receta sintética E2E con `finally`, para que una aserción fallida no contamine casos posteriores.
-- [ ] Probar `/recipes?recipe=missing` como borde: mantener la página de Recetas, no abrir detalle vacío ni caer en Dashboard, limpiar el id inválido con una salida recuperable.
+- [x] Limpiar siempre la receta sintética E2E con `finally`, para que una aserción fallida no contamine casos posteriores.
+- [x] Probar `/recipes?recipe=missing` como borde: mantener la página de Recetas, no abrir detalle vacío ni caer en Dashboard, limpiar el id inválido con una salida recuperable.
 - [x] Corregir `RecipeService.getRecipe()` para desempaquetar el DTO; unit test cubre éxito/error y `currentRecipe`.
-- [ ] E2E comprueba nombre/descripción/ingredientes reales del detalle abierto por deep link.
+- [x] E2E comprueba nombre/descripción/ingredientes reales del detalle abierto por deep link.
 - [x] Alinear `createRecipe()` y `deleteRecipe()` con sus tipos de salida (`Recipe | null` y `boolean`); los tests comprueban payload y persistencia de la señal al fallar.
-- [ ] Corregir el binding del título del modal IA a su `@Input()`; E2E confirma el nombre accesible del diálogo al navegar y al cargar `#ai` directamente.
-- [ ] Añadir pruebas unitarias de resolución de intención de ruta (incluida precedencia entre `recipe` y `#ai`).
-- [x] La cobertura de `RecipeService`, con la prueba focal aislada, supera el 70 % de statements, ramas, funciones y líneas sin bajar gates.
-- [ ] Revisar patrones de ruta/template y ejecutar typecheck/build, pruebas aisladas desktop/Pixel 5 y capturas sintéticas PC/móvil inspeccionadas.
+- [x] Corregir el binding del título del modal IA a su `@Input()`; E2E confirma el nombre accesible del diálogo al navegar y al cargar `#ai` directamente.
+- [x] Añadir pruebas unitarias de resolución de intención de ruta (incluida precedencia entre `recipe` y `#ai`).
+- [x] La cobertura de `RecipeService` y del resolver, con la prueba focal aislada, supera el 70 % de statements, ramas, funciones y líneas sin bajar gates.
+- [x] Revisar patrones de ruta/template y ejecutar typecheck/build, pruebas aisladas desktop/Pixel 5 y capturas sintéticas PC/móvil inspeccionadas.
 
-**Evidencia parcial — contrato del servicio (2026-09-30):** prueba focal `ng test` con solo `recipe.service.spec.ts`: **8/8**. Cobertura informada: statements **100 % (59/59)**, ramas **80 % (8/10)**, funciones **100 % (30/30)** y líneas **100 % (47/47)**; el gate local de Karma se mantiene en 80 % en cada métrica. El runtime de deep links y las capturas quedan pendientes para la unidad de integración siguiente.
+**Evidencia parcial — navegación de recetas (2026-09-30):** con el runner `%TEMP%\hogaria-e2e-runner-audit.mjs`, `E2E_SCOPE=all`, rate limit activo, servidor efímero y SQLite temporal único, el alcance de rutas `dashboard-recipe-links.spec.ts` pasó **3/3 Chromium** y **3/3 Pixel 5**. Se validaron la tarjeta, recarga/cierre, CTA principal/estado vacío, `#ai` directo, Escape, nombre accesible, ausencia de peticiones `/api/ai/` e id inválido. Karma del servicio+resolver pasó **11/11**, cobertura **100/83.33/100/100** (gates locales 80 %); el servicio aislado pasó **8/8**, **100/80/100/100**. También pasaron `node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.e2e.json` y `node .\node_modules\@angular\cli\bin\ng build --configuration production` (warnings previos de bundle de 691.58 kB frente a 500 kB, estilos e imports no usados). Capturas sintéticas inspeccionadas en `.e2e-screenshots/dashboard-recipe-links-route/` (1280 y Pixel 5 393×851); la comprobación/captura de acciones 320×568 sigue pendiente.
 
 ### QA-04c.4 · matriz móvil de bandeja (revalidada en este alcance)
 

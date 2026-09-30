@@ -1,6 +1,10 @@
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { combineLatest, of } from 'rxjs';
+import { distinctUntilChanged, map, switchMap } from 'rxjs/operators';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RecipeService } from '../../core/services/recipe.service';
 import { AiService } from '../../core/services/ai.service';
 import { PantryService } from '../../core/services/pantry.service';
@@ -18,6 +22,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
+import { resolveRecipeRouteIntent } from './recipe-route-intent';
 
 @Component({
   selector: 'app-recipes',
@@ -108,7 +113,7 @@ import { I18nService } from '../../core/services/i18n.service';
       <!-- AI Generation Modal -->
       <app-modal
         [isOpen]="isAiModalOpen()"
-        [attr.title]="'recipes.generar_receta_con_ia' | t"
+        [title]="'recipes.generar_receta_con_ia' | t"
         size="lg"
         (onClose)="closeAiModal()"
       >
@@ -771,11 +776,15 @@ import { I18nService } from '../../core/services/i18n.service';
       .ai-form__row {
         grid-template-columns: 1fr;
       }
+
     }
   `]
 })
 export class RecipesComponent implements OnInit {
   private readonly i18n = inject(I18nService);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   /** Cuantas recetas hay, dicho como se lee: «1 receta» no es «1 recetas». */
   recetasLabel(): string {
@@ -811,6 +820,41 @@ export class RecipesComponent implements OnInit {
   ngOnInit(): void {
     this.recipeService.loadRecipes();
     this.pantryService.loadIngredients();
+
+    combineLatest([this.route.queryParamMap, this.route.fragment])
+      .pipe(
+        map(([queryParams, fragment]) => resolveRecipeRouteIntent(queryParams.get('recipe'), fragment)),
+        distinctUntilChanged((previous, current) =>
+          previous.type === current.type &&
+          (previous.type !== 'recipe' || (current.type === 'recipe' && previous.recipeId === current.recipeId))
+        ),
+        switchMap((intent) => intent.type === 'recipe'
+          ? this.recipeService.getRecipe(intent.recipeId).pipe(map((recipe) => ({ intent, recipe })))
+          : of({ intent, recipe: null })
+        ),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(({ intent, recipe }) => {
+        if (intent.type === 'ai') {
+          this.isDetailModalOpen.set(false);
+          this.selectedRecipe.set(null);
+          if (!this.isAiModalOpen()) this.openAiModal();
+          return;
+        }
+
+        if (intent.type === 'recipe') {
+          if (this.isAiModalOpen()) this.closeAiModal();
+          if (recipe) {
+            this.viewRecipe(recipe);
+          } else {
+            this.closeDetailModal();
+          }
+          return;
+        }
+
+        if (this.isAiModalOpen()) this.closeAiModal();
+        if (this.isDetailModalOpen()) this.closeDetailModal();
+      });
   }
 
   setFilter(filter: string): void {
@@ -832,9 +876,19 @@ export class RecipesComponent implements OnInit {
   }
 
   closeAiModal(): void {
+    const clearAiFragment = this.isAiModalOpen() && this.route.snapshot.fragment === 'ai';
     this.isAiModalOpen.set(false);
     this.selectedIngredients.set([]);
     this.aiService.clearGenerated();
+    if (clearAiFragment) {
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: {},
+        queryParamsHandling: 'merge',
+        fragment: undefined,
+        replaceUrl: true
+      });
+    }
   }
 
   viewRecipe(recipe: Recipe): void {
@@ -843,8 +897,18 @@ export class RecipesComponent implements OnInit {
   }
 
   closeDetailModal(): void {
+    const clearRecipeQuery = this.route.snapshot.queryParamMap.has('recipe');
     this.isDetailModalOpen.set(false);
     this.selectedRecipe.set(null);
+    if (clearRecipeQuery) {
+      void this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { recipe: null },
+        queryParamsHandling: 'merge',
+        preserveFragment: true,
+        replaceUrl: true
+      });
+    }
   }
 
   openFilterModal(): void {
