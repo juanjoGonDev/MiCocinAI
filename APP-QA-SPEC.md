@@ -210,9 +210,11 @@ La revisión del diff señaló dos riesgos aún no reproducidos: el `aria-label`
 - [ ] Escribir primero tests rojos y luego aplicar la solución reactiva mínima; conservar navegación por teclado, texto libre, selección/deshabilitado y click exterior.
 - [ ] Ejecutar unit + Playwright real en escritorio/móvil, build y cobertura ≥70 % de statements, ramas, funciones y líneas del alcance.
 
-### QA-04c.9 · desbordamiento de la barra inferior a 320 px
+### QA-04c.9 · desbordamiento horizontal de la shell de compra a 320 px
 
 En la ejecución real Pixel 5 aislada de `shopping-round6.spec.ts` a 320×568, al volver a la bandeja después de crear una lista, `document.documentElement.clientWidth` era 320 pero `scrollWidth` era 343. El `<header>` y la barra inferior medían 343 px; el último `.bottom-nav__item` terminaba en x=353. Al navegar, Angular `withViewTransitions()` emitió tres `pageerror` «Transition was aborted because of invalid state. Viewport size changed»; otro apareció tras alta de producto. Al añadir el producto el overflow dejó de aparecer, pero no se debe confundir ese cambio de layout con un arreglo.
+
+La primera hipótesis de que solo los labels de bottom-nav imponían el ancho quedó refutada: `flex: 1 1 0; min-width: 0` en sus anchors redujo cada item, pero el E2E siguió midiendo `scrollWidth=343`. En el DOM original también se observó `.tray__filter-toggle` con borde derecho en x=343. El arreglo sigue pendiente; inspeccionar la fila de estados/filtros junto con el shell, no aceptar el cambio parcial de bottom-nav.
 
 - [ ] Añadir regresión E2E en Pixel 5 que compruebe ancho de layout, scroll horizontal y rectángulos de cada destino de bottom-nav en rutas/listas reales a 320×568; repetir 393×851.
 - [ ] Corregir la causa mínima del ancho intrínseco de navegación; conservar nombres visibles/accesibles, targets táctiles y navegación.
