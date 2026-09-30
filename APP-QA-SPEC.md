@@ -48,7 +48,7 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 - [ ] Solo si el rojo reproduce el problema, aplicar el reflujo mínimo con TDD; mantener legibles los datos, estados accesibles y áreas táctiles.
 - [ ] Verificar la regresión en Chromium escritorio y Pixel 5, capturar/inspeccionar PC y móvil y registrar comandos/resultados sin tocar servidor ni base normales.
 
-**TDD rojo (2026-09-30, sin cambios de producción):** runner aislado `E2E_SCOPE=all`, `E2E_PROJECT=mobile-chrome`, `E2E_FILES=household-icon-consistency.spec.ts`, `E2E_RATE_LIMIT=on`: Pixel 5 completa correctamente a 393×851 pero falla a 320×568 porque `.member-card__meta` llega a x=371 px mientras `.member-card` termina en x=304 px (67 px fuera). El documento no se ensancha, por lo que el desborde local quedaba oculto/clipeado. El resto del test de esta pantalla y Dashboard pasa (2 passed, 1 failed); la prueba usa servidor, SQLite y semilla temporales únicas.
+**TDD rojo (2026-09-30, sin cambios de producción):** runner aislado `E2E_SCOPE=all`, `E2E_PROJECT=mobile-chrome`, `E2E_FILES=household-icon-consistency.spec.ts`, `E2E_RATE_LIMIT=on`: Pixel 5 pasa a 393×851 y falla a 320×568. Con el fixture inicial, `.member-card__meta` llegó a x=371 px mientras `.member-card` terminaba en x=304 px; endurecí después el escenario con un nombre sintético largo y el borde de las insignias aún llegó a x=360 px (56 px fuera). El documento no se ensancha, por lo que el desborde local quedaba oculto/clipeado. En la ejecución reforzada, el resto del test de esta pantalla y Dashboard pasa (2 passed, 1 failed); cada corrida usa servidor, SQLite y semilla temporales únicas.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 
