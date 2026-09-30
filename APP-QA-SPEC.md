@@ -125,43 +125,57 @@ Evidencia final QA-04c.1 (2026-09-30): Karma `shopping.model.spec.ts` 24/24; cob
 
 ### QA-04c.2 · reparar expectativas E2E de cesta (revalidación antes de cambiar tests)
 
-La suite completa aislada `shopping-round6.spec.ts` dio 8/11 tras corregir tres selectores/acciones del test; quedan tres rojos. El código actual confirma otros dos desajustes del test, no defectos de producción:
+La primera revalidación de `shopping-round6.spec.ts` dio 7/11; un paso intermedio, 8/11. Los cinco desajustes de expectativas/selectores y el error de UI de foto ya están corregidos o cubiertos abajo; la última suite desktop completa pasó 11/11. La matriz Pixel 5 actual sigue parcialmente abierta en QA-04c.4/04c.5.
 
 - `newList()` (`tests/e2e/shopping-round6.spec.ts`) crea la lista, espera `/shopping/:id` y navega de vuelta a `/shopping`; por eso el `add-input` no debe existir hasta abrir de nuevo la tarjeta creada.
 - `toggleCheck()` mueve la línea marcada fuera de la pestaña «Pendientes»; `visibleItems()` filtra por la pestaña activa y `toggleSelectAll()` selecciona solo esos elementos. La prueba debe pasar a «En el carro» antes de seleccionar todo.
 - El atributo `data-test="discount-amount"` vive en el propio `<input>`, no en un wrapper; el selector `discount-amount input` no puede coincidir.
 - `[data-test="tray-search"]` se renderiza solo con `filtersOpen()`: el control visible `.tray__filter-toggle` abre el panel; el test no lo hacía.
 - El caso de descuento por producto solo asignaba precio `4,00 €/ud` a Jamón y dejaba Leche sin precio; el subtotal aislado era 4,00 €, por eso 2,00 € tras descontar 2 € es correcto. El fixture crea 2 Leches y quiere una línea de 1,00 €; debe fijar `0,50 €/ud` (subtotal previo esperado 5,00 €) para justificar el total posterior de 3,00 €.
-- El error de foto confirma un defecto real de presentación: el E2E recibe `409 AI_NOT_CONFIGURED` y `data.redirect=/settings/ai` desde SQLite temporal vacío, pero la UI muestra «El modelo no está disponible ahora mismo». `errorInterceptor` convierte `HttpErrorResponse` en `{ status, message, original }`; `shopping.service.ts::analyzePhoto` lee solo `error.error`, pierde el body bajo `original` y cae a `AI_UNAVAILABLE`. No se llamó al provider.
+- El error de foto confirmó un defecto real de presentación: E2E recibía `409 AI_NOT_CONFIGURED` pero la UI mostraba el mensaje genérico; QA-04c.3 conserva ahora el body original. No se llamó al provider.
 - `[data-test="tray-search"]` sigue fallando solo porque el panel de filtros continúa cerrado: abrir `.tray__filter-toggle` es la interacción de UI definida por el template.
 - El descuento por producto aplica correctamente el -2 €: total 2,00 € sobre Jamón de 4,00 €; Leche no tenía precio y, por tanto, no forma parte del subtotal. Falta completar el fixture con Leche a 0,50 €/ud (2 uds = 1,00 €) antes de afirmar el total de 3,00 €.
 
-- [x] Revalidar los cuatro rojos iniciales en la suite aislada completa, con servidor/SQLite/puerto/semilla temporales y rate limit activo; registrar 7/11 y luego 8/11 tras aplicar correcciones de expectativas/selectores. La última ejecución deja tres fallos explicados: filtro cerrado, error de UI bajo el wrapper y fixture de Leche sin precio.
+- [x] Revalidar los cuatro rojos iniciales en la suite aislada completa, con servidor/SQLite/puerto/semilla temporales y rate limit activo; registrar 7/11 y 8/11 en corridas intermedias. Tras resolver supuestos/fixtures y el error photo wrapper, Chromium completo pasó 11/11.
 - [x] Contrastar helper de creación, filtro/selección visible, selector de importe, mensaje frontend y contrato/handler backend con fuente actual.
 - [x] Capturar status/body sin provider: `409 AI_NOT_CONFIGURED` y redirect `/settings/ai`; la misma E2E reproduce que la UI pierde el mensaje específico. No se utilizó proveedor externo.
-- [ ] Completar las correcciones test-only (abrir filtro y fijar precio unitario de ambas líneas); conservar cancelación/persistencia y verificar subtotal previo 5,00 € y total posterior 3,00 €.
-- [ ] TDD: cubrir en unitarias el error directo y el wrapper de `errorInterceptor`; preservar status, `body.message` y `body.data` en `analyzePhoto`, y validar por E2E «Falta configurar la IA» + destino accesible sin escribir artículos.
+- [x] Completar correcciones test-only: panel de filtro explícito, selector del input directo, ambas líneas con precio unitario y subtotal previo 5,00 €/total final 3,00 €. Suite completa desktop `shopping-round6.spec.ts` pasó 11/11.
+- [x] TDD del wrapper `errorInterceptor`: la regresión unitaria dio 2 FAILED y luego Karma enfocada 2/2; el unwrap conserva status, `body.message` y `body.data` en `analyzePhoto` y se comparte con `complete()`.
+- [x] Playwright de foto aislado en Chromium y Pixel 5: HTTP 409 `AI_NOT_CONFIGURED`, enlace `/settings/ai`, lista sin filas; el mensaje específico se muestra y no se contacta provider.
 - [ ] Ejecutar la suite `shopping-round6.spec.ts` completa en Chromium y Pixel 5 y registrar resultados; medir cada archivo nuevo/cambiado con ≥70 % por métrica de alcance sin rebajar el gate global.
 
-### QA-04c.3 · conservar el error de IA tras el interceptor (fuente revalidada; TDD pendiente)
+### QA-04c.3 · conservar el error de IA tras el interceptor (causa corregida; coverage pendiente)
 
-La ejecución real aislada verifica el contrato de extremo a extremo hasta la respuesta: POST de foto sin configuración → HTTP 409, `message=AI_NOT_CONFIGURED`, `data.redirect=/settings/ai`; la UI cae al mensaje genérico. Fuente de verdad revalidada: `frontend/src/app/core/interceptors/error.interceptor.ts` vuelve a lanzar `{ status, message, original: HttpErrorResponse }`; `ShoppingService.analyzePhoto` interpreta ese wrapper como si fuera el `HttpErrorResponse` y descarta `original.error`. `ShoppingService.complete()` ya consulta `original` para leer cuerpos de error. No hay filas IA en la DB de prueba y no se contacta ningún provider.
+La ejecución aislada verificó el contrato POST de foto sin configuración → HTTP 409, `message=AI_NOT_CONFIGURED`, `data.redirect=/settings/ai`; antes del fix la UI caía al mensaje genérico. Fuente revalidada: `errorInterceptor` vuelve a lanzar `{ status, message, original: HttpErrorResponse }`; `ShoppingService.analyzePhoto` descartaba `original.error`, mientras `complete()` ya leía `original`. No hay filas IA en la DB de prueba y no se contacta provider.
 
 - [x] Añadir el assert de status/body al E2E sin configuración y reproducir simultáneamente el error visual genérico y la ausencia de escritura en la lista.
 - [x] Escribir tests unitarios con el `errorInterceptor` funcional para 409 `AI_NOT_CONFIGURED`/redirect y 502 `AI_UNAVAILABLE`/detail; rojo TDD reproducible en Karma Chrome Headless 154: 2 FAILED, 0 SUCCESS. En ambos resultados el servicio conserva el status pero devuelve `message=AI_UNAVAILABLE` y `data={}`.
-- [ ] Reutilizar/extractar el unwrap ya requerido por `complete()` sin cambiar la semántica de errores ni mostrar dos toasts; mapear el body original de foto.
-- [ ] E2E aislado: la respuesta y UI expresan «Falta configurar la IA», enlace lleva a `/settings/ai`, `item-row` sigue vacío y no hay llamada a provider.
+- [x] Reutilizar `originalHttpError()` en `complete()` y `analyzePhoto()`; no cambia la semántica del interceptor ni duplica toasts.
+- [x] E2E aislado en Chromium y Pixel 5: la respuesta/UI expresan «Falta configurar la IA», enlace lleva a `/settings/ai`, `item-row` sigue vacío y no hay llamada a provider.
 - [ ] Coverage de lógica nueva ≥70 % statements/branches/functions/lines; typecheck, suite de `shopping-round6` en Chromium/Pixel 5, y gate frontend existente sin rebajar (si global queda rojo, registrar valores y causa).
+
+Evidencia: unitarias enfocadas Karma Chrome Headless 154, 2/2 después de rojo 2/2; typecheck E2E y build de producción pasaron. `shopping-round6.spec.ts` Chromium completo 11/11; Pixel 5: la prueba de foto pasa, aunque otros siete tests todavía fallan por los asuntos aislados en QA-04c.4/.5.
 
 ### QA-04c.4 · matriz móvil de bandeja (fuente revalidada; adaptar E2E antes de valorar UI)
 
-La suite completa en Chromium pasó 11/11; en Pixel 5 pasó 3/11 y ocho casos se atascaron intentando pulsar `[data-test="new-list"]`. La causa reproducible es del test: en ≤600 px ese icono está oculto y `shopping-lists.component.ts` muestra `[data-test="new-list-text"]`. La bandeja también es intencionalmente una tarjeta móvil: a ≤720 px la cabecera/columnheaders se ocultan y cada celda lleva su etiqueta. `HOGARIA-SPEC.md` §8f especifica la tabla y la ordenación de escritorio, filtros compactos en móvil y no exige ordenar desde la tarjeta.
+La suite completa en Chromium pasó 11/11. Pixel 5: baseline 3/11; tras corregir el CTA móvil, 4/11 pasan y 7/11 fallan. Cuatro fallos de bandeja comparten un selector helper defectuoso: `[data-test="back"], a[href="/shopping"]` elige primero un enlace del sidebar fuera del viewport, aunque existe el botón de retorno visible `[data-test="back"]`. Otros tres fallos de cesta son pointer interception: el botón Añadir queda debajo de la lista de autocomplete abierta (`.detail__sugs`). La bandeja es intencionalmente tarjeta móvil: a ≤720 px la cabecera/columnheaders se ocultan y cada celda lleva su etiqueta. `HOGARIA-SPEC.md` §8f especifica la tabla y ordenación de escritorio, filtros compactos en móvil y no exige ordenar desde la tarjeta.
 
-- [x] Baseline aislado de los 11 casos en Pixel 5: 3 pasaron (oferta y dos calendarios), 8 fallaron antes de recorrer sus acciones por selector desktop oculto; no se atribuyen aún a producción.
+- [x] Baseline aislado Pixel 5: 3/11 pasó con selectores desktop; la ejecución con CTA móvil corrigió cuatro flujos y pasó 4/11 (oferta, foto y dos calendarios), con 7 rojos capturados.
 - [x] Revalidar en el template/CSS que el CTA de texto es la acción móvil y que la cabecera de tabla oculta es comportamiento responsive previsto.
-- [ ] Elegir CTA por viewport en helper/pruebas manuales; conservar prueba de columnas/ordenación desktop y comprobar en móvil tarjetas, nombre/tienda/acciones, crear/abrir, filtro expandible, renombrar y paginación sin overflow ni pérdida de foco.
-- [ ] Adaptar los flujos móviles de cesta para el CTA visible, recorrer oferta/discount/photo/selección en Pixel 5 y distinguir fallos de locator de fallos de interacción o layout.
+- [ ] Corregir el helper de retorno para usar el control visible `[data-test="back"]`; conservar prueba de columnas/ordenación desktop y comprobar en móvil tarjetas, nombre/tienda/acciones, filtro expandible, crear/abrir, renombrar y paginación.
+- [ ] Asegurar en móvil que la lista de sugerencias no tape el botón Añadir; E2E de selección táctil/teclado de sugerencia, entrada libre y envío con el puntero sin Escape forzado.
 - [ ] Repetir los 11 E2E en Pixel 5 aislado; guardar/inspeccionar capturas PC y móvil de la bandeja y registrar errores de consola/red.
+
+### QA-04c.5 · autocomplete bloquea «Añadir» en móvil (regresión visual/interactiva revalidada)
+
+En una captura synthetic del run Pixel 5, el listbox de `.detail__sugs` aparece debajo del input, pero por ser `position:absolute; z-index:40` cubre los botones que envuelven la segunda fila del formulario (`.detail__add` ya envuelve a ≤600 px). El click real de Playwright es interceptado por opciones como «Leche de almendras», «Anchoas en aceite» y «Jamón serrano loncheado»; no es un timeout de servidor. `HOGARIA-SPEC.md` §8e/§8f exige captura rápida, lista accesible y acciones funcionales con una mano; no debe necesitar Escape de escritorio para poder pulsar Añadir.
+
+- [x] Reproducir en Pixel 5 real del proyecto: click de puntero en `add-submit` con sugerencias visibles es interceptado; 3 casos de `shopping-round6` se detienen ahí. Captura synthetic del overlay inspeccionada.
+- [x] Contrastar el comportamiento con el markup (`role=combobox`, `aria-autocomplete=list`, `role=listbox/option`, `mousedown.preventDefault`) y la capa absoluta/z-index; desktop Chromium puede usar el flujo actual.
+- [ ] Escribir regresión enfocada que exija que el botón Añadir sea alcanzable por hit-test/click en Pixel 5 y 320×568 con sugerencias visibles; no usar `force` ni Escape antes del click.
+- [ ] Refluir la lista de sugerencias dentro del flujo del formulario móvil (o una solución visual equivalente) para que no tape acciones; preservar toque a sugerencia, flechas/Enter/Escape, foco del combobox y entrada libre.
+- [ ] E2E del quick-add en mobile: seleccionar sugerencia actualiza el valor y crea la línea esperada; entrada libre/cantidad se puede añadir con botón/teclado; ninguna sugerencia accidental se selecciona, sin scroll horizontal.
+- [ ] Repetir 393×851 y 320×568 y los 11 casos Pixel 5 completos; inspeccionar capturas antes/después y asegurar que escritorio no cambia.
 
 ### QA-04b · hit area táctil de `app-checkbox`
 
