@@ -181,11 +181,12 @@ Revalidación incremental tras un primer reflujo CSS: el hit-test del botón ya 
 
 ### QA-04c.6 · selector de descuento bloquea Guardar en hoja móvil
 
-La revalidación de `shopping-round6.spec.ts` en Pixel 5 pasó 11/12. En «Descuento de la lista», tras elegir `10 %`, el click real a `discount-save` queda interceptado por la opción `50 %` del listbox; la captura synthetic muestra el panel abierto cubriendo el CTA al pie de la hoja. La causa revalidada es semántica: el `app-picker` (con su botón interactivo interno) está envuelto por `<label class="detail__field">`; el click de una opción cierra el picker y la activación por defecto de ese label vuelve a pulsar el botón trigger, reabriendo el panel. No afecta al run desktop observado.
+La revalidación de `shopping-round6.spec.ts` en Pixel 5 pasó 11/12. En «Descuento de la lista», tras elegir `10 %`, el click real a `discount-save` queda interceptado por la opción `50 %` del listbox; la captura synthetic muestra el panel abierto cubriendo el CTA al pie de la hoja. Causa probable respaldada por el DOM: `app-picker` (con su botón interactivo interno) está envuelto por `<label class="detail__field">`; al elegir una opción el panel se cierra, pero la activación por defecto del label puede volver a pulsar el trigger y reabrirlo. La prueba genérica del picker cierra con éxito fuera de ese wrapper. No afecta al run desktop observado.
 
 - [x] Reproducir en Pixel 5 aislado con rate limit: 11/12; `locator.click()` sobre Guardar agotó 45 s y Playwright identificó `.picker__label` «50 %» interceptando el puntero.
 - [x] Inspeccionar `PickerComponent.choose()` → `emit()` → `close()` y el wrapper `<label>` de descuento; el label re-activa el trigger descendiente tras elegir la opción.
 - [x] Añadir regresión enfocada: tras elegir se exige panel ausente y `aria-expanded=false` antes de pulsar Guardar. Rojo Pixel 5 aislado: esperado 0 paneles, recibido 1 (12 s); la versión previa agotó el click a Guardar en 45 s.
+- [x] Escribir prueba unitaria del picker para nombre accesible, selección/cierre, Escape y click exterior; Karma enfocada rojo 1 FAILED / 2 SUCCESS (`aria-label` actual es null), mientras selección/cierre normal pasa.
 - [ ] Validar que Guardar recibe el click en móvil y mantener teclado/Escape/outside-click.
 - [ ] Corregir el flujo más pequeño, comprobar PC y móvil, incluidos 393×851 y 320×568, capturas y ausencia de errores de consola/red.
 
