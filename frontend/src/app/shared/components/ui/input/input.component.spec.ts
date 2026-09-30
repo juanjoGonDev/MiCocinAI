@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { InputComponent } from './input.component';
+import { I18nService } from '../../../../core/services/i18n.service';
 
 describe('InputComponent', () => {
   let component: InputComponent;
@@ -156,23 +157,94 @@ describe('InputComponent', () => {
     expect(propagate).toHaveBeenCalledWith('test');
   });
 
-  it('should toggle password visibility', () => {
+  it('toggles password visibility repeatedly without changing the configured input type', () => {
     component.type = 'password';
     component.showToggle = true;
     fixture.detectChanges();
 
-    const toggle = fixture.nativeElement.querySelector('.input__toggle');
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    let toggle: HTMLButtonElement = fixture.nativeElement.querySelector('.input__toggle');
     expect(toggle).toBeTruthy();
+    expect(input.type).toBe('password');
 
     toggle.click();
     fixture.detectChanges();
 
     expect(component.showPassword).toBeTrue();
-    expect(component.type).toBe('text');
+    expect(component.type).toBe('password');
+    expect(input.type).toBe('text');
+    expect(fixture.nativeElement.querySelector('.input__toggle')).toBeTruthy();
 
-    component.togglePassword();
+    toggle = fixture.nativeElement.querySelector('.input__toggle');
+    toggle.click();
+    fixture.detectChanges();
+
     expect(component.showPassword).toBeFalse();
     expect(component.type).toBe('password');
+    expect(input.type).toBe('password');
+  });
+
+  it('labels the password action in the selected language and hides its SVG from assistive technology', () => {
+    component.type = 'password';
+    const i18n = TestBed.inject(I18nService);
+    i18n.setLang('es');
+    fixture.detectChanges();
+
+    let toggle: HTMLButtonElement = fixture.nativeElement.querySelector('.input__toggle');
+    expect(toggle.getAttribute('aria-label')).toBe('Mostrar contraseña');
+    expect(toggle.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+
+    toggle.click();
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-label')).toBe('Ocultar contraseña');
+
+    i18n.setLang('en');
+    fixture.detectChanges();
+    expect(toggle.getAttribute('aria-label')).toBe('Hide password');
+  });
+
+  it('keeps a disabled password hidden and reflects the visible state in the toggle', () => {
+    component.type = 'password';
+    component.disabled = true;
+    fixture.detectChanges();
+
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    let toggle: HTMLButtonElement = fixture.nativeElement.querySelector('.input__toggle');
+    expect(toggle.disabled).toBeTrue();
+    toggle.click();
+    fixture.detectChanges();
+    expect(input.type).toBe('password');
+    expect(component.showPassword).toBeFalse();
+    component.togglePassword();
+    expect(component.showPassword).toBeFalse();
+
+    component.disabled = false;
+    fixture.detectChanges();
+    toggle = fixture.nativeElement.querySelector('.input__toggle');
+    toggle.click();
+    fixture.detectChanges();
+
+    expect(input.type).toBe('text');
+    expect(toggle.classList).toContain('input__toggle--visible');
+
+    component.disabled = true;
+    fixture.detectChanges();
+    expect(toggle.disabled).toBeTrue();
+    expect(input.type).toBe('password');
+    expect(component.showPassword).toBeFalse();
+
+    component.disabled = false;
+    fixture.detectChanges();
+    expect(input.type).toBe('password');
+
+    toggle = fixture.nativeElement.querySelector('.input__toggle');
+    toggle.click();
+    fixture.detectChanges();
+    expect(input.type).toBe('text');
+    component.setDisabledState(true);
+    fixture.detectChanges();
+    expect(input.type).toBe('password');
+    expect(component.showPassword).toBeFalse();
   });
 
   describe('ControlValueAccessor', () => {

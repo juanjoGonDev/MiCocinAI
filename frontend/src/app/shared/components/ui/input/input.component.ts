@@ -1,6 +1,8 @@
 import { Component, Input, Output, EventEmitter, forwardRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR, FormsModule } from '@angular/forms';
+import { IconComponent } from '../icon/icon.component';
+import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 
 export type InputType =
   'text' | 'number' | 'email' | 'password' | 'search' | 'tel' | 'url' | 'date';
@@ -9,7 +11,7 @@ export type InputSize = 'sm' | 'md' | 'lg';
 @Component({
   selector: 'app-input',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, IconComponent, TranslatePipe],
   // El id se aplica SOLO al <input> nativo del template (via @Input() id):
   // si se deja tambien en el host <app-input> el DOM acaba con ids duplicados
   // y los selectores #id dejan de apuntar al campo real.
@@ -28,7 +30,7 @@ export type InputSize = 'sm' | 'md' | 'lg';
 
         <input
           [id]="id"
-          [type]="type"
+          [type]="effectiveType"
           [placeholder]="placeholder"
           [disabled]="disabled"
           [readonly]="readonly"
@@ -51,9 +53,13 @@ export type InputSize = 'sm' | 'md' | 'lg';
           *ngIf="type === 'password' && showToggle"
           type="button"
           class="input__toggle"
+          [class.input__toggle--visible]="showPassword"
+          [disabled]="disabled"
+          [attr.aria-label]="(showPassword ? 'ui.hide_password' : 'ui.show_password') | t"
+          [attr.aria-controls]="id || null"
           (click)="togglePassword()"
         >
-          {{ showPassword ? '🙈' : '👁️' }}
+          <app-icon name="visibility" [size]="20" />
         </button>
       </div>
 
@@ -166,7 +172,7 @@ export type InputSize = 'sm' | 'md' | 'lg';
       }
 
       .input--has-suffix {
-        padding-right: var(--space-10);
+        padding-right: var(--space-12);
       }
 
       .input__icon {
@@ -190,14 +196,32 @@ export type InputSize = 'sm' | 'md' | 'lg';
 
       .input__toggle {
         position: absolute;
-        right: var(--space-3);
+        right: var(--space-1);
         top: 50%;
         transform: translateY(-50%);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        min-height: 44px;
         background: none;
         border: none;
         cursor: pointer;
-        padding: var(--space-1);
-        font-size: var(--text-lg);
+        padding: 0;
+
+        &:disabled {
+          cursor: not-allowed;
+          opacity: 0.5;
+        }
+
+        &--visible::after {
+          content: '';
+          position: absolute;
+          width: 25px;
+          height: 2px;
+          background: currentColor;
+          transform: rotate(-45deg);
+        }
       }
 
       .input__error {
@@ -235,7 +259,15 @@ export class InputComponent implements ControlValueAccessor {
   @Input() helper = '';
   @Input() error = '';
   @Input() size: InputSize = 'md';
-  @Input() disabled = false;
+  private disabledValue = false;
+  @Input()
+  set disabled(value: boolean) {
+    this.disabledValue = value;
+    if (value) this.showPassword = false;
+  }
+  get disabled(): boolean {
+    return this.disabledValue;
+  }
   @Input() readonly = false;
   @Input() required = false;
   @Input() maxLength: number | null = null;
@@ -250,6 +282,10 @@ export class InputComponent implements ControlValueAccessor {
 
   value = '';
   showPassword = false;
+
+  get effectiveType(): InputType {
+    return this.type === 'password' && this.showPassword && !this.disabled ? 'text' : this.type;
+  }
 
   private onChange: (value: string | number) => void = () => {};
   private onTouched: () => void = () => {};
@@ -291,8 +327,8 @@ export class InputComponent implements ControlValueAccessor {
   }
 
   togglePassword(): void {
+    if (this.type !== 'password' || this.disabled) return;
     this.showPassword = !this.showPassword;
-    this.type = this.showPassword ? 'text' : 'password';
   }
 
   getGroupClasses(): string {

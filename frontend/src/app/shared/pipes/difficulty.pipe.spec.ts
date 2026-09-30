@@ -1,5 +1,7 @@
+import { TestBed } from '@angular/core/testing';
 import { DICTS, type TranslationKey } from '../../core/i18n';
-import { difficultyLabel } from './difficulty.pipe';
+import { DifficultyPipe, difficultyLabel } from './difficulty.pipe';
+import { I18nService } from '../../core/services/i18n.service';
 
 /**
  * `t` se le pasa por parametro y el diccionario en espanol es el de verdad: el pipe no tiene logica propia,
@@ -24,9 +26,9 @@ describe('difficultyLabel', () => {
     expect(difficultyLabel('Experta en frituras', es)).toBe('Experta en frituras');
   });
 
-  it('el punto de color solo si se pide y solo si hay nivel', () => {
-    expect(difficultyLabel('easy', es, true)).toBe('🟢 Fácil');
-    expect(difficultyLabel('rara', es, true)).toBe('rara');
+  it('never adds a pictogram to a difficulty label', () => {
+    expect(difficultyLabel('easy', es)).toBe('Fácil');
+    expect(difficultyLabel('rara', es)).toBe('rara');
   });
 
   it('sin dato, nada', () => {
@@ -37,5 +39,17 @@ describe('difficultyLabel', () => {
 
   it('acepta la cadena como la escribio la IA, en lo que sea', () => {
     expect(difficultyLabel('HARD', es)).toBe('Difícil');
+  });
+});
+
+describe('DifficultyPipe', () => {
+  it('uses the active language without adding an icon', () => {
+    TestBed.configureTestingModule({ providers: [DifficultyPipe, I18nService] });
+    const i18n = TestBed.inject(I18nService);
+    const pipe = TestBed.inject(DifficultyPipe);
+    const label = pipe.transform('medium');
+
+    expect(label).toBe(i18n.t('recipes.medio'));
+    expect(label).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });

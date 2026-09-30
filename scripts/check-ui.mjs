@@ -54,15 +54,9 @@ const LEGACY = {
     'frontend/src/app/features/pantry/pantry.component.ts',
     'frontend/src/app/features/recipes/recipes.component.ts',
     'frontend/src/app/layouts/auth-layout/auth-layout.component.ts',
-    'frontend/src/app/shared/components/ui/chip-select/chip-select.component.ts',
-    'frontend/src/app/shared/components/ui/input/input.component.ts',
     'frontend/src/app/shared/components/ui/modal/modal.component.ts',
     'frontend/src/app/shared/components/ui/rating/rating.component.ts',
-    'frontend/src/app/shared/components/ui/toast/toast.component.spec.ts',
-    'frontend/src/app/shared/components/ui/toast/toast.component.ts',
     'frontend/src/app/shared/models/taste-profile.ts',
-    'frontend/src/app/shared/pipes/difficulty.pipe.spec.ts',
-    'frontend/src/app/shared/pipes/difficulty.pipe.ts'
   ],
   'ui-sin-uso': [
     'frontend/src/app/shared/components/ui/card/card.component.ts',

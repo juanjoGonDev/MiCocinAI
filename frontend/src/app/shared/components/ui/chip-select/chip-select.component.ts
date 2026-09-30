@@ -6,6 +6,7 @@ import { ChipOption } from '../../../models/taste-profile';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { tasteLabelKey } from '../../../../core/i18n/labels';
 import { I18nService } from '../../../../core/services/i18n.service';
+import { IconComponent } from '../icon/icon.component';
 
 /**
  * Lista de opciones en formato chip, de una o varias selecciones, con hueco
@@ -20,7 +21,7 @@ import { I18nService } from '../../../../core/services/i18n.service';
   standalone: true,
   imports: [
     TranslatePipe,
-    CommonModule, FormsModule, ButtonComponent],
+    CommonModule, FormsModule, ButtonComponent, IconComponent],
   template: `
     <div class="chip-select" role="group" [attr.aria-label]="label">
       <div class="chip-select__list">
@@ -32,7 +33,12 @@ import { I18nService } from '../../../../core/services/i18n.service';
           [attr.aria-pressed]="isSelected(option.value)"
           (click)="toggle(option.value)"
         >
-          <span class="chip-select__icon" *ngIf="option.icon">{{ option.icon }}</span>
+          <span class="chip-select__icon" *ngIf="option.icon && !isCustom(option.value)" aria-hidden="true">
+            {{ option.icon }}
+          </span>
+          <span class="chip-select__icon" *ngIf="isCustom(option.value)" aria-hidden="true">
+            <app-icon name="edit" [size]="16" />
+          </span>
           <span class="chip-select__text">{{ labelDe(option) }}</span>
           <span class="chip-select__x" *ngIf="isCustom(option.value)" aria-hidden="true">×</span>
         </button>
@@ -94,6 +100,8 @@ import { I18nService } from '../../../../core/services/i18n.service';
       .chip-select__icon {
         font-size: var(--text-base);
         line-height: 1;
+        display: inline-flex;
+        align-items: center;
       }
       .chip-select__x {
         font-size: var(--text-xs);
@@ -188,7 +196,7 @@ export class ChipSelectComponent {
     );
     const extras = this.value
       .filter((item) => !base.some((option) => option.value === item))
-      .map((value) => ({ value, icon: '✏️' }));
+      .map((value) => ({ value }));
     this.choicesOptions = this.options;
     this.choicesValues = values;
     this.choicesCache = [...base, ...extras];

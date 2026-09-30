@@ -2,20 +2,23 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ToastService, Toast } from '../../../../core/services/toast.service';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
+import { IconComponent } from '../icon/icon.component';
+import type { IconName } from '../icon/icon-paths';
 
 @Component({
   selector: 'app-toast',
   standalone: true,
-  imports: [
-    TranslatePipe,
-    CommonModule],
+  imports: [TranslatePipe, CommonModule, IconComponent],
   template: `
     <div class="toast-container toast-container--top">
       <div
         *ngFor="let toast of topToasts(); trackBy: trackById"
         [class]="getToastClasses(toast)"
+        [attr.role]="getToastRole(toast.type)"
+        [attr.aria-live]="getToastLive(toast.type)"
+        aria-atomic="true"
       >
-        <span class="toast__icon">{{ getIcon(toast.type) }}</span>
+        <span class="toast__icon"><app-icon [name]="getIcon(toast.type)" [size]="20" /></span>
         <div class="toast__content">
           <span class="toast__title">{{ toast.title }}</span>
           <span *ngIf="toast.message" class="toast__message">{{ toast.message }}</span>
@@ -36,7 +39,7 @@ import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
           (click)="toastService.dismiss(toast.id)"
           [attr.aria-label]="'ui.dismiss' | t"
         >
-          ✕
+          <app-icon name="close" [size]="18" />
         </button>
         <span
           *ngIf="toast.countdown"
@@ -52,8 +55,11 @@ import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
       <div
         *ngFor="let toast of bottomToasts(); trackBy: trackById"
         [class]="getToastClasses(toast, true)"
+        [attr.role]="getToastRole(toast.type)"
+        [attr.aria-live]="getToastLive(toast.type)"
+        aria-atomic="true"
       >
-        <span class="toast__icon">{{ getIcon(toast.type) }}</span>
+        <span class="toast__icon"><app-icon [name]="getIcon(toast.type)" [size]="20" /></span>
         <div class="toast__content">
           <span class="toast__title">{{ toast.title }}</span>
           <span *ngIf="toast.message" class="toast__message">{{ toast.message }}</span>
@@ -74,7 +80,7 @@ import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
           (click)="toastService.dismiss(toast.id)"
           [attr.aria-label]="'ui.dismiss' | t"
         >
-          ✕
+          <app-icon name="close" [size]="18" />
         </button>
         <span
           *ngIf="toast.countdown"
@@ -93,8 +99,8 @@ import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
      * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
      */
     /* En el toast hay dos botones que solo se ven si el aviso te interesa: deshacer y cerrar. Los dos
-       responden al pasar por encima con el color del propio aviso, y la X se rodea de un circulo para que
-       se vea donde acaba el area util (que es mas grande que el glifo). */
+       responden al pasar por encima con el color del propio aviso; el cierre mantiene un objetivo tactil
+       de 44 px para que no dependa del tamano del glifo. */
     .toast__action:hover {
       text-decoration: underline;
       filter: brightness(1.15);
@@ -186,9 +192,16 @@ import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
     }
 
     .toast__icon {
-      font-size: var(--text-lg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
       flex-shrink: 0;
     }
+
+    .toast--success .toast__icon { color: var(--success); }
+    .toast--error .toast__icon { color: var(--error); }
+    .toast--warning .toast__icon { color: var(--warning); }
+    .toast--info .toast__icon { color: var(--info); }
 
     .toast__content {
       flex: 1;
@@ -224,8 +237,8 @@ import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 24px;
-      height: 24px;
+      min-width: 44px;
+      min-height: 44px;
       border-radius: var(--radius-md);
       background: none;
       border: none;
@@ -300,13 +313,21 @@ export class ToastComponent {
     return `toast toast--${toast.type}${actionable ? ' toast--actionable' : ''}`;
   }
 
-  getIcon(type: string): string {
-    const icons: Record<string, string> = {
-      success: '✓',
-      error: '✕',
-      warning: '⚠',
-      info: 'ℹ'
+  getToastRole(type: Toast['type']): 'alert' | 'status' {
+    return type === 'error' ? 'alert' : 'status';
+  }
+
+  getToastLive(type: Toast['type']): 'assertive' | 'polite' {
+    return type === 'error' ? 'assertive' : 'polite';
+  }
+
+  getIcon(type: string): IconName {
+    const icons: Record<string, IconName> = {
+      success: 'check_circle',
+      error: 'error_outline',
+      warning: 'sync_problem',
+      info: 'help_outline'
     };
-    return icons[type] || icons['info'];
+    return icons[type] ?? 'help_outline';
   }
 }
