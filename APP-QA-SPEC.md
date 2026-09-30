@@ -179,6 +179,15 @@ Revalidación incremental tras un primer reflujo CSS: el hit-test del botón ya 
 - [ ] E2E del quick-add en mobile: seleccionar sugerencia actualiza el valor y crea la línea esperada; entrada libre/cantidad se puede añadir con botón/teclado; ninguna sugerencia accidental se selecciona, sin scroll horizontal.
 - [ ] Repetir 393×851 y 320×568 y los 11 casos Pixel 5 completos; inspeccionar capturas antes/después y asegurar que escritorio no cambia.
 
+### QA-04c.6 · selector de descuento bloquea Guardar en hoja móvil
+
+La revalidación de `shopping-round6.spec.ts` en Pixel 5 pasó 11/12. En «Descuento de la lista», tras elegir `10 %`, el click real a `discount-save` queda interceptado por la opción `50 %` del listbox; la captura synthetic muestra el panel abierto cubriendo el CTA al pie de la hoja. El selector compartido actual declara que elegir cierra (`choose()` → `emit()` → `close()`), así que hay que medir estado/DOM tras la selección y resolver la discrepancia sin forzar clicks. No afecta a la prueba Chromium desktop.
+
+- [x] Reproducir en Pixel 5 aislado con rate limit: 11/12; `locator.click()` sobre Guardar agotó 45 s y Playwright identificó `.picker__label` «50 %» interceptando el puntero.
+- [x] Inspeccionar código actual de `PickerComponent` y hoja: opción selecciona vía `choose`, panel absoluto z-30; hoja móvil tiene scroll propio. La causa exacta de que el panel continúe visible tras el evento aún queda por confirmar.
+- [ ] Añadir una regresión enfocada que mida el estado del panel después de elegir y valide que Guardar recibe el click en móvil; mantener teclado/Escape/outside-click.
+- [ ] Corregir el flujo más pequeño, comprobar PC y móvil, incluidos 393×851 y 320×568, capturas y ausencia de errores de consola/red.
+
 ### QA-04b · hit area táctil de `app-checkbox`
 
 **Discrepancia revalidada:** `HOGARIA-SPEC.md` §8f exige un área de toque de 40 px, pero `checkbox.component.ts` establece `min-height: 36px`. El test unitario actual no mide el tamaño real y, además, lee `aria-checked` antes de ejecutar change detection.
