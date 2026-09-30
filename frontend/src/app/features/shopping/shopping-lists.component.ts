@@ -141,9 +141,17 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
           </button>
         }
         <span class="tray__tabs-spacer"></span>
-        <button type="button" class="tray__filter-toggle" [class.tray__filter-toggle--on]="filtersOpen() || activeFilters() > 0" (click)="filtersOpen.set(!filtersOpen())" aria-controls="tray-filters">
+        <button
+          type="button"
+          class="tray__filter-toggle"
+          [class.tray__filter-toggle--on]="filtersOpen() || activeFilters() > 0"
+          [attr.aria-label]="activeFilters() > 0 ? ('shopping_lists.filtros' | t) + ': ' + activeFilters() : ('shopping_lists.filtros' | t)"
+          [attr.aria-expanded]="filtersOpen()"
+          (click)="filtersOpen.set(!filtersOpen())"
+          aria-controls="tray-filters"
+        >
           <app-icon name="filter_list" [size]="18" [label]="null" />
-          <span>{{ 'shopping_lists.filtros' | t }}</span>
+          <span class="tray__filter-label">{{ 'shopping_lists.filtros' | t }}</span>
           @if (activeFilters() > 0) {
             <span class="tray__filter-count">{{ activeFilters() }}</span>
           }
@@ -797,6 +805,10 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
       /* El movil no tiene seis columnas: la misma fila se convierte en tarjeta de dos
          lineas y cada dato lleva delante la etiqueta que antes estaba en la cabecera. */
       @media (max-width: 720px) {
+        .tray__tab,
+        .tray__filter-toggle {
+          min-height: 44px;
+        }
         .tray__row {
           grid-template-columns: 1fr auto;
           row-gap: var(--space-1);
@@ -828,6 +840,27 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
         }
         .tray__name-tools {
           opacity: 1;
+        }
+      }
+      @media (max-width: 360px) {
+        .tray__tabs {
+          gap: 0;
+          min-width: 0;
+        }
+        .tray__tab,
+        .tray__filter-toggle {
+          padding-inline: var(--space-2);
+        }
+        .tray__tabs-spacer {
+          min-width: 0;
+        }
+        .tray__filter-toggle {
+          flex: 0 0 auto;
+          justify-content: center;
+          min-width: 44px;
+        }
+        .tray__filter-label {
+          display: none;
         }
       }
     `

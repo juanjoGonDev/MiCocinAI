@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { Locator, Page, expect } from '@playwright/test';
 import { test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
@@ -14,17 +16,22 @@ import { registerAndGoto } from './helpers/auth';
 
 function watchPageErrors(page: Page): () => string {
   const errors: string[] = [];
-  page.on('pageerror', (event) => errors.push(String(event.message).split('\n')[0]));
+  page.on('pageerror', (event) => errors.push(String(event.stack || event.message)));
   return () => (errors.length > 0 ? errors.join(' | ') : 'sin errores de pagina');
 }
 
+function newListButton(page: Page): Locator {
+  const mobile = (page.viewportSize()?.width ?? 1024) <= 600;
+  return page.locator(mobile ? '[data-test="new-list-text"]' : '[data-test="new-list"]');
+}
+
 async function newList(page: Page, name: string, store?: string): Promise<void> {
-  await page.locator('[data-test="new-list"]').click();
+  await newListButton(page).click();
   await page.locator('[data-test="list-name"]').fill(name);
   if (store) await page.locator('input[name="listStore"]').fill(store);
   await page.locator('[data-test="create-submit"]').click();
   await expect(page).toHaveURL(/\/shopping\/[\w-]+$/);
-  await page.locator('[data-test="back"], a[href="/shopping"]').first().click();
+  await page.locator('[data-test="back"]').click();
   await expect(page.locator('[data-test="list-row"]').first()).toBeVisible();
 }
 
@@ -33,11 +40,21 @@ function rowOf(page: Page, name: string): Locator {
 }
 
 test.describe('Bandeja: tabla, filtros y paginación', () => {
-  test('las cabeceras son columnas de verdad y se puede ordenar por total', async ({ page }) => {
+  test('la bandeja ordena columnas en escritorio y se adapta a tarjetas móviles', async ({ page }) => {
+    const mobile = (page.viewportSize()?.width ?? 1024) <= 720;
     const echo = watchPageErrors(page);
     await registerAndGoto(page, '/shopping', 'r6-table');
     await newList(page, 'Cesta pequena', 'Ahorro');
     await newList(page, 'Cesta grande', 'Mercadona');
+
+    if (mobile) {
+      await expect(page.locator('.tray__row--head')).toBeHidden();
+      await expect(rowOf(page, 'Cesta pequena').locator('.tray__cell--name')).toContainText('Cesta pequena');
+      await expect(rowOf(page, 'Cesta pequena').locator('.tray__cell--store')).toContainText('Ahorro');
+      await expect(rowOf(page, 'Cesta pequena').locator('.tray__cell--actions')).toBeVisible();
+      expect(echo()).toBe('sin errores de pagina');
+      return;
+    }
 
     await expect(page.getByRole('columnheader', { name: 'Lista' })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: 'Total' })).toBeVisible();
@@ -52,12 +69,15 @@ test.describe('Bandeja: tabla, filtros y paginación', () => {
   test('buscar filtra por producto y el contador de filtros dice cuanto hay puesto', async ({ page }) => {
     await registerAndGoto(page, '/shopping', 'r6-search');
     await newList(page, 'Frutas', 'Ahorro');
-    // La lista queda abierta: se anade una linea y se vuelve.
+    // `newList` vuelve a la bandeja tras comprobar que la fila existe.
+    await rowOf(page, 'Frutas').getByRole('link').click();
+    await expect(page).toHaveURL(/\/shopping\/[\w-]+$/);
     await page.locator('[data-test="add-input"]').fill('Manzanas');
     await page.locator('[data-test="add-submit"]').click();
-    await page.locator('a[href="/shopping"]').first().click();
+    await page.locator('[data-test="back"]').click();
     await newList(page, 'Otros', 'Mercadona');
 
+    await page.locator('.tray__filter-toggle').click();
     await page.locator('[data-test="tray-search"]').fill('Manzanas');
     await expect(page.locator('[data-test="list-row"]')).toHaveCount(1);
     await expect(rowOf(page, 'Frutas')).toBeVisible();
@@ -103,7 +123,7 @@ test.describe('Bandeja: tabla, filtros y paginación', () => {
 test.describe('Cesta: iconos, oferta y descuento', () => {
   test('marcar es un icono, y seleccionar todo tambien', async ({ page }) => {
     await registerAndGoto(page, '/shopping', 'r6-icons');
-    await page.locator('[data-test="new-list"]').click();
+    await newListButton(page).click();
     await page.locator('[data-test="list-name"]').fill('Cesta');
     await page.locator('[data-test="create-submit"]').click();
     await page.locator('[data-test="add-input"]').fill('LecHE');
@@ -114,58 +134,314 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     await row.locator('[data-test="check"]').click();
     await expect(page.locator('[data-test="tab-cart"]')).toContainText('En el carro (1)');
 
+    // Marcar mueve la línea fuera de «Pendientes»; seleccionar todo opera sobre la pestaña visible.
+    await page.locator('[data-test="tab-cart"]').click();
     await page.locator('[data-test="select-all"]').click();
     await expect(page.locator('[data-test="selection-toolbar"]')).toBeVisible();
   });
 
-  test('una oferta 3x2 se pinta en la fila y se quita con un toque', async ({ page }) => {
+  test('las sugerencias no tapan el boton Añadir en movil', async ({ page }, testInfo) => {
+    if (testInfo.project.name !== 'mobile-chrome') test.skip();
+    const pageErrors = watchPageErrors(page);
+    const viewports = [
+      { width: 393, height: 851 },
+      { width: 320, height: 568 }
+    ];
+    await page.setViewportSize(viewports[0]);
+    await registerAndGoto(page, '/shopping', 'r6-add-suggestions');
+    await newListButton(page).click();
+    await page.locator('[data-test="list-name"]').fill('Sugerencias');
+    await page.locator('[data-test="create-submit"]').click();
+
+    const input = page.locator('[data-test="add-input"]');
+    const addButton = page.locator('[data-test="add-submit"]');
+    for (const [index, viewport] of viewports.entries()) {
+      if (index > 0) await page.setViewportSize(viewport);
+      await input.fill('2 LecHE');
+      const suggestions = page.locator('[data-test="add-sugerencias"]');
+      await expect(suggestions).toBeVisible();
+      const layout = await page.evaluate(() => {
+        const visual = visualViewport?.width ?? innerWidth;
+        const form = document.querySelector<HTMLFormElement>('.detail__add');
+        if (!form) return null;
+        const rect = form.getBoundingClientRect();
+        return {
+          visual,
+          rootScrollWidth: document.documentElement.scrollWidth,
+          formClientWidth: form.clientWidth,
+          formScrollWidth: form.scrollWidth,
+          formRight: rect.right
+        };
+      });
+      expect(layout).not.toBeNull();
+      expect(layout!.rootScrollWidth).toBeLessThanOrEqual(layout!.visual);
+      expect(layout!.formScrollWidth).toBeLessThanOrEqual(layout!.formClientWidth);
+      expect(layout!.formRight).toBeLessThanOrEqual(layout!.visual + 1);
+
+      const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+      if (screenshotDirectory) {
+        mkdirSync(screenshotDirectory, { recursive: true });
+        await page.screenshot({
+          path: join(screenshotDirectory, `shopping-quick-add-mobile-${viewport.width}x${viewport.height}.png`)
+        });
+      }
+
+      const rows = page.locator('[data-test="item-row"]');
+      if (index === 0) {
+        // La acción táctil real confirma tanto que el objetivo se puede alcanzar como que envía.
+        await addButton.tap();
+        await expect(rows).toHaveCount(1);
+        await expect(rows.first()).toContainText('LecHE');
+      } else {
+        // También en el ancho mínimo se debe poder añadir sin que la lista de sugerencias
+        // bloquee el CTA; después se prueba elegir una sugerencia y confirmar con teclado.
+        await addButton.tap();
+        // El mismo producto se fusiona con la línea existente: la cantidad total sube a 4,
+        // no se crea una fila duplicada.
+        await expect(input).toHaveValue('');
+        await expect(addButton).toBeDisabled();
+        await expect(rows).toHaveCount(1);
+        await expect(rows.first()).toContainText('4×');
+
+        await input.fill('2 LecHE');
+        await expect(suggestions).toBeVisible();
+        const suggestion = suggestions.locator('[role="option"] button').first();
+        const selectedName = await suggestion.locator('.detail__sug-nombre').innerText();
+        await suggestion.tap();
+        await expect(input).toHaveValue(`2 ${selectedName}`);
+        await expect(suggestions).toHaveCount(0);
+        await addButton.tap();
+        await expect(rows).toHaveCount(2);
+        await expect(rows.filter({ hasText: selectedName })).toHaveCount(1);
+
+        await input.fill('2 LecHE');
+        await expect(suggestions).toBeVisible();
+        const keyboardSelectedName = await suggestions.locator('[role="option"] .detail__sug-nombre').nth(1).innerText();
+        await input.press('ArrowDown');
+        await input.press('ArrowDown');
+        await input.press('Enter');
+        await expect(input).toHaveValue(`2 ${keyboardSelectedName}`);
+        await expect(suggestions).toHaveCount(0);
+        await input.press('Enter');
+        await expect(rows).toHaveCount(3);
+        await expect(rows.filter({ hasText: keyboardSelectedName })).toHaveCount(1);
+      }
+    }
+    expect(pageErrors()).toBe('sin errores de pagina');
+  });
+
+  test('una oferta 3x2 se pinta en la fila y se quita con un toque', async ({ page }, testInfo) => {
+    const isMobile = testInfo.project.name === 'mobile-chrome';
+    const initialViewport = page.viewportSize();
+    if (!isMobile) await page.setViewportSize({ width: 1440, height: 900 });
     await registerAndGoto(page, '/shopping', 'r6-offer');
-    await page.locator('[data-test="new-list"]').click();
+    await page.locator(isMobile ? '[data-test="new-list-text"]' : '[data-test="new-list"]').click();
     await page.locator('[data-test="list-name"]').fill('Ofertas');
     await page.locator('[data-test="create-submit"]').click();
-    await page.locator('[data-test="add-input"]').fill('3 Yogur');
+    const addInput = page.locator('[data-test="add-input"]');
+    await addInput.fill('3 Yogur');
+    await addInput.press('Escape');
+    await expect(page.locator('[data-test="add-sugerencias"]')).toHaveCount(0);
     await page.locator('[data-test="add-submit"]').click();
 
-    await page.locator('[data-test="item-row"]').first().getByRole('button', { name: 'Acciones de la linea' }).click();
+    const offerRow = page.locator('[data-test="item-row"]').first();
+    if (isMobile) {
+      const addRow = await page.evaluate(() => {
+        const visual = { left: visualViewport?.offsetLeft ?? 0, width: visualViewport?.width ?? innerWidth };
+        const form = document.querySelector<HTMLFormElement>('.detail__add');
+        if (!form) return null;
+        const rect = form.getBoundingClientRect();
+        const controls = Array.from(form.children)
+          .filter((child): child is HTMLElement => child instanceof HTMLElement && child.matches('button, app-icon-button'))
+          .map((control) => {
+            const controlRect = control.getBoundingClientRect();
+            return { left: controlRect.left, right: controlRect.right };
+          });
+        return {
+          visual,
+          rootScrollWidth: document.documentElement.scrollWidth,
+          form: { left: rect.left, right: rect.right, clientWidth: form.clientWidth, scrollWidth: form.scrollWidth },
+          controls
+        };
+      });
+      expect(addRow).not.toBeNull();
+      expect(addRow!.rootScrollWidth).toBeLessThanOrEqual(addRow!.visual.width);
+      expect(addRow!.form.scrollWidth).toBeLessThanOrEqual(addRow!.form.clientWidth);
+      expect(addRow!.form.right).toBeLessThanOrEqual(addRow!.visual.left + addRow!.visual.width);
+      expect(addRow!.controls).toHaveLength(4);
+      expect(addRow!.controls.every((control) => control.left >= addRow!.visual.left
+        && control.right <= addRow!.visual.left + addRow!.visual.width)).toBe(true);
+    }
+    await offerRow.getByRole('button', { name: 'Acciones de la linea' }).click();
+    const offerSaved = page.waitForResponse((response) =>
+      response.url().includes('/api/shopping/lists/')
+      && response.url().includes('/items/')
+      && response.request().method() === 'PATCH'
+      && response.ok()
+    );
     await page.locator('[data-test="offer-preset"]', { hasText: '3x2' }).click();
-    await expect(page.locator('[data-test="offer-chip"]')).toHaveText('3x2');
-    await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
+    await offerSaved;
+    const offerChip = page.locator('[data-test="offer-chip"]');
+    await expect(offerChip).toHaveText('3x2');
+    await expect(offerChip).toHaveAccessibleName('3x2');
+    await expect(offerChip).toHaveAttribute('title', /Oferta 3x2/);
+    const editSheet = page.locator('[data-test="edit-sheet"]');
+    const doneButton = editSheet.getByRole('button', { name: /Hecho/i });
+    if (isMobile) {
+      const geometry = await editSheet.evaluate((sheet) => {
+        const rect = sheet.getBoundingClientRect();
+        const viewport = {
+          left: visualViewport?.offsetLeft ?? 0,
+          top: visualViewport?.offsetTop ?? 0,
+          width: visualViewport?.width ?? innerWidth,
+          height: visualViewport?.height ?? innerHeight
+        };
+        const style = getComputedStyle(sheet);
+        return {
+          viewport,
+          sheet: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: sheet.clientWidth, height: sheet.clientHeight, scrollHeight: sheet.scrollHeight, overflowY: style.overflowY }
+        };
+      });
+      expect(geometry.sheet.left).toBeGreaterThanOrEqual(geometry.viewport.left);
+      expect(geometry.sheet.right).toBeLessThanOrEqual(geometry.viewport.left + geometry.viewport.width);
+      expect(geometry.sheet.top).toBeGreaterThanOrEqual(geometry.viewport.top);
+      expect(geometry.sheet.bottom).toBeLessThanOrEqual(geometry.viewport.top + geometry.viewport.height);
+      expect(geometry.sheet.overflowY).toBe('auto');
+    }
+    await doneButton.click({ timeout: isMobile ? 6000 : undefined });
 
-    // La fila recuerda la oferta al recargar, y el chip la quita sin abrir la hoja.
+    if (isMobile) {
+      // 320×568 is the narrow-height edge: the sheet must scroll internally so «Hecho» stays reachable.
+      await page.setViewportSize({ width: 320, height: 568 });
+      const narrowAddRow = await page.evaluate(() => {
+        const width = visualViewport?.width ?? innerWidth;
+        const form = document.querySelector<HTMLFormElement>('.detail__add');
+        if (!form) return null;
+        const rect = form.getBoundingClientRect();
+        const controls = Array.from(form.children)
+          .filter((child): child is HTMLElement => child instanceof HTMLElement && child.matches('button, app-icon-button'))
+          .map((control) => {
+            const controlRect = control.getBoundingClientRect();
+            return { left: controlRect.left, right: controlRect.right };
+          });
+        return { width, rootScrollWidth: document.documentElement.scrollWidth, formWidth: form.clientWidth, formScrollWidth: form.scrollWidth, formRight: rect.right, controls };
+      });
+      expect(narrowAddRow).not.toBeNull();
+      expect(narrowAddRow!.rootScrollWidth).toBeLessThanOrEqual(narrowAddRow!.width);
+      expect(narrowAddRow!.formScrollWidth).toBeLessThanOrEqual(narrowAddRow!.formWidth);
+      expect(narrowAddRow!.formRight).toBeLessThanOrEqual(narrowAddRow!.width);
+      expect(narrowAddRow!.controls).toHaveLength(4);
+      expect(narrowAddRow!.controls.every((control) => control.left >= 0 && control.right <= narrowAddRow!.width)).toBe(true);
+      await offerRow.getByRole('button', { name: 'Acciones de la linea' }).click();
+      await expect(editSheet).toHaveCSS('transform', 'none');
+      const narrowSheet = await editSheet.evaluate((sheet) => {
+        const viewport = { width: visualViewport?.width ?? innerWidth, height: visualViewport?.height ?? innerHeight, left: visualViewport?.offsetLeft ?? 0, top: visualViewport?.offsetTop ?? 0 };
+        const rect = sheet.getBoundingClientRect();
+        const style = getComputedStyle(sheet);
+        return {
+          viewport,
+          left: rect.left,
+          top: rect.top,
+          right: rect.right,
+          bottom: rect.bottom,
+          width: sheet.clientWidth,
+          height: sheet.clientHeight,
+          scrollHeight: sheet.scrollHeight,
+          overflowY: style.overflowY
+        };
+      });
+      await expect(editSheet).toBeVisible();
+      await expect(editSheet).toHaveCSS('transform', 'none');
+      expect(narrowSheet.right).toBeLessThanOrEqual(narrowSheet.viewport.left + narrowSheet.viewport.width);
+      expect(narrowSheet.top).toBeGreaterThanOrEqual(narrowSheet.viewport.top);
+      expect(narrowSheet.bottom).toBeLessThanOrEqual(narrowSheet.viewport.top + narrowSheet.viewport.height);
+      expect(narrowSheet.height).toBeLessThanOrEqual(narrowSheet.viewport.height);
+      expect(narrowSheet.scrollHeight).toBeGreaterThan(narrowSheet.height);
+      expect(narrowSheet.overflowY).toBe('auto');
+      await doneButton.scrollIntoViewIfNeeded();
+      const buttonInViewport = await doneButton.evaluate((button) => {
+        const rect = button.getBoundingClientRect();
+        const left = visualViewport?.offsetLeft ?? 0;
+        const top = visualViewport?.offsetTop ?? 0;
+        return rect.left >= left && rect.right <= left + (visualViewport?.width ?? innerWidth)
+          && rect.top >= top && rect.bottom <= top + (visualViewport?.height ?? innerHeight);
+      });
+      expect(buttonInViewport).toBe(true);
+      await doneButton.focus();
+      expect(await doneButton.evaluate((button) => button === document.activeElement)).toBe(true);
+      await page.keyboard.press('Enter');
+      await expect(editSheet).toHaveCount(0);
+      if (initialViewport) await page.setViewportSize(initialViewport);
+    }
+
+    // La fila recuerda la oferta y el chip la quita con un toque, sin abrir la hoja.
+    await expect(offerChip).toHaveText('3x2');
+    await expect(offerChip).toHaveAccessibleName('3x2');
+    await expect(offerChip).toHaveAttribute('title', /Oferta 3x2/);
+    await expect(page.locator('.detail__status')).toHaveText('Guardado');
+    const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+    if (screenshotDirectory) {
+      mkdirSync(screenshotDirectory, { recursive: true });
+      await page.screenshot({
+        path: join(screenshotDirectory, `shopping-offer-${isMobile ? 'mobile' : 'desktop'}.png`)
+      });
+    }
     await page.reload();
+    await expect(page.locator('[data-test="edit-sheet"]')).toHaveCount(0);
     await expect(page.locator('[data-test="offer-chip"]')).toHaveText('3x2');
-    await page.locator('[data-test="offer-chip"]').click();
+    await expect(page.locator('[data-test="offer-chip"]')).toHaveAccessibleName('3x2');
+    await expect(page.locator('[data-test="offer-chip"]')).toHaveAttribute('title', /Oferta 3x2/);
+    await offerChip.click();
     await expect(page.locator('[data-test="offer-chip"]')).toHaveCount(0);
   });
 
-  test('el descuento de la lista se aplica al total y se puede quitar', async ({ page }) => {
-    await registerAndGoto(page, '/shopping', 'r6-discount');
-    await page.locator('[data-test="new-list"]').click();
-    await page.locator('[data-test="list-name"]').fill('Con descuento');
-    await page.locator('[data-test="create-submit"]').click();
-    await page.locator('[data-test="add-input"]').fill('1 Aceite');
-    await page.locator('[data-test="add-submit"]').click();
-    await page.locator('[data-test="item-row"]').first().getByRole('button', { name: 'Acciones de la linea' }).click();
-    await page.locator('[data-test="price-input"]').fill('10');
-    await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
+  test('el descuento de la lista se aplica al total y se puede quitar', async ({ page }, testInfo) => {
+    const isMobile = testInfo.project.name === 'mobile-chrome';
+    const viewports = isMobile
+      ? [{ width: 393, height: 851 }, { width: 320, height: 568 }]
+      : [{ width: 1440, height: 900 }];
 
-    await page.locator('[data-test="discount-open"]').click();
-    await page.locator('[data-test="discount-kind"]', { hasText: 'Porcentaje' }).click();
-    await page.locator('[data-test="discount-percent"] button').click();
-    await page.getByRole('option', { name: '10 %' }).click();
-    await page.locator('[data-test="discount-save"]').click();
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      await registerAndGoto(page, '/shopping', `r6-discount-${viewport.width}`);
+      await newListButton(page).click();
+      await page.locator('[data-test="list-name"]').fill('Con descuento');
+      await page.locator('[data-test="create-submit"]').click();
+      await page.locator('[data-test="add-input"]').fill('1 Aceite');
+      await page.locator('[data-test="add-submit"]').click();
+      await page.locator('[data-test="item-row"]').first().getByRole('button', { name: 'Acciones de la linea' }).click();
+      await page.locator('[data-test="price-input"]').fill('10');
+      await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
 
-    await expect(page.locator('[data-test="total"]')).toHaveText('9,00 €');
-    await expect(page.locator('[data-test="discount-open"]')).toContainText('10');
+      await page.locator('[data-test="discount-open"]').click();
+      await page.locator('[data-test="discount-kind"]', { hasText: 'Porcentaje' }).click();
+      await page.locator('[data-test="discount-percent"] button').click();
+      await page.getByRole('option', { name: '10 %' }).click();
+      const picker = page.locator('[data-test="discount-percent"]');
+      await expect(picker.locator('.picker__panel')).toHaveCount(0);
+      await expect(picker.locator('button')).toHaveAttribute('aria-expanded', 'false');
 
-    await page.locator('[data-test="discount-open"]').click();
-    await page.locator('[data-test="discount-remove"]').click();
-    await expect(page.locator('[data-test="total"]')).toHaveText('10,00 €');
+      const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+      if (screenshotDirectory) {
+        mkdirSync(screenshotDirectory, { recursive: true });
+        await page.screenshot({
+          path: join(screenshotDirectory, `shopping-discount-${viewport.width}x${viewport.height}.png`)
+        });
+      }
+      await page.locator('[data-test="discount-save"]').click();
+
+      await expect(page.locator('[data-test="total"]')).toHaveText('9,00 €');
+      await expect(page.locator('[data-test="discount-open"]')).toContainText('10');
+
+      await page.locator('[data-test="discount-open"]').click();
+      await page.locator('[data-test="discount-remove"]').click();
+      await expect(page.locator('[data-test="total"]')).toHaveText('10,00 €');
+    }
   });
 
   test('la hoja de foto avisa de que falta la IA y no escribe nada', async ({ page }) => {
     await registerAndGoto(page, '/shopping', 'r6-photo');
-    await page.locator('[data-test="new-list"]').click();
+    await newListButton(page).click();
     await page.locator('[data-test="list-name"]').fill('Con foto');
     await page.locator('[data-test="create-submit"]').click();
 
@@ -231,7 +507,7 @@ test.describe('Calendario de la casa', () => {
 test.describe('Descuento por producto (la etiqueta del supermercado)', () => {
   test('un descuento prometido en un producto solo baja ese producto', async ({ page }) => {
     await registerAndGoto(page, '/shopping', 'r6-discount-product');
-    await page.locator('[data-test="new-list"]').click();
+    await newListButton(page).click();
     await page.locator('[data-test="list-name"]').fill('Jamon y leche');
     await page.locator('[data-test="create-submit"]').click();
 
@@ -239,15 +515,28 @@ test.describe('Descuento por producto (la etiqueta del supermercado)', () => {
       await page.locator('[data-test="add-input"]').fill(line);
       await page.locator('[data-test="add-submit"]').click();
     }
-    // Precios: 4,00 € el jamon y 1,00 € la leche.
+    // Precios unitarios: 4,00 € Jamón y 0,50 € Leche (dos unidades = 1,00 €).
     await page.locator('[data-test="item-row"]').first().getByRole('button', { name: 'Acciones de la linea' }).click();
     await page.locator('[data-test="price-input"]').fill('4');
     await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
 
+    const milkRow = page.locator('[data-test="item-row"]').filter({ hasText: 'Leche' });
+    await milkRow.getByRole('button', { name: 'Acciones de la linea' }).click();
+    await page.locator('[data-test="price-input"]').fill('0,50');
+    const milkPriceSaved = page.waitForResponse((response) =>
+      response.url().includes('/api/shopping/lists/')
+      && response.url().includes('/items/')
+      && response.request().method() === 'PATCH'
+      && response.ok()
+    );
+    await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
+    await milkPriceSaved;
+    await expect(page.locator('[data-test="total"]')).toHaveText('5,00 €');
+
     await page.locator('[data-test="discount-open"]').click();
     await page.locator('[data-test="discount-scope"]', { hasText: 'En productos' }).click();
     // Sin diana no se guarda: «-2 €» a secas mentiria el total de la cesta.
-    await page.locator('[data-test="discount-amount"] input').fill('2');
+    await page.locator('[data-test="discount-amount"]').fill('2');
     await page.locator('[data-test="discount-save"]').click();
     await expect(page.locator('[data-test="discount-sheet"]')).toBeVisible();
 

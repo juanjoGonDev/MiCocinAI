@@ -434,7 +434,9 @@ interface NavItem {
       flex-direction: column;
       align-items: center;
       gap: var(--space-1);
-      padding: var(--space-2);
+      flex: 1 1 0;
+      min-width: 0;
+      padding: var(--space-2) var(--space-1);
       color: var(--text-tertiary);
       text-decoration: none;
       transition: var(--transition-fast);
@@ -453,8 +455,14 @@ interface NavItem {
     }
 
     .bottom-nav__label {
+      display: block;
+      width: 100%;
       font-size: 10px;
       font-weight: var(--font-medium);
+      overflow: hidden;
+      text-align: center;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   `]
 })

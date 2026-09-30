@@ -145,14 +145,21 @@ function formatPercentBps(bps: number): string {
   return (bps / 100).toLocaleString(dateLocale(), { maximumFractionDigits: 2 });
 }
 
-/** La oferta como dato de UI: solo existe si es valida (take < buy y buy >= 2). */
+/** Mantiene las mismas unidades enteras y límites que el normalizador del servidor. */
+function normalizeLineOffer(buyInput: unknown, takeInput: unknown): LineOffer | null {
+  const buy = Math.floor(Number(buyInput ?? 0));
+  const take = Math.floor(Number(takeInput ?? 0));
+  if (!Number.isFinite(buy) || !Number.isFinite(take) || buy < 2 || take < 1 || take >= buy) {
+    return null;
+  }
+  return { buy, take };
+}
+
+/** La oferta como dato de UI; aplica los mismos límites que el servidor. */
 export function offerOfItem(
   item: Pick<ShoppingListItem, 'promo_buy' | 'promo_take'>
 ): LineOffer | null {
-  const buy = Number(item.promo_buy ?? 0);
-  const take = Number(item.promo_take ?? 0);
-  if (!buy || !take || take >= buy || buy < 2) return null;
-  return { buy, take };
+  return normalizeLineOffer(item.promo_buy, item.promo_take);
 }
 
 export interface EstimateLine {
@@ -581,9 +588,10 @@ export const OFFER_PRESETS: {
 ];
 
 export function describeOffer(offer: LineOffer | null | undefined): string | null {
-  if (!offer || !offer.buy || !offer.take) return null;
-  if (offer.take >= offer.buy) return null;
-  return `${offer.buy}x${offer.buy - offer.take}`;
+  if (!offer) return null;
+  const normalized = normalizeLineOffer(offer.buy, offer.take);
+  if (!normalized) return null;
+  return `${normalized.buy}x${normalized.take}`;
 }
 
 export interface PhotoLine {

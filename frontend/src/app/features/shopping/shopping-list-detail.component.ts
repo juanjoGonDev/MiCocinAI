@@ -249,6 +249,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           class="detail__add-btn"
           data-test="add-submit"
           [disabled]="!draftItem.trim()"
+          (mousedown)="mantenerFocoParaAnadir($event)"
         >
           <app-icon name="add" [size]="18" [label]="null" />
           <span>{{ 'ui.anadir' | t }}</span>
@@ -926,13 +927,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               }
             </div>
             <div class="detail__sheet-grid">
-              <label class="detail__field">
-                <span>{{
-                  discountDraft().kind === 'percent'
-                    ? ('shopping_list_detail.porcentaje' | t)
-                    : ('shopping_list_detail.importe_euros' | t)
-                }}</span>
-                @if (discountDraft().kind === 'percent') {
+              @if (discountDraft().kind === 'percent') {
+                <div class="detail__field">
+                  <span>{{ 'shopping_list_detail.porcentaje' | t }}</span>
                   <app-picker
                     [label]="'shopping_list_detail.porcentaje' | t"
                     [options]="percentOptions"
@@ -943,7 +940,10 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     (valueChange)="setPercent($event)"
                     data-test="discount-percent"
                   />
-                } @else {
+                </div>
+              } @else {
+                <label class="detail__field">
+                  <span>{{ 'shopping_list_detail.importe_euros' | t }}</span>
                   <input
                     name="discountValue"
                     inputmode="decimal"
@@ -953,8 +953,8 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     (blur)="commitAmount()"
                     data-test="discount-amount"
                   />
-                }
-              </label>
+                </label>
+              }
               <label class="detail__field">
                 <span>{{ 'shopping_list_detail.etiqueta_opcional' | t }}</span>
                 <input
@@ -2387,6 +2387,25 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         justify-content: space-between;
         gap: var(--space-2);
       }
+      @media (max-width: 600px) {
+        .detail__sheet-backdrop {
+          inset: 0 auto auto 0;
+          width: 100vw;
+          height: 100vh;
+          width: 100dvw;
+          height: 100dvh;
+        }
+        .detail__sheet {
+          min-width: 0;
+          max-height: calc(100dvh - env(safe-area-inset-top));
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+        }
+        .detail__sheet-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
 
       /* ── descuento con varias dianas ─────────────────────────────── */
       /* La fila tocable es de 44 px minimo: quien elige los productos esta en la tienda,
@@ -2689,6 +2708,17 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         flex: 1;
         display: flex;
       }
+      @media (max-width: 600px) {
+        .detail__add {
+          flex-wrap: wrap;
+        }
+        .detail__add-campo {
+          flex: 1 1 100%;
+          min-width: 0;
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
       .detail__sugs {
         position: absolute;
         top: calc(100% + 6px);
@@ -2706,6 +2736,16 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         border: 1px solid var(--border-default);
         border-radius: var(--radius-md);
         box-shadow: var(--shadow-md);
+      }
+      @media (max-width: 600px) {
+        .detail__sugs {
+          position: static;
+          grid-column: 1 / -1;
+          width: 100%;
+          max-height: min(264px, 40dvh);
+          margin-top: var(--space-2);
+          z-index: auto;
+        }
       }
       .detail__sug {
         display: flex;
@@ -2950,6 +2990,12 @@ export class ShoppingListDetailComponent implements OnDestroy {
       event.preventDefault();
       this.aplicarSugerencia(this.sugActivo);
     }
+  }
+
+  protected mantenerFocoParaAnadir(event: MouseEvent): void {
+    // En móvil el listbox está en el flujo: al mover el foco, blur lo cerraría y
+    // reubicaría el botón antes del click. Mantener el foco del combobox hasta submit evita perderlo.
+    if (this.sugAbiertas()) event.preventDefault();
   }
 
   protected aplicarSugerencia(indice: number): void {

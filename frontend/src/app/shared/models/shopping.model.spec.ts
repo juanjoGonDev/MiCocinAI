@@ -4,6 +4,10 @@ import {
   productKeyOf,
   formatQuantity,
   groupItemsByCategory,
+  lineDiscountOfItem,
+  describeLineDiscount,
+  offerOfItem,
+  describeOffer,
   parseMoneyToMinor,
   ShoppingListItem
 } from './shopping.model';
@@ -96,6 +100,80 @@ describe('shopping.model — cantidades y secciones', () => {
 
   it('no crea grupo fantasma cuando la lista esta vacia', () => {
     expect(groupItemsByCategory([])).toEqual([]);
+  });
+});
+
+describe('shopping.model — descuentos de línea y ofertas', () => {
+  const labels = { unidad: 'unidad', unidades: 'unidades' };
+
+  it('normaliza campos ausentes y conserva los ceros de descuentos reconocidos', () => {
+    expect(
+      lineDiscountOfItem({
+        disc_kind: null,
+        disc_value_minor: null,
+        disc_percent_bps: null,
+        disc_units: null
+      })
+    ).toBeNull();
+
+    expect(
+      lineDiscountOfItem({
+        disc_kind: 'amount',
+        disc_value_minor: 0,
+        disc_percent_bps: null,
+        disc_units: null
+      })
+    ).toEqual({ kind: 'amount', valueMinor: 0, percentBps: null, units: null });
+
+    expect(
+      lineDiscountOfItem({
+        disc_kind: 'percent',
+        disc_value_minor: undefined as unknown as number | null,
+        disc_percent_bps: 1250,
+        disc_units: 2
+      })
+    ).toEqual({ kind: 'percent', valueMinor: null, percentBps: 1250, units: 2 });
+  });
+
+  it('describe descuentos ausentes, porcentajes/importes y límites singular/plural', () => {
+    expect(describeLineDiscount(null, labels)).toBeNull();
+    expect(describeLineDiscount(undefined, labels)).toBeNull();
+    expect(describeLineDiscount({ kind: 'amount', valueMinor: 250 }, labels)).toBe('2,50 €');
+    expect(describeLineDiscount({ kind: 'amount' }, labels)).toBe('0,00 €');
+    expect(
+      describeLineDiscount({ kind: 'percent', percentBps: 1250, units: 1 }, labels)
+    ).toBe('12,5 % en 1 unidad');
+    expect(
+      describeLineDiscount({ kind: 'percent', percentBps: 0, units: 2 }, labels)
+    ).toBe('0 % en 2 unidades');
+    expect(describeLineDiscount({ kind: 'percent' }, labels)).toBe('0 %');
+    expect(
+      describeLineDiscount({ kind: 'amount', valueMinor: 1, units: -1 }, labels)
+    ).toBe('0,01 €');
+  });
+
+  it('solo expone ofertas válidas con unidades pagadas positivas', () => {
+    const invalid = [
+      { promo_buy: null, promo_take: null },
+      { promo_buy: 0, promo_take: 1 },
+      { promo_buy: 1, promo_take: 1 },
+      { promo_buy: 3, promo_take: 0 },
+      { promo_buy: 3, promo_take: -1 },
+      { promo_buy: 3, promo_take: 3 }
+    ];
+    for (const item of invalid) expect(offerOfItem(item)).toBeNull();
+
+    expect(offerOfItem({ promo_buy: 3, promo_take: 2 })).toEqual({ buy: 3, take: 2 });
+  });
+
+  it('describe la compra por unidades pagadas (3x2), no por las gratuitas (3x1)', () => {
+    expect(describeOffer(null)).toBeNull();
+    expect(describeOffer(undefined)).toBeNull();
+    expect(describeOffer({ buy: 0, take: 1 })).toBeNull();
+    expect(describeOffer({ buy: 3, take: 0 })).toBeNull();
+    expect(describeOffer({ buy: 3, take: 3 })).toBeNull();
+    expect(describeOffer({ buy: 3, take: 2 })).toBe('3x2');
+    expect(describeOffer({ buy: 2, take: 1 })).toBe('2x1');
   });
 });
 
