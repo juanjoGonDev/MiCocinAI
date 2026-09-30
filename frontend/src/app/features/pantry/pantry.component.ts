@@ -419,7 +419,9 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
             </app-data-table>
           } @else if (suggestions().length === 0) {
             <div class="empty-state">
-              <span class="empty-state__icon">📦</span>
+              <span class="empty-state__icon"
+                ><app-icon name="inventory_2" [size]="64" [label]="null"
+              /></span>
               <h3 class="empty-state__title">{{ 'pantry.empty' | t }}</h3>
               <p class="empty-state__text">{{ 'pantry.agrega_ingredientes_para_empezar' | t }}</p>
               <app-button variant="primary" (onClick)="openAddModal()">{{
@@ -450,7 +452,9 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
 
           @if (utensilTotal() === 0) {
             <div class="empty-state">
-              <span class="empty-state__icon">🍳</span>
+              <span class="empty-state__icon"
+                ><app-icon name="kitchen" [size]="64" [label]="null"
+              /></span>
               <h3 class="empty-state__title">{{ 'pantry.todavia_no_hay_utensilios' | t }}</h3>
               <p class="empty-state__text">
                 {{ 'pantry.anade_los_que_uses' | t }}
@@ -696,7 +700,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
               [(ngModel)]="utensilForm.category"
             >
               <option *ngFor="let cat of utensilCategoryOptions" [value]="cat.value">
-                {{ cat.icon }} {{ cat.labelKey | t }}
+                {{ cat.labelKey | t }}
               </option>
             </select>
           </div>
@@ -1343,7 +1347,8 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
         text-align: center;
       }
       .empty-state__icon {
-        font-size: 64px;
+        display: flex;
+        color: var(--text-tertiary);
         margin-bottom: var(--space-4);
       }
       .empty-state__title {
@@ -1766,20 +1771,19 @@ export class PantryComponent implements OnInit {
   ingredientCategoriesNoAll: {
     value: IngredientCategory;
     labelKey: TranslationKey;
-    icon: string;
   }[] = [
-    { value: 'vegetables', labelKey: 'pantry.categoria_verduras', icon: '🥬' },
-    { value: 'fruits', labelKey: 'pantry.categoria_frutas', icon: '🍎' },
-    { value: 'meat', labelKey: 'pantry.categoria_carnes', icon: '🥩' },
-    { value: 'fish', labelKey: 'pantry.categoria_pescados', icon: '🐟' },
-    { value: 'dairy', labelKey: 'pantry.categoria_lacteos', icon: '🧀' },
-    { value: 'grains', labelKey: 'pantry.categoria_cereales', icon: '🌾' },
-    { value: 'spices', labelKey: 'pantry.categoria_especias', icon: '🧂' },
-    { value: 'condiments', labelKey: 'pantry.categoria_condimentos', icon: '🫙' },
-    { value: 'frozen', labelKey: 'pantry.categoria_congelados', icon: '❄️' },
-    { value: 'canned', labelKey: 'pantry.categoria_enlatados', icon: '🥫' },
-    { value: 'beverages', labelKey: 'pantry.categoria_bebidas', icon: '🥤' },
-    { value: 'other', labelKey: 'pantry.categoria_otros', icon: '📦' }
+    { value: 'vegetables', labelKey: 'pantry.categoria_verduras' },
+    { value: 'fruits', labelKey: 'pantry.categoria_frutas' },
+    { value: 'meat', labelKey: 'pantry.categoria_carnes' },
+    { value: 'fish', labelKey: 'pantry.categoria_pescados' },
+    { value: 'dairy', labelKey: 'pantry.categoria_lacteos' },
+    { value: 'grains', labelKey: 'pantry.categoria_cereales' },
+    { value: 'spices', labelKey: 'pantry.categoria_especias' },
+    { value: 'condiments', labelKey: 'pantry.categoria_condimentos' },
+    { value: 'frozen', labelKey: 'pantry.categoria_congelados' },
+    { value: 'canned', labelKey: 'pantry.categoria_enlatados' },
+    { value: 'beverages', labelKey: 'pantry.categoria_bebidas' },
+    { value: 'other', labelKey: 'pantry.categoria_otros' }
   ];
   /** Las cuatro guardas de siempre, en un picker (## 12x: se quitan los `select` nativos del formulario). */
   readonly opcionesUbicacion = computed<PickerOption[]>(() => {
@@ -1816,15 +1820,6 @@ export class PantryComponent implements OnInit {
     return colorDeCategoria(this.pantryService.categories().find((cat) => cat.key === clave));
   }
 
-  ingredientCategories: {
-    value: IngredientCategory | '';
-    labelKey: TranslationKey;
-    icon: string;
-  }[] = [
-    { value: '', labelKey: 'pantry.categoria_todos', icon: '📋' },
-    ...this.ingredientCategoriesNoAll
-  ];
-
   /** Las opciones del picker de categoria, con su color y las subcategorias agrupadas bajo su padre. */
   readonly opcionesCategoria = computed<PickerOption[]>(() => {
     this.i18n.changeTick();
@@ -1848,17 +1843,17 @@ export class PantryComponent implements OnInit {
   });
 
   /** Opciones del catálogo de utensilios (orden de secciones incluido). */
-  utensilCategoryOptions: { value: UtensilCategory; labelKey: TranslationKey; icon: string }[] = [
-    { value: 'oven', labelKey: 'pantry.utensilio_horno', icon: '🔥' },
-    { value: 'microwave', labelKey: 'pantry.utensilio_microondas', icon: '📡' },
-    { value: 'airfryer', labelKey: 'pantry.utensilio_freidora', icon: '🌪️' },
-    { value: 'stovetop', labelKey: 'pantry.utensilio_cocina', icon: '♨️' },
-    { value: 'blender', labelKey: 'pantry.utensilio_batidora_vaso', icon: '🥤' },
-    { value: 'mixer', labelKey: 'pantry.utensilio_batidora_mano', icon: '🌀' },
-    { value: 'food-processor', labelKey: 'pantry.utensilio_procesador', icon: '🤖' },
-    { value: 'cookware', labelKey: 'pantry.utensilio_ollas', icon: '🍳' },
-    { value: 'bakeware', labelKey: 'pantry.utensilio_horneado', icon: '🧁' },
-    { value: 'tools', labelKey: 'pantry.utensilio_herramientas', icon: '🔪' }
+  utensilCategoryOptions: { value: UtensilCategory; labelKey: TranslationKey }[] = [
+    { value: 'oven', labelKey: 'pantry.utensilio_horno' },
+    { value: 'microwave', labelKey: 'pantry.utensilio_microondas' },
+    { value: 'airfryer', labelKey: 'pantry.utensilio_freidora' },
+    { value: 'stovetop', labelKey: 'pantry.utensilio_cocina' },
+    { value: 'blender', labelKey: 'pantry.utensilio_batidora_vaso' },
+    { value: 'mixer', labelKey: 'pantry.utensilio_batidora_mano' },
+    { value: 'food-processor', labelKey: 'pantry.utensilio_procesador' },
+    { value: 'cookware', labelKey: 'pantry.utensilio_ollas' },
+    { value: 'bakeware', labelKey: 'pantry.utensilio_horneado' },
+    { value: 'tools', labelKey: 'pantry.utensilio_herramientas' }
   ];
 
   ngOnInit(): void {

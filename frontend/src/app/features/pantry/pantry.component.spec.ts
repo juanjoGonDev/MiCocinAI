@@ -75,4 +75,14 @@ describe('PantryComponent add action', () => {
     expect(component.isIngredientModalOpen()).toBeTrue();
     expect(component.formData.name).toBe('harina');
   });
+
+  it('keeps unused emoji metadata out of pantry category controls', () => {
+    const component = createComponent();
+    const categories = [
+      ...component.ingredientCategoriesNoAll,
+      ...component.utensilCategoryOptions
+    ];
+
+    expect(categories.every((category) => !Object.hasOwn(category, 'icon'))).toBeTrue();
+  });
 });

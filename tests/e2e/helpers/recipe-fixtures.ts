@@ -9,7 +9,15 @@ export interface SyntheticRecipe {
   token: string;
 }
 
-export async function createSyntheticRecipe(page: Page): Promise<SyntheticRecipe> {
+export interface SyntheticRecipeOptions {
+  tips?: string;
+  warning?: string;
+}
+
+export async function createSyntheticRecipe(
+  page: Page,
+  options: SyntheticRecipeOptions = {}
+): Promise<SyntheticRecipe> {
   const token = await page.evaluate((key) => localStorage.getItem(key), TOKEN_KEY);
   if (!token) throw new Error('la sesión de prueba debe estar autenticada');
 
@@ -25,7 +33,14 @@ export async function createSyntheticRecipe(page: Page): Promise<SyntheticRecipe
       cookTime: 10,
       servings: 2,
       ingredients: [{ name: 'Tomate QA', quantity: 2, unit: 'unit' }],
-      steps: [{ stepNumber: 1, instruction: 'Cortar el tomate.' }]
+      steps: [
+        {
+          stepNumber: 1,
+          instruction: 'Cortar el tomate.',
+          ...(options.tips ? { tips: options.tips } : {}),
+          ...(options.warning ? { warning: options.warning } : {})
+        }
+      ]
     }
   });
   expect(
