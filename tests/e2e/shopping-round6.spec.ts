@@ -563,3 +563,171 @@ test.describe('Descuento por producto (la etiqueta del supermercado)', () => {
     await expect(page.locator('[data-test="total"]')).toHaveText('3,00 €');
   });
 });
+
+test.describe('Selector de unidad con búsqueda', () => {
+  async function checkUnitSearch(page: Page, viewport: { width: number; height: number }): Promise<void> {
+    const pageErrors = watchPageErrors(page);
+    await registerAndGoto(page, '/shopping', `r6-unit-picker-${viewport.width}`);
+    await newList(page, 'Unidad buscable');
+    if (viewport.width <= 600) {
+      const shellLayout = await page.evaluate(() => {
+        const viewportWidth = document.documentElement.clientWidth;
+        const nav = document.querySelector<HTMLElement>('.bottom-nav');
+        const tabs = document.querySelector<HTMLElement>('.tray__tabs');
+        return {
+          viewportWidth,
+          rootScrollWidth: document.documentElement.scrollWidth,
+          navRight: nav?.getBoundingClientRect().right ?? null,
+          tabs: tabs && {
+            left: tabs.getBoundingClientRect().left,
+            right: tabs.getBoundingClientRect().right,
+            width: tabs.getBoundingClientRect().width,
+            clientWidth: tabs.clientWidth,
+            scrollWidth: tabs.scrollWidth
+          },
+          tabTargets: Array.from(tabs?.querySelectorAll<HTMLElement>('.tray__tab, .tray__filter-toggle') ?? []).map((item) => {
+            const rect = item.getBoundingClientRect();
+            return { name: item.getAttribute('aria-label') || item.innerText, width: rect.width, height: rect.height };
+          }),
+          tabChildren: Array.from(tabs?.children ?? []).map((child) => {
+            const element = child as HTMLElement;
+            const rect = element.getBoundingClientRect();
+            return { className: element.className, text: element.innerText, left: rect.left, right: rect.right, width: rect.width };
+          }),
+          navItems: Array.from(nav?.querySelectorAll<HTMLElement>('.bottom-nav__item') ?? []).map((item) => {
+            const rect = item.getBoundingClientRect();
+            return {
+              label: item.innerText,
+              left: rect.left,
+              right: rect.right,
+              width: rect.width,
+              height: rect.height,
+              style: {
+                flex: getComputedStyle(item).flex,
+                minWidth: getComputedStyle(item).minWidth,
+                labelWidth: item.querySelector('.bottom-nav__label')?.getBoundingClientRect().width
+              }
+            };
+          })
+        };
+      });
+      expect(shellLayout.viewportWidth).toBe(viewport.width);
+      expect(shellLayout.rootScrollWidth, JSON.stringify(shellLayout)).toBeLessThanOrEqual(shellLayout.viewportWidth);
+      expect(shellLayout.navRight).toBeLessThanOrEqual(shellLayout.viewportWidth);
+      expect(shellLayout.navItems.every((item) => item.left >= 0 && item.right <= shellLayout.viewportWidth
+        && item.width >= 44 && item.height >= 44)).toBe(true);
+      expect(shellLayout.tabs?.scrollWidth).toBeLessThanOrEqual(shellLayout.tabs?.clientWidth ?? 0);
+      expect(shellLayout.tabTargets.every((item) => item.width >= 44 && item.height >= 44)).toBe(true);
+      await expect(page.locator('.tray__filter-toggle')).toHaveAccessibleName('Filtros');
+      await expect(page.locator('.tray__filter-toggle')).toHaveAttribute('aria-expanded', 'false');
+    }
+    const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+    if (screenshotDirectory) {
+      mkdirSync(screenshotDirectory, { recursive: true });
+      await page.screenshot({
+        path: join(screenshotDirectory, `shopping-tray-${viewport.width}x${viewport.height}.png`),
+        animations: 'disabled'
+      });
+    }
+    await rowOf(page, 'Unidad buscable').getByRole('link').click();
+    await page.locator('[data-test="add-input"]').fill('1 Leche');
+    await page.locator('[data-test="add-submit"]').click();
+    await page.locator('[data-test="item-row"]').first()
+      .getByRole('button', { name: 'Acciones de la linea' }).click();
+
+    const editSheet = page.locator('[data-test="edit-sheet"]');
+    const picker = editSheet.locator('[data-test="unit-picker"]');
+    const trigger = picker.locator('.picker__trigger');
+    await trigger.click();
+    const search = page.getByPlaceholder('Buscar unidad o escribir la que quieras');
+    await expect(search).toBeFocused();
+    await search.fill('250 g');
+    await expect(page.getByRole('option', { name: '250 g' })).toBeVisible();
+    await expect(page.getByRole('option')).toHaveCount(1);
+    await page.getByRole('option', { name: '250 g' }).click();
+    await expect(trigger).toContainText('250 g');
+    await expect(picker.locator('.picker__panel')).toHaveCount(0);
+
+    // El selector acepta formatos que no están en el catálogo, incluso con Enter.
+    await trigger.click();
+    await search.fill('caja familiar');
+    await expect(page.getByRole('option', { name: 'caja familiar' })).toBeVisible();
+    await expect(picker.locator('.picker__option:not(.picker__option--custom)')).toHaveCount(0);
+    await search.press('Enter');
+    await expect(trigger).toContainText('caja familiar');
+    await expect(trigger).toHaveAccessibleName(/Unidad o formato.*caja familiar/);
+    await expect(picker.locator('.picker__panel')).toHaveCount(0);
+
+    // Escape cancela la consulta siguiente sin cambiar el valor ya guardado.
+    await trigger.click();
+    await search.fill('sin coincidencias');
+    await search.press('Escape');
+    await expect(picker.locator('.picker__panel')).toHaveCount(0);
+    await expect(trigger).toContainText('caja familiar');
+
+    // El teclado opera sobre las filas filtradas: una coincidencia parcial requiere ArrowDown
+    // para elegir la opción y un label exacto debe ganar frente a un substring anterior.
+    await trigger.click();
+    await search.fill('250');
+    await search.press('ArrowDown');
+    await search.press('Enter');
+    await expect(picker.locator('.picker__value')).toHaveText('250 g');
+
+    await trigger.click();
+    await search.fill('g');
+    await search.press('Enter');
+    await expect(picker.locator('.picker__value')).toHaveText('g');
+
+    // Dejar el formato libre como valor final para verificar su persistencia, no solo el texto UI.
+    await trigger.click();
+    await search.fill('caja familiar');
+    await search.press('Enter');
+    await expect(picker.locator('.picker__value')).toHaveText('caja familiar');
+
+    if (screenshotDirectory) {
+      mkdirSync(screenshotDirectory, { recursive: true });
+      await page.screenshot({
+        path: join(screenshotDirectory, `shopping-unit-search-${viewport.width}x${viewport.height}.png`),
+        animations: 'disabled'
+      });
+    }
+
+    const unitSaved = page.waitForResponse((response) =>
+      response.url().includes('/api/shopping/lists/')
+      && response.url().includes('/items/')
+      && response.request().method() === 'PATCH'
+      && response.ok()
+    );
+    await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
+    await unitSaved;
+    await page.reload();
+    await page.locator('[data-test="item-row"]').first()
+      .getByRole('button', { name: 'Acciones de la linea' }).click();
+    await expect(page.locator('[data-test="unit-picker"] .picker__trigger')).toContainText('caja familiar');
+    expect(pageErrors()).toBe('sin errores de pagina');
+  }
+
+  test.describe('1440×900', () => {
+    test.use({ viewport: { width: 1440, height: 900 } });
+    test('búsqueda y persistencia en escritorio', async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name === 'mobile-chrome');
+      await checkUnitSearch(page, { width: 1440, height: 900 });
+    });
+  });
+
+  test.describe('393×851', () => {
+    test.use({ viewport: { width: 393, height: 851 } });
+    test('búsqueda y persistencia en móvil', async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== 'mobile-chrome');
+      await checkUnitSearch(page, { width: 393, height: 851 });
+    });
+  });
+
+  test.describe('320×568', () => {
+    test.use({ viewport: { width: 320, height: 568 } });
+    test('búsqueda y persistencia en móvil estrecho', async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== 'mobile-chrome');
+      await checkUnitSearch(page, { width: 320, height: 568 });
+    });
+  });
+});

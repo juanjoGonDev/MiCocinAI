@@ -64,6 +64,7 @@ export type PickerRow =
         class="picker__trigger"
         [class.picker__trigger--open]="open()"
         [class.picker__trigger--empty]="!selectedLabel"
+        [attr.aria-label]="selectedLabel ? labelText + ': ' + selectedLabel : labelText"
         [attr.aria-expanded]="open()"
         [attr.aria-haspopup]="'listbox'"
         [attr.aria-controls]="open() ? listId() : null"
@@ -100,23 +101,30 @@ export type PickerRow =
                 #search
                 type="text"
                 name="pickerQuery"
-                [(ngModel)]="query"
+                role="combobox"
+                [ngModel]="query()"
+                (ngModelChange)="setQuery($event)"
                 [placeholder]="searchPlaceholderText"
                 autocomplete="off"
+                [attr.aria-expanded]="open()"
+                [attr.aria-controls]="listId()"
+                [attr.aria-activedescendant]="activeOptionId()"
                 (keydown)="onSearchKeys($event)"
               />
             </div>
           }
           <ul class="picker__list">
-            @if (allowCustom && query.trim() && !exactMatch) {
+            @if (customOptionVisible) {
               <li
                 class="picker__option picker__option--custom"
+                [class.picker__option--active]="active() === -1"
                 role="option"
+                [attr.id]="listId() + '-custom'"
                 [attr.aria-selected]="active() === -1"
                 (click)="useCustom()"
               >
                 <app-icon name="add" [size]="18" [label]="null" />
-                <span>{{ query.trim() }}</span>
+                <span>{{ query().trim() }}</span>
                 <span class="picker__tag">{{ 'ui.usar_este_texto' | t }}</span>
               </li>
             }
@@ -340,7 +348,16 @@ export type PickerRow =
 export class PickerComponent implements OnInit, OnDestroy {
   private readonly i18n = inject(I18nService);
 
-  @Input({ required: true }) options: PickerOption[] = [];
+  private readonly optionsState = signal<PickerOption[]>([]);
+
+  @Input({ required: true })
+  set options(options: PickerOption[] | null | undefined) {
+    this.optionsState.set(options ?? []);
+  }
+
+  get options(): PickerOption[] {
+    return this.optionsState();
+  }
   @Input() value: string | null = null;
   /**
    * Cuatro textos de fabrica que eran literales en la declaracion. Un campo del componente se evalua al
@@ -380,7 +397,7 @@ export class PickerComponent implements OnInit, OnDestroy {
   /** Hacia donde abre el panel; ver `flipForRoom`. */
   readonly flipped = signal(false);
   readonly active = signal(0);
-  query = '';
+  readonly query = signal('');
   readonly listId = computed(() => `${this.id}-list`);
 
   private onOutside = (event: MouseEvent) => this.closeOnOutside(event);
@@ -391,14 +408,18 @@ export class PickerComponent implements OnInit, OnDestroy {
   }
 
   get exactMatch(): boolean {
-    const wanted = this.query.trim().toLowerCase();
+    const wanted = this.query().trim().toLowerCase();
     return !!wanted && this.filtered().some((option) => option.label.toLowerCase() === wanted);
   }
 
+  get customOptionVisible(): boolean {
+    return this.allowCustom && !!this.query().trim() && !this.exactMatch;
+  }
+
   readonly filtered = computed(() => {
-    const wanted = this.query.trim().toLowerCase();
+    const wanted = this.query().trim().toLowerCase();
     if (!wanted) return this.options;
-    return this.options.filter(
+    return this.optionsState().filter(
       (option) =>
         option.label.toLowerCase().includes(wanted) ||
         option.value.toLowerCase().includes(wanted) ||
@@ -433,6 +454,27 @@ export class PickerComponent implements OnInit, OnDestroy {
     return option.value === this.value;
   }
 
+  activeOptionId(): string | null {
+    if (this.customOptionVisible && this.active() === -1) return `${this.listId()}-custom`;
+    const index = this.active();
+    return index >= 0 && index < this.filtered().length ? `${this.listId()}-${index}` : null;
+  }
+
+  setQuery(value: string): void {
+    this.query.set(value);
+    const wanted = value.trim().toLowerCase();
+    const filtered = this.filtered();
+    if (!wanted) {
+      const selected = filtered.findIndex((option) => option.value === this.value);
+      this.active.set(selected >= 0 ? selected : 0);
+      return;
+    }
+
+    const exact = filtered.findIndex((option) => option.label.toLowerCase() === wanted);
+    if (exact >= 0) this.active.set(exact);
+    else this.active.set(this.allowCustom ? -1 : 0);
+  }
+
   ngOnInit(): void {
     document.addEventListener('click', this.onOutside, true);
   }
@@ -446,7 +488,7 @@ export class PickerComponent implements OnInit, OnDestroy {
     if (this.open()) {
       const index = this.options.findIndex((option) => option.value === this.value);
       this.active.set(index >= 0 ? index : 0);
-      this.query = '';
+      this.query.set('');
       this.flipForRoom();
       setTimeout(() => {
         this.searchRef?.nativeElement.focus();
@@ -491,7 +533,7 @@ export class PickerComponent implements OnInit, OnDestroy {
   }
 
   useCustom(): void {
-    const text = this.query.trim();
+    const text = this.query().trim();
     if (text) this.emit(text);
   }
 
@@ -502,16 +544,12 @@ export class PickerComponent implements OnInit, OnDestroy {
   }
 
   onSearchKeys(event: KeyboardEvent): void {
-    // Un Enter en el buscador NO cierra sin mas: si hay una coincidencia exacta, esa es
-    // la eleccion; si no y el picker admite texto libre, se usa lo tecleado. Cerrar sin
-    // decir nada es como si el usuario no hubiera escrito.
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      const match = this.filtered()[0];
-      if (this.allowCustom && !this.exactMatch) this.useCustom();
-      else if (match) this.choose(match);
-      return;
-    }
+    // El input vive dentro del listbox, que también escucha keydown. Parar aquí evita
+    // confirmar dos veces la misma fila; espacio, en cambio, debe seguir siendo texto.
+    const handledKeys = ['Enter', ' ', 'ArrowDown', 'ArrowUp', 'Escape', 'Tab', 'Home', 'End'];
+    if (!handledKeys.includes(event.key)) return;
+    event.stopPropagation();
+    if (event.key === ' ') return;
     this.onListKeys(event, false);
   }
 
@@ -526,7 +564,15 @@ export class PickerComponent implements OnInit, OnDestroy {
           return;
         }
         const step = event.key === 'ArrowDown' ? 1 : -1;
-        this.active.set(size ? (this.active() + step + size) % size : 0);
+        const custom = this.customOptionVisible;
+        const total = size + (custom ? 1 : 0);
+        if (!total) {
+          this.active.set(0);
+          return;
+        }
+        const current = custom ? (this.active() < 0 ? 0 : this.active() + 1) : this.active();
+        const next = (current + step + total) % total;
+        this.active.set(custom && next === 0 ? -1 : custom ? next - 1 : next);
         break;
       }
       case 'Enter':
@@ -536,6 +582,12 @@ export class PickerComponent implements OnInit, OnDestroy {
         if (fromTrigger && !this.open()) {
           event.preventDefault();
           this.toggle();
+          return;
+        }
+        if (!fromTrigger && !this.open()) return;
+        if (this.customOptionVisible && this.active() === -1) {
+          event.preventDefault();
+          this.useCustom();
           return;
         }
         const option = this.filtered()[this.active()];
@@ -558,13 +610,13 @@ export class PickerComponent implements OnInit, OnDestroy {
       case 'Home':
         if (this.open()) {
           event.preventDefault();
-          this.active.set(0);
+          this.active.set(this.customOptionVisible ? -1 : 0);
         }
         break;
       case 'End':
         if (this.open()) {
           event.preventDefault();
-          this.active.set(Math.max(0, size - 1));
+          this.active.set(size ? size - 1 : this.customOptionVisible ? -1 : 0);
         }
         break;
     }
