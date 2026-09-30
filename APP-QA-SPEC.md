@@ -216,8 +216,10 @@ En la ejecución real Pixel 5 aislada de `shopping-round6.spec.ts` a 320×568, a
 
 La primera hipótesis de que solo los labels de bottom-nav imponían el ancho quedó refutada: `flex: 1 1 0; min-width: 0` en sus anchors redujo cada item, pero el E2E siguió midiendo `scrollWidth=343`. En el DOM original también se observó `.tray__filter-toggle` con borde derecho en x=343. El arreglo sigue pendiente; inspeccionar la fila de estados/filtros junto con el shell, no aceptar el cambio parcial de bottom-nav.
 
+Medición directa posterior: `.tray__tabs` está en x=16..304 (288 px) pero su `scrollWidth` es 327; los botones «Activas», «Terminadas», «Todas» y «Filtros» consumen el ancho intrínseco, y el último acaba en x=343. La corrección debe mantener el nombre accesible/contador del filtro y objetivos táctiles ≥44×44 px; truncar u ocultar solo el texto visible requiere proporcionar el nombre del control explícitamente.
+
 - [ ] Añadir regresión E2E en Pixel 5 que compruebe ancho de layout, scroll horizontal y rectángulos de cada destino de bottom-nav en rutas/listas reales a 320×568; repetir 393×851.
-- [ ] Corregir la causa mínima del ancho intrínseco de navegación; conservar nombres visibles/accesibles, targets táctiles y navegación.
+- [ ] Corregir la causa mínima en la fila de estados/filtros y el shell; conservar nombre accesible/contador, controles ≥44×44 px y navegación.
 - [ ] Confirmar que el viewport no se ensancha en `/shopping` y que las cancelaciones de transición desaparecen o documentar causa independiente reproducible.
 - [ ] Capturar e inspeccionar escritorio y móvil estrecho; ejecutar build y pruebas aplicables sin tocar la instancia de desarrollo ni la base normal.
 
