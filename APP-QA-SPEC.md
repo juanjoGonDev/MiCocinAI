@@ -14,6 +14,18 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 - No se añaden funcionalidades nuevas solo porque aparezcan en una spec antigua. Si código, texto de interfaz y contrato activo discrepan, primero se anota y decide la conducta esperada.
 - Cada casilla cerrada debe enlazar a un test o anotar comando, navegador, datos y resultado. Una lista de tests enumerada no equivale a una lista ejecutada.
 
+## Unidad QA-UI.1 · panel de cola de tickets y glifos de Hogar (en curso)
+
+**Fuente revalidada antes de implementar:** `ReceiptQueueComponent` se monta en la cabecera móvil y dentro de `.sidebar__header` en escritorio. Su `.rq__panel` es `position:absolute; right:0`, de modo que el panel de 380 px se ancla hacia dentro del lateral de 280 px y el contenido se recorta; `tests/e2e/receipts.spec.ts` solo afirma visibilidad/contenido, no límites geométricos. `HOGARIA-SPEC.md` §7 y `scripts/check-ui.mjs` regla `sin-emoji` respaldan usar el sistema SVG ya existente (`IconComponent`); la pantalla y el diccionario de Hogar aún ponen pictogramas en títulos/acciones. Se conservan explícitamente los emojis de contenido de alergias, gustos y catálogo de ingredientes que el usuario indicó que prefiere. Esta unidad cubre la cola y los iconos de la pantalla Hogar/CTA de Hogar en Dashboard, no da por migrada la deuda de emoji de las demás pantallas.
+
+- [ ] Añadir primero una regresión Playwright que abra la cola vacía y mida el panel real en Chromium escritorio y Pixel 5; reproducir que el panel queda recortado/pegado al lateral antes del arreglo.
+- [ ] Posicionar el panel de la cola junto al disparador sin clipping del lateral ni del viewport; verificar límites, scroll si la lista crece y cierre con Escape en escritorio y móvil.
+- [ ] Retirar los emojis de presentación de Hogar (título, estado sin hogar, compartir, copiar, regenerar, salir) y del CTA de Hogar en Dashboard; usar `app-icon` SVG existente y mantener los textos ES/EN sin pictogramas.
+- [ ] Verificar con E2E que las acciones de invitación siguen siendo accesibles/funcionales y que las etiquetas no incorporan emoji; preservar intactos los emojis semánticos de alergias, gustos e ingredientes.
+- [ ] Guardar e inspeccionar capturas sintéticas de PC y móvil; ejecutar pruebas focales, typecheck, `check-ui` y build con evidencia reproducible, sin rebajar gates.
+
+**Evidencia previa:** la captura facilitada por el usuario muestra el panel de cola recortado dentro del lateral y pictogramas de familia/copia en Hogar. No se ha probado aún en el navegador de auditoría ni se ha modificado código.
+
 ## Evidencia inicial (no equivale a aprobación de la app)
 
 - [x] La ruta pública `/auth/login` responde desde `http://localhost:4200`; revisé también `/auth/register`, `/auth/forgot-password` y la invitación inválida.
