@@ -153,6 +153,16 @@ La ejecución real aislada verifica el contrato de extremo a extremo hasta la re
 - [ ] E2E aislado: la respuesta y UI expresan «Falta configurar la IA», enlace lleva a `/settings/ai`, `item-row` sigue vacío y no hay llamada a provider.
 - [ ] Coverage de lógica nueva ≥70 % statements/branches/functions/lines; typecheck, suite de `shopping-round6` en Chromium/Pixel 5, y gate frontend existente sin rebajar (si global queda rojo, registrar valores y causa).
 
+### QA-04c.4 · matriz móvil de bandeja (fuente revalidada; adaptar E2E antes de valorar UI)
+
+La suite completa en Chromium pasó 11/11; en Pixel 5 pasó 3/11 y ocho casos se atascaron intentando pulsar `[data-test="new-list"]`. La causa reproducible es del test: en ≤600 px ese icono está oculto y `shopping-lists.component.ts` muestra `[data-test="new-list-text"]`. La bandeja también es intencionalmente una tarjeta móvil: a ≤720 px la cabecera/columnheaders se ocultan y cada celda lleva su etiqueta. `HOGARIA-SPEC.md` §8f especifica la tabla y la ordenación de escritorio, filtros compactos en móvil y no exige ordenar desde la tarjeta.
+
+- [x] Baseline aislado de los 11 casos en Pixel 5: 3 pasaron (oferta y dos calendarios), 8 fallaron antes de recorrer sus acciones por selector desktop oculto; no se atribuyen aún a producción.
+- [x] Revalidar en el template/CSS que el CTA de texto es la acción móvil y que la cabecera de tabla oculta es comportamiento responsive previsto.
+- [ ] Elegir CTA por viewport en helper/pruebas manuales; conservar prueba de columnas/ordenación desktop y comprobar en móvil tarjetas, nombre/tienda/acciones, crear/abrir, filtro expandible, renombrar y paginación sin overflow ni pérdida de foco.
+- [ ] Adaptar los flujos móviles de cesta para el CTA visible, recorrer oferta/discount/photo/selección en Pixel 5 y distinguir fallos de locator de fallos de interacción o layout.
+- [ ] Repetir los 11 E2E en Pixel 5 aislado; guardar/inspeccionar capturas PC y móvil de la bandeja y registrar errores de consola/red.
+
 ### QA-04b · hit area táctil de `app-checkbox`
 
 **Discrepancia revalidada:** `HOGARIA-SPEC.md` §8f exige un área de toque de 40 px, pero `checkbox.component.ts` establece `min-height: 36px`. El test unitario actual no mide el tamaño real y, además, lee `aria-checked` antes de ejecutar change detection.
