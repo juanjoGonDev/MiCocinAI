@@ -203,6 +203,19 @@ Playwright real con `hogaria-e2e-runner-audit.mjs`, servidor/puerto/SQLite/semil
 
 **Discrepancias de producto abiertas (no se cierran en esta unidad):** `HOGARIA-SPEC.md` §2/§12al también pide vencimientos, lista abierta/presupuesto semanal y cola IA en Today; `DashboardComponent` actual no renderiza esos bloques. Mantener abierta la checklist general `/dashboard` y decidir cada superficie en su propia unidad, sin atribuirlas a esta corrección de comidas.
 
+## Unidad QA-E2E.1 · aislamiento local de Playwright (en curso)
+
+**Fuente revalidada (2026-09-30, antes de implementar):** `playwright.config.ts` fija `baseURL`/`webServer.url` en `localhost:4200`, arranca `npm run dev`, puede reutilizar un servidor existente fuera de CI y no fija `DATABASE_PATH`; ese script levanta el proxy Angular hacia el backend habitual en `localhost:3000`, cuyo `app.config.ts` cae a `./data/hogaria.sqlite`. `playwright.full-stack.config.ts` también puede reutilizar un servidor y la única línea `DATABASE_PATH` de `webServer.env` está comentada. `tests/e2e/pwa-assets.spec.ts` fija `BASE = 'http://localhost:4200'` en lugar de respetar `E2E_BASE_URL`, por lo que ignora cualquier origen temporal provisto por el runner. El runner local bajo `%TEMP%` inspeccionado para esta auditoría sí genera puerto, SQLite, uploads/artefactos y semilla únicos, inyecta `DATABASE_PATH`, comprueba que la DB aislada se creó y limpia únicamente su propio directorio después de parar el servidor.
+
+**Conducta esperada:** ninguna suite local de escritura debe adjuntarse a un dev server/Base de uso normal ni persistir su DB en el repositorio. Cada ejecución usa un origen/puertos y `DATABASE_PATH` exclusivos bajo el directorio temporal del sistema; todas las specs derivan sus peticiones del `E2E_BASE_URL` del runner. El cierre limpia solo recursos propios y conserva evidencia aislada de una corrida roja; la limitación de peticiones se deja explícita por tipo de suite.
+
+- [ ] Añadir primero una regresión que demuestre que `pwa-assets.spec.ts` respeta el origen efímero y que los configs no pueden resolver una SQLite por defecto ni reutilizar `localhost:4200`; confirmar rojo sin levantar ni escribir en el servidor habitual.
+- [ ] Corregir los configs de desarrollo/full-stack y las URLs de las specs para que el servidor y el navegador compartan `E2E_BASE_URL`, puertos/DB temporales únicos y cleanup seguro; no ocultar ni limpiar archivos ajenos.
+- [ ] Ejecutar un smoke real de assets PWA y una interacción autenticada con escritura en Chromium + Pixel 5, verificar la ruta efectiva de `DATABASE_PATH`, cero peticiones a los puertos habituales y limpieza/retención esperadas.
+- [ ] Añadir tests unitarios de la selección/aislamiento de paths y comprobar cobertura focal ≥70 % en statements, ramas, funciones y líneas; build/typecheck y captura de consola/red.
+
+**Evidencia inicial:** el `:4200` no tenía un listener al comenzar esta revalidación. La spec de PWA todavía contiene una constante fija a `:4200`; aún no se ejecutó contra el runner aislado ni se cambió código.
+
 ## Unidad QA-PANTRY.1 · alta manual accesible en móvil (resuelta)
 
 **Fuente revalidada antes de implementar:** el comentario y `(onClick)="openAddModal()"` de `PantryComponent` definen «+ Agregar» como la acción que abre el modal de alta de la pestaña activa. `.pantry__header` distribuye título y `.pantry__header-acciones` con `flex`, pero la fila de acciones no declara `flex-wrap` ni un reflujo móvil; hay breakpoints cercanos en 480, 600, 768 y 1023 px que deben volver a comprobarse antes de tocar estilos. En Playwright Pixel 5, la prueba existente de Dashboard expiró al pulsar «+ Agregar»; el registro muestra interceptación alternada por `pantry-anadir-catalogo` y el botón de la cola de tickets en `header`. La captura sintética del fallo muestra la fila superior cortada/desplazada. Esto acredita un fallo de interacción real, pero todavía hay que medir límites y solapamientos en viewport, no inferir su geometría solo por la captura.
@@ -592,10 +605,9 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. QA-04a: completada con suite `488/488`, regresiones de servicio y Playwright Chromium/Pixel `2/2` por proyecto; el gate de coverage sigue abierto en QA-04c.
-2. QA-DASH.1: resuelta; continuar con QA-PANTRY.1 para corregir la acción de alta manual obstruida en móvil, tras medirla en viewport.
-3. QA-04b checkbox: completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote.
-5. Corregir la configuración permanente de Playwright full-stack: su `DATABASE_PATH` sigue comentado; conservar aislamiento del servidor/DB de uso normal.
-6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-7. Continuar el barrido funcional de rutas, formularios y acciones con captura de consola/red/overflow; Dashboard/recetas ya tiene su resolución de ruta en QA-04c.11.
+1. QA-E2E.1: aislar de forma permanente las configuraciones/specs de Playwright antes de seguir con pruebas que escriben, según la fuente actual arriba.
+2. Continuar el barrido funcional pendiente de rutas, formularios y acciones, empezando por un baseline real con console/red/overflow en la matriz establecida; usar fixtures y proveedor mock.
+3. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. QA-04a se completó con suite `488/488` y regresiones de servicio.
+4. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+5. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+6. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas en QA-04c.11 y QA-PANTRY.1; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
