@@ -5,7 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { formatDateTime } from '../../core/time';
 import { listCategoryLabelKey } from '../../core/i18n/labels';
 import { UnitPickerComponent } from './unit-picker.component';
-import { canonicalUnit, isKnownUnit } from './unit-families';
+import { parseQuickAddLine } from './quick-add';
 import { seccionDeLista } from './seccion-de-catalogo';
 import {
   auditFace,
@@ -2875,7 +2875,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const sug = this.sugElegida;
     this.sugElegida = null;
     this.cerrarSugerencias();
-    const parsed = this.parseLine(raw);
+    const parsed = parseQuickAddLine(raw);
     const input = sug
       ? {
           name: sug.producto.name,
@@ -2906,7 +2906,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
   /** El texto libre empieza por cantidad+unidad a veces («2kg lec»); se busca por la parte del nombre. */
   onDraftInput(valor: string): void {
     this.sugElegida = null; // el borrador ha cambiado: la eleccion anterior ya no representa el texto
-    const nombre = this.parseLine(valor.trim()).name.trim();
+    const nombre = parseQuickAddLine(valor.trim()).name.trim();
     const pending = this.timers.get('sug:input');
     if (pending) clearTimeout(pending);
     if (nombre.length < 2) {
@@ -2956,7 +2956,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     const producto = this.sugerencias()[indice];
     if (!producto) return;
     const raw = this.draftItem.trim();
-    const parsed = this.parseLine(raw);
+    const parsed = parseQuickAddLine(raw);
     // Se cambia SOLO la parte del nombre: el prefijo con cantidad y unidad («2kg ») sigue donde estaba.
     this.draftItem =
       parsed.name && raw.endsWith(parsed.name)
@@ -2977,21 +2977,6 @@ export class ShoppingListDetailComponent implements OnDestroy {
     this.sugSeq++;
     this.sugAbiertas.set(false);
     this.sugActivo = -1;
-  }
-
-  /** `1kg Tomates` / `2 Leche` -> cantidad + unidad antes de llamar al server. */
-  private parseLine(raw: string): { name: string; quantity: number; unit: string | null } {
-    const cleaned = raw.replace(/^[-•*]\s*/, '');
-    const match = /^(\d+(?:[.,]\d+)?)\s*([a-zA-ZÀ-ÿ]{1,4})?\s+(.+)$/.exec(cleaned);
-    if (!match) return { name: cleaned, quantity: 1, unit: null };
-    const [, amount, maybeUnit, name] = match;
-    const unit = (maybeUnit ?? '').toLowerCase();
-    const known = isKnownUnit(unit) ? canonicalUnit(unit) : null;
-    return {
-      name: name.trim(),
-      quantity: Number.parseFloat(amount.replace(',', '.')) || 1,
-      unit: known
-    };
   }
 
   async paste(): Promise<void> {

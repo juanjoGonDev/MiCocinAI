@@ -30,22 +30,24 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 - `tests/e2e/full-stack/served-app.spec.ts`: 4 pasaron y 1 se omitió (no hay manifest enlazado); Chrome de sistema, SQLite y uploads exclusivos bajo `%TEMP%`, sin vídeo/traza.
 - Suite `tests/e2e/full-stack`: 11 pasaron, 3 fallaron y 1 se omitió; Chrome de sistema, un worker, limitador activo y SQLite temporal. No se llamó al proveedor IA ni se usó una credencial real.
 - Los dos fallos de `request-budget.spec.ts` aún no están clasificados: el observador se instala antes de registro/navegación, el escenario crea una lista y añade líneas, y el cliente vuelve a leer ante invalidaciones SSE. Repetir midiendo reposo tras preparación/acciones para separar una invalidación legítima de un refresh redundante.
-- El rojo de `shopping-money.spec.ts` combina dos defectos comprobados: `tickAll()` conserva locators por índice cuando la pestaña filtra líneas marcadas; además, el selector accesible `Marcar Pan de cristal` no existe tras añadir `1 Pan de cristal`. `parseLine()` captura cualquier palabra corta como posible unidad antes de comprobar `isKnownUnit()`, por lo que descarta `Pan` y deja `de cristal`. Corregir el helper por nombre y el parser para consumir solo unidades reconocidas.
+- El rojo de `shopping-money.spec.ts` combinaba dos defectos comprobados: `tickAll()` conservaba locators por índice cuando la pestaña filtraba líneas marcadas y `parseLine()` descartaba `Pan` como unidad antes de comprobar `isKnownUnit()`. QA-02 corrige ambos; la ejecución aislada actual de los tres casos de `shopping-money.spec.ts` pasa.
 - Las suites Playwright configuradas con vídeo/traza fallaron al cerrar Chromium en este sandbox (`browserContext.close: spawn EPERM`); desactivar ambos para la ejecución local hizo reproducible el cierre. Esto es una limitación del entorno, no evidencia de un fallo de la app.
+- Suite unitaria frontend completa (Chrome Headless 154): 432/451 pasaron; 19 fallaron en `home-profile`, `ThemeService`, `ModulesService`, `CheckboxComponent`, `authGuard`, `AuthService` y `ModalComponent`. Cobertura global medida: statements 77.90 %, ramas 64.84 %, funciones 78.02 %, líneas 79.71 %; no alcanza el umbral local de 80 % y queda como deuda fuera de QA-02. Los ficheros de alcance `quick-add.ts` y `unit-families.ts` alcanzaron 100 % en statements, funciones y líneas; ramas 88.89 % y 100 %, respectivamente.
 
 ## Unidad QA-01 · fiabilidad de medición E2E (pendiente)
 
 - [ ] `request-budget.spec.ts`: preparar usuario/ruta antes de instalar el watcher o resetearlo tras la preparación y tras mutaciones intencionales; medir el intervalo de reposo, seguir detectando bucles y `429`, y comprobar por separado que el stream abre una vez sin reintentos.
-- [ ] `shopping-money.spec.ts`: marcar las líneas por identidad estable, afirmar que ambas están en el carro antes de finalizar y comprobar que la hoja permite guardar ambos precios y que se recuerdan en la siguiente lista.
+- [x] `shopping-money.spec.ts`: marcar las líneas por identidad estable, afirmar que ambas están en el carro antes de finalizar y comprobar que la hoja permite guardar ambos precios y que se recuerdan en la siguiente lista. Evidencia: ejecución aislada Chromium/build producción, 3/3 pasaron.
 - [ ] Ejecutar los specs enfocados en Chromium contra build/servidor real con `DATABASE_PATH` y uploads temporales; registrar resultado antes de atribuir cualquier fallo restante al producto.
 
-## Unidad QA-02 · conservar nombres al parsear cantidad y unidad (pendiente)
+## Unidad QA-02 · conservar nombres al parsear cantidad y unidad (completada)
 
 Contrato activo: `HOGARIA-SPEC.md`, §8 (entrada `2 Leche` y `1kg Tomates`); `unit-families.ts` es la lista de unidades reconocidas.
 
-- [ ] Añadir prueba unitaria al parser puro: conservar nombres que empiezan por palabra corta desconocida (`1 Pan de cristal`, `2 Leche semidesnatada`), reconocer unidades válidas con/sin espacio (`1 kg Tomates`, `1kg Tomates`), admitir decimales y texto sin cantidad.
-- [ ] El input rápido envía a la API cantidad/unidad correctas sin eliminar ninguna palabra del nombre; una unidad solo se separa si `isKnownUnit()` la reconoce.
-- [ ] Playwright Chromium aislado demuestra que `1 Pan de cristal` sigue visible con nombre completo, ambas líneas se pueden marcar por nombre, la hoja de pago enumera ambas y los precios quedan guardados al finalizar.
+- [x] Prueba Jasmine pura: conserva nombres cortos (`1 Pan de cristal`, `2 Leche semidesnatada`), reconoce unidades válidas con/sin espacio, decimales, alias/unidad compuesta, texto plano, marcadores de lista con/sin espacio y cantidad+unidad sin producto.
+- [x] El input rápido usa el parser puro; solo consume prefijos de unidad reconocidos por `isKnownUnit()`. Playwright confirma que `2 Leche semidesnatada` se conserva como dos unidades (total recordado 1,90 €) y no pierde el nombre corto.
+- [x] Playwright Chromium aislado: `1 Pan de cristal` se muestra completo, ambas líneas se marcan por nombre, la hoja de pago enumera ambas y guarda precios; al crear otra lista, se recupera el precio correcto.
+- Evidencia reproducible: build `ng build --configuration production` pasó con warnings ya existentes; prueba unitaria enfocada 5/5; suite `shopping-money.spec.ts` 3/3 con base SQLite y uploads temporales únicos, limitador activo, sin vídeo/traza ni proveedor externo. Cobertura del alcance (suite completa): `quick-add.ts` statements/functions/lines 100 %, branches 88.89 %; `unit-families.ts` 100 % en las cuatro métricas. La suite frontend global permanece roja y bajo su gate local del 80 % (ver baseline).
 
 ### Discrepancias que requieren prueba/decisión
 

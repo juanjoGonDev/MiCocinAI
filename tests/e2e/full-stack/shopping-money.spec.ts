@@ -34,10 +34,8 @@ async function price(page: Page, index: number, value: string) {
   await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
 }
 
-async function tickAll(page: Page) {
-  for (const row of await page.locator('[data-test="item-row"]').all()) {
-    await row.locator('[data-test="check"]').click();
-  }
+async function tickByName(page: Page, name: string) {
+  await page.getByRole('checkbox', { name: `Marcar ${name}`, exact: true }).click();
 }
 
 test.describe('lo que cuesta, y en que tienda', () => {
@@ -46,7 +44,16 @@ test.describe('lo que cuesta, y en que tienda', () => {
     await createList(page, 'Compra sin precios', 'Mercadona');
     await add(page, '2 Leche semidesnatada');
     await add(page, '1 Pan de cristal');
-    await tickAll(page);
+    await expect(
+      page.locator('[data-test="item-row"]').filter({ hasText: 'Pan de cristal' })
+    ).toBeVisible();
+    const lineCount = await page.locator('[data-test="item-row"]').count();
+    await tickByName(page, 'Leche semidesnatada');
+    await tickByName(page, 'Pan de cristal');
+    await expect(page.locator('[data-test="tab-todo"]')).toContainText('Pendientes (0)');
+    await expect(page.locator('[data-test="tab-cart"]')).toContainText(
+      `En el carro (${lineCount})`
+    );
 
     // Primer intento: falta todo. Y la respuesta no es un toast —es la hoja donde se anotan.
     await page.locator('[data-test="complete"]').click();
@@ -115,7 +122,10 @@ test.describe('lo que cuesta, y en que tienda', () => {
     await expect(page.locator('[data-test="total"]')).toContainText('19,00');
 
     await page.locator('[data-test="discount-open"]').click();
-    await page.locator('[data-test="discount-sheet"]').getByRole('button', { name: /En productos/ }).click();
+    await page
+      .locator('[data-test="discount-sheet"]')
+      .getByRole('button', { name: /En productos/ })
+      .click();
     await page.locator('[data-test="discount-target-jamon-serrano"]').click();
     await page.locator('[data-test="discount-target-queso-curado"]').click();
     await page.locator('[data-test="discount-amount"]').fill('2,50');
