@@ -30,7 +30,7 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 - `tests/e2e/full-stack/served-app.spec.ts`: 4 pasaron y 1 se omitió (no hay manifest enlazado); Chrome de sistema, SQLite y uploads exclusivos bajo `%TEMP%`, sin vídeo/traza.
 - Suite `tests/e2e/full-stack`: 11 pasaron, 3 fallaron y 1 se omitió; Chrome de sistema, un worker, limitador activo y SQLite temporal. No se llamó al proveedor IA ni se usó una credencial real.
 - Los dos fallos de `request-budget.spec.ts` aún no están clasificados: el observador se instala antes de registro/navegación, el escenario crea una lista y añade líneas, y el cliente vuelve a leer ante invalidaciones SSE. Repetir midiendo reposo tras preparación/acciones para separar una invalidación legítima de un refresh redundante.
-- El fallo de `shopping-money.spec.ts` tampoco confirma un defecto de producto: la captura muestra «Pan de cristal» aún pendiente; `tickAll()` conserva locators por índice mientras la pestaña filtra las líneas marcadas. Corregir el helper para identificar filas por nombre y afirmar el estado de ambas antes de abrir la hoja.
+- El rojo de `shopping-money.spec.ts` combina dos defectos comprobados: `tickAll()` conserva locators por índice cuando la pestaña filtra líneas marcadas; además, el selector accesible `Marcar Pan de cristal` no existe tras añadir `1 Pan de cristal`. `parseLine()` captura cualquier palabra corta como posible unidad antes de comprobar `isKnownUnit()`, por lo que descarta `Pan` y deja `de cristal`. Corregir el helper por nombre y el parser para consumir solo unidades reconocidas.
 - Las suites Playwright configuradas con vídeo/traza fallaron al cerrar Chromium en este sandbox (`browserContext.close: spawn EPERM`); desactivar ambos para la ejecución local hizo reproducible el cierre. Esto es una limitación del entorno, no evidencia de un fallo de la app.
 
 ## Unidad QA-01 · fiabilidad de medición E2E (pendiente)
@@ -38,6 +38,14 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 - [ ] `request-budget.spec.ts`: preparar usuario/ruta antes de instalar el watcher o resetearlo tras la preparación y tras mutaciones intencionales; medir el intervalo de reposo, seguir detectando bucles y `429`, y comprobar por separado que el stream abre una vez sin reintentos.
 - [ ] `shopping-money.spec.ts`: marcar las líneas por identidad estable, afirmar que ambas están en el carro antes de finalizar y comprobar que la hoja permite guardar ambos precios y que se recuerdan en la siguiente lista.
 - [ ] Ejecutar los specs enfocados en Chromium contra build/servidor real con `DATABASE_PATH` y uploads temporales; registrar resultado antes de atribuir cualquier fallo restante al producto.
+
+## Unidad QA-02 · conservar nombres al parsear cantidad y unidad (pendiente)
+
+Contrato activo: `HOGARIA-SPEC.md`, §8 (entrada `2 Leche` y `1kg Tomates`); `unit-families.ts` es la lista de unidades reconocidas.
+
+- [ ] Añadir prueba unitaria al parser puro: conservar nombres que empiezan por palabra corta desconocida (`1 Pan de cristal`, `2 Leche semidesnatada`), reconocer unidades válidas con/sin espacio (`1 kg Tomates`, `1kg Tomates`), admitir decimales y texto sin cantidad.
+- [ ] El input rápido envía a la API cantidad/unidad correctas sin eliminar ninguna palabra del nombre; una unidad solo se separa si `isKnownUnit()` la reconoce.
+- [ ] Playwright Chromium aislado demuestra que `1 Pan de cristal` sigue visible con nombre completo, ambas líneas se pueden marcar por nombre, la hoja de pago enumera ambas y los precios quedan guardados al finalizar.
 
 ### Discrepancias que requieren prueba/decisión
 
@@ -115,6 +123,6 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Cerrar QA-01: revalidar watcher, SSE y `visibleItems()`; corregir primero los tests/helpers que miden setup o usan índices inestables, y cambiar producto solo si persiste un fallo observado en reposo.
-2. Mantener SQLite/uploads aislados y ejecutar la suite completa por navegador; barrer todas las rutas con capturas de consola/red/overflow.
-3. Convertir solo fallos reproducibles en criterios de aceptación pequeños; TDD por unidad y capturas PC/móvil para cada corrección visual.
+1. Cerrar QA-02 con test-first: parser puro + aristas de unidades, luego input rápido real y hoja de pago; no relajar la expectativa de nombre completo.
+2. Cerrar QA-01: revalidar watcher, SSE y `visibleItems()`; corregir medición y confirmar si queda una repetición real en reposo.
+3. Mantener SQLite/uploads aislados y ejecutar la suite completa por navegador; barrer todas las rutas con capturas de consola/red/overflow.
