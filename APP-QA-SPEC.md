@@ -181,11 +181,12 @@ Revalidación incremental tras un primer reflujo CSS: el hit-test del botón ya 
 
 ### QA-04c.6 · selector de descuento bloquea Guardar en hoja móvil
 
-La revalidación de `shopping-round6.spec.ts` en Pixel 5 pasó 11/12. En «Descuento de la lista», tras elegir `10 %`, el click real a `discount-save` queda interceptado por la opción `50 %` del listbox; la captura synthetic muestra el panel abierto cubriendo el CTA al pie de la hoja. El selector compartido actual declara que elegir cierra (`choose()` → `emit()` → `close()`), así que hay que medir estado/DOM tras la selección y resolver la discrepancia sin forzar clicks. No afecta a la prueba Chromium desktop.
+La revalidación de `shopping-round6.spec.ts` en Pixel 5 pasó 11/12. En «Descuento de la lista», tras elegir `10 %`, el click real a `discount-save` queda interceptado por la opción `50 %` del listbox; la captura synthetic muestra el panel abierto cubriendo el CTA al pie de la hoja. La causa revalidada es semántica: el `app-picker` (con su botón interactivo interno) está envuelto por `<label class="detail__field">`; el click de una opción cierra el picker y la activación por defecto de ese label vuelve a pulsar el botón trigger, reabriendo el panel. No afecta al run desktop observado.
 
 - [x] Reproducir en Pixel 5 aislado con rate limit: 11/12; `locator.click()` sobre Guardar agotó 45 s y Playwright identificó `.picker__label` «50 %» interceptando el puntero.
-- [x] Inspeccionar código actual de `PickerComponent` y hoja: opción selecciona vía `choose`, panel absoluto z-30; hoja móvil tiene scroll propio. La causa exacta de que el panel continúe visible tras el evento aún queda por confirmar.
-- [ ] Añadir una regresión enfocada que mida el estado del panel después de elegir y valide que Guardar recibe el click en móvil; mantener teclado/Escape/outside-click.
+- [x] Inspeccionar `PickerComponent.choose()` → `emit()` → `close()` y el wrapper `<label>` de descuento; el label re-activa el trigger descendiente tras elegir la opción.
+- [x] Añadir regresión enfocada: tras elegir se exige panel ausente y `aria-expanded=false` antes de pulsar Guardar. Rojo Pixel 5 aislado: esperado 0 paneles, recibido 1 (12 s); la versión previa agotó el click a Guardar en 45 s.
+- [ ] Validar que Guardar recibe el click en móvil y mantener teclado/Escape/outside-click.
 - [ ] Corregir el flujo más pequeño, comprobar PC y móvil, incluidos 393×851 y 320×568, capturas y ausencia de errores de consola/red.
 
 ### QA-04b · hit area táctil de `app-checkbox`
