@@ -24,6 +24,7 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 - [x] Añadir primero la regresión Playwright de Dashboard: el baseline renderiza cero `app-icon` en los cuatro resúmenes, las tres acciones y los estados vacíos.
 - [ ] Retirar los emojis de presentación de Hogar (título, estado sin hogar, compartir, copiar, regenerar, salir) y los emojis de los resúmenes, CTA y vacíos decorativos de Dashboard; usar `app-icon` SVG existente, mantener textos ES/EN limpios y preservar la felicitación textual sin iconografía añadida.
 - [ ] Verificar con E2E que las acciones de invitación siguen siendo accesibles/funcionales y que las etiquetas no incorporan emoji; preservar intactos los emojis semánticos de alergias, gustos e ingredientes.
+- [ ] En móvil, mantener el enlace de invitación y sus acciones de copiar/regenerar dentro de la tarjeta a 393 y 320 px, sin clipping ni overflow horizontal.
 - [ ] Guardar e inspeccionar capturas sintéticas de PC y móvil; ejecutar pruebas focales, typecheck, `check-ui` y build con evidencia reproducible, sin rebajar gates.
 
 **Evidencia visual inicial:** la captura facilitada por el usuario muestra el panel de cola recortado dentro del lateral y pictogramas de familia/copia en Hogar; la reproducción de Playwright se registra a continuación.
@@ -31,6 +32,8 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 **TDD rojo (2026-09-30, sin cambios de producción):** `receipt-queue-panel-layout.spec.ts` con el runner aislado `%TEMP%\hogaria-e2e-runner-audit.mjs`, `E2E_SCOPE=all`, `E2E_RATE_LIMIT=on`, DB/puerto/semilla únicos; el runner detuvo el servidor y conservó los artefactos de los casos rojos. Chromium escritorio falla el límite izquierdo (panel `x=-117`, viewport 1280); Pixel 5 falla igual (`x=-71`, viewport 393). En la primera iteración móvil el locator `:visible` resolvió también el disparador de la sidebar trasladada fuera de pantalla; el test se corrigió para elegir `.header`/`.sidebar` por breakpoint y luego reprodujo el defecto geométrico real.
 
 `household-icon-consistency.spec.ts` reprodujo rojo en Chromium con `E2E_SCOPE=all`, `E2E_PROJECT=chromium`, rate limit activo y el mismo runner aislado: **3 fallos esperados**. El estado vacío no contiene `app-icon`; la vista de hogar muestra «👨‍👩‍👧‍👦 Hogar» y falla al buscar «Copiar enlace» exactamente (el emoji del diccionario integra el nombre accesible). Dashboard devuelve cero `app-icon` donde el test espera 4 resúmenes, 3 acciones, el icono de miembros y los vacíos. Cada ejecución usa su propia DB temporal y el runner conserva screenshots/logs de fallo.
+
+**Regresión móvil adicional (TDD rojo, 2026-09-30):** la captura sintética de hogar a 393 px muestra el URL de invitación sobrepasando la tarjeta y las acciones fuera de pantalla. Al endurecer el test con geometría real en Pixel 5, el borde del enlace llega a x=488 px mientras la tarjeta termina en x=377 px; el check del documento solo no lo detectaba porque la vista limita el ancho exterior. Añadí la medición de enlace, botón y tarjeta para 393×851/320×568; queda pendiente reflujo responsive antes de marcarla.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 
