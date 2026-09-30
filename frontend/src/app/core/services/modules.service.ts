@@ -1,4 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { finalize } from 'rxjs';
 import type { HomeModule } from '../../shared/models/home-profile';
 import { MODULE_REGISTRY, moduleOwningPath, type ModuleDefinition } from '../modules.registry';
 import { TasteProfileService } from './taste-profile.service';
@@ -115,13 +116,15 @@ export class ModulesService {
     this.isSaving.set(true);
     this.lastError.set(null);
 
-    this.tasteService.save({}, undefined, { modules: next }).subscribe({
-      error: () => {
-        // Rollback: sin esto la navegacion mentiria sobre lo guardado.
-        this.tasteService.profile.set(previous);
-        this.lastError.set('MODULE_SAVE_FAILED');
-      },
-      complete: () => this.isSaving.set(false)
-    });
+    this.tasteService
+      .save({}, undefined, { modules: next })
+      .pipe(finalize(() => this.isSaving.set(false)))
+      .subscribe({
+        error: () => {
+          // Rollback: sin esto la navegacion mentiria sobre lo guardado.
+          this.tasteService.profile.set(previous);
+          this.lastError.set('MODULE_SAVE_FAILED');
+        }
+      });
   }
 }

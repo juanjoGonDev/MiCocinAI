@@ -84,6 +84,7 @@ describe('ModalComponent', () => {
   });
 
   it('should emit onClose when closed', () => {
+    spyOn(component.isOpenChange, 'emit');
     spyOn(component.onClose, 'emit');
 
     component.isOpen = true;

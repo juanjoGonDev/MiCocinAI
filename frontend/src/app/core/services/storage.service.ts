@@ -9,8 +9,10 @@ import { Injectable } from '@angular/core';
  * migrar el estado sin tocar claves ajenas.
  *
  * `migrateLegacyStorage()` se ejecuta antes de arrancar la aplicacion: copia las
- * claves antiguas a las nuevas y NO las borra, de modo que una version previa del
- * frontend sigue funcionando (rollback) y nadie se queda deslogueado.
+ * claves antiguas a las nuevas y no las borra, de modo que una version previa del
+ * frontend sigue funcionando (rollback) y una migracion no desloguea a nadie. Un
+ * logout explicito si elimina las credenciales antiguas de sesion para que el
+ * siguiente arranque no las vuelva a importar; las preferencias se conservan.
  */
 export const STORAGE_PREFIX = 'hogar:v1:';
 
@@ -25,16 +27,26 @@ export const STORAGE_KEYS = {
 } as const;
 
 /** Claves heredadas de RecipeApp/MiCocinAI -> su equivalente actual. */
-const LEGACY_KEY_MAP: Record<string, string> = {
+const LEGACY_AUTH_KEY_MAP = {
   auth_token: STORAGE_KEYS.authToken,
   refresh_token: STORAGE_KEYS.refreshToken,
-  current_user: STORAGE_KEYS.currentUser,
+  current_user: STORAGE_KEYS.currentUser
+} as const;
+
+const LEGACY_KEY_MAP: Record<string, string> = {
+  ...LEGACY_AUTH_KEY_MAP,
   theme: STORAGE_KEYS.theme,
   language: STORAGE_KEYS.language,
 };
 
 /** Prefijo heredado de `StorageService` (recipeapp_xxx -> hogar:v1:xxx). */
 export const LEGACY_PREFIX = 'recipeapp_';
+
+/** Credenciales que una versión anterior puede volver a importar en el arranque. */
+export const LEGACY_AUTH_KEYS = [
+  ...Object.keys(LEGACY_AUTH_KEY_MAP),
+  ...Object.keys(LEGACY_AUTH_KEY_MAP).map((key) => `${LEGACY_PREFIX}${key}`)
+];
 
 export const APP_STORAGE_MIGRATED = `${STORAGE_PREFIX}migrated`;
 

@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Observable } from 'rxjs';
 import { DEFAULT_HOME_PROFILE, HOME_MODULE_OPTIONS, HomeModule, HomeProfile } from '../../shared/models/home-profile';
@@ -25,10 +26,12 @@ describe('ModulesService', () => {
   let service: ModulesService;
 
   class FakeTasteService {
-    /** Sinal de pega: llamable y con `.set`, como la del servicio real. */
-    readonly profile = Object.assign(() => current, {
+    /** Señal real: los computed del servicio deben invalidarse en cada escritura del fixture. */
+    private readonly profileSignal = signal(current);
+    readonly profile = Object.assign(() => this.profileSignal(), {
       set: (value: HomeProfile) => {
         current = value;
+        this.profileSignal.set(value);
       }
     });
 
@@ -106,12 +109,12 @@ describe('ModulesService', () => {
   });
 
   it('un modulo marcado que el build no trae no anade ninguna ruta', () => {
-    configure({ modules: ['meals', 'receipts'] });
+    configure({ modules: ['meals', 'home'] });
 
-    expect(service.isEnabled('receipts')).toBeTrue();
-    expect(service.isAvailable('receipts')).toBeFalse();
+    expect(service.isEnabled('home')).toBeTrue();
+    expect(service.isAvailable('home')).toBeFalse();
     // Todavia no existe la pantalla: enlazarla seria mandarle a un 404.
-    expect(service.isPathVisible('/receipts')).toBeFalse();
+    expect(service.isPathVisible('/tasks')).toBeFalse();
     expect(service.isPathVisible('/calendar')).toBeTrue();
   });
 
@@ -122,12 +125,15 @@ describe('ModulesService', () => {
     service.toggle('pantry');
 
     // Optimista: la navegacion ya refleja el cambio, sin respuesta del server.
-    expect(service.selected()).toEqual(['meals']);
+    const remainingModules = MODULE_REGISTRY
+      .filter((definition) => definition.available && definition.id !== 'pantry')
+      .map((definition) => definition.id);
+    expect(service.selected()).toEqual(remainingModules);
     expect(service.isPathVisible('/pantry')).toBeFalse();
     expect(service.isPathVisible('/calendar')).toBeTrue();
 
     pending[0].next(current);
-    expect(storedModules()).toEqual(['meals']);
+    expect(storedModules()).toEqual(remainingModules);
     expect(service.isSaving()).toBeFalse();
   });
 
@@ -150,17 +156,27 @@ describe('ModulesService', () => {
   });
 
   it('si el guardado falla, se vuelve al estado anterior', () => {
-    configure({ modules: ['pantry'] });
+    configure({ modules: ['pantry', 'meals'] });
 
     service.toggle('pantry');
     expect(service.isPathVisible('/pantry')).toBeFalse();
 
     pending[0].error(new Error('500'));
 
-    expect(storedModules()).toEqual(['pantry']);
+    expect(storedModules()).toEqual(['pantry', 'meals']);
     expect(service.isPathVisible('/pantry')).toBeTrue();
     expect(service.isSaving()).toBeFalse();
     expect(service.lastError()).toBe('MODULE_SAVE_FAILED');
+
+    service.toggle('pantry');
+    expect(service.selected()).toEqual(['meals']);
+    expect(service.isSaving()).toBeTrue();
+
+    pending[1].next(current);
+
+    expect(storedModules()).toEqual(['meals']);
+    expect(service.isSaving()).toBeFalse();
+    expect(service.lastError()).toBeNull();
   });
 
   it('el rollback no toca el resto del perfil (el nivel de cocina sigue)', () => {
@@ -177,7 +193,7 @@ describe('ModulesService', () => {
   });
 
   it('no deja apagar la ultima seccion visible (si no, la seleccion vacia la reviviria)', () => {
-    configure({ modules: [] });
+    configure({ modules: ['meals', 'pantry'] });
 
     expect(service.visibleNow()).toEqual(['meals', 'pantry']);
     expect(service.canSwitchOff('pantry')).toBeTrue();
@@ -190,9 +206,9 @@ describe('ModulesService', () => {
   });
 
   it('lo que el build no trae se puede apagar siempre: no ocupa navegacion', () => {
-    configure({ modules: ['meals', 'pantry', 'receipts'] });
+    configure({ modules: ['meals', 'pantry', 'home'] });
 
-    expect(service.canSwitchOff('receipts')).toBeTrue();
+    expect(service.canSwitchOff('home')).toBeTrue();
     expect(service.canSwitchOff('meals')).toBeTrue();
   });
 

@@ -774,7 +774,9 @@ Every box is a PR-sized commit. `[x]` only when its tests are green in CI.
       README heading + alias note, `frontend/package.json` 1.1.0.
 - [x] `hogar:v1:*` storage keys with a one-shot read-migrate from the legacy bare keys
       (`auth_token`, `refresh_token`, `current_user`, `theme`, `language`) and from `recipeapp_*`;
-      legacy keys are kept so a rollback still works and nobody is logged out.
+      migration keeps the originals for rollback and does not silently log users out. An explicit
+      logout deletes both namespaced and legacy auth credentials (including `recipeapp_*` aliases)
+      so the next boot cannot restore the session; legacy preferences remain untouched.
 - [x] PWA wired: `frontend/ngsw-config.json` (shell prefetch: `index.html`, `manifest.json`,
       `favicon.ico`, `*.css`, `*.js`; assets lazy/prefetch-on-update; `freshness` for
       `/api/health` + `/api/preferences`), `"serviceWorker": "ngsw-config.json"` in the production

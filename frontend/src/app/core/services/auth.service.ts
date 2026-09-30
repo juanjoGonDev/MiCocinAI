@@ -4,7 +4,7 @@ import { Router } from '@angular/router';
 import { Observable, tap, map, catchError, of } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
-import { STORAGE_KEYS } from './storage.service';
+import { LEGACY_AUTH_KEYS, STORAGE_KEYS } from './storage.service';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import {
   User,
@@ -58,8 +58,9 @@ export class AuthService {
     this.isLoadingSignal.set(true);
 
     return this.http.post<any>(`${this.apiUrl}/login`, credentials).pipe(
+      map((response) => this.unwrap(response)),
       tap((response) => {
-        this.handleAuthResponse(this.unwrap(response));
+        this.handleAuthResponse(response);
         this.isLoadingSignal.set(false);
       }),
       catchError((error) => {
@@ -77,8 +78,9 @@ export class AuthService {
         context: new HttpContext().set(SILENT_TOAST, true)
       })
       .pipe(
+        map((response) => this.unwrap(response)),
         tap((response) => {
-          this.handleAuthResponse(this.unwrap(response));
+          this.handleAuthResponse(response);
           this.isLoadingSignal.set(false);
         }),
         catchError((error) => {
@@ -115,7 +117,8 @@ export class AuthService {
     }
 
     return this.http.post<any>(`${this.apiUrl}/refresh`, { refreshToken }).pipe(
-      tap((response) => this.handleAuthResponse(this.unwrap(response))),
+      map((response) => this.unwrap(response)),
+      tap((response) => this.handleAuthResponse(response)),
       catchError(() => {
         this.logout();
         return of();
@@ -144,6 +147,7 @@ export class AuthService {
     localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem(this.REFRESH_TOKEN_KEY);
     localStorage.removeItem(this.USER_KEY);
+    for (const key of LEGACY_AUTH_KEYS) localStorage.removeItem(key);
   }
 
   private getStoredUser(): User | null {
@@ -180,8 +184,8 @@ export class AuthService {
 
   updateProfile(userData: Partial<User>): Observable<User> {
     return this.http.patch(`${this.apiUrl}/profile`, userData).pipe(
-      tap((response: any) => {
-        const user: User = response?.data ? response.data : response;
+      map((response: any) => (response?.data ? response.data : response) as User),
+      tap((user) => {
         this.currentUserSignal.set(user);
         localStorage.setItem(this.USER_KEY, JSON.stringify(user));
       })

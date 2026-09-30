@@ -31,6 +31,8 @@ describe('CheckboxComponent', () => {
 
   it('cambia y avisa al padre', () => {
     button().click();
+    fixture.detectChanges();
+
     expect(fixture.componentInstance.on).toBeTrue();
     expect(button().getAttribute('aria-checked')).toBe('true');
   });

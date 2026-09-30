@@ -41,12 +41,10 @@ describe('home-profile model', () => {
     expect(DICTS.es[detailLevelHintKey('expert')]).toContain('técnica');
   });
 
-  it('lista las cinco secciones, dos de ellas como pendientes', () => {
+  it('lista las cinco secciones y deja pendiente solo Hogar', () => {
     expect(HOME_MODULE_OPTIONS.map((option) => option.value)).toEqual(HOME_MODULES);
-    // Dos, no tres: «Lista» y «Despensa» salieron del coming soon y el numero no se actualizo. Lo que de
-    // verdad importa es CUALES siguen pendientes —son las dos que HOGARIA-SPEC §13 promete.
+    // «Lista», «Despensa» y «Tickets» ya están disponibles; solo quedan pendientes las tareas del hogar.
     expect(HOME_MODULE_OPTIONS.filter((option) => !option.available).map((option) => option.value)).toEqual([
-      'receipts',
       'home'
     ]);
     for (const option of HOME_MODULE_OPTIONS) {
