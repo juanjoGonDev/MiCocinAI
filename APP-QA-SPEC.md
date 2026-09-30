@@ -68,7 +68,7 @@ Evidencia QA-03 (2026-09-30):
 - Interacción directa de solo lectura con el servidor dev existente `http://localhost:4200/auth/register`: Chromium escritorio y móvil revisaron campos, validación, ARIA y los mismos seis tamaños; 0 POST a registro. Capturas adicionales `.e2e-screenshots/dev-registration-desktop.png` y `dev-registration-mobile.png`, inspeccionadas visualmente.
 - Cobertura del alcance, medida en el informe HTML de Karma: `register-form.validation.ts` y `register.component.ts` — 100 % en statements, ramas, funciones y líneas; `input.component.ts` — 100 % en statements/ramas/líneas y 92.85 % en funciones (13/14), supera 70 % en cada métrica. En `AuthService.register`, todas las sentencias y callbacks del método (contexto silencioso y caminos éxito/error) se ejecutaron; el archivo completo sigue en 53.68/22.73/45.45/54.95 % (statements/branches/functions/lines) por métodos ajenos al alcance. La suite global completa sigue bloqueada por los 19 tests anotados en el baseline y por su gate 80 %; no se rebajó.
 
-## Unidad QA-03b · estado touched del control compartido (pendiente)
+## Unidad QA-03b · estado touched del control compartido (completada)
 
 **Hallazgo revalidado:** `frontend/src/app/shared/components/ui/input/input.component.ts` solo emite `onBlur` en el evento blur. En cambio `onInput()` llama `onTouched()` para texto y valores numéricos vacíos/no válidos, pero retorna sin hacerlo para números válidos. Esto vuelve inconsistente el estado touched de `ControlValueAccessor` según el tipo de campo y no sigue el momento de interacción esperado (salir del campo).
 
@@ -77,6 +77,30 @@ Evidencia QA-03 (2026-09-30):
 - [x] Ejecutar el E2E real de registro en Chromium y mobile-chrome contra un servidor/DB aislados; cobertura de todas las métricas ≥70 % en el alcance, sin tocar los gates existentes.
 
 Evidencia QA-03b (2026-09-30): red TDD 2/28 fallos esperados antes del cambio; suite `input.component.spec.ts` verde 28/28 y subconjunto completo 39/39. Playwright full-stack tras build de producción Chromium 4/4 y mobile-chrome 4/4; servidor dev 4200 escritorio/móvil pasó sin POST de registro; build y typechecks pasaron. El coverage HTML de `InputComponent` indica 100/100/92.85/100 % (statements/branches/functions/lines). La suite global conserva 19 fallos preexistentes, registrados en el baseline.
+
+## Unidad QA-04 · rebaselinar suite unitaria y resolver discrepancias (en curso)
+
+**Fuente revalidada antes de implementar:** el baseline de Karma informa 19 fallos en `AuthService` (4), `authGuard` (2), `home-profile` (1), `ModulesService` (7), `CheckboxComponent` (1), `ThemeService` (3) y `ModalComponent` (1). La inspección de fuente identifica expectativas/setup obsoletos en esos grupos; no se debe cambiar el comportamiento actual solo para hacerlos verdes. El total de matchers incompatibles en `ModulesService` varía según la captura del reporte, así que se volverá a ejecutar la línea base aislada y se registrará el conteo por *spec* antes de cerrar la casilla.
+
+- [ ] Ejecutar de nuevo la línea base de Karma en Chrome Headless, conservar el gate local del 80 % y registrar los nombres de los specs rojos y los porcentajes; no tocar datos ni el servidor de uso normal.
+- [ ] `AuthService`/`authGuard`: sembrar y afirmar `STORAGE_KEYS` antes de construir servicios; modelar `isAuthenticated` como señal invocable. Probar el ciclo legado → migración → logout → nueva migración/arranque para confirmar que una sesión cerrada no se restaura; preservar prioridad/idempotencia de migración y comportamiento de login.
+- [ ] Resolver el hallazgo de logout solo tras prueba: el código de arranque vuelve a copiar claves heredadas y `logout()` hoy limpia las claves namespaced. Si la reproducción confirma reautenticación, borrar únicamente credenciales de sesión heredadas al cerrar sesión (sin borrar preferencias ni claves ajenas) y cubrir el caso con regresión.
+- [ ] `ThemeService`: usar `hogar:v1:theme`, limpiar/sembrar almacenamiento antes de instanciar y crear instancias de prueba dentro de contexto Angular; verificar valores válidos, valor por defecto y persistencia.
+- [ ] `ModulesService`/`home-profile`: alinear fixtures con `MODULE_REGISTRY`: `meals`, `pantry`, `shopping` y `receipts` están disponibles; solo `home` sigue pendiente. Probar selección vacía (todas las disponibles), selección explícita, módulo no disponible, límite del último visible y rollback de guardado con un estado válido de al menos dos módulos.
+- [ ] Reconciliar la frase histórica contradictoria de `HOGARIA-SPEC.md` §8c con el registro, las rutas actuales y las entradas de funciones ya implementadas; no deshabilitar módulos vigentes para complacer tests viejos.
+- [ ] `ModalComponent`/`CheckboxComponent`: comprobar ambos outputs de cierre; actualizar el fixture tras el click antes de leer `aria-checked`; asegurar el estado disabled.
+- [ ] Tras los cambios, ejecutar el grupo unitario enfocado y toda la suite frontend; no marcar como cerrada hasta cero fallos, gate 80 % satisfecho o documentar explícitamente qué métrica/archivo impide pasar sin reducir ningún umbral.
+
+### QA-04b · hit area táctil de `app-checkbox`
+
+**Discrepancia revalidada:** `HOGARIA-SPEC.md` §8f exige un área de toque de 40 px, pero `checkbox.component.ts` establece `min-height: 36px`. El test unitario actual no mide el tamaño real y, además, lee `aria-checked` antes de ejecutar change detection.
+
+- [ ] Añadir primero una regresión que mida el rectángulo real de `button[role=checkbox]` en Chromium; probar disabled y teclado/foco sin cambiar semántica ni nombre accesible.
+- [ ] Corregir el tamaño mínimo con el cambio CSS más pequeño; demostrar altura ≥40 px en la instancia real de Calendario en móvil y escritorio, sin overflow ni solapamiento.
+- [ ] Ejecutar unit tests y Playwright real para el formulario/event sheet afectado; capturar PC y móvil con fixtures sintéticos e inspeccionar las imágenes.
+- [ ] Registrar porcentajes de statements, ramas, funciones y líneas del alcance (cada uno ≥70 %), manteniendo los gates configurados.
+
+**Hallazgos de auditoría (solo lectura):** claves legacy en `auth.service.spec.ts` frente a `STORAGE_KEYS` (`storage.service.ts`); el guard usa `isAuthenticated()` y no un getter booleano; los tests de tema crean instancias fuera del contexto de inyección; el perfil/módulos espera que `receipts` esté pendiente aunque `modules.registry.ts`, `home-profile.ts` y las rutas lo declaran disponible; el rollback de un único módulo prueba una acción que Configuración deshabilita; el test de modal espía el output equivocado; el test de checkbox no refresca el fixture. Ninguna de estas observaciones aisladas justifica cambiar producción salvo el posible ciclo de logout/migración y la altura táctil, que requieren regresión.
 
 ### Discrepancias que requieren prueba/decisión
 
@@ -153,8 +177,8 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Cerrar QA-03b: alinear `InputComponent` CVA con blur/touched, test-first.
-2. QA-04: reparar de forma test-first los 19 fallos de specs frontend obsoletos/dobles y subir la suite al gate local de 80 %, sin rebajar umbrales.
+1. QA-04a: repetir baseline aislado, probar logout+migración y alinear tests con los contratos de servicios actuales.
+2. QA-04b: corregir y validar con Playwright el tamaño táctil del checkbox.
 3. Corregir la configuración permanente de Playwright full-stack: su `DATABASE_PATH` sigue comentado; conservar aislamiento del servidor/DB de uso normal.
 4. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
 5. Continuar el barrido de rutas y acciones con capturas de consola/red/overflow. Resolver el destino de Dashboard `/recipes/:id` con conducta actual observada antes de cambiar el router.

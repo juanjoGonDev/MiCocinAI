@@ -399,8 +399,11 @@ in Configuración, never a new page.
   unmounted mid-life); the nav entry disappears on the next render. Losing the user's place under
   their feet is worse than a stale entry.
 
-`shopping`, `receipts` and `home` (housework) stay `available: false` until their phases (P2, P4,
-Coming soon) land, so what ships today with the picker is the mechanism, not three empty pages.
+At the time of this original module-picker decision, `shopping`, `receipts` and `home` were deferred.
+That availability statement is superseded by the shipped features recorded in later rounds: **the current
+build has `meals`, `pantry`, `shopping` and `receipts` available; `home` (housework) remains unavailable**.
+The current source of truth is `frontend/src/app/core/modules.registry.ts` (availability and owned routes),
+`frontend/src/app/shared/models/home-profile.ts` (picker options) and `frontend/src/app/app.routes.ts`.
 
 ## 8d. Rename: the code says HogarIA now
 
