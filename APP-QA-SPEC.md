@@ -154,7 +154,7 @@ La ejecución aislada verificó el contrato POST de foto sin configuración → 
 - [x] E2E aislado en Chromium y Pixel 5: la respuesta/UI expresan «Falta configurar la IA», enlace lleva a `/settings/ai`, `item-row` sigue vacío y no hay llamada a provider.
 - [ ] Coverage de lógica nueva ≥70 % statements/branches/functions/lines; typecheck, suite de `shopping-round6` en Chromium/Pixel 5, y gate frontend existente sin rebajar (si global queda rojo, registrar valores y causa).
 
-Evidencia: unitarias enfocadas Karma Chrome Headless 154, 2/2 después de rojo 2/2; typecheck E2E y build de producción pasaron. `shopping-round6.spec.ts` Chromium completo 11/11; Pixel 5: la prueba de foto pasa, aunque otros siete tests todavía fallan por los asuntos aislados en QA-04c.4/.5.
+Evidencia actual: Karma Chrome Headless 154 ejecutó 497/497 unitarias. El gate global 80 % sigue rojo (70,71 % statements, 59,21 % branches, 62,44 % functions, 72,33 % lines). Cobertura enfocada del modelo (`shopping.model.spec.ts`, 24/24) sí supera 70 % en las cuatro métricas: 96,25 / 86,18 / 100 / 96,25. La prueba temporal de `ShoppingService` con interceptor real pasó 2/2 pero incorpora ese servicio extenso (961 sentencias; su run aislado muestra 15,60 / 5,11 / 5,19 / 17,30) y derriba el global al instrumentarlo entero. Decisión antes de cerrar QA-04c.3: mover solo la normalización del wrapper a un helper puro pequeño, cubrir wrapper y `HttpErrorResponse` directo allí, borrar la spec que instrumenta todo el servicio y conservar el E2E full-stack como validación real del servicio/interceptor. El helper seguirá probado por el E2E real; no se rebajará el gate.
 
 ### QA-04c.4 · matriz móvil de bandeja (fuente revalidada; adaptar E2E antes de valorar UI)
 
