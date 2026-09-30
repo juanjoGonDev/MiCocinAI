@@ -1,4 +1,5 @@
 import type { TranslationKey } from '../../core/i18n';
+import type { IconName } from '../components/ui/icon/icon-paths';
 
 /**
  * Perfil de gustos, alergias y objetivo del comensal.
@@ -82,13 +83,43 @@ export function hasTasteProfile(taste: TasteProfile | null): boolean {
  * Las opciones del objetivo. `value` es lo que se guarda; `labelKey`/`hintKey` son claves del
  * diccionario, porque lo que se ensena tiene que cambiar de idioma y lo que se guarda, no.
  */
-export const GOAL_OPTIONS: { value: TasteGoal; labelKey: TranslationKey; icon: string; hintKey: TranslationKey }[] = [
-  { value: 'balanced', labelKey: 'taste.goal.balanced', icon: '⚖️', hintKey: 'taste.goalHint.balanced' },
-  { value: 'weight-loss', labelKey: 'taste.goal.weight-loss', icon: '📉', hintKey: 'taste.goalHint.weight-loss' },
-  { value: 'weight-gain', labelKey: 'taste.goal.weight-gain', icon: '📈', hintKey: 'taste.goalHint.weight-gain' },
-  { value: 'muscle-gain', labelKey: 'taste.goal.muscle-gain', icon: '💪', hintKey: 'taste.goalHint.muscle-gain' },
-  { value: 'variety', labelKey: 'taste.goal.variety', icon: '🌈', hintKey: 'taste.goalHint.variety' },
-  { value: 'custom', labelKey: 'taste.goal.custom', icon: '✏️', hintKey: 'taste.goalHint.custom' }
+export const GOAL_OPTIONS: {
+  value: TasteGoal;
+  labelKey: TranslationKey;
+  icon: IconName;
+  hintKey: TranslationKey;
+}[] = [
+  {
+    value: 'balanced',
+    labelKey: 'taste.goal.balanced',
+    icon: 'scale',
+    hintKey: 'taste.goalHint.balanced'
+  },
+  {
+    value: 'weight-loss',
+    labelKey: 'taste.goal.weight-loss',
+    icon: 'remove_circle',
+    hintKey: 'taste.goalHint.weight-loss'
+  },
+  {
+    value: 'weight-gain',
+    labelKey: 'taste.goal.weight-gain',
+    icon: 'add_circle',
+    hintKey: 'taste.goalHint.weight-gain'
+  },
+  {
+    value: 'muscle-gain',
+    labelKey: 'taste.goal.muscle-gain',
+    icon: 'favorite',
+    hintKey: 'taste.goalHint.muscle-gain'
+  },
+  {
+    value: 'variety',
+    labelKey: 'taste.goal.variety',
+    icon: 'star',
+    hintKey: 'taste.goalHint.variety'
+  },
+  { value: 'custom', labelKey: 'taste.goal.custom', icon: 'edit', hintKey: 'taste.goalHint.custom' }
 ];
 
 export const GOAL_LABEL_KEYS: Record<TasteGoal, TranslationKey> = GOAL_OPTIONS.reduce(

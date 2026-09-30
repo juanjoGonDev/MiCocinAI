@@ -3,19 +3,29 @@ import { CommonModule } from '@angular/common';
 import { RouterOutlet } from '@angular/router';
 import { ToastComponent } from '../../shared/components/ui/toast/toast.component';
 import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 @Component({
   selector: 'app-auth-layout',
   standalone: true,
-  imports: [TranslatePipe, CommonModule, RouterOutlet, ToastComponent, ConfirmDialogComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule,
+    RouterOutlet,
+    ToastComponent,
+    ConfirmDialogComponent,
+    IconComponent
+  ],
   template: `
     <div class="auth-layout">
       <div class="auth-layout__background"></div>
 
       <div class="auth-layout__container">
         <div class="auth-layout__header">
-          <span class="auth-layout__logo">🏠</span>
+          <span class="auth-layout__logo">
+            <app-icon name="home" [size]="64" [label]="null" />
+          </span>
           <h1 class="auth-layout__title">{{ 'app.name' | t }}</h1>
           <p class="auth-layout__subtitle">{{ 'auth.tu_asistente_del_hogar' | t }}</p>
         </div>
@@ -68,9 +78,9 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
       }
 
       .auth-layout__logo {
-        font-size: 64px;
         display: block;
         margin-bottom: var(--space-4);
+        color: var(--primary);
       }
 
       .auth-layout__title {

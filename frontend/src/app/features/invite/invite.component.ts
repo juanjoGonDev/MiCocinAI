@@ -7,6 +7,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { environment } from '../../../environments/environment';
 import { InvitePreview } from '../../shared/models/household.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
@@ -17,11 +18,18 @@ import { I18nService } from '../../core/services/i18n.service';
   standalone: true,
   imports: [
     TranslatePipe,
-    CommonModule, RouterLink, ButtonComponent, LoadingComponent],
+    CommonModule,
+    RouterLink,
+    ButtonComponent,
+    LoadingComponent,
+    IconComponent
+  ],
   template: `
     <div class="invite-page">
       <div class="invite-card">
-        <span class="invite-card__icon">🏠</span>
+        <span class="invite-card__icon">
+          <app-icon name="home" [size]="64" [label]="null" />
+        </span>
 
         <ng-container *ngIf="loading(); else loaded">
           <app-loading [message]="'invite.comprobando_invitacion' | t"></app-loading>
@@ -37,7 +45,9 @@ import { I18nService } from '../../core/services/i18n.service';
           </ng-container>
 
           <ng-template #valid>
-            <h1 class="invite-card__title">{{ 'invite.invitacion_a' | t:{household: preview()?.householdName} }}</h1>
+            <h1 class="invite-card__title">
+              {{ 'invite.invitacion_a' | t: { household: preview()?.householdName } }}
+            </h1>
             <p class="invite-card__text">
               {{ 'invite.te_han_invitado_a' | t }}
               <strong>{{ preview()?.householdName }}</strong>
@@ -54,7 +64,9 @@ import { I18nService } from '../../core/services/i18n.service';
             <ng-template #joinActions>
               <ng-container *ngIf="authService.isAuthenticated(); else loginCta">
                 <div class="invite-card__actions">
-                  <app-button variant="ghost" (onClick)="decline()">{{ 'common.cancel' | t }}</app-button>
+                  <app-button variant="ghost" (onClick)="decline()">{{
+                    'common.cancel' | t
+                  }}</app-button>
                   <app-button variant="primary" [loading]="joining()" (onClick)="accept()">
                     {{ 'invite.unirme_al_hogar' | t }}
                   </app-button>
@@ -80,47 +92,59 @@ import { I18nService } from '../../core/services/i18n.service';
       </div>
     </div>
   `,
-  styles: [`
-    .invite-page {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: var(--space-4);
-      background: var(--bg-primary);
-    }
-    .invite-card {
-      max-width: 460px;
-      width: 100%;
-      padding: var(--space-8);
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-xl);
-      text-align: center;
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
-    }
-    .invite-card__icon { font-size: 64px; }
-    .invite-card__title {
-      font-family: var(--font-display);
-      font-size: var(--text-2xl);
-      font-weight: var(--font-bold);
-      margin: 0;
-    }
-    .invite-card__text { color: var(--text-secondary); margin: 0; }
-    .invite-card__info { color: var(--text-secondary); font-size: var(--text-sm); margin: 0; }
-    .invite-card__actions {
-      display: flex;
-      gap: var(--space-3);
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-    .invite-card__link { text-decoration: none; }
-  `]
+  styles: [
+    `
+      .invite-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: var(--space-4);
+        background: var(--bg-primary);
+      }
+      .invite-card {
+        max-width: 460px;
+        width: 100%;
+        padding: var(--space-8);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+      }
+      .invite-card__icon {
+        color: var(--primary);
+      }
+      .invite-card__title {
+        font-family: var(--font-display);
+        font-size: var(--text-2xl);
+        font-weight: var(--font-bold);
+        margin: 0;
+      }
+      .invite-card__text {
+        color: var(--text-secondary);
+        margin: 0;
+      }
+      .invite-card__info {
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        margin: 0;
+      }
+      .invite-card__actions {
+        display: flex;
+        gap: var(--space-3);
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+      .invite-card__link {
+        text-decoration: none;
+      }
+    `
+  ]
 })
 export class InviteComponent implements OnInit {
-
   /** El plural es del idioma, no de la frase: dos claves y la eleccion aqui, en el texto de la app. */
   memberLabel(): string {
     const n = this.preview()?.memberCount ?? 0;
@@ -169,7 +193,10 @@ export class InviteComponent implements OnInit {
     this.joining.set(true);
     this.householdService.joinByCode(this.inviteCode()).subscribe({
       next: () => {
-        this.toastService.success(this.i18n.t('auth.unido'), this.i18n.t('household.ahora_eres_miembro_del'));
+        this.toastService.success(
+          this.i18n.t('auth.unido'),
+          this.i18n.t('household.ahora_eres_miembro_del')
+        );
         this.joining.set(false);
         this.router.navigate(['/household']);
       },

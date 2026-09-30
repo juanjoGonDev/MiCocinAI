@@ -27,7 +27,14 @@ import {
   emptyTasteProfile
 } from '../../shared/models/taste-profile';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
-import { MealPlan, MealTimes, mealPlanPatch, mealTimesPatch, resolveMealPlan, resolveMealTimes } from '../../core/meal-times';
+import {
+  MealPlan,
+  MealTimes,
+  mealPlanPatch,
+  mealTimesPatch,
+  resolveMealPlan,
+  resolveMealTimes
+} from '../../core/meal-times';
 import { MealHoursComponent } from '../../shared/components/ui/meal-hours/meal-hours.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
@@ -48,7 +55,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
   standalone: true,
   imports: [
     TranslatePipe,
-    
+
     CommonModule,
     FormsModule,
     RouterLink,
@@ -67,7 +74,9 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
             {{ 'preferences.tu_perfil_alergias_gustos' | t }}
           </p>
         </div>
-        <a class="preferences__redo" routerLink="/onboarding">{{ 'preferences.rehacer_la_configuracion_inicial' | t }}</a>
+        <a class="preferences__redo" routerLink="/onboarding">{{
+          'preferences.rehacer_la_configuracion_inicial' | t
+        }}</a>
       </header>
 
       <div class="preferences__tabs" role="tablist">
@@ -97,7 +106,8 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
           <h2 class="preferences__panel-title">{{ 'preferences.tu_perfil' | t }}</h2>
           <p class="preferences__panel-hint">
             {{ 'preferences.lo_que_contestaste_al' | t }}
-            <a routerLink="/settings" class="preferences__inline-link">{{ 'nav.settings' | t }}</a>{{ 'preferences.son_de_la_app' | t }}
+            <a routerLink="/settings" class="preferences__inline-link">{{ 'nav.settings' | t }}</a
+            >{{ 'preferences.son_de_la_app' | t }}
           </p>
           <app-home-profile-picker
             [(profile)]="profile"
@@ -196,7 +206,9 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
               [class.preferences__goal--on]="taste.goal === goal.value"
               (click)="taste.goal = goal.value"
             >
-              <span class="preferences__goal-icon">{{ goal.icon }}</span>
+              <span class="preferences__goal-icon">
+                <app-icon [name]="goal.icon" [size]="20" [label]="null" />
+              </span>
               <span class="preferences__goal-label">{{ goal.labelKey | t }}</span>
               <span class="preferences__goal-hint">{{ goal.hintKey | t }}</span>
             </button>
@@ -227,7 +239,10 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
 
           <p class="preferences__footnote">
             {{ 'preferences.falta_cacharro_los_utensilios' | t }}
-            <a routerLink="/pantry" [queryParams]="{ tab: 'utensils' }">{{ 'preferences.la_despensa' | t }}</a>{{ 'preferences.si_no_tienes_horno' | t }}
+            <a routerLink="/pantry" [queryParams]="{ tab: 'utensils' }">{{
+              'preferences.la_despensa' | t
+            }}</a
+            >{{ 'preferences.si_no_tienes_horno' | t }}
           </p>
         </ng-container>
       </section>
@@ -239,10 +254,15 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
         <app-button *ngIf="hasUnsavedChanges()" variant="ghost" (onClick)="discard()">
           {{ 'preferences.descartar_cambios' | t }}
         </app-button>
-        <span class="preferences__state preferences__state--ok" *ngIf="saved() && !hasUnsavedChanges()">
+        <span
+          class="preferences__state preferences__state--ok"
+          *ngIf="saved() && !hasUnsavedChanges()"
+        >
           <app-icon name="check_circle" [size]="16" /> {{ 'preferences.todo_guardado' | t }}
         </span>
-        <span class="preferences__state" *ngIf="hasUnsavedChanges()">{{ 'preferences.hay_cambios_sin_guardar' | t }}</span>
+        <span class="preferences__state" *ngIf="hasUnsavedChanges()">{{
+          'preferences.hay_cambios_sin_guardar' | t
+        }}</span>
       </footer>
     </div>
   `,
@@ -288,9 +308,17 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
       .preferences__tabs {
         display: flex;
         gap: var(--space-2);
+        min-width: 0;
+        max-width: 100%;
         border-bottom: 1px solid var(--border-default);
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-inline: contain;
+        scrollbar-width: thin;
       }
       .tab {
+        flex: 0 0 auto;
+        white-space: nowrap;
         background: none;
         border: none;
         padding: var(--space-3) var(--space-4);
@@ -438,6 +466,20 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
         color: var(--success);
       }
 
+      @media (max-width: 600px) {
+        .preferences__actions {
+          flex-wrap: wrap;
+          align-items: flex-start;
+        }
+
+        .preferences__actions > app-button {
+          max-width: 100%;
+        }
+
+        .preferences__state {
+          flex: 1 1 100%;
+        }
+      }
     `
   ]
 })
@@ -462,11 +504,36 @@ export class PreferencesComponent implements OnInit {
    * `labelKey` en lugar de `label`: la lista se construye una vez al crear el componente, y un texto que
    * se guarda ahi ya no se entera del idioma (12s-B). La traduccion se hace al pintar.
    */
-  readonly tabs: Array<{ id: PreferencesTab; labelKey: TranslationKey; icon: IconName; count: () => string | number }> = [
-    { id: 'profile', labelKey: 'preferences.tab_profile', icon: 'person', count: () => this.profileLabel() },
-    { id: 'allergies', labelKey: 'preferences.tab_allergies', icon: 'error_outline', count: () => this.taste.allergies.length },
-    { id: 'tastes', labelKey: 'preferences.tab_tastes', icon: 'favorite', count: () => this.taste.likes.length + this.taste.dislikes.length },
-    { id: 'meals', labelKey: 'preferences.tab_meals', icon: 'schedule', count: () => this.mealTimesLabel() },
+  readonly tabs: Array<{
+    id: PreferencesTab;
+    labelKey: TranslationKey;
+    icon: IconName;
+    count: () => string | number;
+  }> = [
+    {
+      id: 'profile',
+      labelKey: 'preferences.tab_profile',
+      icon: 'person',
+      count: () => this.profileLabel()
+    },
+    {
+      id: 'allergies',
+      labelKey: 'preferences.tab_allergies',
+      icon: 'error_outline',
+      count: () => this.taste.allergies.length
+    },
+    {
+      id: 'tastes',
+      labelKey: 'preferences.tab_tastes',
+      icon: 'favorite',
+      count: () => this.taste.likes.length + this.taste.dislikes.length
+    },
+    {
+      id: 'meals',
+      labelKey: 'preferences.tab_meals',
+      icon: 'schedule',
+      count: () => this.mealTimesLabel()
+    },
     { id: 'goal', labelKey: 'calendar.objetivo', icon: 'flag', count: () => this.goalLabel() }
   ];
 
@@ -490,7 +557,6 @@ export class PreferencesComponent implements OnInit {
   private savedSnapshot = this.snapshot();
 
   constructor() {
-
     // Convencion de la app: la pestaña activa se refleja en la URL.
     syncTabWithUrl<PreferencesTab>({
       param: 'tab',
@@ -514,7 +580,11 @@ export class PreferencesComponent implements OnInit {
         this.mealPlan = this.tasteService.mealPlan();
         this.markSaved();
       },
-      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('profile.no_se_pudieron_cargar'))
+      error: () =>
+        this.toastService.error(
+          this.i18n.t('ui.error'),
+          this.i18n.t('profile.no_se_pudieron_cargar')
+        )
     });
   }
 
@@ -558,13 +628,20 @@ export class PreferencesComponent implements OnInit {
         mealPlanPatch(this.mealPlan, this.savedMealPlan)
       )
       .subscribe({
-      next: () => {
-        this.markSaved();
-        this.saved.set(true);
-        this.toastService.success(this.i18n.t('ui.guardado'), this.i18n.t('profile.la_ia_tendra_en'));
-      },
-      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('profile.no_se_pudo_guardar'))
-    });
+        next: () => {
+          this.markSaved();
+          this.saved.set(true);
+          this.toastService.success(
+            this.i18n.t('ui.guardado'),
+            this.i18n.t('profile.la_ia_tendra_en')
+          );
+        },
+        error: () =>
+          this.toastService.error(
+            this.i18n.t('ui.error'),
+            this.i18n.t('profile.no_se_pudo_guardar')
+          )
+      });
   }
 
   /** Vuelve a lo guardado sin recargar la página. */

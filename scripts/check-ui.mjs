@@ -43,20 +43,16 @@ const LEGACY = {
     // La deuda de emoji va detras de la clave: al migrar la plantilla al diccionario se llevaban los
     // pictogramas consigo, asi que los ficheros que estaban aqui perdonados ahora lo estan ahi dentro.
     'frontend/src/app/core/i18n/dict/ai_config.ts',
-    'frontend/src/app/core/i18n/dict/invite.ts',
     'frontend/src/app/core/i18n/dict/onboarding.ts',
     'frontend/src/app/core/i18n/dict/pantry.ts',
     'frontend/src/app/core/i18n/dict/recipes.ts',
     'frontend/src/app/core/i18n/dict/settings.ts',
     'frontend/src/app/features/ai-config/ai-config.component.ts',
-    'frontend/src/app/features/invite/invite.component.ts',
-    'frontend/src/app/features/onboarding/onboarding.component.ts',
     'frontend/src/app/features/pantry/pantry.component.ts',
     'frontend/src/app/features/recipes/recipes.component.ts',
-    'frontend/src/app/layouts/auth-layout/auth-layout.component.ts',
     'frontend/src/app/shared/components/ui/modal/modal.component.ts',
     'frontend/src/app/shared/components/ui/rating/rating.component.ts',
-    'frontend/src/app/shared/models/taste-profile.ts',
+    'frontend/src/app/shared/models/taste-profile.ts'
   ],
   'ui-sin-uso': [
     'frontend/src/app/shared/components/ui/card/card.component.ts',
@@ -105,7 +101,8 @@ function walk(dir, filter) {
 }
 
 const isFrontendSource = (path) =>
-  path.endsWith('.ts') || path.endsWith('.html') || path.endsWith('.css');
+  !path.endsWith('.spec.ts') &&
+  (path.endsWith('.ts') || path.endsWith('.html') || path.endsWith('.css'));
 const sourceFiles = walk(FRONTEND, isFrontendSource);
 // El mismo texto, entero, para las reglas que preguntan «existe esta cadena en la interfaz».
 const frontendSource = sourceFiles.map((file) => readFileSync(file, 'utf8')).join('\n');

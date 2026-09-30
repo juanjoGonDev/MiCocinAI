@@ -186,6 +186,39 @@ interface MealHourRow {
         color: var(--text-secondary);
       }
 
+      @media (max-width: 600px) {
+        .meal-hours__row {
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          column-gap: var(--space-2);
+        }
+
+        .meal-hours__label {
+          min-width: 0;
+        }
+
+        .meal-hours__input {
+          grid-column: 2;
+          width: 100%;
+          min-width: 8.5rem;
+        }
+
+        .meal-hours__reset {
+          grid-column: 1;
+          justify-self: start;
+        }
+
+        .meal-hours__state {
+          grid-column: 2;
+          min-width: 0;
+          text-align: left;
+        }
+
+        .meal-hours__plan {
+          grid-column: 1 / -1;
+          min-width: 0;
+        }
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .meal-hours__input,
         .meal-hours__reset {

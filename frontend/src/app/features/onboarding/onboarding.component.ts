@@ -26,6 +26,7 @@ import { MealTimes, mealTimesPatch, resolveMealTimes } from '../../core/meal-tim
 import { MealHoursComponent } from '../../shared/components/ui/meal-hours/meal-hours.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import {
   isLastIndex,
   nextIndex,
@@ -55,13 +56,16 @@ import { I18nService } from '../../core/services/i18n.service';
     MealHoursComponent,
     HomeProfilePickerComponent,
     LoadingComponent,
-    CatalogLabelPipe
+    CatalogLabelPipe,
+    IconComponent
   ],
   template: `
     <div class="onboarding">
       <div class="onboarding__card" (keydown)="onCardKeydown($event)">
         <header class="onboarding__header">
-          <span class="onboarding__logo">🏠</span>
+          <span class="onboarding__logo">
+            <app-icon name="home" [size]="40" [label]="null" />
+          </span>
           <h1 class="onboarding__title">{{ 'onboarding.configura_tu_hogaria' | t }}</h1>
           <p class="onboarding__subtitle">
             {{ 'onboarding.preguntas_cortas' | t: { n: steps.length } }}
@@ -166,7 +170,9 @@ import { I18nService } from '../../core/services/i18n.service';
                 [attr.aria-pressed]="taste.goal === goal.value"
                 (click)="selectGoal(goal.value)"
               >
-                <span class="onboarding__goal-icon">{{ goal.icon }}</span>
+                <span class="onboarding__goal-icon">
+                  <app-icon [name]="goal.icon" [size]="20" [label]="null" />
+                </span>
                 <span class="onboarding__goal-label">{{ goal.labelKey | t }}</span>
                 <span class="onboarding__goal-hint">{{ goal.hintKey | t }}</span>
               </button>
@@ -326,9 +332,9 @@ import { I18nService } from '../../core/services/i18n.service';
         text-align: center;
       }
       .onboarding__logo {
-        font-size: 40px;
         display: block;
         margin-bottom: var(--space-2);
+        color: var(--primary);
       }
       .onboarding__title {
         font-family: var(--font-display);
@@ -469,7 +475,9 @@ import { I18nService } from '../../core/services/i18n.service';
         }
       }
       .onboarding__goal-icon {
-        font-size: var(--text-xl);
+        display: inline-flex;
+        align-items: center;
+        color: var(--primary);
       }
       .onboarding__goal-label {
         font-size: var(--text-sm);
