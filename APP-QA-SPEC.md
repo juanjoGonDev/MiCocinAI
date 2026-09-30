@@ -199,6 +199,17 @@ Al ampliar las pruebas del control compartido, una regresión unitaria real dete
 - [ ] Añadir E2E real en la pantalla que usa el picker con buscador y opciones suficientes; probar resultado, cero coincidencias, texto custom, flechas/Enter/Escape y PC/móvil.
 - [ ] Ejecutar pruebas unitarias focalizadas, cobertura del picker ≥70 % en sus cuatro métricas, build y E2E responsive; capturar/inspeccionar PC y móvil.
 
+Revalidación E2E añadida en `shopping-round6.spec.ts`: Chromium escritorio 1440×900 y Pixel 5 a 393×851 pasan búsqueda exacta, texto libre por Enter, Escape y persistencia tras recarga. A 320×568 los mismos pasos llegan al valor persistido, pero el test detecta cuatro `pageerror` con el texto `Transition was aborted because of invalid state. Viewport size changed`; la causa y su relación con el cambio de viewport/hoja siguen sin aislar. No marcar el flujo estrecho como verde hasta resolver o atribuir este error con evidencia.
+
+### QA-04c.8 · valor anunciado y opciones dinámicas de `app-picker`
+
+La revisión del diff señaló dos riesgos aún no reproducidos: el `aria-label` nuevo del trigger puede reemplazar el texto accesible que contiene el valor actual, y `filtered`/`rows` están memoizados aunque `options` sigue siendo un `@Input` ordinario. Una lista que cambie mientras el panel está abierto podría quedar obsoleta. Revalidar contra la fuente vigente del selector y el contrato de accesibilidad antes de tocar comportamiento.
+
+- [ ] Reproducir el nombre accesible en navegador después de elegir una opción, con label explícito y con fallback; debe comunicar propósito y valor actual, y mantener `aria-expanded`/listbox asociados.
+- [ ] Añadir prueba que cambia opciones mientras el panel/búsqueda está abierto y comprobar listado, filtro y agrupaciones actuales sin reabrirlo.
+- [ ] Escribir primero tests rojos y luego aplicar la solución reactiva mínima; conservar navegación por teclado, texto libre, selección/deshabilitado y click exterior.
+- [ ] Ejecutar unit + Playwright real en escritorio/móvil, build y cobertura ≥70 % de statements, ramas, funciones y líneas del alcance.
+
 ### QA-04b · hit area táctil de `app-checkbox`
 
 **Discrepancia revalidada:** `HOGARIA-SPEC.md` §8f exige un área de toque de 40 px, pero `checkbox.component.ts` establece `min-height: 36px`. El test unitario actual no mide el tamaño real y, además, lee `aria-checked` antes de ejecutar change detection.
