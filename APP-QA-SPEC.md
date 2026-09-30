@@ -188,9 +188,13 @@ El E2E full-stack usa el runner aislado `%TEMP%\hogaria-e2e-runner-audit.mjs`, `
 
 **Hallazgo responsive adicional (Pixel 5 estrecho 320×568):** la inspección de la modal IA muestra que el segundo botón de `.ai-form__actions` queda cortado horizontalmente; la regla móvil solo apila los campos, pero deja ambas acciones en una fila. La captura inicial del test de resize a 320 también tomó la animación de transición a medio camino; las capturas finales deben esperar una vista estable.
 
+**Hallazgo responsive de la ficha (Pixel 5 320×568):** tras abrir el deep link a 320 px en un documento nuevo, `.recipe-detail__actions` también desborda: la fila mide 332 px de contenido dentro de 240 px disponibles. El primer intento de E2E se detuvo ante esta aserción y dejó el fixture sintético sin borrar; el siguiente caso falló en cascada por encontrar esa receta. La prueba debe limpiar su receta propia en `finally`, incluso si una aserción falla.
+
 - [ ] TDD E2E con receta sintética creada por API en SQLite temporal: la tarjeta sugerida del Dashboard abre la receta concreta en desktop y Pixel 5; recargar el deep link conserva modal/contenido; cerrar vuelve a `/recipes` y quita `recipe`.
 - [ ] TDD E2E del CTA principal y del estado vacío: seguir `#ai` abre el formulario accesible tanto al navegar desde Dashboard como al cargar `/recipes#ai`; cerrar limpia el fragmento y no llama a IA.
 - [ ] Refluir las acciones de la modal IA a 320 px y medir ambos botones completos dentro del viewport; mantener scroll vertical usable y comprobar 393×851/320×568.
+- [ ] Refluir también las acciones de la ficha a 320 px; medir «Cocinar ahora» y «Añadir a favoritos» completos en su contenedor y viewport.
+- [ ] Limpiar siempre la receta sintética E2E aunque falle una aserción, evitando contaminación de los casos siguientes.
 - [ ] Probar `/recipes?recipe=missing` como borde: mantener la página de Recetas, no abrir detalle vacío ni caer en Dashboard, limpiar el id inválido con una salida recuperable.
 - [ ] Corregir `RecipeService.getRecipe()` para desempaquetar el DTO de API; unit test cubre éxito/error y `currentRecipe`, y E2E comprueba nombre/descripción/ingredientes reales en el deep link.
 - [ ] Alinear `createRecipe()` y `deleteRecipe()` con sus tipos de salida (`Recipe | null` y `boolean`); los tests comprueban payload y persistencia de la señal al fallar.
