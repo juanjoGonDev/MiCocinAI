@@ -241,6 +241,28 @@ Capturas sintéticas inspeccionadas: PC ticket `.e2e-screenshots/qa-verify-20261
 - [ ] Capturar e inspeccionar baseline sintético autenticado PC 1440×900 y móvil 320×568; guardar los artefactos ignorados por Git y verificar que no contienen PII, tokens ni secretos.
 - [ ] Typecheck/build y Playwright real pasan con al menos un flujo autenticado que escribe solo en la SQLite temporal; registrar fallos previos/ambientales por separado y mantener abiertas las suites de acciones detalladas.
 
+**Primera pasada roja (2026-10-01, QA-BASE sin cerrar):** `tests/e2e/route-baseline.spec.ts` recorrió 28 rutas en 5 viewports en Chromium escritorio y Pixel 5 (140 mediciones por proyecto), con usuario sintético y runner/SQLite aislados. En ambas ejecuciones hubo 0 `pageerror`, 0 componentes ausentes y 0 errores de navegación; el navegador generó 40/42 mensajes genéricos de recurso 404, mayormente duplicados de IDs inválidos intencionados que todavía no están clasificados. Se confirmó además un 404 **no esperado** en `/shopping`: `GET /api/shopping/stream/lists`. La vista llama `openStream('lists')`; el servicio añade `/stream/${path}` y el backend solo registra `/stream/tray` para la bandeja y `/stream/lists/:listId` para una lista concreta. No se ha cambiado producción; pasa a la unidad QA-SHOP-LIVE.1.
+
+La misma pasada midió en `/account` `documentElement.scrollWidth=383` para un viewport de 320 px (63 px de desbordamiento) en ambos proyectos. Se aislará el nodo/causa en la captura y pasa a QA-ACCOUNT-RESP.1. En Pixel 5 hubo una solicitud dev-only `GET /@ng/component` fallida con `ERR_NO_BUFFER_SPACE`, que requiere repetición en un stack de producción antes de clasificarla; 142 fallos a `fonts.googleapis.com` son limitación de red externa y no errores del origen de la app. El primer harness confundía los 404 genéricos del navegador con errores de consola, usaba la ruta activa al completar requests asíncronas y guardaba URLs completas (incluida la query SSE); antes de cerrar el baseline se corregirá la clasificación/atribución y se eliminarán query/hash/userinfo de toda evidencia.
+
+### QA-SHOP-LIVE.1 · evento SSE de la bandeja de listas (pendiente)
+
+**Fuente revalidada (2026-10-01):** `ShoppingListsComponent` se suscribe a `openStream('lists')`; `ShoppingService.openStream()` concatena `/api/shopping/stream/${path}` y el servidor ofrece `/api/shopping/stream/tray` para la bandeja y `/api/shopping/stream/lists/:listId` para un detalle. La pasada real de rutas autenticadas recibió 404 al pedir `/api/shopping/stream/lists`; el callback de refresco de cambios remotos no puede recibir `ready`/`change` desde esa URL.
+
+- [ ] Añadir primero una prueba unitaria del endpoint del stream de bandeja y conservar el endpoint de stream de detalle; cubrir ruta, cierre y payload/error sin introducir el token en logs.
+- [ ] Añadir regresión Playwright con usuario/lista sintéticos en SQLite temporal: abrir `/shopping`, recibir `ready` desde `/stream/tray`, confirmar status/content-type correcto, cero 404/reintentos del stream de bandeja y cleanup del stream al navegar fuera.
+- [ ] Corregir solo el destino de la suscripción de la bandeja, sin alterar el stream por lista; incluir fallos, redirección/cancelación y repetición relevantes.
+- [ ] Cobertura de la lógica nueva ≥70 % en statements, branches, functions y lines sin bajar gates; ejecutar tests focales, Playwright Chromium + Pixel 5, typecheck/build y registrar limitaciones.
+
+### QA-ACCOUNT-RESP.1 · desbordamiento de Cuenta a 320 px (pendiente)
+
+**Fuente revalidada (2026-10-01):** `/account` monta `AccountComponent`; su `.account-page` declara padding `var(--space-4)` y max-width 720 px, los datos usan `.account__facts` con grid, y hay un breakpoint local a 560 px. El baseline real midió 63 px de overflow de documento a 320×568 tanto en escritorio Chromium redimensionado como Pixel 5. El rectángulo/nodo responsable aún no se ha identificado; no se atribuye a una regla CSS hasta inspeccionar la página.
+
+- [ ] Añadir regresión Playwright que mida el elemento que rebasa los límites, ubicación/hit-testing y scrollWidth a 320×568; inspeccionar capturas sintéticas actuales antes de atribuir causa y reproducir el rojo.
+- [ ] Comprobar fichas `account`, `security` e `info`, textos largos sintéticos, tabs/inputs/acciones, teclado/foco y la transición por breakpoint 559/560/561 px; mantener la superficie dentro del viewport y legible sin cambiar la conducta de escritorio.
+- [ ] Aplicar el reflujo CSS mínimo después de la regresión; confirmar ausencia de overflow y controles completos en 320×568, 393×851, 559/560/561 y 1440×900.
+- [ ] Ejecutar Karma focal con ≥70 % de cobertura del alcance en cada métrica, Playwright real Chromium + Pixel 5, typecheck/build y capturas desktop/móvil inspeccionadas; no marcar resuelto ante errores no clasificados.
+
 ## Unidad QA-PANTRY.1 · alta manual accesible en móvil (resuelta)
 
 **Fuente revalidada antes de implementar:** el comentario y `(onClick)="openAddModal()"` de `PantryComponent` definen «+ Agregar» como la acción que abre el modal de alta de la pestaña activa. `.pantry__header` distribuye título y `.pantry__header-acciones` con `flex`, pero la fila de acciones no declara `flex-wrap` ni un reflujo móvil; hay breakpoints cercanos en 480, 600, 768 y 1023 px que deben volver a comprobarse antes de tocar estilos. En Playwright Pixel 5, la prueba existente de Dashboard expiró al pulsar «+ Agregar»; el registro muestra interceptación alternada por `pantry-anadir-catalogo` y el botón de la cola de tickets en `header`. La captura sintética del fallo muestra la fila superior cortada/desplazada. Esto acredita un fallo de interacción real, pero todavía hay que medir límites y solapamientos en viewport, no inferir su geometría solo por la captura.
@@ -630,9 +652,11 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. QA-BASE.1: crear baseline reproducible autenticado en escritorio y móvil sobre runner/SQLite efímeros, registrando console, red, overflow, viewport y las pantallas/acciones recorridas; no inferir cobertura funcional del conteo de specs.
-2. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock, marcando unidades solo con ejecución real.
-3. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. QA-04a se completó con suite `488/488` y regresiones de servicio.
-4. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-5. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-6. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas en QA-04c.11 y QA-PANTRY.1; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
+1. Corregir y revalidar QA-SHOP-LIVE.1: la bandeja solicita actualmente el endpoint SSE inexistente `/api/shopping/stream/lists`.
+2. Corregir y revalidar QA-ACCOUNT-RESP.1: aislar el nodo que hace overflow de 63 px en `/account` a 320 px antes de tocar estilos.
+3. Completar QA-BASE.1 sobre runner/SQLite efímeros, con manifest y telemetría de consola/red sanitizada; no inferir cobertura funcional del conteo de specs.
+4. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock, marcando unidades solo con ejecución real.
+5. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. QA-04a se completó con suite `488/488` y regresiones de servicio.
+6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+7. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+8. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas en QA-04c.11 y QA-PANTRY.1; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
