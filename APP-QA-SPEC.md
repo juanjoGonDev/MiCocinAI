@@ -210,6 +210,15 @@ La revisión del diff señaló dos riesgos aún no reproducidos: el `aria-label`
 - [ ] Escribir primero tests rojos y luego aplicar la solución reactiva mínima; conservar navegación por teclado, texto libre, selección/deshabilitado y click exterior.
 - [ ] Ejecutar unit + Playwright real en escritorio/móvil, build y cobertura ≥70 % de statements, ramas, funciones y líneas del alcance.
 
+### QA-04c.9 · desbordamiento de la barra inferior a 320 px
+
+En la ejecución real Pixel 5 aislada de `shopping-round6.spec.ts` a 320×568, al volver a la bandeja después de crear una lista, `document.documentElement.clientWidth` era 320 pero `scrollWidth` era 343. El `<header>` y la barra inferior medían 343 px; el último `.bottom-nav__item` terminaba en x=353. Al navegar, Angular `withViewTransitions()` emitió tres `pageerror` «Transition was aborted because of invalid state. Viewport size changed»; otro apareció tras alta de producto. Al añadir el producto el overflow dejó de aparecer, pero no se debe confundir ese cambio de layout con un arreglo.
+
+- [ ] Añadir regresión E2E en Pixel 5 que compruebe ancho de layout, scroll horizontal y rectángulos de cada destino de bottom-nav en rutas/listas reales a 320×568; repetir 393×851.
+- [ ] Corregir la causa mínima del ancho intrínseco de navegación; conservar nombres visibles/accesibles, targets táctiles y navegación.
+- [ ] Confirmar que el viewport no se ensancha en `/shopping` y que las cancelaciones de transición desaparecen o documentar causa independiente reproducible.
+- [ ] Capturar e inspeccionar escritorio y móvil estrecho; ejecutar build y pruebas aplicables sin tocar la instancia de desarrollo ni la base normal.
+
 ### QA-04b · hit area táctil de `app-checkbox`
 
 **Discrepancia revalidada:** `HOGARIA-SPEC.md` §8f exige un área de toque de 40 px, pero `checkbox.component.ts` establece `min-height: 36px`. El test unitario actual no mide el tamaño real y, además, lee `aria-checked` antes de ejecutar change detection.
