@@ -199,6 +199,7 @@ Al ampliar las pruebas del control compartido, una regresión unitaria real dete
 - [ ] Convertir la consulta en estado reactivo sin perder filtro por label/value/hint, exact-match, custom, vacíos ni reset/foco al abrir/cerrar.
 - [ ] Añadir E2E real en la pantalla que usa el picker con buscador y opciones suficientes; probar resultado, cero coincidencias, texto custom, flechas/Enter/Escape y PC/móvil.
 - [ ] Ejecutar pruebas unitarias focalizadas, cobertura del picker ≥70 % en sus cuatro métricas, build y E2E responsive; capturar/inspeccionar PC y móvil.
+- [ ] En el E2E real, filtrar por prefijo no exacto y confirmar la fila activa con ArrowDown+Enter; comprobar también label exacto cuando un resultado anterior solo lo contiene como substring. Los tests actuales ejercitan flechas sobre el trigger por evento sintético, pero no el input de búsqueda real.
 
 Revalidación E2E añadida en `shopping-round6.spec.ts`: Chromium escritorio 1440×900 y Pixel 5 a 393×851 pasan búsqueda exacta, texto libre por Enter, Escape y persistencia tras recarga. A 320×568 los mismos pasos llegan al valor persistido, pero el test detecta cuatro `pageerror` con el texto `Transition was aborted because of invalid state. Viewport size changed`; la causa y su relación con el cambio de viewport/hoja siguen sin aislar. No marcar el flujo estrecho como verde hasta resolver o atribuir este error con evidencia.
 
