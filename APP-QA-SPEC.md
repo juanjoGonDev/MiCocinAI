@@ -546,8 +546,8 @@ Evidencia QA-04b (2026-09-30): Playwright aislado con `E2E_RATE_LIMIT=on`, proye
 
 - [x] Dashboard/recetas: rutas para receta concreta y modal de generación resueltas con decisión y evidencia TDD en QA-04c.11; otras superficies pendientes de `/dashboard` siguen abiertas en la checklist funcional.
 - [x] Revalidación aislada actualizada de `shopping-round6.spec.ts` contra vista y contrato actuales: los cuatro fallos antiguos ya no se reproducen. El input existe tras crear/abrir lista; «seleccionar todo» muestra la barra en la pestaña visible; la foto presenta `409 AI_NOT_CONFIGURED` y su error inline; el selector actual `[data-test="discount-amount"]` es el propio input. Playwright con servidor/SQLite/puerto/semilla temporales y rate limit activo: Chromium 12 passed/3 skips esperados y Pixel 5 14 passed/1 skip esperado; verificado de nuevo en esta corrida.
-- [ ] La configuración `playwright.full-stack.config.ts` tiene la asignación de `DATABASE_PATH` dentro de un comentario. Corregir/aislar antes de usar esa configuración en local.
-- [ ] La suite E2E de desarrollo puede reutilizar `:4200` y la base de datos por defecto. No correr pruebas con escritura contra la instancia/base de datos de uso normal.
+- [x] `playwright.full-stack.config.ts` dejó de declarar `webServer`/DB en el repo: el supervisor asigna puerto y `DATABASE_PATH` temporal exclusivos y valida readiness antes de Playwright; smoke servido real 4 passed/1 skip (QA-E2E.1).
+- [x] La suite E2E de desarrollo ya no reutiliza `:4200` ni la base por defecto: ambas configs rechazan ejecución directa y el runner crea puertos/SQLite bajo `%TEMP%`; smoke de escritura autenticado pasó en Chromium y Pixel 5 (QA-E2E.1).
 - [ ] Hay umbral de cobertura frontend del 80 % y backend del 70 % en la configuración local; CI ejecuta cobertura del backend, pero no se encontró un job de cobertura frontend. Confirmar los gates y cerrar la diferencia sin rebajar umbrales.
 
 ## Checklist funcional por pantalla
@@ -618,8 +618,8 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. QA-E2E.1: aislar de forma permanente las configuraciones/specs de Playwright antes de seguir con pruebas que escriben, según la fuente actual arriba.
-2. Continuar el barrido funcional pendiente de rutas, formularios y acciones, empezando por un baseline real con console/red/overflow en la matriz establecida; usar fixtures y proveedor mock.
+1. QA-BASE.1: crear baseline reproducible autenticado en escritorio y móvil sobre runner/SQLite efímeros, registrando console, red, overflow, viewport y las pantallas/acciones recorridas; no inferir cobertura funcional del conteo de specs.
+2. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock, marcando unidades solo con ejecución real.
 3. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. QA-04a se completó con suite `488/488` y regresiones de servicio.
 4. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
 5. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
