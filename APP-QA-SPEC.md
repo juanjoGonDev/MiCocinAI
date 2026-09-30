@@ -39,16 +39,18 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 
 `node scripts/check-ui.mjs` sigue terminando con 13 incidencias preexistentes de `texto-en-un-catalogo` en `frontend/src/app/core/i18n/labels.ts:345-358` (deuda QA-05, fuera de esta unidad); no reporta emoji en los ficheros Hogar/Dashboard migrados. El ESLint directo no tiene configuración en la raíz y `ng lint` está bloqueado porque falta `@angular-eslint/builder:lint`; no se alteró configuración ni dependencias para ocultarlo. `git diff --check` pasa. Build de producción aprobado con los warnings existentes de budgets e imports opcionales/no usados; no se modificaron gates.
 
-## Unidad QA-UI.2 · geometría de tarjeta de miembro en móvil (defecto reproducido)
+## Unidad QA-UI.2 · geometría de tarjeta de miembro en móvil (resuelta)
 
 **Fuente revalidada antes de esta unidad:** `HouseholdComponent` dibuja `.member-card` como fila flex y `.member-card__meta` como otra fila sin reflujo específico móvil. La captura sintética `household-members.png` de QA-UI.1 parece mostrar las insignias de rol/nivel cerca o más allá del borde derecho de la tarjeta; la imagen por sí sola no confirma un defecto. Medir geometría con el navegador antes de cambiar estilos.
 
 - [x] Escribir primero una regresión Playwright que mida los límites reales de `.member-card`, nombre/email y `.member-card__meta` en Pixel 5 a 393×851 y 320×568; registrar el baseline y confirmar si existe desbordamiento horizontal/clipping.
-- [ ] Usar datos sintéticos de nombre/email y etiquetas largas en español e inglés; exigir que las insignias permanezcan dentro de la tarjeta y que no haya overflow horizontal del documento.
-- [ ] Solo si el rojo reproduce el problema, aplicar el reflujo mínimo con TDD; mantener legibles los datos, estados accesibles y áreas táctiles.
-- [ ] Verificar la regresión en Chromium escritorio y Pixel 5, capturar/inspeccionar PC y móvil y registrar comandos/resultados sin tocar servidor ni base normales.
+- [x] Usar datos sintéticos de nombre/email y etiquetas largas en español e inglés; exigir que las insignias permanezcan dentro de la tarjeta y que no haya overflow horizontal del documento.
+- [x] Solo si el rojo reproduce el problema, aplicar el reflujo mínimo con TDD; mantener legibles los datos, estados accesibles y áreas táctiles.
+- [x] Verificar la regresión en Chromium escritorio y Pixel 5, capturar/inspeccionar PC y móvil y registrar comandos/resultados sin tocar servidor ni base normales.
 
 **TDD rojo (2026-09-30, sin cambios de producción):** runner aislado `E2E_SCOPE=all`, `E2E_PROJECT=mobile-chrome`, `E2E_FILES=household-icon-consistency.spec.ts`, `E2E_RATE_LIMIT=on`: Pixel 5 pasa a 393×851 y falla a 320×568. Con el fixture inicial, `.member-card__meta` llegó a x=371 px mientras `.member-card` terminaba en x=304 px; endurecí después el escenario con un nombre sintético largo y el borde de las insignias aún llegó a x=360 px (56 px fuera). El documento no se ensancha, por lo que el desborde local quedaba oculto/clipeado. En la ejecución reforzada, el resto del test de esta pantalla y Dashboard pasa (2 passed, 1 failed); cada corrida usa servidor, SQLite y semilla temporales únicas.
+
+**Evidencia verde QA-UI.2 (2026-09-30):** `HouseholdComponent` refluye la fila de miembro a una rejilla de dos columnas en móvil; la columna de texto tiene ancho mínimo cero y nombre/correo pueden partirse, mientras las insignias ocupan una segunda fila. La regresión mide documento, columna, correo y tarjeta a 393×851 y 320×568 con nombre sintético largo en español e inglés. Tras `npm run build:prod` (el runner aislado sirve el bundle estático existente y no recompila Angular), `tsc -p tsconfig.e2e.json --noEmit` pasa; Playwright aislado con `E2E_RATE_LIMIT=on`, SQLite/puerto/semilla temporales: `household-icon-consistency.spec.ts`, Pixel 5 **3/3** y Chromium escritorio **3/3**. Capturas inspeccionadas: `.e2e-screenshots/qa-ui-2-desktop/household-members.png` y `.e2e-screenshots/qa-ui-2-mobile/household-members-{es,en}-{320x568,393x851}.png`. No se usaron el server ni la base de datos normales.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 

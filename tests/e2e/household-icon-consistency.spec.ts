@@ -23,7 +23,11 @@ test('los iconos de compartir e invitación no forman parte del texto accesible'
   page
 }, testInfo) => {
   const initialViewport = page.viewportSize()!;
-  await registerAndGoto(page, '/household', 'household-action-icons');
+  await registerAndGoto(
+    page,
+    '/household',
+    'Miembro sintético con un nombre deliberadamente muy largo para probar el reflujo'
+  );
   await page.getByRole('button', { name: 'Crear hogar', exact: true }).click();
   await page.locator('input#householdName').fill('Casa sintética QA');
   await page.getByRole('button', { name: 'Crear', exact: true }).click();
@@ -35,44 +39,128 @@ test('los iconos de compartir e invitación no forman parte del texto accesible'
         { width: 320, height: 568 }
       ]
     : [];
-  for (const viewport of responsiveViewports) {
-    await page.setViewportSize(viewport);
-    const linkLayout = await page.evaluate(() => {
-      const card = document.querySelector<HTMLElement>('.invite-card')!;
-      const content = document.querySelector<HTMLElement>('.invite-card__content')!;
-      const link = document.querySelector<HTMLElement>('.invite-card__code')!;
-      const actions = document.querySelector<HTMLElement>('.invite-card__actions')!;
-      const bounds = (element: HTMLElement) => {
-        const { left, right } = element.getBoundingClientRect();
-        return { left, right };
-      };
-      return {
-        viewportWidth: window.innerWidth,
-        documentWidth: document.documentElement.scrollWidth,
-        linkWidth: link.clientWidth,
-        linkScrollWidth: link.scrollWidth,
-        card: bounds(card),
-        content: bounds(content),
-        link: bounds(link),
-        actions: bounds(actions)
-      };
-    });
-    expect(
-      linkLayout.documentWidth,
-      'la pantalla no debe desbordarse horizontalmente'
-    ).toBeLessThanOrEqual(linkLayout.viewportWidth);
-    expect(
-      linkLayout.linkScrollWidth,
-      'el enlace debe envolver dentro de su tarjeta'
-    ).toBeLessThanOrEqual(linkLayout.linkWidth);
-    expect(
-      linkLayout.link.right,
-      'el enlace debe permanecer dentro de la tarjeta'
-    ).toBeLessThanOrEqual(linkLayout.card.right);
-    expect(
-      linkLayout.actions.right,
-      'los botones de copiar y regenerar deben permanecer visibles dentro de la tarjeta'
-    ).toBeLessThanOrEqual(linkLayout.card.right);
+  const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+  if (responsiveViewports.length) {
+    const initialLanguage = await page.evaluate(() => localStorage.getItem('hogar:v1:language'));
+    for (const language of ['es', 'en']) {
+      await page.evaluate((nextLanguage) => {
+        localStorage.setItem('hogar:v1:language', nextLanguage);
+      }, language);
+      await page.reload();
+      await expect(page.locator('.invite-card')).toBeVisible();
+
+      for (const viewport of responsiveViewports) {
+        await page.setViewportSize(viewport);
+        const linkLayout = await page.evaluate(() => {
+          const card = document.querySelector<HTMLElement>('.invite-card')!;
+          const content = document.querySelector<HTMLElement>('.invite-card__content')!;
+          const link = document.querySelector<HTMLElement>('.invite-card__code')!;
+          const actions = document.querySelector<HTMLElement>('.invite-card__actions')!;
+          const bounds = (element: HTMLElement) => {
+            const { left, right } = element.getBoundingClientRect();
+            return { left, right };
+          };
+          return {
+            viewportWidth: window.innerWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            linkWidth: link.clientWidth,
+            linkScrollWidth: link.scrollWidth,
+            card: bounds(card),
+            content: bounds(content),
+            link: bounds(link),
+            actions: bounds(actions)
+          };
+        });
+        expect(
+          linkLayout.documentWidth,
+          'la pantalla no debe desbordarse horizontalmente'
+        ).toBeLessThanOrEqual(linkLayout.viewportWidth);
+        expect(
+          linkLayout.linkScrollWidth,
+          'el enlace debe envolver dentro de su tarjeta'
+        ).toBeLessThanOrEqual(linkLayout.linkWidth);
+        expect(
+          linkLayout.link.right,
+          'el enlace debe permanecer dentro de la tarjeta'
+        ).toBeLessThanOrEqual(linkLayout.card.right);
+        expect(
+          linkLayout.actions.right,
+          'los botones de copiar y regenerar deben permanecer visibles dentro de la tarjeta'
+        ).toBeLessThanOrEqual(linkLayout.card.right);
+
+        const memberLayout = await page.evaluate(() => {
+          const card = document.querySelector<HTMLElement>('.member-card')!;
+          const info = card.querySelector<HTMLElement>('.member-card__info')!;
+          const name = card.querySelector<HTMLElement>('.member-card__name')!;
+          const email = card.querySelector<HTMLElement>('.member-card__email')!;
+          const meta = card.querySelector<HTMLElement>('.member-card__meta')!;
+          const bounds = (element: HTMLElement) => {
+            const { left, right } = element.getBoundingClientRect();
+            return { left, right };
+          };
+          return {
+            viewportWidth: window.innerWidth,
+            documentWidth: document.documentElement.scrollWidth,
+            card: bounds(card),
+            info: bounds(info),
+            infoScrollWidth: info.scrollWidth,
+            infoClientWidth: info.clientWidth,
+            name: bounds(name),
+            nameScrollWidth: name.scrollWidth,
+            nameClientWidth: name.clientWidth,
+            email: bounds(email),
+            emailScrollWidth: email.scrollWidth,
+            emailClientWidth: email.clientWidth,
+            meta: bounds(meta)
+          };
+        });
+        expect(
+          memberLayout.documentWidth,
+          'la fila de miembro no debe crear overflow horizontal del documento'
+        ).toBeLessThanOrEqual(memberLayout.viewportWidth);
+        expect(
+          memberLayout.info.right,
+          'el nombre y correo deben permanecer dentro de la tarjeta'
+        ).toBeLessThanOrEqual(memberLayout.card.right);
+        expect(
+          memberLayout.infoScrollWidth,
+          'el contenido de nombre/correo no debe recortarse dentro de su columna'
+        ).toBeLessThanOrEqual(memberLayout.infoClientWidth);
+        expect(
+          memberLayout.name.right,
+          'el nombre debe permanecer dentro de la tarjeta'
+        ).toBeLessThanOrEqual(memberLayout.card.right);
+        expect(
+          memberLayout.nameScrollWidth,
+          'el nombre largo debe envolver sin recortarse'
+        ).toBeLessThanOrEqual(memberLayout.nameClientWidth);
+        expect(
+          memberLayout.emailScrollWidth,
+          'el correo debe envolver sin recortarse'
+        ).toBeLessThanOrEqual(memberLayout.emailClientWidth);
+        expect(
+          memberLayout.meta.right,
+          'las insignias de rol/nivel deben permanecer dentro de la tarjeta'
+        ).toBeLessThanOrEqual(memberLayout.card.right);
+
+        if (screenshotDirectory) {
+          mkdirSync(screenshotDirectory, { recursive: true });
+          await page.locator('.member-card__meta').scrollIntoViewIfNeeded();
+          await page.screenshot({
+            path: join(
+              screenshotDirectory,
+              `household-members-${language}-${viewport.width}x${viewport.height}.png`
+            )
+          });
+        }
+      }
+    }
+    await page.evaluate((language) => {
+      if (language === null) localStorage.removeItem('hogar:v1:language');
+      else localStorage.setItem('hogar:v1:language', language);
+    }, initialLanguage);
+    await page.reload();
+    await expect(page.locator('.invite-card')).toBeVisible();
   }
   await page.setViewportSize(initialViewport);
   await waitForStableView(page);
@@ -101,7 +189,6 @@ test('los iconos de compartir e invitación no forman parte del texto accesible'
     await page.locator('.toast__close').first().click();
   }
 
-  const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
   if (screenshotDirectory) {
     mkdirSync(screenshotDirectory, { recursive: true });
     await page.screenshot({ path: join(screenshotDirectory, 'household-members.png') });

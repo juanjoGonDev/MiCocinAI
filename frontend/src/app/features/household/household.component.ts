@@ -432,6 +432,7 @@ import type { TranslationKey } from '../../core/i18n';
 
       .member-card__info {
         flex: 1;
+        min-width: 0;
         display: flex;
         flex-direction: column;
       }
@@ -449,6 +450,23 @@ import type { TranslationKey } from '../../core/i18n';
       .member-card__meta {
         display: flex;
         gap: var(--space-2);
+      }
+
+      @media (max-width: 767px) {
+        .member-card {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .member-card__name,
+        .member-card__email {
+          overflow-wrap: anywhere;
+        }
+
+        .member-card__meta {
+          grid-column: 1 / -1;
+          flex-wrap: wrap;
+        }
       }
 
       /* Settings section */
