@@ -256,14 +256,18 @@ La misma pasada midió en `/account` `documentElement.scrollWidth=383` para un v
 
 **TDD/evidencia verde (2026-10-01):** antes del arreglo, la prueba unitaria del componente falló porque llamaba `openStream('lists')` en vez de `'tray'`. Se extrajo `shoppingStreamPath()` como única fuente tipada del contrato: `null → tray`, ID concreto → `lists/:id`; ambos casos pasan Karma **2/2** con cobertura focal **100/100/100/100 %**. La unidad de constructor verifica que la bandeja abre `'tray'` y cierra la suscripción al destruirse (**1/1**). `tests/e2e/full-stack/request-budget.spec.ts` con producción, rate limit activo, navegador real, usuario/lista sintéticos y SQLite/puerto efímeros verifica evento `ready`, status **200**, `text/event-stream`, carga útil, stream de detalle y ausencia de reintentos: **2/2 Chromium** y **2/2 Pixel 5**. `tsc -p tsconfig.e2e.json --noEmit` y build production pasan; build conserva warnings previos de presupuesto/imports sin uso. Sin captura visual nueva porque no cambia el diseño ni hay datos personales.
 
-### QA-ACCOUNT-RESP.1 · desbordamiento de Cuenta a 320 px (pendiente)
+### QA-ACCOUNT-RESP.1 · desbordamiento de Cuenta a 320 px (resuelta)
 
-**Fuente revalidada (2026-10-01):** `/account` monta `AccountComponent`; su `.account-page` declara padding `var(--space-4)` y max-width 720 px, los datos usan `.account__facts` con grid, y hay un breakpoint local a 560 px. El baseline real midió 63 px de overflow de documento a 320×568 tanto en escritorio Chromium redimensionado como Pixel 5. El rectángulo/nodo responsable aún no se ha identificado; no se atribuye a una regla CSS hasta inspeccionar la página.
+**Fuente revalidada (2026-10-01):** `/account` monta `AccountComponent`; `.account__tabs` era `display:flex` sin wrapping, y la hoja ya tiene breakpoint a 560 px. El baseline real midió 63 px de overflow de documento en 320×568; el nodo era el tercer `button.tab` (132 px, x=251…383), que desplaza el ancho de documento a 383 px. Capturas sintéticas anteriores a la corrección: `.e2e-screenshots/qa-account-responsive-20261001/baseline-desktop/account-1440x900.png` y `baseline-mobile/account-320x568.png`.
 
-- [ ] Añadir regresión Playwright que mida el elemento que rebasa los límites, ubicación/hit-testing y scrollWidth a 320×568; inspeccionar capturas sintéticas actuales antes de atribuir causa y reproducir el rojo.
-- [ ] Comprobar fichas `account`, `security` e `info`, textos largos sintéticos, tabs/inputs/acciones, teclado/foco y la transición por breakpoint 559/560/561 px; mantener la superficie dentro del viewport y legible sin cambiar la conducta de escritorio.
-- [ ] Aplicar el reflujo CSS mínimo después de la regresión; confirmar ausencia de overflow y controles completos en 320×568, 393×851, 559/560/561 y 1440×900.
-- [ ] Ejecutar Karma focal con ≥70 % de cobertura del alcance en cada métrica, Playwright real Chromium + Pixel 5, typecheck/build y capturas desktop/móvil inspeccionadas; no marcar resuelto ante errores no clasificados.
+- [x] Añadir regresión Playwright que mide `scrollWidth` y rectángulos reales, identifica el último tab y reproduce el rojo en Chromium/Pixel 5 a 320×568.
+- [x] Comprobar las pestañas `account`, `security` e `info`, nombre de 100 caracteres sin guardar, activación por Enter/foco y scrollWidth en 320×568, 393×851, 559/560/561 px y orientaciones 568×320/844×390.
+- [x] Aplicar `flex-wrap: wrap` solo dentro del breakpoint móvil existente (≤560 px); las pestañas quedan dentro del viewport y la fila de 1440 px no cambia.
+- [x] Verificar los E2E reales con Chromium y Pixel 5 (**1/1 cada uno**), typecheck/build y capturas sintéticas desktop/móvil inspeccionadas. Es una corrección CSS pura, sin nuevas sentencias/ramas/funciones TypeScript; coverage de lógica nueva no aplica y no se alteraron los gates.
+
+**TDD rojo (2026-10-01):** E2E aislado en producción mostró `document.scrollWidth=383` en viewport320 y registró `button.tab` a x=251…383; la captura móvil deja «Información» recortada. El mismo nodo/overflow se reprodujo en Chromium de escritorio y Pixel 5. No se escribieron datos fuera de la SQLite sintética.
+
+**Evidencia verde:** `account-responsive.spec.ts` recorre 21 combinaciones de viewport/estado por proyecto; ambas ejecuciones dan **1/1** y cero errores `pageerror`. Playwright full-stack con `E2E_RATE_LIMIT=on`, SQLite y puerto efímeros; build production y `tsc -p tsconfig.e2e.json --noEmit` pasan. Capturas finales inspeccionadas: `.e2e-screenshots/qa-account-responsive-20261001/final-desktop/account-1440x900.png` y `final-mobile/account-320x568.png`; el tab se mueve a una segunda fila en 320 px y no se corta. No hubo cambios de HTML/comportamiento ni datos personales.
 
 ## Unidad QA-PANTRY.1 · alta manual accesible en móvil (resuelta)
 

@@ -634,6 +634,9 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
       }
 
       @media (max-width: 560px) {
+        .account__tabs {
+          flex-wrap: wrap;
+        }
         .account__fact {
           grid-template-columns: 1fr;
           gap: 2px;
