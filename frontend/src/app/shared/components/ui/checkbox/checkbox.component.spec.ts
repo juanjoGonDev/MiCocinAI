@@ -1,15 +1,17 @@
 import { Component } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { CheckboxComponent } from './checkbox.component';
 
 @Component({
   standalone: true,
   imports: [CheckboxComponent],
-  template: `<app-checkbox label="Todo el dia" [checked]="on" [disabled]="disabled" (checkedChange)="on = $event" />`
+  template: `<app-checkbox label="Todo el dia" [checked]="on" [disabled]="disabled" (checkedChange)="on = $event" (onChange)="changes.push($event)" />`
 })
 class HostComponent {
   on = false;
   disabled = false;
+  changes: boolean[] = [];
 }
 
 describe('CheckboxComponent', () => {
@@ -32,15 +34,24 @@ describe('CheckboxComponent', () => {
   it('cambia y avisa al padre', () => {
     button().click();
     fixture.detectChanges();
+    button().click();
+    fixture.detectChanges();
 
-    expect(fixture.componentInstance.on).toBeTrue();
-    expect(button().getAttribute('aria-checked')).toBe('true');
+    expect(fixture.componentInstance.on).toBeFalse();
+    expect(button().getAttribute('aria-checked')).toBe('false');
+    expect(fixture.componentInstance.changes).toEqual([true, false]);
   });
 
   it('inhabilitada no cambia', () => {
     fixture.componentInstance.disabled = true;
     fixture.detectChanges();
     button().click();
+    fixture.debugElement.query(By.directive(CheckboxComponent)).componentInstance.toggle();
+    fixture.detectChanges();
+
     expect(fixture.componentInstance.on).toBeFalse();
+    expect(fixture.componentInstance.changes).toEqual([]);
+    expect(button().disabled).toBeTrue();
+    expect(button().getAttribute('aria-checked')).toBe('false');
   });
 });

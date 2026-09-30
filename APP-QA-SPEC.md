@@ -238,14 +238,16 @@ Evidencia QA-04c.9: E2E de bandeja y selector miden root `scrollWidth ≤ client
 
 ### QA-04b · hit area táctil de `app-checkbox`
 
-**Discrepancia revalidada:** `HOGARIA-SPEC.md` §8f exige un área de toque de 40 px, pero `checkbox.component.ts` establece `min-height: 36px`. El test unitario actual no mide el tamaño real y, además, lee `aria-checked` antes de ejecutar change detection.
+**Hallazgo reproducido y causa:** la línea base de `checkbox.component.ts` declaraba `min-height: 36px` y no fijaba el ancho; el E2E aislado midió el control real antes del cambio por debajo del mínimo interno. Tras subir el CSS a 44×44, la primera medición encontró 42.49 px durante la animación `scaleIn` del modal; el test espera ahora a que finalicen las animaciones y mide el rectángulo estable.
 
 **Criterio de aceptación:** el contrato de producto pide ≥40 px, mientras que `AGENTS.md` fija ≥44×44 px para objetivos táctiles; se aplicará el criterio interno más estricto, midiendo el rectángulo real del botón en navegador (no solo su CSS declarado), sin cambiar nombre accesible ni semántica.
 
-- [ ] Añadir primero una regresión que mida el rectángulo real de `button[role=checkbox]` en Chromium escritorio/móvil; probar `disabled`, nombre/estado accesible y teclado/foco sin cambiar semántica.
-- [ ] Corregir el tamaño mínimo con el cambio CSS más pequeño; demostrar un objetivo ≥44×44 px en la instancia real de Calendario en escritorio y móvil estrecho, sin overflow ni solapamiento.
-- [ ] Ejecutar unit tests y Playwright real para el formulario/event sheet afectado; capturar PC y móvil con fixtures sintéticos e inspeccionar las imágenes.
-- [ ] Registrar porcentajes de statements, ramas, funciones y líneas del alcance (cada uno ≥70 %), manteniendo los gates configurados.
+- [x] Añadir regresión que mide el rectángulo real de `button[role=checkbox]` en Chromium escritorio y Pixel 5 móvil; la unidad comprueba disabled/outputs y la E2E nombre, `aria-checked`, foco, Space y Enter sin cambiar semántica.
+- [x] Corregir el tamaño mínimo con CSS `min-width`/`min-height: 44px`; Calendario alcanza ≥44×44 px en navegador a 1440×900, 393×851 y 320×568, sin overflow horizontal ni solapamiento visible en capturas inspeccionadas.
+- [x] Ejecutar Karma (3/3), Playwright real (Chromium 1/1; Pixel 5 2/2) para abrir, operar y cancelar el formulario; capturas sintéticas PC/móvil conservadas bajo `.e2e-screenshots/calendar-checkbox-final/` e inspeccionadas.
+- [x] Cobertura del alcance `checkbox.component.ts`: 100 % statements, ramas, funciones y líneas; gate configurado del 80 % intacto. La ejecución focalizada excluyó únicamente `ui/icon/**`, dependencia fuera del alcance, para medir este componente.
+
+Evidencia QA-04b (2026-09-30): Playwright aislado con `E2E_RATE_LIMIT=on`, proyecto `chromium` (1/1) y `mobile-chrome` Pixel 5 (2/2), cada ejecución con puerto y SQLite únicos bajo `%TEMP%`; no se usó el servidor/base de datos normal. Karma focalizada con Chrome Headless 154 y umbral configurado sin cambios: 3/3; cobertura de `checkbox.component.ts` 100/100/100/100. Build de producción ya completado para servir la compilación actual; `tsc -p tsconfig.e2e.json --noEmit` y `git diff --check` pasan. Capturas: `calendar-checkbox-desktop-1440x900.png`, `calendar-checkbox-mobile-393x851.png` y `calendar-checkbox-mobile-320x568.png`.
 
 **Hallazgos QA-04 resueltos:** las credenciales de sesión heredadas no se limpiaban al hacer logout, el observable de AuthService dejaba salir wrappers `{data:...}`, y `ModulesService.apply()` no liberaba `isSaving` al recibir `error`. Los demás fallos basales eran mocks/expectativas obsoletas. El test de Settings confirma rollback, desbloqueo y reintento por teclado en tamaños desktop y móvil; aún queda revisar visualmente el toast de error en el flujo móvil porque la captura full-page lo muestra sobre la barra fija de navegación, sin clasificarlo todavía como defecto reproducible en viewport.
 
@@ -326,7 +328,7 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 ## Siguiente unidad de trabajo
 
 1. QA-04a: completada con suite `488/488`, regresiones de servicio y Playwright Chromium/Pixel `2/2` por proyecto; el gate de coverage sigue abierto en QA-04c.
-2. QA-04b: reproducir/corregir y validar con Playwright el tamaño táctil del checkbox; aclarar el posible solapamiento visual del toast de error en móvil.
+2. QA-04b checkbox: completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
 3. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote.
 4. Corregir la configuración permanente de Playwright full-stack: su `DATABASE_PATH` sigue comentado; conservar aislamiento del servidor/DB de uso normal.
 5. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
