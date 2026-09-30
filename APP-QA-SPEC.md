@@ -190,6 +190,15 @@ La revalidación de `shopping-round6.spec.ts` en Pixel 5 pasó 11/12. En «Descu
 - [ ] Validar que Guardar recibe el click en móvil y mantener teclado/Escape/outside-click.
 - [ ] Corregir el flujo más pequeño, comprobar PC y móvil, incluidos 393×851 y 320×568, capturas y ausencia de errores de consola/red.
 
+### QA-04c.7 · filtro del selector no reacciona al texto escrito
+
+Al ampliar las pruebas del control compartido, una regresión unitaria real detectó que `filtered` es un `computed` que lee `query` como propiedad ordinaria. El `ngModel` actual modifica el texto visible, pero no invalida el valor memoizado: al buscar por pista o valor el listado completo sigue presente y Enter elige la primera opción en vez de la escrita. Esto afecta a los pickers con buscador (p. ej. unidades/catálogos) aunque el selector de porcentaje no muestre campo por su `filterFrom` alto.
+
+- [x] Escribir unit de búsqueda por valor, pista, texto libre y Enter exacto; Karma enfocada da 7 SUCCESS / 1 FAILED: `filtered()` devuelve las 4 opciones tras teclear `Fresco` y, ante texto desconocido, Enter elige `10`.
+- [ ] Convertir la consulta en estado reactivo sin perder filtro por label/value/hint, exact-match, custom, vacíos ni reset/foco al abrir/cerrar.
+- [ ] Añadir E2E real en la pantalla que usa el picker con buscador y opciones suficientes; probar resultado, cero coincidencias, texto custom, flechas/Enter/Escape y PC/móvil.
+- [ ] Ejecutar pruebas unitarias focalizadas, cobertura del picker ≥70 % en sus cuatro métricas, build y E2E responsive; capturar/inspeccionar PC y móvil.
+
 ### QA-04b · hit area táctil de `app-checkbox`
 
 **Discrepancia revalidada:** `HOGARIA-SPEC.md` §8f exige un área de toque de 40 px, pero `checkbox.component.ts` establece `min-height: 36px`. El test unitario actual no mide el tamaño real y, además, lee `aria-checked` antes de ejecutar change detection.
