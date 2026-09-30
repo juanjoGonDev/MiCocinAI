@@ -178,6 +178,7 @@ Revalidación incremental tras un primer reflujo CSS: el hit-test del botón ya 
 - [ ] Refluir la lista de sugerencias dentro del flujo del formulario móvil (o una solución visual equivalente) para que no tape acciones; preservar toque a sugerencia, flechas/Enter/Escape, foco del combobox y entrada libre.
 - [ ] E2E del quick-add en mobile: seleccionar sugerencia actualiza el valor y crea la línea esperada; entrada libre/cantidad se puede añadir con botón/teclado; ninguna sugerencia accidental se selecciona, sin scroll horizontal.
 - [ ] Repetir 393×851 y 320×568 y los 11 casos Pixel 5 completos; inspeccionar capturas antes/después y asegurar que escritorio no cambia.
+- [ ] Probar `tap()` táctil real sobre Añadir con sugerencias abiertas en ambos anchos (la prueba actual usa `.click()` para ese botón); verificar una sola alta y que no se seleccione la sugerencia por accidente.
 
 ### QA-04c.6 · selector de descuento bloquea Guardar en hoja móvil
 
