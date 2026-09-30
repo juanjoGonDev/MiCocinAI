@@ -28,7 +28,7 @@ Prioridades: corrección > seguridad/datos > mantenimiento > simplicidad > UX. T
 
 - Haz commits atómicos por unidad de checklist, con pruebas y docs que expliquen esa unidad. Usa mensaje Conventional Commit y deja un rollback claro.
 - Corre hooks de commit y push. Nunca uses `--no-verify` ni otro bypass. Si falla un hook de push sobre un commit aún local, corrige la causa y amenda ese commit antes de reintentar; no reescribas historia ya publicada: crea otro commit.
-- Mantén el PR en Draft durante el trabajo, enlaza evidencia/checklist y no lo marques listo hasta que gates y pruebas estén verdes. Respeta el límite de PR del usuario y divide por unidades revisables.
+- Mantén cada PR en Draft durante el trabajo, enlaza evidencia/checklist y no lo marques listo hasta que gates y pruebas estén verdes. No impongas un límite predeterminado de PR: separa el trabajo en unidades revisables y sigue cualquier límite explícito que indique el usuario.
 - Usa subagentes en paralelo cuando aporte valor, con tareas delimitadas y sin editar los mismos archivos. Considera worktrees paralelos si reducen espera sin elevar el coste de RAM; integra sus cambios en la rama/worktree inicial, verifica el resultado conjunto y elimina worktrees temporales ya integrados.
 - Informa al usuario de forma simple y periódica: en qué trabajas, qué validaste, capturas PC/móvil cuando corresponda y bloqueos reales.
 
