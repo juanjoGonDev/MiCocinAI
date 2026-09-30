@@ -84,7 +84,9 @@ describe('IconComponent', () => {
       'kitchen',
       'smart_toy',
       'calendar_today',
-      'event_note'
+      'event_note',
+      'star',
+      'star_outline'
     ]) {
       expect(hasIcon(name)).withContext(name).toBe(true);
     }

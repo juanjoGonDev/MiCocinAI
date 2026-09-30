@@ -14,6 +14,7 @@
 // =============================================================================
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, posix } from 'node:path';
+import { findEmojiViolations } from './check-ui-emoji.mjs';
 
 const FRONTEND = 'frontend/src';
 const UI_DIR = 'frontend/src/app/shared/components/ui';
@@ -39,18 +40,6 @@ const LEGACY = {
   // (sustituir / quitar) y su boton de cancelar, y quitar la foto se deshace volviendo a subirla. Un
   // confirm dentro de un dialogo que ya es una confirmacion es preguntar dos veces por lo mismo.
   'sin-confirmar-borrado': ['frontend/src/app/features/account/account.component.ts'],
-  'sin-emoji': [
-    // La deuda de emoji va detras de la clave: al migrar la plantilla al diccionario se llevaban los
-    // pictogramas consigo, asi que los ficheros que estaban aqui perdonados ahora lo estan ahi dentro.
-    'frontend/src/app/core/i18n/dict/onboarding.ts',
-    'frontend/src/app/core/i18n/dict/pantry.ts',
-    'frontend/src/app/core/i18n/dict/recipes.ts',
-    'frontend/src/app/features/pantry/pantry.component.ts',
-    'frontend/src/app/features/recipes/recipes.component.ts',
-    'frontend/src/app/shared/components/ui/modal/modal.component.ts',
-    'frontend/src/app/shared/components/ui/rating/rating.component.ts',
-    'frontend/src/app/shared/models/taste-profile.ts'
-  ],
   'ui-sin-uso': [
     'frontend/src/app/shared/components/ui/card/card.component.ts',
     'frontend/src/app/shared/components/ui/dropdown/dropdown.component.ts',
@@ -114,18 +103,15 @@ const lineOf = (text, index) => text.slice(0, index).split('\n').length;
 // necesita el nombre del producto. El rango esta elegido a mano para NO cazar la
 // puntuacion latina de siempre: «», ·, —, ✓ y ° siguen siendo bienvenidas.
 // ---------------------------------------------------------------------------
-const EMOJI =
-  /[\u{1F000}-\u{1FAFF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{1F3FB}-\u{1F3FF}]/u;
-
 for (const file of sourceFiles) {
   const text = readFileSync(file, 'utf8');
-  for (const match of text.matchAll(new RegExp(EMOJI, 'gu'))) {
+  for (const violation of findEmojiViolations(file, text)) {
     const snippet = text
-      .slice(Math.max(0, match.index - 40), match.index + 40)
+      .slice(Math.max(0, violation.index - 40), violation.index + 40)
       .replace(/\s+/g, ' ')
       .trim();
     // Un emoji DENTRO de un comentario tampoco vale: manana alguien lo copia.
-    fail(file, lineOf(text, match.index), 'sin-emoji', `"${match[0]}" en: ${snippet}`);
+    fail(file, lineOf(text, violation.index), 'sin-emoji', `"${violation.emoji}" en: ${snippet}`);
   }
 }
 

@@ -41,9 +41,13 @@ test('Recipe and Pantry decorative icons are SVG while food and recipe content s
 
     await page.getByRole('button', { name: /Utensilios/ }).click();
     await expect(page.locator('[data-test="utensilios-tabla"]')).toBeVisible();
+    const customUtensilTitle = page.locator('.utensils-add__title');
+    await expect(customUtensilTitle.locator('app-icon')).toBeVisible();
+    expect(DECORATIVE_EMOJI.test(await customUtensilTitle.innerText())).toBe(false);
     await page.locator('.pantry__header-acciones app-button').last().locator('button').click();
     const utensilCategory = page.locator('#utensilCategory');
     await expect(utensilCategory).toBeVisible();
+    await expect(page.locator('.modal__close app-icon svg')).toBeVisible();
     await waitForStableView(page);
     const utensilOptions = await utensilCategory.locator('option').allTextContents();
     expect(utensilOptions.every((label) => !DECORATIVE_EMOJI.test(label))).toBe(true);
@@ -55,6 +59,16 @@ test('Recipe and Pantry decorative icons are SVG while food and recipe content s
     await page.screenshot({
       path: join(screenshotDirectory, 'pantry-utensil-category-mobile.png')
     });
+    await page.locator('.modal__close').click();
+
+    await page.getByRole('button', { name: /Ingredientes/ }).click();
+    await page.locator('.pantry__header-acciones app-button').last().locator('button').click();
+    await expect(page.locator('[data-test="pantry-picker-ubicacion"]')).toBeVisible();
+    await page.locator('[data-test="pantry-picker-ubicacion"] .picker__trigger').click();
+    const locationOptions = await page.locator('[role="option"]').allTextContents();
+    expect(locationOptions).toContain('Nevera');
+    expect(locationOptions).toContain('Congelador');
+    expect(locationOptions.every((label) => !DECORATIVE_EMOJI.test(label))).toBe(true);
     await page.locator('.modal__close').click();
 
     await page.goto('/recipes');
@@ -104,6 +118,7 @@ test('Recipe and Pantry decorative icons are SVG while food and recipe content s
 
     await card.locator('.recipe-card__name').click();
     await expect(page.getByRole('dialog')).toBeVisible();
+    await expect(page.locator('.modal__close app-icon svg')).toBeVisible();
     const tip = page.locator('.step-card__tip');
     const warning = page.locator('.step-card__warning');
     await expect(tip).toContainText('Consejo QA: remueve suavemente.');

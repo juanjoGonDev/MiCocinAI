@@ -557,7 +557,10 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
           }
 
           <div class="utensils-add">
-            <h3 class="utensils-add__title">{{ 'pantry.no_encuentras_un_utensilio' | t }}</h3>
+            <h3 class="utensils-add__title">
+              <app-icon name="add" [size]="18" [label]="null" />
+              <span>{{ 'pantry.no_encuentras_un_utensilio' | t }}</span>
+            </h3>
             <p class="utensils-add__hint">
               {{ 'pantry.anade_los_que_no' | t }}
             </p>
@@ -1271,6 +1274,9 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
         padding: var(--space-4);
       }
       .utensils-add__title {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
         font-family: var(--font-display);
         font-size: var(--text-base);
         font-weight: var(--font-semibold);
@@ -2146,15 +2152,6 @@ export class PantryComponent implements OnInit {
       });
   }
 
-  getLocationIcon(location: string): string {
-    const icons: Record<string, string> = {
-      fridge: '🧊',
-      freezer: '❄️',
-      pantry: '📦',
-      counter: '🍳'
-    };
-    return icons[location] || '📦';
-  }
   /**
    * Dias de calendario, no milisegundos: con `Math.ceil` sobre el instante, a las 23:00 del dia
    * de la caducidad el yogur ya estaba «caducado» una noche antes de estarlo.

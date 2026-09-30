@@ -113,6 +113,16 @@ describe('ModalComponent', () => {
     expect(closeBtn).toBeTruthy();
   });
 
+  it('uses the local SVG icon for the named close action', () => {
+    fixture.componentRef.setInput('isOpen', true);
+    fixture.detectChanges();
+
+    const closeButton = fixture.nativeElement.querySelector('.modal__close') as HTMLButtonElement;
+    expect(closeButton.getAttribute('aria-label')).toBeTruthy();
+    expect(closeButton.querySelector('app-icon svg')).toBeTruthy();
+    expect(closeButton.textContent?.trim()).toBe('');
+  });
+
   it('should not show close button when not closable', () => {
     component.isOpen = true;
     component.closable = false;

@@ -12,6 +12,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
+import { IconComponent } from '../icon/icon.component';
 
 export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 
@@ -21,7 +22,7 @@ const FOCUSABLE_SELECTOR =
 @Component({
   selector: 'app-modal',
   standalone: true,
-  imports: [TranslatePipe, CommonModule],
+  imports: [TranslatePipe, CommonModule, IconComponent],
   template: `
     <div *ngIf="isOpen" class="modal-overlay" (click)="onOverlayClick($event)">
       <div
@@ -40,7 +41,7 @@ const FOCUSABLE_SELECTOR =
             (click)="close()"
             [attr.aria-label]="'ui.close' | t"
           >
-            ✕
+            <app-icon name="close" [size]="18" [label]="null" />
           </button>
         </div>
 
@@ -127,7 +128,6 @@ const FOCUSABLE_SELECTOR =
         color: var(--text-tertiary);
         cursor: pointer;
         transition: var(--transition-fast);
-        font-size: var(--text-lg);
 
         &:hover {
           background: var(--bg-tertiary);
