@@ -241,7 +241,7 @@ Capturas sintéticas inspeccionadas: PC ticket `.e2e-screenshots/qa-verify-20261
 - [ ] Capturar e inspeccionar baseline sintético autenticado PC 1440×900 y móvil 320×568; guardar los artefactos ignorados por Git y verificar que no contienen PII, tokens ni secretos.
 - [ ] Typecheck/build y Playwright real pasan con al menos un flujo autenticado que escribe solo en la SQLite temporal; registrar fallos previos/ambientales por separado y mantener abiertas las suites de acciones detalladas.
 
-**Primera pasada roja (2026-10-01, QA-BASE sin cerrar):** `tests/e2e/route-baseline.spec.ts` recorrió 28 rutas en 5 viewports en Chromium escritorio y Pixel 5 (140 mediciones por proyecto), con usuario sintético y runner/SQLite aislados. En ambas ejecuciones hubo 0 `pageerror`, 0 componentes ausentes y 0 errores de navegación; el navegador generó 40/42 mensajes genéricos de recurso 404, mayormente duplicados de IDs inválidos intencionados que todavía no están clasificados. Se confirmó además un 404 **no esperado** en `/shopping`: `GET /api/shopping/stream/lists`. La vista llama `openStream('lists')`; el servicio añade `/stream/${path}` y el backend solo registra `/stream/tray` para la bandeja y `/stream/lists/:listId` para una lista concreta. No se ha cambiado producción; pasa a la unidad QA-SHOP-LIVE.1.
+**Primera pasada roja pre-fix (2026-10-01, QA-BASE sin cerrar):** `tests/e2e/route-baseline.spec.ts` recorrió 28 rutas en 5 viewports en Chromium escritorio y Pixel 5 (140 mediciones por proyecto), con usuario sintético y runner/SQLite aislados. En ambas ejecuciones hubo 0 `pageerror`, 0 componentes ausentes y 0 errores de navegación; el navegador generó 40/42 mensajes genéricos de recurso 404, mayormente duplicados de IDs inválidos intencionados que todavía no están clasificados. Se confirmó además un 404 **no esperado** en `/shopping`: `GET /api/shopping/stream/lists`. La vista llamaba `openStream('lists')`; el servicio añade `/stream/${path}` y el backend solo registra `/stream/tray` para la bandeja y `/stream/lists/:listId` para una lista concreta. Este hallazgo motivó QA-SHOP-LIVE.1, resuelta abajo; QA-BASE debe repetirse con el endpoint corregido.
 
 La misma pasada midió en `/account` `documentElement.scrollWidth=383` para un viewport de 320 px (63 px de desbordamiento) en ambos proyectos. Se aislará el nodo/causa en la captura y pasa a QA-ACCOUNT-RESP.1. En Pixel 5 hubo una solicitud dev-only `GET /@ng/component` fallida con `ERR_NO_BUFFER_SPACE`, que requiere repetición en un stack de producción antes de clasificarla; 142 fallos a `fonts.googleapis.com` son limitación de red externa y no errores del origen de la app. El primer harness confundía los 404 genéricos del navegador con errores de consola, usaba la ruta activa al completar requests asíncronas y guardaba URLs completas (incluida la query SSE); antes de cerrar el baseline se corregirá la clasificación/atribución y se eliminarán query/hash/userinfo de toda evidencia.
 
@@ -249,10 +249,12 @@ La misma pasada midió en `/account` `documentElement.scrollWidth=383` para un v
 
 **Fuente revalidada (2026-10-01):** `ShoppingListsComponent` se suscribe a `openStream('lists')`; `ShoppingService.openStream()` concatena `/api/shopping/stream/${path}` y el servidor ofrece `/api/shopping/stream/tray` para la bandeja y `/api/shopping/stream/lists/:listId` para un detalle. La pasada real de rutas autenticadas recibió 404 al pedir `/api/shopping/stream/lists`; el callback de refresco de cambios remotos no puede recibir `ready`/`change` desde esa URL.
 
-- [ ] Añadir primero una prueba unitaria del endpoint del stream de bandeja y conservar el endpoint de stream de detalle; cubrir ruta, cierre y payload/error sin introducir el token en logs.
-- [ ] Añadir regresión Playwright con usuario/lista sintéticos en SQLite temporal: abrir `/shopping`, recibir `ready` desde `/stream/tray`, confirmar status/content-type correcto, cero 404/reintentos del stream de bandeja y cleanup del stream al navegar fuera.
-- [ ] Corregir solo el destino de la suscripción de la bandeja, sin alterar el stream por lista; incluir fallos, redirección/cancelación y repetición relevantes.
-- [ ] Cobertura de la lógica nueva ≥70 % en statements, branches, functions y lines sin bajar gates; ejecutar tests focales, Playwright Chromium + Pixel 5, typecheck/build y registrar limitaciones.
+- [x] Añadir primero pruebas unitarias de ruta de bandeja/detalle; el componente también demuestra que destruye la suscripción. El E2E recoge solo `pathname` y nunca inspecciona ni registra la query SSE.
+- [x] Añadir regresión Playwright con usuario/lista sintéticos en SQLite temporal: abrir `/shopping`, recibir `ready` desde `/stream/tray`, confirmar status/content-type correcto y payload, validar `/stream/lists/:id` en el detalle y no observar reintentos tras navegación.
+- [x] Corregir solo el destino de la bandeja, preservando el endpoint concreto del detalle; tipar los dos destinos válidos en `ShoppingService` para impedir que vuelva a compilar `/stream/lists` sin `:id`.
+- [x] Coverage del helper nuevo 100/100/100/100 % (statements/branches/functions/lines), mantener los gates y ejecutar Karma, Playwright Chromium + Pixel 5, typecheck/build.
+
+**TDD/evidencia verde (2026-10-01):** antes del arreglo, la prueba unitaria del componente falló porque llamaba `openStream('lists')` en vez de `'tray'`. Se extrajo `shoppingStreamPath()` como única fuente tipada del contrato: `null → tray`, ID concreto → `lists/:id`; ambos casos pasan Karma **2/2** con cobertura focal **100/100/100/100 %**. La unidad de constructor verifica que la bandeja abre `'tray'` y cierra la suscripción al destruirse (**1/1**). `tests/e2e/full-stack/request-budget.spec.ts` con producción, rate limit activo, navegador real, usuario/lista sintéticos y SQLite/puerto efímeros verifica evento `ready`, status **200**, `text/event-stream`, carga útil, stream de detalle y ausencia de reintentos: **2/2 Chromium** y **2/2 Pixel 5**. `tsc -p tsconfig.e2e.json --noEmit` y build production pasan; build conserva warnings previos de presupuesto/imports sin uso. Sin captura visual nueva porque no cambia el diseño ni hay datos personales.
 
 ### QA-ACCOUNT-RESP.1 · desbordamiento de Cuenta a 320 px (pendiente)
 
@@ -652,11 +654,10 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Corregir y revalidar QA-SHOP-LIVE.1: la bandeja solicita actualmente el endpoint SSE inexistente `/api/shopping/stream/lists`.
-2. Corregir y revalidar QA-ACCOUNT-RESP.1: aislar el nodo que hace overflow de 63 px en `/account` a 320 px antes de tocar estilos.
-3. Completar QA-BASE.1 sobre runner/SQLite efímeros, con manifest y telemetría de consola/red sanitizada; no inferir cobertura funcional del conteo de specs.
-4. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock, marcando unidades solo con ejecución real.
-5. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. QA-04a se completó con suite `488/488` y regresiones de servicio.
-6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-7. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-8. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas en QA-04c.11 y QA-PANTRY.1; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
+1. Corregir y revalidar QA-ACCOUNT-RESP.1: aislar el nodo que hace overflow de 63 px en `/account` a 320 px antes de tocar estilos.
+2. Completar QA-BASE.1 sobre runner/SQLite efímeros, con manifest y telemetría de consola/red sanitizada; no inferir cobertura funcional del conteo de specs.
+3. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock, marcando unidades solo con ejecución real.
+4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. QA-04a se completó con suite `488/488` y regresiones de servicio.
+5. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+6. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+7. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas en QA-04c.11 y QA-PANTRY.1; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.

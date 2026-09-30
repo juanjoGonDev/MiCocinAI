@@ -3,9 +3,15 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ShoppingService } from '../../core/services/shopping.service';
+import { shoppingStreamPath } from '../../core/services/shopping-stream-path';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ToastService } from '../../core/services/toast.service';
-import { formatMoney, ListsQuery, ListsSort, ShoppingList } from '../../shared/models/shopping.model';
+import {
+  formatMoney,
+  ListsQuery,
+  ListsSort,
+  ShoppingList
+} from '../../shared/models/shopping.model';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
@@ -28,7 +34,11 @@ const SORTS: readonly ListsSort[] = ['updated', 'name', 'total', 'lines'];
  */
 const MIN_TOTALS: { value: string; labelKey: TranslationKey; hintKey?: TranslationKey }[] = [
   { value: '', labelKey: 'shopping_lists.total_cualquier' },
-  { value: '1000', labelKey: 'shopping_lists.total_10', hintKey: 'shopping_lists.total_cestas_medias' },
+  {
+    value: '1000',
+    labelKey: 'shopping_lists.total_10',
+    hintKey: 'shopping_lists.total_cestas_medias'
+  },
   { value: '2500', labelKey: 'shopping_lists.total_25' },
   { value: '5000', labelKey: 'shopping_lists.total_50' },
   { value: '10000', labelKey: 'shopping_lists.total_100' }
@@ -57,8 +67,14 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
   standalone: true,
   imports: [
     TranslatePipe,
-    CommonModule, FormsModule, IconComponent, IconButtonComponent, PickerComponent, AvatarComponent,
-    ShoppingSuggestedComponent],
+    CommonModule,
+    FormsModule,
+    IconComponent,
+    IconButtonComponent,
+    PickerComponent,
+    AvatarComponent,
+    ShoppingSuggestedComponent
+  ],
   template: `
     <div class="tray">
       <header class="tray__head">
@@ -67,7 +83,14 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
           <p class="tray__subtitle">{{ 'shopping_lists.cesta_por_tienda_precio' | t }}</p>
         </div>
         <div class="tray__head-actions">
-          <app-icon-button icon="refresh" [label]="'shopping_lists.actualizar' | t" size="sm" variant="ghost" [spin]="refreshing()" (onClick)="refresh()" />
+          <app-icon-button
+            icon="refresh"
+            [label]="'shopping_lists.actualizar' | t"
+            size="sm"
+            variant="ghost"
+            [spin]="refreshing()"
+            (onClick)="refresh()"
+          />
           <app-icon-button
             [icon]="creating() ? 'close' : 'add'"
             [label]="creating() ? ('common.cancel' | t) : ('shopping_lists.nueva_lista' | t)"
@@ -76,9 +99,16 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
             (onClick)="creating.set(!creating())"
             data-test="new-list"
           />
-          <button type="button" class="tray__new" (click)="creating.set(!creating())" data-test="new-list-text">
+          <button
+            type="button"
+            class="tray__new"
+            (click)="creating.set(!creating())"
+            data-test="new-list-text"
+          >
             <app-icon [name]="creating() ? 'close' : 'add'" [size]="18" [label]="null" />
-            <span>{{ creating() ? ('common.cancel' | t) : ('shopping_lists.nueva_lista' | t) }}</span>
+            <span>{{
+              creating() ? ('common.cancel' | t) : ('shopping_lists.nueva_lista' | t)
+            }}</span>
           </button>
         </div>
       </header>
@@ -119,8 +149,15 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
             }
           </datalist>
           <div class="tray__create-actions">
-            <button type="button" class="tray__ghost" (click)="cancelCreate()">{{ 'common.cancel' | t }}</button>
-            <button type="submit" class="tray__primary" data-test="create-submit" [disabled]="!draftName.trim() || busy()">
+            <button type="button" class="tray__ghost" (click)="cancelCreate()">
+              {{ 'common.cancel' | t }}
+            </button>
+            <button
+              type="submit"
+              class="tray__primary"
+              data-test="create-submit"
+              [disabled]="!draftName.trim() || busy()"
+            >
               {{ busy() ? ('shopping_lists.creando' | t) : ('shopping_lists.crear_y_abrir' | t) }}
             </button>
           </div>
@@ -145,7 +182,11 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
           type="button"
           class="tray__filter-toggle"
           [class.tray__filter-toggle--on]="filtersOpen() || activeFilters() > 0"
-          [attr.aria-label]="activeFilters() > 0 ? ('shopping_lists.filtros' | t) + ': ' + activeFilters() : ('shopping_lists.filtros' | t)"
+          [attr.aria-label]="
+            activeFilters() > 0
+              ? ('shopping_lists.filtros' | t) + ': ' + activeFilters()
+              : ('shopping_lists.filtros' | t)
+          "
           [attr.aria-expanded]="filtersOpen()"
           (click)="filtersOpen.set(!filtersOpen())"
           aria-controls="tray-filters"
@@ -171,7 +212,12 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
               data-test="tray-search"
             />
             @if (queryDraft) {
-              <button type="button" class="tray__clear" (click)="clearSearch()" [attr.aria-label]="'shopping_lists.quitar_la_busqueda' | t">
+              <button
+                type="button"
+                class="tray__clear"
+                (click)="clearSearch()"
+                [attr.aria-label]="'shopping_lists.quitar_la_busqueda' | t"
+              >
                 <app-icon name="close" [size]="16" [label]="null" />
               </button>
             }
@@ -194,17 +240,29 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
             />
             <label class="tray__field">
               <span>{{ 'calendar.desde' | t }}</span>
-              <input type="date" name="trayFrom" [ngModel]="from()" (ngModelChange)="setFrom($event)" max="{{ to() || '' }}" />
+              <input
+                type="date"
+                name="trayFrom"
+                [ngModel]="from()"
+                (ngModelChange)="setFrom($event)"
+                max="{{ to() || '' }}"
+              />
             </label>
             <label class="tray__field">
               <span>{{ 'calendar.hasta' | t }}</span>
-              <input type="date" name="trayTo" [ngModel]="to()" (ngModelChange)="setTo($event)" min="{{ from() || '' }}" />
+              <input
+                type="date"
+                name="trayTo"
+                [ngModel]="to()"
+                (ngModelChange)="setTo($event)"
+                min="{{ from() || '' }}"
+              />
             </label>
           </div>
           @if (activeFilters() > 0) {
             <button type="button" class="tray__ghost" (click)="clearFilters()">
               <app-icon name="delete_sweep" [size]="16" [label]="null" />
-              {{ 'shopping_lists.quitar_los_filtros' | t:{n: activeFilters()} }}
+              {{ 'shopping_lists.quitar_los_filtros' | t: { n: activeFilters() } }}
             </button>
           }
         </section>
@@ -228,13 +286,21 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
           <h2 class="tray__empty-title">{{ emptyTitle() }}</h2>
           <p class="tray__empty-text">{{ emptyText() }}</p>
           @if (activeFilters() > 0) {
-            <button type="button" class="tray__ghost" (click)="clearFilters()">{{ 'shopping_lists.quitar_los_filtros_2' | t }}</button>
+            <button type="button" class="tray__ghost" (click)="clearFilters()">
+              {{ 'shopping_lists.quitar_los_filtros_2' | t }}
+            </button>
           } @else if (status() === 'active') {
-            <button type="button" class="tray__primary" (click)="creating.set(true)">{{ 'shopping_lists.empezar_una_lista' | t }}</button>
+            <button type="button" class="tray__primary" (click)="creating.set(true)">
+              {{ 'shopping_lists.empezar_una_lista' | t }}
+            </button>
           }
         </section>
       } @else {
-        <div class="tray__table" role="table" [attr.aria-label]="'shopping_lists.listas_de_estado' | t:{label: statusLabel()}">
+        <div
+          class="tray__table"
+          role="table"
+          [attr.aria-label]="'shopping_lists.listas_de_estado' | t: { label: statusLabel() }"
+        >
           <div class="tray__row tray__row--head" role="row">
             @for (column of columns; track $index) {
               <button
@@ -248,7 +314,11 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
               >
                 <span>{{ column.labelKey ? (column.labelKey | t) : '' }}</span>
                 @if (sort() === column.key) {
-                  <app-icon [name]="dir() === 'asc' ? 'expand_less' : 'expand_more'" [size]="16" [label]="null" />
+                  <app-icon
+                    [name]="dir() === 'asc' ? 'expand_less' : 'expand_more'"
+                    [size]="16"
+                    [label]="null"
+                  />
                 }
               </button>
             }
@@ -261,7 +331,11 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
               [class.tray__row--muted]="list.status !== 'active'"
               [attr.data-test]="'list-row'"
             >
-              <div class="tray__cell tray__cell--name" role="cell" [attr.data-label]="'shopping_lists.columna_lista' | t">
+              <div
+                class="tray__cell tray__cell--name"
+                role="cell"
+                [attr.data-label]="'shopping_lists.columna_lista' | t"
+              >
                 @if (editingId() === list.id) {
                   <div class="tray__edit">
                     <input
@@ -275,11 +349,28 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
                       (blur)="onRenameBlur(list)"
                       data-test="rename-input"
                     />
-                    <app-icon-button icon="check" [label]="'account.guardar_el_nombre' | t" size="sm" variant="primary" (onClick)="commitRename(list)" />
-                    <app-icon-button icon="close" [label]="'common.cancel' | t" size="sm" variant="ghost" (onClick)="cancelRename()" />
+                    <app-icon-button
+                      icon="check"
+                      [label]="'account.guardar_el_nombre' | t"
+                      size="sm"
+                      variant="primary"
+                      (onClick)="commitRename(list)"
+                    />
+                    <app-icon-button
+                      icon="close"
+                      [label]="'common.cancel' | t"
+                      size="sm"
+                      variant="ghost"
+                      (onClick)="cancelRename()"
+                    />
                   </div>
                 } @else {
-                  <a class="tray__name" [href]="hrefOf(list)" (click)="open(list, $event)" [attr.aria-label]="'shopping_lists.abrir_lista' | t:{name: list.name}">
+                  <a
+                    class="tray__name"
+                    [href]="hrefOf(list)"
+                    (click)="open(list, $event)"
+                    [attr.aria-label]="'shopping_lists.abrir_lista' | t: { name: list.name }"
+                  >
                     <span>{{ list.name }}</span>
                     @if (list.ownerName) {
                       <app-avatar
@@ -287,19 +378,33 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
                         [name]="list.ownerName"
                         [src]="list.ownerAvatar ?? undefined"
                         size="xs"
-                        [attr.title]="'shopping_lists.lista_de' | t:{name: list.ownerName}"
+                        [attr.title]="'shopping_lists.lista_de' | t: { name: list.ownerName }"
                         data-test="row-owner"
                       />
                     }
                   </a>
                   <div class="tray__name-tools">
-                    <app-icon-button icon="edit" [label]="'shopping_lists.renombrar' | t" size="sm" (onClick)="startRename(list)" />
-                    <app-icon-button icon="chevron_right" [label]="'shopping_lists.abrir' | t" size="sm" (onClick)="open(list, $event)" />
+                    <app-icon-button
+                      icon="edit"
+                      [label]="'shopping_lists.renombrar' | t"
+                      size="sm"
+                      (onClick)="startRename(list)"
+                    />
+                    <app-icon-button
+                      icon="chevron_right"
+                      [label]="'shopping_lists.abrir' | t"
+                      size="sm"
+                      (onClick)="open(list, $event)"
+                    />
                   </div>
                 }
               </div>
 
-              <div class="tray__cell tray__cell--store" role="cell" [attr.data-label]="'shopping_lists.columna_tienda' | t">
+              <div
+                class="tray__cell tray__cell--store"
+                role="cell"
+                [attr.data-label]="'shopping_lists.columna_tienda' | t"
+              >
                 @if (list.store) {
                   <span class="tray__chip">{{ list.store }}</span>
                 } @else {
@@ -307,47 +412,96 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
                 }
               </div>
 
-              <div class="tray__cell tray__cell--progress" role="cell" [attr.data-label]="'shopping_lists.columna_progreso' | t">
+              <div
+                class="tray__cell tray__cell--progress"
+                role="cell"
+                [attr.data-label]="'shopping_lists.columna_progreso' | t"
+              >
                 <span class="tray__bar" aria-hidden="true">
                   <span class="tray__bar-fill" [style.width.%]="progressOf(list)"></span>
                 </span>
                 <span class="tray__fraction">{{ list.checkedItems }}/{{ list.totalItems }}</span>
               </div>
 
-              <div class="tray__cell tray__cell--total" role="cell" [attr.data-label]="'shopping_lists.columna_total' | t">
+              <div
+                class="tray__cell tray__cell--total"
+                role="cell"
+                [attr.data-label]="'shopping_lists.columna_total' | t"
+              >
                 <span class="tray__money">{{ money(list.pricedTotalMinor) }}</span>
               </div>
 
-              <div class="tray__cell tray__cell--when" role="cell" [attr.data-label]="'shopping_lists.columna_actualizado' | t">
+              <div
+                class="tray__cell tray__cell--when"
+                role="cell"
+                [attr.data-label]="'shopping_lists.columna_actualizado' | t"
+              >
                 <span class="tray__since">{{ since(list.updated_at) }}</span>
               </div>
 
-              <div class="tray__cell tray__cell--actions" role="cell" [attr.data-label]="'shopping_lists.columna_acciones' | t">
+              <div
+                class="tray__cell tray__cell--actions"
+                role="cell"
+                [attr.data-label]="'shopping_lists.columna_acciones' | t"
+              >
                 <app-icon-button
                   [icon]="list.status === 'done' ? 'undo' : 'check_circle'"
-                  [label]="list.status === 'done' ? ('shopping_lists.reabrir' | t) : ('shopping_lists.terminar_lista' | t)"
+                  [label]="
+                    list.status === 'done'
+                      ? ('shopping_lists.reabrir' | t)
+                      : ('shopping_lists.terminar_lista' | t)
+                  "
                   size="sm"
                   [attr.data-test]="'row-done-' + list.id"
                   (onClick)="archive(list)"
                 />
-                <app-icon-button icon="delete" [label]="'shopping_lists.borrar_lista' | t" size="sm" variant="danger" (onClick)="remove(list)" />
+                <app-icon-button
+                  icon="delete"
+                  [label]="'shopping_lists.borrar_lista' | t"
+                  size="sm"
+                  variant="danger"
+                  (onClick)="remove(list)"
+                />
               </div>
             </div>
           }
         </div>
 
         <nav class="tray__pager" [attr.aria-label]="'shopping_lists.paginas_de_listas' | t">
-          <app-icon-button icon="chevron_left" [label]="'shopping_lists.pagina_anterior' | t" size="md" variant="soft" [disabled]="!canGoPrev()" (onClick)="go(-1)" />
-          <span class="tray__pager-text">{{ 'shopping_lists.pager_de' | t: { range: rangeLabel(), total: total() } }}</span>
-          <app-icon-button icon="chevron_right" [label]="'shopping_lists.pagina_siguiente' | t" size="md" variant="soft" [disabled]="!canGoNext()" (onClick)="go(1)" />
+          <app-icon-button
+            icon="chevron_left"
+            [label]="'shopping_lists.pagina_anterior' | t"
+            size="md"
+            variant="soft"
+            [disabled]="!canGoPrev()"
+            (onClick)="go(-1)"
+          />
+          <span class="tray__pager-text">{{
+            'shopping_lists.pager_de' | t: { range: rangeLabel(), total: total() }
+          }}</span>
+          <app-icon-button
+            icon="chevron_right"
+            [label]="'shopping_lists.pagina_siguiente' | t"
+            size="md"
+            variant="soft"
+            [disabled]="!canGoNext()"
+            (onClick)="go(1)"
+          />
           <span class="tray__pager-spacer"></span>
-          <app-picker [label]="'shopping_lists.tamano_de_pagina' | t" [options]="pageSizes()" [value]="pageSizeValue()" [filterFrom]="99" (valueChange)="setSize($event)" />
+          <app-picker
+            [label]="'shopping_lists.tamano_de_pagina' | t"
+            [options]="pageSizes()"
+            [value]="pageSizeValue()"
+            [filterFrom]="99"
+            (valueChange)="setSize($event)"
+          />
         </nav>
       }
     </div>
   `,
   styles: [
-    `  /*
+    `
+      /*
      * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
      *
      * Todo lo que se pulsa avisa antes de que se pulse. Va aqui arriba, junto, en lugar de repartido por
@@ -355,37 +509,36 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
      * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
      * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
      */
-    .tray__new:hover:not(:disabled),
-    .tray__primary:hover:not(:disabled) {
-      background: var(--primary-dark);
-      box-shadow: var(--shadow-sm);
-    }
-  
-    .tray__ghost:hover:not(:disabled) {
-      border-color: var(--primary);
-      background: var(--primary-subtle);
-      color: var(--primary-dark);
-    }
-  
-    /* Las pestanas y el filtro viven dentro de una pista oscura: su respuesta es aclararse, no coloreanse
+      .tray__new:hover:not(:disabled),
+      .tray__primary:hover:not(:disabled) {
+        background: var(--primary-dark);
+        box-shadow: var(--shadow-sm);
+      }
+
+      .tray__ghost:hover:not(:disabled) {
+        border-color: var(--primary);
+        background: var(--primary-subtle);
+        color: var(--primary-dark);
+      }
+
+      /* Las pestanas y el filtro viven dentro de una pista oscura: su respuesta es aclararse, no coloreanse
        de primario (el estado activo ya usa ese fondo, y no hay nada que decir dos veces). */
-    .tray__tab:hover:not(.tray__tab--active),
-    .tray__filter-toggle:hover:not(.tray__filter-toggle--on) {
-      color: var(--text-primary);
-      background: var(--bg-secondary);
-    }
-  
-    .tray__clear:hover {
-      color: var(--error);
-      background: var(--error-subtle);
-    }
-  
-    /* Ordenar por columna es una accion sobre la tabla entera: se anuncia en el propio encabezado. */
-    .tray__th:hover:not(:disabled) {
-      color: var(--text-primary);
-      background: var(--bg-tertiary);
-    }
-  
+      .tray__tab:hover:not(.tray__tab--active),
+      .tray__filter-toggle:hover:not(.tray__filter-toggle--on) {
+        color: var(--text-primary);
+        background: var(--bg-secondary);
+      }
+
+      .tray__clear:hover {
+        color: var(--error);
+        background: var(--error-subtle);
+      }
+
+      /* Ordenar por columna es una accion sobre la tabla entera: se anuncia en el propio encabezado. */
+      .tray__th:hover:not(:disabled) {
+        color: var(--text-primary);
+        background: var(--bg-tertiary);
+      }
 
       .tray {
         padding: var(--space-4);
@@ -624,7 +777,9 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
       }
       .tray__row {
         display: grid;
-        grid-template-columns: minmax(160px, 2.2fr) minmax(90px, 1fr) minmax(120px, 1.2fr) minmax(80px, 0.8fr) minmax(84px, 0.8fr) auto;
+        grid-template-columns:
+          minmax(160px, 2.2fr) minmax(90px, 1fr) minmax(120px, 1.2fr) minmax(80px, 0.8fr)
+          minmax(84px, 0.8fr) auto;
         align-items: center;
         gap: var(--space-2);
         padding: var(--space-2) var(--space-3);
@@ -933,7 +1088,9 @@ export class ShoppingListsComponent {
 
   readonly total = computed(() => this.shopping.listsMeta().total);
   readonly storeOptions = computed<PickerOption[]>(() =>
-    this.shopping.stores().map((entry) => ({ value: entry.store, label: entry.store, hint: `${entry.lists} listas` }))
+    this.shopping
+      .stores()
+      .map((entry) => ({ value: entry.store, label: entry.store, hint: `${entry.lists} listas` }))
   );
 
   constructor() {
@@ -942,7 +1099,7 @@ export class ShoppingListsComponent {
     this.shopping.loadStores();
     // La bandeja es la pantalla que se queda abierta mientras otra persona compra: sin
     // SSE habria que adivinar cuando volver a mirar.
-    const close = this.shopping.openStream('lists', () => {
+    const close = this.shopping.openStream(shoppingStreamPath(null), () => {
       this.reload();
       this.liveNote.set(this.i18n.t('shopping_lists.alguien_del_hogar_ha'));
       setTimeout(() => this.liveNote.set(null), 6000);
@@ -994,7 +1151,11 @@ export class ShoppingListsComponent {
       page: this.page() === 0 ? null : String(this.page()),
       size: this.size() === 25 ? null : String(this.size())
     };
-    void this.router.navigate([], { queryParams: params, queryParamsHandling: 'merge', replaceUrl: true });
+    void this.router.navigate([], {
+      queryParams: params,
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   private query(): ListsQuery {
@@ -1093,7 +1254,8 @@ export class ShoppingListsComponent {
   }
 
   activeFilters(): number {
-    return [this.search(), this.store(), this.minTotal(), this.from(), this.to()].filter(Boolean).length;
+    return [this.search(), this.store(), this.minTotal(), this.from(), this.to()].filter(Boolean)
+      .length;
   }
 
   sortBy(key: ListsSort | ''): void {
@@ -1193,7 +1355,11 @@ export class ShoppingListsComponent {
     if (!name || name === list.name) return;
     void this.shopping.renameList(list.id, { name }, list.version).then((updated) => {
       if (updated) this.reload();
-      else this.toast.error(this.i18n.t('ui.no_se_ha_podido'), this.i18n.t('ui.otra_persona_cambio_la'));
+      else
+        this.toast.error(
+          this.i18n.t('ui.no_se_ha_podido'),
+          this.i18n.t('ui.otra_persona_cambio_la')
+        );
     });
   }
 
@@ -1250,14 +1416,16 @@ export class ShoppingListsComponent {
     this.toast.show({
       type: 'success',
       title: wasDone ? this.i18n.t('ui.lista_reabierta') : this.i18n.t('ui.lista_terminada'),
-      message: this.i18n.t(
-        wasDone ? 'ui.lista_vuelve_a_activas' : 'ui.lista_pasa_al_historial',
-        { name: list.name }
-      ),
+      message: this.i18n.t(wasDone ? 'ui.lista_vuelve_a_activas' : 'ui.lista_pasa_al_historial', {
+        name: list.name
+      }),
       duration: 6000,
       countdown: true,
       position: 'bottom',
-      action: { label: this.i18n.t('ui.deshacer'), run: () => void this.shopping.setStatus(list.id, wasDone ? 'done' : 'active') }
+      action: {
+        label: this.i18n.t('ui.deshacer'),
+        run: () => void this.shopping.setStatus(list.id, wasDone ? 'done' : 'active')
+      }
     });
   }
 

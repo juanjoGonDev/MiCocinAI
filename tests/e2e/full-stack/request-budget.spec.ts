@@ -11,6 +11,12 @@ async function expectNoRepeatAfterIdle(
   watch.reset();
 }
 
+function newListAction(page: Parameters<typeof watchRequests>[0]) {
+  return page
+    .locator('[data-test="new-list"]:visible, [data-test="new-list-text"]:visible')
+    .first();
+}
+
 /**
  * El bucle de peticiones, medido desde fuera.
  *
@@ -61,7 +67,7 @@ test.describe('presupuesto de peticiones en el stack de produccion', () => {
     }
 
     await page.goto('/shopping');
-    await page.locator('[data-test="new-list"]').click();
+    await newListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Cesta con presupuesto');
     await page.locator('[data-test="create-submit"]').click();
     await expect(page.locator('[data-test="add-input"]')).toBeVisible();
@@ -86,7 +92,36 @@ test.describe('presupuesto de peticiones en el stack de produccion', () => {
     await expect(page.locator('[data-test="tab-todo"]')).toContainText(/Pendientes \(\d+\)/);
   });
 
-  test('el stream de la lista se abre una vez por pestana', async ({ page }) => {
+  test('la bandeja y el detalle usan sus streams SSE reales una vez por pantalla', async ({
+    page
+  }) => {
+    await page.addInitScript(() => {
+      const OriginalEventSource = window.EventSource;
+      type StreamAuditWindow = Window & {
+        __qaReadyStreams?: Array<{ path: string; data: string }>;
+      };
+
+      Object.defineProperty(window, 'EventSource', {
+        configurable: true,
+        value: class extends OriginalEventSource {
+          constructor(url: string, eventSourceInitDict?: EventSourceInit) {
+            super(url, eventSourceInitDict);
+            const path = new URL(url, window.location.href).pathname;
+            if (!path.startsWith('/api/shopping/stream/')) return;
+
+            this.addEventListener(
+              'ready',
+              (event) => {
+                const audit = window as StreamAuditWindow;
+                audit.__qaReadyStreams ??= [];
+                audit.__qaReadyStreams.push({ path, data: (event as MessageEvent<string>).data });
+              },
+              { once: true }
+            );
+          }
+        }
+      });
+    });
     await registerUser(page, 'full-sse');
     const watch = watchRequests(page, {
       windowMs: 2000,
@@ -94,29 +129,65 @@ test.describe('presupuesto de peticiones en el stack de produccion', () => {
       // §12aj permite leer la cola cada segundo mientras se observa; no es un bucle SSE.
       ignore: /\.(js|css|svg|png|woff2?|ico|json)(\?|$)|\/api\/receipts\/queue(?:\?|$)/
     });
+    const trayResponsePromise = page.waitForResponse((response) => {
+      return new URL(response.url()).pathname === '/api/shopping/stream/tray';
+    });
     await page.goto('/shopping');
-    await expect(page.locator('[data-test="new-list"]')).toBeVisible();
+    await expect(newListAction(page)).toBeVisible();
+    const trayResponse = await trayResponsePromise;
+    expect(trayResponse.status()).toBe(200);
+    expect(trayResponse.headers()['content-type']).toContain('text/event-stream');
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const audit = window as Window & {
+            __qaReadyStreams?: Array<{ path: string; data: string }>;
+          };
+          return audit.__qaReadyStreams?.some(
+            (stream) => stream.path === '/api/shopping/stream/tray'
+          );
+        })
+      )
+      .toBe(true);
+    const trayReady = await page.evaluate(() => {
+      const audit = window as Window & {
+        __qaReadyStreams?: Array<{ path: string; data: string }>;
+      };
+      return audit.__qaReadyStreams?.find((stream) => stream.path === '/api/shopping/stream/tray')
+        ?.data;
+    });
+    expect(JSON.parse(trayReady ?? '{}').channels).toBeInstanceOf(Array);
+
     await expect
       .poll(
         () => watch.entries().filter((entry) => entry.url.includes('/api/shopping/stream/')).length
       )
       .toBe(1);
 
-    await page.locator('[data-test="new-list"]').click();
+    const detailResponsePromise = page.waitForResponse((response) => {
+      const path = new URL(response.url()).pathname;
+      return /^\/api\/shopping\/stream\/lists\/[^/]+$/.test(path);
+    });
+    await newListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Cesta en vivo');
     await page.locator('[data-test="create-submit"]').click();
     await expect(page.locator('[data-test="add-input"]')).toBeVisible();
+    const detailResponse = await detailResponsePromise;
+    expect(detailResponse.status()).toBe(200);
+    expect(detailResponse.headers()['content-type']).toContain('text/event-stream');
     await expect
       .poll(
         () => watch.entries().filter((entry) => entry.url.includes('/api/shopping/stream/')).length
       )
       .toBe(2);
 
-    // Bandeja y detalle abren su propia URL (una por pantalla); tras resetear el historial,
-    // cualquier nueva conexión es un reintento, no una recarga intencional.
+    // La bandeja y el detalle tienen rutas de servidor distintas; una URL malformada
+    // podría seguir contando como otro stream aunque sus respuestas fueran 404.
     const streams = watch.entries().filter((entry) => entry.url.includes('/api/shopping/stream/'));
     const paths = streams.map((entry) => new URL(entry.url.replace(/^[A-Z]+\s+/, '')).pathname);
-    expect(new Set(paths).size).toBe(2);
+    expect(paths).toHaveLength(2);
+    expect(paths[0]).toBe('/api/shopping/stream/tray');
+    expect(paths[1]).toMatch(/^\/api\/shopping\/stream\/lists\/[^/]+$/);
 
     watch.reset();
     await page.waitForTimeout(2500);

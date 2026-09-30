@@ -15,6 +15,7 @@ import {
   type ListEvent
 } from '../../shared/models/shopping.model';
 import { ShoppingService } from '../../core/services/shopping.service';
+import { shoppingStreamPath } from '../../core/services/shopping-stream-path';
 import { PantryService } from '../../core/services/pantry.service';
 import type { PantryCatalogProduct } from '../../shared/models/pantry.model';
 import { ToastService } from '../../core/services/toast.service';
@@ -2870,7 +2871,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     }
     // En vivo: si otra persona de la casa toca la lista, se vuelve a leer (nunca se pinta
     // el payload del aviso, que es una pista de refresco, no el estado).
-    this.cancelStream = this.shopping.openStream(`lists/${this.listId}`, (payload) => {
+    this.cancelStream = this.shopping.openStream(shoppingStreamPath(this.listId), (payload) => {
       this.shopping.loadList(this.listId);
       if (this.auditOpen()) this.shopping.loadEvents(this.listId);
       const event = payload as { byName?: string | null; action?: string } | null;
