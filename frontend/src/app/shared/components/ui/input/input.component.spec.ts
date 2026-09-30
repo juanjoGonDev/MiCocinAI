@@ -41,6 +41,52 @@ describe('InputComponent', () => {
     expect(input.placeholder).toBe('Enter email');
   });
 
+  it('sets an optional maximum length on the native input', () => {
+    component.maxLength = 100;
+    fixture.detectChanges();
+
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    expect(input.maxLength).toBe(100);
+  });
+
+  it('does not impose a maximum length when one is not configured', () => {
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    expect(input.hasAttribute('maxlength')).toBeFalse();
+  });
+
+  it('associates an error message with the input and announces it', () => {
+    component.id = 'email';
+    component.error = 'Enter a valid email';
+    fixture.detectChanges();
+
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    const error: HTMLElement = fixture.nativeElement.querySelector('#email-error');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(input.getAttribute('aria-describedby')).toBe('email-error');
+    expect(error.textContent?.trim()).toBe('Enter a valid email');
+    expect(error.getAttribute('role')).toBe('alert');
+  });
+
+  it('associates helper text when there is no error', () => {
+    component.id = 'email';
+    component.helper = 'Use your account email';
+    fixture.detectChanges();
+
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    const helper: HTMLElement = fixture.nativeElement.querySelector('#email-helper');
+    expect(input.getAttribute('aria-invalid')).toBeNull();
+    expect(input.getAttribute('aria-describedby')).toBe('email-helper');
+    expect(helper.textContent?.trim()).toBe('Use your account email');
+  });
+
+  it('does not point to a missing helper or error description', () => {
+    component.id = 'email';
+    fixture.detectChanges();
+
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    expect(input.getAttribute('aria-describedby')).toBeNull();
+  });
+
   it('should disable input when disabled', () => {
     component.disabled = true;
     fixture.detectChanges();
@@ -123,12 +169,24 @@ describe('InputComponent', () => {
 
     expect(component.showPassword).toBeTrue();
     expect(component.type).toBe('text');
+
+    component.togglePassword();
+    expect(component.showPassword).toBeFalse();
+    expect(component.type).toBe('password');
   });
 
   describe('ControlValueAccessor', () => {
     it('should write value', () => {
       component.writeValue('test value');
       expect(component.value).toBe('test value');
+    });
+
+    it('normalizes null and undefined model values to an empty string', () => {
+      component.writeValue(null as never);
+      expect(component.value).toBe('');
+
+      component.writeValue(undefined as never);
+      expect(component.value).toBe('');
     });
 
     it('should register onChange', () => {
@@ -147,6 +205,34 @@ describe('InputComponent', () => {
       expect(fn).toHaveBeenCalled();
     });
 
+    it('propagates valid numeric input as a number without marking it touched', () => {
+      const changed = jasmine.createSpy('registerOnChange');
+      const touched = jasmine.createSpy('registerOnTouched');
+      component.type = 'number';
+      component.registerOnChange(changed);
+      component.registerOnTouched(touched);
+
+      component.onInput({ target: { value: '42' } } as unknown as Event);
+
+      expect(changed).toHaveBeenCalledWith(42);
+      expect(touched).not.toHaveBeenCalled();
+    });
+
+    it('keeps empty or non-numeric input as text and marks it touched', () => {
+      const changed = jasmine.createSpy('registerOnChange');
+      const touched = jasmine.createSpy('registerOnTouched');
+      component.type = 'number';
+      component.registerOnChange(changed);
+      component.registerOnTouched(touched);
+
+      component.onInput({ target: { value: '' } } as unknown as Event);
+      component.onInput({ target: { value: '12x' } } as unknown as Event);
+
+      expect(changed.calls.argsFor(0)).toEqual(['']);
+      expect(changed.calls.argsFor(1)).toEqual(['12x']);
+      expect(touched).toHaveBeenCalledTimes(2);
+    });
+
     it('should set disabled state', () => {
       component.setDisabledState(true);
       expect(component.disabled).toBeTrue();
@@ -157,6 +243,8 @@ describe('InputComponent', () => {
     it('should return correct group classes', () => {
       component.fullWidth = true;
       expect(component.getGroupClasses()).toContain('input-group--full-width');
+      component.fullWidth = false;
+      expect(component.getGroupClasses()).not.toContain('input-group--full-width');
     });
 
     it('should return correct input classes', () => {
@@ -166,6 +254,13 @@ describe('InputComponent', () => {
       const classes = component.getInputClasses();
       expect(classes).toContain('input--lg');
       expect(classes).toContain('input--error');
+
+      component.prefixIcon = true;
+      expect(component.getInputClasses()).toContain('input--has-prefix');
+
+      component.type = 'password';
+      component.showToggle = false;
+      expect(component.getInputClasses()).not.toContain('input--has-suffix');
     });
   });
 });

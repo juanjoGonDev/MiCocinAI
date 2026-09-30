@@ -9,17 +9,42 @@ import { ButtonComponent } from '../../../shared/components/ui/button/button.com
 import { InputComponent } from '../../../shared/components/ui/input/input.component';
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import { I18nService } from '../../../core/services/i18n.service';
+import type { TranslationKey } from '../../../core/i18n';
+import {
+  registerEmailIssue,
+  registerNameIssue,
+  registerPasswordIssue,
+  type RegisterEmailIssue,
+  type RegisterNameIssue,
+  type RegisterPasswordIssue
+} from './register-form.validation';
+
+const NAME_ERROR_KEYS: Record<RegisterNameIssue, TranslationKey> = {
+  required: 'auth.el_nombre_es_requerido',
+  tooShort: 'auth.el_nombre_debe_tener',
+  tooLong: 'auth.el_nombre_no_puede_superar'
+};
+
+const EMAIL_ERROR_KEYS: Record<RegisterEmailIssue, TranslationKey> = {
+  required: 'auth.el_email_es_requerido',
+  invalidEmail: 'auth.el_email_no_es_valido'
+};
+
+const PASSWORD_ERROR_KEYS: Record<RegisterPasswordIssue, TranslationKey> = {
+  required: 'auth.la_contrasena_es_requerida',
+  tooShort: 'auth.la_contrasena_debe_tener',
+  uppercaseRequired: 'auth.la_contrasena_necesita_mayuscula',
+  numberRequired: 'auth.la_contrasena_necesita_numero'
+};
 
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [
-    TranslatePipe,
-    CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
+  imports: [TranslatePipe, CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
   template: `
     <form (ngSubmit)="onSubmit()" class="register-form">
       <h2 class="register-form__title">{{ 'auth.register.cta' | t }}</h2>
-      
+
       <app-input
         id="name"
         name="name"
@@ -28,6 +53,7 @@ import { I18nService } from '../../../core/services/i18n.service';
         [placeholder]="'auth.tu_nombre' | t"
         [(ngModel)]="name"
         [required]="true"
+        [maxLength]="100"
         [error]="nameError()"
       ></app-input>
 
@@ -51,7 +77,7 @@ import { I18nService } from '../../../core/services/i18n.service';
         [(ngModel)]="password"
         [required]="true"
         [error]="passwordError()"
-        helper="Mínimo 6 caracteres, una mayúscula y un número"
+        [helper]="'auth.requisitos_de_contrasena' | t"
       ></app-input>
 
       <p class="register-form__note">
@@ -76,58 +102,60 @@ import { I18nService } from '../../../core/services/i18n.service';
       </div>
     </form>
   `,
-  styles: [`
-    .register-form__note {
-      margin: 0;
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-      line-height: 1.45;
-    }
-    .register-form {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-5);
-    }
-
-    .register-form__title {
-      font-family: var(--font-display);
-      font-size: var(--text-2xl);
-      font-weight: var(--font-bold);
-      color: var(--text-primary);
-      text-align: center;
-    }
-
-    .register-form__field {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    .register-form__label {
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-      color: var(--text-primary);
-    }
-
-    .register-form__footer {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-2);
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-    }
-
-    .register-form__link {
-      font-weight: var(--font-semibold);
-      color: var(--primary);
-      text-decoration: none;
-
-      &:hover {
-        color: var(--primary-dark);
+  styles: [
+    `
+      .register-form__note {
+        margin: 0;
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+        line-height: 1.45;
       }
-    }
-  `]
+      .register-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+      }
+
+      .register-form__title {
+        font-family: var(--font-display);
+        font-size: var(--text-2xl);
+        font-weight: var(--font-bold);
+        color: var(--text-primary);
+        text-align: center;
+      }
+
+      .register-form__field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+
+      .register-form__label {
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        color: var(--text-primary);
+      }
+
+      .register-form__footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+      }
+
+      .register-form__link {
+        font-weight: var(--font-semibold);
+        color: var(--primary);
+        text-decoration: none;
+
+        &:hover {
+          color: var(--primary-dark);
+        }
+      }
+    `
+  ]
 })
 export class RegisterComponent {
   private readonly i18n = inject(I18nService);
@@ -163,22 +191,27 @@ export class RegisterComponent {
   }
 
   onSubmit(): void {
+    if (this.isLoading()) return;
+
     this.nameError.set('');
     this.emailError.set('');
     this.passwordError.set('');
 
-    if (!this.name) {
-      this.nameError.set(this.i18n.t('auth.el_nombre_es_requerido'));
+    const nameIssue = registerNameIssue(this.name);
+    if (nameIssue) {
+      this.nameError.set(this.i18n.t(NAME_ERROR_KEYS[nameIssue]));
       return;
     }
 
-    if (!this.email) {
-      this.emailError.set(this.i18n.t('auth.el_email_es_requerido'));
+    const emailIssue = registerEmailIssue(this.email);
+    if (emailIssue) {
+      this.emailError.set(this.i18n.t(EMAIL_ERROR_KEYS[emailIssue]));
       return;
     }
 
-    if (!this.password || this.password.length < 6) {
-      this.passwordError.set(this.i18n.t('auth.la_contrasena_debe_tener'));
+    const passwordIssue = registerPasswordIssue(this.password);
+    if (passwordIssue) {
+      this.passwordError.set(this.i18n.t(PASSWORD_ERROR_KEYS[passwordIssue]));
       return;
     }
 
@@ -186,20 +219,31 @@ export class RegisterComponent {
 
     // El nivel de cocina ya no se pregunta aqui: es parte del perfil y se
     // responde en el tour (y se edita en Preferencias › Perfil).
-    this.authService.register({
-      name: this.name,
-      email: this.email,
-      password: this.password
-    }).subscribe({
-      next: () => {
-        this.toastService.success(this.i18n.t('auth.cuenta_creada'), this.i18n.t('auth.tu_cuenta_ha_sido'));
-        this.householdService.loadHousehold();
-        this.redirectAfterAuth();
-      },
-      error: (error) => {
-        this.isLoading.set(false);
-        this.toastService.error(this.i18n.t('ui.error'), error.message || this.i18n.t('auth.error_al_crear_la'));
-      }
-    });
+    this.authService
+      .register({
+        name: this.name,
+        email: this.email,
+        password: this.password
+      })
+      .subscribe({
+        next: () => {
+          this.toastService.success(
+            this.i18n.t('auth.cuenta_creada'),
+            this.i18n.t('auth.tu_cuenta_ha_sido')
+          );
+          this.householdService.loadHousehold();
+          this.redirectAfterAuth();
+        },
+        error: (error) => {
+          this.isLoading.set(false);
+          const message =
+            error?.status === 409
+              ? this.i18n.t('auth.el_email_ya_esta_registrado')
+              : error?.status === 429
+                ? this.i18n.t('ui.demasiadas_solicitudes')
+                : this.i18n.t('auth.error_al_crear_la');
+          this.toastService.error(this.i18n.t('ui.error'), message);
+        }
+      });
   }
 }

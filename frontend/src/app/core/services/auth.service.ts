@@ -1,10 +1,11 @@
 import { Injectable, signal, computed } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, tap, map, catchError, of } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { STORAGE_KEYS } from './storage.service';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import {
   User,
   AuthCredentials,
@@ -57,11 +58,11 @@ export class AuthService {
     this.isLoadingSignal.set(true);
 
     return this.http.post<any>(`${this.apiUrl}/login`, credentials).pipe(
-      tap(response => {
+      tap((response) => {
         this.handleAuthResponse(this.unwrap(response));
         this.isLoadingSignal.set(false);
       }),
-      catchError(error => {
+      catchError((error) => {
         this.isLoadingSignal.set(false);
         throw error;
       })
@@ -71,16 +72,20 @@ export class AuthService {
   register(data: RegisterData): Observable<AuthResponse> {
     this.isLoadingSignal.set(true);
 
-    return this.http.post<any>(`${this.apiUrl}/register`, data).pipe(
-      tap(response => {
-        this.handleAuthResponse(this.unwrap(response));
-        this.isLoadingSignal.set(false);
-      }),
-      catchError(error => {
-        this.isLoadingSignal.set(false);
-        throw error;
+    return this.http
+      .post<any>(`${this.apiUrl}/register`, data, {
+        context: new HttpContext().set(SILENT_TOAST, true)
       })
-    );
+      .pipe(
+        tap((response) => {
+          this.handleAuthResponse(this.unwrap(response));
+          this.isLoadingSignal.set(false);
+        }),
+        catchError((error) => {
+          this.isLoadingSignal.set(false);
+          throw error;
+        })
+      );
   }
 
   /**
@@ -110,7 +115,7 @@ export class AuthService {
     }
 
     return this.http.post<any>(`${this.apiUrl}/refresh`, { refreshToken }).pipe(
-      tap(response => this.handleAuthResponse(this.unwrap(response))),
+      tap((response) => this.handleAuthResponse(this.unwrap(response))),
       catchError(() => {
         this.logout();
         return of();
@@ -167,7 +172,7 @@ export class AuthService {
     const jsonPayload = decodeURIComponent(
       atob(base64)
         .split('')
-        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
         .join('')
     );
     return JSON.parse(jsonPayload) as TokenPayload;

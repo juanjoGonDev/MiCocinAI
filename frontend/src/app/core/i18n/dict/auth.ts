@@ -8,7 +8,13 @@
  */
 export const authEs = {
   'auth.la_contrasena_debe_tener': 'La contraseña debe tener al menos 6 caracteres',
+  'auth.la_contrasena_necesita_mayuscula': 'La contraseña debe incluir una mayúscula',
+  'auth.la_contrasena_necesita_numero': 'La contraseña debe incluir un número',
   'auth.el_nombre_es_requerido': 'El nombre es requerido',
+  'auth.el_nombre_debe_tener': 'El nombre debe tener al menos 2 caracteres',
+  'auth.el_nombre_no_puede_superar': 'El nombre no puede superar los 100 caracteres',
+  'auth.el_email_no_es_valido': 'Introduce un email válido',
+  'auth.el_email_ya_esta_registrado': 'Este email ya está registrado',
   'auth.la_contrasena_es_requerida': 'La contraseña es requerida',
   'auth.el_email_es_requerido': 'El email es requerido',
   'auth.error_al_crear_la': 'Error al crear la cuenta',
@@ -39,6 +45,7 @@ export const authEs = {
   'auth.name': 'Nombre',
   'auth.noaccount': '¿No tienes cuenta?',
   'auth.password': 'Contraseña',
+  'auth.requisitos_de_contrasena': 'Mínimo 6 caracteres, una mayúscula y un número',
   'auth.recuperar_contrasena': 'Recuperar Contraseña',
   'auth.register.cta': 'Crear Cuenta',
   'auth.register': 'Crear cuenta',
@@ -51,7 +58,13 @@ export const authEs = {
 
 export const authEn: Record<keyof typeof authEs, string> = {
   'auth.la_contrasena_debe_tener': 'Password must be at least 6 characters',
+  'auth.la_contrasena_necesita_mayuscula': 'Password must include an uppercase letter',
+  'auth.la_contrasena_necesita_numero': 'Password must include a number',
   'auth.el_nombre_es_requerido': 'Name is required',
+  'auth.el_nombre_debe_tener': 'Name must be at least 2 characters',
+  'auth.el_nombre_no_puede_superar': 'Name cannot exceed 100 characters',
+  'auth.el_email_no_es_valido': 'Enter a valid email address',
+  'auth.el_email_ya_esta_registrado': 'This email is already registered',
   'auth.la_contrasena_es_requerida': 'Password is required',
   'auth.el_email_es_requerido': 'Email is required',
   'auth.error_al_crear_la': 'Could not create the account',
@@ -81,6 +94,7 @@ export const authEn: Record<keyof typeof authEs, string> = {
   'auth.name': 'Name',
   'auth.noaccount': "Don't have an account?",
   'auth.password': 'Password',
+  'auth.requisitos_de_contrasena': 'At least 6 characters, one uppercase letter and one number',
   'auth.recuperar_contrasena': 'Reset password',
   'auth.register.cta': 'Create account',
   'auth.register': 'Sign up',
