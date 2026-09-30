@@ -39,14 +39,16 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 
 `node scripts/check-ui.mjs` sigue terminando con 13 incidencias preexistentes de `texto-en-un-catalogo` en `frontend/src/app/core/i18n/labels.ts:345-358` (deuda QA-05, fuera de esta unidad); no reporta emoji en los ficheros Hogar/Dashboard migrados. El ESLint directo no tiene configuración en la raíz y `ng lint` está bloqueado porque falta `@angular-eslint/builder:lint`; no se alteró configuración ni dependencias para ocultarlo. `git diff --check` pasa. Build de producción aprobado con los warnings existentes de budgets e imports opcionales/no usados; no se modificaron gates.
 
-## Unidad QA-UI.2 · geometría de tarjeta de miembro en móvil (pendiente de verificar)
+## Unidad QA-UI.2 · geometría de tarjeta de miembro en móvil (defecto reproducido)
 
 **Fuente revalidada antes de esta unidad:** `HouseholdComponent` dibuja `.member-card` como fila flex y `.member-card__meta` como otra fila sin reflujo específico móvil. La captura sintética `household-members.png` de QA-UI.1 parece mostrar las insignias de rol/nivel cerca o más allá del borde derecho de la tarjeta; la imagen por sí sola no confirma un defecto. Medir geometría con el navegador antes de cambiar estilos.
 
-- [ ] Escribir primero una regresión Playwright que mida los límites reales de `.member-card`, nombre/email y `.member-card__meta` en Pixel 5 a 393×851 y 320×568; registrar el baseline y confirmar si existe desbordamiento horizontal/clipping.
+- [x] Escribir primero una regresión Playwright que mida los límites reales de `.member-card`, nombre/email y `.member-card__meta` en Pixel 5 a 393×851 y 320×568; registrar el baseline y confirmar si existe desbordamiento horizontal/clipping.
 - [ ] Usar datos sintéticos de nombre/email y etiquetas largas en español e inglés; exigir que las insignias permanezcan dentro de la tarjeta y que no haya overflow horizontal del documento.
 - [ ] Solo si el rojo reproduce el problema, aplicar el reflujo mínimo con TDD; mantener legibles los datos, estados accesibles y áreas táctiles.
 - [ ] Verificar la regresión en Chromium escritorio y Pixel 5, capturar/inspeccionar PC y móvil y registrar comandos/resultados sin tocar servidor ni base normales.
+
+**TDD rojo (2026-09-30, sin cambios de producción):** runner aislado `E2E_SCOPE=all`, `E2E_PROJECT=mobile-chrome`, `E2E_FILES=household-icon-consistency.spec.ts`, `E2E_RATE_LIMIT=on`: Pixel 5 completa correctamente a 393×851 pero falla a 320×568 porque `.member-card__meta` llega a x=371 px mientras `.member-card` termina en x=304 px (67 px fuera). El documento no se ensancha, por lo que el desborde local quedaba oculto/clipeado. El resto del test de esta pantalla y Dashboard pasa (2 passed, 1 failed); la prueba usa servidor, SQLite y semilla temporales únicas.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 
