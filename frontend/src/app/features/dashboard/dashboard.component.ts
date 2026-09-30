@@ -6,25 +6,24 @@ import { RecipeService } from '../../core/services/recipe.service';
 import { PantryService } from '../../core/services/pantry.service';
 import { CalendarService } from '../../core/services/calendar.service';
 import { HouseholdService } from '../../core/services/household.service';
+import { I18nService } from '../../core/services/i18n.service';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import type { TranslationKey } from '../../core/i18n';
+import type { MealType } from '../../shared/models/calendar.model';
+import {
+  localIsoDate,
+  mealTypeLabel as translateMealTypeLabel,
+  pendingMealsForDate
+} from './dashboard-meals.util';
 
 interface QuickStat {
   icon: IconName;
   labelKey: TranslationKey;
   value: string | number;
   color: string;
-}
-
-interface UpcomingMeal {
-  id: string;
-  type: string;
-  name: string;
-  time: string;
-  icon: IconName;
 }
 
 interface SuggestedRecipe {
@@ -94,18 +93,55 @@ interface SuggestedRecipe {
         </div>
 
         <div class="meals-list">
-          <div *ngFor="let meal of upcomingMeals()" class="meal-card">
+          <div *ngFor="let meal of upcomingMeals()" class="meal-card" data-test="today-meal">
             <span class="meal-card__icon"
-              ><app-icon [name]="meal.icon" [size]="24" [label]="null"
+              ><app-icon name="event_note" [size]="24" [label]="null"
             /></span>
             <div class="meal-card__content">
-              <span class="meal-card__type">{{ meal.type }}</span>
-              <span class="meal-card__name">{{ meal.name }}</span>
+              <span class="meal-card__type">{{ mealTypeLabel(meal.mealType) }}</span>
+              <span class="meal-card__name">{{ meal.title }}</span>
             </div>
-            <span class="meal-card__time">{{ meal.time }}</span>
+            <time *ngIf="meal.time as time" class="meal-card__time" [attr.datetime]="time">
+              {{ time }}
+            </time>
           </div>
 
-          <div *ngIf="upcomingMeals().length === 0 && !isLoading()" class="empty-state">
+          <div
+            *ngIf="calendarLoading()"
+            class="meal-status"
+            role="status"
+            data-test="today-meals-loading"
+          >
+            {{ 'common.loading' | t }}
+          </div>
+
+          <div
+            *ngIf="!calendarLoading() && calendarError() as error"
+            class="meal-error"
+            role="alert"
+            data-test="today-meals-error"
+          >
+            <p class="meal-error__message">{{ error }}</p>
+            <button
+              class="meal-error__retry"
+              type="button"
+              data-test="today-meals-retry"
+              (click)="retryTodayMeals()"
+            >
+              {{ 'calendar.reintentar' | t }}
+            </button>
+          </div>
+
+          <div
+            *ngIf="
+              calendarReady() &&
+              !calendarLoading() &&
+              !calendarError() &&
+              upcomingMeals().length === 0
+            "
+            class="empty-state"
+            data-test="today-meals-empty"
+          >
             <span class="empty-state__icon"
               ><app-icon name="event_note" [size]="40" [label]="null"
             /></span>
@@ -307,6 +343,54 @@ interface SuggestedRecipe {
         gap: var(--space-2);
       }
 
+      .meal-status {
+        display: flex;
+        align-items: center;
+        min-height: 44px;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+      }
+
+      .meal-error {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        background: var(--bg-secondary);
+      }
+
+      .meal-error__message {
+        flex: 1;
+        min-width: 0;
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+      }
+
+      .meal-error__retry {
+        min-height: 44px;
+        padding: var(--space-2) var(--space-4);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: transparent;
+        color: var(--text-primary);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .meal-error__retry:hover {
+        background: var(--bg-tertiary);
+      }
+
+      .meal-error__retry:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+
       .meal-card {
         display: flex;
         align-items: center;
@@ -319,10 +403,12 @@ interface SuggestedRecipe {
 
       .meal-card__icon {
         display: inline-flex;
+        flex: none;
         color: var(--text-secondary);
       }
       .meal-card__content {
         flex: 1;
+        min-width: 0;
         display: flex;
         flex-direction: column;
       }
@@ -335,10 +421,13 @@ interface SuggestedRecipe {
         font-size: var(--text-sm);
         font-weight: var(--font-medium);
         color: var(--text-primary);
+        overflow-wrap: anywhere;
       }
       .meal-card__time {
+        flex: none;
         font-size: var(--text-xs);
         color: var(--text-secondary);
+        white-space: nowrap;
       }
 
       .recipes-grid {
@@ -440,11 +529,20 @@ export class DashboardComponent implements OnInit {
   private pantryService = inject(PantryService);
   private calendarService = inject(CalendarService);
   private householdService = inject(HouseholdService);
+  private i18n = inject(I18nService);
 
   userName = signal('');
 
-  /** Comidas del dia de hoy (aun no se exponen desde el calendario). */
-  upcomingMeals = signal<UpcomingMeal[]>([]);
+  readonly todayIso = localIsoDate(new Date());
+  readonly upcomingMeals = computed(() =>
+    pendingMealsForDate(this.calendarService.meals(), this.todayIso)
+  );
+  readonly calendarLoading = this.calendarService.isLoading;
+  readonly calendarError = this.calendarService.error;
+  readonly calendarReady = computed(() => {
+    const range = this.calendarService.range();
+    return range?.start === this.todayIso && range.end === this.todayIso;
+  });
 
   /** Recetas sugeridas: las 6 mas recientes del listado. */
   suggestedRecipes = computed<SuggestedRecipe[]>(() =>
@@ -512,17 +610,23 @@ export class DashboardComponent implements OnInit {
     // Recetas (la rejilla muestra las 6 primeras)
     this.recipeService.loadRecipes();
 
-    // Calendario y hogar: best-effort, el dashboard no debe romperse si fallan
-    try {
-      this.calendarService.loadCalendar();
-    } catch {
-      /* ignore */
-    }
+    // Comidas de hoy: el rango y el estado de error vienen del calendario compartido.
+    this.calendarService.loadRange(this.todayIso, this.todayIso);
+
+    // El hogar es best-effort; el dashboard no debe romperse si falla.
     try {
       this.householdService.loadHousehold();
     } catch {
       /* ignore */
     }
+  }
+
+  mealTypeLabel(mealType: MealType): string {
+    return translateMealTypeLabel(mealType, (key) => this.i18n.t(key));
+  }
+
+  retryTodayMeals(): void {
+    this.calendarService.loadRange(this.todayIso, this.todayIso, true);
   }
 
   getDifficultyVariant(difficulty: string): 'success' | 'warning' | 'error' {

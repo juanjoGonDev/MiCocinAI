@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** inventario inicial hecho; unidad de compra QA-04c revalidada en escritorio y móviles estrechos; el barrido funcional/responsive del resto de pantallas sigue pendiente
+- **Estado:** inventario inicial hecho; cola de tickets/Hogar, tarjeta móvil de hogar y comidas pendientes de hoy ya tienen regresiones verificadas; el barrido funcional/responsive del resto de pantallas sigue pendiente
 - **Actualizado:** 2026-09-30
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -52,19 +52,35 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 
 **Evidencia verde QA-UI.2 (2026-09-30):** `HouseholdComponent` refluye la fila de miembro a una rejilla de dos columnas en móvil; la columna de texto tiene ancho mínimo cero y nombre/correo pueden partirse, mientras las insignias ocupan una segunda fila. La regresión mide documento, columna, correo y tarjeta a 393×851 y 320×568 con nombre sintético largo en español e inglés. Tras `npm run build:prod` (el runner aislado sirve el bundle estático existente y no recompila Angular), `tsc -p tsconfig.e2e.json --noEmit` pasa; Playwright aislado con `E2E_RATE_LIMIT=on`, SQLite/puerto/semilla temporales: `household-icon-consistency.spec.ts`, Pixel 5 **3/3** y Chromium escritorio **3/3**. Capturas inspeccionadas: `.e2e-screenshots/qa-ui-2-desktop/household-members.png` y `.e2e-screenshots/qa-ui-2-mobile/household-members-{es,en}-{320x568,393x851}.png`. No se usaron el server ni la base de datos normales.
 
-## Unidad QA-DASH.1 · comidas pendientes de hoy en el Dashboard (pendiente)
+## Unidad QA-DASH.1 · comidas pendientes de hoy en el Dashboard (resuelta)
 
-**Fuentes revalidadas:** el contrato activo `HOGARIA-SPEC.md` §2 define Today con comidas debidas y §12al pide la siguiente comida planificada. En el código actual, `DashboardComponent.upcomingMeals` empieza como `[]` y no se actualiza; `loadDashboardData()` llama a `CalendarService.loadCalendar()` pero nunca conecta su respuesta con el bloque «Comidas de hoy». La ruta del calendario ya expone `loadRange(start, end)` y datos normalizados `CalendarMeal`. No hay un E2E actual que cree una comida para hoy y luego compruebe el Dashboard.
+**Fuentes revalidadas antes de implementar:** el contrato activo `HOGARIA-SPEC.md` §2 define Today con comidas debidas y §12al pide la siguiente comida planificada. `DashboardComponent.upcomingMeals` empezaba como `[]` y no se actualizaba; `loadDashboardData()` llamaba a `CalendarService.loadCalendar()` sin conectar la respuesta con «Comidas de hoy». `CalendarService.loadRange(start, end)` y `CalendarMeal` ya normalizan la carga.
 
 **Decisión de comportamiento:** el bloque mostrará las comidas no completadas de la fecha local de hoy, ordenadas por hora; no debe mostrar como «pendiente» una comida completada ni una comida de otro día. Un error de carga no se presentará como «no hay comidas».
 
-- [ ] Añadir primero una regresión Playwright con comidas sintéticas de hoy/ayer/mañana, incluidas completada y pendiente, creadas por API contra SQLite aislada; confirmar rojo actual, cero proveedor IA y que cada fixture se limpia.
-- [ ] Conectar el Dashboard a la API/rango de hoy ya normalizado por `CalendarService`, sin duplicar cliente HTTP; mostrar tipo localizado, nombre y hora; conservar el vacío real tras carga correcta y distinguir carga/error.
-- [ ] Añadir pruebas unitarias focales para orden, fecha, completado y etiquetas ES/EN; coverage del alcance ≥70 % en statements/branches/functions/lines sin rebajar gates.
-- [ ] Verificar el CTA «Ver todo» hacia `/calendar`, recarga y recuperación tras error; ejecutar E2E real en Chromium y Pixel 5 a 320×568/393×851, breakpoint 480/768 y una orientación horizontal, sin overflow ni controles tapados.
-- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil y registrar build, typecheck, cobertura y resultados exactos.
+- [x] Escribir primero la regresión Playwright con comidas sintéticas de hoy/ayer/mañana, pendiente y completada; el baseline previo carecía de render de comidas y estados de carga/error. Al inicio `page.route()` no interceptaba por el service worker Angular; bloquear workers hizo determinista el test. El caso devuelve 503 en la primera carga y comprueba que no aparezca el vacío; todas las fixtures se crean y cada borrado se intenta en `finally` contra SQLite aislada. El test vigila `/api/ai/*` y confirma cero llamadas.
+- [x] Conectar el Dashboard a `CalendarService.loadRange()` para la fecha local, sin duplicar cliente HTTP; ordenar pendientes por hora, localizar tipo, mostrar título/hora, mantener carga/error/reintento separados y enseñar el vacío solo después de una carga correcta.
+- [x] Añadir pruebas unitarias focales para orden estable, fecha local, fecha/completado y etiquetas ES/EN. `dashboard-meals.util.ts` alcanza 100 % statements/branches/functions/lines; el agregado de la ejecución enfocada (incluye dependencias) queda en 65.71/40.54/55.55/67.74 %, por debajo del gate global, que continúa abierto en QA-04c. El alcance de cobertura del helper está al 100 %; no se presenta el agregado ni el gate global como cerrados.
+- [x] Verificar CTA «Ver todo» a `/calendar`, recarga, primer error 503 (sin estado vacío), error tras datos, reintento y vacío después de limpiar; probar el nombre accesible, foco y Enter de «Reintentar». Probar cruce local/UTC fijando Playwright en `Europe/Madrid` a 2026-09-30 22:30Z (fecha local 1 oct, UTC 30 sep). Playwright aislado: Chromium 1/1 y Pixel 5 1/1. Pixel 5 cubre 320×568, 393×851, 479/480/481, 767/768/769 y 844×390; Chromium escritorio cubre 1440×900 y 1023/1024. Sin overflow/solapamiento del bloque ni errores JS.
+- [x] `node ./node_modules/@angular/cli/bin/ng.js test --no-watch --browsers=ChromeHeadlessNoSandbox --include=src/app/features/dashboard/dashboard-meals.util.spec.ts --code-coverage` (frontend): 3/3; `node ./node_modules/@angular/cli/bin/ng.js build --configuration production`: éxito con warnings preexistentes; `node ./node_modules/typescript/bin/tsc -p tsconfig.e2e.json --noEmit`: éxito. Playwright: `$env:E2E_SCOPE='all'; $env:E2E_RATE_LIMIT='on'; $env:E2E_FILES='dashboard-today-meals.spec.ts'; $env:E2E_PROJECT='chromium'` y después `mobile-chrome`; `node (Join-Path $env:TEMP 'hogaria-e2e-runner-audit.mjs') (Get-Location).Path`: 1/1 en cada proyecto, cada uno con servidor, puerto, semilla y SQLite únicos temporales. Capturas sintéticas EN inspeccionadas: `.e2e-screenshots/qa-dashboard-1/desktop/dashboard-today-meals-1440x900.png` y `.e2e-screenshots/qa-dashboard-1/mobile/dashboard-today-meals-393x851.png`.
+
+**Evidencia de regresión ampliada:** la suite Dashboard existente pasó 7/7 en Chromium; Pixel 5 pasó 6/7. El único fallo fue al hacer click en «+ Agregar» de `/pantry`: controles del encabezado/cabecera de cola interceptan el click (45 s). No lo causa el cambio aislado de Dashboard; queda desglosado en QA-PANTRY.1, sin ocultarlo como suite completamente verde.
+
+**TDD rojo observado antes del cambio:** contra el bundle anterior, `dashboard-today-meals.spec.ts` falló porque el Dashboard no renderizaba comidas ni estados de carga/error. En la primera versión del test, el mock 503 no alcanzó la petición porque el service worker registrado la interceptaba; lo registré y corregí el setup con `serviceWorkers: 'block'` antes de usar el test como señal verde. Rollback de esta unidad: revertir conjuntamente `dashboard.component.ts`, `dashboard-meals.util.ts`, su spec unitario, `dashboard-today-meals.spec.ts` y esta sección QA-DASH.1.
 
 **Discrepancias de producto abiertas (no se cierran en esta unidad):** `HOGARIA-SPEC.md` §2/§12al también pide vencimientos, lista abierta/presupuesto semanal y cola IA en Today; `DashboardComponent` actual no renderiza esos bloques. Mantener abierta la checklist general `/dashboard` y decidir cada superficie en su propia unidad, sin atribuirlas a esta corrección de comidas.
+
+## Unidad QA-PANTRY.1 · alta manual accesible en móvil (pendiente)
+
+**Fuente revalidada antes de implementar:** el comentario y `(onClick)="openAddModal()"` de `PantryComponent` definen «+ Agregar» como la acción que abre el modal de alta de la pestaña activa. `.pantry__header` distribuye título y `.pantry__header-acciones` con `flex`, pero la fila de acciones no declara `flex-wrap` ni un reflujo móvil; hay breakpoints cercanos en 480, 600, 768 y 1023 px que deben volver a comprobarse antes de tocar estilos. En Playwright Pixel 5, la prueba existente de Dashboard expiró al pulsar «+ Agregar»; el registro muestra interceptación alternada por `pantry-anadir-catalogo` y el botón de la cola de tickets en `header`. La captura sintética del fallo muestra la fila superior cortada/desplazada. Esto acredita un fallo de interacción real, pero todavía hay que medir límites y solapamientos en viewport, no inferir su geometría solo por la captura.
+
+**Conducta esperada:** los tres controles de acción del encabezado permanecen visibles, no se superponen y son activables por toque/teclado; «+ Agregar» abre el alta de la pestaña activa. A 320 px debe ser posible operar sin overflow horizontal ni un control vecino capturando el puntero.
+
+- [ ] Crear prueba unitaria de los dos destinos del CTA (ingredientes/utensilios) y Playwright de regresión que mida el rectángulo/área de cada acción, overflow del documento y elemento que recibe click; reproducir la obstrucción sin `force`, usar solo fixtures sintéticas y API/DB de prueba aislada.
+- [ ] Medir Chromium escritorio y Pixel 5 en 320×568, 393×851, 479/480/481, 599/600/601, 767/768/769, 1023/1024 y 844×390; volver a localizar breakpoints actuales antes de ajustar CSS. Confirmar acciones dentro del viewport y objetivos ≥44×44 px.
+- [ ] Aplicar solo si se reproduce un reflujo responsive mínimo que conserva las tres acciones, jerarquía/labels, navegación y uso por teclado; verificar modal correcto en ambas pestañas y ausencia de clicks interceptados.
+- [ ] Ejecutar prueba unitaria focal, E2E real Chromium/Pixel 5, build/typecheck y coverage del alcance ≥70 % en las cuatro métricas sin rebajar gates; capturar e inspeccionar PC 1440×900 y móvil 393×851/320×568.
+- [ ] Anotar el resultado exacto y dejar la suite Dashboard completa verde en ambos proyectos; no atribuir los demás hallazgos globales a esta unidad.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 
@@ -363,7 +379,7 @@ Evidencia QA-04b (2026-09-30): Playwright aislado con `E2E_RATE_LIMIT=on`, proye
 
 ### Discrepancias que requieren prueba/decisión
 
-- [ ] Dashboard/recetas: discrepancia reproducida en fuentes actuales; decisión de comportamiento y checklist TDD anotados en QA-04c.11.
+- [x] Dashboard/recetas: rutas para receta concreta y modal de generación resueltas con decisión y evidencia TDD en QA-04c.11; otras superficies pendientes de `/dashboard` siguen abiertas en la checklist funcional.
 - [x] Revalidación aislada actualizada de `shopping-round6.spec.ts` contra vista y contrato actuales: los cuatro fallos antiguos ya no se reproducen. El input existe tras crear/abrir lista; «seleccionar todo» muestra la barra en la pestaña visible; la foto presenta `409 AI_NOT_CONFIGURED` y su error inline; el selector actual `[data-test="discount-amount"]` es el propio input. Playwright con servidor/SQLite/puerto/semilla temporales y rate limit activo: Chromium 12 passed/3 skips esperados y Pixel 5 14 passed/1 skip esperado; verificado de nuevo en esta corrida.
 - [ ] La configuración `playwright.full-stack.config.ts` tiene la asignación de `DATABASE_PATH` dentro de un comentario. Corregir/aislar antes de usar esa configuración en local.
 - [ ] La suite E2E de desarrollo puede reutilizar `:4200` y la base de datos por defecto. No correr pruebas con escritura contra la instancia/base de datos de uso normal.
@@ -438,7 +454,7 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 ## Siguiente unidad de trabajo
 
 1. QA-04a: completada con suite `488/488`, regresiones de servicio y Playwright Chromium/Pixel `2/2` por proyecto; el gate de coverage sigue abierto en QA-04c.
-2. QA-DASH.1: conectar y probar las comidas pendientes de hoy con datos reales sintéticos; después resolver, en unidades separadas, las discrepancias de vencimientos/lista/presupuesto de Today.
+2. QA-DASH.1: resuelta; continuar con QA-PANTRY.1 para corregir la acción de alta manual obstruida en móvil, tras medirla en viewport.
 3. QA-04b checkbox: completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
 4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote.
 5. Corregir la configuración permanente de Playwright full-stack: su `DATABASE_PATH` sigue comentado; conservar aislamiento del servidor/DB de uso normal.
