@@ -209,12 +209,15 @@ Playwright real con `hogaria-e2e-runner-audit.mjs`, servidor/puerto/SQLite/semil
 
 **Conducta esperada:** ninguna suite local de escritura debe adjuntarse a un dev server/Base de uso normal ni persistir su DB en el repositorio. Cada ejecución usa un origen/puertos y `DATABASE_PATH` exclusivos bajo el directorio temporal del sistema; todas las specs derivan sus peticiones del `E2E_BASE_URL` del runner. El cierre limpia solo recursos propios y conserva evidencia aislada de una corrida roja; la limitación de peticiones se deja explícita por tipo de suite.
 
-- [ ] Añadir primero una regresión que demuestre que `pwa-assets.spec.ts` respeta el origen efímero y que los configs no pueden resolver una SQLite por defecto ni reutilizar `localhost:4200`; confirmar rojo sin levantar ni escribir en el servidor habitual.
+- [x] Añadir primero una regresión que demuestre que `pwa-assets.spec.ts` respeta `E2E_BASE_URL`; confirmar rojo en el runner aislado antes de cualquier petición del spec. La protección y evidencia están abajo.
+- [ ] Añadir regresiones para impedir que los configs resuelvan la SQLite por defecto o reutilicen servicios locales existentes; confirmar rechazo sin escribir en el servidor habitual.
 - [ ] Corregir los configs de desarrollo/full-stack y las URLs de las specs para que el servidor y el navegador compartan `E2E_BASE_URL`, puertos/DB temporales únicos y cleanup seguro; no ocultar ni limpiar archivos ajenos.
 - [ ] Ejecutar un smoke real de assets PWA y una interacción autenticada con escritura en Chromium + Pixel 5, verificar la ruta efectiva de `DATABASE_PATH`, cero peticiones a los puertos habituales y limpieza/retención esperadas.
 - [ ] Añadir tests unitarios de la selección/aislamiento de paths y comprobar cobertura focal ≥70 % en statements, ramas, funciones y líneas; build/typecheck y captura de consola/red.
 
-**Evidencia inicial:** el `:4200` no tenía un listener al comenzar esta revalidación. La spec de PWA todavía contiene una constante fija a `:4200`; aún no se ejecutó contra el runner aislado ni se cambió código.
+**TDD rojo (2026-09-30):** la nueva aserción ejecutada desde el runner aislado recibió `E2E_BASE_URL=http://127.0.0.1:62230`, pero encontró `BASE=http://localhost:4200`; el `beforeAll` falló antes de pedir manifiesto/assets (un caso fallido, cinco omitidos). Un intento anterior sin esta aserción había dado 6/6, pero la fuente fija al puerto habitual hacía que esos resultados no probaran el servidor temporal; solo había peticiones GET de assets, no escrituras. `Test-NetConnection` confirmó que 4200 y 3000 respondían; no se detuvieron ni modificaron esos procesos.
+
+**Corrección/evidencia de origen (2026-09-30):** `BASE` ahora prioriza `process.env.E2E_BASE_URL`. Con runner efímero que impone SQLite/puerto/semilla únicos y rate limit activo, `pwa-assets.spec.ts` pasa **6/6 Chromium** y **6/6 Pixel 5**; el hook compara el origen efectivo con el configurado y no realiza requests si no coinciden. Ambos runners confirmaron creación de `DATABASE_PATH` temporal y limpiaron su directorio al cerrar correctamente. Esto resuelve solo el desvío de esta spec; el config root y el de full-stack siguen pendientes y no se ejecutará la suite global por ellos hasta aislarlos.
 
 ## Unidad QA-PANTRY.1 · alta manual accesible en móvil (resuelta)
 

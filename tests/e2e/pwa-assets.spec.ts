@@ -11,7 +11,7 @@ import { test, expect, APIRequestContext } from '@playwright/test';
  * lo que se sirve tiene el tamano que dice tener. Ambos son bugs silenciosos.
  */
 
-const BASE = 'http://localhost:4200';
+const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:4200';
 
 type Manifest = {
   name: string;
@@ -40,6 +40,14 @@ async function getManifest(request: APIRequestContext): Promise<Manifest> {
 }
 
 test.describe('PWA — assets declarados y servidos', () => {
+  test.beforeAll(({}, workerInfo) => {
+    const configuredBase =
+      process.env.E2E_BASE_URL ?? String(workerInfo.project.use.baseURL ?? BASE);
+    expect(new URL(BASE).origin, 'PWA no debe salir del origen del proyecto/réplica').toBe(
+      new URL(configuredBase).origin
+    );
+  });
+
   test('el manifiesto describe HogarIA como app instalable', async ({ request }) => {
     const manifest = await getManifest(request);
 
@@ -75,8 +83,12 @@ test.describe('PWA — assets declarados y servidos', () => {
     const purposes = manifest.icons.map((icon) => icon.purpose ?? 'any');
 
     // Android (instalacion) pide 192 y 512; iOS quiere el suyo propio de 180.
-    expect(manifest.icons.some((i) => i.sizes === '192x192' && (i.purpose ?? 'any') === 'any')).toBe(true);
-    const maskable512 = manifest.icons.find((i) => i.sizes === '512x512' && i.purpose === 'maskable');
+    expect(
+      manifest.icons.some((i) => i.sizes === '192x192' && (i.purpose ?? 'any') === 'any')
+    ).toBe(true);
+    const maskable512 = manifest.icons.find(
+      (i) => i.sizes === '512x512' && i.purpose === 'maskable'
+    );
     expect(maskable512, 'falta un 512x512 purpose:maskable').toBeTruthy();
     expect(purposes.some((p) => p.includes('any'))).toBe(true);
     expect(purposes.some((p) => p.includes('maskable'))).toBe(true);
@@ -94,7 +106,9 @@ test.describe('PWA — assets declarados y servidos', () => {
     for (const shortcut of manifest.shortcuts ?? []) {
       for (const icon of shortcut.icons ?? []) {
         const response = await request.get(`${BASE}/${icon.src.replace(/^\//, '')}`);
-        expect(response.ok(), `el icono del atajo ${shortcut.name} da ${response.status()}`).toBe(true);
+        expect(response.ok(), `el icono del atajo ${shortcut.name} da ${response.status()}`).toBe(
+          true
+        );
       }
     }
 
