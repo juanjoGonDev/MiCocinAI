@@ -1,4 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
+import { join } from 'node:path';
+
+import { validateIsolatedEnvironment } from './server/tests/support/e2e-isolation.mjs';
+
+const isolation = validateIsolatedEnvironment(process.env);
+const reportDir = process.env.E2E_REPORT_DIR ?? join(isolation.runDir, 'playwright-report');
+const outputDir = process.env.E2E_OUTPUT_DIR ?? join(isolation.runDir, 'artifacts');
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -16,10 +23,8 @@ export default defineConfig({
   // literalmente como se ha colgado este job. 90s cubre el peor caso conocido.
   timeout: process.env.CI ? 90000 : 60000,
   retries: process.env.CI ? 1 : 0,
-  // Con un solo worker la suite de 113 tests tardaba mas que el propio runner.
-  // El trabajo pesado (install, compilacion) esta fuera de los tests, asi que se
-  // puede paralelizar: 2 por shard, 4 shards en paralelo = 8 tests a la vez.
-  workers: process.env.CI ? 2 : undefined,
+  // Local stays at one worker to cap browser/Angular memory; CI uses two per shard.
+  workers: process.env.CI ? 2 : 1,
   reporter: [
     // `list`, y no el reporter propio que se citaba aqui: `tools/reporters/hogaria-e2e-reporter.js`
     // nunca llego al repositorio, y un path inexistente no degrada —Playwright falla antes de correr el
@@ -28,20 +33,26 @@ export default defineConfig({
     // este, el arbol por `it` con duracion de `list` dice lo esencial.
     ['list'],
     // El informe HTML sigue siendo el sitio donde ver el trace de un fallo.
-    ['html', { open: 'never' }],
-    ['json', { outputFile: 'test-results/results.json' }],
+    ['html', { open: 'never', outputFolder: reportDir }],
+    [
+      'json',
+      { outputFile: process.env.E2E_RESULTS_FILE ?? join(isolation.runDir, 'results.json') }
+    ],
     // XML para quien lo quiera consumir (CI, IDEs, quality gates).
-    ['junit', { outputFile: 'test-results/junit.xml' }]
+    ['junit', { outputFile: join(isolation.runDir, 'junit.xml') }]
   ],
+  outputDir,
   use: {
-    baseURL: 'http://localhost:4200',
+    baseURL: isolation.baseUrl,
     // El idioma del navegador, fijado: con `language: 'auto'` la app mira `navigator.language`, y en CI eso
     // es `en-US`. Toda la suite esta escrita contra el espanol de la interfaz, asi que sin este ancla un
     // test verde en mi maquina es rojo en la suya —y al reves— sin que nadie haya tocado la app.
     locale: 'es-ES',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    // En sandboxes de Windows el cierre del contexto puede fallar al exportar trace/video
+    // (spawn EPERM). Los tests visuales guardan capturas explícitas; CI conserva artefactos.
+    trace: process.env.CI ? 'on-first-retry' : 'off',
+    screenshot: process.env.CI ? 'only-on-failure' : 'off',
+    video: process.env.CI ? 'retain-on-failure' : 'off',
     // Acotados, pero con margen: recortar esto a 15/20s convirtio 5 fallos
     // reales en 69 (la compilacion en frio del dev server de CI no da abasto).
     actionTimeout: 45000,
@@ -50,29 +61,25 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] }
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(process.env.E2E_CHROME_BIN
+          ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } }
+          : {})
+      }
     },
     {
       name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] }
+      use: {
+        ...devices['Pixel 5'],
+        ...(process.env.E2E_CHROME_BIN
+          ? { launchOptions: { executablePath: process.env.E2E_CHROME_BIN } }
+          : {})
+      }
     },
     {
       name: 'mobile-safari',
       use: { ...devices['iPhone 13'] }
     }
-  ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:4200',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-    // Toda la suite comparte la IP del backend: sin apagar el rate limit, un
-    // pico de peticiones deja algun registro sin redirigir y el test espera su
-    // navegacion hasta el timeout. Las limitaciones no son lo que se prueba aqui.
-    env: {
-      DISABLE_RATE_LIMIT: '1',
-      // Para poder cruzar los logs del backend con la semilla del run.
-      E2E_SEED: process.env.E2E_SEED ?? ''
-    }
-  }
+  ]
 });

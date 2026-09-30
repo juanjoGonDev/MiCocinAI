@@ -291,20 +291,23 @@ jobs:
         run: pnpm run build
 
       - name: 'E2E against the single production process (rate limiter on)'
-        run: pnpm exec playwright test -c playwright.full-stack.config.ts --forbid-only
+        id: e2e-full-stack
+        run: node scripts/run-isolated-playwright.mjs --config=playwright.full-stack.config.ts --forbid-only
         env:
           CI: 'true'
 
       - name: Publish E2E failures as annotations
         if: failure()
         run: node scripts/ci-e2e-summary.mjs
+        env:
+          E2E_RESULTS_FILE: ${{ steps.e2e-full-stack.outputs.e2e_results_file }}
 
       - name: Upload the full-stack Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-full-stack
-          path: playwright-report/
+          path: ${{ steps.e2e-full-stack.outputs.e2e_report_dir }}/
           retention-days: 7
 
   e2e:
@@ -359,8 +362,9 @@ jobs:
           if [ "${{ steps.pw.outputs.cache-hit }}" != "true" ]; then pnpm exec playwright install --with-deps chromium; fi
 
       - name: Run Playwright tests (webServer config boots frontend + backend)
+        id: e2e
         run: >-
-          pnpm exec playwright test --project=chromium
+          node scripts/run-isolated-playwright.mjs --project=chromium
           --shard=${{ matrix.shard }}/${{ strategy.job-total }}
           --forbid-only
         env:
@@ -369,13 +373,15 @@ jobs:
       - name: Publish E2E failures as annotations
         if: failure()
         run: node scripts/ci-e2e-summary.mjs
+        env:
+          E2E_RESULTS_FILE: ${{ steps.e2e.outputs.e2e_results_file }}
 
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-${{ matrix.shard }}
-          path: playwright-report/
+          path: ${{ steps.e2e.outputs.e2e_report_dir }}/
           retention-days: 7
 
       # El trace y el `error-context.md` (snapshot del DOM en el momento del fallo)
@@ -386,7 +392,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results-${{ matrix.shard }}
-          path: test-results/
+          path: ${{ steps.e2e.outputs.e2e_output_dir }}/
           retention-days: 7
           if-no-files-found: ignore
 
@@ -395,8 +401,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: hogaria-run-${{ matrix.shard }}
-          path: |
-            test-results/hogaria-run.json
-            test-results/junit.xml
+          path: ${{ steps.e2e.outputs.e2e_run_dir }}/junit.xml
           retention-days: 14
           if-no-files-found: ignore

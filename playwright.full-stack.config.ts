@@ -1,4 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
+import { join } from 'node:path';
+
+import { validateIsolatedEnvironment } from './server/tests/support/e2e-isolation.mjs';
 
 /**
  * Playwright contra el proyecto ENTERO levantado como en produccion: un unico proceso
@@ -13,20 +16,19 @@ import { defineConfig, devices } from '@playwright/test';
  * aplicado y con el streaming de logs intacto. Un «todo verde» que no ejercita esa
  * combinacion no dice nada de ella.
  *
- * Local:  `npm run build && npx playwright test -c playwright.full-stack.config.ts`
+ * Local: `pnpm run test:e2e:full-stack` (build + isolated process supervisor).
  */
 
 // Nada de `import.meta` ni `__dirname`: Playwright carga este fichero como CJS (el package.json de la raiz
 // no declara `type: module`) y ahi `import.meta` es un SyntaxError que tumba el job ANTES de escribir un
-// solo resultado —el fallo que persigue este fix—. `testDir`, `globalSetup` y el `webServer` se resuelven
-// solos contra la carpeta de esta config, que es la raiz del repo.
-const port = Number(process.env.E2E_FULL_STACK_PORT ?? 3100);
-const base = process.env.E2E_BASE_URL ?? `http://localhost:${port}`;
-// El globalSetup comun calienta el `ng serve` del :4200 porque ahi el primer render compila en frio. Aqui no
-// hay nada que calentar —el binario ya esta construido y el propio webServer espera a `/health`—, y en CI el
-// :4200 no escucha: el warmup se comia su presupuesto de 180 s ENTERO y el job reventaba por timeout sin
-// dejar ni results.json. Se le dice a ese warmup que mire a este servidor: responde un 200 al primer bote.
-process.env.E2E_BASE_URL = base;
+// solo resultado —el fallo que persigue este fix—. `testDir` y `globalSetup` se resuelven solos contra la
+// carpeta de esta config; el runner externo arranca y detiene el binario aislado.
+const isolation = validateIsolatedEnvironment(process.env);
+const base = isolation.baseUrl;
+// The isolated runner starts the production binary before Playwright and points global setup at this origin.
+const reportDir = process.env.E2E_REPORT_DIR ?? join(isolation.runDir, 'playwright-report');
+const resultsFile = process.env.E2E_RESULTS_FILE ?? join(isolation.runDir, 'results.json');
+const outputDir = process.env.E2E_OUTPUT_DIR ?? join(isolation.runDir, 'artifacts');
 
 export default defineConfig({
   testDir: './tests/e2e/full-stack',
@@ -41,13 +43,14 @@ export default defineConfig({
     ['list'],
     // Informe aparte: mezclarlo con el de la suite de desarrollo haria imposible saber
     // de que job es un fallo que se abre en el navegador.
-    ['html', { open: 'never', outputFolder: 'playwright-report/full-stack' }],
+    ['html', { open: 'never', outputFolder: reportDir }],
     // CUARTA CAUSA del job mudo, y la buena: `scripts/ci-e2e-summary.mjs` anota los fallos leyendo este
     // json, y el config del rescate se quedo sin el reporter —el job corria la suite ENTERA (4 min),
     // fallaba lo que debia fallar, y el parte decia «no se encontro results.json» como si no hubiera
     // pasado nada. Mismo fichero y misma ruta que la suite de desarrollo.
-    ['json', { outputFile: 'test-results/results.json' }]
+    ['json', { outputFile: resultsFile }]
   ],
+  outputDir,
   use: {
     baseURL: base,
     trace: 'on-first-retry',
@@ -78,26 +81,5 @@ export default defineConfig({
           : {})
       }
     }
-  ],
-  webServer: {
-    // Un solo proceso: el `CMD` del Dockerfile, no un montaje de dos servidores.
-    // `PUBLIC_DIR` se deja SIN fijar a proposito: el servidor probe las formas reales
-    // del `dist` (`frontend/dist/browser`, `./public`...), que es lo que hace en el
-    // contenedor, y asi este config tampoco se queda apuntando a una ruta vieja.
-    command: 'node server/dist/index.js',
-    // Sin `cwd`: Playwright la pone en el directorio de esta config (la raiz), que es donde `server/dist`
-    // y `frontend/dist` viven.
-    url: `${base}/health`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
-    env: {
-      PORT: String(port),
-      NODE_ENV: 'production',
-      // BD propia por puerto, para poder tener el server de desarrollo y este a la vez.
-      // Relativo a la raiz del repo (el cwd del webServer): BD propia por puerto, para poder tener el
-      // server de desarrollo y este a la vez.      DATABASE_PATH: `server/data/hogaria-e2e-full-stack-${port}.sqlite`,
-      // El limitador NO se apaga: es lo que se viene a probar aqui.
-      E2E_SEED: process.env.E2E_SEED ?? ''
-    }
-  }
+  ]
 });

@@ -43,9 +43,10 @@ test.describe('PWA — assets declarados y servidos', () => {
   test.beforeAll(({}, workerInfo) => {
     const configuredBase =
       process.env.E2E_BASE_URL ?? String(workerInfo.project.use.baseURL ?? BASE);
-    expect(new URL(BASE).origin, 'PWA no debe salir del origen del proyecto/réplica').toBe(
-      new URL(configuredBase).origin
-    );
+    expect(
+      new URL(BASE).origin,
+      `PWA origin mismatch: BASE=${BASE}, configured project origin=${configuredBase}`
+    ).toBe(new URL(configuredBase).origin);
   });
 
   test('el manifiesto describe HogarIA como app instalable', async ({ request }) => {

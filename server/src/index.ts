@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server';
+import { writeFileSync } from 'node:fs';
 import { relative } from 'node:path';
 
 import { config } from './config/app.config.js';
@@ -35,9 +36,14 @@ async function startServer() {
       {
         fetch: app.fetch,
         port,
-        hostname: '0.0.0.0'
+        hostname: config.server.host
       },
       (info) => {
+        if (process.env.E2E_READY_FILE) {
+          writeFileSync(process.env.E2E_READY_FILE, `${process.pid}:${info.port}\n`, {
+            flag: 'wx'
+          });
+        }
         const shown = staticDir ? relative(process.cwd(), staticDir) : null;
         console.log(`
 [SERVER] ══════════════════════════════════════════════════════════
