@@ -2,6 +2,7 @@ export interface ReceiptQueueAnchor {
   left: number;
   top: number;
   bottom: number;
+  sidebarRight?: number;
 }
 
 export interface ReceiptQueueViewport {
@@ -31,7 +32,15 @@ export function computeReceiptQueuePanelPosition(
   const verticalMargin = Math.min(VIEWPORT_MARGIN, Math.max(0, viewport.height / 2));
   const width = Math.max(0, Math.min(PANEL_MAX_WIDTH, viewport.width - horizontalMargin * 2));
   const maxLeft = Math.max(horizontalMargin, viewport.width - horizontalMargin - width);
-  const left = Math.min(maxLeft, Math.max(horizontalMargin, anchor.left));
+  const panelLeftAfterSidebar =
+    anchor.sidebarRight === undefined ? null : anchor.sidebarRight + TRIGGER_GAP;
+  const roomAfterSidebar =
+    panelLeftAfterSidebar === null ? 0 : viewport.width - horizontalMargin - panelLeftAfterSidebar;
+  const minimumLeft =
+    panelLeftAfterSidebar !== null && roomAfterSidebar >= width
+      ? panelLeftAfterSidebar
+      : horizontalMargin;
+  const left = Math.min(maxLeft, Math.max(minimumLeft, anchor.left));
 
   const topBelow = anchor.bottom + TRIGGER_GAP;
   const availableBelow = Math.max(0, viewport.height - verticalMargin - topBelow);

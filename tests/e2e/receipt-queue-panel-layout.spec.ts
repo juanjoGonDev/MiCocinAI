@@ -5,7 +5,31 @@ import { registerAndGoto } from './helpers/auth';
 import { waitForStableView } from './helpers/recipe-fixtures';
 
 test('el panel de cola queda fuera del lateral y dentro del viewport', async ({ page }) => {
+  const browserErrors: string[] = [];
+  const appOrigin = new URL(process.env.E2E_BASE_URL ?? 'http://localhost:4200').origin;
+  page.on('pageerror', (error) => browserErrors.push(`pageerror: ${error.message}`));
+  page.on('console', (message) => {
+    if (message.type() === 'error' && message.location().url.startsWith(appOrigin)) {
+      browserErrors.push(`console: ${message.text()}`);
+    }
+  });
+  page.on('requestfailed', (request) => {
+    if (new URL(request.url()).origin === appOrigin) {
+      browserErrors.push(
+        `requestfailed: ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`
+      );
+    }
+  });
+
   await registerAndGoto(page, '/dashboard', 'receipt-queue-layout');
+  await page.waitForFunction(() => {
+    const currentDocument = document as Document & { activeViewTransition?: unknown };
+    return !currentDocument.activeViewTransition;
+  });
+  await waitForStableView(page);
+  const initialViewport = page.viewportSize()!;
+  const isDesktop = initialViewport.width >= 1024;
+  if (isDesktop) await page.setViewportSize({ width: 1440, height: 900 });
   const viewport = page.viewportSize()!;
   const queueButton =
     viewport.width >= 1024
@@ -50,6 +74,31 @@ test('el panel de cola queda fuera del lateral y dentro del viewport', async ({ 
       bounds.right,
       'el panel debe expandirse sobre el contenido, no quedar atrapado en el lateral'
     ).toBeGreaterThan(bounds.sidebarRight!);
+    expect(
+      bounds.left,
+      'el panel debe empezar después del lateral y no quedar metido en él'
+    ).toBeGreaterThanOrEqual(bounds.sidebarRight! + 8);
+
+    for (const width of [1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await waitForStableView(page);
+      const resizedBounds = await panel.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        const sidebar = element.closest('.sidebar')!;
+        return {
+          left: rect.left,
+          right: rect.right,
+          sidebarRight: sidebar.getBoundingClientRect().right
+        };
+      });
+      expect(
+        resizedBounds.left,
+        `a ${width}px el panel debe dejar libre el lateral`
+      ).toBeGreaterThanOrEqual(resizedBounds.sidebarRight + 8);
+      expect(resizedBounds.right).toBeLessThanOrEqual(width - 8);
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await waitForStableView(page);
   }
 
   const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
@@ -58,7 +107,7 @@ test('el panel de cola queda fuera del lateral y dentro del viewport', async ({ 
     await page.screenshot({ path: join(screenshotDirectory, 'receipt-queue-panel.png') });
   }
 
-  if (viewport.width < 1024) {
+  if (!isDesktop) {
     await page.setViewportSize({ width: 568, height: 320 });
     await waitForStableView(page);
     const landscapeBounds = await panel.evaluate((element) => {
@@ -94,6 +143,34 @@ test('el panel de cola queda fuera del lateral y dentro del viewport', async ({ 
 
   await page.keyboard.press('Escape');
   await expect(panel).toHaveCount(0);
+
+  if (!isDesktop) {
+    await page.locator('.header__menu').click();
+    const drawerQueueButton = page.locator('.sidebar [data-test="receipt-queue-icon"]');
+    await expect(drawerQueueButton).toBeVisible();
+    await drawerQueueButton.click();
+    await expect(panel).toBeVisible();
+    const drawerPanelBounds = await panel.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom
+      };
+    });
+    expect(drawerPanelBounds.left).toBeGreaterThanOrEqual(8);
+    expect(drawerPanelBounds.right).toBeLessThanOrEqual(page.viewportSize()!.width - 8);
+    expect(drawerPanelBounds.top).toBeGreaterThanOrEqual(0);
+    expect(drawerPanelBounds.bottom).toBeLessThanOrEqual(page.viewportSize()!.height);
+    if (screenshotDirectory) {
+      await page.screenshot({ path: join(screenshotDirectory, 'receipt-queue-panel-drawer.png') });
+    }
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+  }
+
+  expect(browserErrors, 'el flujo no debe introducir errores de consola o JavaScript').toEqual([]);
 });
 
 test('la cola desplaza varios tickets sin salirse de la pantalla estrecha', async ({ page }) => {

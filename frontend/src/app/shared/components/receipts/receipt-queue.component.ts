@@ -453,9 +453,15 @@ export class ReceiptQueueComponent implements OnInit, OnDestroy {
 
     const trigger = this.activeTrigger;
     const bounds = trigger.getBoundingClientRect();
+    const sidebarRight = trigger.closest<HTMLElement>('.sidebar')?.getBoundingClientRect().right;
     this.panelPosition.set(
       computeReceiptQueuePanelPosition(
-        { left: bounds.left, top: bounds.top, bottom: bounds.bottom },
+        {
+          left: bounds.left,
+          top: bounds.top,
+          bottom: bounds.bottom,
+          ...(sidebarRight === undefined ? {} : { sidebarRight })
+        },
         { width: window.innerWidth, height: window.innerHeight }
       )
     );
