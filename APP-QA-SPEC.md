@@ -180,7 +180,7 @@ Evidencia reproducible (2026-09-30): TDD rojo: seguir `/settings/ai` acababa en 
 
 El E2E full-stack usa el runner aislado `%TEMP%\hogaria-e2e-runner-audit.mjs`, `DATABASE_PATH` SQLite temporal único y rate limit activo, sin proveedor externo ni base normal: `shopping-ai-recovery.spec.ts` Chromium 1/1 y Pixel 5 1/1; en Pixel 5 comprueba 393×851 y 320×568, destino, CTA en viewport, cero overflow, cero items y cero toast duplicado antes/después de navegar. La regresión existente `shopping-round6.spec.ts` pasa Chromium 12 (3 skips esperados) y Pixel 5 14 (1 skip esperado). Typechecks de servidor y E2E y build de producción pasaron; se mantienen warnings previos de bundle (691.41 kB frente al warning de 500 kB), estilos e imports. Capturas sintéticas inspeccionadas: `.e2e-screenshots/shopping-ai-recovery-final-2/shopping-ai-recovery-config-1280.png`, `...-393.png` y `...-320.png` (también se conserva el estado de error PC/móvil); todas ignoradas por Git. El gate global frontend de 80 % sigue pendiente en QA-04c.
 
-### QA-04c.11 · enlaces de recetas y generación IA desde el Dashboard (en curso)
+### QA-04c.11 · enlaces de recetas y generación IA desde el Dashboard (resuelta)
 
 **Fuente activa y decisión antes de codificar:** `app.routes.ts` declara `/recipes` pero `recipes.routes.ts` solo declara `path: ''`; el `*` envía `/recipes/:id` al Dashboard. La pantalla de Recetas enseña el detalle en un modal (`viewRecipe`) y ya ofrece la API autenticada `GET /api/recipes/:id`. Por tanto, la tarjeta sugerida conservará su destino concreto con `?recipe=<id>` y abrirá ese modal existente; no se creará una segunda vista de detalle. Los CTA Dashboard existentes llevan `#ai`, así que cargar/navegar a ese fragmento abrirá el modal de generación sin enviar una petición al proveedor. Al cerrar cualquiera de los modales, su estado URL se limpiará; un id inexistente debe volver a la lista sin dejar un destino roto.
 
@@ -192,8 +192,8 @@ El E2E full-stack usa el runner aislado `%TEMP%\hogaria-e2e-runner-audit.mjs`, `
 
 - [x] TDD E2E con receta sintética creada por API en SQLite temporal: la tarjeta sugerida del Dashboard abre la receta concreta en desktop y Pixel 5; recargar el deep link conserva modal/contenido; cerrar vuelve a `/recipes` y quita `recipe`.
 - [x] TDD E2E del CTA principal y del estado vacío: seguir `#ai` abre el formulario accesible tanto al navegar desde Dashboard como al cargar `/recipes#ai`; cerrar limpia el fragmento y no llama a IA.
-- [ ] Refluir las acciones de la modal IA a 320 px y medir ambos botones completos dentro del viewport; mantener scroll vertical usable y comprobar 393×851/320×568.
-- [ ] Refluir también las acciones de la ficha a 320 px; medir «Cocinar ahora» y «Añadir a favoritos» completos en su contenedor y viewport, con espacio bajo los botones.
+- [x] Refluir las acciones de la modal IA a 320 px y medir ambos botones completos dentro del viewport; mantener scroll vertical usable y comprobar 393×851/320×568.
+- [x] Refluir también las acciones de la ficha a 320 px; medir «Cocinar ahora» y «Añadir a favoritos» completos en su contenedor y viewport, con espacio bajo los botones.
 - [x] Limpiar siempre la receta sintética E2E con `finally`, para que una aserción fallida no contamine casos posteriores.
 - [x] Probar `/recipes?recipe=missing` como borde: mantener la página de Recetas, no abrir detalle vacío ni caer en Dashboard, limpiar el id inválido con una salida recuperable.
 - [x] Corregir `RecipeService.getRecipe()` para desempaquetar el DTO; unit test cubre éxito/error y `currentRecipe`.
@@ -204,7 +204,17 @@ El E2E full-stack usa el runner aislado `%TEMP%\hogaria-e2e-runner-audit.mjs`, `
 - [x] La cobertura de `RecipeService` y del resolver, con la prueba focal aislada, supera el 70 % de statements, ramas, funciones y líneas sin bajar gates.
 - [x] Revisar patrones de ruta/template y ejecutar typecheck/build, pruebas aisladas desktop/Pixel 5 y capturas sintéticas PC/móvil inspeccionadas.
 
-**Evidencia parcial — navegación de recetas (2026-09-30):** con el runner `%TEMP%\hogaria-e2e-runner-audit.mjs`, `E2E_SCOPE=all`, rate limit activo, servidor efímero y SQLite temporal único, el alcance de rutas `dashboard-recipe-links.spec.ts` pasó **3/3 Chromium** y **3/3 Pixel 5**. Se validaron la tarjeta, recarga/cierre, CTA principal/estado vacío, `#ai` directo, Escape, nombre accesible, ausencia de peticiones `/api/ai/` e id inválido. Karma del servicio+resolver pasó **11/11**, cobertura **100/83.33/100/100** (gates locales 80 %); el servicio aislado pasó **8/8**, **100/80/100/100**. También pasaron `node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.e2e.json` y `node .\node_modules\@angular\cli\bin\ng build --configuration production` (warnings previos de bundle de 691.58 kB frente a 500 kB, estilos e imports no usados). Capturas sintéticas inspeccionadas en `.e2e-screenshots/dashboard-recipe-links-route/` (1280 y Pixel 5 393×851); la comprobación/captura de acciones 320×568 sigue pendiente.
+**Evidencia final (2026-09-30):** las corridas reales de Playwright usaron `E2E_SCOPE=all`, `E2E_RATE_LIMIT=on` y el runner `%TEMP%\hogaria-e2e-runner-audit.mjs`, que asigna puerto/SQLite únicos y limpia el DB temporal al terminar. Comando reproducible (desde la raíz; repetir para cada variante):
+
+```powershell
+$env:E2E_SCOPE='all'; $env:E2E_PROJECT='<chromium|mobile-chrome>'; $env:E2E_FILES='<dashboard-recipe-links.spec.ts|recipe-actions-mobile.spec.ts>'; $env:E2E_RATE_LIMIT='on'; node "$env:TEMP\hogaria-e2e-runner-audit.mjs" (Get-Location).Path
+```
+
+`dashboard-recipe-links.spec.ts` pasó **3/3 Chromium** y **3/3 Pixel 5**; `recipe-actions-mobile.spec.ts` pasó **1/1 Pixel 5**, midiendo 393×851 y 320×568. Las regresiones rojas anteriores midieron 302 px (IA) y 332 px (ficha) en 240 px disponibles; el CSS ahora apila ambas filas a ≤480 px. Aserciones miden ancho, cajas completas, viewport y 8 px de separación inferior; el modal IA conserva desplazamiento vertical, raíz sin overflow horizontal y cero llamadas `/api/ai/`. Los fixtures API sintéticos se borran en `finally`.
+
+Karma focal, desde `frontend`: `node .\node_modules\@angular\cli\bin\ng test --no-watch --code-coverage --include=src/app/core/services/recipe.service.spec.ts --include=src/app/features/recipes/recipe-route-intent.spec.ts --browsers=ChromeHeadless` pasó **11/11**, statements **100 % (64/64)**, ramas **83.33 % (10/12)**, funciones **100 % (31/31)** y líneas **100 % (50/50)**; servicio aislado **8/8**, 100/80/100/100. Gate local Karma existente: 80 % por métrica. También pasaron `node .\node_modules\typescript\bin\tsc --noEmit -p tsconfig.e2e.json`, `node .\node_modules\prettier\bin\prettier.cjs --check tests/e2e/dashboard-recipe-links.spec.ts tests/e2e/helpers/recipe-fixtures.ts tests/e2e/recipe-actions-mobile.spec.ts` y `node .\node_modules\@angular\cli\bin\ng build --configuration production` (warnings previos: bundle 691.58 kB vs 500 kB, estilos e imports no usados; exit 0).
+
+Capturas sintéticas inspeccionadas: `.e2e-screenshots/dashboard-recipe-links-route-rerun/desktop/` (1280), `.../mobile/` (393×851) y `.e2e-screenshots/recipe-actions-mobile-final-rerun/` (detalle/IA 393×851 y 320×568), todas ignoradas por Git. Se repitieron los tres proyectos/alcances antes de cerrar; cada runner eliminó su SQLite/artefactos temporales tras el resultado verde. Rollback: los commits de servicios, navegación y reflujo son unidades separadas; esta última solo revierte el apilado de `.ai-form__actions` y `.recipe-detail__actions` y su E2E móvil.
 
 ### QA-04c.4 · matriz móvil de bandeja (revalidada en este alcance)
 

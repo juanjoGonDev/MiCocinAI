@@ -777,6 +777,10 @@ import { resolveRecipeRouteIntent } from './recipe-route-intent';
         grid-template-columns: 1fr;
       }
 
+      .ai-form__actions,
+      .recipe-detail__actions {
+        flex-direction: column;
+      }
     }
   `]
 })
