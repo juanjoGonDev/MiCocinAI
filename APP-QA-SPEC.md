@@ -82,7 +82,7 @@ Evidencia QA-03b (2026-09-30): red TDD 2/28 fallos esperados antes del cambio; s
 
 **Fuente revalidada antes de implementar:** la línea base aislada de Karma volvió a dar 19 specs fallidos y 452/471 verdes: `AuthService` (4), `authGuard` (2), `home-profile` (1), `ModulesService` (7), `CheckboxComponent` (1), `ThemeService` (3) y `ModalComponent` (1). En `ModulesService.spec.ts`, el fake `profile` era una función mutable pero no estaba respaldada por una señal Angular; por ello los `computed` del servicio no reaccionaban a `set()` y seis de los siete specs caían por estado obsoleto. El séptimo supone incorrectamente que `receipts` aún no está disponible. No cambiar el comportamiento de producción solo para hacer verdes estos tests.
 
-- [ ] Ejecutar de nuevo la línea base de Karma en Chrome Headless, conservar el gate local del 80 % y registrar los nombres de los specs rojos y los porcentajes; no tocar datos ni el servidor de uso normal.
+- [x] Repetir la línea base aislada de Karma y registrar los nombres de los specs rojos y porcentajes; no tocar datos ni el servidor de uso normal.
 - [ ] `AuthService`/`authGuard`: sembrar y afirmar `STORAGE_KEYS` antes de construir servicios; modelar `isAuthenticated` como señal invocable. Probar el ciclo legado → migración → logout → nueva migración/arranque para confirmar que una sesión cerrada no se restaura; preservar prioridad/idempotencia de migración y comportamiento de login.
 - [ ] Resolver el hallazgo de logout solo tras prueba: el código de arranque vuelve a copiar claves heredadas y `logout()` hoy limpia las claves namespaced. Si la reproducción confirma reautenticación, borrar únicamente credenciales de sesión heredadas al cerrar sesión (sin borrar preferencias ni claves ajenas) y cubrir el caso con regresión.
 - [ ] `ThemeService`: usar `hogar:v1:theme`, limpiar/sembrar almacenamiento antes de instanciar y crear instancias de prueba dentro de contexto Angular; verificar valores válidos, valor por defecto y persistencia.
@@ -90,6 +90,8 @@ Evidencia QA-03b (2026-09-30): red TDD 2/28 fallos esperados antes del cambio; s
 - [ ] Reconciliar la frase histórica contradictoria de `HOGARIA-SPEC.md` §8c con el registro, las rutas actuales y las entradas de funciones ya implementadas; no deshabilitar módulos vigentes para complacer tests viejos.
 - [ ] `ModalComponent`/`CheckboxComponent`: comprobar ambos outputs de cierre; actualizar el fixture tras el click antes de leer `aria-checked`; asegurar el estado disabled.
 - [ ] Tras los cambios, ejecutar el grupo unitario enfocado y toda la suite frontend; no marcar como cerrada hasta cero fallos, gate 80 % satisfecho o documentar explícitamente qué métrica/archivo impide pasar sin reducir ningún umbral.
+
+Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 19 FAILED, 452 SUCCESS`. Tras rebaselinar mocks/expectativas y corregir logout+migración y `isSaving`, el grupo de 8 specs auditados pasa 84/84 y la suite completa pasa 473/473. El gate de coverage **sigue rojo**, no se rebajó: statements 77.18 %, ramas 63.72 %, funciones 73.64 %, líneas 78.45 % (umbral configurado 80 % para cada métrica). El informe por archivo señala más ramas sin cubrir en `shopping.model.ts` (47), `error.interceptor.ts` (41), `swipe-row.directive.ts` (40), `core/time.ts` (35), `data-table.util.ts` (31), `i18n.service.ts` (29), `household.service.ts` (24) y `taste-profile.service.ts` (18); se validará el alcance activo de cada uno antes de añadir tests.
 
 ### QA-04b · hit area táctil de `app-checkbox`
 
@@ -99,6 +101,14 @@ Evidencia QA-03b (2026-09-30): red TDD 2/28 fallos esperados antes del cambio; s
 - [ ] Corregir el tamaño mínimo con el cambio CSS más pequeño; demostrar altura ≥40 px en la instancia real de Calendario en móvil y escritorio, sin overflow ni solapamiento.
 - [ ] Ejecutar unit tests y Playwright real para el formulario/event sheet afectado; capturar PC y móvil con fixtures sintéticos e inspeccionar las imágenes.
 - [ ] Registrar porcentajes de statements, ramas, funciones y líneas del alcance (cada uno ≥70 %), manteniendo los gates configurados.
+
+### QA-04c · cobertura global sin rebajar gates
+
+La ejecución completa ya no falla en assertions, pero el gate local existente exige 80 % global en las cuatro métricas. No se elimina ni se excluye ningún archivo productivo para ocultar la deuda.
+
+- [ ] Revalidar el informe por archivo inmediatamente antes de cada lote; empezar por utilidades/modelos de alto impacto con lógica activa y distinguir código realmente no usado antes de escribir tests.
+- [ ] Añadir pruebas unitarias/integración para ramas y caminos de error/éxito no cubiertos; cada unidad tendrá comando reproducible, ≥70 % de las cuatro métricas del alcance y commit atómico.
+- [ ] Repetir la suite frontend completa con coverage y alcanzar 80 % en statements, ramas, funciones y líneas; documentar comandos y salidas, sin bajar umbrales ni desactivar instrumentation.
 
 **Hallazgos de auditoría (solo lectura):** claves legacy en `auth.service.spec.ts` frente a `STORAGE_KEYS` (`storage.service.ts`); el guard usa `isAuthenticated()` y no un getter booleano; los tests de tema crean instancias fuera del contexto de inyección; el fake de `ModulesService` no es reactivo y la disponibilidad esperada de `receipts` es obsoleta. Tras hacer reactivo el fake, el test de error revela un bug real: `apply()` solo limpia `isSaving` en `complete`, que RxJS no ejecuta tras `error`; `SettingsComponent` usa ese estado para deshabilitar todos los módulos y bloquea el reintento. El rollback de un único módulo prueba una acción que Configuración deshabilita; el test de modal espía el output equivocado; el test de checkbox no refresca el fixture. La regresión nueva de logout/migración y la altura táctil también requieren corrección de producción.
 
@@ -177,8 +187,9 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. QA-04a: repetir baseline aislado, probar logout+migración y alinear tests con los contratos de servicios actuales.
-2. QA-04b: corregir y validar con Playwright el tamaño táctil del checkbox.
-3. Corregir la configuración permanente de Playwright full-stack: su `DATABASE_PATH` sigue comentado; conservar aislamiento del servidor/DB de uso normal.
-4. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-5. Continuar el barrido de rutas y acciones con capturas de consola/red/overflow. Resolver el destino de Dashboard `/recipes/:id` con conducta actual observada antes de cambiar el router.
+1. QA-04a: cerrar cobertura E2E real del logout+migración y error/reintento de módulos, actualizar evidencia y hacer commit atómico.
+2. QA-04b: reproducir/corregir y validar con Playwright el tamaño táctil del checkbox.
+3. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables.
+4. Corregir la configuración permanente de Playwright full-stack: su `DATABASE_PATH` sigue comentado; conservar aislamiento del servidor/DB de uso normal.
+5. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+6. Continuar el barrido de rutas y acciones con capturas de consola/red/overflow. Resolver el destino de Dashboard `/recipes/:id` con conducta actual observada antes de cambiar el router.
