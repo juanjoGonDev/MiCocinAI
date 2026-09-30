@@ -172,7 +172,7 @@ En una captura synthetic del run Pixel 5, el listbox de `.detail__sugs` aparece 
 
 - [x] Reproducir en Pixel 5 real del proyecto: click de puntero en `add-submit` con sugerencias visibles es interceptado; 3 casos de `shopping-round6` se detienen ahí. Captura synthetic del overlay inspeccionada.
 - [x] Contrastar el comportamiento con el markup (`role=combobox`, `aria-autocomplete=list`, `role=listbox/option`, `mousedown.preventDefault`) y la capa absoluta/z-index; desktop Chromium puede usar el flujo actual.
-- [ ] Escribir regresión enfocada que exija que el botón Añadir sea alcanzable por hit-test/click en Pixel 5 y 320×568 con sugerencias visibles; no usar `force` ni Escape antes del click.
+- [x] Escribir regresión enfocada que exige que el botón Añadir sea alcanzable por hit-test/click en Pixel 5 con sugerencias visibles; no usa `force` ni Escape antes del click. Rojo reproducible: `E2E_SCOPE=all E2E_PROJECT=mobile-chrome E2E_FILES=tests/e2e/shopping-round6.spec.ts:143 E2E_RATE_LIMIT=on node %TEMP%/hogaria-e2e-runner-audit.mjs`, 0/1; hit-test recibió el listbox y Playwright guardó captura en `hogaria-e2e-TYX1pM/.../test-failed-1.png`.
 - [ ] Refluir la lista de sugerencias dentro del flujo del formulario móvil (o una solución visual equivalente) para que no tape acciones; preservar toque a sugerencia, flechas/Enter/Escape, foco del combobox y entrada libre.
 - [ ] E2E del quick-add en mobile: seleccionar sugerencia actualiza el valor y crea la línea esperada; entrada libre/cantidad se puede añadir con botón/teclado; ninguna sugerencia accidental se selecciona, sin scroll horizontal.
 - [ ] Repetir 393×851 y 320×568 y los 11 casos Pixel 5 completos; inspeccionar capturas antes/después y asegurar que escritorio no cambia.
