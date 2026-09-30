@@ -39,7 +39,7 @@ export type InputSize = 'sm' | 'md' | 'lg';
           [value]="value"
           [class]="getInputClasses()"
           (input)="onInput($event)"
-          (blur)="onBlur.emit($event)"
+          (blur)="handleBlur($event)"
           (focus)="onFocus.emit($event)"
         />
 
@@ -283,6 +283,10 @@ export class InputComponent implements ControlValueAccessor {
     }
 
     this.onChange(raw);
+  }
+
+  handleBlur(event: Event): void {
+    this.onBlur.emit(event);
     this.onTouched();
   }
 

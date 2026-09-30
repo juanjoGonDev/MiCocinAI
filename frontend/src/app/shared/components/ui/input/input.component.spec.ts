@@ -201,7 +201,7 @@ describe('InputComponent', () => {
       const fn = jasmine.createSpy('onTouched');
       component.registerOnTouched(fn);
 
-      component.onInput({ target: { value: 'test' } } as any);
+      component.handleBlur(new Event('blur'));
       expect(fn).toHaveBeenCalled();
     });
 
@@ -218,7 +218,7 @@ describe('InputComponent', () => {
       expect(touched).not.toHaveBeenCalled();
     });
 
-    it('keeps empty or non-numeric input as text and marks it touched', () => {
+    it('keeps empty or non-numeric input as text without marking it touched while typing', () => {
       const changed = jasmine.createSpy('registerOnChange');
       const touched = jasmine.createSpy('registerOnTouched');
       component.type = 'number';
@@ -230,6 +230,31 @@ describe('InputComponent', () => {
 
       expect(changed.calls.argsFor(0)).toEqual(['']);
       expect(changed.calls.argsFor(1)).toEqual(['12x']);
+      expect(touched).not.toHaveBeenCalled();
+    });
+
+    it('marks text and numeric controls touched on blur while preserving the blur output', () => {
+      const touched = jasmine.createSpy('registerOnTouched');
+      component.registerOnTouched(touched);
+      const emitBlur = spyOn(component.onBlur, 'emit');
+      const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+
+      input.value = 'Ana';
+      input.dispatchEvent(new Event('input'));
+      expect(touched).not.toHaveBeenCalled();
+
+      const textBlur = new Event('blur');
+      input.dispatchEvent(textBlur);
+      expect(touched).toHaveBeenCalledTimes(1);
+      expect(emitBlur).toHaveBeenCalledWith(textBlur);
+
+      component.type = 'number';
+      fixture.detectChanges();
+      input.value = '42';
+      input.dispatchEvent(new Event('input'));
+      expect(touched).toHaveBeenCalledTimes(1);
+
+      input.dispatchEvent(new Event('blur'));
       expect(touched).toHaveBeenCalledTimes(2);
     });
 
