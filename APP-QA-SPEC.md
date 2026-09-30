@@ -20,6 +20,7 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 
 - [x] Añadir primero una regresión Playwright que abra la cola vacía y mida el panel real en Chromium escritorio y Pixel 5; reproducir que el panel queda recortado/pegado al lateral antes del arreglo.
 - [ ] Posicionar el panel de la cola junto al disparador sin clipping del lateral ni del viewport; verificar límites, scroll si la lista crece y cierre con Escape en escritorio y móvil.
+- [x] Añadir primero la regresión Playwright visual de Hogar: el baseline debe mostrar el `app-icon` ausente en el estado vacío y el emoji dentro del nombre accesible de «Copiar enlace».
 - [ ] Retirar los emojis de presentación de Hogar (título, estado sin hogar, compartir, copiar, regenerar, salir) y el emoji de familia de la métrica de miembros en Dashboard; usar `app-icon` SVG existente y mantener los textos ES/EN sin pictogramas.
 - [ ] Verificar con E2E que las acciones de invitación siguen siendo accesibles/funcionales y que las etiquetas no incorporan emoji; preservar intactos los emojis semánticos de alergias, gustos e ingredientes.
 - [ ] Guardar e inspeccionar capturas sintéticas de PC y móvil; ejecutar pruebas focales, typecheck, `check-ui` y build con evidencia reproducible, sin rebajar gates.
@@ -27,6 +28,8 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 **Evidencia visual inicial:** la captura facilitada por el usuario muestra el panel de cola recortado dentro del lateral y pictogramas de familia/copia en Hogar; la reproducción de Playwright se registra a continuación.
 
 **TDD rojo (2026-09-30, sin cambios de producción):** `receipt-queue-panel-layout.spec.ts` con el runner aislado `%TEMP%\hogaria-e2e-runner-audit.mjs`, `E2E_SCOPE=all`, `E2E_RATE_LIMIT=on`, DB/puerto/semilla únicos; el runner detuvo el servidor y conservó los artefactos de los casos rojos. Chromium escritorio falla el límite izquierdo (panel `x=-117`, viewport 1280); Pixel 5 falla igual (`x=-71`, viewport 393). En la primera iteración móvil el locator `:visible` resolvió también el disparador de la sidebar trasladada fuera de pantalla; el test se corrigió para elegir `.header`/`.sidebar` por breakpoint y luego reprodujo el defecto geométrico real.
+
+`household-icon-consistency.spec.ts` también reprodujo rojo en Chromium: el estado vacío no contiene `app-icon`; la prueba del hogar sintético ve «👨‍👩‍👧‍👦 Hogar» y falla al buscar un nombre accesible exactamente «Copiar enlace» (el emoji del diccionario se expone como parte del nombre del botón). Los dos runs usaron la misma DB temporal aislada y el runner conservó sus screenshots/logs de fallo.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 
