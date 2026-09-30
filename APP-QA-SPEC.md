@@ -160,13 +160,16 @@ Evidencia: `shopping-http-error.ts` cubre el helper puro al 100 % en las cuatro 
 
 **Revalidación posterior:** esta unidad verificó que el enlace mostrara el destino del body, pero no lo siguió. El árbol actual declara `/ai-config`; `settings.routes.ts` solo declara `path: ''`; por tanto `/settings/ai` no es una ruta válida y el wildcard conduce a `/dashboard`. Mantener la preservación del mensaje como resuelta y auditar/cambiar el destino por separado en QA-04c.10.
 
-### QA-04c.10 · el error sin IA lleva a la ruta real de configuración (pendiente)
+### QA-04c.10 · el error sin IA recupera a la ruta real sin toast duplicado (pendiente)
 
 **Decisión basada en la fuente activa:** `app.routes.ts` declara `/ai-config` como área protegida y `main-layout.component.ts` la ofrece en la navegación; `/settings` es una pantalla distinta y no tiene subruta `ai`. El contrato anterior `/settings/ai` estaba obsoleto. La acción de recuperación del error sin proveedor debe llevar a `/ai-config`; no se añadirá un alias ficticio de settings.
+
+**Hallazgo de la inspección visual PC/móvil:** la hoja ya muestra un error específico y el enlace, pero el mismo `409 AI_NOT_CONFIGURED` además crea un toast global «Error / AI_NOT_CONFIGURED» que persiste al navegar y cubre parte de la cabecera móvil. `error.interceptor.ts` ya define `SILENT_TOAST` precisamente para errores que la pantalla resuelve; `ShoppingService.complete()` lo usa, `analyzePhoto()` no. Para esta respuesta tipada y presentada inline, se conserva status/body pero se silencia el toast genérico.
 
 - [ ] Actualizar primero el contrato activo y expectativas de backend para `409 AI_NOT_CONFIGURED` → `data.redirect: '/ai-config'`; conservar el estado sin configuración y no llamar al proveedor.
 - [ ] Añadir regresión E2E al flujo real de foto: mostrar error/link accesible, seguirlo en escritorio y Pixel 5, confirmar URL `/ai-config` y encabezado de configuración, y confirmar cero filas creadas.
 - [ ] Reproducir rojo aislado con el link actual `/settings/ai`, y corregir backend más fallback frontend al destino único vigente.
+- [ ] Añadir prueba unitaria de `analyzePhoto()` para `HttpContext` `SILENT_TOAST=true` y preservación del resultado específico; E2E confirma que desaparece el toast redundante antes/después de navegar.
 - [ ] Ejecutar pruebas unitarias de ruta, Playwright desktop/móvil, typecheck/build y verificar coverage del alcance ≥70 % sin bajar gates.
 - [ ] Guardar e inspeccionar capturas sintéticas PC/móvil; actualizar evidencia y solo entonces marcar checklist.
 
