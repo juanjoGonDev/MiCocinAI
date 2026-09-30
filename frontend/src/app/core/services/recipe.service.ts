@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, catchError, map, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Recipe, RecipeFilter, RecipeListResponse } from '../../shared/models/recipe.model';
 
@@ -47,16 +47,18 @@ export class RecipeService {
   }
 
   getRecipe(id: string): Observable<Recipe | null> {
-    return this.http.get<any>(`${this.apiUrl}/${id}`).pipe(
-      tap(response => this.currentRecipeSignal.set(response.data)),
+    return this.http.get<{ data: Recipe }>(`${this.apiUrl}/${id}`).pipe(
+      map(response => response.data),
+      tap(recipe => this.currentRecipeSignal.set(recipe)),
       catchError(() => of(null))
     );
   }
 
   createRecipe(recipe: Partial<Recipe>): Observable<Recipe | null> {
-    return this.http.post<any>(this.apiUrl, recipe).pipe(
-      tap(response => {
-        this.recipesSignal.update(list => [response.data, ...list]);
+    return this.http.post<{ data: Recipe }>(this.apiUrl, recipe).pipe(
+      map(response => response.data),
+      tap(created => {
+        this.recipesSignal.update(list => [created, ...list]);
       }),
       catchError(() => of(null))
     );
@@ -89,7 +91,8 @@ export class RecipeService {
   }
 
   deleteRecipe(id: string): Observable<boolean> {
-    return this.http.delete<any>(`${this.apiUrl}/${id}`).pipe(
+    return this.http.delete<unknown>(`${this.apiUrl}/${id}`).pipe(
+      map(() => true),
       tap(() => {
         this.recipesSignal.update(list => list.filter(r => r.id !== id));
       }),
