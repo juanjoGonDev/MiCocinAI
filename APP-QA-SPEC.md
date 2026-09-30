@@ -64,8 +64,8 @@ El barrido actual encontró pictogramas decorativos en controles compartidos, Au
 
 ### QA-UI.3a · controles compartidos
 
-- [ ] Añadir primero unit tests para chip-select, toggle de contraseña, toast y `DifficultyPipe`: emoji de catálogo de Preferencias sigue visible pero se marca decorativo; opción personalizada usa SVG; mostrar/ocultar contraseña funciona en ciclos repetidos por click y teclado con nombre ES/EN; estados/close de toast usan SVG accesible; la pipe no añade emoji.
-- [ ] Corregir el botón de contraseña que desaparece tras mostrarla; usar los `IconName` disponibles y labels localizados, conservando el contrato externo del input.
+- [ ] Añadir primero unit tests para chip-select, toggle de contraseña, toast y `DifficultyPipe`: emoji de catálogo de Preferencias sigue visible pero se marca decorativo; opción personalizada usa SVG; mostrar/ocultar contraseña funciona en ciclos repetidos por click y teclado con nombre ES/EN, icono que refleja la acción y sin revelar un control deshabilitado; cada tipo de toast anuncia su texto mediante una región viva y usa icono SVG distinguible; la pipe no añade emoji.
+- [ ] Corregir el botón de contraseña que desaparece tras mostrarla; usar los `IconName` disponibles y labels localizados, conservar el contrato externo del input y deshabilitar también el toggle cuando el campo está deshabilitado. Dar a success/error/warning/info semántica viva adecuada, conservar cierre accesible y diferenciar error de warning sin añadir dependencia ni emoji.
 - [ ] Validar cobertura focal ≥70 % en statements/branches/functions/lines, typecheck y build; Playwright de Auth en Chromium y Pixel 5 confirma visibilidad repetible/teclado y nombres limpios.
 
 ### QA-UI.3b · Auth, onboarding e invitación
