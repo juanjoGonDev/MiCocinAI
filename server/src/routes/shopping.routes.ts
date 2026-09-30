@@ -1507,7 +1507,7 @@ function aiError(c: any, error: unknown) {
     error instanceof AiCallError ? (error.detail ?? null) : String(error).slice(0, 200);
   if (code === 'NO_CONFIG') {
     return c.json(
-      { success: false, message: 'AI_NOT_CONFIGURED', data: { redirect: '/settings/ai' } },
+      { success: false, message: 'AI_NOT_CONFIGURED', data: { redirect: '/ai-config' } },
       409
     );
   }

@@ -460,9 +460,9 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     const photoBody = await photoResponse.json() as { message?: string; data?: { redirect?: string } };
     expect(photoResponse.status(), `photo error code: ${String(photoBody.message)}`).toBe(409);
     expect(photoBody.message).toBe('AI_NOT_CONFIGURED');
-    expect(photoBody.data?.redirect).toBe('/settings/ai');
+    expect(photoBody.data?.redirect).toBe('/ai-config');
     await expect(page.locator('[data-test="photo-error"]')).toContainText(/Falta configurar la IA/i);
-    await expect(page.locator('[data-test="photo-error"] a')).toHaveAttribute('href', /\/settings\/ai/);
+    await expect(page.locator('[data-test="photo-error"] a')).toHaveAttribute('href', '/ai-config');
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(0);
   });
 });

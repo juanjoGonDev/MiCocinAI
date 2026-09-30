@@ -4278,7 +4278,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     }
     this.photoResult.set(null);
     if (outcome.message === 'AI_NOT_CONFIGURED') {
-      this.photoRedirect.set('/settings/ai');
+      this.photoRedirect.set('/ai-config');
       this.photoError.set(this.i18n.t('ui.falta_configurar_la_ia'));
       return;
     }

@@ -160,7 +160,7 @@ Evidencia: `shopping-http-error.ts` cubre el helper puro al 100 % en las cuatro 
 
 **Revalidación posterior:** esta unidad verificó que el enlace mostrara el destino del body, pero no lo siguió. El árbol actual declara `/ai-config`; `settings.routes.ts` solo declara `path: ''`; por tanto `/settings/ai` no es una ruta válida y el wildcard conduce a `/dashboard`. Mantener la preservación del mensaje como resuelta y auditar/cambiar el destino por separado en QA-04c.10.
 
-### QA-04c.10 · el error sin IA recupera a la ruta real sin toast duplicado (pendiente)
+### QA-04c.10 · el error sin IA recupera a la ruta real sin toast duplicado (verificada)
 
 **Decisión basada en la fuente activa:** `app.routes.ts` declara `/ai-config` como área protegida y `main-layout.component.ts` la ofrece en la navegación; `/settings` es una pantalla distinta y no tiene subruta `ai`. El contrato anterior `/settings/ai` estaba obsoleto. La acción de recuperación del error sin proveedor debe llevar a `/ai-config`; no se añadirá un alias ficticio de settings.
 
@@ -168,13 +168,17 @@ Evidencia: `shopping-http-error.ts` cubre el helper puro al 100 % en las cuatro 
 
 **Hallazgo de la pantalla de destino:** la captura real de `/ai-config` en Pixel 5 (393 px) muestra que el CTA de cabecera rebasa el borde derecho. La fuente actual `.ai-config__header` es una fila flex sin reflujo móvil. El flujo de recuperación solo queda utilizable si la pantalla destino mantiene su CTA dentro del viewport a 393 y 320 px.
 
-- [ ] Actualizar primero el contrato activo y expectativas de backend para `409 AI_NOT_CONFIGURED` → `data.redirect: '/ai-config'`; conservar el estado sin configuración y no llamar al proveedor.
-- [ ] Añadir regresión E2E al flujo real de foto: mostrar error/link accesible, seguirlo en escritorio y Pixel 5, confirmar URL `/ai-config` y encabezado de configuración, y confirmar cero filas creadas.
-- [ ] Reproducir rojo aislado con el link actual `/settings/ai`, y corregir backend más fallback frontend al destino único vigente.
-- [ ] Añadir prueba unitaria focalizada de la política de contexto HTTP silencioso y cubrir el resultado específico con E2E real de `analyzePhoto()`; confirmar que desaparece el toast redundante antes/después de navegar, sin incorporar al scope de coverage las ramas ajenas del servicio legado completo.
-- [ ] En Pixel 5, demostrar sin overflow horizontal que el CTA «Agregar configuración» queda entero dentro del viewport de `/ai-config` a 393×851 y 320×568; refluir el header si la regresión lo reproduce.
-- [ ] Ejecutar pruebas unitarias de ruta, Playwright desktop/móvil, typecheck/build y verificar coverage del alcance ≥70 % sin bajar gates.
-- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil; actualizar evidencia y solo entonces marcar checklist.
+- [x] Actualizar primero el contrato activo y expectativas de backend para `409 AI_NOT_CONFIGURED` → `data.redirect: '/ai-config'`; conservar el estado sin configuración y no llamar al proveedor.
+- [x] Añadir regresión E2E al flujo real de foto: mostrar error/link accesible, seguirlo en escritorio y Pixel 5, confirmar URL `/ai-config` y encabezado de configuración, y confirmar cero filas creadas.
+- [x] Reproducir rojo aislado con el link actual `/settings/ai`, y corregir backend más fallback frontend al destino único vigente.
+- [x] Añadir prueba unitaria focalizada de la política de contexto HTTP silencioso y cubrir el resultado específico con E2E real de `analyzePhoto()`; confirmar que desaparece el toast redundante antes/después de navegar, sin incorporar al scope de coverage las ramas ajenas del servicio legado completo.
+- [x] En Pixel 5, demostrar sin overflow horizontal que el CTA «Agregar configuración» queda entero dentro del viewport de `/ai-config` a 393×851 y 320×568; refluir el header si la regresión lo reproduce.
+- [x] Ejecutar pruebas unitarias de ruta, Playwright desktop/móvil, typecheck/build y verificar coverage del alcance ≥70 % sin bajar gates.
+- [x] Guardar e inspeccionar capturas sintéticas PC/móvil; actualizar evidencia y solo entonces marcar checklist.
+
+Evidencia reproducible (2026-09-30): TDD rojo: seguir `/settings/ai` acababa en `/dashboard`, el error dejaba un `.toast--error` global y Pixel 5 a 393 px tenía `scrollWidth=474`; al quitar el toast antes de corregir el servicio, el test de contexto falló (`false` esperado como `true`). Verde: `shopping.routes.spec.ts` 94/94; cobertura del archivo de ruta 89.80/79.92/89.69/92.65 % (statements/branches/functions/lines). `shopping-photo-http-context.spec.ts` 1/1 y su helper 100/100/100/100 %. La cobertura parcial del spec de ruta sale con código 1 porque el scope incluye otros ficheros no ejecutados (por ejemplo `database.ts`, `ai-client.ts`, `memory-monitor.ts`, `taste-profile.ts`, `week-calendar.ts`, `weekly-plan.ts`); no se redujo el gate server global de 70 %.
+
+El E2E full-stack usa el runner aislado `%TEMP%\hogaria-e2e-runner-audit.mjs`, `DATABASE_PATH` SQLite temporal único y rate limit activo, sin proveedor externo ni base normal: `shopping-ai-recovery.spec.ts` Chromium 1/1 y Pixel 5 1/1; en Pixel 5 comprueba 393×851 y 320×568, destino, CTA en viewport, cero overflow, cero items y cero toast duplicado antes/después de navegar. La regresión existente `shopping-round6.spec.ts` pasa Chromium 12 (3 skips esperados) y Pixel 5 14 (1 skip esperado). Typechecks de servidor y E2E y build de producción pasaron; se mantienen warnings previos de bundle (691.41 kB frente al warning de 500 kB), estilos e imports. Capturas sintéticas inspeccionadas: `.e2e-screenshots/shopping-ai-recovery-final-2/shopping-ai-recovery-config-1280.png`, `...-393.png` y `...-320.png` (también se conserva el estado de error PC/móvil); todas ignoradas por Git. El gate global frontend de 80 % sigue pendiente en QA-04c.
 
 ### QA-04c.4 · matriz móvil de bandeja (revalidada en este alcance)
 

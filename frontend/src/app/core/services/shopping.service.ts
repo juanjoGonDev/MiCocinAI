@@ -8,6 +8,7 @@ import { ToastService } from './toast.service';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import { AuthService } from './auth.service';
 import { originalHttpError } from './shopping-http-error';
+import { photoAnalysisHttpContext } from './shopping-photo-http-context';
 import {
   CompletePurchaseInput,
   CompleteReceipt,
@@ -274,12 +275,17 @@ export class ShoppingService {
   /**
    * Analizar NO escribe: la persona repasa la hoja y luego manda `applyLines`. Un modelo
    * que se equivoca con una etiqueta no deberia poder tocar la lista sin que nadie lo vea.
+   * La hoja presenta los errores aqui; el interceptor no debe duplicarlos en un toast global.
    */
   analyzePhoto(listId: string, image: string, mode: 'auto' | 'ticket' | 'shelf' = 'auto', note?: string): Promise<PhotoOutcome> {
     const failure = (status: number, message: string, data: Record<string, unknown>): PhotoOutcome => ({ ok: false, status, message, data });
     return firstValue(
       this.http
-        .post<{ data: PhotoAnalysis }>(`${this.apiUrl}/lists/${listId}/photo/analyze`, { image, mode, note: note || undefined })
+        .post<{ data: PhotoAnalysis }>(
+          `${this.apiUrl}/lists/${listId}/photo/analyze`,
+          { image, mode, note: note || undefined },
+          { context: photoAnalysisHttpContext() }
+        )
         .pipe(
           map(response => ({ ok: true, data: response.data }) as PhotoOutcome),
           catchError((error: unknown) => {

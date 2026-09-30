@@ -1232,7 +1232,7 @@ describe('entrada por foto (§8f)', () => {
     const body = (await response.json()) as any;
     expect(body.message).toBe('AI_NOT_CONFIGURED');
     // Con destino, que es lo que convierte un error en un boton.
-    expect(body.data.redirect).toBe('/settings/ai');
+    expect(body.data.redirect).toBe('/ai-config');
   });
 
   it('una respuesta que no es JSON se reporta como 422 con la muestra', async () => {

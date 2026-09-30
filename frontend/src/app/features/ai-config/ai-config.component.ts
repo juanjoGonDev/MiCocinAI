@@ -313,6 +313,20 @@ import { I18nService } from '../../core/services/i18n.service';
       color: var(--text-secondary);
     }
 
+    @media (max-width: 600px) {
+      .ai-config__header {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: var(--space-3);
+      }
+
+      .ai-config__title-section {
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        max-width: 100%;
+      }
+    }
+
     .ai-config__info {
       padding: var(--space-4);
       background: var(--info-subtle);
