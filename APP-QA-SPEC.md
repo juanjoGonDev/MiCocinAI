@@ -52,6 +52,20 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 
 **Evidencia verde QA-UI.2 (2026-09-30):** `HouseholdComponent` refluye la fila de miembro a una rejilla de dos columnas en móvil; la columna de texto tiene ancho mínimo cero y nombre/correo pueden partirse, mientras las insignias ocupan una segunda fila. La regresión mide documento, columna, correo y tarjeta a 393×851 y 320×568 con nombre sintético largo en español e inglés. Tras `npm run build:prod` (el runner aislado sirve el bundle estático existente y no recompila Angular), `tsc -p tsconfig.e2e.json --noEmit` pasa; Playwright aislado con `E2E_RATE_LIMIT=on`, SQLite/puerto/semilla temporales: `household-icon-consistency.spec.ts`, Pixel 5 **3/3** y Chromium escritorio **3/3**. Capturas inspeccionadas: `.e2e-screenshots/qa-ui-2-desktop/household-members.png` y `.e2e-screenshots/qa-ui-2-mobile/household-members-{es,en}-{320x568,393x851}.png`. No se usaron el server ni la base de datos normales.
 
+## Unidad QA-DASH.1 · comidas pendientes de hoy en el Dashboard (pendiente)
+
+**Fuentes revalidadas:** el contrato activo `HOGARIA-SPEC.md` §2 define Today con comidas debidas y §12al pide la siguiente comida planificada. En el código actual, `DashboardComponent.upcomingMeals` empieza como `[]` y no se actualiza; `loadDashboardData()` llama a `CalendarService.loadCalendar()` pero nunca conecta su respuesta con el bloque «Comidas de hoy». La ruta del calendario ya expone `loadRange(start, end)` y datos normalizados `CalendarMeal`. No hay un E2E actual que cree una comida para hoy y luego compruebe el Dashboard.
+
+**Decisión de comportamiento:** el bloque mostrará las comidas no completadas de la fecha local de hoy, ordenadas por hora; no debe mostrar como «pendiente» una comida completada ni una comida de otro día. Un error de carga no se presentará como «no hay comidas».
+
+- [ ] Añadir primero una regresión Playwright con comidas sintéticas de hoy/ayer/mañana, incluidas completada y pendiente, creadas por API contra SQLite aislada; confirmar rojo actual, cero proveedor IA y que cada fixture se limpia.
+- [ ] Conectar el Dashboard a la API/rango de hoy ya normalizado por `CalendarService`, sin duplicar cliente HTTP; mostrar tipo localizado, nombre y hora; conservar el vacío real tras carga correcta y distinguir carga/error.
+- [ ] Añadir pruebas unitarias focales para orden, fecha, completado y etiquetas ES/EN; coverage del alcance ≥70 % en statements/branches/functions/lines sin rebajar gates.
+- [ ] Verificar el CTA «Ver todo» hacia `/calendar`, recarga y recuperación tras error; ejecutar E2E real en Chromium y Pixel 5 a 320×568/393×851, breakpoint 480/768 y una orientación horizontal, sin overflow ni controles tapados.
+- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil y registrar build, typecheck, cobertura y resultados exactos.
+
+**Discrepancias de producto abiertas (no se cierran en esta unidad):** `HOGARIA-SPEC.md` §2/§12al también pide vencimientos, lista abierta/presupuesto semanal y cola IA en Today; `DashboardComponent` actual no renderiza esos bloques. Mantener abierta la checklist general `/dashboard` y decidir cada superficie en su propia unidad, sin atribuirlas a esta corrección de comidas.
+
 ## Evidencia inicial (no equivale a aprobación de la app)
 
 - [x] La ruta pública `/auth/login` responde desde `http://localhost:4200`; revisé también `/auth/register`, `/auth/forgot-password` y la invitación inválida.
@@ -424,9 +438,9 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 ## Siguiente unidad de trabajo
 
 1. QA-04a: completada con suite `488/488`, regresiones de servicio y Playwright Chromium/Pixel `2/2` por proyecto; el gate de coverage sigue abierto en QA-04c.
-2. QA-04c.10: corregir el destino roto del error «Falta configurar la IA» con prueba real que siga el enlace; no tocar proveedor/token.
+2. QA-DASH.1: conectar y probar las comidas pendientes de hoy con datos reales sintéticos; después resolver, en unidades separadas, las discrepancias de vencimientos/lista/presupuesto de Today.
 3. QA-04b checkbox: completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
 4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote.
 5. Corregir la configuración permanente de Playwright full-stack: su `DATABASE_PATH` sigue comentado; conservar aislamiento del servidor/DB de uso normal.
 6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-7. Continuar el barrido de rutas y acciones con capturas de consola/red/overflow. Resolver el destino de Dashboard `/recipes/:id` con conducta actual observada antes de cambiar el router.
+7. Continuar el barrido funcional de rutas, formularios y acciones con captura de consola/red/overflow; Dashboard/recetas ya tiene su resolución de ruta en QA-04c.11.
