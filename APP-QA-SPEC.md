@@ -240,8 +240,10 @@ Evidencia QA-04c.9: E2E de bandeja y selector miden root `scrollWidth ≤ client
 
 **Discrepancia revalidada:** `HOGARIA-SPEC.md` §8f exige un área de toque de 40 px, pero `checkbox.component.ts` establece `min-height: 36px`. El test unitario actual no mide el tamaño real y, además, lee `aria-checked` antes de ejecutar change detection.
 
-- [ ] Añadir primero una regresión que mida el rectángulo real de `button[role=checkbox]` en Chromium; probar disabled y teclado/foco sin cambiar semántica ni nombre accesible.
-- [ ] Corregir el tamaño mínimo con el cambio CSS más pequeño; demostrar altura ≥40 px en la instancia real de Calendario en móvil y escritorio, sin overflow ni solapamiento.
+**Criterio de aceptación:** el contrato de producto pide ≥40 px, mientras que `AGENTS.md` fija ≥44×44 px para objetivos táctiles; se aplicará el criterio interno más estricto, midiendo el rectángulo real del botón en navegador (no solo su CSS declarado), sin cambiar nombre accesible ni semántica.
+
+- [ ] Añadir primero una regresión que mida el rectángulo real de `button[role=checkbox]` en Chromium escritorio/móvil; probar `disabled`, nombre/estado accesible y teclado/foco sin cambiar semántica.
+- [ ] Corregir el tamaño mínimo con el cambio CSS más pequeño; demostrar un objetivo ≥44×44 px en la instancia real de Calendario en escritorio y móvil estrecho, sin overflow ni solapamiento.
 - [ ] Ejecutar unit tests y Playwright real para el formulario/event sheet afectado; capturar PC y móvil con fixtures sintéticos e inspeccionar las imágenes.
 - [ ] Registrar porcentajes de statements, ramas, funciones y líneas del alcance (cada uno ≥70 %), manteniendo los gates configurados.
 
