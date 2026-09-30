@@ -54,18 +54,43 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 
 **Evidencia verde QA-UI.2 (2026-09-30):** `HouseholdComponent` refluye la fila de miembro a una rejilla de dos columnas en móvil; la columna de texto tiene ancho mínimo cero y nombre/correo pueden partirse, mientras las insignias ocupan una segunda fila. La regresión mide documento, columna, correo y tarjeta a 393×851 y 320×568 con nombre sintético largo en español e inglés. Tras `npm run build:prod` (el runner aislado sirve el bundle estático existente y no recompila Angular), `tsc -p tsconfig.e2e.json --noEmit` pasa; Playwright aislado con `E2E_RATE_LIMIT=on`, SQLite/puerto/semilla temporales: `household-icon-consistency.spec.ts`, Pixel 5 **3/3** y Chromium escritorio **3/3**. Capturas inspeccionadas: `.e2e-screenshots/qa-ui-2-desktop/household-members.png` y `.e2e-screenshots/qa-ui-2-mobile/household-members-{es,en}-{320x568,393x851}.png`. No se usaron el server ni la base de datos normales.
 
-## Unidad QA-UI.3 · coherencia de iconos fuera de Preferencias (pendiente)
+## Unidad QA-UI.3 · coherencia de iconos fuera del contenido semántico (en curso)
 
-**Fuente revalidada antes de implementar:** `IconComponent`/`IconName` y `scripts/icons.mjs` son el sistema SVG local actual. El barrido `rg -l --pcre2 "\p{Extended_Pictographic}" frontend/src/app --glob '!**/*.spec.ts'` encontró glifos de UI fuera de Hogar/Dashboard en `auth-layout`, `invite`, `onboarding`, `ai-config`, `recipes`, `pantry`, `settings`, `input`, `chip-select`, `difficulty.pipe` y `toast`, además de etiquetas de esos dominios en `core/i18n/dict`. También existen emojis alimentarios/objetivos en `shared/models/taste-profile.ts`, que el usuario indicó que le gustan en la sección de alergias/gustos/ingredientes: se preservan. No eliminar emojis que el usuario escriba en nombres, recetas, consejos o contenido factual; distinguirlos de iconos decorativos/acciones en cada plantilla.
+**Fuente revalidada antes de implementar:** el sistema SVG local es `IconComponent` + `IconName`, declarado por `frontend/src/app/shared/components/ui/icon/icon-paths.ts`. El generador es `frontend/scripts/icons.mjs` (no `scripts/icons.mjs`) y espera `frontend/node_modules/@material-icons/svg/svg`; esa fuente no está instalada en este entorno, así que no regenerar ni añadir dependencias sin encontrar una fuente local verificable. Preferir nombres SVG ya registrados; si no hay equivalente adecuado, quitar el ornamento y dejar texto limpio antes que inventar un icono.
 
-**Decisión de diseño:** donde un pictograma actúe como icono de navegación, acción, categoría, estado, métrica, título o estado vacío se usará el SVG local `app-icon` (y copy i18n limpio en ES/EN). Se conservará el repertorio emoji de Preferencias (`taste-profile.ts`) sin normalizarlo ni sustituirlo.
+El barrido actual encontró pictogramas decorativos en controles compartidos, Auth/Onboarding/Invitación, Configuración IA, Configuración, Recetas e Inventario. Clasificación explícita: se preservan los emojis de contenido de `COMMON_ALLERGENS`, `COMMON_LIKES` y `COMMON_DISLIKES` en `shared/models/taste-profile.ts`, que el usuario aprobó para preferencias de alergias/gustos/ingredientes, y los marcadores 👍/👎 de las elecciones «Me gusta/Mejor no» del onboarding; se migran los iconos de objetivos que comparten ese archivo. Se limpia el 👍 de copy de invitación. No cambiar emojis escritos por usuarios ni texto dinámico de recetas/consejos/advertencias: solo sustituir prefijos decorativos controlados por la plantilla.
 
-- [ ] Clasificar cada ocurrencia fuera de Preferencias como icono de UI o contenido semántico; fijar explícitamente las excepciones en el scanner para no borrar emojis de contenido/usuario.
-- [ ] Añadir primero regresiones unitarias/Playwright para las superficies afectadas y comprobar que los iconos decorativos no contaminan nombres accesibles, estados ES/EN ni controles de teclado.
-- [ ] Reemplazar los iconos decorativos detectados en Auth/Onboarding/Invitación, Configuración IA, Recetas, Inventario y controles compartidos; completar `IconName` desde la fuente SVG local cuando falte un glifo equivalente.
-- [ ] Mantener intactos los emojis de alergias, gustos e ingredientes de Preferencias y verificar visualmente esa sección antes/después.
-- [ ] Extender una comprobación estática específica para impedir regresiones fuera de las excepciones y validar build/typecheck + cobertura focal ≥70 % en statements/branches/functions/lines.
-- [ ] Ejecutar Playwright real en Chromium escritorio y Pixel 5 para cada superficie cambiada; revisar breakpoints, interacción/teclado y errores de consola. Guardar e inspeccionar capturas PC+móvil sintéticas antes de marcar.
+**Decisión de diseño:** una acción, navegación, categoría, estado, métrica, título o estado vacío usa `app-icon` decorativo y texto accesible independiente; si falta icono local, se conserva el significado mediante texto, no emoji. Los nombres accesibles no deben incluir glifos ornamentales.
+
+### QA-UI.3a · controles compartidos
+
+- [ ] Añadir primero unit tests para chip-select, toggle de contraseña, toast y `DifficultyPipe`: emoji de catálogo de Preferencias sigue visible pero se marca decorativo; opción personalizada usa SVG; mostrar/ocultar contraseña funciona en ciclos repetidos por click y teclado con nombre ES/EN; estados/close de toast usan SVG accesible; la pipe no añade emoji.
+- [ ] Corregir el botón de contraseña que desaparece tras mostrarla; usar los `IconName` disponibles y labels localizados, conservando el contrato externo del input.
+- [ ] Validar cobertura focal ≥70 % en statements/branches/functions/lines, typecheck y build; Playwright de Auth en Chromium y Pixel 5 confirma visibilidad repetible/teclado y nombres limpios.
+
+### QA-UI.3b · Auth, onboarding e invitación
+
+- [ ] Añadir regresiones antes de cambiar logo/objetivos; SVG casa decorativo sin contaminar títulos, retirar 👍 de copy de invitación y usar SVG para iconos de objetivo, sin cambiar semántica 👍/👎 de opciones de gusto.
+- [ ] Probar rutas públicas/invitación válida e inválida, pasos de onboarding y guardado/salto/retroceso en ES/EN; los emojis de alergias/gustos siguen visibles. Medir 320/393 px, viewport corto y horizontal, controles/foco/teclado.
+- [ ] Ejecutar Playwright real en escritorio y Pixel 5, capturar e inspeccionar PC+móvil y revisar errores de consola.
+
+### QA-UI.3c · Configuración IA y Configuración
+
+- [ ] Añadir primero regresiones para vacío/resultado/acciones de IA y títulos/opciones de Configuración en ES/EN; migrar robots, estado, acciones, título, idioma/tema a SVG o texto limpio; eliminar banderas de las etiquetas de idioma.
+- [ ] Verificar creación/edición/activación/prueba/eliminación de configuración IA y persistencia de idioma/tema/módulos; medir bordes 320/393, 480/481, 600/601, 768/769 y navegación por teclado/modal.
+- [ ] Ejecutar Playwright real en Chromium y Pixel 5, capturar e inspeccionar PC+móvil; cobertura focal ≥70 % en las métricas aplicables.
+
+### QA-UI.3d · Inventario y Recetas
+
+- [ ] Añadir primero regresiones para vacíos/categorías/favorito/porciones/filtros/tips/advertencias; migrar solo glifos decorativos. Remover metadatos de emoji no usados; mantener el selector nativo entendible sin emoji y no alterar contenido de receta escrito/generado.
+- [ ] Verificar acciones de Inventario y Recetas con fixtures sintéticas en ES/EN, incluidos estados vacíos y cargados, 320/393 px, breakpoints del código y orientación horizontal; no debe haber glifos en iconos/nombres accesibles.
+- [ ] Ejecutar Playwright real en Chromium y Pixel 5, revisar errores de consola, capturar e inspeccionar PC+móvil y validar cobertura focal ≥70 % en las métricas aplicables.
+
+### QA-UI.3e · guardia estática y cierre
+
+- [ ] Probar primero la guardia estática: detecta emoji decorativo en cualquier fuente de UI/diccionario, permite únicamente el contenido semántico aprobado y falla si se añade emoji decorativo junto a esos datos; no mantener excepciones por archivo completo.
+- [ ] Retirar allowlists heredadas que oculten pictogramas en los ficheros ya migrados, preservar explícitamente las excepciones de contenido aprobadas y comprobar `node scripts/check-ui.mjs`.
+- [ ] Ejecutar build, typecheck, unit tests focales, `check-ui`, Playwright real de todas las superficies afectadas en Chromium y Pixel 5; registrar cobertura y limitaciones sin rebajar gates existentes.
 
 ## Unidad QA-DASH.1 · comidas pendientes de hoy en el Dashboard (resuelta)
 
