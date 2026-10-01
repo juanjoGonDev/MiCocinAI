@@ -8,6 +8,9 @@ import { tasteLabelKey } from '../../../../core/i18n/labels';
 import { I18nService } from '../../../../core/services/i18n.service';
 import { IconComponent } from '../icon/icon.component';
 
+const MAX_SELECTIONS = 60;
+const MAX_VALUE_LENGTH = 60;
+
 /**
  * Lista de opciones en formato chip, de una o varias selecciones, con hueco
  * para escribir lo que no esté en la lista.
@@ -51,13 +54,19 @@ import { IconComponent } from '../icon/icon.component';
           name="chip-select-custom"
           [placeholder]="placeholderText"
           [attr.aria-label]="labelText"
-          [(ngModel)]="customText"
+          [ngModel]="customText"
+          (ngModelChange)="customText = $event; onCustomTextChange()"
+          [attr.aria-describedby]="describedBy"
+          [attr.aria-invalid]="validationError === 'max_length' ? 'true' : null"
           (keyup.enter)="$event.preventDefault(); addCustom()"
         />
         <app-button variant="ghost" size="sm" (onClick)="addCustom()">{{ 'ui.anadir' | t }}</app-button>
       </div>
 
-      <p class="chip-select__hint" *ngIf="hint">{{ hint }}</p>
+      <p *ngIf="validationError" class="chip-select__error" [id]="errorId" role="alert">
+        {{ (validationError === 'max_length' ? 'ui.custom_option_max_length' : 'ui.custom_options_max_selected') | t }}
+      </p>
+      <p class="chip-select__hint" *ngIf="hint" [id]="hintId">{{ hint }}</p>
     </div>
   `,
   styles: [
@@ -132,11 +141,20 @@ import { IconComponent } from '../icon/icon.component';
         font-size: var(--text-xs);
         color: var(--text-tertiary);
       }
+      .chip-select__error {
+        margin: 0;
+        font-size: var(--text-xs);
+        color: var(--error);
+      }
     `
   ]
 })
 export class ChipSelectComponent {
   private readonly i18n = inject(I18nService);
+  private static nextInstanceId = 0;
+  readonly instanceId = ChipSelectComponent.nextInstanceId++;
+  readonly hintId = `chip-select-hint-${this.instanceId}`;
+  readonly errorId = `chip-select-error-${this.instanceId}`;
 
   /** El valor del catalogo, traducido; lo que escribio la persona, tal cual. */
   labelDe(option: ChipOption): string {
@@ -170,6 +188,20 @@ export class ChipSelectComponent {
   }
 
   customText = '';
+  validationError: 'max_length' | 'max_selected' | null = null;
+
+  get describedBy(): string | null {
+    const ids = [this.hint ? this.hintId : null, this.validationError ? this.errorId : null].filter(
+      (id): id is string => id !== null
+    );
+    return ids.length ? ids.join(' ') : null;
+  }
+
+  onCustomTextChange(): void {
+    if (this.validationError === 'max_length' && this.customText.trim().length <= MAX_VALUE_LENGTH) {
+      this.validationError = null;
+    }
+  }
 
   /** Predefinidas + las que haya escrito el usuario. */
   /**
@@ -222,18 +254,38 @@ export class ChipSelectComponent {
   }
 
   toggle(value: string): void {
-    this.emit(
-      this.isSelected(value) ? this.value.filter((item) => item !== value) : [...this.value, value]
-    );
+    if (this.isSelected(value)) {
+      this.validationError = null;
+      this.emit(this.value.filter((item) => item !== value));
+      return;
+    }
+
+    if (this.value.length >= MAX_SELECTIONS) {
+      this.validationError = 'max_selected';
+      return;
+    }
+
+    this.validationError = null;
+    this.emit([...this.value, value]);
   }
 
   addCustom(): void {
     const text = this.customText.trim();
     if (!text) return;
 
+    if (text.length > MAX_VALUE_LENGTH) {
+      this.validationError = 'max_length';
+      return;
+    }
+
     if (!this.value.some((item) => item.toLowerCase() === text.toLowerCase())) {
+      if (this.value.length >= MAX_SELECTIONS) {
+        this.validationError = 'max_selected';
+        return;
+      }
       this.emit([...this.value, text]);
     }
+    this.validationError = null;
     this.customText = '';
   }
 

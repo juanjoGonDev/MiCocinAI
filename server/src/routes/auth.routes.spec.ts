@@ -315,6 +315,34 @@ describe('saltarse el onboarding (HOGARIA-SPEC 12o)', () => {
   });
 });
 
+describe('límites del perfil de preferencias', () => {
+  it('acepta 60 caracteres y 60 opciones, y rechaza cada límite excedido', async () => {
+    const { token } = await register('Nora');
+    const patchTaste = (allergies: string[]) =>
+      app.request(
+        '/api/auth/taste',
+        withAuth(token, { method: 'PATCH', body: JSON.stringify({ taste: { allergies } }) })
+      );
+    const withinListLimit = Array.from({ length: 60 }, (_, index) => `Alergia ${index}`);
+
+    const atCharacterLimit = await patchTaste(['A'.repeat(60)]);
+    expect(atCharacterLimit.status).toBe(200);
+    expect((await json(atCharacterLimit)).data.taste.allergies).toEqual(['A'.repeat(60)]);
+
+    const aboveCharacterLimit = await patchTaste(['A'.repeat(61)]);
+    expect(aboveCharacterLimit.status).toBe(400);
+
+    const atListLimit = await patchTaste(withinListLimit);
+    expect(atListLimit.status).toBe(200);
+    expect((await json(atListLimit)).data.taste.allergies).toEqual(withinListLimit);
+
+    const aboveListLimit = await patchTaste([...withinListLimit, 'Alergia 60']);
+    expect(aboveListLimit.status).toBe(400);
+    const preserved = await json(await app.request('/api/auth/taste', withAuth(token)));
+    expect(preserved.data.taste.allergies).toEqual(withinListLimit);
+  });
+});
+
 describe('limite bcrypt para contrasenas nuevas', () => {
   const passwordAt72Bytes = `Aa1${'x'.repeat(69)}`;
   const passwordAt73Bytes = `Aa1${'x'.repeat(70)}`;
