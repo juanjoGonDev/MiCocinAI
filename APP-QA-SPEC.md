@@ -1,7 +1,7 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
 - **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra y overflow de Cuenta tienen regresiones verificadas; QA-PANTRY.2 investiga error de carga confundido con vacío y el barrido global sigue pendiente
-- **Actualizado:** 2026-10-02
+- **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -293,7 +293,7 @@ Playwright real con `E2E_SCOPE=all`, rate limit activo, servidor de producción 
 
 ## Unidad QA-PANTRY.2 · distinguir error de carga de despensa vacía (en curso)
 
-**Fuente revalidada (2026-10-02):** el contrato activo `HOGARIA-SPEC.md` §12ak describe `/pantry/caducidades` como resumen, gráfica y tabla ordenable; el botón vuelve a `/pantry`. No define filtros ni enlace a una ficha de producto, así que se excluyen de esta unidad. En `PantryService.loadCaducidades()`, cualquier error del `GET /api/pantry/expiry` se convierte hoy en `[]`; `CaducidadesComponent` usa `filas().length === 0` para pintar el estado válido «sin caducidades». Por tanto un 503/red caída se presenta como inventario vacío. La E2E existente cubre datos poblados y el error de estimación IA, no el error de carga, el vacío del GET ni el reintento.
+**Fuente revalidada (2026-10-01):** el contrato activo `HOGARIA-SPEC.md` §12ak describe `/pantry/caducidades` como resumen, gráfica y tabla ordenable; el botón vuelve a `/pantry`. No define filtros ni enlace a una ficha de producto, así que se excluyen de esta unidad. En `PantryService.loadCaducidades()`, cualquier error del `GET /api/pantry/expiry` se convierte hoy en `[]`; `CaducidadesComponent` usa `filas().length === 0` para pintar el estado válido «sin caducidades». Por tanto un 503/red caída se presenta como inventario vacío. La E2E existente cubre datos poblados y el error de estimación IA, no el error de carga, el vacío del GET ni el reintento.
 
 **Conducta esperada:** mantener diferenciados loading, éxito vacío y error de transporte/servidor. El error debe mostrar un mensaje accesible y una acción de reintento; no anunciar «sin caducidades». Un reintento exitoso debe limpiar el error y renderizar la respuesta real; uno que falle debe terminar loading y permitir reintentar. La lectura no escribe datos ni llama al proveedor IA.
 
@@ -306,7 +306,7 @@ Playwright real con `E2E_SCOPE=all`, rate limit activo, servidor de producción 
 
 ## Hallazgo QA-REC.INGRESS.1 · límite de subida distinto en Nginx (pendiente de reproducción runtime)
 
-**Fuente revalidada (2026-10-02):** `HOGARIA-SPEC.md` §12aj fija el techo en 10 MB y enumera PNG/JPEG/WebP/PDF; el formulario y `POST /api/receipts` aceptan hasta 10 MiB. `nginx/nginx.conf` declara `client_max_body_size 512k` en el bloque `http`, y la configuración de `docker-compose.yml` monta ese Nginx frente a `/api/`. Esto predice un 413 para ficheros mayores de 512 KiB antes de llegar a la API, aunque la UI/API indiquen 10 MiB. Es todavía discrepancia estática: en esta máquina no están disponibles `docker` ni `nginx`, así que no se afirma que el 413 esté reproducido en runtime y no se cambia el límite sin esa validación.
+**Fuente revalidada (2026-10-01):** `HOGARIA-SPEC.md` §12aj fija el techo en 10 MB y enumera PNG/JPEG/WebP/PDF; el formulario y `POST /api/receipts` aceptan hasta 10 MiB. `nginx/nginx.conf` declara `client_max_body_size 512k` en el bloque `http`, y la configuración de `docker-compose.yml` monta ese Nginx frente a `/api/`. Esto predice un 413 para ficheros mayores de 512 KiB antes de llegar a la API, aunque la UI/API indiquen 10 MiB. Es todavía discrepancia estática: en esta máquina no están disponibles `docker` ni `nginx`, así que no se afirma que el 413 esté reproducido en runtime y no se cambia el límite sin esa validación.
 
 - [ ] Preparar una prueba real por el ingress Nginx efectivo con backend/SQLite aislados: una PNG sintética válida de 513 KiB debe alcanzar el backend y, sin proveedor configurado, terminar en `NO_CONFIG`; no usar `page.route` que evite el proxy.
 - [ ] Añadir pruebas del backend para firma/tamaño en 0 bytes, 10 MiB exactos y 10 MiB + 1 byte; validar 413 con `FILE_TOO_LARGE` solo al superar el límite.
