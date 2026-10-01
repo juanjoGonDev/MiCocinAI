@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-CALENDAR.RANGE-STALE.1 está en implementación y QA-CALENDAR.MOBILE-HEADER.1 está especificada tras confirmar clipping móvil; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-CALENDAR.RANGE-STALE.1 y QA-CALENDAR.MOBILE-HEADER.1 están en implementación/verificación; QA-CALENDAR.ALL-DAY-GUTTER.1 quedó especificada tras detectar clipping en capturas; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -221,7 +221,7 @@ Playwright real con `hogaria-e2e-runner-audit.mjs`, servidor/puerto/SQLite/semil
 - [ ] Ejecutar Karma focal con cobertura ≥70 % en statements, ramas, funciones y líneas para el guardado reutilizable de actualidad; las pruebas de servicio cubren su integración en ambos loaders. No rebajar el gate global frontend del 80 %. Ejecutar Playwright real con servidor/SQLite/puertos/semilla temporales en Chromium y Pixel 5; revisar teclado, navegación de periodo y sin errores de consola.
 - [ ] Guardar e inspeccionar capturas sintéticas PC y móvil del calendario; dejar comando, resultado, cobertura, limitaciones y rollback exactos en esta sección.
 
-## Unidad QA-CALENDAR.MOBILE-HEADER.1 · reflujo de cabecera móvil (especificada antes de implementar)
+## Unidad QA-CALENDAR.MOBILE-HEADER.1 · reflujo de cabecera móvil (en verificación)
 
 **Fuente de verdad revalidada (2026-10-01):** `CalendarComponent` envuelve la cabecera `.cal-top` en una superficie `.calendar__panel` con `overflow: hidden`. La cabecera permite envolver sus hijos, pero `.cal-top__right` y sus controles siguen en una fila flex de ancho intrínseco. En un Chromium Pixel 5 real de 393 px CSS, después de navegar y añadir una comida sintética, el documento no tiene overflow (`innerWidth=393`, `documentElement.scrollWidth=393`, `scrollX=0`), pero el panel sí: `clientWidth=359`, `scrollWidth=455`, `scrollLeft=96`; el título queda en `x=-63` y el botón Día en `x=-60`, ambos fuera del panel (`x=16..377`). `.cal-top__right` ocupa 423 px para unos 327 px disponibles. `calendar-timeline.component.ts` no añade overflow horizontal. La captura `.e2e-screenshots/qa-calendar-range-stale-20261001/mobile-chrome-calendar-range-latest.png` muestra controles y contenido recortados.
 
@@ -232,6 +232,17 @@ Playwright real con `hogaria-e2e-runner-audit.mjs`, servidor/puerto/SQLite/semil
 - [ ] Verificar navegación de teclado/foco, selector de fecha, controles táctiles y los anchos 320/393/568/767/768/1440 tras cada interacción; registrar por separado cualquier estado que cambie el rango de forma intencional.
 - [ ] Ejecutar Playwright real contra servidor y SQLite temporales en Chromium de escritorio y Pixel 5; comprobar cero errores de página/consola y ausencia de overflow de documento/panel. No usar la DB habitual ni el proveedor IA.
 - [ ] Guardar e inspeccionar capturas sintéticas PC y móvil después de la corrección; anotar TDD rojo/verde, comandos, limitaciones y rollback exactos sin rebajar el gate frontend del 80 %.
+
+## Unidad QA-CALENDAR.ALL-DAY-GUTTER.1 · etiqueta «Todo el día» cortada (especificada antes de implementar)
+
+**Fuente de verdad revalidada (2026-10-01):** `CalendarTimelineComponent.columns()` fija la primera columna de hora en 46 px para «22:00». La banda de eventos de día completo reutiliza el mismo ancho para `.tl__gutter--band`, que añade padding horizontal y pinta «Todo el día» sin ajustar el track a su texto. En las capturas reales sintéticas `.e2e-screenshots/qa-calendar-mobile-header-20261001-green2/chromium-calendar-header-desktop.png` y `mobile-chrome-calendar-header-mobile.png`, las primeras letras de esa etiqueta quedan ocultas en el borde izquierdo de la rejilla. La medición exacta del nodo de texto frente a su celda queda pendiente de la regresión de esta unidad; no se atribuye a overflow global.
+
+**Conducta esperada (inferencia de legibilidad/alineación del calendario):** la etiqueta de la banda «Todo el día» debe leerse completa en escritorio y móvil, sin invadir el borde del panel ni desplazar sus columnas. El track de gutter compartido por cabecera, banda y horas debe medir una sola vez el ancho necesario; no se debe resolver ocultando o truncando el texto.
+
+- [ ] Añadir primero una E2E real que compare los límites renderizados de la etiqueta y su track en 320×568, 393×851, 568×320, 768×1024 y 1440×900; confirmar rojo antes de tocar el CSS del timeline.
+- [ ] Ajustar la fuente compartida del ancho de la primera columna para contener la etiqueta completa con su padding y mantener alineadas la cabecera, banda de todo el día y escala horaria.
+- [ ] Verificar de nuevo la legibilidad en las vistas día/semana y que ninguna acción, columna o contenido se recorte ni cree overflow horizontal del documento/panel.
+- [ ] Ejecutar Playwright real aislado en Chromium y Pixel 5; guardar/inspeccionar capturas sintéticas PC/móvil y registrar coverage/gates, comandos, limitaciones y rollback sin rebajar el umbral global frontend.
 
 ## Unidad QA-E2E.1 · aislamiento local de Playwright (resuelta)
 
