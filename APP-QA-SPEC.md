@@ -581,15 +581,32 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 ## Unidad QA-04c · cobertura global sin rebajar gates (en curso)
 
-La ejecución completa más reciente de Karma pasó `507/507` specs sin fallos de aserción, pero **falla el gate existente de 80 %**. Cobertura global: sentencias `80.80 %` (1819/2251), ramas `69.75 %` (798/1144), funciones `79.25 %` (428/540), líneas `82.32 %` (1584/1924). El gate falla en ramas/funciones; las ramas globales también quedan 0,25 puntos por debajo del mínimo 70 % pedido. No se rebajó el umbral ni se desactivó instrumentation.
+La línea base histórica pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentencias/ramas/funciones/líneas). La revalidación actual ejecutó `651/651` sin fallos de aserción, pero la cobertura cae a **60.64/51.37/50.72/62.41 %**, por debajo tanto del objetivo de 70 % como del gate configurado de 80 %. No se rebajó ningún umbral.
 
-- [x] Revalidar cobertura global y por archivo antes de iniciar el siguiente lote; guardar el informe aislado bajo `%TEMP%`.
+- [x] Revalidar cobertura global y por archivo antes del siguiente lote; archivar el reporte de esta ejecución en `%TEMP%`.
 - [ ] Añadir pruebas unitarias/integración para ramas y caminos de error/éxito no cubiertos; cada lote debe partir de fuentes actuales, tener regresión útil, cobertura ≥70 % en cada métrica del alcance y commit atómico.
 - [ ] Repetir la suite frontend completa con coverage y alcanzar 80 % en statements, ramas, funciones y líneas; documentar comandos y salidas, sin bajar umbrales.
 
 Candidatos del informe previo al lote (histórico; orden statements/branches/functions/lines): `auth.service.ts` 100/81.82/94.59/100 %, `theme.service.ts` 96.67/92.86/87.50/96.67 %, `shopping.model.ts` 79.22/62.40/66.67/79.22 %, `error.interceptor.ts` 7.89/0/0/7.89 %, `swipe-row.directive.ts` 10.09/11.11/11.76/10.09 %, `core/time.ts` 86.75/57.83/95/86.75 %, `data-table.util.ts` 95.86/78.77/100/95.86 %, `i18n.service.ts` 61.70/23.68/61.54/61.70 %, `household.service.ts` 1.79/0/0/1.79 % y `taste-profile.service.ts` 3.33/0/0/3.33 %.
 
-Revalidación actual (Karma Chrome Headless 154, `ng test --watch=false --code-coverage`, gate original intacto): `picker.component.ts` 96.90/92.42/100/97.37 %, `shopping.model.ts` 93.55/86.18/100/96.25 %, `shopping-http-error.ts` 100/100/100/100 %. Esos tres archivos superan ≥70 % en statements/branches/functions/lines. El global requiere todavía un lote específico para ramas/funciones restantes; no se declara completo.
+Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `shopping.model.ts` 93.55/86.18/100/96.25 %, `shopping-http-error.ts` 100/100/100/100 %. En el informe completo actual, `core/services` queda en 46.11/30.15/37.41/47.31 %, `pantry` en 55.23/43.92/38.36/57.23 %, `shopping` en 40.06/29.29/22.22/42.54 % e `interceptors` en 7.50/0/0/7.89 %. Reporte íntegro aislado: `%TEMP%\hogaria-coverage-qa-b0416800414946a881b73f56d0df9ef0`. El global sigue abierto.
+
+### QA-04c.GATE.1 · ejecutar realmente el gate configurado (pendiente)
+
+**Fuente y rojo reproducible (2026-10-01):** `frontend/karma.conf.js` declara 80 % global para sentencias, ramas, funciones y líneas, pero `frontend/angular.json` no conecta esa configuración al builder `test`. `ng test --no-watch --browsers=ChromeHeadlessNoSandbox --code-coverage` ejecutó 651/651 y salió `0` pese a los porcentajes inferiores. Cargando explícitamente `karma.conf.js` mediante un config temporal seguro para Chrome, la misma suite ejecutó 651/651, reportó fallo en las cuatro métricas y salió `1`. El launcher temporal se eliminó; no se tocó el umbral. Criterio: el comando estándar debe imponer el gate, no solo imprimirlo.
+
+- [x] Reproducir que el comando estándar devuelve éxito con coverage bajo el gate.
+- [x] Confirmar que la configuración de Karma existente detecta el mismo déficit y devuelve fallo sin cambiar los thresholds.
+- [ ] Conectar el target `test`/scripts estándar a `karma.conf.js`; mantener 80 % en las cuatro métricas y el launcher de CI normal.
+- [ ] Verificar que el comando estándar falla con el baseline bajo y pasa únicamente cuando la suite completa supera el 80 %; conservar los artefactos de cobertura.
+
+### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (pendiente)
+
+**Fuente revalidada (2026-10-01):** `TasteProfileService` no tiene spec propio y el reporte actual muestra 5.40/0/0/3.33 % (sentencias/ramas/funciones/líneas). Sus caminos actuales son `ensureLoaded`/`load`, `save` con campos opcionales, normalización/aplicación de `TasteResponse` y `finalize` de loading en éxito/error. El scope no cambia comportamiento de producción ni toca DB: se ejercita con `HttpTestingController`.
+
+- [ ] Añadir pruebas unitarias para carga/idempotencia/reintento, defaults y perfil normalizado, payload mínimo/completo de PATCH y limpieza de loading en éxito/error.
+- [ ] Asegurar ≥70 % por statements/branches/functions/lines en `TasteProfileService` con pruebas sobre la fuente actual.
+- [ ] Repetir la suite global y registrar el impacto real; mantener todos los thresholds existentes.
 
 **Subunidad QA-04c.1 — modelo de ofertas/descuentos de compra (fuente revalidada):** `HOGARIA-SPEC.md` §12h define `buy:3,take:2` como una oferta 3×2; el preset activo lo representa como `{ label:'3x2', buy:3, take:2 }`. `shopping.model.ts::describeOffer` antes devolvía `${buy}x${buy-take}` (3x1) y la plantilla de `shopping-list-detail.component.ts` lo pinta en la chapa accesible de cada fila; Playwright real reprodujo el texto visible y accesible «3x1». Los helpers puros `lineDiscountOfItem`, `describeLineDiscount`, `offerOfItem` y `describeOffer` son usados por la pantalla activa. El normalizador de backend `server/src/utils/list-discount.ts::normalizeOffer` exige `buy ≥ 2`, `take ≥ 1` y `take < buy`, por lo que el helper cliente debe ignorar también filas inválidas. Criterios:
 
