@@ -617,6 +617,21 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 **Rollback:** revertir la unidad del gate restaura el builder Angular sin `karmaConfig`, elimina el guard de configuración/launcher local y quita su step de CI y script de test; no cambia los thresholds ni lógica de producto.
 
+### QA-04c.UI.DATATABLE.1 · cobertura del componente compartido de tabla (planificada)
+
+**Fuente revalidada (2026-10-02):** el contrato vigente de `app-data-table` está en `HOGARIA-SPEC.md` §§12ab–12ad. `DataTableComponent` recibe filas/columnas y presenta búsqueda proyectada, celdas proyectadas, orden multi-columna, filtros de texto/número/fecha, paginación, selección y una hoja móvil; `data-table.util.spec.ts` ya cubre helpers puros, y `pantry.spec.ts`, `pantry-managers.spec.ts` y `pantry-catalog.spec.ts` recorren consumidores reales. Sin embargo, no existe `data-table.component.spec.ts`. El `frontend/coverage/lcov.info` generado por la suite actual atribuye al componente **2/254 líneas, 0/163 ramas y 0/97 funciones**. Se añadirá cobertura directa sin duplicar contratos de API ni cambiar comportamiento por anticipado; todo fallo de producto deberá quedar primero reproducido en rojo.
+
+- [ ] Añadir primero pruebas Angular del render y proyección: lista vacía vs. sin coincidencias, celdas proyectadas/booleanas y formato texto/número/fecha, clases e identificadores de fila y `resultadoChange` con todas las filas filtradas (no solo la página).
+- [ ] Cubrir orden ascendente/descendente/limpio y multiorden con Shift, columnas no ordenables y `aria-sort`; filtros de valores y búsqueda del menú, todos/ninguno/limpiar/recortar, extremos numéricos/fechas válidos y vacíos/invalidables, anclaje dentro del viewport, clic exterior y Escape.
+- [ ] Cubrir paginación y reanclaje al cambiar tamaño, rangos y saltos en límites, rechazar tamaño inválido, conservar selección según el contrato, estados none/mixed/all, selección por página, tramos Shift en ambos sentidos y poda de IDs al retirar filas.
+- [ ] Cubrir la vista móvil <720 px: hoja única de ordenar/filtrar, cambiar columna, abrir/cerrar menú, volver, limpiar y cerrar por Escape/velo; verificar roles/nombres/estado accesible y que cada control tenga un solo DOM activo.
+- [ ] Escribir/ejecutar una prueba Playwright real aislada con filas sintéticas contra un consumidor actual en Chromium y Pixel 5; revalidar los flujos de tabla existentes, dimensiones, orientación, foco/teclado, ausencia de overflow/errores y capturas comparables de PC/móvil. No escribir en el servidor/base habituales ni llamar a proveedor IA.
+- [ ] Lograr ≥70 % de statements/branches/functions/lines en `DataTableComponent`, ejecutar typecheck/build y repetir la suite frontend completa con el gate existente sin rebajarlo; registrar conteos, resultado real del gate, limitaciones y rollback. Mantener QA-04c global abierto hasta que las cuatro métricas completas alcancen 80 %.
+
+**Baseline anterior a implementación:** LCOV actual: `2/254` líneas, `0/163` ramas, `0/97` funciones; utilidades puras y parte de la integración de Pantry sí tienen pruebas, pero no existe una spec del componente. No se ha demostrado aún un defecto de producción ni se presupone que la cobertura revele uno.
+
+**Rollback previsto:** retirar únicamente `data-table.component.spec.ts`, los E2E nuevos de integración si fueran necesarios y esta unidad de spec; no tocar la lógica de tabla ni las suites/fixtures preexistentes salvo que una regresión roja pruebe una corrección concreta.
+
 ### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (resuelta localmente; gate global pendiente)
 
 **Fuente revalidada antes de añadir el spec (2026-10-01):** `TasteProfileService` no tenía spec propio y el reporte marcaba 5.40/0/0/3.33 % (sentencias/ramas/funciones/líneas). Sus caminos actuales son `ensureLoaded`/`load`, `save` con campos opcionales, normalización/aplicación de `TasteResponse` y `finalize` de loading en éxito/error. El alcance no cambia comportamiento de producción ni toca DB: se ejercita con `HttpTestingController`.
