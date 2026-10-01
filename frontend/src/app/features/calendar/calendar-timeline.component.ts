@@ -44,6 +44,8 @@ import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.compon
 import { MEAL_LABEL_KEYS } from '../../core/i18n/labels';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
+const TIMELINE_GUTTER_WIDTH_PX = 60;
+
 /**
  * La rejilla de horas del día y de la semana —el sustituto de las cuatro franjas de comida.
  *
@@ -545,10 +547,9 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   }
 
   protected columns(): string {
-    // 46 px de gutter para las etiquetas de hora y el resto repartido. El gutter es fijo en px por el
-    // ancho de «22:00»: si fuera liquido, etiquetas y lineas dejarian de alinear en la vista de día,
-    // que es donde mas se nota.
-    return `46px repeat(${Math.max(1, this.days.length)}, minmax(0, 1fr))`;
+    // El track común contiene la etiqueta más larga («Todo el día») y las horas («22:00»),
+    // de modo que cabecera, banda y rejilla sigan alineadas sin recortar texto.
+    return `${TIMELINE_GUTTER_WIDTH_PX}px repeat(${Math.max(1, this.days.length)}, minmax(0, 1fr))`;
   }
 
   /** La altura de hora, una sola vez: la geometria y el CSS tienen que medir lo mismo. */

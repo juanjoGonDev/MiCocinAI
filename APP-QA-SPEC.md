@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-CALENDAR.RANGE-STALE.1 y QA-CALENDAR.MOBILE-HEADER.1 están en implementación/verificación; QA-CALENDAR.ALL-DAY-GUTTER.1 quedó especificada tras detectar clipping en capturas; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1 y QA-CALENDAR.ALL-DAY-GUTTER.1 tienen regresiones verificadas localmente; el gate global de cobertura frontend sigue sin cumplir y el barrido global sigue pendiente. QA-REC.INGRESS.1 continúa pendiente por falta de runtime Nginx
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -243,16 +243,20 @@ Playwright real con `hogaria-e2e-runner-audit.mjs`, servidor/puerto/SQLite/semil
 
 **Verificación real:** la E2E combinada pasa **6/6** (header **2/2**); el test recorre los seis anchos/orientaciones indicados, Día/Semana/Mes, fecha y comida sintética, Tab + Enter sobre navegación de periodo, foco, los modales de objetivo/evento con Escape y geometría tras cada estado. Cero errores de página/consola; `tsc -p tsconfig.e2e.json --noEmit` y Prettier focal pasan. Capturas PC/móvil inspeccionadas en `.e2e-screenshots/qa-calendar-final2-20261001/{chromium-calendar-header-desktop,mobile-chrome-calendar-header-mobile}.png`. Rollback: revertir el commit atómico con CSS, E2E y esta sección. La corrida full Karma conserva el gate 80 % y su agregado actual no lo alcanza (detalle en QA-CALENDAR.RANGE-STALE.1).
 
-## Unidad QA-CALENDAR.ALL-DAY-GUTTER.1 · etiqueta «Todo el día» cortada (especificada antes de implementar)
+## Unidad QA-CALENDAR.ALL-DAY-GUTTER.1 · etiqueta «Todo el día» cortada (resuelta localmente)
 
-**Fuente de verdad revalidada (2026-10-01):** `CalendarTimelineComponent.columns()` fija la primera columna de hora en 46 px para «22:00». La banda de eventos de día completo reutiliza el mismo ancho para `.tl__gutter--band`, que añade padding horizontal y pinta «Todo el día» sin ajustar el track a su texto. En las capturas reales sintéticas `.e2e-screenshots/qa-calendar-mobile-header-20261001-green2/chromium-calendar-header-desktop.png` y `mobile-chrome-calendar-header-mobile.png`, las primeras letras de esa etiqueta quedan ocultas en el borde izquierdo de la rejilla. La medición exacta del nodo de texto frente a su celda queda pendiente de la regresión de esta unidad; no se atribuye a overflow global.
+**Fuente de verdad revalidada (2026-10-01):** `CalendarTimelineComponent.columns()` fijaba la primera columna de hora en 46 px para «22:00». La banda de eventos de día completo reutiliza el mismo ancho para `.tl__gutter--band`, que añade padding horizontal y pinta «Todo el día» sin ajustar el track a su texto. La E2E midió el nodo: 48 px de texto frente al track de 46 px; empezaba 6 px fuera de la celda. Las capturas sintéticas previas `.e2e-screenshots/qa-calendar-mobile-header-20261001-green2/` también mostraban el clipping; no era overflow global.
 
 **Conducta esperada (inferencia de legibilidad/alineación del calendario):** la etiqueta de la banda «Todo el día» debe leerse completa en escritorio y móvil, sin invadir el borde del panel ni desplazar sus columnas. El track de gutter compartido por cabecera, banda y horas debe medir una sola vez el ancho necesario; no se debe resolver ocultando o truncando el texto.
 
-- [ ] Añadir primero una E2E real que compare los límites renderizados de la etiqueta y su track en 320×568, 393×851, 568×320, 768×1024 y 1440×900; confirmar rojo antes de tocar el CSS del timeline.
-- [ ] Ajustar la fuente compartida del ancho de la primera columna para contener la etiqueta completa con su padding y mantener alineadas la cabecera, banda de todo el día y escala horaria.
-- [ ] Verificar de nuevo la legibilidad en las vistas día/semana y que ninguna acción, columna o contenido se recorte ni cree overflow horizontal del documento/panel.
-- [ ] Ejecutar Playwright real aislado en Chromium y Pixel 5; guardar/inspeccionar capturas sintéticas PC/móvil y registrar coverage/gates, comandos, limitaciones y rollback sin rebajar el umbral global frontend.
+- [x] Añadir primero una E2E real que compare los límites renderizados de la etiqueta y su track en 320×568, 393×851, 568×320, 768×1024 y 1440×900; confirmar rojo antes de tocar el CSS del timeline.
+- [x] Ajustar la fuente compartida del ancho de la primera columna para contener la etiqueta completa con su padding y mantener alineadas la cabecera, banda de todo el día y escala horaria.
+- [x] Verificar de nuevo la legibilidad en las vistas día/semana y que ninguna acción, columna o contenido se recorte ni cree overflow horizontal del documento/panel.
+- [x] Ejecutar Playwright real aislado en Chromium y Pixel 5; guardar/inspeccionar capturas sintéticas PC/móvil y registrar coverage/gates, comandos, limitaciones y rollback sin rebajar el umbral global frontend.
+
+**TDD rojo → verde (2026-10-01):** la primera E2E midió texto/celda en ambas sesiones de navegador y reprobaron Chromium y Pixel 5: la etiqueta ocupaba 48 px dentro de un track compartido de 46 px, empezaba 6 px fuera de la celda y la primera parte quedaba cortada; no era overflow del documento. `columns()` usa ahora un gutter común de 60 px, único para cabecera, banda de día completo y horas.
+
+**Verificación real:** en la corrida aislada final la spec pasa **2/2** (Chromium y Pixel 5) en vistas Día y Semana a 320×568, 393×851, 568×320, 768×1024 y 1440×900. El texto cabe en su celda, los tres tracks continúan alineados, no hay overflow de panel/documento ni errores JavaScript. Capturas PC/móvil inspeccionadas: `.e2e-screenshots/qa-calendar-final2-20261001/{chromium-calendar-all-day-gutter,mobile-chrome-calendar-all-day-gutter}.png`. Rollback: revertir el commit atómico con ancho, regresión y esta sección. El gate global frontend de coverage 80 % permanece sin cumplir; no se modificó.
 
 ## Unidad QA-E2E.1 · aislamiento local de Playwright (resuelta)
 
