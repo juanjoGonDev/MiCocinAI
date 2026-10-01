@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   AiCallError,
   activeAiConfig,
-  callAI,
-  callAIStreaming,
+  callAI as queuedCallAI,
+  callAIWithConfig as callAITransport,
+  callAIStreaming as queuedCallAIStreaming,
+  callAIStreamingWithConfig as callAIStreamingTransport,
   endpoint,
   extractJsonObject,
-  pingDeConexion
+  pingDeConexionTransport
 } from './ai-client.js';
 
 /**
@@ -52,7 +54,9 @@ const CONFIG = {
   top_p: null,
   frequency_penalty: null,
   presence_penalty: null,
-  timeout: 1234
+  timeout: 1234,
+  retry_attempts: 0,
+  concurrency: 0
 };
 
 afterEach(() => {
@@ -78,10 +82,9 @@ describe('callAI', () => {
       });
     });
 
-    const out = await callAI(
-      'u-1',
-      [{ role: 'user', content: 'hola' }],
-      dbWith({ ai_configs: [CONFIG] })
+    const out = await callAITransport(
+      CONFIG,
+      [{ role: 'user', content: 'hola' }]
     );
 
     expect(out).toBe('{"ok":true}');
@@ -93,7 +96,7 @@ describe('callAI', () => {
   });
 
   it('sin configuracion activa NO es un error del proveedor', async () => {
-    await expect(callAI('u-x', [], dbWith({ ai_configs: [] }))).rejects.toMatchObject({
+    await expect(queuedCallAI('u-x', [], dbWith({ ai_configs: [] }))).rejects.toMatchObject({
       code: 'NO_CONFIG'
     });
   });
@@ -107,7 +110,7 @@ describe('callAI', () => {
           statusText: 'Bad Gateway'
         })
     );
-    const error = await callAI('u-1', [], dbWith({ ai_configs: [CONFIG] })).catch((e) => e);
+    const error = await callAITransport(CONFIG, []).catch((e) => e);
     expect(error).toBeInstanceOf(AiCallError);
     expect(error.code).toBe('PROVIDER');
     expect(error.message).toContain('upstream exploded');
@@ -119,7 +122,7 @@ describe('callAI', () => {
       'fetch',
       async () => new Response(JSON.stringify({ choices: [] }), { status: 200 })
     );
-    await expect(callAI('u-1', [], dbWith({ ai_configs: [CONFIG] }))).rejects.toMatchObject({
+    await expect(callAITransport(CONFIG, [])).rejects.toMatchObject({
       code: 'BAD_JSON'
     });
   });
@@ -128,7 +131,7 @@ describe('callAI', () => {
     vi.stubGlobal('fetch', async () => {
       throw new Error('The operation was aborted due to timeout');
     });
-    await expect(callAI('u-1', [], dbWith({ ai_configs: [CONFIG] }))).rejects.toMatchObject({
+    await expect(callAITransport(CONFIG, [])).rejects.toMatchObject({
       code: 'TIMEOUT'
     });
   });
@@ -221,10 +224,9 @@ describe('callAIStreaming', () => {
       );
     });
 
-    const texto = await callAIStreaming(
-      'u-1',
+    const texto = await callAIStreamingTransport(
+      CONFIG,
       [{ role: 'user', content: 'lee' }],
-      dbWith({ ai_configs: [CONFIG] }),
       (delta) => deltas.push(delta),
       new AbortController().signal
     );
@@ -237,7 +239,7 @@ describe('callAIStreaming', () => {
 
   it('sin configuracion activa, NO_CONFIG (la cola lo traduce por «configura la IA»)', async () => {
     await expect(
-      callAIStreaming(
+      queuedCallAIStreaming(
         'u-x',
         [],
         dbWith({ ai_configs: [] }),
@@ -249,10 +251,9 @@ describe('callAIStreaming', () => {
 
   it('un 4xx/5xx del proveedor es PROVIDER con el cuerpo recortado', async () => {
     vi.stubGlobal('fetch', async () => new Response('boom ' + 'y'.repeat(500), { status: 500 }));
-    const error = await callAIStreaming(
-      'u-1',
+    const error = await callAIStreamingTransport(
+      CONFIG,
       [],
-      dbWith({ ai_configs: [CONFIG] }),
       () => undefined,
       new AbortController().signal
     ).catch((e) => e);
@@ -264,10 +265,9 @@ describe('callAIStreaming', () => {
   it('un stream que no trajo nada de texto es BAD_JSON, no un exito silencioso', async () => {
     vi.stubGlobal('fetch', async () => new Response(sse(['data: [DONE]\n']), { status: 200 }));
     await expect(
-      callAIStreaming(
-        'u-1',
+      callAIStreamingTransport(
+        CONFIG,
         [],
-        dbWith({ ai_configs: [CONFIG] }),
         () => undefined,
         new AbortController().signal
       )
@@ -287,10 +287,9 @@ describe('callAIStreaming', () => {
           { status: 200 }
         )
     );
-    const error = await callAIStreaming(
-      'u-1',
+    const error = await callAIStreamingTransport(
+      CONFIG,
       [],
-      dbWith({ ai_configs: [CONFIG] }),
       () => control.abort(),
       control.signal
     ).catch((e) => e);
@@ -304,10 +303,9 @@ describe('callAIStreaming', () => {
       throw new Error('The operation was aborted due to timeout');
     });
     await expect(
-      callAIStreaming(
-        'u-1',
+      callAIStreamingTransport(
+        CONFIG,
         [],
-        dbWith({ ai_configs: [CONFIG] }),
         () => undefined,
         new AbortController().signal
       )
@@ -336,11 +334,6 @@ describe('endpoint', () => {
 
 describe('callAI: el cuerpo lleva solo lo configurado', () => {
   it('los parametros en null no viajan: un proveedor estricto no recibe basura', async () => {
-    const db = dbWith({
-      ai_configs: [
-        { ...CONFIG, temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null }
-      ]
-    });
     let cuerpo: any;
     vi.stubGlobal(
       'fetch',
@@ -349,13 +342,12 @@ describe('callAI: el cuerpo lleva solo lo configurado', () => {
         return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 });
       }
     );
-    await callAI('u-1', [{ role: 'user', content: 'hola' }], db);
+    await callAITransport({ ...CONFIG, temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null }, [{ role: 'user', content: 'hola' }]);
     vi.unstubAllGlobals();
     expect(cuerpo).toEqual({ model: CONFIG.model, messages: [{ role: 'user', content: 'hola' }] });
   });
 
   it('los parametros con valor si viajan', async () => {
-    const db = dbWith({ ai_configs: [{ ...CONFIG, temperature: 0.2, max_tokens: 500 }] });
     let cuerpo: any;
     vi.stubGlobal(
       'fetch',
@@ -364,7 +356,7 @@ describe('callAI: el cuerpo lleva solo lo configurado', () => {
         return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 });
       }
     );
-    await callAI('u-1', [{ role: 'user', content: 'hola' }], db);
+    await callAITransport({ ...CONFIG, temperature: 0.2, max_tokens: 500 }, [{ role: 'user', content: 'hola' }]);
     vi.unstubAllGlobals();
     expect(cuerpo.temperature).toBe(0.2);
     expect(cuerpo.max_tokens).toBe(500);
@@ -384,7 +376,7 @@ describe('pingDeConexion', () => {
         return respuesta('{"status":"ok","message":"conexión establecida"}');
       }
     );
-    const veredicto = await pingDeConexion({ base_url: 'http://x:8000', api_key: 'k', model: 'gpt-5' });
+    const veredicto = await pingDeConexionTransport({ base_url: 'http://x:8000', api_key: 'k', model: 'gpt-5' });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(true);
     // El contrato del proveedor, como el ejemplo del usuario: json_schema estricto.
@@ -399,7 +391,7 @@ describe('pingDeConexion', () => {
 
   it('un 200 con cuerpo que no es JSON (el proxy con su pagina HTML) es veredicto de error, no un vuelco', async () => {
     vi.stubGlobal('fetch', async () => new Response('<html>Bad Gateway</html>', { status: 200, headers: { 'content-type': 'text/html' } }));
-    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(false);
     if (!veredicto.ok) expect(veredicto.error).toContain('no tiene la forma esperada');
@@ -412,7 +404,7 @@ describe('pingDeConexion', () => {
       }
     });
     vi.stubGlobal('fetch', async () => new Response(cuerpoRoto, { status: 502 }));
-    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(false);
     // Sin cuerpo no hay texto del proveedor: queda el HTTP, que es lo unico cierto.
@@ -421,7 +413,7 @@ describe('pingDeConexion', () => {
 
   it('un «Hello» ambiguo ya no vale: el modelo tiene que devolver el JSON pedido', async () => {
     vi.stubGlobal('fetch', async () => respuesta('Hello! How can I help you today?'));
-    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(false);
     if (!veredicto.ok) expect(veredicto.error).toContain('no devolvió el JSON pedido');
@@ -432,7 +424,7 @@ describe('pingDeConexion', () => {
       'fetch',
       async () => new Response('{"error":"max_tokens is not supported"}', { status: 400 })
     );
-    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(false);
     if (!veredicto.ok) expect(veredicto.error).toContain('max_tokens is not supported');
@@ -445,7 +437,7 @@ describe('pingDeConexion', () => {
         throw new Error('fetch failed');
       }
     );
-    const veredicto = await pingDeConexion({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(false);
   });

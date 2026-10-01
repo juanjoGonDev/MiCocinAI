@@ -646,6 +646,29 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // La concurrencia máxima de IA es por configuración (por proveedor): default 0 = ilimitada, y se
   // toca desde el apartado de IA (## 12aj).
   addColumnIfMissing('ai_configs', 'concurrency', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing('ai_jobs', 'config_id', 'TEXT');
+  addColumnIfMissing('ai_jobs', 'queue_order', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing('ai_jobs', 'claim_generation', 'INTEGER NOT NULL DEFAULT 0');
+  // Los trabajos de tickets antiguos no tenian identidad de proveedor. Fijamos, una unica vez,
+  // la configuracion activa que mejor representa el comportamiento anterior; no se vuelve a
+  // consultar la activa al despachar. Los jobs sin configuracion quedan sin config_id y fallan
+  // de forma explicita al procesarse, en vez de adoptar una clave futura silenciosamente.
+  db.prepare(`
+    UPDATE ai_jobs
+       SET config_id = (
+         SELECT id FROM ai_configs
+          WHERE ai_configs.user_id = ai_jobs.user_id AND ai_configs.is_active = 1
+          ORDER BY ai_configs.updated_at DESC LIMIT 1
+       )
+     WHERE ai_jobs.kind = 'receipt' AND ai_jobs.config_id IS NULL
+       AND ai_jobs.status IN ('queued', 'running')
+  `).run();
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_ai_jobs_provider_queue
+      ON ai_jobs(config_id, status, queue_order, created_at);
+    CREATE INDEX IF NOT EXISTS idx_ai_jobs_user_provider
+      ON ai_jobs(user_id, config_id, status);
+  `);
   addColumnIfMissing('shopping_list_items', 'added_by', 'TEXT');
   addColumnIfMissing('shopping_list_items', 'updated_by', 'TEXT');
   addColumnIfMissing('shopping_lists', 'updated_by', 'TEXT');

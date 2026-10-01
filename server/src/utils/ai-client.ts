@@ -16,6 +16,15 @@ export type AiMessagePart =
   | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } };
 
 export type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string | AiMessagePart[] };
+export type AiJobKind =
+  | 'receipt'
+  | 'recipe'
+  | 'multiple_recipes'
+  | 'recommendations'
+  | 'weekly_plan'
+  | 'shopping_photo'
+  | 'expiry_estimate'
+  | 'connection_test';
 
 export interface AiConfigRow {
   id: string;
@@ -30,6 +39,7 @@ export interface AiConfigRow {
   frequency_penalty: number | null;
   presence_penalty: number | null;
   timeout: number | null;
+  retry_attempts?: number | null;
   /** Máximo de trabajos IA en vuelo para esta configuración; 0 = ilimitado. */
   concurrency: number | null;
 }
@@ -97,11 +107,22 @@ function chatBody(active: AiConfigRow, extra: Record<string, unknown>): Record<s
  * Llamada a `/chat/completions` con lo que el usuario configuro en la UI (nada de
  * variables de entorno). Devuelve el texto del primer choice.
  */
-export async function callAI(userId: string, messages: AiMessage[], db: SqlDb): Promise<string> {
-  const active = activeAiConfig(db, userId);
-  if (!active) {
-    throw new AiCallError('NO_CONFIG', 'No active AI configuration found');
-  }
+export async function callAI(
+  userId: string,
+  messages: AiMessage[],
+  db: SqlDb,
+  kind: AiJobKind = 'recipe'
+): Promise<string> {
+  const { dispatchAI } = await import('./ticket-queue.js');
+  return dispatchAI(userId, messages, db, kind);
+}
+
+/** Transporte de una configuración ya fijada por el dispatcher. */
+export async function callAIWithConfig(
+  active: AiConfigRow,
+  messages: AiMessage[],
+  signal?: AbortSignal
+): Promise<string> {
 
   let response: Response;
   try {
@@ -112,7 +133,7 @@ export async function callAI(userId: string, messages: AiMessage[], db: SqlDb): 
         Authorization: `Bearer ${active.api_key}`
       },
       body: JSON.stringify(chatBody(active, { messages })),
-      signal: AbortSignal.timeout(active.timeout ?? DEFAULT_TIMEOUT_MS)
+      signal: señalConTimeout(signal, active.timeout ?? DEFAULT_TIMEOUT_MS)
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -150,11 +171,18 @@ export async function callAIStreaming(
   onDelta: (texto: string) => void,
   senal: AbortSignal
 ): Promise<string> {
-  const active = activeAiConfig(db, userId);
-  if (!active) {
-    throw new AiCallError('NO_CONFIG', 'No active AI configuration found');
-  }
+  const { dispatchAIStreaming } = await import('./ticket-queue.js');
+  return dispatchAIStreaming(userId, messages, db, onDelta, senal);
+}
 
+/** Transporte en streaming de una configuración ya fijada por el dispatcher. */
+export async function callAIStreamingWithConfig(
+  active: AiConfigRow,
+  messages: AiMessage[],
+  onDelta: (texto: string) => void,
+  senal: AbortSignal
+): Promise<string> {
+  const signal = señalConTimeout(senal, active.timeout ?? DEFAULT_TIMEOUT_MS);
   let response: Response;
   try {
     response = await fetch(endpoint(active.base_url), {
@@ -173,7 +201,7 @@ export async function callAIStreaming(
         presence_penalty: active.presence_penalty,
         stream: true
       }),
-      signal: senal
+      signal
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -190,7 +218,7 @@ export async function callAIStreaming(
   let entero = '';
   let porProcesar = '';
   for await (const trozo of response.body) {
-    if (senal.aborted) throw new AiCallError('PROVIDER', 'Cancelado', 'CANCELLED');
+    if (signal.aborted) throw new AiCallError('PROVIDER', 'Cancelado', 'CANCELLED');
     porProcesar += decoder.decode(trozo, { stream: true });
     // El SSE llega en lineas «data: {...}» separadas por saltos; una linea «data: [DONE]» cierra.
     const lineas = porProcesar.split('\n');
@@ -272,11 +300,26 @@ export const testAnswerSchema = z.object({
  * veredicto con su latencia; quien llama decide si lo guarda en `ai_configs` (prueba de una
  * config guardada) o solo lo ensena (prueba desde el formulario, sin tocar nada).
  */
-export async function pingDeConexion(config: {
+export async function pingDeConexion(
+  config: {
+    base_url: string;
+    api_key: string;
+    model: string;
+    timeout?: number | null;
+  },
+  context: { db: SqlDb; userId: string; config: AiConfigRow; configId: string | null }
+): Promise<{ ok: true; latency: number; message: string } | { ok: false; latency: number; error: string }> {
+  const { dispatchPingDeConexion } = await import('./ticket-queue.js');
+  return dispatchPingDeConexion(config, context);
+}
+
+/** Raw provider connection probe. Production callers must use pingDeConexion (queued wrapper). */
+export async function pingDeConexionTransport(config: {
   base_url: string;
   api_key: string;
   model: string;
   timeout?: number | null;
+  signal?: AbortSignal;
 }): Promise<{ ok: true; latency: number; message: string } | { ok: false; latency: number; error: string }> {
   const startTime = Date.now();
   try {
@@ -307,7 +350,7 @@ export async function pingDeConexion(config: {
           }
         }
       }),
-      signal: AbortSignal.timeout(config.timeout ?? DEFAULT_TIMEOUT_MS)
+      signal: señalConTimeout(config.signal, config.timeout ?? DEFAULT_TIMEOUT_MS)
     });
 
     const latency = Date.now() - startTime;
@@ -346,4 +389,9 @@ export async function pingDeConexion(config: {
     const mensaje = error instanceof Error ? error.message : String(error);
     return { ok: false, latency, error: mensaje };
   }
+}
+
+function señalConTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
+  const timeout = AbortSignal.timeout(timeoutMs);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }

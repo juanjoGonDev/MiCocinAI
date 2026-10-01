@@ -26,6 +26,11 @@ import {
 import { persistWeeklyPlan, resolveMealTypes } from '../utils/weekly-plan.js';
 import { bloqueDeCaducidades } from '../utils/caducidades.js';
 import { callAI, extractJsonObject, pingDeConexion } from '../utils/ai-client.js';
+import type { AiConfigRow } from '../utils/ai-client.js';
+import {
+  cancelarColaDeConfiguracion,
+  cerrarVentanasReintentoConfiguracion
+} from '../utils/ticket-queue.js';
 const aiRoutes = new Hono<AppEnv>();
 aiRoutes.use('*', authMiddleware);
 
@@ -81,6 +86,9 @@ aiRoutes.post('/configs', async (c) => {
 
   const db = getDatabase();
   const id = nanoid();
+  const configuracionesActivas = db
+    .prepare('SELECT id FROM ai_configs WHERE user_id = ? AND is_active = 1')
+    .all(userId) as { id: string }[];
 
   db.prepare(`
     INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, timeout, retry_attempts, concurrency)
@@ -95,6 +103,9 @@ aiRoutes.post('/configs', async (c) => {
   // vieja, por rowid) seguia siendo la que contestaba a todas las llamadas y la IA «no se
   // activaba nunca» por muchas configuraciones nuevas que se guardaran encima.
   db.prepare('UPDATE ai_configs SET is_active = 0 WHERE user_id = ? AND id != ?').run(userId, id);
+  for (const antigua of configuracionesActivas) {
+    cancelarColaDeConfiguracion(db, userId, antigua.id);
+  }
 
   const config = db.prepare('SELECT * FROM ai_configs WHERE id = ?').get(id);
   return c.json({ success: true, data: toClientConfig(config as Record<string, unknown>) }, 201);
@@ -116,6 +127,11 @@ aiRoutes.patch('/configs/:id', async (c) => {
 
   const updates: string[] = [];
   const values: any[] = [];
+  const configuracionesDesactivadas = input.isActive
+    ? (db
+        .prepare('SELECT id FROM ai_configs WHERE user_id = ? AND is_active = 1 AND id != ?')
+        .all(userId, id) as { id: string }[])
+    : [];
 
   if (input.name !== undefined) { updates.push('name = ?'); values.push(input.name); }
   if (input.baseUrl !== undefined) { updates.push('base_url = ?'); values.push(input.baseUrl); }
@@ -129,13 +145,23 @@ aiRoutes.patch('/configs/:id', async (c) => {
     db.prepare('UPDATE ai_configs SET is_active = 0 WHERE user_id = ?').run(userId);
   }
   if (input.isActive !== undefined) { updates.push('is_active = ?'); values.push(input.isActive ? 1 : 0); }
-  // La concurrencia de la cola de tickets (## 12aj): por proveedor, y editable en caliente.
+  // La concurrencia máxima de esta configuración (## 12an) se edita en caliente.
   if (input.concurrency !== undefined) { updates.push('concurrency = ?'); values.push(input.concurrency); }
 
   if (updates.length > 0) {
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(id);
     db.prepare(`UPDATE ai_configs SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+  }
+
+  for (const desactivada of configuracionesDesactivadas) {
+    cancelarColaDeConfiguracion(db, userId, desactivada.id);
+  }
+  if (input.isActive === false) {
+    cancelarColaDeConfiguracion(db, userId, id);
+  }
+  if (input.concurrency === 0) {
+    cerrarVentanasReintentoConfiguracion(db, userId, id, 'CONCURRENCY_DISABLED');
   }
 
   const config = db.prepare('SELECT * FROM ai_configs WHERE id = ?').get(id);
@@ -148,6 +174,11 @@ aiRoutes.delete('/configs/:id', async (c) => {
   const id = c.req.param('id');
   const db = getDatabase();
 
+  const existe = db.prepare('SELECT id FROM ai_configs WHERE id = ? AND user_id = ?').get(id, userId);
+  if (!existe) {
+    return c.json({ success: false, message: 'Config not found' }, 404);
+  }
+  cancelarColaDeConfiguracion(db, userId, id);
   const result = db.prepare('DELETE FROM ai_configs WHERE id = ? AND user_id = ?').run(id, userId);
   if (result.changes === 0) {
     return c.json({ success: false, message: 'Config not found' }, 404);
@@ -194,6 +225,26 @@ aiRoutes.post('/test-connection', async (c) => {
     api_key: config.api_key,
     model: config.model,
     timeout: config.timeout
+  }, {
+    db,
+    userId,
+    config: {
+      id: config.id ?? `ephemeral-${userId}`,
+      name: String(config.name ?? 'Connection test'),
+      provider: String(config.provider ?? 'custom'),
+      base_url: config.base_url,
+      api_key: config.api_key,
+      model: config.model,
+      temperature: (config.temperature as number | null) ?? null,
+      max_tokens: (config.max_tokens as number | null) ?? null,
+      top_p: (config.top_p as number | null) ?? null,
+      frequency_penalty: (config.frequency_penalty as number | null) ?? null,
+      presence_penalty: (config.presence_penalty as number | null) ?? null,
+      timeout: (config.timeout as number | null) ?? null,
+      retry_attempts: (config.retry_attempts as number | null) ?? 0,
+      concurrency: (config.concurrency as number | null) ?? 0
+    } satisfies AiConfigRow,
+    configId: input.configId ? String(config.id) : null
   });
 
   // El estado de la prueba solo se persiste cuando se prueba una config GUARDADA; la del
@@ -378,7 +429,7 @@ Responde SOLO con un JSON válido: {"recommendations": [{"name": "", "reason": "
     const response = await callAI(userId, [
       { role: 'system', content: 'Eres un chef profesional. Responde SOLO con JSON válido.' },
       { role: 'user', content: prompt }
-    ], db);
+    ], db, 'recommendations');
 
     const result = extractJsonObject(response) as any;
     return c.json({ success: true, data: result.recommendations });
@@ -458,7 +509,7 @@ ${mealShape}
     const response = await callAI(userId, [
       { role: 'system', content: 'Eres un nutricionista y chef. Responde SOLO con JSON válido.' },
       { role: 'user', content: prompt }
-    ], db);
+    ], db, 'weekly_plan');
 
     const plan = extractJsonObject(response) as any;
 

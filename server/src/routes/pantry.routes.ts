@@ -593,7 +593,7 @@ pantryRoutes.post('/expiry/estimate', async (c) => {
         await callAI(userId, [
           { role: 'system', content: system },
           { role: 'user', content: user }
-        ], db)
+        ], db, 'expiry_estimate')
       );
     } catch (error) {
       if (error instanceof AiCallError) {

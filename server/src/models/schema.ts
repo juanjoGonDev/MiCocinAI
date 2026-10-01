@@ -264,3 +264,24 @@ export const aiConfigsRelations = relations(aiConfigs, ({ one }) => ({
     references: [users.id]
   })
 }));
+
+/** Metadata only: non-ticket request bodies, prompts and attachments intentionally stay in memory. */
+export const aiJobs = sqliteTable('ai_jobs', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  configId: text('config_id'),
+  kind: text('kind').notNull().default('receipt'),
+  receiptId: text('receipt_id'),
+  status: text('status').notNull().default('queued'),
+  attempts: integer('attempts').notNull().default(0),
+  maxAttempts: integer('max_attempts').notNull().default(3),
+    queueOrder: integer('queue_order').notNull().default(0),
+    claimGeneration: integer('claim_generation').notNull().default(0),
+  leaseUntil: text('lease_until'),
+  errorCode: text('error_code'),
+  errorDetail: text('error_detail'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+  startedAt: text('started_at'),
+  finishedAt: text('finished_at')
+});

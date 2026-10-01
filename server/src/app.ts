@@ -18,6 +18,7 @@ import { recipeRoutes } from './routes/recipes.routes.js';
 import { householdRoutes } from './routes/household.routes.js';
 import { calendarRoutes } from './routes/calendar.routes.js';
 import { aiRoutes } from './routes/ai.routes.js';
+import { aiQueueRoutes } from './routes/ai-queue.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
 import { logRoutes } from './routes/logs.routes.js';
 
@@ -372,6 +373,7 @@ export function createApp(options: AppOptions = {}): Hono {
   app.route('/api/household', householdRoutes);
   app.route('/api/calendar', calendarRoutes);
   app.route('/api/ai', aiRoutes);
+  app.route('/api/ai', aiQueueRoutes);
   app.route('/api/logs', logRoutes);
 
   app.onError(errorHandler);

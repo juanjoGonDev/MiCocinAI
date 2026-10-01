@@ -25,6 +25,7 @@ import { defineConfig } from 'vitest/config';
  */
 const COVERED = [
   'src/routes/shopping.routes.ts',
+  'src/routes/ai-queue.routes.ts',
   'src/schemas/shopping.schema.ts',
   'src/utils/product-key.ts',
   'src/utils/shopping-categories.ts',
@@ -34,6 +35,7 @@ const COVERED = [
   'src/utils/photo-prompt.ts',
   'src/utils/live-hub.ts',
   'src/utils/ai-client.ts',
+  'src/utils/ticket-queue.ts',
   'src/config/database.ts',
   'src/utils/memory-monitor.ts',
   'src/utils/seed-data.ts',

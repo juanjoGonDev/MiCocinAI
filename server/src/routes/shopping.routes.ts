@@ -1579,7 +1579,8 @@ shoppingRoutes.post('/lists/:id/photo/analyze', async (c) => {
           ]
         }
       ],
-      db
+      db,
+      'shopping_photo'
     );
   } catch (error) {
     return aiError(c, error);

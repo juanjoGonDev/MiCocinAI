@@ -12,7 +12,7 @@ import { storeTicket, detectarKindTicket } from '../utils/uploads.js';
 import { ensureDefaultCategories as ensurePantryCategories } from '../utils/pantry-categories.js';
 import { productKeyOf } from '../utils/product-key.js';
 import {
-  ensureWorker,
+  encolarTicket,
   pararTrabajo,
   pararTodo,
   reencolar,
@@ -116,10 +116,7 @@ receiptsRoutes.post('/', async (c) => {
     (fichero.name || '').slice(0, 120),
     bytes.byteLength
   );
-  db.prepare(
-    `INSERT INTO ai_jobs (id, user_id, kind, receipt_id, status) VALUES (?, ?, 'receipt', ?, 'queued')`
-  ).run(nanoid(), userId, id);
-  ensureWorker();
+  encolarTicket(db, userId, id);
 
   return c.json({ success: true, data: pintar(filaDeRecibo(db, userId, id)!, 0) }, 201);
 });
@@ -552,7 +549,7 @@ receiptsRoutes.post('/:id/stop', async (c) => {
   if (!cancelado) {
     // estaba en cola sin correr: se marca parado a mano
     db.prepare(
-      `UPDATE ai_jobs SET status = 'stopped', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+      `UPDATE ai_jobs SET status = 'stopped', claim_generation = claim_generation + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).run(trabajo.id);
     db.prepare(
       `UPDATE receipts SET status = 'stopped', updated_at = CURRENT_TIMESTAMP WHERE id = ?`

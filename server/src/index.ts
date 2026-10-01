@@ -7,6 +7,7 @@ import { initializeDatabase } from './config/database.js';
 import { memoryMonitor } from './utils/memory-monitor.js';
 import { installConsoleCapture } from './utils/log-store.js';
 import { uploadsRoot } from './utils/uploads.js';
+import { ensureWorker } from './utils/ticket-queue.js';
 import { createApp, rateLimitFromEnv, resolveStaticDir } from './app.js';
 
 // Install console capture BEFORE anything else so that startup messages
@@ -24,6 +25,9 @@ async function startServer() {
   try {
     await initializeDatabase();
     console.log('[SERVER] ✓ Database initialized');
+
+    ensureWorker();
+    console.log('[SERVER] ✓ AI queue started');
 
     memoryMonitor.start();
     console.log('[SERVER] ✓ Memory monitor started');
