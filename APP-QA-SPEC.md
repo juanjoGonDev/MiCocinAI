@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-CALENDAR.RANGE-STALE.1 está en curso; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -208,6 +208,18 @@ Playwright real con `hogaria-e2e-runner-audit.mjs`, servidor/puerto/SQLite/semil
 **TDD rojo observado antes del cambio:** contra el bundle anterior, `dashboard-today-meals.spec.ts` falló porque el Dashboard no renderizaba comidas ni estados de carga/error. En la primera versión del test, el mock 503 no alcanzó la petición porque el service worker registrado la interceptaba; lo registré y corregí el setup con `serviceWorkers: 'block'` antes de usar el test como señal verde. Rollback de esta unidad: revertir conjuntamente `dashboard.component.ts`, `dashboard-meals.util.ts`, su spec unitario, `dashboard-today-meals.spec.ts` y esta sección QA-DASH.1.
 
 **Discrepancias de producto abiertas (no se cierran en esta unidad):** `HOGARIA-SPEC.md` §2/§12al también pide vencimientos, lista abierta/presupuesto semanal y cola IA en Today; `DashboardComponent` actual no renderiza esos bloques. Mantener abierta la checklist general `/dashboard` y decidir cada superficie en su propia unidad, sin atribuirlas a esta corrección de comidas.
+
+## Unidad QA-CALENDAR.RANGE-STALE.1 · respuestas obsoletas del rango visible (en curso)
+
+**Fuente de verdad revalidada (2026-10-01):** `HOGARIA-SPEC.md` §8f define calendario por día/semana/mes; `CalendarComponent.visibleRange` deriva el rango de lo que la persona mira y el efecto pide ese rango a `CalendarService.loadRange()`. El servicio evita peticiones duplicadas de la misma clave, pero cada `tap` y `catchError` actual escribe señales sin comprobar si otra petición más reciente ya tomó su lugar. Una respuesta vieja puede reemplazar comidas/objetivos/rango o limpiar el estado de carga/error del rango actual; un fallo viejo incluso borra `lastRequested` y permite duplicar la carga más reciente.
+
+**Decisión (inferencia de la fuente vigente, no un cambio de contrato API):** mientras cambian vista/fecha, solo la solicitud más reciente puede mutar comidas, objetivos, rango, error, loading o deduplicación. Un error de la petición actual conserva los datos previamente cargados y permite reintentar; respuestas anteriores no modifican ni datos ni estado, incluso tras `force` de la misma clave. Mantener llamadas GET reales en la E2E; aislar su respuesta temporalmente para ordenar la carrera.
+
+- [ ] Añadir primero pruebas unitarias para éxito viejo tras éxito nuevo, fallo viejo mientras la petición actual sigue cargando, fallo actual con datos previos conservados y reintento; incluir dos `force` concurrentes para la misma clave. Confirmar rojo antes del cambio de producción.
+- [ ] Añadir primero una E2E real que persista dos comidas sintéticas en fechas distintas, demore una respuesta GET real del rango anterior, navegue a otro rango y libere la respuesta vieja al final; demostrar que la comida del rango visible no desaparece ni se cambia. No usar la base habitual ni el proveedor IA.
+- [ ] Aplicar el guardado mínimo de actualidad a todos los efectos de cada respuesta (datos, loading, error y clave deduplicada), conservando la política actual de mantener datos previos ante error recuperable.
+- [ ] Ejecutar Karma focal con cobertura de `CalendarService` ≥70 % en statements, ramas, funciones y líneas; no rebajar el gate global existente. Ejecutar Playwright real con servidor/SQLite/puertos/semilla temporales en Chromium y Pixel 5; revisar teclado, navegación de periodo y sin errores de consola.
+- [ ] Guardar e inspeccionar capturas sintéticas PC y móvil del calendario; dejar comando, resultado, cobertura, limitaciones y rollback exactos en esta sección.
 
 ## Unidad QA-E2E.1 · aislamiento local de Playwright (resuelta)
 
