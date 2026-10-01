@@ -1016,6 +1016,16 @@ Rollback previsto: revertir el commit atómico de esta unidad para quitar el gua
 - [ ] Cubrir la autorización de miembro con ≥70 % de statements, branches, functions y lines; comprobar lectura posterior y ausencia de escrituras cruzadas en la base aislada.
 - [ ] Sin cambio visual: capturas N/A. Mantener pendiente el barrido general `/household` y no mezclar decisiones de política de roles no mostradas por la UI.
 
+### QA-HOUSEHOLD.API-SURFACE.1 · Contrato HTTP de hogar sobre SQLite aislada
+
+**Fuente revalidada (2026-10-01):** `household.routes.ts` contiene lecturas privadas/públicas, create/join, cambios de permisos/ajustes, regeneración de invitación y salida. El E2E actual cubre crear hogar e inspeccionar la invitación pública, pero no prueba todas las respuestas ni cambios persistidos. Vitest excluye los routers del umbral por fichero salvo compras y recuperación; al añadir una suite de este router, se comprobará y aplicará aquí el gate de ≥70 % en las cuatro métricas, sin rebajar otros gates.
+
+- [ ] Cubrir `GET /` con y sin hogar; `GET /invite/:code` válido/inválido y miembro/no miembro; comprobar el sobre y los miembros devueltos sin secretos.
+- [ ] Cubrir cambios de nombre y los tres permisos de compartir con admin; no-op, hogar ausente y miembro sin rol admin; verificar persistencia tras lectura.
+- [ ] Cubrir regenerar invitación, salida de miembro con admin restante, salida del único admin, ausencia de hogar y datos que se conservan/eliminan.
+- [ ] Mantener las regresiones separadas de crear/unirse y propiedad de miembro; ejecutar Vitest aislado, incluir `household.routes.ts` en el gate ≥70 % S/B/F/L y repetir Playwright real de Hogar en Chromium/Pixel 5.
+- [ ] Esta unidad no sustituye el recorrido Playwright de cada formulario/confirmación responsive de `/household`; sin cambio visual en el router, capturas N/A.
+
 ### Cocina, despensa y planificación
 
 - [ ] `/pantry`: ingredientes/utensilios, búsqueda, filtro/categoría, orden, paginar/seleccionar, lote, cantidad/unidad, alta/edición/borrado y sugerencias; estados vacío, sin resultados, error y recarga.
