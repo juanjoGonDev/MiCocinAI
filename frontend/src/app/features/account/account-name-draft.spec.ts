@@ -5,7 +5,7 @@ describe('nameDraftIsDirty', () => {
     expect(nameDraftIsDirty('Bea', 'Ana Belen')).toBeTrue();
   });
 
-  it('ignores whitespace the server trims before saving', () => {
+  it('ignores surrounding whitespace removed by the client before submission', () => {
     expect(nameDraftIsDirty(' Ana Belen ', 'Ana Belen')).toBeFalse();
   });
 

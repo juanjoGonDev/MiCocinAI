@@ -101,6 +101,38 @@ test.describe('Borrador del nombre en Cuenta', () => {
     });
   }
 
+  test('envía el nombre recortado y sincroniza el valor confirmado', async ({ page }) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(`${error.name}: ${error.message}`));
+    await registerAndGoto(page, '/account', 'acct-name-normalize');
+
+    const nameInput = page.locator('[data-test="account-name"]');
+    const saveButton = page.locator('[data-test="account-name-save"] button');
+    const cancelButton = page.locator('[data-test="account-name-cancel"]');
+    await nameInput.fill(' Ana Belen ');
+
+    const patchRequest = page.waitForRequest(
+      (request) => request.url().includes('/api/auth/profile') && request.method() === 'PATCH'
+    );
+    const patchResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/auth/profile') && response.request().method() === 'PATCH'
+    );
+    await saveButton.click();
+
+    const request = await patchRequest;
+    expect(request.postDataJSON().name).toBe('Ana Belen');
+    expect((await patchResponse).status()).toBe(200);
+    await expect(
+      page.locator('.toast--success').filter({ hasText: 'Nombre guardado' })
+    ).toBeVisible();
+    await expect(page.locator('.sidebar__account-name')).toHaveText('Ana Belen');
+    await expect(nameInput).toHaveValue('Ana Belen');
+    await expect(saveButton).toBeDisabled();
+    await expect(cancelButton).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+  });
+
   test('conserva el borrador en error y permite reintentar', async ({ page }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(`${error.name}: ${error.message}`));
