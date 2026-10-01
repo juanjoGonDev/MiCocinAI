@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra y overflow de Cuenta tienen regresiones verificadas; QA-PANTRY.2 investiga error de carga confundido con vacío y el barrido global sigue pendiente
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta y error de carga de caducidades tienen regresiones verificadas; el barrido global sigue pendiente
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -295,18 +295,24 @@ El harness usa el `Referer` same-origin para asociar el request a la ruta origen
 
 Playwright real con `E2E_SCOPE=all`, rate limit activo, servidor de producción efímero, puerto/SQLite/semilla únicos y cleanup: `pantry-header-actions.spec.ts` Chromium 2/2 y Pixel 5 2/2. Pixel 5 recorrió 320×568, 393×851, límites 479/480/481, 599/600/601, 767/768/769, 1022/1023/1024, 568×320 y 844×390; Chromium recorrió 1440×900 y 1022/1023/1024. Sin overflow, solapamiento, acción fuera de viewport ni interceptación; errores JS = 0. Suite Dashboard combinada (`dashboard.spec.ts`, `dashboard-recipe-links.spec.ts`, `dashboard-today-meals.spec.ts`) 7/7 en Chromium y 7/7 en Pixel 5. Capturas inspeccionadas: `.e2e-screenshots/qa-pantry-1/final-desktop/pantry-header-1440x900.png`, `.e2e-screenshots/qa-pantry-1/final-mobile/pantry-header-{393x851,320x568}.png`.
 
-## Unidad QA-PANTRY.2 · distinguir error de carga de despensa vacía (en curso)
+## Unidad QA-PANTRY.2 · distinguir error de carga de despensa vacía (resuelta)
 
 **Fuente revalidada (2026-10-01):** el contrato activo `HOGARIA-SPEC.md` §12ak describe `/pantry/caducidades` como resumen, gráfica y tabla ordenable; el botón vuelve a `/pantry`. No define filtros ni enlace a una ficha de producto, así que se excluyen de esta unidad. En `PantryService.loadCaducidades()`, cualquier error del `GET /api/pantry/expiry` se convierte hoy en `[]`; `CaducidadesComponent` usa `filas().length === 0` para pintar el estado válido «sin caducidades». Por tanto un 503/red caída se presenta como inventario vacío. La E2E existente cubre datos poblados y el error de estimación IA, no el error de carga, el vacío del GET ni el reintento.
 
 **Conducta esperada:** mantener diferenciados loading, éxito vacío y error de transporte/servidor. El error debe mostrar un mensaje accesible y una acción de reintento; no anunciar «sin caducidades». Un reintento exitoso debe limpiar el error y renderizar la respuesta real; uno que falle debe terminar loading y permitir reintentar. La lectura no escribe datos ni llama al proveedor IA.
 
-- [ ] Escribir primero pruebas unitarias para GET 200 vacío, error 503, reintento 503→200, limpieza de estado y loading terminado en éxito/error.
-- [ ] Escribir primero la E2E que intercepta únicamente `/api/pantry/expiry`: 503 no muestra el vacío; botón de reintento operable por teclado vuelve a solicitarlo; 200 sintético pinta la tabla. Añadir el caso 200 con `data: []` que sí pinta el vacío.
-- [ ] Aplicar el estado mínimo en service/componente, mensaje ES/EN y supresión de toast genérico duplicado si la pantalla muestra su propio error; revisar nombres accesibles y no permitir envíos duplicados durante loading.
-- [ ] Ejecutar cobertura focal (statements/branches/functions/lines ≥80 % para la lógica tocada, sin rebajar gates), typecheck/build y Playwright real aislado en Chromium y Pixel 5; comprobar 320×568, 393×851 y escritorio, teclado, overflow y capturas PC/móvil.
+- [x] Escribir primero pruebas unitarias para GET 200 vacío, error 503, reintento 503→200, limpieza de estado y loading terminado en éxito/error.
+- [x] Escribir primero la E2E que intercepta únicamente `/api/pantry/expiry`: 503 no muestra el vacío; botón de reintento operable por teclado vuelve a solicitarlo; 200 sintético pinta la tabla. Añadir el caso 200 con `data: []` que sí pinta el vacío.
+- [x] Aplicar el estado mínimo en service/componente, mensaje ES/EN y supresión de toast genérico duplicado si la pantalla muestra su propio error; revisar nombres accesibles y no permitir envíos duplicados durante loading.
+- [x] Ejecutar cobertura focal (statements/branches/functions/lines ≥80 % para la lógica tocada, sin rebajar gates), typecheck/build y Playwright real aislado en Chromium y Pixel 5; comprobar 320×568, 393×851 y escritorio, teclado, overflow y capturas PC/móvil.
 
 **Discrepancia deliberadamente acotada:** el checklist anterior mencionaba filtros y volver «a la ficha»; no se implementarán por inferencia. Reabrirlo solo si el contrato de producto activo se modifica explícitamente.
+
+**TDD y evidencia verde (2026-10-01):** primero quedó reproducido en Playwright que un GET `/api/pantry/expiry` 503 mostraba «La despensa está vacía»; la nueva prueba del service también se añadió antes del cambio. `PantryService` ahora mantiene separado error/loading/datos previos, valida que `data` sea un array, suprime el toast genérico duplicado y deja reintentar; la pantalla presenta un `role="alert"` con acción ES/EN de 44×44 px, sustituida por loading mientras solicita. Los errores repetidos terminan loading y permiten nuevo reintento. La lectura sigue sin escribir datos ni llamar al proveedor IA.
+
+`pantry.service.spec.ts`: Karma focal **5/5**; coverage de `loadCaducidades()` **100 % statements / 100 % branches / 100 % functions / 100 % lines**. El reporte agregado de esa selección pequeña queda por debajo del gate global existente de **80 %** (19.16 / 0.68 / 3.42 / 21.53 %); Karma por ello devuelve fallo en el gate global, no en los cinco tests ni en el método medido. No se rebajó el gate: resolver el agregado global sigue en QA-04c. Playwright real aislado (`E2E_RATE_LIMIT=on`, SQLite/puerto/semilla temporales, Google Chrome del sistema): `pantry-caducidades.spec.ts` Chromium **4/4**, Pixel 5 **4/4**. Se validaron 503/error sin falso vacío ni toast duplicado, reintento con Enter y respuesta 200, loading y cantidad exacta de peticiones, 200 vacío legítimo, texto inglés, orden/precio, viewport escritorio 1440×900 y móvil 320×740/393×851 sin overflow y botón táctil dentro del viewport. Fixtures interceptan únicamente el endpoint de caducidades; no se usó el proveedor ni la base normal de `localhost:4200`.
+
+Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Prettier focal y `git diff --check`: pasan. El build conserva avisos previos de bundle (697.57 KB frente al presupuesto de aviso de 500 KB), estilos e imports; no se alteraron budgets. Capturas sintéticas PC/móvil inspeccionadas: `.e2e-screenshots/qa-pantry-2/current/desktop/expiry-load-error-chromium-1440x900.png`, `.e2e-screenshots/qa-pantry-2/current/mobile/expiry-load-error-mobile-chrome-320x740.png` y `.../expiry-load-error-mobile-chrome-393x851.png`. Rollback: revertir el commit atómico de QA-PANTRY.2.
 
 ## Hallazgo QA-REC.INGRESS.1 · límite de subida distinto en Nginx (pendiente de reproducción runtime)
 

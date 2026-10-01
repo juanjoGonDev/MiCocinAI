@@ -37,6 +37,9 @@ export const caducidadesEs = {
     'Falta configurar la IA para estimar lo que no está en el catálogo.',
   'caducidades.error_json': 'El modelo no ha contestado lo que se le esperaba.',
   'caducidades.error': 'No se ha podido estimar.',
+  'caducidades.carga_error':
+    'No se pudieron cargar las caducidades. Comprueba tu conexión e inténtalo de nuevo.',
+  'caducidades.reintentar': 'Reintentar',
   'caducidades.sin_nada_hint':
     'Nada con fecha ni estimación: registra la fecha al editar el artículo, o pulsa «Estimar caducidades».',
   'caducidades.vacio': 'La despensa está vacía',
@@ -79,6 +82,9 @@ export const caducidadesEn: Record<keyof typeof caducidadesEs, string> = {
   'caducidades.error_sin_ia': 'Set up the AI to estimate what the catalog does not cover.',
   'caducidades.error_json': 'The model did not answer what was expected.',
   'caducidades.error': 'Could not estimate.',
+  'caducidades.carga_error':
+    'Expiry data could not be loaded. Check your connection and try again.',
+  'caducidades.reintentar': 'Retry',
   'caducidades.sin_nada_hint':
     'Nothing with a date or an estimate: set the date when editing the item, or press «Estimate expiry dates».',
   'caducidades.vacio': 'The pantry is empty',

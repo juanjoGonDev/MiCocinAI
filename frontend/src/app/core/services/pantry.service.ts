@@ -64,17 +64,27 @@ export class PantryService {
   /** La despensa ordenada por urgencia, con fechas estimadas y ritmo de compra. */
   readonly caducidades = signal<CaducidadRow[]>([]);
   readonly cargandoCaducidades = signal(false);
+  readonly caducidadesError = signal(false);
 
   loadCaducidades(): void {
     this.cargandoCaducidades.set(true);
+    this.caducidadesError.set(false);
     this.http
-      .get<{ data: CaducidadRow[] }>(`${this.apiUrl}/expiry`)
+      .get<{ data: CaducidadRow[] }>(`${this.apiUrl}/expiry`, {
+        context: new HttpContext().set(SILENT_TOAST, true)
+      })
       .pipe(
-        map(response => response.data),
-        catchError(() => of([] as CaducidadRow[]))
+        map((response) => {
+          if (!Array.isArray(response?.data)) throw new Error('Invalid expiry response');
+          return response.data;
+        }),
+        catchError(() => {
+          this.caducidadesError.set(true);
+          return of(null as CaducidadRow[] | null);
+        })
       )
-      .subscribe(filas => {
-        this.caducidades.set(filas);
+      .subscribe((filas) => {
+        if (filas !== null) this.caducidades.set(filas);
         this.cargandoCaducidades.set(false);
       });
   }

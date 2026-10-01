@@ -60,8 +60,21 @@ type Columna = 'caduca' | 'nombre' | 'dura';
 
       @if (service.cargandoCaducidades()) {
         <app-loading />
+      } @else if (service.caducidadesError()) {
+        <section class="cad__error-carga" data-test="cad-error-carga">
+          <p class="cad__error" role="alert">{{ 'caducidades.carga_error' | t }}</p>
+          <app-button
+            variant="primary"
+            type="button"
+            [touchTarget]="true"
+            (onClick)="service.loadCaducidades()"
+            data-test="cad-reintentar"
+          >
+            {{ 'caducidades.reintentar' | t }}
+          </app-button>
+        </section>
       } @else if (filas().length === 0) {
-        <div class="cad__vacio">
+        <div class="cad__vacio" data-test="cad-vacio">
           <span class="cad__vacio-titulo">{{ 'caducidades.vacio' | t }}</span>
           <span class="cad__vacio-hint">{{ 'caducidades.vacio_hint' | t }}</span>
         </div>
@@ -250,6 +263,12 @@ type Columna = 'caduca' | 'nombre' | 'dura';
         background: rgba(220, 38, 38, 0.08);
         color: var(--danger);
         font-size: var(--text-sm, 14px);
+      }
+
+      .cad__error-carga {
+        display: grid;
+        justify-items: start;
+        gap: var(--space-3, 12px);
       }
 
       .cad__vacio {
