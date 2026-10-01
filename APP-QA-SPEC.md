@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-CALENDAR.RANGE-STALE.1 está en curso; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-CALENDAR.RANGE-STALE.1 está en implementación y QA-CALENDAR.MOBILE-HEADER.1 está especificada tras confirmar clipping móvil; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -220,6 +220,18 @@ Playwright real con `hogaria-e2e-runner-audit.mjs`, servidor/puerto/SQLite/semil
 - [ ] Aplicar el guardado mínimo de actualidad a todos los efectos de cada respuesta (datos, loading, error y clave deduplicada), conservando la política actual de mantener datos previos ante error recuperable.
 - [ ] Ejecutar Karma focal con cobertura ≥70 % en statements, ramas, funciones y líneas para el guardado reutilizable de actualidad; las pruebas de servicio cubren su integración en ambos loaders. No rebajar el gate global frontend del 80 %. Ejecutar Playwright real con servidor/SQLite/puertos/semilla temporales en Chromium y Pixel 5; revisar teclado, navegación de periodo y sin errores de consola.
 - [ ] Guardar e inspeccionar capturas sintéticas PC y móvil del calendario; dejar comando, resultado, cobertura, limitaciones y rollback exactos en esta sección.
+
+## Unidad QA-CALENDAR.MOBILE-HEADER.1 · reflujo de cabecera móvil (especificada antes de implementar)
+
+**Fuente de verdad revalidada (2026-10-01):** `CalendarComponent` envuelve la cabecera `.cal-top` en una superficie `.calendar__panel` con `overflow: hidden`. La cabecera permite envolver sus hijos, pero `.cal-top__right` y sus controles siguen en una fila flex de ancho intrínseco. En un Chromium Pixel 5 real de 393 px CSS, después de navegar y añadir una comida sintética, el documento no tiene overflow (`innerWidth=393`, `documentElement.scrollWidth=393`, `scrollX=0`), pero el panel sí: `clientWidth=359`, `scrollWidth=455`, `scrollLeft=96`; el título queda en `x=-63` y el botón Día en `x=-60`, ambos fuera del panel (`x=16..377`). `.cal-top__right` ocupa 423 px para unos 327 px disponibles. `calendar-timeline.component.ts` no añade overflow horizontal. La captura `.e2e-screenshots/qa-calendar-range-stale-20261001/mobile-chrome-calendar-range-latest.png` muestra controles y contenido recortados.
+
+**Conducta esperada (inferencia de accesibilidad/responsive, no cambio del contrato de calendario):** en móvil, título, navegación de periodo, selector Día/Semana/Mes y acciones disponibles deben reflowear dentro del panel; ninguna acción puede depender de desplazamiento horizontal oculto. La página y la cabecera no deben adquirir overflow horizontal en 320 px, 393 px, horizontal 568 px ni en el borde de 768 px. El problema no es scroll horizontal global: la limitación actual es que el panel oculta su propio contenido; la causa exacta del `scrollLeft=96` inducido durante el flujo se confirmará en la regresión.
+
+- [ ] Añadir primero una E2E real que mida límites y scroll de `.cal-top`/sus controles al cargar, cambiar de vista y fecha, usar las acciones de cabecera y después de enfocar/navegar con teclado. Cubrir 320×568, 393×851, 568×320, 767×1024, 768×1024 y 1440×900; confirmar rojo antes del cambio CSS.
+- [ ] Reflowear la cabecera para que título, navegación, selector y acciones disponibles sean visibles y operables sin clipping ni scroll horizontal oculto en todos esos tamaños, sin alterar el layout de escritorio.
+- [ ] Verificar navegación de teclado/foco, selector de fecha, controles táctiles y los anchos 320/393/568/767/768/1440 tras cada interacción; registrar por separado cualquier estado que cambie el rango de forma intencional.
+- [ ] Ejecutar Playwright real contra servidor y SQLite temporales en Chromium de escritorio y Pixel 5; comprobar cero errores de página/consola y ausencia de overflow de documento/panel. No usar la DB habitual ni el proveedor IA.
+- [ ] Guardar e inspeccionar capturas sintéticas PC y móvil después de la corrección; anotar TDD rojo/verde, comandos, limitaciones y rollback exactos sin rebajar el gate frontend del 80 %.
 
 ## Unidad QA-E2E.1 · aislamiento local de Playwright (resuelta)
 
