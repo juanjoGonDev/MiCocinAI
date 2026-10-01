@@ -320,15 +320,17 @@ cooking-only question no longer describes the user. The concept moves, it does n
 **Where it lives**
 
 - Signup stops configuring the product: the register form is name, email, password only. It lands in
-  the tour, which keeps the level as its **first** step ("Perfil") next to the module picker — five
-  short questions, skippable, editable later.
+  the tour, which keeps the level as its **first** step ("Perfil") next to the module picker. The
+  original five steps gained the meal-hours step in §12C; the current tour has six steps in total,
+  skippable and editable later. Its utensils step links to Pantry rather than mutating inventory in
+  the tour, as specified by the parity table in §8c.
 - **Preferencias › Perfil** is the section to change it later (first tab, `?tab=profile`), with the
   same controls, the derived AI detail level shown as text, and the standard dirty/discard/save
   behaviour of that page. `detailLevel` itself remains in Settings: the profile only _suggests_ it.
 
 **Acceptance**
 
-- Register → tour step 1 of 5 = Perfil; choosing a level and two modules and finishing persists both
+- Register → tour step 1 of 6 = Perfil; choosing a level and two modules and finishing persists both
   (`GET /api/auth/taste` returns them) and survives a reload of Preferencias › Perfil.
 - `cooking_level = 'none'` is accepted by `/api/auth/profile` and renders as "Apenas cocino" in the
   household member list.
@@ -349,6 +351,12 @@ cooking-only question no longer describes the user. The concept moves, it does n
 - [x] Preferencias › Perfil as the default tab, dirty tracking/save/discard covering the profile.
 - [x] e2e re-linked (5 steps, default tab, two tests now explicit about `?tab=allergies`) + the
       profile surviving a reload. Green in CI at `ad0eee4` (Type Check · Server Tests · Build · E2E).
+
+**Contract reconciliation (2026-10-01):** the five-step count above records the original profile
+tour before §12C introduced meal hours as a separate step. §12E later fixes the visible counter at
+six; current order is `profile, allergies, tastes, goal, meals, kitchen`. §8c remains authoritative
+for utensil ownership: the `kitchen` step may link to Pantry › Utensilios, but may not change
+`utensils.available` itself.
 
 Note for the icon pass (P0): the new picker uses an inline SVG check and no emoji, while the existing
 Preferencias tab strip keeps its emoji labels — they are replaced together with the nav in the sprite
