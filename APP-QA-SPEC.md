@@ -633,7 +633,8 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 - [x] Añadir primero pruebas de contrato que exijan que `getIngredient/createIngredient/updateIngredient` emitan `data` (o `null` ante ausencia según firma) y actualicen signals/estadísticas como corresponda.
 - [x] Añadir pruebas aisladas para paginación/defaults, filtros, CRUD y errores, carga de utensilios/stats, manager categorías/productos e impactos, operaciones bulk y catálogo.
 - [x] Corregir la proyección de envelopes solo cuando la regresión la demuestre; comprobar finalización de `loading/saving`, error reintentable y cache/force de categorías.
-- [ ] Alcanzar ≥70 % S/B/F/L de `PantryService`, ejecutar suite frontend y verificar que no se toca DB de uso normal.
+- [x] Alcanzar ≥70 % S/B/F/L de `PantryService`; confirmar que el grupo unitario no escribe en DB de uso normal.
+- [ ] Ejecutar suite frontend completa y gate local.
 
 **Evidencia QA-04c.CORE.PANTRY.1 (2026-10-01):** `pantry.service.spec.ts` cubre contratos HTTP, estados, filtros/paginación, CRUD, utensilios/stats, categorías/productos, impactos/bulk y catálogo. El grupo aislado de servicios ejecutó **65/65**. TDD confirmó que `getIngredient`, `createIngredient` y `updateIngredient` emitían `{data: ...}` pese a declarar `Ingredient|null`; ahora proyectan `data`, mantienen las señales y no insertan `null`. `deleteIngredient` también proyecta éxito como `true` conforme a su tipo. Cobertura de `PantryService`: **100/84.82/100/100 %** (S/B/F/L). Suite completa/gate global pendientes.
 
@@ -648,14 +649,16 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 **Evidencia QA-04c.CORE.HOUSEHOLD.1 (2026-10-01):** se añadió `household.service.spec.ts` con 13 casos `HttpTestingController`; el grupo aislado hogar/pantry/tickets/gustos ejecutó **65/65**. Antes del fix, las regresiones confirmaron que `previewInvite`, `createHousehold`, `updateSettings` y `regenerateInviteCode` devolvían el envelope en vez de su firma pública, y `leaveHousehold()` devolvía el objeto HTTP en vez de booleano. Tras mapear `data`, actualizar signals con la entidad y emitir `true` en salida correcta, cobertura de `HouseholdService`: **100/96.55/100/100 %** (S/B/F/L). Sin escritura a servidor/DB normal. La suite completa y gate siguen pendientes.
 
-### QA-04c.CORE.RECEIPTS.1 · cobertura del servicio de tickets y refresco inicial (pendiente)
+### QA-04c.CORE.RECEIPTS.1 · cobertura del servicio de tickets y refresco inicial (resuelta localmente; gate global pendiente)
 
 **Fuente revalidada (2026-10-01):** no existe spec directa; el reporte actual marca 1.56/0/0/1.58 % (S/B/F/L). `ReceiptsService.watch()` incrementa su contador y llama `void this.refreshQueue()`, pero `HttpClient` devuelve un Observable frío: ese primer GET no se ejecuta hasta el siguiente tick de polling (1 s). El comentario de `watch()` describe activar el latido; el contrato §12aj exige que el icono refleje la cola activa. Se fija como conducta esperada refrescar inmediatamente al primer watcher, luego sondear una vez por segundo solo mientras haya watchers y cancelar al destruir el servicio.
 
-- [ ] Añadir pruebas unitarias primero para endpoints/señales/flags, multipart sintético, errores y toast, operaciones explícitas de stop/retry/confirm, `stopAll()` en éxito/error y limpieza en destroy.
-- [ ] Reproducir que `watch()` no inicia el GET inmediatamente; conectar un solo primer refresco y mantener el contador saturado en cero y polling solo mientras exista watcher.
-- [ ] Alcanzar ≥70 % S/B/F/L de `ReceiptsService`; validar intervalos con tiempo virtual, sin EventSource/SSE/proveedor/DB real.
+- [x] Añadir pruebas unitarias primero para endpoints/señales/flags, multipart sintético, errores y toast, operaciones explícitas de stop/retry/confirm, `stopAll()` en éxito/error y limpieza en destroy.
+- [x] Reproducir que `watch()` no inicia el GET inmediatamente; conectar un solo primer refresco y mantener el contador saturado en cero y polling solo mientras exista watcher.
+- [x] Alcanzar ≥70 % S/B/F/L de `ReceiptsService`; validar intervalos con tiempo virtual, sin EventSource/SSE/proveedor/DB real.
 - [ ] Repetir suite frontend + gate sin reducir umbrales y registrar el impacto.
+
+**Evidencia QA-04c.CORE.RECEIPTS.1 (2026-10-01):** `receipts.service.spec.ts` añadió 9 pruebas unitarias; el grupo aislado hogar/pantry/tickets/gustos pasó **65/65**. Antes del fix, `watch()` descartaba el Observable frío y no emitía el GET inmediato; ahora solo la transición de cero a primer watcher suscribe un refresco protegido por `DestroyRef`, y el polling sigue activo únicamente con watchers. Cobertura de `ReceiptsService`: **100/100/100/100 %** (S/B/F/L). Los tests de intervalo reinicializan el injector dentro de `fakeAsync` para que `tick()` controle el scheduler real. Suite completa/gate pendientes.
 
 **Subunidad QA-04c.1 — modelo de ofertas/descuentos de compra (fuente revalidada):** `HOGARIA-SPEC.md` §12h define `buy:3,take:2` como una oferta 3×2; el preset activo lo representa como `{ label:'3x2', buy:3, take:2 }`. `shopping.model.ts::describeOffer` antes devolvía `${buy}x${buy-take}` (3x1) y la plantilla de `shopping-list-detail.component.ts` lo pinta en la chapa accesible de cada fila; Playwright real reprodujo el texto visible y accesible «3x1». Los helpers puros `lineDiscountOfItem`, `describeLineDiscount`, `offerOfItem` y `describeOffer` son usados por la pantalla activa. El normalizador de backend `server/src/utils/list-discount.ts::normalizeOffer` exige `buy ≥ 2`, `take ≥ 1` y `take < buy`, por lo que el helper cliente debe ignorar también filas inválidas. Criterios:
 

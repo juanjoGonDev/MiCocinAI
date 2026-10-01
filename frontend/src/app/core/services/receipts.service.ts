@@ -66,8 +66,11 @@ export class ReceiptsService {
 
   /** Se llama al montar el icono / la ficha: enciende el latido. */
   watch(): void {
+    const isFirstWatcher = this.watching === 0;
     this.watching += 1;
-    void this.refreshQueue();
+    if (isFirstWatcher) {
+      this.refreshQueue().pipe(takeUntilDestroyed(this.destroyRef)).subscribe();
+    }
   }
 
   unwatch(): void {
