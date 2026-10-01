@@ -982,13 +982,17 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 **Fuente revalidada (2026-10-01):** `LoginComponent.onSubmit()` comprueba campos vacíos y activa `isLoading`, pero no consulta ese estado antes de volver a enviar. El botón compartido queda `disabled` durante la carga, pero el formulario sigue teniendo un único listener `ngSubmit`; falta una prueba runtime que compruebe si una segunda petición de submit mientras la primera está pendiente genera otra llamada. Si el login lleva `?code=`, el éxito continúa con `HouseholdService.joinByCode()` y navega a `/household`; el fallo de login limpia `isLoading` y permite reintentar. La solución solo se aplicará si la regresión se reproduce.
 
-- [ ] Añadir primero una prueba unitaria que mantenga pendiente `AuthService.login`, dispare dos submits y exija una única llamada; cubrir campos inválidos y permitir retry tras error.
-- [ ] Reproducir en Playwright aislado con un usuario/hogar sintéticos: durante el login pendiente volver a someter el formulario, observar una sola petición de login, una sola unión por `?code=`, y destino `/household`; bloquear service workers para que no omitan la interceptación de prueba.
-- [ ] Si se reproduce el doble envío, añadir guard temprano en `onSubmit()` y verificar rojo/verde con la misma prueba; si no, registrar evidencia y no cambiar producción.
-- [ ] Ejecutar en Chromium escritorio y Pixel 5, sin escritura en DB/servidor normal; confirmar cobertura de `login.component.ts` ≥70 % en statements/branches/functions/lines sin rebajar gates existentes.
-- [ ] No hay cambio visual previsto; capturas PC/móvil son N/A salvo que la prueba revele un problema visual adicional.
+- [x] Añadir primero una prueba unitaria que mantenga pendiente `AuthService.login`, dispare dos submits y exija una única llamada; cubrir campos inválidos y permitir retry tras error.
+- [x] Reproducir en Playwright aislado con un usuario/hogar sintéticos: durante el login pendiente volver a someter el formulario, observar una sola petición de login, una sola unión por `?code=`, y destino `/household`; bloquear service workers para que no omitan la interceptación de prueba.
+- [x] El doble envío se reprodujo; añadir guard temprano en `onSubmit()` y verificar rojo/verde con la misma prueba.
+- [x] Ejecutar en Chromium escritorio y Pixel 5, sin escritura en DB/servidor normal; confirmar cobertura de `login.component.ts` ≥70 % en statements/branches/functions/lines sin rebajar gates existentes.
+- [x] No hay cambio visual; capturas PC/móvil son N/A.
 
-Rollback previsto: retirar solo la regresión y el guard de `LoginComponent` si se implementa; conservar la especificación y su evidencia como parte del checklist global.
+**TDD rojo (2026-10-01):** Karma reprodujo 2 llamadas a `AuthService.login` en el segundo submit (1 fallo y 3 pruebas vecinas verdes). En el build full-stack aislado, `login-double-submit.spec.ts` falló en Chromium y Pixel 5 porque el segundo `requestSubmit()` generó otra petición durante la primera autenticación. El runner usó SQLite, puerto y semilla únicos; la ejecución roja retuvo sus artefactos bajo `%TEMP%`, sin tocar la base de datos normal.
+
+**Evidencia verde QA-AUTH.LOGIN.DOUBLE-SUBMIT.1 (2026-10-01):** el guard `if (this.isLoading()) return` en `LoginComponent.onSubmit()` evita el envío concurrente sin alterar validación ni estados de error. Karma `login.component.spec.ts`: **6/6**; coverage focal de `login.component.ts`: **100/85,71/100/100 % S/B/F/L**. Playwright full-stack aislado, rate limit activo y service workers bloqueados: `login-double-submit.spec.ts` **2/2** (Chromium y Pixel 5); registra un solo POST de login, un solo `POST /api/household/join/:code`, URL final `/household` y cero `pageerror`. Cada run verde limpió su SQLite/puerto/semilla temporales. `pnpm run build` (server+client antes del guard) y `pnpm run build:client` (después del guard), `tsc -p tsconfig.e2e.json --noEmit`, Prettier focal y `git diff --check`: correctos; el build conserva warnings preexistentes de bundle/imports.
+
+Rollback previsto: revertir el commit atómico de esta unidad para quitar el guard y sus pruebas; conservar el commit previo que publicó primero la especificación.
 
 ### Cocina, despensa y planificación
 

@@ -141,6 +141,8 @@ export class LoginComponent {
   }
 
   onSubmit(): void {
+    if (this.isLoading()) return;
+
     this.emailError.set('');
     this.passwordError.set('');
 
