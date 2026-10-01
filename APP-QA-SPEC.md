@@ -602,10 +602,13 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 **Fuente y rojo reproducible (2026-10-01):** `frontend/karma.conf.js` declara 80 % global para sentencias, ramas, funciones y líneas, pero `frontend/angular.json` no conecta esa configuración al builder `test`. `ng test --no-watch --browsers=ChromeHeadlessNoSandbox --code-coverage` ejecutó 665/665 y salió `0` pese a los porcentajes inferiores. Cargando explícitamente `karma.conf.js` mediante un config temporal seguro para Chrome, la misma suite ejecutó 665/665, reportó **60.30/52.21/49.80/61.92 %** y falló las cuatro métricas con salida `1`. El launcher temporal se eliminó; no se tocó el umbral. Criterio: el comando estándar debe imponer el gate, no solo imprimirlo.
 
+**Revalidación de fuente/ejecución (2026-10-02):** la opción `projects.hogaria.architect.test.options.karmaConfig` sigue ausente en `frontend/angular.json`; `frontend/package.json` llama `ng test --no-watch --code-coverage` y `test:coverage` agrega `--browsers=ChromeHeadless`, sin pasar la configuración. `frontend/karma.conf.js` mantiene los thresholds globales 80 % en S/B/F/L y el launcher por defecto `ChromeHeadless`. En esta máquina el comando sin config intentó Chrome 154 y falló antes de iniciar los tests por `GPU process isn't usable` (dos intentos); no se atribuye ese resultado al gate. En cambio, al cargar el `karma.conf.js` real con launcher SwiftShader temporal, la suite actual ejecutó 797/797, reportó **75.55/65.61/73.92/77.19 %** y salió `1` por las cuatro métricas; el déficit de ramas sobre 70 % sigue abierto. La verificación local deberá seleccionar el launcher compatible con Windows sin cambiar el launcher predeterminado de CI.
+
 - [x] Reproducir que el comando estándar devuelve éxito con coverage bajo el gate.
 - [x] Confirmar que la configuración de Karma existente detecta el mismo déficit y devuelve fallo sin cambiar los thresholds.
-- [ ] Conectar el target `test`/scripts estándar a `karma.conf.js`; mantener 80 % en las cuatro métricas y el launcher de CI normal.
-- [ ] Verificar que el comando estándar falla con el baseline bajo y pasa únicamente cuando la suite completa supera el 80 %; conservar los artefactos de cobertura.
+- [ ] Añadir primero una prueba de configuración que exija al target `test` cargar `karma.conf.js` y preserve sus cuatro thresholds globales.
+- [ ] Conectar el target `test` estándar a `karma.conf.js`; mantener 80 % en las cuatro métricas y el launcher de CI `ChromeHeadless`.
+- [ ] Verificar con Chrome local compatible que el comando estándar ejecuta la suite y falla por el baseline bajo, sin fallos de tests; conservar los artefactos de cobertura. Probar una cobertura sobre 80 % en las cuatro métricas en un fixture aislado o mantener explícito ese caso como pendiente si no es seguro fabricar un falso positivo.
 
 ### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (resuelta localmente; gate global pendiente)
 
