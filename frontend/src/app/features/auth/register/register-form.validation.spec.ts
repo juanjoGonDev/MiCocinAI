@@ -38,4 +38,16 @@ describe('register form validation', () => {
       expect(registerPasswordIssue(password)).withContext(password).toBe(issue);
     }
   });
+
+  it('limits passwords by UTF-8 bytes instead of visible characters', () => {
+    const at72Bytes = `Aa1${'é'.repeat(34)}a`;
+    const at73Bytes = `Aa1${'é'.repeat(35)}`;
+
+    expect(new TextEncoder().encode(at72Bytes).length).toBe(72);
+    expect(new TextEncoder().encode(at73Bytes).length).toBe(73);
+    expect(at72Bytes.length).toBeLessThan(72);
+    expect(at73Bytes.length).toBeLessThan(72);
+    expect(registerPasswordIssue(at72Bytes)).toBeNull();
+    expect(registerPasswordIssue(at73Bytes)).toBe('tooLongBytes');
+  });
 });

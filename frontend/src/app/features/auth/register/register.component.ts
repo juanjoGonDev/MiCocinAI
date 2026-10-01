@@ -10,6 +10,7 @@ import { InputComponent } from '../../../shared/components/ui/input/input.compon
 import { TranslatePipe } from '../../../core/pipes/translate.pipe';
 import { I18nService } from '../../../core/services/i18n.service';
 import type { TranslationKey } from '../../../core/i18n';
+import { MAX_BCRYPT_PASSWORD_BYTES } from '../../../core/utils/password-policy';
 import {
   registerEmailIssue,
   registerNameIssue,
@@ -34,7 +35,8 @@ const PASSWORD_ERROR_KEYS: Record<RegisterPasswordIssue, TranslationKey> = {
   required: 'auth.la_contrasena_es_requerida',
   tooShort: 'auth.la_contrasena_debe_tener',
   uppercaseRequired: 'auth.la_contrasena_necesita_mayuscula',
-  numberRequired: 'auth.la_contrasena_necesita_numero'
+  numberRequired: 'auth.la_contrasena_necesita_numero',
+  tooLongBytes: 'auth.password_max_72_bytes'
 };
 
 @Component({
@@ -76,6 +78,7 @@ const PASSWORD_ERROR_KEYS: Record<RegisterPasswordIssue, TranslationKey> = {
         placeholder="••••••••"
         [(ngModel)]="password"
         [required]="true"
+        [maxLength]="passwordMaxLength"
         [error]="passwordError()"
         [helper]="'auth.requisitos_de_contrasena' | t"
       ></app-input>
@@ -172,6 +175,7 @@ export class RegisterComponent {
   nameError = signal('');
   emailError = signal('');
   passwordError = signal('');
+  readonly passwordMaxLength = MAX_BCRYPT_PASSWORD_BYTES;
 
   private redirectAfterAuth(): void {
     const code = this.route.snapshot.queryParamMap.get('code');

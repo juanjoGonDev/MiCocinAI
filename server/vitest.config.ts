@@ -40,6 +40,7 @@ const COVERED = [
   'src/utils/taste-profile.ts',
   'src/utils/week-calendar.ts',
   'src/utils/weekly-plan.ts',
+  'src/schemas/bcrypt-password.schema.ts',
   'src/models/schema.ts',
   'src/config/app.config.ts',
   'tests/support/e2e-isolation.mjs'

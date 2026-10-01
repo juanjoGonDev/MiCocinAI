@@ -21,6 +21,7 @@ import { environment } from '../../../environments/environment';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
+import { MAX_BCRYPT_PASSWORD_BYTES, newPasswordIssue } from '../../core/utils/password-policy';
 
 /**
  * La cuenta de la persona, en su propia pagina (HOGARIA-SPEC §12l).
@@ -34,6 +35,13 @@ import { I18nService } from '../../core/services/i18n.service';
  */
 type AccountTab = 'account' | 'security' | 'info';
 
+const PASSWORD_DESCRIPTION_IDS = {
+  current: 'account-password-hint',
+  new: 'account-password-new-hint',
+  currentWithError: 'account-password-hint account-password-error',
+  newWithError: 'account-password-new-hint account-password-error'
+} as const;
+
 const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
 
 @Component({
@@ -41,7 +49,15 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
   standalone: true,
   imports: [
     TranslatePipe,
-    CommonModule, FormsModule, RouterLink, AvatarComponent, ButtonComponent, IconComponent, ModalComponent, AvatarEditorComponent],
+    CommonModule,
+    FormsModule,
+    RouterLink,
+    AvatarComponent,
+    ButtonComponent,
+    IconComponent,
+    ModalComponent,
+    AvatarEditorComponent
+  ],
   template: `
     <div class="account-page">
       <header class="account__head">
@@ -50,8 +66,10 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
           <h1 class="account__title">{{ 'account.mi_cuenta' | t }}</h1>
           <p class="account__subtitle">
             {{ 'account.tu_nombre_tu_foto' | t }}
-            <a routerLink="/preferences" class="account__inline-link">{{ 'nav.preferences' | t }}</a>{{ 'account.y_lo_de_la' | t }}
-            <a routerLink="/household" class="account__inline-link">{{ 'nav.household' | t }}</a>.
+            <a routerLink="/preferences" class="account__inline-link">{{ 'nav.preferences' | t }}</a
+            >{{ 'account.y_lo_de_la' | t }}
+            <a routerLink="/household" class="account__inline-link">{{ 'nav.household' | t }}</a
+            >.
           </p>
         </div>
       </header>
@@ -80,7 +98,11 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               type="button"
               class="account__face"
               data-test="account-avatar-button"
-              [attr.aria-label]="avatarUrl() ? ('account.cambiar_la_foto_de' | t:{name: displayName()}) : ('account.subir_una_foto_para' | t:{name: displayName()})"
+              [attr.aria-label]="
+                avatarUrl()
+                  ? ('account.cambiar_la_foto_de' | t: { name: displayName() })
+                  : ('account.subir_una_foto_para' | t: { name: displayName() })
+              "
               (click)="openAvatarModal()"
             >
               <app-avatar
@@ -118,7 +140,9 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
             <p class="account__hint">
               {{ 'account.aparece_en_el_historial' | t }}
             </p>
-            <p class="account__error" *ngIf="nameError()" data-test="account-name-error">{{ nameError() }}</p>
+            <p class="account__error" *ngIf="nameError()" data-test="account-name-error">
+              {{ nameError() }}
+            </p>
             <div class="account__field-actions">
               <app-button
                 variant="primary"
@@ -147,20 +171,34 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
         <ng-container *ngSwitchCase="'security'">
           <div class="account__field">
             <span class="account__label">{{ 'account.contrasena' | t }}</span>
-            <p class="account__hint">{{ 'account.seis_caracteres_como_minimo' | t }}</p>
+            <p class="account__hint" id="account-password-hint">
+              {{ 'account.seis_caracteres_como_minimo' | t }}
+            </p>
             <input
               class="account__input"
               type="password"
               autocomplete="current-password"
               [placeholder]="'account.contrasena_actual' | t"
+              [attr.aria-describedby]="
+                passwordError()
+                  ? passwordDescriptionIds.currentWithError
+                  : passwordDescriptionIds.current
+              "
               data-test="account-password-current"
               [(ngModel)]="passwordDraft.current"
             />
+            <p class="account__hint" id="account-password-new-hint">
+              {{ 'account.password_max_72_bytes_hint' | t }}
+            </p>
             <input
               class="account__input"
               type="password"
               autocomplete="new-password"
               [placeholder]="'account.nueva_contrasena' | t"
+              [attr.maxlength]="passwordMaxLength"
+              [attr.aria-describedby]="
+                passwordError() ? passwordDescriptionIds.newWithError : passwordDescriptionIds.new
+              "
               data-test="account-password-new"
               [(ngModel)]="passwordDraft.fresh"
             />
@@ -169,6 +207,10 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               type="password"
               autocomplete="new-password"
               [placeholder]="'account.repite_la_nueva_contrasena' | t"
+              [attr.maxlength]="passwordMaxLength"
+              [attr.aria-describedby]="
+                passwordError() ? passwordDescriptionIds.newWithError : passwordDescriptionIds.new
+              "
               data-test="account-password-repeat"
               [(ngModel)]="passwordDraft.repeat"
             />
@@ -180,7 +222,15 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               ></span>
               <span class="account__strength-text">{{ passwordStrengthLabel() }}</span>
             </div>
-            <p class="account__error" *ngIf="passwordError()" data-test="account-password-error">{{ passwordError() }}</p>
+            <p
+              class="account__error"
+              *ngIf="passwordError()"
+              id="account-password-error"
+              role="alert"
+              data-test="account-password-error"
+            >
+              {{ passwordError() }}
+            </p>
             <div class="account__field-actions">
               <app-button
                 variant="primary"
@@ -210,7 +260,12 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               {{ 'account.la_contrasena_se_guarda' | t }}
             </p>
             <div class="account__field-actions">
-              <app-button variant="ghost" size="sm" data-test="account-logout" (onClick)="endSession()">
+              <app-button
+                variant="ghost"
+                size="sm"
+                data-test="account-logout"
+                (onClick)="endSession()"
+              >
                 <app-icon name="logout" [size]="16" />
                 {{ 'account.cerrar_sesion_en_este' | t }}
               </app-button>
@@ -231,7 +286,11 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
             <div class="account__fact">
               <dt>{{ 'auth.cookingLevel' | t }}</dt>
               <dd>
-                <a routerLink="/preferences?tab=profile" class="account__inline-link" data-test="account-level-link">
+                <a
+                  routerLink="/preferences?tab=profile"
+                  class="account__inline-link"
+                  data-test="account-level-link"
+                >
                   {{ cookingLevelLabel() }}
                 </a>
               </dd>
@@ -240,7 +299,10 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
             <div class="account__fact">
               <dt>{{ 'household_event.home' | t }}</dt>
               <dd>
-                <a *ngIf="householdId(); else noHousehold" routerLink="/household" class="account__inline-link"
+                <a
+                  *ngIf="householdId(); else noHousehold"
+                  routerLink="/household"
+                  class="account__inline-link"
                   >{{ 'account.personas_de_la_casa' | t }}</a
                 >
                 <ng-template #noHousehold>{{ 'account.sin_casa_solo_lo' | t }}</ng-template>
@@ -255,7 +317,9 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
             <div class="account__fact">
               <dt>{{ 'account.version' | t }}</dt>
               <dd data-test="account-version">{{ version() }}</dd>
-              <p class="account__fact-note">{{ 'account.la_hora_se_muestra_en' | t:{tz: timezone()} }}</p>
+              <p class="account__fact-note">
+                {{ 'account.la_hora_se_muestra_en' | t: { tz: timezone() } }}
+              </p>
             </div>
             <div class="account__fact">
               <dt>{{ 'account.identificador' | t }}</dt>
@@ -271,11 +335,17 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
       <app-modal
         [isOpen]="avatarModalOpen()"
         (isOpenChange)="onAvatarModalOpenChange($event)"
-        [title]="avatarStep() === 'crop' ? ('account.encuadrar_la_foto' | t) : ('account.tu_foto' | t)"
+        [title]="
+          avatarStep() === 'crop' ? ('account.encuadrar_la_foto' | t) : ('account.tu_foto' | t)
+        "
         size="sm"
       >
         @if (avatarStep() === 'crop') {
-          <app-avatar-editor [file]="pendingPhoto()" (cancelled)="backToChoose()" (applied)="onCropped($event)" />
+          <app-avatar-editor
+            [file]="pendingPhoto()"
+            (cancelled)="backToChoose()"
+            (applied)="onCropped($event)"
+          />
         } @else {
           <div class="avatar-choose">
             <div class="avatar-choose__preview">
@@ -295,7 +365,9 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
             <div class="avatar-choose__actions">
               <label class="account__file" for="account-photo" data-test="account-photo-label">
                 <app-icon name="add_a_photo" [size]="16" />
-                {{ avatarUrl() ? ('account.sustituir_la_foto' | t) : ('account.subir_una_foto' | t) }}
+                {{
+                  avatarUrl() ? ('account.sustituir_la_foto' | t) : ('account.subir_una_foto' | t)
+                }}
                 <input
                   id="account-photo"
                   type="file"
@@ -316,8 +388,12 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
                 {{ 'account.quitar_la_foto' | t }}
               </app-button>
             </div>
-            <p class="account__error" *ngIf="photoError()" data-test="account-photo-error">{{ photoError() }}</p>
-            <p class="avatar-choose__busy" *ngIf="uploading()">{{ 'account.subiendo_la_foto' | t }}</p>
+            <p class="account__error" *ngIf="photoError()" data-test="account-photo-error">
+              {{ photoError() }}
+            </p>
+            <p class="avatar-choose__busy" *ngIf="uploading()">
+              {{ 'account.subiendo_la_foto' | t }}
+            </p>
           </div>
         }
       </app-modal>
@@ -649,7 +725,6 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
   ]
 })
 export class AccountComponent {
-
   /**
    * Como se llama aqui dentro, con el «tu cuenta» de relleno ya traducido: en la plantilla no se puede
    * encadenar una pipe dentro del argumento de otra pipe, y ese limite es lo que empuja este metodo a
@@ -672,6 +747,7 @@ export class AccountComponent {
     { id: 'info', labelKey: 'account.pestanja_informacion', icon: 'description' }
   ];
   readonly activeTab = signal<AccountTab>('account');
+  readonly passwordDescriptionIds = PASSWORD_DESCRIPTION_IDS;
 
   /** Borradores locales: nada viaja al servidor hasta pulsar el boton de su bloque. */
   nameDraft = '';
@@ -682,6 +758,7 @@ export class AccountComponent {
   readonly photoError = signal('');
   readonly nameError = signal('');
   readonly passwordError = signal('');
+  readonly passwordMaxLength = MAX_BCRYPT_PASSWORD_BYTES;
   readonly avatarUrl = signal<string | null>(null);
   /** Si la URL guardada no carga, eso es un estado que se puede arreglar: se dice, no se calla. */
   readonly photoBroken = signal(false);
@@ -859,7 +936,9 @@ export class AccountComponent {
   // ── La contrasena ──────────────────────────────────────────────────────
 
   passwordDirty(): boolean {
-    return Boolean(this.passwordDraft.current || this.passwordDraft.fresh || this.passwordDraft.repeat);
+    return Boolean(
+      this.passwordDraft.current || this.passwordDraft.fresh || this.passwordDraft.repeat
+    );
   }
 
   /** La misma regla que el servidor, contada en puntos para no mandar una contrasena floja. */
@@ -875,7 +954,8 @@ export class AccountComponent {
 
   passwordStrengthLabel(): string {
     // Cinco claves, no cinco palabras escritas: quien pinta esto es la pantalla, y la pantalla tiene idioma.
-    const clave = PASSWORD_STRENGTH_KEYS[Math.min(this.passwordStrength(), PASSWORD_STRENGTH_KEYS.length - 1)];
+    const clave =
+      PASSWORD_STRENGTH_KEYS[Math.min(this.passwordStrength(), PASSWORD_STRENGTH_KEYS.length - 1)];
     return this.i18n.t(clave);
   }
 
@@ -885,7 +965,12 @@ export class AccountComponent {
       this.passwordError.set(this.i18n.t('account.falta_la_contrasena_actual'));
       return;
     }
-    if (!/[A-Z]/.test(fresh) || !/[0-9]/.test(fresh) || fresh.length < 6) {
+    const passwordIssue = newPasswordIssue(fresh);
+    if (passwordIssue === 'tooLongBytes') {
+      this.passwordError.set(this.i18n.t('account.password_max_72_bytes'));
+      return;
+    }
+    if (passwordIssue) {
       this.passwordError.set(this.i18n.t('account.la_nueva_contrasena_necesita'));
       return;
     }
@@ -899,13 +984,18 @@ export class AccountComponent {
         this.savingPassword.set(false);
         this.passwordError.set('');
         this.cancelPassword();
-        this.toastService.success(this.i18n.t('account.contrasena_cambiada'), this.i18n.t('account.la_proxima_vez_entra'));
+        this.toastService.success(
+          this.i18n.t('account.contrasena_cambiada'),
+          this.i18n.t('account.la_proxima_vez_entra')
+        );
       },
       error: (error) => {
         this.savingPassword.set(false);
         const message = typeof error?.error?.message === 'string' ? error.error.message : '';
         this.passwordError.set(
-          message.includes('incorrect') ? this.i18n.t('account.la_contrasena_actual_no') : this.i18n.t('account.no_se_pudo_cambiar')
+          message.includes('incorrect')
+            ? this.i18n.t('account.la_contrasena_actual_no')
+            : this.i18n.t('account.no_se_pudo_cambiar')
         );
       }
     });
@@ -947,14 +1037,21 @@ export class AccountComponent {
       const key = localStorage.key(index);
       if (key) keys.push(key);
     }
-    return storageUsage(keys, (key) => localStorage.getItem(key) ?? '', this.shopping.pendingWrites());
+    return storageUsage(
+      keys,
+      (key) => localStorage.getItem(key) ?? '',
+      this.shopping.pendingWrites()
+    );
   });
 
   /** El inventario del almacenamiento, en el idioma de la app: la frase la arma el diccionario. */
   storageText(): string {
     const usage = this.usage();
     if (!usage.entries) return this.i18n.t('account.nada_guardado_en');
-    return this.i18n.t('account.bytes_en_entradas', { bytes: formatBytes(usage.bytes), n: usage.entries });
+    return this.i18n.t('account.bytes_en_entradas', {
+      bytes: formatBytes(usage.bytes),
+      n: usage.entries
+    });
   }
 
   pendingText(): string {

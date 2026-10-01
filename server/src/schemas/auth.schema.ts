@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { formDefault, formField } from './form.js';
 import { cookingLevelEnum } from '../utils/taste-profile.js';
+import { bcryptPasswordSchema } from './bcrypt-password.schema.js';
 
 export const loginSchema = z.object({
   email: z.string().email('Invalid email format'),
@@ -10,9 +11,7 @@ export const loginSchema = z.object({
 export const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100),
   email: z.string().email('Invalid email format'),
-  password: z.string().min(6, 'Password must be at least 6 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number'),
+  password: bcryptPasswordSchema,
   cookingLevel: formDefault(cookingLevelEnum, 'beginner')
 });
 
@@ -26,16 +25,12 @@ export const forgotPasswordSchema = z.object({
 
 export const resetPasswordSchema = z.object({
   token: z.string().min(1, 'Token is required'),
-  newPassword: z.string().min(6, 'Password must be at least 6 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number')
+  newPassword: bcryptPasswordSchema
 });
 
 export const changePasswordSchema = z.object({
   oldPassword: z.string().min(1, 'Old password is required'),
-  newPassword: z.string().min(6, 'Password must be at least 6 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number')
+  newPassword: bcryptPasswordSchema
 });
 
 /**
@@ -48,7 +43,8 @@ export const avatarField = z
   .min(1)
   .max(512)
   .refine(
-    (value) => /^\/api\/uploads\/avatars\/[a-zA-Z0-9._-]{4,80}$/.test(value) || /^https?:\/\//.test(value),
+    (value) =>
+      /^\/api\/uploads\/avatars\/[a-zA-Z0-9._-]{4,80}$/.test(value) || /^https?:\/\//.test(value),
     'avatar debe ser una ruta de subida de esta app o una URL absoluta'
   );
 
@@ -64,16 +60,20 @@ export const updateProfileSchema = z.object({
   cookingLevel: formField(cookingLevelEnum),
   // El grupo entero tambien admite el hueco: un panel de preferencias que llega `null` es «no lo he
   // tocado», no «prefiero un objeto vacio».
-  preferences: formField(z.object({
-    theme: formField(z.enum(['light', 'dark', 'system'])),
-    language: formField(z.enum(['es', 'en'])),
-    detailLevel: formField(z.enum(['basic', 'intermediate', 'expert'])),
-    notifications: z.object({
-      expirationAlerts: formField(z.boolean()),
-      mealReminders: formField(z.boolean()),
-      recipeSuggestions: formField(z.boolean())
-    }).optional()
-  }))
+  preferences: formField(
+    z.object({
+      theme: formField(z.enum(['light', 'dark', 'system'])),
+      language: formField(z.enum(['es', 'en'])),
+      detailLevel: formField(z.enum(['basic', 'intermediate', 'expert'])),
+      notifications: z
+        .object({
+          expirationAlerts: formField(z.boolean()),
+          mealReminders: formField(z.boolean()),
+          recipeSuggestions: formField(z.boolean())
+        })
+        .optional()
+    })
+  )
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;

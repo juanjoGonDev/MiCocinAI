@@ -1,19 +1,23 @@
+import { newPasswordIssue, type NewPasswordIssue } from '../../../core/utils/password-policy';
+
 export type RegisterValidationIssue =
-  'required' | 'tooShort' | 'tooLong' | 'invalidEmail' | 'uppercaseRequired' | 'numberRequired';
+  | 'required'
+  | 'tooShort'
+  | 'tooLong'
+  | 'tooLongBytes'
+  | 'invalidEmail'
+  | 'uppercaseRequired'
+  | 'numberRequired';
 
 export type RegisterNameIssue = Extract<
   RegisterValidationIssue,
   'required' | 'tooShort' | 'tooLong'
 >;
 export type RegisterEmailIssue = Extract<RegisterValidationIssue, 'required' | 'invalidEmail'>;
-export type RegisterPasswordIssue = Extract<
-  RegisterValidationIssue,
-  'required' | 'tooShort' | 'uppercaseRequired' | 'numberRequired'
->;
+export type RegisterPasswordIssue = 'required' | NewPasswordIssue;
 
 const NAME_MIN_LENGTH = 2;
 const NAME_MAX_LENGTH = 100;
-const PASSWORD_MIN_LENGTH = 6;
 const EMAIL_PATTERN =
   /^(?:[A-Za-z0-9_'+\-]+\.)*[A-Za-z0-9_'+\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\-]*\.)+[A-Za-z]{2,}$/;
 
@@ -31,8 +35,5 @@ export function registerEmailIssue(email: string): RegisterEmailIssue | null {
 
 export function registerPasswordIssue(password: string): RegisterPasswordIssue | null {
   if (!password) return 'required';
-  if (password.length < PASSWORD_MIN_LENGTH) return 'tooShort';
-  if (!/[A-Z]/.test(password)) return 'uppercaseRequired';
-  if (!/[0-9]/.test(password)) return 'numberRequired';
-  return null;
+  return newPasswordIssue(password);
 }
