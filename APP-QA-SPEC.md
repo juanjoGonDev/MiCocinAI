@@ -1,7 +1,7 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra y overflow de Cuenta tienen regresiones verificadas; el barrido funcional/responsive del resto de pantallas sigue pendiente
-- **Actualizado:** 2026-10-01
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra y overflow de Cuenta tienen regresiones verificadas; QA-PANTRY.2 investiga error de carga confundido con vacío y el barrido global sigue pendiente
+- **Actualizado:** 2026-10-02
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -290,6 +290,27 @@ El harness usa el `Referer` same-origin para asociar el request a la ruta origen
 **Evidencia verde (2026-09-30):** Karma enfocado Button + Pantry 18/18; coverage HTML de `ButtonComponent` 100/100/100/100 (statements/branches/functions/lines). `PantryComponent.openAddModal()` cubre ambos destinos y las dos salidas de `prefill` (todos sus statements/branches/functions/lines ejecutados); el agregado de Karma de toda la app no representa el alcance y el gate global continúa abierto en QA-04c. Build Angular producción pasó con warnings de presupuesto/imports anotados; `tsc -p tsconfig.e2e.json --noEmit`, Prettier de los tests y `git diff --check` pasan.
 
 Playwright real con `E2E_SCOPE=all`, rate limit activo, servidor de producción efímero, puerto/SQLite/semilla únicos y cleanup: `pantry-header-actions.spec.ts` Chromium 2/2 y Pixel 5 2/2. Pixel 5 recorrió 320×568, 393×851, límites 479/480/481, 599/600/601, 767/768/769, 1022/1023/1024, 568×320 y 844×390; Chromium recorrió 1440×900 y 1022/1023/1024. Sin overflow, solapamiento, acción fuera de viewport ni interceptación; errores JS = 0. Suite Dashboard combinada (`dashboard.spec.ts`, `dashboard-recipe-links.spec.ts`, `dashboard-today-meals.spec.ts`) 7/7 en Chromium y 7/7 en Pixel 5. Capturas inspeccionadas: `.e2e-screenshots/qa-pantry-1/final-desktop/pantry-header-1440x900.png`, `.e2e-screenshots/qa-pantry-1/final-mobile/pantry-header-{393x851,320x568}.png`.
+
+## Unidad QA-PANTRY.2 · distinguir error de carga de despensa vacía (en curso)
+
+**Fuente revalidada (2026-10-02):** el contrato activo `HOGARIA-SPEC.md` §12ak describe `/pantry/caducidades` como resumen, gráfica y tabla ordenable; el botón vuelve a `/pantry`. No define filtros ni enlace a una ficha de producto, así que se excluyen de esta unidad. En `PantryService.loadCaducidades()`, cualquier error del `GET /api/pantry/expiry` se convierte hoy en `[]`; `CaducidadesComponent` usa `filas().length === 0` para pintar el estado válido «sin caducidades». Por tanto un 503/red caída se presenta como inventario vacío. La E2E existente cubre datos poblados y el error de estimación IA, no el error de carga, el vacío del GET ni el reintento.
+
+**Conducta esperada:** mantener diferenciados loading, éxito vacío y error de transporte/servidor. El error debe mostrar un mensaje accesible y una acción de reintento; no anunciar «sin caducidades». Un reintento exitoso debe limpiar el error y renderizar la respuesta real; uno que falle debe terminar loading y permitir reintentar. La lectura no escribe datos ni llama al proveedor IA.
+
+- [ ] Escribir primero pruebas unitarias para GET 200 vacío, error 503, reintento 503→200, limpieza de estado y loading terminado en éxito/error.
+- [ ] Escribir primero la E2E que intercepta únicamente `/api/pantry/expiry`: 503 no muestra el vacío; botón de reintento operable por teclado vuelve a solicitarlo; 200 sintético pinta la tabla. Añadir el caso 200 con `data: []` que sí pinta el vacío.
+- [ ] Aplicar el estado mínimo en service/componente, mensaje ES/EN y supresión de toast genérico duplicado si la pantalla muestra su propio error; revisar nombres accesibles y no permitir envíos duplicados durante loading.
+- [ ] Ejecutar cobertura focal (statements/branches/functions/lines ≥80 % para la lógica tocada, sin rebajar gates), typecheck/build y Playwright real aislado en Chromium y Pixel 5; comprobar 320×568, 393×851 y escritorio, teclado, overflow y capturas PC/móvil.
+
+**Discrepancia deliberadamente acotada:** el checklist anterior mencionaba filtros y volver «a la ficha»; no se implementarán por inferencia. Reabrirlo solo si el contrato de producto activo se modifica explícitamente.
+
+## Hallazgo QA-REC.INGRESS.1 · límite de subida distinto en Nginx (pendiente de reproducción runtime)
+
+**Fuente revalidada (2026-10-02):** `HOGARIA-SPEC.md` §12aj fija el techo en 10 MB y enumera PNG/JPEG/WebP/PDF; el formulario y `POST /api/receipts` aceptan hasta 10 MiB. `nginx/nginx.conf` declara `client_max_body_size 512k` en el bloque `http`, y la configuración de `docker-compose.yml` monta ese Nginx frente a `/api/`. Esto predice un 413 para ficheros mayores de 512 KiB antes de llegar a la API, aunque la UI/API indiquen 10 MiB. Es todavía discrepancia estática: en esta máquina no están disponibles `docker` ni `nginx`, así que no se afirma que el 413 esté reproducido en runtime y no se cambia el límite sin esa validación.
+
+- [ ] Preparar una prueba real por el ingress Nginx efectivo con backend/SQLite aislados: una PNG sintética válida de 513 KiB debe alcanzar el backend y, sin proveedor configurado, terminar en `NO_CONFIG`; no usar `page.route` que evite el proxy.
+- [ ] Añadir pruebas del backend para firma/tamaño en 0 bytes, 10 MiB exactos y 10 MiB + 1 byte; validar 413 con `FILE_TOO_LARGE` solo al superar el límite.
+- [ ] Corregir el límite del proxy para incluir el multipart overhead sin cambiar innecesariamente el límite global; verificar con Chromium y Pixel 5 sobre Nginx real aislado y documentar si falta el runtime.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 
@@ -618,7 +639,7 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 ### Cocina, despensa y planificación
 
 - [ ] `/pantry`: ingredientes/utensilios, búsqueda, filtro/categoría, orden, paginar/seleccionar, lote, cantidad/unidad, alta/edición/borrado y sugerencias; estados vacío, sin resultados, error y recarga.
-- [ ] `/pantry/caducidades`: fechas ausentes/pasadas/próximas, orden y filtros, estado vacío y navegación de vuelta a la ficha.
+- [ ] `/pantry/caducidades`: fechas ausentes/pasadas/próximas, orden por caducidad/nombre/duración, estado vacío frente a error/reintento y navegación de vuelta a `/pantry`; el contrato activo §12ak no define filtros ni enlace a la ficha.
 - [ ] `/pantry/inventario/:id` y `/editar`: ficha válida/no encontrada, atributos, historial/precios, editar/cancelar/guardar, aliases/código de barras, error y borrar observación con confirmación.
 - [ ] `/pantry/categories[/:id]` y `/pantry/products[/:id]`: buscar/filtrar/ordenar, alta/edición, padres/aliases, selección y acciones por lote, protección de registros en uso, validación y confirmaciones.
 - [ ] `/pantry/catalogo`: búsqueda, pasillos/categorías, query string, filtros/paginación, alta individual y por lote, ya existente/en inventario, quitar con confirmación y persistencia al volver.
@@ -631,7 +652,7 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 - [ ] `/shopping`: crear/renombrar/borrar lista, tienda, tabs abiertas/completadas, búsqueda/filtros/orden/páginas, completar/reabrir y sugerencias.
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
-- [ ] `/receipts`: elegir/arrastrar archivo, formatos/tamaño soportados y rechazados, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
+- [ ] `/receipts`: elegir/arrastrar archivo, validar formatos y borde de 10 MiB a través del ingress de producción, rechazar inválidos, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
 - [ ] `/receipts/:id`: procesamiento IA directo (sin OCR según HOGARIA-SPEC §12aj), edición de tienda/notas/líneas/unidad/cantidad/precio/oferta, añadir/quitar, total que cuadra/no cuadra, confirmar a inventario, detener/reintentar/borrar y fallo de proveedor.
 - [ ] `/ai-config`: alta/edición/borrado, campos y rangos, mostrar/ocultar clave, probar desde formulario y desde ficha, loading/éxito/error/timeout, activar una sola config y conservar el secreto sin exponerlo.
 - [ ] `/logs`: conexión SSE/reconexión, pausar/reanudar/autoscroll, filtrar fuente/nivel, seleccionar/copiar líneas o todo, borrar con confirmación y cola de logs vacía/larga.
@@ -662,9 +683,10 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
-2. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area y WebKit además de Chromium.
-3. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
-4. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-5. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-6. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
+1. Cerrar QA-PANTRY.2 con pruebas unitarias y reintento Playwright real en stack aislado; después reproducir QA-REC.INGRESS.1 con Nginx real antes de cambiar límites.
+2. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
+3. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area y WebKit además de Chromium.
+4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
+5. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+6. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+7. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
