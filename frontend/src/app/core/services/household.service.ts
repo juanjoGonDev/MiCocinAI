@@ -1,9 +1,10 @@
 import { Injectable, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable, tap, catchError, map, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Household, InvitePreview } from '../../shared/models/household.model';
 import { STORAGE_KEYS } from './storage.service';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 
 @Injectable({
   providedIn: 'root'
@@ -86,20 +87,24 @@ export class HouseholdService {
   }
 
   createHousehold(name: string, sharedPantry = true): Observable<Household | null> {
-    return this.http.post<any>(this.apiUrl, { name, sharedPantry }).pipe(
-      map((response) => (response?.data ? this.mapHousehold(response.data) : null)),
-      tap((household) => {
-        this.householdSignal.set(household);
-      }),
-      catchError(() => of(null))
-    );
+    return this.http
+      .post<any>(this.apiUrl, { name, sharedPantry }, { context: this.silentToastContext() })
+      .pipe(
+        map((response) => (response?.data ? this.mapHousehold(response.data) : null)),
+        tap((household) => {
+          this.householdSignal.set(household);
+        }),
+        catchError(() => of(null))
+      );
   }
 
   joinHousehold(inviteCode: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/join`, { inviteCode }).pipe(
-      tap(() => this.loadHousehold()),
-      catchError(() => of(null))
-    );
+    return this.http
+      .post<any>(`${this.apiUrl}/join`, { inviteCode }, { context: this.silentToastContext() })
+      .pipe(
+        tap(() => this.loadHousehold()),
+        catchError(() => of(null))
+      );
   }
 
   updateSettings(data: {
@@ -108,7 +113,7 @@ export class HouseholdService {
     shareRecipes?: boolean;
     shareCalendar?: boolean;
   }): Observable<Household | null> {
-    return this.http.patch<any>(this.apiUrl, data).pipe(
+    return this.http.patch<any>(this.apiUrl, data, { context: this.silentToastContext() }).pipe(
       map((response) => (response?.data ? this.mapHousehold(response.data) : null)),
       tap((household) => {
         this.householdSignal.set(household);
@@ -118,25 +123,29 @@ export class HouseholdService {
   }
 
   regenerateInviteCode(): Observable<string | null> {
-    return this.http.post<any>(`${this.apiUrl}/regenerate-invite`, {}).pipe(
-      map((response) => response?.data?.inviteCode ?? null),
-      tap((inviteCode) => {
-        if (inviteCode) {
-          this.householdSignal.update((h) => (h ? { ...h, inviteCode } : null));
-        }
-      }),
-      catchError(() => of(null))
-    );
+    return this.http
+      .post<any>(`${this.apiUrl}/regenerate-invite`, {}, { context: this.silentToastContext() })
+      .pipe(
+        map((response) => response?.data?.inviteCode ?? null),
+        tap((inviteCode) => {
+          if (inviteCode) {
+            this.householdSignal.update((h) => (h ? { ...h, inviteCode } : null));
+          }
+        }),
+        catchError(() => of(null))
+      );
   }
 
   leaveHousehold(): Observable<boolean> {
-    return this.http.delete<any>(`${this.apiUrl}/leave`).pipe(
-      tap(() => {
-        this.householdSignal.set(null);
-      }),
-      map(() => true),
-      catchError(() => of(false))
-    );
+    return this.http
+      .delete<any>(`${this.apiUrl}/leave`, { context: this.silentToastContext() })
+      .pipe(
+        tap(() => {
+          this.householdSignal.set(null);
+        }),
+        map(() => true),
+        catchError(() => of(false))
+      );
   }
 
   copyInviteCode(): void {
@@ -192,5 +201,9 @@ export class HouseholdService {
     } catch {
       return null;
     }
+  }
+
+  private silentToastContext(): HttpContext {
+    return new HttpContext().set(SILENT_TOAST, true);
   }
 }

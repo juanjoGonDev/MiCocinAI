@@ -1,5 +1,6 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import type {
   Household,
   HouseholdMember,
@@ -228,6 +229,7 @@ describe('HouseholdService', () => {
     const create = http.expectOne(API_URL);
     expect(create.request.method).toBe('POST');
     expect(create.request.body).toEqual({ name: 'Casa sintética', sharedPantry: true });
+    expect(create.request.context.get(SILENT_TOAST)).toBeTrue();
     create.flush({ success: true, data: raw });
     expect(created).toEqual(jasmine.objectContaining({ id: 'home-1', inviteCode: 'ABC12345' }));
     expect(service.household()?.name).toBe('Casa sintética');
@@ -274,6 +276,7 @@ describe('HouseholdService', () => {
     const join = http.expectOne(`${API_URL}/join`);
     expect(join.request.method).toBe('POST');
     expect(join.request.body).toEqual({ inviteCode: 'JOINCODE' });
+    expect(join.request.context.get(SILENT_TOAST)).toBeTrue();
     join.flush({ success: true, message: 'Joined household' });
     expect(joined).toEqual({ success: true, message: 'Joined household' });
     http.expectOne(API_URL).flush({ data: null });
@@ -298,6 +301,7 @@ describe('HouseholdService', () => {
     const update = http.expectOne(API_URL);
     expect(update.request.method).toBe('PATCH');
     expect(update.request.body).toEqual(settings);
+    expect(update.request.context.get(SILENT_TOAST)).toBeTrue();
     update.flush({ success: true, data: household({ ...settings, inviteCode: 'NEWCODE' }) });
     expect(updated).toEqual(
       jasmine.objectContaining({ id: 'home-1', inviteCode: 'NEWCODE', name: 'Casa renovada' })
@@ -324,6 +328,7 @@ describe('HouseholdService', () => {
     const regenerate = http.expectOne(`${API_URL}/regenerate-invite`);
     expect(regenerate.request.method).toBe('POST');
     expect(regenerate.request.body).toEqual({});
+    expect(regenerate.request.context.get(SILENT_TOAST)).toBeTrue();
     regenerate.flush({ success: true, data: { inviteCode: 'NEWCODE' } });
     expect(code).toBe('NEWCODE');
     expect(service.household()?.inviteCode).toBe('NEWCODE');
@@ -356,6 +361,7 @@ describe('HouseholdService', () => {
     service.leaveHousehold().subscribe((value) => (left = value));
     const leave = http.expectOne(`${API_URL}/leave`);
     expect(leave.request.method).toBe('DELETE');
+    expect(leave.request.context.get(SILENT_TOAST)).toBeTrue();
     leave.flush({ success: true, message: 'Left household' });
     expect(left).toBeTrue();
     expect(service.household()).toBeNull();

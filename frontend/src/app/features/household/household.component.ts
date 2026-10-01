@@ -155,7 +155,7 @@ import type { TranslationKey } from '../../core/i18n';
               <input
                 type="checkbox"
                 [checked]="household.sharedPantry"
-                (change)="toggleSetting('sharedPantry', $any($event.target).checked)"
+                (change)="toggleSetting('sharedPantry', $any($event.target).checked, $event)"
               />
               <span>{{ 'household.despensa_compartida' | t }}</span>
             </label>
@@ -163,7 +163,7 @@ import type { TranslationKey } from '../../core/i18n';
               <input
                 type="checkbox"
                 [checked]="household.shareRecipes"
-                (change)="toggleSetting('shareRecipes', $any($event.target).checked)"
+                (change)="toggleSetting('shareRecipes', $any($event.target).checked, $event)"
               />
               <span>{{ 'household.recetas_compartidas' | t }}</span>
             </label>
@@ -171,7 +171,7 @@ import type { TranslationKey } from '../../core/i18n';
               <input
                 type="checkbox"
                 [checked]="household.shareCalendar"
-                (change)="toggleSetting('shareCalendar', $any($event.target).checked)"
+                (change)="toggleSetting('shareCalendar', $any($event.target).checked, $event)"
               />
               <span>{{ 'household.calendario_compartido' | t }}</span>
             </label>
@@ -190,7 +190,7 @@ import type { TranslationKey } from '../../core/i18n';
       <!-- Create Modal -->
       <app-modal
         [isOpen]="isCreateModalOpen()"
-        [attr.title]="'household.crear_hogar' | t"
+        [title]="'household.crear_hogar' | t"
         size="md"
         (onClose)="closeCreateModal()"
       >
@@ -212,12 +212,20 @@ import type { TranslationKey } from '../../core/i18n';
           </div>
 
           <div class="form-actions">
-            <app-button variant="ghost" type="button" (onClick)="closeCreateModal()">{{
-              'common.cancel' | t
-            }}</app-button>
-            <app-button variant="primary" type="submit" [loading]="isSaving()">{{
-              'common.create' | t
-            }}</app-button>
+            <app-button
+              variant="ghost"
+              type="button"
+              [touchTarget]="true"
+              (onClick)="closeCreateModal()"
+              >{{ 'common.cancel' | t }}</app-button
+            >
+            <app-button
+              variant="primary"
+              type="submit"
+              [touchTarget]="true"
+              [loading]="isSaving()"
+              >{{ 'common.create' | t }}</app-button
+            >
           </div>
         </form>
       </app-modal>
@@ -225,7 +233,7 @@ import type { TranslationKey } from '../../core/i18n';
       <!-- Join Modal -->
       <app-modal
         [isOpen]="isJoinModalOpen()"
-        [attr.title]="'household.unirse_a_un_hogar' | t"
+        [title]="'household.unirse_a_un_hogar' | t"
         size="md"
         (onClose)="closeJoinModal()"
       >
@@ -244,12 +252,20 @@ import type { TranslationKey } from '../../core/i18n';
           ></app-input>
 
           <div class="form-actions">
-            <app-button variant="ghost" type="button" (onClick)="closeJoinModal()">{{
-              'common.cancel' | t
-            }}</app-button>
-            <app-button variant="primary" type="submit" [loading]="isSaving()">{{
-              'household.unirse' | t
-            }}</app-button>
+            <app-button
+              variant="ghost"
+              type="button"
+              [touchTarget]="true"
+              (onClick)="closeJoinModal()"
+              >{{ 'common.cancel' | t }}</app-button
+            >
+            <app-button
+              variant="primary"
+              type="submit"
+              [touchTarget]="true"
+              [loading]="isSaving()"
+              >{{ 'household.unirse' | t }}</app-button
+            >
           </div>
         </form>
       </app-modal>
@@ -257,7 +273,7 @@ import type { TranslationKey } from '../../core/i18n';
       <!-- Invite Modal -->
       <app-modal
         [isOpen]="isInviteModalOpen()"
-        [attr.title]="'household.invitar_miembro' | t"
+        [title]="'household.invitar_miembro' | t"
         size="md"
         (onClose)="closeInviteModal()"
       >
@@ -268,7 +284,7 @@ import type { TranslationKey } from '../../core/i18n';
             <span class="invite-code-display__code">{{
               householdService.household()?.inviteCode
             }}</span>
-            <app-button variant="primary" (onClick)="copyCode()">
+            <app-button variant="primary" [touchTarget]="true" (onClick)="copyCode()">
               <app-icon name="content_copy" [size]="16" [label]="null" />
               {{ 'household.copiar' | t }}
             </app-button>
@@ -658,18 +674,27 @@ export class HouseholdComponent implements OnInit {
     );
   }
 
-  toggleSetting(key: 'sharedPantry' | 'shareRecipes' | 'shareCalendar', value: boolean): void {
+  toggleSetting(
+    key: 'sharedPantry' | 'shareRecipes' | 'shareCalendar',
+    value: boolean,
+    event?: Event
+  ): void {
+    const input = event?.target as HTMLInputElement | null;
+    const confirmedHousehold = this.householdService.household();
+    if (input && confirmedHousehold) input.checked = confirmedHousehold[key];
+
     this.householdService.updateSettings({ [key]: value }).subscribe({
-      next: () =>
+      next: (updated) => {
+        if (!updated) {
+          this.notifyMutationError('household.no_se_pudo_actualizar');
+          return;
+        }
         this.toastService.success(
           this.i18n.t('ai_config.actualizado'),
           this.i18n.t('household.ajustes_del_hogar_guardados')
-        ),
-      error: () =>
-        this.toastService.error(
-          this.i18n.t('ui.error'),
-          this.i18n.t('household.no_se_pudo_actualizar')
-        )
+        );
+      },
+      error: () => this.notifyMutationError('household.no_se_pudo_actualizar')
     });
   }
 
@@ -704,13 +729,18 @@ export class HouseholdComponent implements OnInit {
   }
 
   createHousehold(): void {
-    if (!this.createForm.name) return;
+    if (!this.createForm.name || this.isSaving()) return;
 
     this.isSaving.set(true);
     this.householdService
       .createHousehold(this.createForm.name, this.createForm.sharedPantry)
       .subscribe({
-        next: () => {
+        next: (household) => {
+          if (!household) {
+            this.notifyMutationError('household.no_se_pudo_crear');
+            this.isSaving.set(false);
+            return;
+          }
           this.toastService.success(
             this.i18n.t('household.creado'),
             this.i18n.t('household.tu_hogar_ha_sido')
@@ -719,21 +749,23 @@ export class HouseholdComponent implements OnInit {
           this.isSaving.set(false);
         },
         error: () => {
-          this.toastService.error(
-            this.i18n.t('ui.error'),
-            this.i18n.t('household.no_se_pudo_crear')
-          );
+          this.notifyMutationError('household.no_se_pudo_crear');
           this.isSaving.set(false);
         }
       });
   }
 
   joinHousehold(): void {
-    if (!this.joinForm.inviteCode) return;
+    if (!this.joinForm.inviteCode || this.isSaving()) return;
 
     this.isSaving.set(true);
     this.householdService.joinHousehold(this.joinForm.inviteCode).subscribe({
-      next: () => {
+      next: (result) => {
+        if (result?.success !== true) {
+          this.notifyMutationError('household.codigo_invalido_o_ya');
+          this.isSaving.set(false);
+          return;
+        }
         this.toastService.success(
           this.i18n.t('household.te_has_unido'),
           this.i18n.t('household.ahora_eres_miembro_del')
@@ -742,10 +774,7 @@ export class HouseholdComponent implements OnInit {
         this.isSaving.set(false);
       },
       error: () => {
-        this.toastService.error(
-          this.i18n.t('ui.error'),
-          this.i18n.t('household.codigo_invalido_o_ya')
-        );
+        this.notifyMutationError('household.codigo_invalido_o_ya');
         this.isSaving.set(false);
       }
     });
@@ -757,12 +786,17 @@ export class HouseholdComponent implements OnInit {
 
   regenerateCode(): void {
     this.householdService.regenerateInviteCode().subscribe({
-      next: () => {
+      next: (inviteCode) => {
+        if (!inviteCode) {
+          this.notifyMutationError('household.no_se_pudo_regenerar');
+          return;
+        }
         this.toastService.success(
           this.i18n.t('household.regenerado'),
           this.i18n.t('household.nuevo_codigo_de_invitacion')
         );
-      }
+      },
+      error: () => this.notifyMutationError('household.no_se_pudo_regenerar')
     });
   }
 
@@ -775,13 +809,22 @@ export class HouseholdComponent implements OnInit {
     if (!accepted) return;
 
     this.householdService.leaveHousehold().subscribe({
-      next: () => {
+      next: (left) => {
+        if (left !== true) {
+          this.notifyMutationError('household.no_se_pudo_salir');
+          return;
+        }
         this.toastService.success(
           this.i18n.t('household.saliste'),
           this.i18n.t('household.has_salido_del_hogar')
         );
-      }
+      },
+      error: () => this.notifyMutationError('household.no_se_pudo_salir')
     });
+  }
+
+  private notifyMutationError(message: TranslationKey): void {
+    this.toastService.error(this.i18n.t('ui.error'), this.i18n.t(message));
   }
 
   getRoleVariant(role: string): 'primary' | 'secondary' | 'neutral' {
