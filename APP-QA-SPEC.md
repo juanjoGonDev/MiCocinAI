@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta y error de carga de caducidades tienen regresiones verificadas; el barrido global sigue pendiente
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta y error de carga de caducidades tienen regresiones verificadas; QA-REC.INGRESS.1 sigue sin runtime Nginx y QA-REC.FAV.1 queda especificada; el barrido global sigue pendiente
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -318,9 +318,23 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Fuente revalidada (2026-10-01):** `HOGARIA-SPEC.md` §12aj fija el techo en 10 MB y enumera PNG/JPEG/WebP/PDF; el formulario y `POST /api/receipts` aceptan hasta 10 MiB. `nginx/nginx.conf` declara `client_max_body_size 512k` en el bloque `http`, y la configuración de `docker-compose.yml` monta ese Nginx frente a `/api/`. Esto predice un 413 para ficheros mayores de 512 KiB antes de llegar a la API, aunque la UI/API indiquen 10 MiB. Es todavía discrepancia estática: en esta máquina no están disponibles `docker` ni `nginx`, así que no se afirma que el 413 esté reproducido en runtime y no se cambia el límite sin esa validación.
 
+**Revalidación de entorno (2026-10-01):** `Get-Command docker`, `docker-compose` y `nginx` no encuentra ejecutables; tampoco existen las rutas estándar comprobadas de Docker Desktop o Nginx. `wsl --list --verbose` devuelve `Wsl/EnumerateDistros/Service/E_ACCESSDENIED`. No se levantó ningún servicio ni se tocó `./data`. El runner Playwright aislado levanta Node directamente (modo dev o full-stack) y evita Nginx; no sirve como sustituto de la prueba de ingress. El Compose de producción no es seguro para QA aislado: fija nombres/contenedores y puertos, monta `./data` persistente y reinicia el servicio automáticamente. Mantener pendiente la reproducción real; preparar un harness Compose de QA con proyecto/puertos/SQLite temporales cuando haya Docker/Nginx disponible.
+
 - [ ] Preparar una prueba real por el ingress Nginx efectivo con backend/SQLite aislados: una PNG sintética válida de 513 KiB debe alcanzar el backend y, sin proveedor configurado, terminar en `NO_CONFIG`; no usar `page.route` que evite el proxy.
 - [ ] Añadir pruebas del backend para firma/tamaño en 0 bytes, 10 MiB exactos y 10 MiB + 1 byte; validar 413 con `FILE_TOO_LARGE` solo al superar el límite.
 - [ ] Corregir el límite del proxy para incluir el multipart overhead sin cambiar innecesariamente el límite global; verificar con Chromium y Pixel 5 sobre Nginx real aislado y documentar si falta el runtime.
+
+## Unidad QA-REC.FAV.1 · quitar favoritos desde la pestaña filtrada (especificada)
+
+**Fuente de verdad revalidada (2026-10-01):** la ruta activa de `/recipes` etiqueta el filtro como «Favoritas»; `RecipesComponent.setFilter('favorites')` pide `RecipeService.loadRecipes({ isFavorite: true })` y `GET /api/recipes` aplica `is_favorite = 1`. El endpoint `POST /api/recipes/:id/favorite` confirma el valor nuevo. Sin embargo, `RecipeService.toggleFavorite()` solo cambia `isFavorite` en el array cargado; la receta desfavoritada sigue pintándose mientras `activeFilter` continúa en «Favoritas». Los E2E actuales verifican el toggle o la selección del filtro por separado, pero no la consistencia de pertenencia ni su persistencia tras recargar.
+
+**Conducta esperada (inferencia explícita de la semántica del filtro):** una vez que el servidor confirma `isFavorite: false`, la receta deja de pertenecer a «Favoritas» y debe desaparecer de esa lista; las demás favoritas permanecen. El fallo de red/servidor no debe quitar la tarjeta ni modificar el estado visual. Cambiar de filtro y recargar debe mostrar los datos persistidos, sin ocultar la receta de «Todas».
+
+- [ ] Escribir primero una regresión Playwright con dos recetas sintéticas en stack SQLite aislado: activar «Favoritas», quitar una, comprobar que desaparece solo tras éxito, la otra sigue, y el resultado persiste al recargar y volver a «Todas».
+- [ ] Reproducir el fallo contra el build actual y añadir prueba unitaria para toggle en filtro de favoritas, toggle en «Todas» y respuesta fallida; conservar conteo/estado y evitar desapariciones optimistas ante error.
+- [ ] Corregir el estado del filtro/lista en el punto mínimo, sin duplicar la fuente del filtro; verificar fallo y reintento, nombres accesibles ES/EN y activación por teclado.
+- [ ] Ejecutar tests unitarios/coverage focal con cada métrica ≥80 % en lógica tocada, typecheck/build y Playwright real Chromium + Pixel 5 con puerto, SQLite, semilla y limpieza aislados; comprobar 1440×900, 393×851 y 320×568 sin overflow ni CTA fuera de viewport.
+- [ ] Guardar e inspeccionar capturas sintéticas comparables de escritorio y móvil tras el cambio; registrar errores de consola/red y cualquier limitación.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 
@@ -693,10 +707,11 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Cerrar QA-PANTRY.2 con pruebas unitarias y reintento Playwright real en stack aislado; después reproducir QA-REC.INGRESS.1 con Nginx real antes de cambiar límites.
-2. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
-3. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area y WebKit además de Chromium.
-4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
-5. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-6. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-7. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
+1. Completar QA-REC.FAV.1 con regresión real de la pertenencia a «Favoritas» y persistencia tras recarga.
+2. QA-REC.INGRESS.1 sigue como discrepancia estática: reproducir con Nginx real aislado cuando haya engine/runtime disponible y no cambiar límites antes de esa prueba.
+3. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
+4. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area y WebKit además de Chromium.
+5. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
+6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+7. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+8. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
