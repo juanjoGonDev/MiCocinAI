@@ -25,11 +25,12 @@ import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
         <p class="confirm__message" *ngIf="request.message">{{ request.message }}</p>
 
         <div class="confirm__actions">
-          <app-button variant="ghost" (onClick)="confirmService.cancel()">
+          <app-button variant="ghost" [touchTarget]="true" (onClick)="confirmService.cancel()">
             {{ request.cancelText || ('common.cancel' | t) }}
           </app-button>
           <app-button
             [variant]="request.variant || 'danger'"
+            [touchTarget]="true"
             (onClick)="confirmService.accept()"
           >
             {{ request.confirmText || ('common.confirmar' | t) }}

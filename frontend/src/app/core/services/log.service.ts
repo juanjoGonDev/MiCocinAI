@@ -1,5 +1,6 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { openResilientStream, type StreamHandle, type StreamStatus } from '../sse';
 
@@ -110,10 +111,8 @@ export class LogService {
     this.pausedSignal.update(v => !v);
   }
 
-  clear(): void {
-    this.http.delete(`${this.apiUrl}`).subscribe({
-      next: () => this.logsSignal.set([]),
-    });
+  clear(): Observable<unknown> {
+    return this.http.delete(`${this.apiUrl}`).pipe(tap(() => this.logsSignal.set([])));
   }
 
   isVisible(entry: LogEntry): boolean {

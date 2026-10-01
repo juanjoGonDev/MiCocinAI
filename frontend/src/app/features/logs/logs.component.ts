@@ -57,6 +57,7 @@ interface FilterOption<T extends string> {
         <div class="logs-toolbar__filters">
           <select
             class="logs-select"
+            [attr.aria-label]="'logs.fuente_filtro_label' | t"
             [ngModel]="logService.sourceFilter()"
             (ngModelChange)="onSourceChange($event)"
           >
@@ -65,6 +66,7 @@ interface FilterOption<T extends string> {
 
           <select
             class="logs-select"
+            [attr.aria-label]="'logs.nivel_filtro_label' | t"
             [ngModel]="logService.levelFilter()"
             (ngModelChange)="onLevelChange($event)"
           >
@@ -652,8 +654,12 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
     });
     if (!accepted) return;
 
-    this.logService.clear();
-    this.clearSelection();
+    this.logService.clear().subscribe({
+      next: () => this.clearSelection(),
+      // The shared HTTP interceptor already announces the failure. Keep the rows and their
+      // selection so the user can retry without losing the current context.
+      error: () => undefined
+    });
   }
 
   /**
