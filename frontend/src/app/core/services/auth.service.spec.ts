@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { HttpClient } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { Router } from '@angular/router';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import { AuthService } from './auth.service';
 import { migrateLegacyStorage, STORAGE_KEYS } from './storage.service';
 import type { User } from '../../shared/models/user.model';
@@ -48,10 +49,7 @@ describe('AuthService', () => {
 
     TestBed.configureTestingModule({
       imports: [HttpClientTestingModule],
-      providers: [
-        AuthService,
-        { provide: Router, useValue: routerSpy }
-      ]
+      providers: [AuthService, { provide: Router, useValue: routerSpy }]
     });
 
     service = TestBed.inject(AuthService);
@@ -77,7 +75,7 @@ describe('AuthService', () => {
         refreshToken: 'mock-refresh-token'
       };
 
-      service.login(credentials).subscribe(response => {
+      service.login(credentials).subscribe((response) => {
         expect(response.user.email).toBe('test@test.com');
         expect(service.isAuthenticated()).toBeTrue();
         expect(service.currentUser()?.name).toBe('Test User');
@@ -136,7 +134,7 @@ describe('AuthService', () => {
         refreshToken: 'new-refresh'
       };
 
-      service.register(data).subscribe(response => {
+      service.register(data).subscribe((response) => {
         expect(response.user.name).toBe('New User');
         expect(service.isAuthenticated()).toBeTrue();
       });
@@ -324,7 +322,11 @@ describe('AuthService', () => {
 
       const request = httpMock.expectOne('/api/auth/change-password');
       expect(request.request.method).toBe('POST');
-      expect(request.request.body).toEqual({ oldPassword: 'old-password', newPassword: 'new-password' });
+      expect(request.request.body).toEqual({
+        oldPassword: 'old-password',
+        newPassword: 'new-password'
+      });
+      expect(request.request.context.get(SILENT_TOAST)).toBeTrue();
       request.flush({});
     });
 
@@ -341,7 +343,9 @@ describe('AuthService', () => {
   describe('profile and avatar', () => {
     it('updates the profile cache from a wrapped response', () => {
       const updatedUser = { ...TEST_USER, name: 'Updated User' };
-      service.updateProfile({ name: updatedUser.name }).subscribe((user) => expect(user).toEqual(updatedUser));
+      service
+        .updateProfile({ name: updatedUser.name })
+        .subscribe((user) => expect(user).toEqual(updatedUser));
 
       const request = httpMock.expectOne('/api/auth/profile');
       expect(request.request.method).toBe('PATCH');
@@ -365,7 +369,9 @@ describe('AuthService', () => {
     it('stores an uploaded avatar for the current user', () => {
       const signedIn = createSignedInService({ ...TEST_USER, avatar: 'old-avatar.png' });
       const image = 'data:image/png;base64,synthetic';
-      signedIn.uploadAvatar(image).subscribe((avatar) => expect(avatar).toBe('/uploads/avatar.png'));
+      signedIn
+        .uploadAvatar(image)
+        .subscribe((avatar) => expect(avatar).toBe('/uploads/avatar.png'));
 
       const request = httpMock.expectOne('/api/auth/avatar');
       expect(request.request.method).toBe('POST');
@@ -373,7 +379,9 @@ describe('AuthService', () => {
       request.flush({ data: { avatar: '/uploads/avatar.png' } });
 
       expect(signedIn.currentUser()?.avatar).toBe('/uploads/avatar.png');
-      expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.currentUser) ?? 'null').avatar).toBe('/uploads/avatar.png');
+      expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.currentUser) ?? 'null').avatar).toBe(
+        '/uploads/avatar.png'
+      );
     });
 
     it('removes the avatar from the current user after a successful delete', () => {
@@ -385,11 +393,15 @@ describe('AuthService', () => {
       request.flush({});
 
       expect(signedIn.currentUser()?.avatar).toBeUndefined();
-      expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.currentUser) ?? 'null').avatar).toBeUndefined();
+      expect(
+        JSON.parse(localStorage.getItem(STORAGE_KEYS.currentUser) ?? 'null').avatar
+      ).toBeUndefined();
     });
 
     it('returns an uploaded avatar without changing an absent user cache', () => {
-      service.uploadAvatar('synthetic-image').subscribe((avatar) => expect(avatar).toBe('/uploads/avatar.png'));
+      service
+        .uploadAvatar('synthetic-image')
+        .subscribe((avatar) => expect(avatar).toBe('/uploads/avatar.png'));
 
       httpMock.expectOne('/api/auth/avatar').flush({ data: { avatar: '/uploads/avatar.png' } });
 

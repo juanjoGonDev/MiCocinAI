@@ -77,7 +77,7 @@ export const accountEs = {
   'account.bytes_en_entradas': '{bytes} in {n} entries',
   'account.pestanja_cuenta': 'Cuenta',
   'account.pestanja_seguridad': 'Seguridad',
-  'account.pestanja_informacion': 'Informacion',
+  'account.pestanja_informacion': 'Información',
   'account.sin_nivel': 'Sin marcar',
   'account.pw_muy_corta': 'muy corta',
   'account.pw_justa': 'justa',

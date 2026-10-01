@@ -5,6 +5,7 @@ import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ToastService } from '../../core/services/toast.service';
+import { passwordChangeErrorKey } from './account-password-error';
 import { timeZoneLabel } from '../../core/time';
 import { cookingLevelWord } from '../../shared/models/home-profile';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
@@ -986,6 +987,7 @@ export class AccountComponent {
       this.passwordError.set(this.i18n.t('account.las_dos_contrasenas_nuevas'));
       return;
     }
+    this.passwordError.set('');
     this.savingPassword.set(true);
     this.auth.changePassword(current, fresh).subscribe({
       next: () => {
@@ -999,12 +1001,7 @@ export class AccountComponent {
       },
       error: (error) => {
         this.savingPassword.set(false);
-        const message = typeof error?.error?.message === 'string' ? error.error.message : '';
-        this.passwordError.set(
-          message.includes('incorrect')
-            ? this.i18n.t('account.la_contrasena_actual_no')
-            : this.i18n.t('account.no_se_pudo_cambiar')
-        );
+        this.passwordError.set(this.i18n.t(passwordChangeErrorKey(error)));
       }
     });
   }

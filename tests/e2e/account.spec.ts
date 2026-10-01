@@ -1,5 +1,8 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { Page, expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { shoppingNewListAction } from './helpers/shopping-ui';
 
 /**
  * La cuenta de la persona, en su pagina (ronda 13). Hasta aqui vivia dentro de Preferencias, que
@@ -8,26 +11,48 @@ import { registerAndGoto } from './helpers/auth';
  * media pantalla es un fichero en `uploads/`.
  */
 
-const PNG = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-  'base64'
-);
+async function syntheticAvatarPng(page: Page): Promise<Buffer> {
+  const base64 = await page.evaluate(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 192;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('No se pudo crear el fixture sintético del avatar');
+
+    context.fillStyle = '#d95d39';
+    context.fillRect(0, 0, 128, 192);
+    context.fillStyle = '#355070';
+    context.fillRect(128, 0, 128, 192);
+    context.fillStyle = '#f6bd60';
+    context.beginPath();
+    context.arc(192, 96, 48, 0, Math.PI * 2);
+    context.fill();
+
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  return Buffer.from(base64, 'base64');
+}
 
 async function addOneItem(page: Page, name: string, item: string): Promise<void> {
   await registerAndGoto(page, '/shopping', name);
-  await page.locator('[data-test="new-list"]').click();
+  await shoppingNewListAction(page).click();
   await page.locator('[data-test="list-name"]').fill('La compra');
   await page.locator('[data-test="create-submit"]').click();
   await page.locator('[data-test="add-input"]').fill(item);
   await page.locator('[data-test="add-submit"]').click();
 }
 
+function profileEntryAction(page: Page) {
+  const width = page.viewportSize()?.width ?? 1024;
+  return page.locator(width < 1024 ? '.header__profile' : '.sidebar__account-main');
+}
+
 test.describe('Mi cuenta', () => {
-  test('tiene pagina propia, y se entra por la cara del menu', async ({ page }) => {
+  test('tiene pagina propia, y se entra por la cara del menu', async ({ page }, testInfo) => {
     await registerAndGoto(page, '/dashboard', 'acct-entry');
 
     // El avatar del menu es la puerta: lleva a la cuenta, no a las preferencias del comensal.
-    await page.locator('[data-test="account-chip"]').locator('.sidebar__account-main').click();
+    await profileEntryAction(page).click();
     await expect(page).toHaveURL(/\/account$/);
 
     // Tres sub-secciones, la primera por defecto y sin ensuciar la URL.
@@ -35,17 +60,38 @@ test.describe('Mi cuenta', () => {
     await expect(page.locator('.tab--active')).toContainText('Cuenta');
     await expect(page).not.toHaveURL(/tab=/);
 
-    await page.locator('.tab', { hasText: 'Seguridad' }).click();
+    await page.locator('[data-test="account-tab-security"]').click();
     await expect(page).toHaveURL(/[?&]tab=security/);
-    await page.locator('.tab', { hasText: 'Información' }).click();
+    const infoTab = page.locator('[data-test="account-tab-info"]');
+    await expect(infoTab).toContainText('Información');
+    await infoTab.click();
     await expect(page).toHaveURL(/[?&]tab=info/);
     await expect(page.locator('[data-test="account-email"]')).toContainText('@');
+
+    if (process.env.E2E_CAPTURE_QA_SCREENSHOTS === '1') {
+      const viewport =
+        testInfo.project.name === 'chromium'
+          ? { width: 1440, height: 900 }
+          : { width: 393, height: 851 };
+      const screenshotDirectory = join(
+        process.cwd(),
+        '.e2e-screenshots',
+        'qa-account-tabs-20261001'
+      );
+      mkdirSync(screenshotDirectory, { recursive: true });
+      await page.setViewportSize(viewport);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: join(screenshotDirectory, `account-info-${testInfo.project.name}.png`),
+        animations: 'disabled'
+      });
+    }
 
     await page.reload();
     await expect(page.locator('.tab--active')).toContainText('Información');
 
     // La de la cuenta es una pestaña con controles propios, y el enlace al comensal esta ahi.
-    await page.locator('.tab', { hasText: 'Cuenta' }).click();
+    await page.locator('[data-test="account-tab-account"]').click();
     await expect(page.locator('[data-test="account-name"]')).toBeVisible();
     await expect(page.locator('a[href="/preferences"]')).not.toHaveCount(0);
   });
@@ -60,7 +106,9 @@ test.describe('Mi cuenta', () => {
     await page.goto('/account');
     await page.locator('[data-test="account-name"]').fill('Ana Belen');
     await page.locator('[data-test="account-name-save"]').click();
-    await expect(page.locator('.toast--success').filter({ hasText: 'Nombre guardado' })).toBeVisible();
+    await expect(
+      page.locator('.toast--success').filter({ hasText: 'Nombre guardado' })
+    ).toBeVisible();
 
     // El menu ya la llama asi (misma senal que el historial, no dos copias que se separan).
     await expect(page.locator('.sidebar__account-name')).toHaveText('Ana Belen');
@@ -68,6 +116,7 @@ test.describe('Mi cuenta', () => {
     // Y la fila del historial, sin refrescar la lista: es tu linea, y decir «Ana ha anadido»
     // mientras la pantalla entera te llama de otra forma es el fallo que esto cierra.
     await page.goto('/shopping');
+    await page.locator('[data-test="list-row"]').getByRole('link').click();
     await page.locator('[data-test="item-row"]').first().click();
     await page.getByRole('button', { name: 'Quien ha tocado que' }).click();
     await expect(page.locator('[data-test="audit-row"]').first()).toContainText('Ana Belen');
@@ -76,6 +125,7 @@ test.describe('Mi cuenta', () => {
 
   test('la cara se toca: hover, modal, encuadre y foto en todos lados', async ({ page }) => {
     await registerAndGoto(page, '/account', 'acct-photo');
+    const avatarPng = await syntheticAvatarPng(page);
 
     // El disco con la inicial: tinta sobre fondo, no sobre el fondo de la pagina (que era el
     // fallo: una letra del mismo color que su propio circulo).
@@ -92,19 +142,27 @@ test.describe('Mi cuenta', () => {
     expect(ink).toBeTruthy();
     expect(ink).not.toBe(background);
 
-    // La cara es un control: en un escritorio con puntero la etiqueta sale al pasar por encima, y
-    // no ocupa sitio hasta ese momento.
+    // Con puntero el affordance aparece en hover; en tacto se queda visible porque no hay hover.
     const edit = page.locator('[data-test="account-avatar-edit"]');
-    await expect(edit).toHaveCSS('opacity', '0');
-    await page.locator('[data-test="account-avatar-button"]').hover();
-    await expect(edit).toHaveCSS('opacity', '1');
+    const hoverAvailable = await page.evaluate(() => matchMedia('(hover: hover)').matches);
+    if (hoverAvailable) {
+      await expect(edit).toHaveCSS('opacity', '0');
+      await page.locator('[data-test="account-avatar-button"]').hover();
+      await expect(edit).toHaveCSS('opacity', '1');
+    } else {
+      await expect(edit).toHaveCSS('opacity', '1');
+    }
 
     await page.locator('[data-test="account-avatar-button"]').click();
     await expect(page.locator('[data-test="account-photo-label"]')).toBeVisible();
     // Sin foto no hay nada que quitar: el boton de quite no se inventa.
     await expect(page.locator('[data-test="account-photo-remove"]')).toHaveCount(0);
 
-    await page.locator('[data-test="account-photo"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: PNG });
+    await page.locator('[data-test="account-photo"]').setInputFiles({
+      name: 'foto.png',
+      mimeType: 'image/png',
+      buffer: avatarPng
+    });
     await expect(page.locator('[data-test="avatar-stage"]')).toBeVisible();
 
     // Encuadrar: acercar cambia lo que se ve dentro del cuadro. La prueba es el estilo del `img`,
@@ -121,9 +179,15 @@ test.describe('Mi cuenta', () => {
     await page.locator('[data-test="avatar-editor-cancel"]').click();
     await expect(page.locator('[data-test="account-photo-label"]')).toBeVisible();
 
-    await page.locator('[data-test="account-photo"]').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: PNG });
+    await page.locator('[data-test="account-photo"]').setInputFiles({
+      name: 'foto.png',
+      mimeType: 'image/png',
+      buffer: avatarPng
+    });
     await page.locator('[data-test="avatar-editor-use"]').click();
-    await expect(page.locator('.toast--success').filter({ hasText: 'Imagen cambiada' })).toBeVisible();
+    await expect(
+      page.locator('.toast--success').filter({ hasText: 'Imagen cambiada' })
+    ).toBeVisible();
 
     // El modal se cierra despues de subir (el editor se va con el): si se queda abierto con la
     // foto ya guardada dentro, la pantalla miente sobre en que paso esta.
@@ -134,10 +198,17 @@ test.describe('Mi cuenta', () => {
     const photo = page.locator('[data-test="account-avatar"] img');
     await expect(photo).toHaveAttribute('src', /^\/api\/uploads\/avatars\/.+\.jpg$/);
     await expect
-      .poll(() => photo.evaluate((el) => (el as HTMLImageElement).naturalWidth), { timeout: 15_000 })
+      .poll(() => photo.evaluate((el) => (el as HTMLImageElement).naturalWidth), {
+        timeout: 15_000
+      })
       .toBeGreaterThan(0);
     await expect
-      .poll(() => photo.evaluate((el) => `${(el as HTMLImageElement).naturalWidth}x${(el as HTMLImageElement).naturalHeight}`))
+      .poll(() =>
+        photo.evaluate(
+          (el) =>
+            `${(el as HTMLImageElement).naturalWidth}x${(el as HTMLImageElement).naturalHeight}`
+        )
+      )
       .toBe('128x128');
 
     // La foto necesita anillo: sobre una tarjeta blanca dejaba de ser un circulo.
@@ -155,40 +226,117 @@ test.describe('Mi cuenta', () => {
     await page.locator('[data-test="account-photo-remove"]').click();
     await expect(page.locator('[data-test="account-avatar"] img')).toHaveCount(0);
     await expect(page.locator('[data-test="account-avatar"] .avatar__initials')).toBeVisible();
-    await expect(page.locator('.toast--success').filter({ hasText: 'Imagen quitada' })).toBeVisible();
+    await expect(
+      page.locator('.toast--success').filter({ hasText: 'Imagen quitada' })
+    ).toBeVisible();
   });
 
-  test('la contrasena se cambia aqui, y Cancelar limpia los tres campos', async ({ page }) => {
-    await registerAndGoto(page, '/account?tab=security', 'acct-pass');
+  test('la contrasena se cambia aqui, y Cancelar limpia los tres campos', async ({
+    page
+  }, testInfo) => {
+    const email = await registerAndGoto(page, '/account?tab=security', 'acct-pass');
     await expect(page.locator('.tab--active')).toContainText('Seguridad');
+    const passwordSaveButton = page.locator('[data-test="account-password-save"] button');
 
-    await expect(page.locator('[data-test="account-password-save"]')).toBeDisabled();
+    await expect(passwordSaveButton).toBeDisabled();
     await page.locator('[data-test="account-password-current"]').fill('ClaveFalsa1');
     await page.locator('[data-test="account-password-new"]').fill('Nueva1234');
     await page.locator('[data-test="account-password-repeat"]').fill('Nueva1234');
-    await expect(page.locator('[data-test="account-password-save"]')).toBeEnabled();
+    await expect(passwordSaveButton).toBeEnabled();
 
     // No coinciden: se dice aqui, antes de llamar a nadie.
     await page.locator('[data-test="account-password-repeat"]').fill('Otra12345');
-    await page.locator('[data-test="account-password-save"]').click();
-    await expect(page.locator('[data-test="account-password-error"]')).toContainText('no coinciden');
+    await passwordSaveButton.click();
+    await expect(page.locator('[data-test="account-password-error"]')).toContainText(
+      'no coinciden'
+    );
 
     // Floja: la regla es la del servidor, contada en la pantalla.
     await page.locator('[data-test="account-password-new"]').fill('nova');
     await page.locator('[data-test="account-password-repeat"]').fill('nova');
-    await page.locator('[data-test="account-password-save"]').click();
+    await passwordSaveButton.click();
     await expect(page.locator('[data-test="account-password-error"]')).toContainText('mayuscula');
 
     // Con la actual equivocada, lo que contesta el servidor, traducido.
     await page.locator('[data-test="account-password-new"]').fill('Nueva1234');
     await page.locator('[data-test="account-password-repeat"]').fill('Nueva1234');
-    await page.locator('[data-test="account-password-save"]').click();
-    await expect(page.locator('[data-test="account-password-error"]')).toContainText('La contrasena actual no es esa');
+    const wrongCurrentPasswordResponse = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/auth/change-password') &&
+        response.request().method() === 'POST'
+    );
+    await passwordSaveButton.click();
+    const response = await wrongCurrentPasswordResponse;
+    expect(response.status()).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      message: 'Current password is incorrect'
+    });
+    await expect(page.locator('[data-test="account-password-error"]')).toContainText(
+      'La contrasena actual no es esa'
+    );
+    expect(
+      await page
+        .locator('.toast--error .toast__message')
+        .filter({ hasText: 'Current password is incorrect' })
+        .count()
+    ).toBe(0);
+
+    if (process.env.E2E_CAPTURE_QA_SCREENSHOTS === '1') {
+      const viewport =
+        testInfo.project.name === 'chromium'
+          ? { width: 1440, height: 900 }
+          : { width: 393, height: 851 };
+      const screenshotDirectory = join(
+        process.cwd(),
+        '.e2e-screenshots',
+        'qa-account-password-20261001'
+      );
+      mkdirSync(screenshotDirectory, { recursive: true });
+      await page.setViewportSize(viewport);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({
+        path: join(screenshotDirectory, `account-password-error-${testInfo.project.name}.png`),
+        animations: 'disabled'
+      });
+    }
 
     await page.locator('[data-test="account-password-cancel"]').click();
     await expect(page.locator('[data-test="account-password-current"]')).toHaveValue('');
     await expect(page.locator('[data-test="account-password-new"]')).toHaveValue('');
     await expect(page.locator('[data-test="account-password-repeat"]')).toHaveValue('');
+
+    // El camino correcto también termina en el servidor, vacía el borrador y mantiene la sesión.
+    await page.locator('[data-test="account-password-current"]').fill('Test1234');
+    await page.locator('[data-test="account-password-new"]').fill('Nueva1234');
+    await page.locator('[data-test="account-password-repeat"]').fill('Nueva1234');
+    await page.route('**/api/auth/change-password', async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await route.continue();
+    });
+    const successfulPasswordChange = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/auth/change-password') &&
+        response.request().method() === 'POST'
+    );
+    await passwordSaveButton.click();
+    await expect(passwordSaveButton).toBeDisabled();
+    const success = await successfulPasswordChange;
+    expect(success.status()).toBe(200);
+    await expect(
+      page.locator('.toast--success').filter({ hasText: 'Contrasena cambiada' })
+    ).toBeVisible();
+    await expect(page.locator('[data-test="account-password-current"]')).toHaveValue('');
+    await expect(page.locator('[data-test="account-password-new"]')).toHaveValue('');
+    await expect(page.locator('[data-test="account-password-repeat"]')).toHaveValue('');
+
+    const oldLogin = await page.request.post('/api/auth/login', {
+      data: { email, password: 'Test1234' }
+    });
+    const newLogin = await page.request.post('/api/auth/login', {
+      data: { email, password: 'Nueva1234' }
+    });
+    expect(oldLogin.status()).toBe(401);
+    expect(newLogin.status()).toBe(200);
   });
 
   test('informacion dice lo que la app guarda en este navegador', async ({ page }) => {

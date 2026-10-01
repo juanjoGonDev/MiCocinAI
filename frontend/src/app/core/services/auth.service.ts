@@ -222,10 +222,18 @@ export class AuthService {
   }
 
   changePassword(oldPassword: string, newPassword: string): Observable<void> {
-    return this.http.post<void>(`${this.apiUrl}/change-password`, {
-      oldPassword,
-      newPassword
-    });
+    return this.http.post<void>(
+      `${this.apiUrl}/change-password`,
+      {
+        oldPassword,
+        newPassword
+      },
+      {
+        // AccountComponent translates the reason beside the fields; a global toast would duplicate
+        // the inline message and expose the server's English detail.
+        context: new HttpContext().set(SILENT_TOAST, true)
+      }
+    );
   }
 
   forgotPassword(email: string): Observable<void> {

@@ -1,6 +1,6 @@
-import { chmodSync, mkdtempSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/app.config.js';
@@ -81,18 +81,30 @@ describe('la cuenta de la persona', () => {
     expect(await profileAvatar(token)).toBe(avatar);
   });
 
-  it('con el disco de las imagenes sin permisos, se dice 500: nada de un 200 mentiroso', async () => {
+  it('con el destino de imagen inutilizable, se dice 500: nada de un 200 mentiroso', async () => {
     // El fallo que esto cierra es el peor posible en una pantalla de identidad: la subida
     // responde satisfecha, la URL queda en la base de datos y el navegador recibe un 404 en cada
     // `img` —una foto que «no cambia» y un toast que dice que si. Si escribir no se pudo, el
     // perfil tiene que quedarse como estaba y hay que decir por que.
     const { token } = await register('Eun');
     const before = await profileAvatar(token);
-    const ro = mkdtempSync(join(tmpdir(), 'hogaria-uploads-sin-permisos-'));
-    chmodSync(ro, 0o500);
+    const ro = mkdtempSync(join(tmpdir(), 'hogaria-uploads-inutilizables-'));
+    // `chmod(0500)` no impide escribir en Windows. En vez de depender de permisos del sistema,
+    // se coloca un fichero donde `uploads/` tendría que ser un directorio; `mkdir` falla igual
+    // en todos los sistemas y no requiere tocar datos ni rutas fuera de este fixture temporal.
+    writeFileSync(join(ro, 'uploads'), 'fixture no-dir');
+    const tempRoot = resolve(tmpdir());
+    const tempRelative = relative(tempRoot, resolve(ro));
     const saved = process.env.DATABASE_PATH;
-    process.env.DATABASE_PATH = join(ro, 'hogaria.sqlite'); // `uploads/` se crea dentro: no podra
     try {
+      if (
+        isAbsolute(tempRelative) ||
+        tempRelative === '..' ||
+        tempRelative.startsWith(`..${sep}`)
+      ) {
+        throw new Error('El fixture debe permanecer bajo el directorio temporal del sistema');
+      }
+      process.env.DATABASE_PATH = join(ro, 'hogaria.sqlite'); // `uploads/` se crea dentro: no podra
       const res = await app.request(
         '/api/auth/avatar',
         withAuth(token, { method: 'POST', body: JSON.stringify({ image: PNG_1PX }) })
@@ -102,7 +114,7 @@ describe('la cuenta de la persona', () => {
       expect(await profileAvatar(token)).toBe(before);
     } finally {
       process.env.DATABASE_PATH = saved;
-      chmodSync(ro, 0o700);
+      rmSync(ro, { recursive: true, force: true });
     }
   });
 
@@ -207,6 +219,14 @@ describe('la cuenta de la persona', () => {
 
   it('cambiar la contrasena exige la anterior, y con la nueva se entra', async () => {
     const { token, email } = await register('Luis');
+    const assertDefaultPasswordStillWorks = async () => {
+      const response = await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password: 'Clave1234' })
+      });
+      expect(response.status).toBe(200);
+    };
     const wrong = await app.request(
       '/api/auth/change-password',
       withAuth(token, {
@@ -215,6 +235,7 @@ describe('la cuenta de la persona', () => {
       })
     );
     expect(wrong.status).toBe(400);
+    await assertDefaultPasswordStillWorks();
 
     const weak = await app.request(
       '/api/auth/change-password',
@@ -224,6 +245,7 @@ describe('la cuenta de la persona', () => {
       })
     );
     expect(weak.status).toBeGreaterThanOrEqual(400);
+    await assertDefaultPasswordStillWorks();
 
     const ok = await app.request(
       '/api/auth/change-password',
