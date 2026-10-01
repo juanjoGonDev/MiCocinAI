@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -76,7 +76,7 @@ Esta spec convierte la petición de revisar toda la app en una lista verificable
 
 **Evidencia verde QA-UI.2 (2026-09-30):** `HouseholdComponent` refluye la fila de miembro a una rejilla de dos columnas en móvil; la columna de texto tiene ancho mínimo cero y nombre/correo pueden partirse, mientras las insignias ocupan una segunda fila. La regresión mide documento, columna, correo y tarjeta a 393×851 y 320×568 con nombre sintético largo en español e inglés. Tras `npm run build:prod` (el runner aislado sirve el bundle estático existente y no recompila Angular), `tsc -p tsconfig.e2e.json --noEmit` pasa; Playwright aislado con `E2E_RATE_LIMIT=on`, SQLite/puerto/semilla temporales: `household-icon-consistency.spec.ts`, Pixel 5 **3/3** y Chromium escritorio **3/3**. Capturas inspeccionadas: `.e2e-screenshots/qa-ui-2-desktop/household-members.png` y `.e2e-screenshots/qa-ui-2-mobile/household-members-{es,en}-{320x568,393x851}.png`. No se usaron el server ni la base de datos normales.
 
-## Unidad QA-UI.3 · coherencia de iconos fuera del contenido semántico (en curso)
+## Unidad QA-UI.3 · coherencia de iconos fuera del contenido semántico (resuelta)
 
 **Fuente revalidada antes de implementar:** el sistema SVG local es `IconComponent` + `IconName`, declarado por `frontend/src/app/shared/components/ui/icon/icon-paths.ts`. El generador es `frontend/scripts/icons.mjs` (no `scripts/icons.mjs`) y espera `frontend/node_modules/@material-icons/svg/svg`; esa fuente no está instalada en este entorno, así que no regenerar ni añadir dependencias sin encontrar una fuente local verificable. Preferir nombres SVG ya registrados; si no hay equivalente adecuado, quitar el ornamento y dejar texto limpio antes que inventar un icono.
 
@@ -339,6 +339,20 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 **Evidencia TDD y cierre (2026-10-01):** la regresión E2E y la unidad reprodujeron en rojo la tarjeta que seguía en Favoritas tras desfavoritarla; un caso adicional reprodujo que un GET filtrado fallido no debe cambiar la identidad del listado que sigue visible. Tras el arreglo mínimo, `recipe.service.spec.ts` pasó **11/11** en Chrome Headless. La cobertura focal del código tocado fue **100 %** en statements, branches, functions y lines (36/36, 12/12, 10/10 y 27/27). `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/recipe-favorites.spec.ts` pasó **2/2** (Chromium escritorio y Pixel 5); usó Chrome local mediante `E2E_CHROME_BIN`, puerto y SQLite temporales, usuario/recetas sintéticos y cleanup del runner. El flujo cubre fallo HTTP 500 sin cambio visual, reintento real exitoso, persistencia tras recarga, lista «Todas», nombres accesibles ES/EN y Enter. Sin errores de página; sin overflow horizontal; control favorito visible y ≥44×44 en 1440×900, 393×851 y 320×568.
 
 **Artefactos y gates:** capturas inspeccionadas (solo fixtures sintéticos): [Chromium 1440×900](.e2e-screenshots/qa-rec-fav-1/chromium/all-recipes-after-unfavorite-1440x900.png), [Pixel 5 393×851](.e2e-screenshots/qa-rec-fav-1/mobile-chrome/all-recipes-after-unfavorite-393x851.png) y [Pixel 5 320×568](.e2e-screenshots/qa-rec-fav-1/mobile-chrome/all-recipes-after-unfavorite-320x568.png). `tsc -p tsconfig.e2e.json --noEmit`, build de producción y diff check pasaron. La suite frontend completa pasó **591/591**, pero el gate global configurado en 80 % continúa fallando: statements **58.36 %**, branches **49.26 %**, lines **60.00 %**, functions **47.92 %**; no se redujo el gate y QA-04c sigue abierta. El formato Prettier focal pasó; se conserva sin reformatear el estilo histórico de los archivos completos.
+
+## Hallazgo QA-AUTH.PW-LIMIT.1 · límite de bytes al establecer una contraseña (especificada)
+
+**Fuente revalidada (2026-10-01):** el paquete activo `bcryptjs` es 2.4.3 y su `README.md` instalado establece un máximo de 72 bytes; UTF-8 puede ocupar hasta 4 bytes por carácter. Los schemas `registerSchema`, `resetPasswordSchema` y `changePasswordSchema` solo aplican mínimo/política de caracteres y no limitan los bytes, aunque sus rutas envían el nuevo valor a `bcrypt.hash`. La pantalla de registro y `/account?tab=security` tampoco validan bytes; el login y la verificación de la contraseña actual usan `bcrypt.compare`.
+
+**Reproducción sin datos ni red:** con una contraseña sintética de 73 bytes, `bcryptjs.hash` la aceptó y `bcrypt.compare` devolvió `true` tanto para los 73 bytes como para el mismo prefijo de 72 bytes. Esto confirma que el sufijo que la persona cree haber establecido no distingue la credencial. Aún falta reproducir el rechazo por ausencia de validación en las rutas/formularios antes de marcar regresiones rojas.
+
+**Conducta esperada (decisión técnica explícita):** rechazar contraseñas nuevas de más de 72 bytes UTF-8 en registro, restablecimiento y cambio; no recortarlas silenciosamente. Aceptar exactamente 72 bytes, también con caracteres multibyte. No imponer ahora un límite nuevo al login ni a la contraseña actual: preservar compatibilidad con cuentas existentes y limitar únicamente los valores que se guardan como credencial nueva.
+
+- [ ] Añadir primero pruebas de schemas/rutas: registro, reset y cambio aceptan el borde de 72 bytes y rechazan 73 bytes; incluir una cadena multibyte que distingue bytes UTF-8 de `.length`.
+- [ ] Añadir validación de bytes UTF-8 con mensajes accesibles ES/EN a los formularios de registro y cambio en Cuenta; comprobar que maxlength nativo no sustituye la validación en bytes. Mantener sin límite nuevo el campo de contraseña actual/login.
+- [ ] Reproducir en rojo y verificar en verde con Playwright real contra stack aislado: registro y cambio de contraseña en el borde, rechazo de más de 72 bytes antes de mutar la credencial, reintento/login con la credencial aceptada; no exponer valores en artefactos.
+- [ ] Ejecutar cobertura focal ≥70 % en statements/branches/functions/lines, typecheck/build y Chromium + Pixel 5; revisar ES/EN, teclado, 320/393 px, escritorio, errores de consola y persistencia.
+- [ ] Guardar e inspeccionar capturas PC/móvil sintéticas de la pantalla de seguridad; actualizar evidencia, riesgos de compatibilidad y rollback tras las pruebas.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 
@@ -711,10 +725,11 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. QA-REC.INGRESS.1 sigue como discrepancia estática: reproducir con Nginx real aislado cuando haya engine/runtime disponible y no cambiar límites antes de esa prueba.
-2. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
-3. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area y WebKit además de Chromium.
-4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
-5. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-6. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-7. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
+1. Implementar QA-AUTH.PW-LIMIT.1 con red/green TDD y límites de byte UTF-8 en todos los puntos que establecen credenciales nuevas.
+2. QA-REC.INGRESS.1 sigue como discrepancia estática: reproducir con Nginx real aislado cuando haya engine/runtime disponible y no cambiar límites antes de esa prueba.
+3. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
+4. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
+5. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
+6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+7. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+8. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
