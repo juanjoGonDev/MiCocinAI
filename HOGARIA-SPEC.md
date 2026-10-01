@@ -108,8 +108,11 @@ error_message, created_at, updated_at, finished_at`.
 - Transitions: `queued → running` takes a lease with a deadline; a worker that dies leaves
   `running` rows which are swept at startup to `failed` + `RECEIPT_EXTRACTION_INTERRUPTED` (or
   re-queued when attempts remain) — recovery is automatic, never manual.
-- Backoff per kind; `max_attempts` from Settings; single-process cooperative scheduling with a
-  concurrency cap from Settings (receipt validation concurrency 1..8).
+- Backoff per kind; `max_attempts` from Settings; single-process cooperative scheduling with one
+  queue per saved provider configuration, shared by every AI operation (not only receipt scans).
+  `ai_configs.concurrency` is the maximum in-flight work for that provider: integer `1..8`, or
+  `0` for unlimited; new configurations default to `0`. Pending jobs keep their provider-config
+  identity and can be reordered/cancelled/retried through the AI settings queue manager.
 - REST: `POST /api/ai/jobs` (create, returns the id), `GET /api/ai/jobs/:id`,
   `DELETE /api/ai/jobs/:id` (cancel), `POST /api/ai/jobs/recover`. Progress reaches the client via
   SSE invalidations, not polling.
@@ -4307,8 +4310,9 @@ cada linea es CLAVE del catalogo de la despensa —no la seccion del carrito—,
 respuesta se valida con `ticketAnswerSchema` (hermana de `photoLinesSchema` con tienda y total).
 
 **B) La cola local (`ticket-queue.ts`).** Trabajos durables en `ai_jobs` (lease 300s, `max_attempts` 3, barrido de
-arranque que devuelve a la cola lo que quedo `running`). Tick de 700ms `unref`; concurrencia POR USUARIO leida de
-`ai_configs.concurrency` (clamp 1..8, default 1, editable en caliente desde Ajustes → IA). `callAIStreaming` (nueva en
+arranque que devuelve a la cola lo que quedo `running`). La cola es por configuración de proveedor y comparte el
+dispatcher general de IA: `ai_configs.concurrency` acepta `0..8`, con `0` ilimitado y valor inicial `0`; se limita
+cualquier trabajo de IA de esa configuración, no solo los tickets. `callAIStreaming` (nueva en
 `ai-client.ts`) consume el SSE y `lineasNuevas` (`ticket-lines-stream.ts`, con spec: cadenas, escapes, llaves dentro de
 textos) extrae del JSON parcial cada linea COMPLETA —cada una se inserta en `receipt_items` al momento, que es el
 «poco a poco»—. Si el stream muere antes del primer delta, cae a `callAI`; al final revalida el esquema y reescribe
@@ -4333,8 +4337,8 @@ categoria de la despensa con el picker, precio en euros, oferta «3x2», nota) y
 la tabla se vuelve una tarjeta por linea (grid-areas, siete columnas no caben). **El icono de la cola**
 (`receipt-queue.component.ts`) vive en la cabecera movil y en el sidebar: anillo girando mientras lee, borde rojo
 quieto si algo fallo, badge con el numero; su panel ensena cada trabajo (lineas leidas, intento n de m) con parar
-todo y parar/reintentar individual. La concurrencia por proveedor se edita en Ajustes → IA («Concurrencia de
-tickets»).
+todo y parar/reintentar individual. El formulario de Ajustes → IA configura la concurrencia máxima general del
+proveedor («Concurrencia máxima», `0 = ilimitado`); el gestor detallado de la cola por proveedor vive en esa sección.
 
 **E) El estado del modulo y su UI.** Diccionario propio (`dict/receipts.ts`, ES/EN pareados) con los estados del
 pipeline y los errores de IA traducidos (NO_CONFIG → «encaja el proveedor en Ajustes → IA», como la foto de la
@@ -4552,8 +4556,9 @@ y regresion shopping-lists + sugerencias + caducidades 19/19.
    rename must land as one commit with the workflow. Kept out of P0 for exactly this reason.
 2. **localStorage is not a database** — quota (typically 5 MB) and eviction force the budget rules in
    §5; if the outbox grows past the cap, the UI blocks new offline edits rather than losing them.
-3. **OCR/AI cost and latency** — one shared queue, bounded concurrency, `max_attempts`, and kill
-   switches in Settings; a missing provider keeps every manual flow available.
+3. **OCR/AI cost and latency** — a queue per provider configuration, shared by every AI operation,
+   `max_attempts`, cancellation, and provider-scoped concurrency (`0` means no configured cap);
+   a missing provider keeps every manual flow available.
 4. **Money arithmetic** — float anywhere is a bug; cents only, tested at the boundary.
 5. **Two histories of truth** — during the merge, `pantry` and `shopping_list_items` must not both
    invent products; the catalog is the join point, and unconfirmed AI output never persists.
@@ -4633,3 +4638,75 @@ el modelo que no devuelve el JSON pedido suspende, la vía formulario no toca la
 intercepta la ruta con 700 ms de retraso y comprueba que el botón está bloqueado en «Comprobando…» SIN toast de
 éxito mientras el proveedor no ha contestado; la mono-activa crea dos configs y verifica que la nueva es la activa
 y que activar la vieja apaga la nueva. Server 837/837, e2e IA 16/16, build de producción y `check-ui` verdes.
+
+## 12an — Concurrencia máxima y gestor de cola por proveedor (pendiente)
+
+**Contrato del límite.** `ai_configs.concurrency` se presenta como **Concurrencia máxima** /
+**Maximum concurrency**. Es un entero de `0..8`; `0` significa **ilimitado** y es el valor inicial
+para configuraciones nuevas. Se mantiene el máximo positivo de 8 que ya define la API. El input
+explica `0 = ilimitado` / `0 = unlimited`, muestra el rango válido e impide guardar negativos,
+fracciones u otros valores inválidos; create y update API aplican el mismo límite. Al editar, `0`
+debe sobrevivir sin convertirse a un fallback truthy. No se reescriben en bloque valores guardados
+existentes al migrar: se conservan límites configurados previamente.
+
+**Una sola puerta de salida.** Cada llamada al modelo pasa por el dispatcher asociado al ID de
+configuración de proveedor que la recibió: recetas (una o varias), recomendaciones, planificación,
+análisis de foto de compra, estimación de caducidad, lectura de tickets y prueba de conexión.
+Ninguna ruta de producto llama directamente al transporte del proveedor. Una solicitud ya admitida
+no cambia de proveedor en silencio si el usuario activa otra configuración. Una prueba del formulario
+sin guardar usa el mismo dispatcher con datos efímeros de la petición: no crea una configuración ni
+persiste su API key.
+
+Un límite positivo restringe trabajos en curso de ESA configuración; las configuraciones tienen
+colas independientes. `0` quita el límite configurado, no desactiva el dispatcher ni bloquea la cola:
+se inician todos los trabajos elegibles. Bajar el límite no interrumpe solicitudes que ya están en
+curso; evita iniciar más hasta estar por debajo del nuevo límite. Desactivar o eliminar una
+configuración cancela los trabajos suyos pendientes y aborta los que estén en curso, sin redirigirlos
+a otra configuración. La cola inicial ordena por llegada; el reordenamiento cambia de forma atómica
+el orden solo de los trabajos pendientes.
+
+**Gestor en Ajustes → IA.** Se muestra dentro de cada configuración solo cuando `concurrency > 0`.
+Expone trabajos pendientes, en curso y fallidos terminales con metadatos seguros (tipo, estado,
+intentos y error redactado), sin mostrar API keys, prompts, adjuntos, cuerpos ni resultados. Permite:
+
+- Arrastrar trabajos pendientes para persistir su nueva prioridad; trabajos en curso no se mueven.
+  Debe existir alternativa de teclado (subir/bajar) y controles táctiles accesibles.
+- Cancelar trabajos pendientes y en curso. La cancelación en curso aborta la petición real al
+  proveedor y evita aplicar una respuesta final tardía. El flujo de tickets conserva su contrato
+  incremental actual; un retry limpia sus líneas parciales antes de volver a procesar.
+- Reintentar un fallo terminal tras agotar los reintentos automáticos. Un retry manual inicia otro
+  ciclo con la política configurada, limpia el error visible y conserva el tipo/vínculo del trabajo.
+
+Estado vacío, carga/error/reintento, carreras de cancelación/claim, aislamiento por usuario y
+configuración, caída/timeout del proveedor, cambio de límite y eliminación de configuración son
+parte del contrato. La cola debe seguir despachando cuando el gestor visual está oculto por límite 0.
+
+### Checklist QA-AI.PROVIDER-QUEUE.1
+
+- [ ] Antes de implementar, ejecutar baseline aislada: comprobar negativos, fracciones, 0/1/8/9 en
+  formulario y POST/PATCH API; registrar respuesta real sin usar la base normal.
+- [ ] API y formulario validan el mismo rango entero `0..8`; 0 es el default nuevo, significa
+  ilimitado y permanece 0 después de editar/recargar. Valores inválidos no se envían desde UI ni
+  persisten por API. No alterar configuraciones existentes por migración masiva.
+- [ ] Centralizar todo transporte de modelo; cubrir tickets, recetas, recetas múltiples,
+  recomendaciones, planificación, compra/foto, caducidad y test de conexión, incluida la prueba
+  efímera no guardada. Cada trabajo conserva el config ID y no filtra secretos/payload.
+- [ ] Tests del dispatcher prueban límite por proveedor, independencia, 0 ilimitado, FIFO inicial,
+  orden explícito persistido, cambio de cap, cancelación real y retries automático/manual.
+- [ ] API del gestor aplica autorización de usuario/config, reordena solo pendientes, cancela
+  queued/running, reintenta solo terminales y no devuelve API key, prompt, adjunto ni resultado.
+- [ ] Playwright real valida que el gestor solo aparece con cap >0, drag/drop + alternativa teclado,
+  cancelación pendiente/en curso, retry tras agotar intentos y persistencia de orden, en ES/EN.
+- [ ] Validar 320×568, 393×851, 568×320 y 1440×900 y los límites de breakpoints actuales; comprobar
+  overflow, foco, nombres/labels, errores, anuncios de estado y targets táctiles. Guardar capturas
+  sintéticas PC/móvil e inspeccionarlas.
+- [ ] Cobertura del alcance ≥70 % en statements/branches/functions/lines sin rebajar gates;
+  ejecutar typechecks, build, unit/integración y E2E aislado, y registrar resultados/limitaciones.
+
+**Fuente revalidada (2026-10-01):** solo `ticket-queue.ts` encola trabajo IA. Recetas, generación
+múltiple, recomendaciones, plan semanal, foto de compra, estimación de caducidad y test de conexión
+llaman `callAI`/`pingDeConexion` directamente. El API Zod actual parece rechazar negativos (mínimo 1),
+pero no hay cobertura de regresión y el input no ofrece límites/helper; reproducir POST/PATCH real.
+El input compartido no retransmite `min/max/step`, y `config.concurrency || 1` reemplazaría un 0 al
+editar. La cola actual atiende tickets, usa llegada sin posición mutable y carga la configuración
+activa al despachar; el contrato nuevo debe fijar proveedor y concurrencia para todos los usos.
