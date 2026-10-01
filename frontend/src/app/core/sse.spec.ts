@@ -129,4 +129,17 @@ describe('openResilientStream', () => {
     jasmine.clock().tick(120_000);
     expect(FakeSource.opened).toHaveSize(1);
   });
+
+  it('ignora errores tardíos del EventSource después del cierre explícito', () => {
+    const handle = open({ maxRetries: 2 });
+    const source = FakeSource.opened[0];
+
+    handle.close();
+    source.emitError();
+    jasmine.clock().tick(120_000);
+
+    expect(handle.status()).toBe('closed');
+    expect(FakeSource.opened).toHaveSize(1);
+    expect(statuses).toEqual(['connecting', 'closed']);
+  });
 });
