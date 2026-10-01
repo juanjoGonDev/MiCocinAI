@@ -95,11 +95,14 @@ export class PantryService {
    * diga «configura la IA» y no «error» a secas.
    */
   async estimarCaducidades(): Promise<
-    { catalogo: number; ia: number; sinEstimar: number; sinFecha: number } | { error: 'NO_CONFIG' | 'BAD_JSON' | 'ERROR' }
+    | { catalogo: number; ia: number; sinEstimar: number; sinFecha: number }
+    | { error: 'NO_CONFIG' | 'BAD_JSON' | 'ERROR' }
   > {
     try {
       const response = await firstValueFrom(
-        this.http.post<{ data: { catalogo: number; ia: number; sinEstimar: number; sinFecha: number } }>(
+        this.http.post<{
+          data: { catalogo: number; ia: number; sinEstimar: number; sinFecha: number };
+        }>(
           `${this.apiUrl}/expiry/estimate`,
           {},
           // Silencio el toast del interceptor: la pantalla de caducidades traduce el codigo a
@@ -136,17 +139,20 @@ export class PantryService {
     if (filter?.page) params = params.set('page', String(filter.page));
     if (filter?.pageSize) params = params.set('pageSize', String(filter.pageSize));
 
-    this.http.get<any>(`${this.apiUrl}/ingredients`, { params }).pipe(
-      tap(response => {
-        this.ingredientsSignal.set(response.data.ingredients);
-        this.totalSignal.set(response.data.total);
-        this.isLoadingSignal.set(false);
-      }),
-      catchError(() => {
-        this.isLoadingSignal.set(false);
-        return of(null);
-      })
-    ).subscribe();
+    this.http
+      .get<any>(`${this.apiUrl}/ingredients`, { params })
+      .pipe(
+        tap((response) => {
+          this.ingredientsSignal.set(response.data.ingredients);
+          this.totalSignal.set(response.data.total);
+          this.isLoadingSignal.set(false);
+        }),
+        catchError(() => {
+          this.isLoadingSignal.set(false);
+          return of(null);
+        })
+      )
+      .subscribe();
   }
 
   /**
@@ -165,15 +171,19 @@ export class PantryService {
       let pagina = 1;
       while (todas.length < total && pagina <= 20) {
         const params = new HttpParams().set('pageSize', '100').set('page', String(pagina));
-        const response = await firstValueFrom(this.http.get<any>(`${this.apiUrl}/ingredients`, { params }));
+        const response = await firstValueFrom(
+          this.http.get<any>(`${this.apiUrl}/ingredients`, { params })
+        );
         // El LIST de /ingredients devuelve la fila en snake_case (expiration_date) y el modelo del visor
         // promete camelCase: aqui se viste, una vez, en el unico sitio donde el visor lee las filas
         // completas (## 12ab). `loadIngredients` se queda crudo para no moverle el suelo al gestor.
-        const lote = ((response?.data?.ingredients ?? []) as Record<string, unknown>[]).map((f) => ({
-          ...f,
-          quantity: Number(f['quantity'] ?? 0),
-          expirationDate: f['expirationDate'] ?? f['expiration_date'] ?? null
-        })) as unknown as Ingredient[];
+        const lote = ((response?.data?.ingredients ?? []) as Record<string, unknown>[]).map(
+          (f) => ({
+            ...f,
+            quantity: Number(f['quantity'] ?? 0),
+            expirationDate: f['expirationDate'] ?? f['expiration_date'] ?? null
+          })
+        ) as unknown as Ingredient[];
         total = Number(response?.data?.total ?? lote.length);
         todas.push(...lote);
         if (lote.length === 0) break;
@@ -188,7 +198,7 @@ export class PantryService {
 
   getIngredient(id: string): Observable<Ingredient | null> {
     return this.http.get<any>(`${this.apiUrl}/ingredients/${id}`).pipe(
-      tap(response => response.data),
+      map((response) => response?.data ?? null),
       catchError(() => of(null))
     );
   }
@@ -210,34 +220,37 @@ export class PantryService {
 
   createIngredient(data: CreateIngredientInput): Observable<Ingredient | null> {
     return this.http.post<any>(`${this.apiUrl}/ingredients`, data).pipe(
-      tap(response => {
-        this.ingredientsSignal.update(list => [response.data, ...list]);
+      map((response) => response?.data ?? null),
+      tap((ingredient) => {
+        if (ingredient) this.ingredientsSignal.update((list) => [ingredient, ...list]);
         this.loadStats();
       }),
       // Se propaga el error: si se silencia, la UI muestra "Agregado" aunque
       // el backend haya rechazado el alta con un 400.
-      catchError(error => throwError(() => error))
+      catchError((error) => throwError(() => error))
     );
   }
 
   updateIngredient(id: string, data: UpdateIngredientInput): Observable<Ingredient | null> {
     return this.http.patch<any>(`${this.apiUrl}/ingredients/${id}`, data).pipe(
-      tap(response => {
-        this.ingredientsSignal.update(list =>
-          list.map(i => i.id === id ? response.data : i)
-        );
+      map((response) => response?.data ?? null),
+      tap((ingredient) => {
+        if (ingredient) {
+          this.ingredientsSignal.update((list) => list.map((i) => (i.id === id ? ingredient : i)));
+        }
         this.loadStats();
       }),
-      catchError(error => throwError(() => error))
+      catchError((error) => throwError(() => error))
     );
   }
 
   deleteIngredient(id: string): Observable<boolean> {
     return this.http.delete<any>(`${this.apiUrl}/ingredients/${id}`).pipe(
       tap(() => {
-        this.ingredientsSignal.update(list => list.filter(i => i.id !== id));
+        this.ingredientsSignal.update((list) => list.filter((i) => i.id !== id));
         this.loadStats();
       }),
+      map(() => true),
       catchError(() => of(false))
     );
   }
@@ -253,35 +266,33 @@ export class PantryService {
    */
   loadUtensils(): Observable<Utensil[]> {
     return this.http.get<any>(`${this.apiUrl}/utensils`).pipe(
-      tap(response => this.utensilsSignal.set(response.data ?? [])),
-      map(response => (response.data ?? []) as Utensil[])
+      tap((response) => this.utensilsSignal.set(response.data ?? [])),
+      map((response) => (response.data ?? []) as Utensil[])
     );
   }
 
   createUtensil(data: CreateUtensilInput): Observable<Utensil> {
     return this.http.post<any>(`${this.apiUrl}/utensils`, data).pipe(
-      tap(response => {
-        this.utensilsSignal.update(list => [...list, response.data]);
+      tap((response) => {
+        this.utensilsSignal.update((list) => [...list, response.data]);
       }),
-      map(response => response.data)
+      map((response) => response.data)
     );
   }
 
   updateUtensil(id: string, data: UpdateUtensilInput): Observable<Utensil> {
     return this.http.patch<any>(`${this.apiUrl}/utensils/${id}`, data).pipe(
-      tap(response => {
-        this.utensilsSignal.update(list =>
-          list.map(u => u.id === id ? response.data : u)
-        );
+      tap((response) => {
+        this.utensilsSignal.update((list) => list.map((u) => (u.id === id ? response.data : u)));
       }),
-      map(response => response.data)
+      map((response) => response.data)
     );
   }
 
   deleteUtensil(id: string): Observable<boolean> {
     return this.http.delete<any>(`${this.apiUrl}/utensils/${id}`).pipe(
       tap(() => {
-        this.utensilsSignal.update(list => list.filter(u => u.id !== id));
+        this.utensilsSignal.update((list) => list.filter((u) => u.id !== id));
       }),
       map(() => true)
     );
@@ -292,16 +303,19 @@ export class PantryService {
   // ═══════════════════════════════════════════════════════════════
 
   loadStats(): void {
-    this.http.get<any>(`${this.apiUrl}/ingredients/stats`).pipe(
-      tap(response => {
-        // El backend cuenta los ingredientes reales de la despensa en
-        // `data.total` (solo los que tienen quantity > 0); el modelo lo
-        // expone como `totalItems`, asi que se mapea aqui en lugar de
-        // guardar el payload tal cual.
-        this.statsSignal.set({ ...response.data, totalItems: response.data.total });
-      }),
-      catchError(() => of(null))
-    ).subscribe();
+    this.http
+      .get<any>(`${this.apiUrl}/ingredients/stats`)
+      .pipe(
+        tap((response) => {
+          // El backend cuenta los ingredientes reales de la despensa en
+          // `data.total` (solo los que tienen quantity > 0); el modelo lo
+          // expone como `totalItems`, asi que se mapea aqui en lugar de
+          // guardar el payload tal cual.
+          this.statsSignal.set({ ...response.data, totalItems: response.data.total });
+        }),
+        catchError(() => of(null))
+      )
+      .subscribe();
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -336,26 +350,44 @@ export class PantryService {
       });
   }
 
-  listCategories(view: PantryCategoryView = 'all', q = '', limit = 100, offset = 0): Promise<PantryCategoryListResult | null> {
-    let params = new HttpParams({ fromObject: { view, limit: String(limit), offset: String(offset) } });
+  listCategories(
+    view: PantryCategoryView = 'all',
+    q = '',
+    limit = 100,
+    offset = 0
+  ): Promise<PantryCategoryListResult | null> {
+    let params = new HttpParams({
+      fromObject: { view, limit: String(limit), offset: String(offset) }
+    });
     if (q) params = params.set('q', q);
     return this.request<PantryCategoryListResult>(() =>
-      this.http.get<any>(`${this.apiUrl}/categories`, { params }).pipe(
-        map((response) => ({ data: response.data ?? [], meta: response.meta, hasMore: Boolean(response.hasMore) }))
-      )
+      this.http
+        .get<any>(`${this.apiUrl}/categories`, { params })
+        .pipe(
+          map((response) => ({
+            data: response.data ?? [],
+            meta: response.meta,
+            hasMore: Boolean(response.hasMore)
+          }))
+        )
     ).then((resultado) => (resultado.ok ? resultado.data : null));
   }
 
   createCategory(input: PantryCategoryInput): Promise<PantryRequest<PantryCategory>> {
     return this.request<PantryCategory>(() =>
-      this.http.post<{ data: PantryCategory }>(`${this.apiUrl}/categories`, input).pipe(map((response) => response.data))
+      this.http
+        .post<{ data: PantryCategory }>(`${this.apiUrl}/categories`, input)
+        .pipe(map((response) => response.data))
     ).then((resultado) => {
       if (resultado.ok) this.loadCategories(true);
       return resultado;
     });
   }
 
-  updateCategory(id: string, input: Partial<PantryCategoryInput>): Promise<PantryRequest<PantryCategory>> {
+  updateCategory(
+    id: string,
+    input: Partial<PantryCategoryInput>
+  ): Promise<PantryRequest<PantryCategory>> {
     return this.request<PantryCategory>(() =>
       this.http
         .patch<{ data: PantryCategory }>(`${this.apiUrl}/categories/${id}`, input)
@@ -375,7 +407,9 @@ export class PantryService {
   }
 
   deleteCategory(id: string): Promise<PantryRequest<null>> {
-    return this.request<null>(() => this.http.delete<void>(`${this.apiUrl}/categories/${id}`).pipe(map(() => null))).then((resultado) => {
+    return this.request<null>(() =>
+      this.http.delete<void>(`${this.apiUrl}/categories/${id}`).pipe(map(() => null))
+    ).then((resultado) => {
       this.loadCategories(true);
       return resultado;
     });
@@ -387,23 +421,38 @@ export class PantryService {
     if (query.category) params = params.set('category', query.category);
     if (query.filter) params = params.set('filter', query.filter);
     if (query.sort) params = params.set('sort', query.sort);
-    params = params.set('limit', String(query.limit ?? 10)).set('offset', String(query.offset ?? 0));
+    params = params
+      .set('limit', String(query.limit ?? 10))
+      .set('offset', String(query.offset ?? 0));
     return this.request<PantryProductListResult>(() =>
-      this.http.get<any>(`${this.apiUrl}/products`, { params }).pipe(
-        map((response) => ({ data: (response.data ?? []) as PantryProduct[], meta: response.meta, hasMore: Boolean(response.hasMore) }))
-      )
+      this.http
+        .get<any>(`${this.apiUrl}/products`, { params })
+        .pipe(
+          map((response) => ({
+            data: (response.data ?? []) as PantryProduct[],
+            meta: response.meta,
+            hasMore: Boolean(response.hasMore)
+          }))
+        )
     ).then((resultado) => (resultado.ok ? resultado.data : null));
   }
 
   createProduct(input: PantryProductInput): Promise<PantryRequest<PantryProduct>> {
     return this.request<PantryProduct>(() =>
-      this.http.post<{ data: PantryProduct }>(`${this.apiUrl}/products`, input).pipe(map((response) => response.data))
+      this.http
+        .post<{ data: PantryProduct }>(`${this.apiUrl}/products`, input)
+        .pipe(map((response) => response.data))
     );
   }
 
-  updateProduct(id: string, input: Partial<PantryProductInput>): Promise<PantryRequest<PantryProduct>> {
+  updateProduct(
+    id: string,
+    input: Partial<PantryProductInput>
+  ): Promise<PantryRequest<PantryProduct>> {
     return this.request<PantryProduct>(() =>
-      this.http.patch<{ data: PantryProduct }>(`${this.apiUrl}/products/${id}`, input).pipe(map((response) => response.data))
+      this.http
+        .patch<{ data: PantryProduct }>(`${this.apiUrl}/products/${id}`, input)
+        .pipe(map((response) => response.data))
     );
   }
 
@@ -416,7 +465,9 @@ export class PantryService {
   }
 
   deleteProduct(id: string): Promise<PantryRequest<null>> {
-    return this.request<null>(() => this.http.delete<void>(`${this.apiUrl}/products/${id}`).pipe(map(() => null)));
+    return this.request<null>(() =>
+      this.http.delete<void>(`${this.apiUrl}/products/${id}`).pipe(map(() => null))
+    );
   }
 
   /** Lo que el dialogo de lote necesita saber antes de marcar nada: cuales se pueden y cuales estorban. */
@@ -443,24 +494,34 @@ export class PantryService {
   listCatalogCategories(): Promise<PantryCatalogCategory[]> {
     return this.request<{ data: PantryCatalogCategory[] }>(() =>
       this.http.get<{ data: PantryCatalogCategory[] }>(`${this.apiUrl}/catalog/categories`)
-    ).then((resultado) => (resultado.ok ? resultado.data?.data ?? [] : []));
+    ).then((resultado) => (resultado.ok ? (resultado.data?.data ?? []) : []));
   }
 
   listCatalog(query: PantryCatalogQuery = {}): Promise<PantryCatalogListResult | null> {
     let params = new HttpParams();
     if (query.q) params = params.set('q', query.q);
     if (query.category) params = params.set('category', query.category);
-    params = params.set('limit', String(query.limit ?? 24)).set('offset', String(query.offset ?? 0));
+    params = params
+      .set('limit', String(query.limit ?? 24))
+      .set('offset', String(query.offset ?? 0));
     return this.request<PantryCatalogListResult>(() =>
-      this.http.get<any>(`${this.apiUrl}/catalog/products`, { params }).pipe(
-        map((response) => ({ data: (response.data ?? []) as PantryCatalogListResult['data'], meta: response.meta, hasMore: Boolean(response.hasMore) }))
-      )
+      this.http
+        .get<any>(`${this.apiUrl}/catalog/products`, { params })
+        .pipe(
+          map((response) => ({
+            data: (response.data ?? []) as PantryCatalogListResult['data'],
+            meta: response.meta,
+            hasMore: Boolean(response.hasMore)
+          }))
+        )
     ).then((resultado) => (resultado.ok ? resultado.data : null));
   }
 
   addFromCatalog(ids: string[]): Promise<PantryRequest<PantryCatalogAddResult>> {
     return this.request<PantryCatalogAddResult>(() =>
-      this.http.post<{ data: PantryCatalogAddResult }>(`${this.apiUrl}/catalog/add`, { ids }).pipe(map((response) => response.data))
+      this.http
+        .post<{ data: PantryCatalogAddResult }>(`${this.apiUrl}/catalog/add`, { ids })
+        .pipe(map((response) => response.data))
     );
   }
 
@@ -476,7 +537,11 @@ export class PantryService {
       return { ok: true, data: await firstValueFrom(factory()) };
     } catch (error) {
       if (error instanceof HttpErrorResponse) {
-        const cuerpo = (error.error ?? {}) as { error?: string; message?: string; details?: unknown };
+        const cuerpo = (error.error ?? {}) as {
+          error?: string;
+          message?: string;
+          details?: unknown;
+        };
         return {
           ok: false,
           status: error.status,
@@ -485,10 +550,14 @@ export class PantryService {
           ...(cuerpo.details === undefined ? {} : { details: cuerpo.details })
         };
       }
-      return { ok: false, status: 0, error: 'NETWORK', message: error instanceof Error ? error.message : 'Error de red' };
+      return {
+        ok: false,
+        status: 0,
+        error: 'NETWORK',
+        message: error instanceof Error ? error.message : 'Error de red'
+      };
     } finally {
       this.savingSignal.set(false);
     }
   }
 }
-

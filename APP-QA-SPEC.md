@@ -626,14 +626,16 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 - [ ] Cubrir streams, fotos, cierre de compra, artículos, precios y búsquedas dentro del contrato actual; alcanzar ≥70 % S/B/F/L del servicio antes de cerrar la unidad.
 - [ ] Repetir full frontend + gate local sin reducirlo; registrar impacto y mantener fixture sintético, sin tocar DB normal/proveedor real.
 
-### QA-04c.CORE.PANTRY.1 · cobertura de inventario, categorías y catálogo (pendiente)
+### QA-04c.CORE.PANTRY.1 · cobertura de inventario, categorías y catálogo (resuelta localmente; gate global pendiente)
 
 **Fuente revalidada (2026-10-01):** `pantry.service.spec.ts` existente solo cubre la carga/reintento de caducidades; el reporte global muestra `PantryService` en 14.60/1.92/4.46/16.48 % (S/B/F/L). La API actual agrupa ingredientes/utensilios, carga paginada, stats, categorías/productos, impactos y catálogo. `GET /ingredients/:id` devuelve `{data: ingredient}`, pero `getIngredient()` usa `tap(response => response.data)` sin proyectar el resultado; `createIngredient()` y `updateIngredient()` también declaran emitir `Ingredient|null` pero conservan el envelope mientras actualizan signals. Es discrepancia entre firmas, respuesta REST observada en `server/src/routes/pantry.routes.ts` y operador actual, no decisión de producto.
 
-- [ ] Añadir primero pruebas de contrato que exijan que `getIngredient/createIngredient/updateIngredient` emitan `data` (o `null` ante ausencia según firma) y actualicen signals/estadísticas como corresponda.
-- [ ] Añadir pruebas aisladas para paginación/defaults, filtros, CRUD y errores, carga de utensilios/stats, manager categorías/productos e impactos, operaciones bulk y catálogo.
-- [ ] Corregir la proyección de envelopes solo cuando la regresión la demuestre; comprobar finalización de `loading/saving`, error reintentable y cache/force de categorías.
+- [x] Añadir primero pruebas de contrato que exijan que `getIngredient/createIngredient/updateIngredient` emitan `data` (o `null` ante ausencia según firma) y actualicen signals/estadísticas como corresponda.
+- [x] Añadir pruebas aisladas para paginación/defaults, filtros, CRUD y errores, carga de utensilios/stats, manager categorías/productos e impactos, operaciones bulk y catálogo.
+- [x] Corregir la proyección de envelopes solo cuando la regresión la demuestre; comprobar finalización de `loading/saving`, error reintentable y cache/force de categorías.
 - [ ] Alcanzar ≥70 % S/B/F/L de `PantryService`, ejecutar suite frontend y verificar que no se toca DB de uso normal.
+
+**Evidencia QA-04c.CORE.PANTRY.1 (2026-10-01):** `pantry.service.spec.ts` cubre contratos HTTP, estados, filtros/paginación, CRUD, utensilios/stats, categorías/productos, impactos/bulk y catálogo. El grupo aislado de servicios ejecutó **65/65**. TDD confirmó que `getIngredient`, `createIngredient` y `updateIngredient` emitían `{data: ...}` pese a declarar `Ingredient|null`; ahora proyectan `data`, mantienen las señales y no insertan `null`. `deleteIngredient` también proyecta éxito como `true` conforme a su tipo. Cobertura de `PantryService`: **100/84.82/100/100 %** (S/B/F/L). Suite completa/gate global pendientes.
 
 ### QA-04c.CORE.HOUSEHOLD.1 · cobertura y contratos del hogar (resuelta localmente; gate global pendiente)
 
