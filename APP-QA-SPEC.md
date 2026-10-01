@@ -1007,6 +1007,15 @@ Rollback previsto: revertir el commit atómico de esta unidad para quitar el gua
 
 **Baseline funcional (2026-10-01):** `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/household.spec.ts`, con `E2E_RATE_LIMIT=on` y Chrome local, terminó **4/4** sobre una SQLite temporal. Recorre crear hogar/enlace/controles de compartir y visualización pública de invitación; no fuerza errores de escritura ni comprueba que la secuencia de creación/unión sea atómica. La hipótesis de escrituras parciales queda pendiente de reproducción mediante la prueba de integración anterior.
 
+### QA-HOUSEHOLD.MEMBER-OWNERSHIP.1 · Limitar cambios de miembros al hogar administrador
+
+**Fuente revalidada (2026-10-01):** `PATCH /api/household` verifica que quien llama sea administrador de su `household_id`, pero la actualización opcional de rol/permisos busca después por `household_members.id` sin incluir ese `household_id`. Falta una prueba que demuestre si un admin que conozca un ID de otro hogar puede alterarlo. La conducta esperada es que ningún administrador modifique miembros ajenos a su hogar; responder 404 para un miembro ausente/ajeno evita revelar su existencia. No hay cambio visual previsto y el formulario actual de Hogar no expone edición de roles.
+
+- [ ] Añadir primero una prueba de integración con dos hogares y administrador sintético; enviar el ID de membresía del otro hogar y reproducir el resultado actual sobre SQLite en memoria.
+- [ ] Rechazar membresía ausente o de otro hogar con 404, sin cambiar rol ni permisos; conservar la actualización legítima de un miembro local por admin y el 403 de un usuario no admin.
+- [ ] Cubrir la autorización de miembro con ≥70 % de statements, branches, functions y lines; comprobar lectura posterior y ausencia de escrituras cruzadas en la base aislada.
+- [ ] Sin cambio visual: capturas N/A. Mantener pendiente el barrido general `/household` y no mezclar decisiones de política de roles no mostradas por la UI.
+
 ### Cocina, despensa y planificación
 
 - [ ] `/pantry`: ingredientes/utensilios, búsqueda, filtro/categoría, orden, paginar/seleccionar, lote, cantidad/unidad, alta/edición/borrado y sugerencias; estados vacío, sin resultados, error y recarga.
