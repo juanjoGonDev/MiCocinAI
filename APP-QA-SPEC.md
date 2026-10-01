@@ -994,6 +994,19 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 Rollback previsto: revertir el commit atómico de esta unidad para quitar el guard y sus pruebas; conservar el commit previo que publicó primero la especificación.
 
+### QA-HOUSEHOLD.CREATE-JOIN.ATOMICITY.1 · Crear o unirse a un hogar sin escrituras parciales
+
+**Fuente revalidada (2026-10-01):** `POST /api/household`, `POST /api/household/join` y `POST /api/household/join/:code` escriben membresía, `users.household_id`, adopción del inventario personal y semillas del hogar. `create` y `doJoin` no envuelven hoy toda la secuencia en una transacción. `adoptPersonalRowsIntoHousehold()` actualiza y borra filas personales antes de `seedDefaultsForHousehold()`, por lo que falta evidencia de que un error de SQL revierta la secuencia completa. El contrato define que HogarIA comparte inventario y el código actual traslada el inventario personal al hogar; no define una política de producto distinta para una persona que ya pertenecía a otro hogar. Esta unidad conservará el comportamiento exitoso actual y no decidirá esa política.
+
+- [ ] Añadir primero pruebas de integración de las rutas con `DATABASE_PATH=:memory:` y un trigger SQLite determinista que falle durante la siembra, después de iniciar la adopción; reproducir el resultado actual antes de implementar.
+- [ ] En fallo al crear: no dejar hogar, membresía, `users.household_id` ni semillas parciales; conservar intactos los ingredientes y utensilios personales.
+- [ ] En fallo al unirse por ambos endpoints: conservar hogar y membresía anteriores, `users.household_id` y filas personales; no dejar nueva membresía ni semillas parciales.
+- [ ] Confirmar que al retirar el trigger crear/unirse sí termina con adopción y siembra completas; conservar 404 de código inválido y 409 de miembro duplicado.
+- [ ] Cubrir la lógica transaccional en éxito/error con ≥70 % de statements, branches, functions y lines; ejecutar la suite focal y repetir `household.spec.ts` en Chromium y Pixel 5 con SQLite temporal y rate limit activo.
+- [ ] No hay cambio visual; capturas PC/móvil son N/A. Mantener sin marcar el barrido general `/household` hasta cubrir invitaciones, permisos, roles, salida, errores y dimensiones.
+
+**Baseline funcional (2026-10-01):** `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/household.spec.ts`, con `E2E_RATE_LIMIT=on` y Chrome local, terminó **4/4** sobre una SQLite temporal. Recorre crear hogar/enlace/controles de compartir y visualización pública de invitación; no fuerza errores de escritura ni comprueba que la secuencia de creación/unión sea atómica. La hipótesis de escrituras parciales queda pendiente de reproducción mediante la prueba de integración anterior.
+
 ### Cocina, despensa y planificación
 
 - [ ] `/pantry`: ingredientes/utensilios, búsqueda, filtro/categoría, orden, paginar/seleccionar, lote, cantidad/unidad, alta/edición/borrado y sugerencias; estados vacío, sin resultados, error y recarga.
