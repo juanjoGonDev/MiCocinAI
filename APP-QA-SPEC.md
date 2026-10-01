@@ -1090,6 +1090,19 @@ Rollback previsto: revertir el commit atómico de esta unidad para quitar el gua
 
 `sse.spec.ts` en Chrome Headless del sistema pasó **7/7**. Cobertura focal de `core/sse.ts`: **80/70,59/71,43/85,07 % S/B/F/L**; el test adicional de error tardío tras cierre explícito eleva ramas sobre el mínimo de 70 %. Karma terminó con exit 1 porque el umbral global configurado de **80 %** no se alcanza en branches/functions durante esta ejecución focal; no se rebajó ningún gate. `node node_modules/typescript/bin/tsc -p tsconfig.e2e.json --noEmit`, Prettier local (`node node_modules/prettier/bin/prettier.cjs --check APP-QA-SPEC.md frontend/src/app/core/sse.spec.ts tests/e2e/logs-sse-reconnect.spec.ts`) y `git diff --check` pasan. `pnpm exec prettier` no pudo abrir el directorio de Corepack por `EPERM`; usar el binario local dio resultado verde. No hubo cambios de diseño/UI; capturas PC/móvil: N/A. La ruta completa `/logs`, la deuda global frontend QA-04c y las capacidades de HOGARIA §6 continúan pendientes.
 
+### Unidad QA-LOGS.CLEAR-FILTERS.1 · filtro por nivel y borrado confirmado
+
+**Fuente revalidada antes de implementar:** el contrato activo `HOGARIA-SPEC.md` §6 conserva filtros de nivel/fuente y navegación de logs. El E2E `logs.spec.ts` cubre filtro de fuente, selección/copia y controles de pausa/autoscroll, pero no el filtro de nivel ni el borrado. El componente sí presenta `levelOptions`, pide `ConfirmService.confirm()` antes de borrar y llama a `clearSelection()` inmediatamente después de iniciar el DELETE. `LogService.clear()` solo maneja `next`: ante fallo HTTP la lista no se vacía, pero la selección ya se pierde y el `subscribe` carece de handler de error; el interceptor común emite su toast genérico. Se comprobará ese fallo real/inyectado antes de tocar código. La ruta general `/logs` sigue abierta también por cola vacía/larga y capacidades aún ausentes de HOGARIA §6 (vistas guardadas, «solo errores», expansión de `data` y `/report`).
+
+- [ ] Sembrar errores/warnings/info sintéticos; filtrar por nivel y verificar que solo las entradas del nivel elegido permanecen visibles, y que «Todos» recupera las tres.
+- [ ] Seleccionar una línea, abrir confirmación y cancelar con Escape y con el botón Cancelar; afirmar cero DELETE, contenido y selección intactos.
+- [ ] Confirmar un DELETE que responda 503; preservar logs y selección, anunciar el error accesiblemente, no producir `pageerror` y permitir reintentar.
+- [ ] Reintentar contra el servidor aislado con éxito; esperar el DELETE 200, vista vacía y selección despejada. Cubrir la lógica modificada con pruebas de `LogService`/integración.
+- [ ] Ejecutar el flujo real en Chromium y Pixel 5, con rate limit, DB/puertos/semillas sintéticos; comprobar overflow en 320×568, 393×851, 568×320, 1023/1024/1025 y 1440×900, teclado/foco/Escape/targets táctiles.
+- [ ] Alcanzar ≥70 % S/B/F/L en cada archivo de producción tocado, respetar los gates superiores, ejecutar typecheck/formato/diff checks y guardar/inspeccionar capturas sintéticas PC/móvil de la notificación de error.
+
+**Baseline observado (2026-10-01):** `logs.spec.ts` pasa **12/12** en el runner Playwright aislado con rate limit activo, Chrome local y SQLite/puertos/semilla efímeros (`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/logs.spec.ts`). El servicio no tiene actualmente una spec unitaria propia; el source confirma que un `DELETE` fallido deja la lista local sin limpiar, pero aún no se ha probado en la pantalla el estado de selección/error.
+
 ## Matriz responsive, visual y accesibilidad
 
 - [ ] Barrido de **todas las rutas** en 320, 360, 390/393, 430, 768, 1023, 1024, 1280 y 1440 px; guardar ruta, viewport, overflow y errores por página.
