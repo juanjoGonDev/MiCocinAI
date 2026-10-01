@@ -66,6 +66,8 @@ export class ShoppingService {
   private readonly apiUrl = '/api/shopping';
 
   private readonly queue: QueuedWrite[] = [];
+  private onlineEventVersion = 0;
+  private pausedAfterNetworkError = false;
 
   readonly lists = signal<ShoppingList[]>([]);
   readonly list = signal<ShoppingList | null>(null);
@@ -93,7 +95,11 @@ export class ShoppingService {
     // un 4xx es un error de datos, no de red, y reintentarlo solo gastaria bateria.
     fromEvent(window, 'online')
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => void this.flush());
+      .subscribe(() => {
+        this.onlineEventVersion += 1;
+        this.pausedAfterNetworkError = false;
+        void this.flush();
+      });
   }
 
   // ---------------------------------------------------------------- listas
@@ -311,7 +317,7 @@ export class ShoppingService {
       this.http
         .post<{ data: PhotoAnalysis }>(
           `${this.apiUrl}/lists/${listId}/photo/analyze`,
-          { image, mode, note: note || undefined },
+          { image, mode, note: note?.trim() || undefined },
           { context: photoAnalysisHttpContext() }
         )
         .pipe(
@@ -353,7 +359,10 @@ export class ShoppingService {
   createList(name: string, store?: string | null): Promise<ShoppingList | null> {
     return this.request<ShoppingList>(() =>
       this.http
-        .post<{ data: ShoppingList }>(`${this.apiUrl}/lists`, { name, store: store || null })
+        .post<{ data: ShoppingList }>(`${this.apiUrl}/lists`, {
+          name,
+          store: store?.trim() || null
+        })
         .pipe(
           map((response) => response.data),
           tap(() => this.loadLists())
@@ -845,30 +854,45 @@ export class ShoppingService {
   private flushing = false;
 
   private async flush(): Promise<void> {
-    if (this.flushing) return;
+    if (this.flushing || this.pausedAfterNetworkError) return;
     this.flushing = true;
-    while (this.queue.length > 0) {
-      const entry = this.queue[0];
-      try {
-        await firstValue(entry.send());
-        this.queue.shift();
-      } catch (error) {
-        // Error de negocio (4xx): reintentar no lo arregla, se descarta y se avisa.
-        if (isConflict(error)) {
+    let observedOnlineEvent = this.onlineEventVersion;
+    try {
+      while (this.queue.length > 0) {
+        const entry = this.queue[0];
+        try {
+          await firstValue(entry.send());
           this.queue.shift();
-          this.toast.warning(
-            this.i18n.t('ui.la_lista_cambio_en'),
-            this.i18n.t('ui.se_han_vuelto_a')
-          );
-          const listId = this.list()?.id;
-          if (listId) this.loadList(listId);
-          continue;
+        } catch (error) {
+          // Error de negocio (4xx): reintentar no lo arregla, se descarta y se avisa.
+          if (isConflict(error)) {
+            this.queue.shift();
+            this.toast.warning(
+              this.i18n.t('ui.la_lista_cambio_en'),
+              this.i18n.t('ui.se_han_vuelto_a')
+            );
+            const listId = this.list()?.id;
+            if (listId) this.loadList(listId);
+            continue;
+          }
+          if (isNetworkError(error)) {
+            // Si `online` llego mientras la request seguia pendiente, damos un unico
+            // reintento porque el evento pudo preceder a la respuesta de red fallida.
+            if (this.onlineEventVersion > observedOnlineEvent) {
+              observedOnlineEvent = this.onlineEventVersion;
+              continue;
+            }
+            // Conserva la escritura, pero no la reenvia en un bucle ni ante otro cambio
+            // local hasta que el navegador confirme que vuelve la conexion.
+            this.pausedAfterNetworkError = true;
+            break;
+          }
+          this.queue.shift();
         }
-        if (isNetworkError(error)) continue; // se queda en la cola hasta tener red
-        this.queue.shift();
       }
+    } finally {
+      this.flushing = false;
     }
-    this.flushing = false;
   }
 
   /** Petición corta: se espera, se propaga el fallo al llamador y ya. */

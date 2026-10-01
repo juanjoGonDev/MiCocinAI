@@ -616,15 +616,17 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 **Evidencia QA-04c.CORE.TASTE.1 (2026-10-01):** `taste-profile.service.spec.ts` cubre carga/idempotencia, normalización, payloads y errores con `HttpTestingController`: 10/10; cobertura actual 100/100/100/100 %. La suite frontend completa, ya con esta spec, ejecutó 665/665 y dejó el global en 60.30/52.21/49.80/61.92 %, por debajo del gate 80 % (QA-04c.GATE.1). No se modificó threshold ni se escribieron datos externos.
 
-### QA-04c.CORE.SHOPPING.1 · cobertura y drenaje de escrituras offline (pendiente)
+### QA-04c.CORE.SHOPPING.1 · cobertura y drenaje de escrituras offline (resuelta localmente; gate global pendiente)
 
 **Fuente revalidada (2026-10-01):** no hay spec directa de `ShoppingService`; la única spec que lo importa lo reemplaza con un mock. El HTML del reporte global actual confirma 1/338 statements (0.29 %), 0/174 branches, 0/154 functions y 1/298 lines (0.33 %). El servicio concentra consultas/paginación, sugerencias, CRUD de listas/artículos, precios, fotos, SSE y cola offline.
 
-- [ ] Añadir primero regresiones `HttpTestingController` para parámetros/respuestas y estados de lectura, guardado, errores HTTP y recargas anidadas de las operaciones públicas principales.
-- [ ] Reproducir de forma acotada el fallo de red de `flush()`: el código conserva la primera escritura y ejecuta `continue` en el mismo `while`, reemitiéndola enseguida en vez de esperar el evento `online`; fijar conducta esperada de cola retenida, un intento por desconexión y reanudación al recuperar red, sin tormenta de solicitudes.
-- [ ] Implementar las correcciones mínimas que exijan las regresiones; cubrir deduplicación, orden, conflicto 409, errores de red/no-red, cambios optimistas y `pendingWrites`.
-- [ ] Cubrir streams, fotos, cierre de compra, artículos, precios y búsquedas dentro del contrato actual; alcanzar ≥70 % S/B/F/L del servicio antes de cerrar la unidad.
+- [x] Añadir primero regresiones `HttpTestingController` para parámetros/respuestas y estados de lectura, guardado, errores HTTP y recargas anidadas de las operaciones públicas principales.
+- [x] Reproducir de forma acotada el fallo de red de `flush()`: el código conserva la primera escritura y ejecuta `continue` en el mismo `while`, reemitiéndola enseguida en vez de esperar el evento `online`; fijar conducta esperada de cola retenida, un intento por desconexión y reanudación al recuperar red, sin tormenta de solicitudes.
+- [x] Implementar las correcciones mínimas que exijan las regresiones; cubrir deduplicación, orden, conflicto 409, errores de red/no-red, cambios optimistas y `pendingWrites`.
+- [x] Cubrir streams, fotos, cierre de compra, artículos, precios y búsquedas dentro del contrato actual; alcanzar ≥70 % S/B/F/L del servicio antes de cerrar la unidad.
 - [ ] Repetir full frontend + gate local sin reducirlo; registrar impacto y mantener fixture sintético, sin tocar DB normal/proveedor real.
+
+**Evidencia QA-04c.CORE.SHOPPING.1 (2026-10-01):** se añadieron 32 pruebas `HttpTestingController`; `shopping.service.spec.ts` pasó **32/32**. La regresión reprodujo el retry en bucle al recibir error de red; ahora conserva las escrituras, pausa el drenaje (también para nuevos cambios locales) y reanuda al evento `online`, con una comprobación de evento concurrente para no perder una reconexión recibida antes de que falle la request. Se normaliza whitespace en nombre de tienda y nota de foto en consonancia con `createListSchema`/`photoAnalyzeSchema`. Cobertura de `ShoppingService`: **98.56/90.96/100/99.02 %** (S/B/F/L). No se usó DB/proveedor normal; queda pendiente la suite frontend completa y el gate global.
 
 ### QA-04c.CORE.PANTRY.1 · cobertura de inventario, categorías y catálogo (resuelta localmente; gate global pendiente)
 
