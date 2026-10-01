@@ -4639,7 +4639,7 @@ intercepta la ruta con 700 ms de retraso y comprueba que el botón está bloquea
 éxito mientras el proveedor no ha contestado; la mono-activa crea dos configs y verifica que la nueva es la activa
 y que activar la vieja apaga la nueva. Server 837/837, e2e IA 16/16, build de producción y `check-ui` verdes.
 
-## 12an — Concurrencia máxima y gestor de cola por proveedor (pendiente)
+## 12an — Concurrencia máxima y gestor de cola por proveedor (implementado)
 
 **Contrato del límite.** `ai_configs.concurrency` se presenta como **Concurrencia máxima** /
 **Maximum concurrency**. Es un entero de `0..8`; `0` significa **ilimitado** y es el valor inicial
@@ -4665,9 +4665,12 @@ configuración cancela los trabajos suyos pendientes y aborta los que estén en 
 a otra configuración. La cola inicial ordena por llegada; el reordenamiento cambia de forma atómica
 el orden solo de los trabajos pendientes.
 
-**Gestor en Ajustes → IA.** Se muestra dentro de cada configuración solo cuando `concurrency > 0`.
-Expone trabajos pendientes, en curso y fallidos terminales con metadatos seguros (tipo, estado,
-intentos y error redactado), sin mostrar API keys, prompts, adjuntos, cuerpos ni resultados. Permite:
+**Gestor en Ajustes → IA.** El listado de proveedores permanece compacto: cada configuración con
+`concurrency > 0` muestra una acción para abrir su vista dedicada de cola (`/ai-config/:configId/queue`),
+con el nombre/configuración del proveedor y una navegación explícita de vuelta al listado. La vista
+solo carga la cola de esa configuración y expone trabajos pendientes, en curso y fallidos terminales
+con metadatos seguros (tipo, estado, intentos y error redactado), sin mostrar API keys, prompts,
+adjuntos, cuerpos ni resultados. Permite:
 
 - Arrastrar trabajos pendientes para persistir su nueva prioridad; trabajos en curso no se mueven.
   Debe existir alternativa de teclado (subir/bajar) y controles táctiles accesibles.
@@ -4677,6 +4680,26 @@ intentos y error redactado), sin mostrar API keys, prompts, adjuntos, cuerpos ni
 - Reintentar un fallo terminal tras agotar los reintentos automáticos. Un retry manual inicia otro
   ciclo con la política configurada, limpia el error visible y conserva el tipo/vínculo del trabajo.
 
+**Ciclo de vida de datos y retry síncrono.** `ai_jobs` persiste solo metadatos de despacho; prompts,
+imágenes/adjuntos, respuestas y cierres de ejecución viven solo en RAM. Un fallo genérico con
+configuración guardada y concurrencia positiva conserva la operación síncrona original pendiente
+durante 5 minutos tras agotar retries automáticos. Un retry manual reejecuta la misma closure; si
+termina correctamente, resuelve la petición HTTP original y deja que su caller procese/guarde el
+resultado. Cada fallo manual abre otra ventana de 5 minutos. Al vencer la ventana el caller se
+rechaza (o devuelve el último veredicto fallido de conexión), el error pasa a `INPUT_EXPIRED` y el
+payload se libera. Al cancelar/desactivar/eliminar se aborta y libera la ejecución. Configuración
+efímera de prueba y concurrencia 0 no exponen gestor ni ventana manual: la petición termina al
+agotar retries. Se limita el payload residente a 100 jobs y 32 MiB por usuario; una solicitud que
+exceda cualquiera recibe `QUEUE_CAPACITY`. Tras reinicio, tickets recuperables mantienen su
+`receipt_id`/archivo, pero los jobs genéricos sin closure fallan `INPUT_EXPIRED`; no se afirma
+persistencia/reintento de payloads genéricos. La cola requiere una sola instancia Node por base
+SQLite: las closures genéricas son locales al proceso y no se comparte memoria entre workers. El
+worker solo reclama un job genérico si conserva esa closure; no se debe desplegar más de un proceso
+servidor contra la misma DB sin reemplazar este contrato por ownership/lease multiproceso. Cada
+claim incrementa `claim_generation`; cancelación y reinicio invalidan la generación en curso. Las
+escrituras incrementales/finales verifican estado y generación para que una respuesta tardía de un
+intento cancelado no modifique un retry posterior del mismo job.
+
 Estado vacío, carga/error/reintento, carreras de cancelación/claim, aislamiento por usuario y
 configuración, caída/timeout del proveedor, cambio de límite y eliminación de configuración son
 parte del contrato. La cola debe seguir despachando cuando el gestor visual está oculto por límite 0.
@@ -4684,25 +4707,27 @@ parte del contrato. La cola debe seguir despachando cuando el gestor visual est�
 ### Checklist QA-AI.PROVIDER-QUEUE.1
 
 - [x] Baseline aislada antes de implementar: POST de `-1`, `1.5` y `9`, PATCH de `-1`, y POST de
-  `0`; registrar respuesta real sin usar la base normal. (Los límites válidos `1/8` se verifican en
-  las pruebas finales; no se afirma haberlos recorrido en el build previo.)
+      `0`; registrar respuesta real sin usar la base normal. (Los límites válidos `1/8` se verifican en
+      las pruebas finales; no se afirma haberlos recorrido en el build previo.)
 - [x] API y formulario validan el mismo rango entero `0..8`; 0 es el default nuevo, significa
-  ilimitado y permanece 0 después de editar/recargar. Valores inválidos no se envían desde UI ni
-  persisten por API. No alterar configuraciones existentes por migración masiva.
-- [ ] Centralizar todo transporte de modelo; cubrir tickets, recetas, recetas múltiples,
-  recomendaciones, planificación, compra/foto, caducidad y test de conexión, incluida la prueba
-  efímera no guardada. Cada trabajo conserva el config ID y no filtra secretos/payload.
-- [ ] Tests del dispatcher prueban límite por proveedor, independencia, 0 ilimitado, FIFO inicial,
-  orden explícito persistido, cambio de cap, cancelación real y retries automático/manual.
-- [ ] API del gestor aplica autorización de usuario/config, reordena solo pendientes, cancela
-  queued/running, reintenta solo terminales y no devuelve API key, prompt, adjunto ni resultado.
-- [ ] Playwright real valida que el gestor solo aparece con cap >0, drag/drop + alternativa teclado,
-  cancelación pendiente/en curso, retry tras agotar intentos y persistencia de orden, en ES/EN.
-- [ ] Validar 320×568, 393×851, 568×320 y 1440×900 y los límites de breakpoints actuales; comprobar
-  overflow, foco, nombres/labels, errores, anuncios de estado y targets táctiles. Guardar capturas
-  sintéticas PC/móvil e inspeccionarlas.
-- [ ] Cobertura del alcance ≥70 % en statements/branches/functions/lines sin rebajar gates;
-  ejecutar typechecks, build, unit/integración y E2E aislado, y registrar resultados/limitaciones.
+      ilimitado y permanece 0 después de editar/recargar. Valores inválidos no se envían desde UI ni
+      persisten por API. No alterar configuraciones existentes por migración masiva.
+- [x] Centralizar todo transporte de modelo; cubrir tickets, recetas, recetas múltiples,
+      recomendaciones, planificación, compra/foto, caducidad y test de conexión, incluida la prueba
+      efímera no guardada. Cada trabajo conserva el config ID y no filtra secretos/payload.
+- [x] Tests del dispatcher prueban límite por proveedor, independencia, 0 ilimitado, FIFO inicial,
+      orden explícito persistido, cambio de cap, cancelación real y retries automático/manual.
+- [x] API del gestor aplica autorización de usuario/config, reordena solo pendientes, cancela
+      queued/running, reintenta solo terminales y no devuelve API key, prompt, adjunto ni resultado.
+- [x] El listado no monta gestores inline: ofrece acceso a una vista dedicada por proveedor, con
+      navegación de vuelta. Vista directa con cap 0, proveedor inexistente o acceso ajeno no expone cola.
+- [x] Playwright real valida el gestor en la vista dedicada solo para cap >0, drag/drop + alternativa teclado,
+      cancelación pendiente/en curso, retry tras agotar intentos y persistencia de orden, en ES/EN.
+- [x] Validar 320×568, 393×851, 568×320 y 1440×900 y los límites de breakpoints actuales; comprobar
+      overflow, foco, nombres/labels, errores, anuncios de estado y targets táctiles. Guardar capturas
+      sintéticas PC/móvil e inspeccionarlas.
+- [x] Cobertura del alcance ≥70 % en statements/branches/functions/lines sin rebajar gates;
+      ejecutar typechecks, build, unit/integración y E2E aislado, y registrar resultados/limitaciones.
 
 **Fuente revalidada al crear spec (2026-10-01):** solo `ticket-queue.ts` encolaba trabajo IA.
 Recetas, generación múltiple, recomendaciones, plan semanal, foto de compra, estimación de
@@ -4715,5 +4740,28 @@ activa al despachar; el contrato nuevo fija proveedor y concurrencia para todos 
 `1.5` y `9` → 400, PATCH `-1` → 400, POST explícito `0` → 400 y el formulario sin límites ni
 error inline al enviar `-1`. Tras el cambio, `tests/e2e/ai-provider-concurrency.spec.ts` pasa 3/3 y
 verifica POST/PATCH inválidos, límites válidos `0/1/8`, default `0` y bloqueo del formulario.
-Karma (AiConfig + Input) pasa 45/45; Vitest de rutas IA/recibos pasa 24/24. Coverage agregada y el
-resto del gestor permanecen pendientes.
+Karma (AiConfig + Input) pasó 45/45; el test aislado de valores se ejecuta también en el set E2E final.
+
+**Evidencia — cola por proveedor (2026-10-01):** el transporte raw solo se invoca desde el
+dispatcher; el `rg` de `callAIWithConfig`, `callAIStreamingWithConfig` y `pingDeConexionTransport`
+no encontró llamantes de producto fuera de `ticket-queue.ts`. `server` TypeScript build pasa;
+Vitest dirigido a dispatcher, rutas de cola, cliente IA, rutas IA, despensa y compra: 6 archivos,
+170/170 pruebas. La cobertura configurada del servidor (41 archivos, excluida únicamente la suite
+Windows-específica de `uploads.spec.ts`) quedó en 91.24/81.65/94.08/93.87; los archivos nuevos
+`ticket-queue.ts` y `ai-queue.routes.ts` superan 70 % en cada métrica.
+
+El listado no monta los gestores: tres proveedores sintéticos muestran tres enlaces de cola; cada
+enlace abre `/ai-config/:configId/queue`. La vista enseña solo el proveedor elegido y ofrece volver;
+cap 0 y proveedor no disponible no montan cola. La suite Playwright aislada para concurrencia/cola
+pasó 6/6 en inglés y español; cubrió 320×568, 393×851, 568×320 y 1440×900, persistencia de orden,
+drag/drop, orden por teclado con foco restaurado, cancelación queued/running con abort del proveedor,
+retry manual tras agotar retries y supresión del gestor a cap 0. El proveedor fue loopback sintético;
+no se usó el token LAN. Capturas sintéticas inspeccionadas (listado y vista, PC/móvil) en
+`test-results/ai-provider-queue-qa-hogaria-e2e-WxUZwa-{providers,manager}-{desktop,mobile}.png`.
+
+Karma de frontend: 643/643 tests; la cobertura agregada de proyecto sigue bajo el umbral global ya
+configurado de 80 % (60.41/51.31/50.59/62.17). La cobertura de los cuatro archivos de UI/servicio
+de cola sí supera 70 % en statements/branches/functions/lines: 96.24/81.16/97.17/96.24; no se
+rebajó ningún gate. `ng build --configuration production` y `check-ui` pasan; el build conserva
+warnings existentes de budget del bundle/estilos. `pnpm run typecheck:e2e` está bloqueado por
+`EPERM` de Corepack en Windows, pero el mismo `tsc -p tsconfig.e2e.json --noEmit` directo pasa.

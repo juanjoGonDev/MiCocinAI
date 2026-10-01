@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
+import { provideRouter } from '@angular/router';
 import { of, Subject, throwError } from 'rxjs';
 import { AiConfigComponent } from './ai-config.component';
 import { AiService } from '../../core/services/ai.service';
@@ -66,7 +67,8 @@ describe('AiConfigComponent', () => {
         { provide: AiService, useValue: service },
         { provide: ToastService, useValue: toast },
         { provide: ConfirmService, useValue: confirm },
-        { provide: I18nService, useValue: i18n }
+        { provide: I18nService, useValue: i18n },
+        provideRouter([])
       ]
     }).compileComponents();
 
@@ -84,6 +86,21 @@ describe('AiConfigComponent', () => {
     expect(fixture.nativeElement.querySelector('.config-card__name')?.textContent).toContain(
       CONFIG.name
     );
+  });
+
+  it('keeps queue panels out of the provider list and links only positive caps to their own view', () => {
+    service.configs.set([
+      CONFIG,
+      { ...CONFIG, id: 'unlimited-provider', concurrency: 0, name: 'Unlimited provider' }
+    ]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelectorAll('[data-test="ai-provider-queue"]').length).toBe(
+      0
+    );
+    const links = fixture.nativeElement.querySelectorAll('[data-test="ai-queue-link"]');
+    expect(links.length).toBe(1);
+    expect(links[0].getAttribute('href')).toContain(`/ai-config/${CONFIG.id}/queue`);
   });
 
   it('separates loading and failure from the confirmed empty state', () => {

@@ -13,6 +13,7 @@ import { AIProviderConfig, AIProvider } from '../../shared/models/ai-config.mode
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { I18nService } from '../../core/services/i18n.service';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-ai-config',
@@ -26,7 +27,8 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
     BadgeComponent,
     ModalComponent,
     LoadingComponent,
-    IconComponent
+    IconComponent,
+    RouterLink
   ],
   template: `
     <div class="ai-config">
@@ -122,6 +124,15 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
           </div>
 
           <div class="config-card__actions">
+            <a
+              *ngIf="config.concurrency > 0"
+              class="config-card__queue-link"
+              [routerLink]="['/ai-config', config.id, 'queue']"
+              data-test="ai-queue-link"
+            >
+              <app-icon name="schedule" [size]="16" [label]="null" />
+              {{ 'ai_config.queue_open' | t }}
+            </a>
             <app-button
               variant="ghost"
               size="sm"
@@ -536,6 +547,30 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
         display: flex;
         flex-wrap: wrap;
         gap: var(--space-2);
+      }
+
+      .config-card__queue-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        min-height: 44px;
+        padding: var(--space-1) var(--space-3);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: var(--text-xs);
+        text-decoration: none;
+      }
+
+      .config-card__queue-link:hover {
+        border-color: var(--border-strong);
+        background: var(--bg-tertiary);
+      }
+
+      .config-card__queue-link:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
       }
 
       /* Form */
@@ -967,9 +1002,7 @@ export class AiConfigComponent implements OnInit {
   validateConcurrency(): boolean {
     const value = this.formData.concurrency;
     const isValid = Number.isInteger(value) && value >= 0 && value <= 8;
-    this.concurrencyError.set(
-      isValid ? '' : this.i18n.t('ai_config.concurrencia_invalida')
-    );
+    this.concurrencyError.set(isValid ? '' : this.i18n.t('ai_config.concurrencia_invalida'));
     return isValid;
   }
 }
