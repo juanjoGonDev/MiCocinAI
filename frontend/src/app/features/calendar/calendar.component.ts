@@ -1014,6 +1014,14 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       gap: var(--space-2);
     }
 
+    @media (max-width: 600px) {
+      .cal-top__right {
+        flex: 1 1 100%;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+    }
+
     @media (min-width: 1100px) {
       .cal-top__title { margin-right: var(--space-6); }
     }
