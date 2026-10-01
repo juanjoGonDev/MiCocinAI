@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1, QA-AUTH.PW-LIMIT.1, QA-ACCOUNT.DRAFT.1, QA-05.PATH.1, QA-SHOP-MOBILE.CTA.1, QA-ACCOUNT.E2E-TARGETS.1, QA-ACCOUNT.TABS.1 y QA-ACCOUNT.PASSWORD.ERROR.1 tienen regresiones verificadas localmente. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-RECIPES.AI-FLOW.1 pasa pruebas funcionales locales desktop/móvil; su cierre queda pendiente junto al gate de cobertura global frontend. QA-AI.PROVIDER-QUEUE.1 quedó especificada en HOGARIA-SPEC.md §12an antes de implementar; está pendiente. El barrido de todas las rutas y formularios sigue pendiente; QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx.
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1, QA-AUTH.PW-LIMIT.1, QA-ACCOUNT.DRAFT.1, QA-05.PATH.1, QA-SHOP-MOBILE.CTA.1, QA-ACCOUNT.E2E-TARGETS.1, QA-ACCOUNT.TABS.1, QA-ACCOUNT.PASSWORD.ERROR.1 y QA-AUTH.FORGOT.1 tienen regresiones verificadas localmente. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-RECIPES.AI-FLOW.1 pasa pruebas funcionales locales desktop/móvil; su cierre queda pendiente junto al gate de cobertura global frontend. QA-AI.PROVIDER-QUEUE.1 está implementada en HOGARIA-SPEC.md §12an, publicada en commits y validada con Playwright aislado; ya no está pendiente. La repetición del baseline recorrió las 28 rutas configuradas en 5 viewports, sin errores app-origin ni overflow; Google Fonts sigue bloqueada por el entorno. La recuperación de contraseña permanece sin entrega de correo/token; la UI lo comunica sin prometer un enlace. El barrido funcional completo sigue pendiente; QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx.
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -504,8 +504,12 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 - [x] Barrido exploratorio sin sesión en 320, 360, 390, 430, 768, 1023, 1024 y 1440 px: esas cuatro pantallas no mostraron overflow horizontal. No se probó aquí la app autenticada ni cada acción.
 - [x] El árbol actual declara las áreas pública, onboarding, dashboard, despensa, recetas, compra, tickets, calendario, hogar, configuración de IA, logs, cuenta, preferencias y ajustes; el detalle de rutas está más abajo.
 - [x] Playwright enumera 636 casos en 31 archivos y configura Chromium escritorio, Pixel 5 y iPhone 13. Se enumeraron, **no se ejecutaron**.
-- [ ] Repetir el barrido con captura de errores de red/console. Google Fonts falló en este entorno restringido (`ERR_NETWORK_ACCESS_DENIED`); determinar si el resto de recursos necesarios funciona y no atribuir este bloqueo a la app sin comprobarlo en un entorno con red.
-- [ ] Capturar evidencia de referencia autenticada en escritorio y móvil después de preparar base de datos aislada.
+- [x] Repetir el barrido con captura de errores de red/console en la matriz de rutas y viewports definida abajo.
+- [x] Comprobar si los fallos pertenecen a la app: cero errores de consola/página/requests del origen app, cero respuestas no-2xx inesperadas, cero rutas/componentes faltantes y cero overflow. Los 404 son fixtures deliberadamente inexistentes; Google Fonts es el único host externo fallido (`ERR_NETWORK_ACCESS_DENIED`).
+- [ ] Revalidar Google Fonts en un entorno con acceso de red antes de decidir si la apariencia con fallback representa el estilo de producción; no atribuirlo a la aplicación basándose solo en el bloqueo local.
+- [x] Capturar evidencia autenticada en escritorio y móvil después de preparar una base aislada.
+
+**Revalidación real del baseline (2026-10-01):** `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/route-baseline.spec.ts`, con `E2E_RATE_LIMIT=off` y Chrome local. El runner asignó la SQLite a `%TEMP%\hogaria-e2e-*\hogaria.sqlite`, semilla única y puertos loopback efímeros (no se usó `localhost:4200` para escrituras); validación de entorno confirmó `isolated=true` y el runner limpió la DB temporal al terminar. Chromium y Pixel 5: **2/2**; cada proyecto cargó 28 rutas/componentes en 5 tamaños (320×568, 393×851, 768×1024, 1024×768, 1440×900), 140 mediciones por proyecto; navegación, page errors, console errors, fallos app-origin, componentes faltantes, HTTP inesperado y overflow: **0**. Único fallo externo: `https://fonts.googleapis.com/css2`, `net::ERR_NETWORK_ACCESS_DENIED` (142 solicitudes por proyecto); los 404 de API son los casos `qa-baseline-*` esperados. Capturas autenticadas sintéticas inspeccionadas: `.e2e-screenshots/qa-route-baseline-5686ee0a982c429b9f0197e05bb36ea0/dashboard-chromium-1440x900.png` y `dashboard-mobile-chrome-320x568.png`. Esta es navegación/layout baseline, no validación de todas las acciones de formulario.
 
 ### Baseline real de Chromium (2026-09-30; hallazgos, no cierre)
 
@@ -581,7 +585,7 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 ## Unidad QA-04c · cobertura global sin rebajar gates (en curso)
 
-La línea base histórica pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentencias/ramas/funciones/líneas). La revalidación actual ejecutó `651/651` sin fallos de aserción, pero la cobertura cae a **60.64/51.37/50.72/62.41 %**, por debajo tanto del objetivo de 70 % como del gate configurado de 80 %. No se rebajó ningún umbral.
+La línea base histórica pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentencias/ramas/funciones/líneas). La revalidación anterior ejecutó `651/651` con 60.64/51.37/50.72/62.41 %. La revalidación actual ejecutó `665/665` sin fallos de aserción, pero la cobertura cae a **60.30/52.21/49.80/61.92 %**, por debajo tanto del mínimo de 70 % como del gate configurado de 80 %. No se rebajó ningún umbral.
 
 - [x] Revalidar cobertura global y por archivo antes del siguiente lote; archivar el reporte de esta ejecución en `%TEMP%`.
 - [ ] Añadir pruebas unitarias/integración para ramas y caminos de error/éxito no cubiertos; cada lote debe partir de fuentes actuales, tener regresión útil, cobertura ≥70 % en cada métrica del alcance y commit atómico.
@@ -589,24 +593,63 @@ La línea base histórica pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentenc
 
 Candidatos del informe previo al lote (histórico; orden statements/branches/functions/lines): `auth.service.ts` 100/81.82/94.59/100 %, `theme.service.ts` 96.67/92.86/87.50/96.67 %, `shopping.model.ts` 79.22/62.40/66.67/79.22 %, `error.interceptor.ts` 7.89/0/0/7.89 %, `swipe-row.directive.ts` 10.09/11.11/11.76/10.09 %, `core/time.ts` 86.75/57.83/95/86.75 %, `data-table.util.ts` 95.86/78.77/100/95.86 %, `i18n.service.ts` 61.70/23.68/61.54/61.70 %, `household.service.ts` 1.79/0/0/1.79 % y `taste-profile.service.ts` 3.33/0/0/3.33 %.
 
-Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `shopping.model.ts` 93.55/86.18/100/96.25 %, `shopping-http-error.ts` 100/100/100/100 %. En el informe completo actual, `core/services` queda en 46.11/30.15/37.41/47.31 %, `pantry` en 55.23/43.92/38.36/57.23 %, `shopping` en 40.06/29.29/22.22/42.54 % e `interceptors` en 7.50/0/0/7.89 %. Reporte íntegro aislado: `%TEMP%\hogaria-coverage-qa-b0416800414946a881b73f56d0df9ef0`. El global sigue abierto.
+Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `shopping.model.ts` 93.55/86.18/100/96.25 %, `shopping-http-error.ts` 100/100/100/100 %. El reporte completo actual instrumenta 135 de 182 fuentes de producción TS bajo `frontend/src/app`; `core/services` sigue siendo una superficie de riesgo: `shopping.service.ts` 0.29/0/0/0.33 %, `receipts.service.ts` 1.56/0/0/1.58 %, `household.service.ts` 3.33/0/0/1.78 %, `pantry.service.ts` 14.60/1.92/4.46/16.48 % y `calendar.service.ts` 43.60/42.64/15.78/45.94 % (S/B/F/L). Reporte completo archivado fuera de Git: `%TEMP%\hogaria-coverage-qa-20261001-1812`. El global sigue abierto.
 
 ### QA-04c.GATE.1 · ejecutar realmente el gate configurado (pendiente)
 
-**Fuente y rojo reproducible (2026-10-01):** `frontend/karma.conf.js` declara 80 % global para sentencias, ramas, funciones y líneas, pero `frontend/angular.json` no conecta esa configuración al builder `test`. `ng test --no-watch --browsers=ChromeHeadlessNoSandbox --code-coverage` ejecutó 651/651 y salió `0` pese a los porcentajes inferiores. Cargando explícitamente `karma.conf.js` mediante un config temporal seguro para Chrome, la misma suite ejecutó 651/651, reportó fallo en las cuatro métricas y salió `1`. El launcher temporal se eliminó; no se tocó el umbral. Criterio: el comando estándar debe imponer el gate, no solo imprimirlo.
+**Fuente y rojo reproducible (2026-10-01):** `frontend/karma.conf.js` declara 80 % global para sentencias, ramas, funciones y líneas, pero `frontend/angular.json` no conecta esa configuración al builder `test`. `ng test --no-watch --browsers=ChromeHeadlessNoSandbox --code-coverage` ejecutó 665/665 y salió `0` pese a los porcentajes inferiores. Cargando explícitamente `karma.conf.js` mediante un config temporal seguro para Chrome, la misma suite ejecutó 665/665, reportó **60.30/52.21/49.80/61.92 %** y falló las cuatro métricas con salida `1`. El launcher temporal se eliminó; no se tocó el umbral. Criterio: el comando estándar debe imponer el gate, no solo imprimirlo.
 
 - [x] Reproducir que el comando estándar devuelve éxito con coverage bajo el gate.
 - [x] Confirmar que la configuración de Karma existente detecta el mismo déficit y devuelve fallo sin cambiar los thresholds.
 - [ ] Conectar el target `test`/scripts estándar a `karma.conf.js`; mantener 80 % en las cuatro métricas y el launcher de CI normal.
 - [ ] Verificar que el comando estándar falla con el baseline bajo y pasa únicamente cuando la suite completa supera el 80 %; conservar los artefactos de cobertura.
 
-### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (pendiente)
+### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (resuelta localmente; gate global pendiente)
 
-**Fuente revalidada (2026-10-01):** `TasteProfileService` no tiene spec propio y el reporte actual muestra 5.40/0/0/3.33 % (sentencias/ramas/funciones/líneas). Sus caminos actuales son `ensureLoaded`/`load`, `save` con campos opcionales, normalización/aplicación de `TasteResponse` y `finalize` de loading en éxito/error. El scope no cambia comportamiento de producción ni toca DB: se ejercita con `HttpTestingController`.
+**Fuente revalidada antes de añadir el spec (2026-10-01):** `TasteProfileService` no tenía spec propio y el reporte marcaba 5.40/0/0/3.33 % (sentencias/ramas/funciones/líneas). Sus caminos actuales son `ensureLoaded`/`load`, `save` con campos opcionales, normalización/aplicación de `TasteResponse` y `finalize` de loading en éxito/error. El alcance no cambia comportamiento de producción ni toca DB: se ejercita con `HttpTestingController`.
 
-- [ ] Añadir pruebas unitarias para carga/idempotencia/reintento, defaults y perfil normalizado, payload mínimo/completo de PATCH y limpieza de loading en éxito/error.
-- [ ] Asegurar ≥70 % por statements/branches/functions/lines en `TasteProfileService` con pruebas sobre la fuente actual.
-- [ ] Repetir la suite global y registrar el impacto real; mantener todos los thresholds existentes.
+- [x] Añadir pruebas unitarias para carga/idempotencia/reintento, defaults y perfil normalizado, payload mínimo/completo de PATCH y limpieza de loading en éxito/error.
+- [x] Asegurar ≥70 % por statements/branches/functions/lines en `TasteProfileService` con pruebas sobre la fuente actual.
+- [x] Repetir la suite global y registrar el impacto real; mantener todos los thresholds existentes.
+
+**Evidencia QA-04c.CORE.TASTE.1 (2026-10-01):** `taste-profile.service.spec.ts` cubre carga/idempotencia, normalización, payloads y errores con `HttpTestingController`: 10/10; cobertura actual 100/100/100/100 %. La suite frontend completa, ya con esta spec, ejecutó 665/665 y dejó el global en 60.30/52.21/49.80/61.92 %, por debajo del gate 80 % (QA-04c.GATE.1). No se modificó threshold ni se escribieron datos externos.
+
+### QA-04c.CORE.SHOPPING.1 · cobertura y drenaje de escrituras offline (pendiente)
+
+**Fuente revalidada (2026-10-01):** no hay spec directa de `ShoppingService`; la única spec que lo importa lo reemplaza con un mock. El HTML del reporte global actual confirma 1/338 statements (0.29 %), 0/174 branches, 0/154 functions y 1/298 lines (0.33 %). El servicio concentra consultas/paginación, sugerencias, CRUD de listas/artículos, precios, fotos, SSE y cola offline.
+
+- [ ] Añadir primero regresiones `HttpTestingController` para parámetros/respuestas y estados de lectura, guardado, errores HTTP y recargas anidadas de las operaciones públicas principales.
+- [ ] Reproducir de forma acotada el fallo de red de `flush()`: el código conserva la primera escritura y ejecuta `continue` en el mismo `while`, reemitiéndola enseguida en vez de esperar el evento `online`; fijar conducta esperada de cola retenida, un intento por desconexión y reanudación al recuperar red, sin tormenta de solicitudes.
+- [ ] Implementar las correcciones mínimas que exijan las regresiones; cubrir deduplicación, orden, conflicto 409, errores de red/no-red, cambios optimistas y `pendingWrites`.
+- [ ] Cubrir streams, fotos, cierre de compra, artículos, precios y búsquedas dentro del contrato actual; alcanzar ≥70 % S/B/F/L del servicio antes de cerrar la unidad.
+- [ ] Repetir full frontend + gate local sin reducirlo; registrar impacto y mantener fixture sintético, sin tocar DB normal/proveedor real.
+
+### QA-04c.CORE.PANTRY.1 · cobertura de inventario, categorías y catálogo (pendiente)
+
+**Fuente revalidada (2026-10-01):** `pantry.service.spec.ts` existente solo cubre la carga/reintento de caducidades; el reporte global muestra `PantryService` en 14.60/1.92/4.46/16.48 % (S/B/F/L). La API actual agrupa ingredientes/utensilios, carga paginada, stats, categorías/productos, impactos y catálogo. `GET /ingredients/:id` devuelve `{data: ingredient}`, pero `getIngredient()` usa `tap(response => response.data)` sin proyectar el resultado; `createIngredient()` y `updateIngredient()` también declaran emitir `Ingredient|null` pero conservan el envelope mientras actualizan signals. Es discrepancia entre firmas, respuesta REST observada en `server/src/routes/pantry.routes.ts` y operador actual, no decisión de producto.
+
+- [ ] Añadir primero pruebas de contrato que exijan que `getIngredient/createIngredient/updateIngredient` emitan `data` (o `null` ante ausencia según firma) y actualicen signals/estadísticas como corresponda.
+- [ ] Añadir pruebas aisladas para paginación/defaults, filtros, CRUD y errores, carga de utensilios/stats, manager categorías/productos e impactos, operaciones bulk y catálogo.
+- [ ] Corregir la proyección de envelopes solo cuando la regresión la demuestre; comprobar finalización de `loading/saving`, error reintentable y cache/force de categorías.
+- [ ] Alcanzar ≥70 % S/B/F/L de `PantryService`, ejecutar suite frontend y verificar que no se toca DB de uso normal.
+
+### QA-04c.CORE.HOUSEHOLD.1 · cobertura y contratos del hogar (pendiente)
+
+**Fuente revalidada (2026-10-01):** no existe spec directa; el reporte global mide 2/60 statements (3.33 %), 0/24 branches, 0/34 functions y 1/56 lines (1.78 %). Los callers activos consultan carga/creación/unión, permisos e invitaciones. Las firmas de `previewInvite`, `createHousehold`, `updateSettings` y `regenerateInviteCode` indican emitir `data`/entidad/código, pero los pipes actuales solo usan `tap`; la API real de regenerar devuelve `{data:{inviteCode}}`. Las pruebas fijarán contrato a partir de firma, caller y respuesta server, y cubrirán almacenamiento local corrupto.
+
+- [ ] Añadir pruebas `HttpTestingController` de `ensureHousehold` (deduplicación, vacío exitoso, error y reintento), mapeo de members/current-user/defaults y respuestas públicas de invitación.
+- [ ] Añadir pruebas de alta/unión/update/regeneración/salida, errores, clipboard y `getInviteLink/isAdmin`; exigir emisiones `data` conforme a las firmas públicas.
+- [ ] Corregir solo los mappings confirmados por las regresiones; alcanzar ≥70 % S/B/F/L de `HouseholdService` sin escribir en servidor/DB real.
+- [ ] Repetir suite frontend + gate existente y registrar el impacto.
+
+### QA-04c.CORE.RECEIPTS.1 · cobertura del servicio de tickets y refresco inicial (pendiente)
+
+**Fuente revalidada (2026-10-01):** no existe spec directa; el reporte actual marca 1.56/0/0/1.58 % (S/B/F/L). `ReceiptsService.watch()` incrementa su contador y llama `void this.refreshQueue()`, pero `HttpClient` devuelve un Observable frío: ese primer GET no se ejecuta hasta el siguiente tick de polling (1 s). El comentario de `watch()` describe activar el latido; el contrato §12aj exige que el icono refleje la cola activa. Se fija como conducta esperada refrescar inmediatamente al primer watcher, luego sondear una vez por segundo solo mientras haya watchers y cancelar al destruir el servicio.
+
+- [ ] Añadir pruebas unitarias primero para endpoints/señales/flags, multipart sintético, errores y toast, operaciones explícitas de stop/retry/confirm, `stopAll()` en éxito/error y limpieza en destroy.
+- [ ] Reproducir que `watch()` no inicia el GET inmediatamente; conectar un solo primer refresco y mantener el contador saturado en cero y polling solo mientras exista watcher.
+- [ ] Alcanzar ≥70 % S/B/F/L de `ReceiptsService`; validar intervalos con tiempo virtual, sin EventSource/SSE/proveedor/DB real.
+- [ ] Repetir suite frontend + gate sin reducir umbrales y registrar el impacto.
 
 **Subunidad QA-04c.1 — modelo de ofertas/descuentos de compra (fuente revalidada):** `HOGARIA-SPEC.md` §12h define `buy:3,take:2` como una oferta 3×2; el preset activo lo representa como `{ label:'3x2', buy:3, take:2 }`. `shopping.model.ts::describeOffer` antes devolvía `${buy}x${buy-take}` (3x1) y la plantilla de `shopping-list-detail.component.ts` lo pinta en la chapa accesible de cada fila; Playwright real reprodujo el texto visible y accesible «3x1». Los helpers puros `lineDiscountOfItem`, `describeLineDiscount`, `offerOfItem` y `describeOffer` son usados por la pantalla activa. El normalizador de backend `server/src/utils/list-discount.ts::normalizeOffer` exige `buy ≥ 2`, `take ≥ 1` y `take < buy`, por lo que el helper cliente debe ignorar también filas inválidas. Criterios:
 
@@ -850,6 +893,24 @@ Evidencia de la suite frontend completa (2026-10-01): Karma **614/614** tests pa
 
 **Evidencia reproducible (2026-10-01):** TDD añadió expectativa antes del fix: Karma `AiService` rojo 1/11 (fallo HTTP borraba la receta/lista previa) y E2E Chromium 1440×900 rojo al segundo intento (API 500 eliminaba las tres candidatas). Verde: `AiService` **11/11**; `server/src/routes/ai.routes.spec.ts` **13/13**; build/typecheck servidor y typecheck E2E pasan; `ng build --configuration production` pasa con warnings previos de budgets/imports no usados. Playwright real: `node scripts/run-isolated-playwright.mjs tests/e2e/recipes-ai-generation.spec.ts --project=chromium --project=mobile-chrome`, **18/18**; además prueba standalone múltiple 1440×900 **1/1** para confirmar arranque cold de ruta lazy. App/API usan DB única temporal y proveedor stub loopback; `E2E_RATE_LIMIT=off` permite 18 registros sintéticos, sin llamar proveedor LAN ni usar `localhost:4200` para escrituras. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-recipes-ai-final-verify2/` (1440×900, 393×851, 320×568 y 568×320). Primer intento sin `E2E_CHROME_BIN` no lanzó navegador (binario Playwright ausente); repetido con Chrome del sistema pasó. El gate global de coverage frontend sigue abierto en QA-04c. Rollback: revertir juntos el flujo de borradores en `server/src/routes/ai.routes.ts`, el contrato de `AiService` y UI en `frontend/src/app/core/services/ai.service.ts`/`recipes.component.ts`/`dict/recipes.ts`, sus pruebas `*.spec.ts` y el E2E `tests/e2e/recipes-ai-generation.spec.ts`.
 
+## QA-AUTH.FORGOT.1 · resultado honesto y no enumeración en recuperación (spec-first)
+
+**Fuente revalidada (2026-10-01):** `POST /api/auth/forgot-password` valida formato en API y responde 200 indistinguible para cuenta existente/inexistente, pero solo consulta la cuenta; no hay servicio/configuración de email ni generación de enlaces en el repo. La pantalla, su CTA y la respuesta API afirman falsamente que se envió un enlace. `ForgotPasswordComponent.onSubmit()` valida vacío pero no formato; el input es un `ControlValueAccessor` y el `ngSubmit` permite enviar `type=email` inválido. Playwright aislado reprodujo que `not-an-email` hace POST/400. La solicitud tampoco tiene contexto `SILENT_TOAST`, por lo que un error 5xx genera el toast global genérico además del mensaje local; actualmente la rama `error` también llama `toastService.success()`. El mismo E2E midió un CTA de 42 px, por debajo del objetivo táctil de 44 px. Mantener no enumeración, copy honesto en formulario/CTA/API/aviso de que recuperación por correo aún no está disponible, validación local de email y error contextual recuperable sin duplicar toast; botón accesible ≥44 px. El endpoint se aislará en un módulo pequeño para aplicar el gate de cobertura por fichero sin cambiar los gates; no se implementa proveedor de correo sin credenciales/decisión de producto.
+
+- [x] Test de integración backend: cuentas existentes/inexistentes reciben el mismo status y mensaje genérico sin afirmar envío ni consultar existencia; email inválido rechaza.
+- [x] Test unitario de respuesta/error: aviso informativo honesto ES/EN; fallo no emite éxito; loading se limpia, email se conserva, hay retry y guard contra doble envío; AuthService silencia el toast global.
+- [x] Playwright real aislado: vacío/formato inválido no envían; existente/desconocida reciben el mismo status/cuerpo/aviso; 503 muestra solo error contextual y luego permite retry real.
+- [x] Chromium y Pixel 5: labels/teclado, CTA ≥44 px, no-overflow a 1440×900 y 393×851, estados de carga/error; cobertura focal supera 70 % en las cuatro métricas; capturas PC/móvil inspeccionadas.
+- [x] Limitación de producto comunicada: actualmente no hay entrega de correo ni generación de token de recuperación.
+
+**TDD rojo (2026-10-01):** el contrato inicial esperaba “link sent” y el test backend falló con el texto engañoso vigente. Playwright aislado mostró que email vacío/malformado podía hacer POST, que 503 generaba toast global genérico junto al falso success local, y que el CTA solo medía 42 px. Karma reprodujo falso éxito en `error`, doble envío y copy ES/EN ausente.
+
+**Evidencia verde QA-AUTH.FORGOT.1 (2026-10-01):** `server`: `npm test -- src/routes/auth-forgot-password.spec.ts` **2/2**, API 200 indistinguible para cuenta existente/desconocida con texto estático sin lookup/email, y 400 para formato inválido; `npm run build` pasa. El handler vive en `forgot-password.routes.ts`, incluido en el gate por fichero: la suite `npm run test:coverage -- --exclude=src/utils/uploads.spec.ts` pasó **43 archivos/893 tests**, cobertura **93.55/85.38/94.98/96.41** global y handler nuevo **100/100/100/100**. Sin la exclusión documentada de la suite POSIX `uploads.spec.ts`, Windows ejecutó 899/902: fallaron solo tres casos de permisos/rutas POSIX incompatibles con este host; no se cambió el gate.
+
+Frontend: Karma `forgot-password.component.spec.ts` + `auth.service.spec.ts` **34/34**; cobertura focal `ForgotPasswordComponent` **100/100/100/100** y `AuthService` **96/81.81/91.89/97.89**. El run focal conserva el gate existente de 80 % y, al excluir el resto del app, naturalmente no satisface el aggregate (51.27/16.73/43.75/54.69); no se rebajó ningún umbral y el gate global sigue abierto en QA-04c. `npm run build:prod` compila; persisten warnings previos de budgets/imports.
+
+Playwright real con `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/auth-forgot-password.spec.ts`, rate limit activo, SQLite/seed/puertos temporales: **4/4**. Comprueba vacío/malformado sin POST, respuesta igual para ambas cuentas, retry tras 503, un solo error accesible, orden de tab, target 44 px y documento sin overflow en escritorio/móvil. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-auth-forgot-password-qa-hogaria-e2e-RgSArN/error-chromium-1440x900.png` y `error-mobile-chrome-393x851.png`. No se usó `localhost:4200`, correo externo ni proveedor IA/LAN.
+
 ## Checklist funcional por pantalla
 
 En cada flujo probar: camino válido, validación/límites, doble envío, carga, fallo de red/servidor, recuperación/reintento, cancelar/volver, recarga/persistencia, teclado, nombres largos y confirmación antes de borrar o perder cambios.
@@ -866,15 +927,19 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 - [ ] Shell autenticado: redirección de ruta privada sin sesión; menú lateral, overlay, botón cerrar, Escape, bottom-nav, sidebar de escritorio, cuenta/avatar, cerrar sesión y cola de tickets; verificar ruta directa y atrás/adelante.
 
-### QA-SHELL.DRAWER.ESCAPE.1 · Escape y foco del menú móvil (pendiente)
+### QA-SHELL.DRAWER.ESCAPE.1 · Escape y foco del menú móvil (resuelta)
 
 **Fuente revalidada (2026-10-01):** `MainLayoutComponent` abre/cierra el drawer con `isSidebarOpen` y ofrece cierre por botón, overlay o navegación, pero no tiene listener de teclado. El breakpoint vigente es 1024 px: por debajo hay cabecera/overlay; desde 1024 px el sidebar queda fijo, sin trigger móvil ni overlay. Escape debe cerrar solo el drawer móvil abierto y devolver el foco al botón que lo abrió; el botón debe exponer su estado accesible.
 
-- [ ] Añadir primero una regresión Playwright real aislada: activar el menú por teclado, pulsar Escape, exigir overlay ausente, `aria-expanded=false` y foco devuelto al trigger; reproducir rojo antes del cambio, sin `force`.
-- [ ] Cubrir 393×851, 320×568 y los bordes 1023/1024/1025 px; probar click en overlay, botón cerrar y navegación para conservar el cierre actual; confirmar que Escape no oculta el sidebar desktop.
-- [ ] Añadir prueba unitaria/de integración de cierre por Escape (incluye no-op cerrado y no afectar un overlay superior), manteniendo la navegación por teclado.
-- [ ] Corregir accesibilidad/estado mínimo y ejecutar Playwright real Chromium + Pixel 5; revisar foco/teclado, límites, scroll y no-overflow.
-- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil y registrar tests/rollback; no modificar los datos ni el server normal.
+- [x] Añadir primero una regresión Playwright real aislada: activar el menú por teclado, pulsar Escape, exigir overlay ausente, `aria-expanded=false` y foco devuelto al trigger; reproducir rojo antes del cambio, sin `force`.
+- [x] Cubrir 393×851, 320×568, 568×320 y los bordes 1023/1024/1025 px; probar click en overlay, botón cerrar y navegación para conservar el cierre actual; confirmar que Escape no oculta el sidebar desktop.
+- [x] Añadir prueba unitaria/de integración de cierre por Escape (incluye no-op cerrado y no afectar un overlay superior), manteniendo la navegación por teclado.
+- [x] Corregir accesibilidad/estado mínimo y ejecutar Playwright real Chromium + Pixel 5; revisar foco/teclado, límites, scroll y no-overflow.
+- [x] Guardar e inspeccionar capturas sintéticas PC/móvil y registrar tests/rollback; no modificar los datos ni el server normal.
+
+**TDD rojo (2026-10-01):** `tests/e2e/main-layout-drawer.spec.ts` en Chromium aislado detectó que Escape dejaba el overlay montado (`Expected: 0, Received: 1`); la unidad Karma también falló porque el drawer permanecía abierto. El runner asignó SQLite, puerto y semilla bajo `%TEMP%`; no usó `localhost:4200`.
+
+**Evidencia verde QA-SHELL.DRAWER.ESCAPE.1 (2026-10-01):** `frontend` Karma focal, 4/4; `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/main-layout-drawer.spec.ts`, 2/2, rate limit activo y cleanup del entorno temporal. Se ejercitaron teclado/Enter/Escape, foco devuelto, Escape no-op al cerrar y en desktop, dialog superior, cierre por botón/overlay/navegación y scroll del menú en horizontal 568×320. Matriz: 320×568, 393×851, 568×320, 1023×768, 1024×900, 1025×900 y 1440×900; no hubo overflow horizontal. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-shell-drawer-final-20261001/main-layout-drawer-desktop.png` y `main-layout-drawer-mobile.png`. Rollback: revertir el commit atómico QA-SHELL.DRAWER.ESCAPE.1; no hay migración de datos.
 
 - [ ] `/dashboard`: estados con/sin datos, resumen, vencimientos, comidas/recetas y cada CTA; verificar los destinos anotados en discrepancias.
 - [ ] `/household`: crear hogar, unirse por código, código incorrecto, copiar/regenerar invitación, miembros/roles, permisos para compartir, salir del hogar y estados sin hogar.
@@ -929,7 +994,7 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
+1. Continuar el barrido funcional de pantallas, formularios y acciones con datos sintéticos/proveedor mock, releyendo la fuente de verdad antes de cada unidad y marcando solo tras prueba real.
 2. QA-REC.INGRESS.1 sigue como discrepancia estática: reproducir con Nginx real aislado cuando haya engine/runtime disponible y no cambiar límites antes de esa prueba.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
 4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
