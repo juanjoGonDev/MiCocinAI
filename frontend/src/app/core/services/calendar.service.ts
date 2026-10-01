@@ -12,6 +12,7 @@ import {
   WeeklyCalendar
 } from '../../shared/models/calendar.model';
 import { I18nService } from '../../core/services/i18n.service';
+import { LatestRequest } from '../utils/latest-request';
 
 /** Fila cruda de `meals` tal y como la devuelve la API (snake_case). */
 interface MealRow {
@@ -83,6 +84,7 @@ export class CalendarService {
   private isLoadingSignal = signal(false);
   private errorSignal = signal<string | null>(null);
   private lastRequested = '';
+  private readonly rangeLoadRequests = new LatestRequest();
 
   /** @deprecated El dashboard sigue leyendo el calendario «de la semana actual». */
   private calendarSignal = signal<WeeklyCalendar | null>(null);
@@ -112,6 +114,7 @@ export class CalendarService {
   loadRange(start: string, end: string, force = false): void {
     const key = `${start}|${end}`;
     if (!force && key === this.lastRequested) return;
+    const requestId = this.rangeLoadRequests.begin();
     this.lastRequested = key;
     this.isLoadingSignal.set(true);
 
@@ -120,6 +123,7 @@ export class CalendarService {
       .get<RangeResponse>(`${this.apiUrl}/range`, { params })
       .pipe(
         tap((response) => {
+          if (!this.rangeLoadRequests.isCurrent(requestId)) return;
           this.lastRequested = key;
           this.rangeSignal.set({ start, end });
           this.mealsSignal.set((response.data?.meals ?? []).map(toMeal));
@@ -130,9 +134,11 @@ export class CalendarService {
         catchError(() => {
           // Se deja el dato anterior en pantalla: mejor un calendario algo
           // desactualizado que uno vacío por un pico de la API.
-          this.lastRequested = '';
-          this.errorSignal.set(this.i18n.t('ui.no_se_han_podido'));
-          this.isLoadingSignal.set(false);
+          if (this.rangeLoadRequests.isCurrent(requestId)) {
+            this.lastRequested = '';
+            this.errorSignal.set(this.i18n.t('ui.no_se_han_podido'));
+            this.isLoadingSignal.set(false);
+          }
           return of(null);
         })
       )
@@ -262,6 +268,7 @@ export class CalendarService {
   readonly eventsError = signal<string | null>(null);
   readonly creatingEvent = signal(false);
   private eventsWindow: string | null = null;
+  private readonly eventRangeRequests = new LatestRequest();
 
   /**
    * Una peticion por ventana, no una por re-computacion.
@@ -274,6 +281,7 @@ export class CalendarService {
   loadHouseholdEvents(from: string, to: string, force = false): void {
     const window = `${from}|${to}`;
     if (!force && this.eventsWindow === window) return;
+    const requestId = this.eventRangeRequests.begin();
     this.eventsWindow = window;
     this.eventsLoading.set(true);
     this.eventsError.set(null);
@@ -283,15 +291,21 @@ export class CalendarService {
       .pipe(
         map(response => response.data ?? []),
         catchError(error => {
-          this.eventsError.set(this.readError(error));
-          // Una ventana que fallo se olvida: si no, reintentar sin cambiar de rango
-          // nunca volveria a pedir nada.
-          this.eventsWindow = null;
+          if (this.eventRangeRequests.isCurrent(requestId)) {
+            this.eventsError.set(this.readError(error));
+            // Una ventana que fallo se olvida: si no, reintentar sin cambiar de rango
+            // nunca volveria a pedir nada.
+            this.eventsWindow = null;
+          }
           return of([] as HouseholdEvent[]);
         }),
-        tap(() => this.eventsLoading.set(false))
+        tap(() => {
+          if (this.eventRangeRequests.isCurrent(requestId)) this.eventsLoading.set(false);
+        })
       )
-      .subscribe(events => this.householdEvents.set(events));
+      .subscribe(events => {
+        if (this.eventRangeRequests.isCurrent(requestId)) this.householdEvents.set(events);
+      });
   }
 
   /** Se recarga el rango actual: es lo que quiere el usuario después de crear o borrar. */
