@@ -4683,9 +4683,10 @@ parte del contrato. La cola debe seguir despachando cuando el gestor visual est�
 
 ### Checklist QA-AI.PROVIDER-QUEUE.1
 
-- [ ] Antes de implementar, ejecutar baseline aislada: comprobar negativos, fracciones, 0/1/8/9 en
-  formulario y POST/PATCH API; registrar respuesta real sin usar la base normal.
-- [ ] API y formulario validan el mismo rango entero `0..8`; 0 es el default nuevo, significa
+- [x] Baseline aislada antes de implementar: POST de `-1`, `1.5` y `9`, PATCH de `-1`, y POST de
+  `0`; registrar respuesta real sin usar la base normal. (Los límites válidos `1/8` se verifican en
+  las pruebas finales; no se afirma haberlos recorrido en el build previo.)
+- [x] API y formulario validan el mismo rango entero `0..8`; 0 es el default nuevo, significa
   ilimitado y permanece 0 después de editar/recargar. Valores inválidos no se envían desde UI ni
   persisten por API. No alterar configuraciones existentes por migración masiva.
 - [ ] Centralizar todo transporte de modelo; cubrir tickets, recetas, recetas múltiples,
@@ -4703,10 +4704,16 @@ parte del contrato. La cola debe seguir despachando cuando el gestor visual est�
 - [ ] Cobertura del alcance ≥70 % en statements/branches/functions/lines sin rebajar gates;
   ejecutar typechecks, build, unit/integración y E2E aislado, y registrar resultados/limitaciones.
 
-**Fuente revalidada (2026-10-01):** solo `ticket-queue.ts` encola trabajo IA. Recetas, generación
-múltiple, recomendaciones, plan semanal, foto de compra, estimación de caducidad y test de conexión
-llaman `callAI`/`pingDeConexion` directamente. El API Zod actual parece rechazar negativos (mínimo 1),
-pero no hay cobertura de regresión y el input no ofrece límites/helper; reproducir POST/PATCH real.
-El input compartido no retransmite `min/max/step`, y `config.concurrency || 1` reemplazaría un 0 al
-editar. La cola actual atiende tickets, usa llegada sin posición mutable y carga la configuración
-activa al despachar; el contrato nuevo debe fijar proveedor y concurrencia para todos los usos.
+**Fuente revalidada al crear spec (2026-10-01):** solo `ticket-queue.ts` encolaba trabajo IA.
+Recetas, generación múltiple, recomendaciones, plan semanal, foto de compra, estimación de
+caducidad y test de conexión llamaban `callAI`/`pingDeConexion` directamente. La validación API
+exigía mínimo 1, el input compartido no retransmitía `min/max/step` y `config.concurrency || 1`
+reemplazaba un 0 al editar. La cola atendía tickets, sin orden mutable y cargaba la configuración
+activa al despachar; el contrato nuevo fija proveedor y concurrencia para todos los usos.
+
+**Evidencia — unidad numérica (2026-10-01):** baseline Playwright aislado confirmó POST de `-1`,
+`1.5` y `9` → 400, PATCH `-1` → 400, POST explícito `0` → 400 y el formulario sin límites ni
+error inline al enviar `-1`. Tras el cambio, `tests/e2e/ai-provider-concurrency.spec.ts` pasa 3/3 y
+verifica POST/PATCH inválidos, límites válidos `0/1/8`, default `0` y bloqueo del formulario.
+Karma (AiConfig + Input) pasa 45/45; Vitest de rutas IA/recibos pasa 24/24. Coverage agregada y el
+resto del gestor permanecen pendientes.

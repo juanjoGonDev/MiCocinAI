@@ -79,11 +79,12 @@ export function barrerArranque(db: SqlDb = getDatabase()): number {
   return info.changes;
 }
 
-/** Cuantos trabajos puede tener a la vez la configuracion activa de un usuario. */
+/** Máximo de trabajos IA en vuelo; `0` significa que no hay un límite configurado. */
 export function concurrenciaDe(db: SqlDb, userId: string): number {
   const activa = activeAiConfig(db, userId);
-  const tope = Number(activa?.concurrency ?? 1);
-  return Number.isFinite(tope) && tope >= 1 ? Math.min(Math.trunc(tope), 8) : 1;
+  const tope = Number(activa?.concurrency ?? 0);
+  if (tope === 0) return Number.POSITIVE_INFINITY;
+  return Number.isInteger(tope) && tope > 0 ? Math.min(tope, 8) : 0;
 }
 
 /** Un paso del bucle: lanza trabajos hasta llenar la concurrencia de cada configuracion. */

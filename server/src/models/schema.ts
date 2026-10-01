@@ -249,6 +249,7 @@ export const aiConfigs = sqliteTable('ai_configs', {
   presencePenalty: real('presence_penalty'),
   timeout: integer('timeout').default(30000),
   retryAttempts: integer('retry_attempts').default(3),
+  concurrency: integer('concurrency').notNull().default(0),
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
   lastTested: text('last_tested'),
   testStatus: text('test_status'),

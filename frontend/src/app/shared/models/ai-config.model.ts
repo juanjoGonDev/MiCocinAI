@@ -12,7 +12,7 @@ export interface AIProviderConfig {
   presencePenalty?: number;
   timeout: number;
   retryAttempts: number;
-  /** La concurrencia de la cola de tickets (## 12aj): por proveedor, default 1. */
+  /** Máximo de trabajos IA en vuelo por proveedor; 0 = ilimitado. */
   concurrency: number;
   isActive: boolean;
   lastTested?: Date;

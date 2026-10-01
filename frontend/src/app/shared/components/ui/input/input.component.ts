@@ -35,6 +35,9 @@ export type InputSize = 'sm' | 'md' | 'lg';
           [disabled]="disabled"
           [readonly]="readonly"
           [required]="required"
+          [attr.min]="min"
+          [attr.max]="max"
+          [attr.step]="step"
           [attr.maxlength]="maxLength"
           [attr.aria-invalid]="error ? 'true' : null"
           [attr.aria-describedby]="getDescriptionId()"
@@ -270,6 +273,9 @@ export class InputComponent implements ControlValueAccessor {
   }
   @Input() readonly = false;
   @Input() required = false;
+  @Input() min: number | string | null = null;
+  @Input() max: number | string | null = null;
+  @Input() step: number | string | null = null;
   @Input() maxLength: number | null = null;
   @Input() prefixIcon = false;
   @Input() suffixIcon = false;

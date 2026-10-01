@@ -643,9 +643,9 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('ingredients', 'estimated_shelf_days', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'promo_buy', 'INTEGER');
   addColumnIfMissing('shopping_list_items', 'promo_take', 'INTEGER');
-  // La concurrencia de la cola de IA es por configuracion (por proveedor): default 1, y se
+  // La concurrencia máxima de IA es por configuración (por proveedor): default 0 = ilimitada, y se
   // toca desde el apartado de IA (## 12aj).
-  addColumnIfMissing('ai_configs', 'concurrency', 'INTEGER NOT NULL DEFAULT 1');
+  addColumnIfMissing('ai_configs', 'concurrency', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing('shopping_list_items', 'added_by', 'TEXT');
   addColumnIfMissing('shopping_list_items', 'updated_by', 'TEXT');
   addColumnIfMissing('shopping_lists', 'updated_by', 'TEXT');

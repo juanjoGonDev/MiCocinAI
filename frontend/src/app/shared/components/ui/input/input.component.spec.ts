@@ -55,6 +55,26 @@ describe('InputComponent', () => {
     expect(input.hasAttribute('maxlength')).toBeFalse();
   });
 
+  it('forwards optional numeric constraints to the native input', () => {
+    component.type = 'number';
+    component.min = 0;
+    component.max = 8;
+    component.step = 1;
+    fixture.detectChanges();
+
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    expect(input.getAttribute('min')).toBe('0');
+    expect(input.getAttribute('max')).toBe('8');
+    expect(input.getAttribute('step')).toBe('1');
+  });
+
+  it('does not impose numeric constraints when none are configured', () => {
+    const input: HTMLInputElement = fixture.nativeElement.querySelector('input');
+    expect(input.hasAttribute('min')).toBeFalse();
+    expect(input.hasAttribute('max')).toBeFalse();
+    expect(input.hasAttribute('step')).toBeFalse();
+  });
+
   it('associates an error message with the input and announces it', () => {
     component.id = 'email';
     component.error = 'Enter a valid email';

@@ -7,6 +7,7 @@ import { ConfirmService } from '../../core/services/confirm.service';
 import { I18nService } from '../../core/services/i18n.service';
 import { ToastService } from '../../core/services/toast.service';
 import type { AIProviderConfig } from '../../shared/models/ai-config.model';
+import { aiConfigEn, aiConfigEs } from '../../core/i18n/dict/ai_config';
 
 const CONFIG: AIProviderConfig = {
   id: 'synthetic-config',
@@ -113,6 +114,41 @@ describe('AiConfigComponent', () => {
     component.closeModal();
     expect(component.isModalOpen()).toBeFalse();
     expect(component.editingConfig()).toBeNull();
+  });
+
+  it('defaults new providers to unlimited and preserves zero while editing', () => {
+    component.openAddModal();
+    expect(component.formData.concurrency).toBe(0);
+
+    component.editConfig({ ...CONFIG, concurrency: 0 });
+    expect(component.formData.concurrency).toBe(0);
+  });
+
+  it('labels the provider-wide limit and explains unlimited mode in Spanish and English', () => {
+    expect(aiConfigEs['ai_config.concurrencia']).toBe('Concurrencia máxima');
+    expect(aiConfigEs['ai_config.concurrencia_helper']).toContain('0 = ilimitado');
+    expect(aiConfigEn['ai_config.concurrencia']).toBe('Maximum concurrency');
+    expect(aiConfigEn['ai_config.concurrencia_helper']).toContain('0 = unlimited');
+  });
+
+  it('blocks negative, fractional and out-of-range concurrency before saving', () => {
+    for (const invalidConcurrency of [-1, 1.5, 9]) {
+      component.openAddModal();
+      component.formData = {
+        ...component.formData,
+        name: 'Synthetic provider',
+        baseUrl: CONFIG.baseUrl,
+        apiKey: 'sk-synthetic-only',
+        model: CONFIG.model,
+        concurrency: invalidConcurrency
+      };
+
+      component.saveConfig();
+
+      expect(service.createConfig).not.toHaveBeenCalled();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('#concurrency-error')).not.toBeNull();
+    }
   });
 
   it('creates a config on success and keeps the dialog open when save fails', () => {

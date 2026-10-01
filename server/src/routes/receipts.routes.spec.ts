@@ -168,9 +168,9 @@ describe('la cola', () => {
     await esperarEstado(subida.payload.data.id, 'failed');
   });
 
-  it('la concurrencia por configuracion: default 1, y lo que escriba el apartado de IA', async () => {
+  it('la concurrencia por configuración: default ilimitado, y respeta el valor guardado', async () => {
     const { concurrenciaDe } = await import('../utils/ticket-queue.js');
-    expect(concurrenciaDe(db, alice.id)).toBe(1);
+    expect(concurrenciaDe(db, alice.id)).toBe(Number.POSITIVE_INFINITY);
 
     const id = 'cfg-conc';
     db.prepare(

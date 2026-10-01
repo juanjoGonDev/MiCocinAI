@@ -306,8 +306,14 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
               name="concurrency"
               type="number"
               [label]="'ai_config.concurrencia' | t"
-              placeholder="1"
+              placeholder="0"
+              [min]="0"
+              [max]="8"
+              [step]="1"
+              [helper]="'ai_config.concurrencia_helper' | t"
+              [error]="concurrencyError()"
               [(ngModel)]="formData.concurrency"
+              (ngModelChange)="validateConcurrency()"
             ></app-input>
           </div>
 
@@ -701,6 +707,7 @@ export class AiConfigComponent implements OnInit {
   /** La prueba en curso: UNA a la vez, y el boton bloqueado hasta que llegue el veredicto. */
   probandoId = signal<string | null>(null);
   probandoForm = signal(false);
+  concurrencyError = signal('');
 
   formData = {
     name: '',
@@ -712,7 +719,7 @@ export class AiConfigComponent implements OnInit {
     maxTokens: 2000,
     timeout: 30000,
     retryAttempts: 3,
-    concurrency: 1
+    concurrency: 0
   };
 
   ngOnInit(): void {
@@ -727,6 +734,7 @@ export class AiConfigComponent implements OnInit {
 
   editConfig(config: AIProviderConfig): void {
     this.editingConfig.set(config);
+    this.concurrencyError.set('');
     this.formData = {
       name: config.name,
       provider: config.provider,
@@ -737,7 +745,7 @@ export class AiConfigComponent implements OnInit {
       maxTokens: config.maxTokens,
       timeout: config.timeout || 30000,
       retryAttempts: config.retryAttempts || 3,
-      concurrency: config.concurrency || 1
+      concurrency: config.concurrency ?? 0
     };
     this.isModalOpen.set(true);
   }
@@ -749,6 +757,7 @@ export class AiConfigComponent implements OnInit {
   }
 
   saveConfig(): void {
+    if (!this.validateConcurrency()) return;
     this.isSaving.set(true);
 
     const data: Partial<typeof this.formData> = { ...this.formData };
@@ -940,6 +949,7 @@ export class AiConfigComponent implements OnInit {
   }
 
   private resetForm(): void {
+    this.concurrencyError.set('');
     this.formData = {
       name: '',
       provider: 'custom',
@@ -950,7 +960,16 @@ export class AiConfigComponent implements OnInit {
       maxTokens: 2000,
       timeout: 30000,
       retryAttempts: 3,
-      concurrency: 1
+      concurrency: 0
     };
+  }
+
+  validateConcurrency(): boolean {
+    const value = this.formData.concurrency;
+    const isValid = Number.isInteger(value) && value >= 0 && value <= 8;
+    this.concurrencyError.set(
+      isValid ? '' : this.i18n.t('ai_config.concurrencia_invalida')
+    );
+    return isValid;
   }
 }
