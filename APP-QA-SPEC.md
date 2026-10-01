@@ -606,9 +606,16 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 - [x] Reproducir que el comando estándar devuelve éxito con coverage bajo el gate.
 - [x] Confirmar que la configuración de Karma existente detecta el mismo déficit y devuelve fallo sin cambiar los thresholds.
-- [ ] Añadir primero una prueba de configuración que exija al target `test` cargar `karma.conf.js` y preserve sus cuatro thresholds globales.
-- [ ] Conectar el target `test` estándar a `karma.conf.js`; mantener 80 % en las cuatro métricas y el launcher de CI `ChromeHeadless`.
-- [ ] Verificar con Chrome local compatible que el comando estándar ejecuta la suite y falla por el baseline bajo, sin fallos de tests; conservar los artefactos de cobertura. Probar una cobertura sobre 80 % en las cuatro métricas en un fixture aislado o mantener explícito ese caso como pendiente si no es seguro fabricar un falso positivo.
+- [x] Añadir primero una prueba de configuración que exija al target `test` cargar `karma.conf.js` y preserve sus cuatro thresholds globales.
+- [x] Conectar el target `test` estándar a `karma.conf.js`; mantener 80 % en las cuatro métricas y el launcher de CI `ChromeHeadless`.
+- [x] Verificar con Chrome local compatible que el comando estándar ejecuta la suite y falla por el baseline bajo, sin fallos de tests; conservar los artefactos de cobertura.
+- [ ] Probar un caso positivo auténtico donde la suite completa supere 80 % en las cuatro métricas; no fabricar cobertura ni relajar la instrumentación. La suite actual aún no alcanza el gate.
+
+**TDD rojo (2026-10-02):** `node --test scripts/karma-coverage-gate.test.mjs` falló 2/2 antes del cambio: el target Angular no declaraba `karmaConfig` y `karma.conf.js` no registraba el launcher local `ChromeHeadlessLocal`. El comando `ng test --no-watch --code-coverage --browsers=ChromeHeadlessLocal` confirmó el launcher no registrado antes de ejecutar tests. La ejecución estándar con `ChromeHeadless` sí falló antes de iniciar tests por la limitación GPU de Chrome en esta máquina; no se contó como evidencia del gate.
+
+**Evidencia de gate conectado (2026-10-02):** ahora `frontend/angular.json` carga `karma.conf.js`; los cuatro thresholds siguen en 80 %, el launcher por defecto continúa `ChromeHeadless` para CI y `ChromeHeadlessLocal` con SwiftShader permite validar aquí. `npm run test:config` pasa **2/2**. `npm run test:coverage -- --browsers=ChromeHeadlessLocal` ejecuta **797/797** pruebas, luego retorna código **1** por statements/branches/functions/lines **75.55/65.61/73.92/77.19 %**, sin bajar umbrales. `node scripts/check-workflows.mjs` valida **5 workflows**; `make ci:yaml` no es invocable con GNU Make en esta máquina Windows porque interpreta los dos puntos del nombre del target. CI remoto no se ejecutó en esta ronda. Los artefactos de coverage permanecen en `frontend/coverage/`.
+
+**Rollback:** revertir la unidad del gate restaura el builder Angular sin `karmaConfig`, elimina el guard de configuración/launcher local y quita su step de CI y script de test; no cambia los thresholds ni lógica de producto.
 
 ### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (resuelta localmente; gate global pendiente)
 
