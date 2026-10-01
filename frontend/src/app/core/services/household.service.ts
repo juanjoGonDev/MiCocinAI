@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, catchError, map, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Household, InvitePreview } from '../../shared/models/household.model';
 import { STORAGE_KEYS } from './storage.service';
@@ -46,28 +46,31 @@ export class HouseholdService {
   loadHousehold(): void {
     this.isLoadingSignal.set(true);
 
-    this.http.get<any>(this.apiUrl).pipe(
-      tap(response => {
-        this.householdSignal.set(response.data ? this.mapHousehold(response.data) : null);
-        this.isLoadingSignal.set(false);
-        this.askedSignal.set(true);
-        this.failedSignal.set(false);
-      }),
-      catchError(() => {
-        // Se apunta el fallo, no se finge una casa vacia: `household() === null` significa «no lo
-        // sabemos», y una pantalla que lo interpreta como «no tienes casa» esconde un boton que manana
-        // si existe.
-        this.isLoadingSignal.set(false);
-        this.failedSignal.set(true);
-        return of(null);
-      })
-    ).subscribe();
+    this.http
+      .get<any>(this.apiUrl)
+      .pipe(
+        tap((response) => {
+          this.householdSignal.set(response.data ? this.mapHousehold(response.data) : null);
+          this.isLoadingSignal.set(false);
+          this.askedSignal.set(true);
+          this.failedSignal.set(false);
+        }),
+        catchError(() => {
+          // Se apunta el fallo, no se finge una casa vacia: `household() === null` significa «no lo
+          // sabemos», y una pantalla que lo interpreta como «no tienes casa» esconde un boton que manana
+          // si existe.
+          this.isLoadingSignal.set(false);
+          this.failedSignal.set(true);
+          return of(null);
+        })
+      )
+      .subscribe();
   }
 
   /** Fetch public info about an invite code (no auth needed on backend, but we have cookie/token anyway). */
   previewInvite(code: string): Observable<InvitePreview | null> {
     return this.http.get<any>(`${this.apiUrl}/invite/${code}`).pipe(
-      tap(r => r?.data),
+      map((response) => response?.data ?? null),
       catchError(() => of(null))
     );
   }
@@ -76,14 +79,17 @@ export class HouseholdService {
   joinByCode(code: string): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/join/${code}`, {}).pipe(
       tap(() => this.loadHousehold()),
-      catchError((err) => { throw err; })
+      catchError((err) => {
+        throw err;
+      })
     );
   }
 
   createHousehold(name: string, sharedPantry = true): Observable<Household | null> {
     return this.http.post<any>(this.apiUrl, { name, sharedPantry }).pipe(
-      tap(response => {
-        this.householdSignal.set(response.data ? this.mapHousehold(response.data) : null);
+      map((response) => (response?.data ? this.mapHousehold(response.data) : null)),
+      tap((household) => {
+        this.householdSignal.set(household);
       }),
       catchError(() => of(null))
     );
@@ -103,8 +109,9 @@ export class HouseholdService {
     shareCalendar?: boolean;
   }): Observable<Household | null> {
     return this.http.patch<any>(this.apiUrl, data).pipe(
-      tap(response => {
-        this.householdSignal.set(response.data ? this.mapHousehold(response.data) : null);
+      map((response) => (response?.data ? this.mapHousehold(response.data) : null)),
+      tap((household) => {
+        this.householdSignal.set(household);
       }),
       catchError(() => of(null))
     );
@@ -112,8 +119,11 @@ export class HouseholdService {
 
   regenerateInviteCode(): Observable<string | null> {
     return this.http.post<any>(`${this.apiUrl}/regenerate-invite`, {}).pipe(
-      tap(response => {
-        this.householdSignal.update(h => h ? { ...h, inviteCode: response.data.inviteCode } : null);
+      map((response) => response?.data?.inviteCode ?? null),
+      tap((inviteCode) => {
+        if (inviteCode) {
+          this.householdSignal.update((h) => (h ? { ...h, inviteCode } : null));
+        }
       }),
       catchError(() => of(null))
     );
@@ -124,6 +134,7 @@ export class HouseholdService {
       tap(() => {
         this.householdSignal.set(null);
       }),
+      map(() => true),
       catchError(() => of(false))
     );
   }
@@ -147,8 +158,7 @@ export class HouseholdService {
 
   /** Map snake_case DB row to camelCase Household. */
   private mapHousehold(raw: any): Household {
-    const me = raw.members?.find((m: any) => m.userId === this.currentUserId())
-      || raw.members?.[0];
+    const me = raw.members?.find((m: any) => m.userId === this.currentUserId()) || raw.members?.[0];
     return {
       id: raw.id,
       name: raw.name,
@@ -179,6 +189,8 @@ export class HouseholdService {
       // Read from localStorage without importing AuthService to avoid circular imports.
       const user = localStorage.getItem(STORAGE_KEYS.currentUser);
       return user ? JSON.parse(user).id : null;
-    } catch { return null; }
+    } catch {
+      return null;
+    }
   }
 }

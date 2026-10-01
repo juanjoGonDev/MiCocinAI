@@ -635,14 +635,16 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 - [ ] Corregir la proyección de envelopes solo cuando la regresión la demuestre; comprobar finalización de `loading/saving`, error reintentable y cache/force de categorías.
 - [ ] Alcanzar ≥70 % S/B/F/L de `PantryService`, ejecutar suite frontend y verificar que no se toca DB de uso normal.
 
-### QA-04c.CORE.HOUSEHOLD.1 · cobertura y contratos del hogar (pendiente)
+### QA-04c.CORE.HOUSEHOLD.1 · cobertura y contratos del hogar (resuelta localmente; gate global pendiente)
 
 **Fuente revalidada (2026-10-01):** no existe spec directa; el reporte global mide 2/60 statements (3.33 %), 0/24 branches, 0/34 functions y 1/56 lines (1.78 %). Los callers activos consultan carga/creación/unión, permisos e invitaciones. Las firmas de `previewInvite`, `createHousehold`, `updateSettings` y `regenerateInviteCode` indican emitir `data`/entidad/código, pero los pipes actuales solo usan `tap`; la API real de regenerar devuelve `{data:{inviteCode}}`. Las pruebas fijarán contrato a partir de firma, caller y respuesta server, y cubrirán almacenamiento local corrupto.
 
-- [ ] Añadir pruebas `HttpTestingController` de `ensureHousehold` (deduplicación, vacío exitoso, error y reintento), mapeo de members/current-user/defaults y respuestas públicas de invitación.
-- [ ] Añadir pruebas de alta/unión/update/regeneración/salida, errores, clipboard y `getInviteLink/isAdmin`; exigir emisiones `data` conforme a las firmas públicas.
-- [ ] Corregir solo los mappings confirmados por las regresiones; alcanzar ≥70 % S/B/F/L de `HouseholdService` sin escribir en servidor/DB real.
+- [x] Añadir pruebas `HttpTestingController` de `ensureHousehold` (deduplicación, vacío exitoso, error y reintento), mapeo de members/current-user/defaults y respuestas públicas de invitación.
+- [x] Añadir pruebas de alta/unión/update/regeneración/salida, errores, clipboard y `getInviteLink/isAdmin`; exigir emisiones `data` conforme a las firmas públicas.
+- [x] Corregir solo los mappings confirmados por las regresiones; alcanzar ≥70 % S/B/F/L de `HouseholdService` sin escribir en servidor/DB real.
 - [ ] Repetir suite frontend + gate existente y registrar el impacto.
+
+**Evidencia QA-04c.CORE.HOUSEHOLD.1 (2026-10-01):** se añadió `household.service.spec.ts` con 13 casos `HttpTestingController`; el grupo aislado hogar/pantry/tickets/gustos ejecutó **65/65**. Antes del fix, las regresiones confirmaron que `previewInvite`, `createHousehold`, `updateSettings` y `regenerateInviteCode` devolvían el envelope en vez de su firma pública, y `leaveHousehold()` devolvía el objeto HTTP en vez de booleano. Tras mapear `data`, actualizar signals con la entidad y emitir `true` en salida correcta, cobertura de `HouseholdService`: **100/96.55/100/100 %** (S/B/F/L). Sin escritura a servidor/DB normal. La suite completa y gate siguen pendientes.
 
 ### QA-04c.CORE.RECEIPTS.1 · cobertura del servicio de tickets y refresco inicial (pendiente)
 
