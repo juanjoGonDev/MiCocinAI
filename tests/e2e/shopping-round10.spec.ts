@@ -1,6 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { shoppingNewListAction } from './helpers/shopping-ui';
 
 /**
  * Ronda 10 (HOGARIA-SPEC §12h): un solo control para elegir la unidad, el descuento propio de
@@ -28,7 +29,7 @@ async function closeSheet(page: Page): Promise<void> {
 /** Lista nueva con una linea y la hoja de edicion de esa linea abierta. */
 async function openLineSheet(page: Page, slug: string, line: string): Promise<void> {
   await registerAndGoto(page, '/shopping', slug);
-  await page.locator('[data-test="new-list"]').click();
+  await shoppingNewListAction(page).click();
   await page.locator('[data-test="list-name"]').fill('Compra ronda 10');
   await page.locator('[data-test="create-submit"]').click();
   await expect(page).toHaveURL(/\/shopping\/[\w-]+$/);

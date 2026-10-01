@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { Locator, Page, expect } from '@playwright/test';
 import { test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { shoppingNewListAction } from './helpers/shopping-ui';
 
 /**
  * Ronda 6 (HOGARIA-SPEC §8f): la bandeja como tabla con filtros, controles de solo icono,
@@ -20,13 +21,8 @@ function watchPageErrors(page: Page): () => string {
   return () => (errors.length > 0 ? errors.join(' | ') : 'sin errores de pagina');
 }
 
-function newListButton(page: Page): Locator {
-  const mobile = (page.viewportSize()?.width ?? 1024) <= 600;
-  return page.locator(mobile ? '[data-test="new-list-text"]' : '[data-test="new-list"]');
-}
-
 async function newList(page: Page, name: string, store?: string): Promise<void> {
-  await newListButton(page).click();
+  await shoppingNewListAction(page).click();
   await page.locator('[data-test="list-name"]').fill(name);
   if (store) await page.locator('input[name="listStore"]').fill(store);
   await page.locator('[data-test="create-submit"]').click();
@@ -123,7 +119,7 @@ test.describe('Bandeja: tabla, filtros y paginación', () => {
 test.describe('Cesta: iconos, oferta y descuento', () => {
   test('marcar es un icono, y seleccionar todo tambien', async ({ page }) => {
     await registerAndGoto(page, '/shopping', 'r6-icons');
-    await newListButton(page).click();
+    await shoppingNewListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Cesta');
     await page.locator('[data-test="create-submit"]').click();
     await page.locator('[data-test="add-input"]').fill('LecHE');
@@ -149,7 +145,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     ];
     await page.setViewportSize(viewports[0]);
     await registerAndGoto(page, '/shopping', 'r6-add-suggestions');
-    await newListButton(page).click();
+    await shoppingNewListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Sugerencias');
     await page.locator('[data-test="create-submit"]').click();
 
@@ -235,7 +231,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     const initialViewport = page.viewportSize();
     if (!isMobile) await page.setViewportSize({ width: 1440, height: 900 });
     await registerAndGoto(page, '/shopping', 'r6-offer');
-    await page.locator(isMobile ? '[data-test="new-list-text"]' : '[data-test="new-list"]').click();
+    await shoppingNewListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Ofertas');
     await page.locator('[data-test="create-submit"]').click();
     const addInput = page.locator('[data-test="add-input"]');
@@ -404,7 +400,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await registerAndGoto(page, '/shopping', `r6-discount-${viewport.width}`);
-      await newListButton(page).click();
+      await shoppingNewListAction(page).click();
       await page.locator('[data-test="list-name"]').fill('Con descuento');
       await page.locator('[data-test="create-submit"]').click();
       await page.locator('[data-test="add-input"]').fill('1 Aceite');
@@ -441,7 +437,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
 
   test('la hoja de foto avisa de que falta la IA y no escribe nada', async ({ page }) => {
     await registerAndGoto(page, '/shopping', 'r6-photo');
-    await newListButton(page).click();
+    await shoppingNewListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Con foto');
     await page.locator('[data-test="create-submit"]').click();
 
@@ -515,7 +511,7 @@ test.describe('Calendario de la casa', () => {
 test.describe('Descuento por producto (la etiqueta del supermercado)', () => {
   test('un descuento prometido en un producto solo baja ese producto', async ({ page }) => {
     await registerAndGoto(page, '/shopping', 'r6-discount-product');
-    await newListButton(page).click();
+    await shoppingNewListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Jamon y leche');
     await page.locator('[data-test="create-submit"]').click();
 

@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '../fixtures';
 import { registerAndGoto } from '../helpers/auth';
+import { shoppingNavigationLink, shoppingNewListAction } from '../helpers/shopping-ui';
 
 /**
  * El dinero de la cesta, contra el binario que sirve todo.
@@ -11,7 +12,7 @@ import { registerAndGoto } from '../helpers/auth';
  */
 
 async function createList(page: Page, name: string, store?: string) {
-  await page.locator('[data-test="new-list"]').click();
+  await shoppingNewListAction(page).click();
   await page.locator('[data-test="list-name"]').fill(name);
   if (store) await page.locator('[data-test="list-store"]').fill(store);
   await page.locator('[data-test="create-submit"]').click();
@@ -99,7 +100,7 @@ test.describe('lo que cuesta, y en que tienda', () => {
       await expect(page).toHaveURL(/tab=hechas/);
       // De vuelta a la bandeja por el enlace del menu: el `href` es lo que el router pinta,
       // y depender de un `data-test` del shell para volver seria inventarse una prueba nueva.
-      await page.locator('a[href="/shopping"]').first().click();
+      await shoppingNavigationLink(page).click();
     }
 
     // La tercera lista, en Lidl, vale 0,60 —no el 1,00 anotado despues en Mercadona. Este es

@@ -1,6 +1,7 @@
 import { expect, test } from '../fixtures';
 import { registerUser } from '../helpers/auth';
 import { watchRequests } from '../helpers/request-watch';
+import { shoppingNewListAction } from '../helpers/shopping-ui';
 
 async function expectNoRepeatAfterIdle(
   page: Parameters<typeof watchRequests>[0],
@@ -9,12 +10,6 @@ async function expectNoRepeatAfterIdle(
   await page.waitForTimeout(1500);
   expect(watch.describeProblems()).toBe('sin rachas ni 429');
   watch.reset();
-}
-
-function newListAction(page: Parameters<typeof watchRequests>[0]) {
-  return page
-    .locator('[data-test="new-list"]:visible, [data-test="new-list-text"]:visible')
-    .first();
 }
 
 /**
@@ -67,7 +62,7 @@ test.describe('presupuesto de peticiones en el stack de produccion', () => {
     }
 
     await page.goto('/shopping');
-    await newListAction(page).click();
+    await shoppingNewListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Cesta con presupuesto');
     await page.locator('[data-test="create-submit"]').click();
     await expect(page.locator('[data-test="add-input"]')).toBeVisible();
@@ -133,7 +128,7 @@ test.describe('presupuesto de peticiones en el stack de produccion', () => {
       return new URL(response.url()).pathname === '/api/shopping/stream/tray';
     });
     await page.goto('/shopping');
-    await expect(newListAction(page)).toBeVisible();
+    await expect(shoppingNewListAction(page)).toBeVisible();
     const trayResponse = await trayResponsePromise;
     expect(trayResponse.status()).toBe(200);
     expect(trayResponse.headers()['content-type']).toContain('text/event-stream');
@@ -168,7 +163,7 @@ test.describe('presupuesto de peticiones en el stack de produccion', () => {
       const path = new URL(response.url()).pathname;
       return /^\/api\/shopping\/stream\/lists\/[^/]+$/.test(path);
     });
-    await newListAction(page).click();
+    await shoppingNewListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Cesta en vivo');
     await page.locator('[data-test="create-submit"]').click();
     await expect(page.locator('[data-test="add-input"]')).toBeVisible();

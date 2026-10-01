@@ -1,6 +1,7 @@
 import { Locator, Page, expect } from '@playwright/test';
 import { test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { shoppingNavigationLink, shoppingNewListAction } from './helpers/shopping-ui';
 
 /**
  * La lista de la compra, usada como se usa en la vida real: con un pulgar.
@@ -15,7 +16,7 @@ const LIST_NAME = 'Compra de la semana';
 
 async function openNewList(page: Page, seed: string, name = LIST_NAME): Promise<void> {
   await registerAndGoto(page, '/shopping', seed);
-  await page.locator('[data-test="new-list"]').click();
+  await shoppingNewListAction(page).click();
   await page.locator('[data-test="list-name"]').fill(name);
   await page.locator('[data-test="create-submit"]').click();
   await expect(page).toHaveURL(/\/shopping\/[\w-]+$/);
@@ -100,9 +101,9 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
   test('el módulo vivo enlaza la sección y la bandeja empieza vacía', async ({ page }) => {
     await registerAndGoto(page, '/settings', 'shop-nav');
 
-    await expect(page.locator('a[href="/shopping"]')).not.toHaveCount(0);
+    await expect(shoppingNavigationLink(page)).toBeVisible();
 
-    await page.locator('a[href="/shopping"]').first().click();
+    await shoppingNavigationLink(page).click();
     await expect(page).toHaveURL(/\/shopping$/);
     await expect(page.getByRole('heading', { name: /Lista de la compra/i })).toBeVisible();
     await expect(page.locator('[data-test="list-row"]')).toHaveCount(0);
@@ -350,7 +351,7 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
     const first = row_(page, 'Azucar');
 
     await first.locator('[data-test="check"]').click();
-    await page.getByRole('button', { name: /Vaciar carro/i }).click();
+    await page.getByRole('button', { name: /Vaciar(?: el)? carro/i }).click();
     // Y vaciar confirma antes de barrer: el carro comprado se va con un si explicito (## 12ae).
     const vaciar = page.locator('.modal-overlay');
     await expect(vaciar.locator('.modal__title')).toContainText('Vaciar lo comprado');

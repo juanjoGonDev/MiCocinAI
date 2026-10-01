@@ -1,6 +1,7 @@
 import { Locator, Page, expect } from '@playwright/test';
 import { test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { shoppingNewListAction } from './helpers/shopping-ui';
 
 /**
  * Ronda 35 (HOGARIA-SPEC ## 12ag): el autocompletado al anadir lineas y el vuelco del carro
@@ -19,7 +20,7 @@ import { registerAndGoto } from './helpers/auth';
 
 async function openNewList(page: Page, seed: string, store?: string): Promise<void> {
   await registerAndGoto(page, '/shopping', seed);
-  await page.locator('[data-test="new-list"]').click();
+  await shoppingNewListAction(page).click();
   await page.locator('[data-test="list-name"]').fill('Compra ronda 35');
   if (store) await page.locator('[data-test="list-store"]').fill(store);
   await page.locator('[data-test="create-submit"]').click();

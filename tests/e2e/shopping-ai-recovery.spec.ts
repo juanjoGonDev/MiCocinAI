@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { shoppingNewListAction } from './helpers/shopping-ui';
 
 async function expectConfigFitsViewport(page: import('@playwright/test').Page): Promise<void> {
   const metrics = await page.evaluate(() => ({
@@ -24,7 +25,7 @@ test('el error de foto sin IA lleva a la configuración real sin escribir línea
   const viewport = page.viewportSize() ?? { width: 1280, height: 720 };
   const mobile = viewport.width <= 600;
   await registerAndGoto(page, '/shopping', 'ai-recovery');
-  await page.locator(mobile ? '[data-test="new-list-text"]' : '[data-test="new-list"]').click();
+  await shoppingNewListAction(page).click();
   await page.locator('[data-test="list-name"]').fill('Recuperación IA');
   await page.locator('[data-test="create-submit"]').click();
 

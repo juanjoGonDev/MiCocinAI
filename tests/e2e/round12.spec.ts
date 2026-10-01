@@ -1,5 +1,6 @@
 import { Page, test, expect } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { shoppingNewListAction } from './helpers/shopping-ui';
 
 /** Un `pageerror` en la consola es un fallo, aunque la pantalla parezca buena (costumbre de la suite). */
 function watchPageErrors(page: Page): () => string {
@@ -67,7 +68,7 @@ test.describe('los chips de quitar se leen como lo que son', () => {
   test('«Sin oferta» y «Sin descuento» son de quite, y reclicar el activo lo apaga', async ({ page }) => {
     const echo = watchPageErrors(page);
     await registerAndGoto(page, '/shopping', 'r12-chips');
-    await page.locator('[data-test="new-list"]').click();
+    await shoppingNewListAction(page).click();
     await page.locator('[data-test="list-name"]').fill('Chips');
     await page.locator('[data-test="create-submit"]').click();
     await page.locator('[data-test="add-input"]').fill('2 Yogur');
