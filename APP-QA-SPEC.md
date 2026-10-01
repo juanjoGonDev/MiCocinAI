@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1 y QA-CALENDAR.ALL-DAY-GUTTER.1 tienen regresiones verificadas localmente; el gate global de cobertura frontend sigue sin cumplir y el barrido global sigue pendiente. QA-REC.INGRESS.1 continúa pendiente por falta de runtime Nginx
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1 y QA-CALENDAR.ALL-DAY-GUTTER.1 tienen regresiones verificadas localmente; la revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-PANTRY.TOUCH.1 está especificada y pendiente de reproducción geométrica en navegador. El gate global de cobertura frontend sigue sin cumplir y el barrido global sigue pendiente. QA-REC.INGRESS.1 continúa pendiente por falta de runtime Nginx
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -364,6 +364,20 @@ Playwright real con `E2E_SCOPE=all`, rate limit activo, servidor de producción 
 `pantry.service.spec.ts`: Karma focal **5/5**; coverage de `loadCaducidades()` **100 % statements / 100 % branches / 100 % functions / 100 % lines**. El reporte agregado de esa selección pequeña queda por debajo del gate global existente de **80 %** (19.16 / 0.68 / 3.42 / 21.53 %); Karma por ello devuelve fallo en el gate global, no en los cinco tests ni en el método medido. No se rebajó el gate: resolver el agregado global sigue en QA-04c. Playwright real aislado (`E2E_RATE_LIMIT=on`, SQLite/puerto/semilla temporales, Google Chrome del sistema): `pantry-caducidades.spec.ts` Chromium **4/4**, Pixel 5 **4/4**. Se validaron 503/error sin falso vacío ni toast duplicado, reintento con Enter y respuesta 200, loading y cantidad exacta de peticiones, 200 vacío legítimo, texto inglés, orden/precio, viewport escritorio 1440×900 y móvil 320×740/393×851 sin overflow y botón táctil dentro del viewport. Fixtures interceptan únicamente el endpoint de caducidades; no se usó el proveedor ni la base normal de `localhost:4200`.
 
 Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Prettier focal y `git diff --check`: pasan. El build conserva avisos previos de bundle (697.57 KB frente al presupuesto de aviso de 500 KB), estilos e imports; no se alteraron budgets. Capturas sintéticas PC/móvil inspeccionadas: `.e2e-screenshots/qa-pantry-2/current/desktop/expiry-load-error-chromium-1440x900.png`, `.e2e-screenshots/qa-pantry-2/current/mobile/expiry-load-error-mobile-chrome-320x740.png` y `.../expiry-load-error-mobile-chrome-393x851.png`. Rollback: revertir el commit atómico de QA-PANTRY.2.
+
+## Unidad QA-PANTRY.TOUCH.1 · objetivos táctiles de acciones por ingrediente (pendiente de reproducción)
+
+**Fuente revalidada (2026-10-01):** el código actual de `PantryComponent` renderiza los controles de cantidad `pantry-stock-menos-*` y `pantry-stock-mas-*` como botones `.stock-btn` de 28×28 px, y editar/eliminar como `.action-btn` de 40×40 px. No hay un override responsive para esos selectores. `DataTableComponent` convierte la tabla en tarjetas móviles hasta 719 px. `tests/e2e/pantry.spec.ts` verifica que el stepper cambia cantidad y que bajar a cero conserva la semántica de inventario conocido, pero no mide los rectángulos táctiles ni verifica acciones de edición/borrado en móvil. La evidencia estática identifica riesgo, no confirma aún tamaño final renderizado, hit testing ni clipping.
+
+**Conducta esperada:** en las tarjetas móviles de inventario, cada acción por ingrediente tiene un objetivo visible y activable de al menos 44×44 px, nombre accesible correcto y foco visible. El ajuste no debe crear overflow horizontal ni solapar controles a 320 px; las acciones conservan su comportamiento actual y el escritorio no pierde innecesariamente su densidad.
+
+- [ ] Añadir primero una regresión Playwright que cree ingredientes sintéticos en la SQLite aislada y mida con `getBoundingClientRect()` los cuatro controles reales de una fila en Pixel 5 a 320×568 y 393×851, incluyendo el límite de DataTable 719/720 px; reproducir cualquier objetivo menor de 44×44 px antes de cambiar estilos.
+- [ ] Comprobar hit testing, nombres accesibles/foco y activación por toque y teclado: incrementar/decrementar cantidad (incluido cero sin borrar), abrir/cerrar edición y abrir/cancelar confirmación de borrado. Asegurar documento sin overflow horizontal ni controles fuera de viewport.
+- [ ] Si el baseline confirma controles menores, aplicar el cambio CSS mínimo —preferentemente limitado al reflujo móvil si la densidad de escritorio se degrada— sin alterar iconos ni datos semánticos de ingredientes.
+- [ ] Añadir o ampliar pruebas unitarias para cualquier lógica de TypeScript que se toque; exigir ≥70 % de statements, ramas, funciones y líneas para esa lógica, sin rebajar el gate global de coverage configurado. Ejecutar Playwright real Chromium/Pixel 5, typecheck y build.
+- [ ] Guardar e inspeccionar capturas sintéticas de escritorio 1440×900 y móvil 320×568/393×851; registrar comando, resultados y limitaciones. No usar la base ni el servidor normal de `localhost:4200`.
+
+**Rollback previsto:** revertir la unidad atómica que incluya este bloque, las regresiones de `pantry.spec.ts`, los tests unitarios que se añadan y cualquier override CSS de `PantryComponent`; no revertir las unidades Pantry ya cerradas.
 
 ## Hallazgo QA-REC.INGRESS.1 · límite de subida distinto en Nginx (pendiente de reproducción runtime)
 
@@ -782,11 +796,12 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Implementar QA-AUTH.PW-LIMIT.1 con red/green TDD y límites de byte UTF-8 en todos los puntos que establecen credenciales nuevas.
-2. QA-REC.INGRESS.1 sigue como discrepancia estática: reproducir con Nginx real aislado cuando haya engine/runtime disponible y no cambiar límites antes de esa prueba.
-3. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
-4. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
-5. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
-6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-7. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-8. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
+1. Ejecutar QA-PANTRY.TOUCH.1: primero reproducir geométricamente en navegador los posibles objetivos menores de 44×44 px; aplicar TDD/CSS solo si el baseline actual los confirma.
+2. Implementar QA-AUTH.PW-LIMIT.1 con red/green TDD y límites de byte UTF-8 en todos los puntos que establecen credenciales nuevas.
+3. QA-REC.INGRESS.1 sigue como discrepancia estática: reproducir con Nginx real aislado cuando haya engine/runtime disponible y no cambiar límites antes de esa prueba.
+4. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
+5. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
+6. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
+7. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+8. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+9. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
