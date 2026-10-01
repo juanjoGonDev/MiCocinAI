@@ -1,7 +1,8 @@
 // Diccionario del dominio `onboarding`: texto de la interfaz, lo que la app dice. No va aqui lo que se
 // guarda ni lo que se envia a la IA (HOGARIA-SPEC §12s-A). El `en` lo escribe una persona.
 export const onboardingEs = {
-  'onboarding.no_se_pudo_guardar': 'No se pudo guardar el utensilio',
+  'onboarding.no_se_pudo_guardar_progreso':
+    'No se pudieron guardar tus respuestas. Inténtalo de nuevo.',
   'onboarding.preguntas_cortas':
     '{n} preguntas cortas. Con esto la IA te propone recetas que de verdad puedes comer y la app sabe qué quieres llevar desde aquí; podrás cambiarlo cuando quieras en Preferencias.',
   'onboarding.mas_sobre_el_objetivo': '¿Algo más sobre el objetivo? (opcional)',
@@ -18,11 +19,11 @@ export const onboardingEs = {
   'onboarding.guardar_y_empezar': 'Guardar y empezar',
   'onboarding.hogaria_es_tu_dia_a_dia':
     'HogarIA es el día a día de tu casa: dinos cómo andas de cocina y qué quieres llevar desde la app.',
-  'onboarding.lo_que_no_marques':
-    'Lo que no marques no se usa: si no tienes horno, no te proponemos nada al horno. El resto del catálogo (ollas, herramientas, tus utensilios propios) lo dejas marcado en el inventario.',
+  'onboarding.utensilios_en_despensa':
+    'La disponibilidad de los utensilios se configura en Despensa. Allí puedes marcar qué tienes y editarlo cuando quieras.',
   'onboarding.marca_el_plato_no':
     'Marca el plato, no la dieta. Se lo pasamos al planificador de la semana.',
-  'onboarding.marcar_el_resto_de': 'Marcar el resto de utensilios →',
+  'onboarding.gestionar_utensilios': 'Gestionar utensilios →',
   'onboarding.me_gusta': 'Me gusta 👍',
   'onboarding.mejor_no': 'Mejor no 👎',
   'onboarding.no_es_un_adorno':
@@ -53,7 +54,7 @@ export const onboardingEs = {
 } as const;
 
 export const onboardingEn: Record<keyof typeof onboardingEs, string> = {
-  'onboarding.no_se_pudo_guardar': 'Could not save the utensil',
+  'onboarding.no_se_pudo_guardar_progreso': 'Your answers could not be saved. Please try again.',
   'onboarding.preguntas_cortas':
     '{n} short questions. With them the AI suggests recipes you can actually eat and the app knows what you want from it; you can change it whenever you like in Preferences.',
   'onboarding.mas_sobre_el_objetivo': 'Anything else about the goal? (optional)',
@@ -71,10 +72,10 @@ export const onboardingEn: Record<keyof typeof onboardingEs, string> = {
   'onboarding.guardar_y_empezar': 'Save and start',
   'onboarding.hogaria_es_tu_dia_a_dia':
     'HogarIA is your day to day: tell us how much you cook and what you want out of the app.',
-  'onboarding.lo_que_no_marques':
-    'Whatever you leave unticked is not used: no oven, nothing with the oven. The rest of the catalogue (pots, tools, your own utensils) stays ticked in the inventory.',
+  'onboarding.utensilios_en_despensa':
+    'Utensil availability is managed in Pantry. Mark what you have there and update it whenever you need.',
   'onboarding.marca_el_plato_no': "Tick the dish, not the diet. We pass it to the week's planner.",
-  'onboarding.marcar_el_resto_de': 'Tick the rest of the utensils →',
+  'onboarding.gestionar_utensilios': 'Manage utensils →',
   'onboarding.me_gusta': 'I like it 👍',
   'onboarding.mejor_no': 'Better not 👎',
   'onboarding.no_es_un_adorno':

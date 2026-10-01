@@ -2,30 +2,25 @@ import type { TranslationKey } from '../../core/i18n';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { TasteProfileService } from '../../core/services/taste-profile.service';
-import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { ChipSelectComponent } from '../../shared/components/ui/chip-select/chip-select.component';
 import { HomeProfilePickerComponent } from '../../shared/components/ui/home-profile-picker/home-profile-picker.component';
 import { DEFAULT_HOME_PROFILE, HomeProfile, toHomeProfile } from '../../shared/models/home-profile';
-import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import {
   COMMON_ALLERGENS,
   COMMON_DISLIKES,
   COMMON_LIKES,
   GOAL_OPTIONS,
-  ONBOARDING_UTENSIL_CATEGORIES,
   TasteGoal,
   TasteProfile,
   emptyTasteProfile
 } from '../../shared/models/taste-profile';
-import { Utensil } from '../../shared/models/pantry.model';
 import { MealTimes, mealTimesPatch, resolveMealTimes } from '../../core/meal-times';
 import { MealHoursComponent } from '../../shared/components/ui/meal-hours/meal-hours.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
-import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import {
   isLastIndex,
@@ -39,9 +34,8 @@ import { I18nService } from '../../core/services/i18n.service';
 
 /**
  * Configuración inicial, nada más registrarse: alergias, gustos, objetivo y
- * con qué utensilios cuentas. Todo es opcional y se puede saltar (y editar
- * luego en Preferencias), pero es lo que usa la IA para no proponer lo que no
- * puedes comer.
+ * horarios. Todo es opcional y se puede saltar; los utensilios se gestionan en
+ * Despensa, su única fuente de verdad.
  */
 @Component({
   selector: 'app-onboarding',
@@ -50,13 +44,10 @@ import { I18nService } from '../../core/services/i18n.service';
     TranslatePipe,
     CommonModule,
     FormsModule,
-    RouterLink,
     ButtonComponent,
     ChipSelectComponent,
     MealHoursComponent,
     HomeProfilePickerComponent,
-    LoadingComponent,
-    CatalogLabelPipe,
     IconComponent
   ],
   template: `
@@ -224,43 +215,14 @@ import { I18nService } from '../../core/services/i18n.service';
           <ng-container *ngSwitchCase="'kitchen'">
             <h2 class="onboarding__step-title">{{ 'onboarding.con_que_cuentas_en' | t }}</h2>
             <p class="onboarding__step-hint">
-              {{ 'onboarding.lo_que_no_marques' | t }}
+              {{ 'onboarding.utensilios_en_despensa' | t }}
             </p>
 
-            <app-loading
-              *ngIf="isLoadingUtensils()"
-              [message]="'onboarding.cargando_utensilios' | t"
-            ></app-loading>
-
-            <div class="utensil-grid" *ngIf="!isLoadingUtensils()">
-              <label
-                *ngFor="let utensil of applianceUtensils(); trackBy: trackById"
-                class="utensil-card"
-                [class.utensil-card--owned]="utensil.available"
-              >
-                <input
-                  type="checkbox"
-                  class="utensil-card__check"
-                  [checked]="utensil.available"
-                  (change)="toggleUtensil(utensil)"
-                />
-                <span class="utensil-card__name">{{ utensil.name | catalog }}</span>
-              </label>
-            </div>
-
             <p class="onboarding__link-row">
-              <a
-                routerLink="/pantry"
-                [queryParams]="{ tab: 'utensils' }"
-                (click)="persistProgress()"
-              >
-                {{ 'onboarding.marcar_el_resto_de' | t }}
+              <a href="/pantry?tab=utensils" (click)="navigateToPantry($event, 'utensils')">
+                {{ 'onboarding.gestionar_utensilios' | t }}
               </a>
-              <a
-                routerLink="/pantry"
-                [queryParams]="{ tab: 'ingredients' }"
-                (click)="persistProgress()"
-              >
+              <a href="/pantry?tab=ingredients" (click)="navigateToPantry($event, 'ingredients')">
                 {{ 'onboarding.revisar_la_despensa' | t }}
               </a>
             </p>
@@ -270,6 +232,7 @@ import { I18nService } from '../../core/services/i18n.service';
         <footer class="onboarding__nav">
           <app-button
             variant="ghost"
+            [touchTarget]="true"
             [disabled]="stepIndex() === 0 || isSaving()"
             (onClick)="back()"
           >
@@ -285,12 +248,18 @@ import { I18nService } from '../../core/services/i18n.service';
           >
             {{ 'onboarding.saltar_este_paso' | t }}
           </button>
-          <app-button *ngIf="!isLastStep()" variant="primary" (onClick)="next()">
+          <app-button
+            *ngIf="!isLastStep()"
+            variant="primary"
+            [touchTarget]="true"
+            (onClick)="next()"
+          >
             {{ 'onboarding.siguiente' | t }}
           </app-button>
           <app-button
             *ngIf="isLastStep()"
             variant="primary"
+            [touchTarget]="true"
             [loading]="isSaving()"
             (onClick)="finish()"
           >
@@ -389,7 +358,7 @@ import { I18nService } from '../../core/services/i18n.service';
         font-size: var(--text-xs);
         color: var(--text-tertiary);
         padding: var(--space-1) var(--space-3);
-        min-height: 32px;
+        min-height: 44px;
         transition: var(--transition-fast);
         &:hover:not(:disabled) {
           color: var(--text-primary);
@@ -403,7 +372,7 @@ import { I18nService } from '../../core/services/i18n.service';
       .onboarding__skip--step {
         font-size: var(--text-sm);
         padding: var(--space-2) var(--space-4);
-        min-height: 40px;
+        min-height: 44px;
       }
 
       .onboarding__step {
@@ -489,37 +458,6 @@ import { I18nService } from '../../core/services/i18n.service';
         color: var(--text-secondary);
       }
 
-      .utensil-grid {
-        display: grid;
-        gap: var(--space-2);
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      }
-      .utensil-card {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-        padding: var(--space-2) var(--space-3);
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-md);
-        cursor: pointer;
-        transition: var(--transition-fast);
-        font-size: var(--text-sm);
-        &:hover {
-          border-color: var(--border-strong);
-        }
-        &--owned {
-          background: var(--success-subtle);
-          border-color: var(--success);
-        }
-      }
-      .utensil-card__check {
-        accent-color: var(--success);
-      }
-      .utensil-card__name {
-        flex: 1;
-      }
-
       .onboarding__link-row {
         display: flex;
         gap: var(--space-4);
@@ -527,10 +465,17 @@ import { I18nService } from '../../core/services/i18n.service';
         margin: 0;
         font-size: var(--text-sm);
         a {
+          display: inline-flex;
+          align-items: center;
+          min-height: 44px;
           color: var(--primary);
           text-decoration: none;
           &:hover {
             text-decoration: underline;
+          }
+          &:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
           }
         }
       }
@@ -555,6 +500,9 @@ import { I18nService } from '../../core/services/i18n.service';
         .onboarding__goals {
           grid-template-columns: 1fr;
         }
+        .onboarding__nav {
+          flex-wrap: wrap;
+        }
       }
     `
   ]
@@ -562,7 +510,6 @@ import { I18nService } from '../../core/services/i18n.service';
 export class OnboardingComponent implements OnInit {
   private readonly i18n = inject(I18nService);
   private readonly tasteService = inject(TasteProfileService);
-  private readonly pantryService = inject(PantryService);
   private readonly toastService = inject(ToastService);
   private readonly router = inject(Router);
 
@@ -570,7 +517,7 @@ export class OnboardingComponent implements OnInit {
   readonly steps = ONBOARDING_STEPS;
   readonly stepIndex = signal(0);
   readonly isSaving = signal(false);
-  readonly isLoadingUtensils = signal(false);
+  private progressSavePending = false;
   /**
    * Pasos saltados uno a uno. No cambian lo que se guarda —lo que haya en el formulario se guarda
    * igual—; cambian lo que se *dice* del paso (la cabecera lo anuncia «sin responder») y si el tour
@@ -614,13 +561,6 @@ export class OnboardingComponent implements OnInit {
   mealTimes: MealTimes = resolveMealTimes(null);
   private savedMealTimes: MealTimes = resolveMealTimes(null);
 
-  /** Electrodomésticos del catálogo: los que cambian qué recetas son posibles. */
-  readonly applianceUtensils = computed(() =>
-    this.pantryService
-      .utensils()
-      .filter((u) => (ONBOARDING_UTENSIL_CATEGORIES as readonly string[]).includes(u.category))
-  );
-
   ngOnInit(): void {
     // Si ya lo hizo (o lo saltó), no se le vuelve a preguntar: entra y edita.
     this.tasteService.load().subscribe({
@@ -639,27 +579,6 @@ export class OnboardingComponent implements OnInit {
         this.loaded = true;
       }
     });
-
-    this.ensureUtensils();
-  }
-
-  /**
-   * El paso 4 no tiene mas datos que la lista de utensilios: si aquella carga
-   * fallo, el usuario se quedaria con el paso vacio y sin manera de salir salvo
-   * recargar. Al entrar se vuelve a pedir si no hay nada en pantalla.
-   */
-  private ensureUtensils(): void {
-    if (this.isLoadingUtensils() || this.pantryService.utensils().length > 0) return;
-
-    this.isLoadingUtensils.set(true);
-    this.pantryService.loadUtensils().subscribe({
-      next: () => this.isLoadingUtensils.set(false),
-      error: () => this.isLoadingUtensils.set(false)
-    });
-  }
-
-  trackById(_index: number, utensil: Utensil): string {
-    return utensil.id;
   }
 
   private applyMealTimes(times: MealTimes): void {
@@ -671,25 +590,41 @@ export class OnboardingComponent implements OnInit {
     this.taste.goal = goal;
   }
 
-  toggleUtensil(utensil: Utensil): void {
-    this.pantryService.updateUtensil(utensil.id, { available: !utensil.available }).subscribe({
-      error: () =>
-        this.toastService.error(
-          this.i18n.t('ui.error'),
-          this.i18n.t('onboarding.no_se_pudo_guardar')
-        )
-    });
+  /**
+   * Guarda las respuestas del tour antes de salir hacia Pantry. Si falla la red,
+   * la navegación se cancela y la copia local sigue en pantalla para reintentar.
+   */
+  navigateToPantry(event: MouseEvent, tab: 'utensils' | 'ingredients'): void {
+    event.preventDefault();
+    if (!this.loaded || this.progressSavePending) return;
+
+    this.progressSavePending = true;
+    this.saveProgress(
+      () => {
+        this.progressSavePending = false;
+        void this.router.navigate(['/pantry'], { queryParams: { tab } });
+      },
+      () => (this.progressSavePending = false)
+    );
   }
 
-  /**
-   * Guarda lo lleva contestado sin cerrar el flujo: si el usuario se va a la
-   * despensa a mitad, no pierde lo que ya ha marcado.
-   */
+  /** El perfil se guarda progresivamente, igual que en la versión anterior del tour. */
   persistProgress(): void {
+    this.saveProgress();
+  }
+
+  private saveProgress(onSaved?: () => void, onFailed?: () => void): void {
     if (!this.loaded) return;
-    this.tasteService
-      .save(this.taste, undefined, this.profile, this.mealTimesPatch())
-      .subscribe({ error: () => undefined });
+    this.tasteService.save(this.taste, undefined, this.profile, this.mealTimesPatch()).subscribe({
+      next: () => onSaved?.(),
+      error: () => {
+        onFailed?.();
+        this.toastService.error(
+          this.i18n.t('ui.error'),
+          this.i18n.t('onboarding.no_se_pudo_guardar_progreso')
+        );
+      }
+    });
   }
 
   /** Solo las horas que han cambiado: verlas en pantalla no es editarlas. */
@@ -708,7 +643,13 @@ export class OnboardingComponent implements OnInit {
     const inputType = (target as HTMLInputElement | null)?.type;
 
     if (event.key === 'Enter') {
-      if (tag === 'TEXTAREA' || tag === 'BUTTON' || target?.getAttribute('role') === 'button')
+      if (
+        tag === 'TEXTAREA' ||
+        tag === 'BUTTON' ||
+        tag === 'A' ||
+        target?.getAttribute('role') === 'button' ||
+        target?.getAttribute('role') === 'link'
+      )
         return;
       // Y no acaba el tour: terminar y guardar tiene que ser un boton, no una tecla que se pulsa sola.
       event.preventDefault();
@@ -726,7 +667,6 @@ export class OnboardingComponent implements OnInit {
   next(): void {
     const target = nextIndex(this.stepIndex(), this.steps.length);
     this.stepIndex.set(target);
-    if (this.steps[target] === 'kitchen') this.ensureUtensils();
   }
 
   /**

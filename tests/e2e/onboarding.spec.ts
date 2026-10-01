@@ -112,13 +112,40 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
 
     await page.getByRole('button', { name: 'Siguiente →' }).click();
 
-    // ── Paso 6 · con qué cuentas: se marca en la propia despensa
+    // ── Paso 6 · la disponibilidad solo se edita en la propia despensa
     await expect(page.locator('.onboarding__step-label')).toContainText('Paso 6 de 6 · Cocina');
-    const airfryer = page.locator('.utensil-card', { hasText: 'Airfryer' });
-    await expect(airfryer.first()).toBeVisible({ timeout: 20000 });
-    await airfryer.first().locator('input.utensil-card__check').check();
-    await expect(airfryer.first()).toHaveClass(/utensil-card--owned/);
+    await expect(page.locator('input.utensil-card__check')).toHaveCount(0);
+    const pantrySave = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/auth/taste' &&
+        response.request().method() === 'PATCH'
+    );
+    await page.getByRole('link', { name: 'Gestionar utensilios →' }).click();
+    expect((await pantrySave).status()).toBe(200);
+    await expect(page).toHaveURL(/\/pantry\?tab=utensils$/);
 
+    await page.fill('input#utensilios-q', 'Airfryer');
+    const airfryer = page.getByRole('row', { name: /Airfryer/ });
+    await expect(airfryer).toBeVisible({ timeout: 20000 });
+    const availability = airfryer.getByRole('checkbox', { name: 'Airfryer' }).last();
+    if ((await availability.getAttribute('aria-checked')) !== 'true') await availability.click();
+    await expect(availability).toHaveAttribute('aria-checked', 'true');
+    await page.reload();
+    await page.fill('input#utensilios-q', 'Airfryer');
+    await expect(
+      page
+        .getByRole('row', { name: /Airfryer/ })
+        .getByRole('checkbox', { name: 'Airfryer' })
+        .last()
+    ).toHaveAttribute('aria-checked', 'true');
+
+    // El tour sigue pendiente y vuelve con las respuestas que se guardaron antes de navegar.
+    await page.goto('/onboarding');
+    await expect(page.locator('[data-level="none"]')).toHaveClass(/profile-picker__level--on/);
+    for (let step = 0; step < 5; step += 1) {
+      await page.getByRole('button', { name: 'Siguiente →' }).click();
+    }
+    await expect(page.locator('.onboarding__step-label')).toContainText('Paso 6 de 6 · Cocina');
     await page.getByRole('button', { name: 'Guardar y empezar' }).click();
     await expect(page.locator('.toast--success').filter({ hasText: 'Listo' })).toBeVisible();
     await expect(page).toHaveURL(/.*dashboard/);
