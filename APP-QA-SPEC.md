@@ -978,6 +978,18 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 - [ ] `/preferences`: tabs/URL y recarga, perfil, alergias, gustos, comidas/horas y objetivos; añadir/quitar opciones personalizadas, guardar/descartar, aviso de cambios sin guardar y enlaces a onboarding/despensa.
 - [ ] `/settings`: tema claro/oscuro/sistema, idioma ES/EN, módulos habilitar/deshabilitar, reinicio/persistencia y rutas directas con módulo oculto.
 
+### QA-AUTH.LOGIN.DOUBLE-SUBMIT.1 · Evitar envíos concurrentes del login
+
+**Fuente revalidada (2026-10-01):** `LoginComponent.onSubmit()` comprueba campos vacíos y activa `isLoading`, pero no consulta ese estado antes de volver a enviar. El botón compartido queda `disabled` durante la carga, pero el formulario sigue teniendo un único listener `ngSubmit`; falta una prueba runtime que compruebe si una segunda petición de submit mientras la primera está pendiente genera otra llamada. Si el login lleva `?code=`, el éxito continúa con `HouseholdService.joinByCode()` y navega a `/household`; el fallo de login limpia `isLoading` y permite reintentar. La solución solo se aplicará si la regresión se reproduce.
+
+- [ ] Añadir primero una prueba unitaria que mantenga pendiente `AuthService.login`, dispare dos submits y exija una única llamada; cubrir campos inválidos y permitir retry tras error.
+- [ ] Reproducir en Playwright aislado con un usuario/hogar sintéticos: durante el login pendiente volver a someter el formulario, observar una sola petición de login, una sola unión por `?code=`, y destino `/household`; bloquear service workers para que no omitan la interceptación de prueba.
+- [ ] Si se reproduce el doble envío, añadir guard temprano en `onSubmit()` y verificar rojo/verde con la misma prueba; si no, registrar evidencia y no cambiar producción.
+- [ ] Ejecutar en Chromium escritorio y Pixel 5, sin escritura en DB/servidor normal; confirmar cobertura de `login.component.ts` ≥70 % en statements/branches/functions/lines sin rebajar gates existentes.
+- [ ] No hay cambio visual previsto; capturas PC/móvil son N/A salvo que la prueba revele un problema visual adicional.
+
+Rollback previsto: retirar solo la regresión y el guard de `LoginComponent` si se implementa; conservar la especificación y su evidencia como parte del checklist global.
+
 ### Cocina, despensa y planificación
 
 - [ ] `/pantry`: ingredientes/utensilios, búsqueda, filtro/categoría, orden, paginar/seleccionar, lote, cantidad/unidad, alta/edición/borrado y sugerencias; estados vacío, sin resultados, error y recarga.
