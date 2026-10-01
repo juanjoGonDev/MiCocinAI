@@ -14,7 +14,8 @@ import { defineConfig } from 'vitest/config';
  *
  * Hoy quedan fuera, con su prueba atada a la fase que les corresponde:
  *   - src/routes/** (salvo shopping.routes.ts, que tiene spec desde la ronda 9, y
- *     src/routes/pantry.routes.ts, que empezo en la 10 con los filtros por dias: el
+ *     household.routes.ts, que entra con su spec focal, y src/routes/pantry.routes.ts,
+ *     que empezo en la 10 con los filtros por dias: el
  *     fichero entero no entra hasta que el alta y los utensilios tengan la suya, porque
  *     el umbral es por fichero y un 20 % maquillaria la rampa) y src/index.ts
  *                             → el resto se prueba de momento con la suite e2e
@@ -25,6 +26,7 @@ import { defineConfig } from 'vitest/config';
  */
 const COVERED = [
   'src/routes/shopping.routes.ts',
+  'src/routes/household.routes.ts',
   'src/routes/ai-queue.routes.ts',
   'src/schemas/shopping.schema.ts',
   'src/utils/product-key.ts',
