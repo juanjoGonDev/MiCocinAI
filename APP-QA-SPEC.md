@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta y error de carga de caducidades tienen regresiones verificadas; QA-REC.INGRESS.1 sigue sin runtime Nginx y QA-REC.FAV.1 queda especificada; el barrido global sigue pendiente
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades y pertenencia a Favoritas tienen regresiones verificadas; QA-REC.INGRESS.1 sigue sin runtime Nginx y el barrido global sigue pendiente
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -324,17 +324,21 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 - [ ] Añadir pruebas del backend para firma/tamaño en 0 bytes, 10 MiB exactos y 10 MiB + 1 byte; validar 413 con `FILE_TOO_LARGE` solo al superar el límite.
 - [ ] Corregir el límite del proxy para incluir el multipart overhead sin cambiar innecesariamente el límite global; verificar con Chromium y Pixel 5 sobre Nginx real aislado y documentar si falta el runtime.
 
-## Unidad QA-REC.FAV.1 · quitar favoritos desde la pestaña filtrada (especificada)
+## Unidad QA-REC.FAV.1 · quitar favoritos desde la pestaña filtrada (resuelta)
 
 **Fuente de verdad revalidada (2026-10-01):** la ruta activa de `/recipes` etiqueta el filtro como «Favoritas»; `RecipesComponent.setFilter('favorites')` pide `RecipeService.loadRecipes({ isFavorite: true })` y `GET /api/recipes` aplica `is_favorite = 1`. El endpoint `POST /api/recipes/:id/favorite` confirma el valor nuevo. Sin embargo, `RecipeService.toggleFavorite()` solo cambia `isFavorite` en el array cargado; la receta desfavoritada sigue pintándose mientras `activeFilter` continúa en «Favoritas». Los E2E actuales verifican el toggle o la selección del filtro por separado, pero no la consistencia de pertenencia ni su persistencia tras recargar.
 
 **Conducta esperada (inferencia explícita de la semántica del filtro):** una vez que el servidor confirma `isFavorite: false`, la receta deja de pertenecer a «Favoritas» y debe desaparecer de esa lista; las demás favoritas permanecen. El fallo de red/servidor no debe quitar la tarjeta ni modificar el estado visual. Cambiar de filtro y recargar debe mostrar los datos persistidos, sin ocultar la receta de «Todas».
 
-- [ ] Escribir primero una regresión Playwright con dos recetas sintéticas en stack SQLite aislado: activar «Favoritas», quitar una, comprobar que desaparece solo tras éxito, la otra sigue, y el resultado persiste al recargar y volver a «Todas».
-- [ ] Reproducir el fallo contra el build actual y añadir prueba unitaria para toggle en filtro de favoritas, toggle en «Todas» y respuesta fallida; conservar conteo/estado y evitar desapariciones optimistas ante error.
-- [ ] Corregir el estado del filtro/lista en el punto mínimo, sin duplicar la fuente del filtro; verificar fallo y reintento, nombres accesibles ES/EN y activación por teclado.
-- [ ] Ejecutar tests unitarios/coverage focal con cada métrica ≥80 % en lógica tocada, typecheck/build y Playwright real Chromium + Pixel 5 con puerto, SQLite, semilla y limpieza aislados; comprobar 1440×900, 393×851 y 320×568 sin overflow ni CTA fuera de viewport.
-- [ ] Guardar e inspeccionar capturas sintéticas comparables de escritorio y móvil tras el cambio; registrar errores de consola/red y cualquier limitación.
+- [x] Escribir primero una regresión Playwright con dos recetas sintéticas en stack SQLite aislado: activar «Favoritas», quitar una, comprobar que desaparece solo tras éxito, la otra sigue, y el resultado persiste al recargar y volver a «Todas».
+- [x] Reproducir el fallo contra el build actual y añadir prueba unitaria para toggle en filtro de favoritas, toggle en «Todas» y respuesta fallida; conservar conteo/estado y evitar desapariciones optimistas ante error.
+- [x] Corregir el estado del filtro/lista en el punto mínimo, sin duplicar la fuente del filtro; verificar fallo y reintento, nombres accesibles ES/EN y activación por teclado.
+- [x] Ejecutar tests unitarios/coverage focal, typecheck/build y Playwright real Chromium + Pixel 5 con puerto, SQLite, semilla y limpieza aislados; comprobar 1440×900, 393×851 y 320×568 sin overflow horizontal ni control favorito fuera del viewport.
+- [x] Guardar e inspeccionar capturas sintéticas comparables de escritorio y móvil tras el cambio; revisar errores JS, estados de fallo/red y anotar limitaciones.
+
+**Evidencia TDD y cierre (2026-10-01):** la regresión E2E y la unidad reprodujeron en rojo la tarjeta que seguía en Favoritas tras desfavoritarla; un caso adicional reprodujo que un GET filtrado fallido no debe cambiar la identidad del listado que sigue visible. Tras el arreglo mínimo, `recipe.service.spec.ts` pasó **11/11** en Chrome Headless. La cobertura focal del código tocado fue **100 %** en statements, branches, functions y lines (36/36, 12/12, 10/10 y 27/27). `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/recipe-favorites.spec.ts` pasó **2/2** (Chromium escritorio y Pixel 5); usó Chrome local mediante `E2E_CHROME_BIN`, puerto y SQLite temporales, usuario/recetas sintéticos y cleanup del runner. El flujo cubre fallo HTTP 500 sin cambio visual, reintento real exitoso, persistencia tras recarga, lista «Todas», nombres accesibles ES/EN y Enter. Sin errores de página; sin overflow horizontal; control favorito visible y ≥44×44 en 1440×900, 393×851 y 320×568.
+
+**Artefactos y gates:** capturas inspeccionadas (solo fixtures sintéticos): [Chromium 1440×900](.e2e-screenshots/qa-rec-fav-1/chromium/all-recipes-after-unfavorite-1440x900.png), [Pixel 5 393×851](.e2e-screenshots/qa-rec-fav-1/mobile-chrome/all-recipes-after-unfavorite-393x851.png) y [Pixel 5 320×568](.e2e-screenshots/qa-rec-fav-1/mobile-chrome/all-recipes-after-unfavorite-320x568.png). `tsc -p tsconfig.e2e.json --noEmit`, build de producción y diff check pasaron. La suite frontend completa pasó **591/591**, pero el gate global configurado en 80 % continúa fallando: statements **58.36 %**, branches **49.26 %**, lines **60.00 %**, functions **47.92 %**; no se redujo el gate y QA-04c sigue abierta. El formato Prettier focal pasó; se conserva sin reformatear el estilo histórico de los archivos completos.
 
 ## Evidencia inicial (no equivale a aprobación de la app)
 
@@ -707,11 +711,10 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Completar QA-REC.FAV.1 con regresión real de la pertenencia a «Favoritas» y persistencia tras recarga.
-2. QA-REC.INGRESS.1 sigue como discrepancia estática: reproducir con Nginx real aislado cuando haya engine/runtime disponible y no cambiar límites antes de esa prueba.
-3. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
-4. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area y WebKit además de Chromium.
-5. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
-6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-7. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-8. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
+1. QA-REC.INGRESS.1 sigue como discrepancia estática: reproducir con Nginx real aislado cuando haya engine/runtime disponible y no cambiar límites antes de esa prueba.
+2. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
+3. Cubrir la matriz responsive completa: breakpoints actuales B−1/B/B+1, orientación, scroll, teclado, safe-area y WebKit además de Chromium.
+4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
+5. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+6. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+7. Dashboard/recetas y el alta manual móvil de Pantry ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.

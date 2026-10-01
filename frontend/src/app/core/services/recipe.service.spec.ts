@@ -114,6 +114,66 @@ describe('RecipeService', () => {
     expect(service.recipes()[0].isFavorite).toBeTrue();
   });
 
+  it('removes a successfully unfavorited recipe from favorites results only', () => {
+    const first = makeRecipe({ id: 'favorite-1', isFavorite: true });
+    const second = makeRecipe({ id: 'favorite-2', name: 'Otra sopa', isFavorite: true });
+    service.loadRecipes({ isFavorite: true });
+    http.expectOne('/api/recipes?isFavorite=true').flush({
+      data: { recipes: [first, second], total: 2 }
+    });
+
+    service.toggleFavorite(first.id);
+    http
+      .expectOne({ method: 'POST', url: `/api/recipes/${first.id}/favorite` })
+      .flush({}, { status: 500, statusText: 'Server Error' });
+    expect(service.recipes()).toEqual([first, second]);
+    expect(service.total()).toBe(2);
+
+    service.toggleFavorite(first.id);
+    http
+      .expectOne({ method: 'POST', url: `/api/recipes/${first.id}/favorite` })
+      .flush({ data: { isFavorite: false } });
+
+    expect(service.recipes()).toEqual([second]);
+    expect(service.total()).toBe(1);
+  });
+
+  it('keeps an unfavorited recipe visible in unfiltered results', () => {
+    const first = makeRecipe({ id: 'favorite-1', isFavorite: true });
+    const second = makeRecipe({ id: 'favorite-2', name: 'Otra sopa', isFavorite: true });
+    service.loadRecipes();
+    http.expectOne('/api/recipes').flush({ data: { recipes: [first, second], total: 2 } });
+
+    service.toggleFavorite(first.id);
+    http
+      .expectOne({ method: 'POST', url: `/api/recipes/${first.id}/favorite` })
+      .flush({ data: { isFavorite: false } });
+
+    expect(service.recipes()).toEqual([{ ...first, isFavorite: false }, second]);
+    expect(service.total()).toBe(2);
+  });
+
+  it('keeps the loaded filter when a later filter request fails', () => {
+    const first = makeRecipe({ id: 'favorite-1', isFavorite: true });
+    const second = makeRecipe({ id: 'favorite-2', name: 'Otra sopa', isFavorite: true });
+    service.loadRecipes();
+    http.expectOne('/api/recipes').flush({ data: { recipes: [first, second], total: 2 } });
+
+    service.loadRecipes({ isFavorite: true });
+    http
+      .expectOne('/api/recipes?isFavorite=true')
+      .flush({}, { status: 500, statusText: 'Server Error' });
+    expect(service.recipes()).toEqual([first, second]);
+
+    service.toggleFavorite(first.id);
+    http
+      .expectOne({ method: 'POST', url: `/api/recipes/${first.id}/favorite` })
+      .flush({ data: { isFavorite: false } });
+
+    expect(service.recipes()).toEqual([{ ...first, isFavorite: false }, second]);
+    expect(service.total()).toBe(2);
+  });
+
   it('increments cooking count once on success and keeps it on failure', () => {
     const initial = makeRecipe();
     service.loadRecipes();

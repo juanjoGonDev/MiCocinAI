@@ -16,6 +16,7 @@ export class RecipeService {
   private currentRecipeSignal = signal<Recipe | null>(null);
   private isLoadingSignal = signal(false);
   private totalSignal = signal(0);
+  private currentFilter: RecipeFilter | undefined;
 
   readonly recipes = this.recipesSignal.asReadonly();
   readonly currentRecipe = this.currentRecipeSignal.asReadonly();
@@ -35,6 +36,7 @@ export class RecipeService {
 
     this.http.get<any>(this.apiUrl, { params }).pipe(
       tap(response => {
+        this.currentFilter = filter;
         this.recipesSignal.set(response.data.recipes);
         this.totalSignal.set(response.data.total);
         this.isLoadingSignal.set(false);
@@ -67,8 +69,19 @@ export class RecipeService {
   toggleFavorite(id: string): void {
     this.http.post<any>(`${this.apiUrl}/${id}/favorite`, {}).pipe(
       tap(response => {
+        const isFavorite = response.data.isFavorite;
+        if (this.currentFilter?.isFavorite && !isFavorite) {
+          const current = this.recipesSignal();
+          const remaining = current.filter(recipe => recipe.id !== id);
+          this.recipesSignal.set(remaining);
+          if (remaining.length < current.length) {
+            this.totalSignal.update(total => Math.max(0, total - 1));
+          }
+          return;
+        }
+
         this.recipesSignal.update(list =>
-          list.map(r => r.id === id ? { ...r, isFavorite: response.data.isFavorite } : r)
+          list.map(r => r.id === id ? { ...r, isFavorite } : r)
         );
       }),
       catchError(() => of(null))

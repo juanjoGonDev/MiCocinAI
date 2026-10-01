@@ -10,6 +10,7 @@ export interface SyntheticRecipe {
 }
 
 export interface SyntheticRecipeOptions {
+  name?: string;
   tips?: string;
   warning?: string;
 }
@@ -21,7 +22,7 @@ export async function createSyntheticRecipe(
   const token = await page.evaluate((key) => localStorage.getItem(key), TOKEN_KEY);
   if (!token) throw new Error('la sesión de prueba debe estar autenticada');
 
-  const name = `Receta QA ${Date.now()}`;
+  const name = options.name ?? `Receta QA ${Date.now()}`;
   const response = await page.request.post('/api/recipes', {
     headers: { authorization: `Bearer ${token}` },
     data: {
