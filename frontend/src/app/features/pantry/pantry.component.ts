@@ -1,5 +1,5 @@
-import { Component, inject, OnInit, computed, signal, viewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, DestroyRef, inject, OnInit, computed, signal, viewChild } from '@angular/core';
+import { CommonModule, DOCUMENT } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { firstValueFrom } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -104,7 +104,12 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
           >
             {{ 'pantry.catalogo_anadir' | t }}
           </app-button>
-          <app-button variant="primary" [touchTarget]="true" (onClick)="openAddModal()">
+          <app-button
+            variant="primary"
+            [touchTarget]="true"
+            (onClick)="openAddModal()"
+            data-test="pantry-agregar"
+          >
             {{ addButtonLabel() }}
           </app-button>
         </div>
@@ -360,7 +365,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                       type="button"
                       class="stock-btn"
                       [attr.aria-label]="'pantry.quitar_unidad' | t"
-                      (click)="quitarUnidad(filaIngrediente(fila))"
+                      (click)="quitarUnidad(filaIngrediente(fila), $event)"
                       [attr.data-test]="'pantry-stock-menos-' + filaId(fila)"
                     >
                       <app-icon name="remove" [size]="14" [label]="null" />
@@ -372,7 +377,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
                       type="button"
                       class="stock-btn"
                       [attr.aria-label]="'pantry.anadir_unidad' | t"
-                      (click)="anadirUnidad(filaIngrediente(fila))"
+                      (click)="anadirUnidad(filaIngrediente(fila), $event)"
                       [attr.data-test]="'pantry-stock-mas-' + filaId(fila)"
                     >
                       <app-icon name="add" [size]="14" [label]="null" />
@@ -1031,6 +1036,13 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
           color: var(--error);
         }
       }
+      @media (max-width: 719px), (pointer: coarse) {
+        .stock-btn,
+        .action-btn {
+          min-width: 44px;
+          min-height: 44px;
+        }
+      }
       /* ── lote flotante (## 12ad, regla F) ──
        Barra centrada abajo, por encima de la tarjeta pero por debajo de la hoja de filtros y su velo (55/60).
        El «empuje» es el hueco que deja la tarjeta para que la ultima fila jamas quede tapada por la barra. */
@@ -1378,7 +1390,10 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
   ]
 })
 export class PantryComponent implements OnInit {
+  private readonly destroyRef = inject(DestroyRef);
   private readonly i18n = inject(I18nService);
+  private readonly document = inject(DOCUMENT);
+  private readonly pendingStockFocusCleanups = new Set<() => void>();
   pantryService = inject(PantryService);
   private toastService = inject(ToastService);
   private confirmService = inject(ConfirmService);
@@ -1750,6 +1765,10 @@ export class PantryComponent implements OnInit {
    * y a prueba de F5. `?section=` ya no existe: la tabla del catalogo lo sustituye.
    */
   constructor() {
+    this.destroyRef.onDestroy(() => {
+      for (const cleanup of this.pendingStockFocusCleanups) cleanup();
+    });
+
     syncTabWithUrl<PantryTab>({
       param: 'tab',
       values: PANTRY_TABS,
@@ -1931,19 +1950,132 @@ export class PantryComponent implements OnInit {
   // segunda forma de cambiar algo, es un atajo a lo mismo. Bajar a 0 NO borra la fila: deja el producto en «lo
   // que la casa conoce y no tiene» (la semantica de `staples` de la ## 12x) y la fila vuelve a las sugerencias.
 
-  anadirUnidad(ingrediente: Ingredient): void {
-    this.moverStock(ingrediente, 1);
+  anadirUnidad(ingrediente: Ingredient, event?: Event): void {
+    this.moverStock(ingrediente, 1, event);
   }
 
-  quitarUnidad(ingrediente: Ingredient): void {
-    this.moverStock(ingrediente, -1);
+  quitarUnidad(ingrediente: Ingredient, event?: Event): void {
+    this.moverStock(ingrediente, -1, event);
   }
 
-  private moverStock(ingrediente: Ingredient, delta: number): void {
+  private moverStock(ingrediente: Ingredient, delta: number, event?: Event): void {
     const siguiente = Math.max(0, (ingrediente.quantity ?? 0) + delta);
     if (siguiente === ingrediente.quantity) return;
-    this.pantryService.updateIngredient(ingrediente.id, { quantity: siguiente }).subscribe(() => {
-      void this.recargarInventario();
+    const sourceButton = (event?.currentTarget as HTMLButtonElement | null) ?? null;
+    const dataTest = sourceButton?.getAttribute('data-test');
+    const shouldRestoreFocus = this.document.activeElement === sourceButton;
+    let focusDataTest = dataTest;
+    let focusSourceButton = sourceButton;
+    let restoreFocus = shouldRestoreFocus;
+    let focusTrackingDisposed = false;
+    const trackPantryActionFocus = (event: FocusEvent): void => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target === this.document.body || target === this.document.documentElement) return;
+
+      const actionButton = target.closest<HTMLButtonElement>(
+        'button[data-test^="pantry-stock-"], button[data-test^="pantry-editar-"], button[data-test^="pantry-eliminar-"]'
+      );
+      const activeDataTest = actionButton?.getAttribute('data-test');
+      if (actionButton && this.esAccionDeFilaPantry(activeDataTest)) {
+        focusDataTest = activeDataTest;
+        focusSourceButton = actionButton;
+        restoreFocus = true;
+        return;
+      }
+
+      focusDataTest = undefined;
+      focusSourceButton = null;
+      restoreFocus = false;
+    };
+    const stopTrackingFocus = (): void => {
+      focusTrackingDisposed = true;
+      if (shouldRestoreFocus) {
+        this.document.removeEventListener('focusin', trackPantryActionFocus);
+        this.pendingStockFocusCleanups.delete(stopTrackingFocus);
+      }
+    };
+    if (shouldRestoreFocus) {
+      this.document.addEventListener('focusin', trackPantryActionFocus);
+      this.pendingStockFocusCleanups.add(stopTrackingFocus);
+    }
+
+    this.pantryService.updateIngredient(ingrediente.id, { quantity: siguiente }).subscribe({
+      next: () => {
+        void this.recargarInventario()
+          .then(() => {
+            if (!focusTrackingDisposed) {
+              this.restaurarFocoAccionInventario(focusDataTest, focusSourceButton, restoreFocus);
+            }
+          })
+          .finally(stopTrackingFocus);
+      },
+      error: stopTrackingFocus
+    });
+  }
+
+  private esAccionDeFilaPantry(dataTest: string | null | undefined): dataTest is string {
+    return (
+      dataTest?.startsWith('pantry-stock-mas-') === true ||
+      dataTest?.startsWith('pantry-stock-menos-') === true ||
+      dataTest?.startsWith('pantry-editar-') === true ||
+      dataTest?.startsWith('pantry-eliminar-') === true
+    );
+  }
+
+  private restaurarFocoAccionInventario(
+    dataTest: string | null | undefined,
+    sourceButton: HTMLButtonElement | null,
+    shouldRestoreFocus: boolean
+  ): void {
+    if (!dataTest || !shouldRestoreFocus) return;
+    const actionPrefix = [
+      'pantry-stock-mas-',
+      'pantry-stock-menos-',
+      'pantry-editar-',
+      'pantry-eliminar-'
+    ].find((prefix) => dataTest.startsWith(prefix));
+    if (!actionPrefix) return;
+    const view = this.document.defaultView;
+    view?.requestAnimationFrame(() => {
+      view.requestAnimationFrame(() => {
+        const activeElement = this.document.activeElement;
+        const focusWasLostWithTheRow =
+          activeElement === this.document.body ||
+          activeElement === this.document.documentElement ||
+          activeElement === sourceButton;
+        if (!focusWasLostWithTheRow) return;
+        if (activeElement === sourceButton && sourceButton?.isConnected) return;
+
+        const stepperButtons = Array.from(
+          this.document.querySelectorAll<HTMLButtonElement>(
+            'button[data-test^="pantry-stock-"], button[data-test^="pantry-editar-"], button[data-test^="pantry-eliminar-"]'
+          )
+        );
+        const isFullyVisible = (candidate: HTMLButtonElement): boolean => {
+          const rect = candidate.getBoundingClientRect();
+          return (
+            candidate.getClientRects().length > 0 &&
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.top >= 0 &&
+            rect.left >= 0 &&
+            rect.bottom <= view.innerHeight &&
+            rect.right <= view.innerWidth
+          );
+        };
+        const button =
+          stepperButtons.find((candidate) => candidate.getAttribute('data-test') === dataTest) ??
+          stepperButtons.find(
+            (candidate) =>
+              candidate.getAttribute('data-test')?.startsWith(actionPrefix) &&
+              isFullyVisible(candidate)
+          ) ??
+          this.document.querySelector<HTMLButtonElement>(
+            'app-button[data-test="pantry-agregar"] button'
+          );
+        button?.focus();
+      });
     });
   }
 
