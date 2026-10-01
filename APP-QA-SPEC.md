@@ -865,6 +865,17 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 ### Navegación y superficies de hogar
 
 - [ ] Shell autenticado: redirección de ruta privada sin sesión; menú lateral, overlay, botón cerrar, Escape, bottom-nav, sidebar de escritorio, cuenta/avatar, cerrar sesión y cola de tickets; verificar ruta directa y atrás/adelante.
+
+### QA-SHELL.DRAWER.ESCAPE.1 · Escape y foco del menú móvil (pendiente)
+
+**Fuente revalidada (2026-10-01):** `MainLayoutComponent` abre/cierra el drawer con `isSidebarOpen` y ofrece cierre por botón, overlay o navegación, pero no tiene listener de teclado. El breakpoint vigente es 1024 px: por debajo hay cabecera/overlay; desde 1024 px el sidebar queda fijo, sin trigger móvil ni overlay. Escape debe cerrar solo el drawer móvil abierto y devolver el foco al botón que lo abrió; el botón debe exponer su estado accesible.
+
+- [ ] Añadir primero una regresión Playwright real aislada: activar el menú por teclado, pulsar Escape, exigir overlay ausente, `aria-expanded=false` y foco devuelto al trigger; reproducir rojo antes del cambio, sin `force`.
+- [ ] Cubrir 393×851, 320×568 y los bordes 1023/1024/1025 px; probar click en overlay, botón cerrar y navegación para conservar el cierre actual; confirmar que Escape no oculta el sidebar desktop.
+- [ ] Añadir prueba unitaria/de integración de cierre por Escape (incluye no-op cerrado y no afectar un overlay superior), manteniendo la navegación por teclado.
+- [ ] Corregir accesibilidad/estado mínimo y ejecutar Playwright real Chromium + Pixel 5; revisar foco/teclado, límites, scroll y no-overflow.
+- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil y registrar tests/rollback; no modificar los datos ni el server normal.
+
 - [ ] `/dashboard`: estados con/sin datos, resumen, vencimientos, comidas/recetas y cada CTA; verificar los destinos anotados en discrepancias.
 - [ ] `/household`: crear hogar, unirse por código, código incorrecto, copiar/regenerar invitación, miembros/roles, permisos para compartir, salir del hogar y estados sin hogar.
 - [ ] `/account`: tabs y URL, editar/cancelar nombre, seguridad/cambio de contraseña, cerrar sesión, información de cuenta; avatar: formatos/tamaño permitidos, recorte, zoom, recentrar, cancelar, subir, quitar, error y persistencia.
