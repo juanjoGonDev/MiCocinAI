@@ -22,6 +22,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 import { MAX_BCRYPT_PASSWORD_BYTES, newPasswordIssue } from '../../core/utils/password-policy';
+import { nameDraftIsDirty } from './account-name-draft';
 
 /**
  * La cuenta de la persona, en su propia pagina (HOGARIA-SPEC §12l).
@@ -133,6 +134,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               maxlength="100"
               autocomplete="name"
               [placeholder]="'account.como_te_llamas_en' | t"
+              [attr.aria-describedby]="nameError() ? 'account-name-error' : null"
               data-test="account-name"
               [(ngModel)]="nameDraft"
               (ngModelChange)="onNameInput()"
@@ -140,7 +142,13 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
             <p class="account__hint">
               {{ 'account.aparece_en_el_historial' | t }}
             </p>
-            <p class="account__error" *ngIf="nameError()" data-test="account-name-error">
+            <p
+              class="account__error"
+              *ngIf="nameError()"
+              id="account-name-error"
+              role="alert"
+              data-test="account-name-error"
+            >
               {{ nameError() }}
             </p>
             <div class="account__field-actions">
@@ -900,7 +908,7 @@ export class AccountComponent {
   }
 
   nameDirty(): boolean {
-    return this.nameDraft.trim() !== this.savedName.trim();
+    return nameDraftIsDirty(this.nameDraft, this.savedName);
   }
 
   saveName(): void {
@@ -915,9 +923,9 @@ export class AccountComponent {
       next: () => {
         this.savingName.set(false);
         this.nameError.set('');
-        // Vuelta a sincronizar con lo que hay guardado: si el servidor recorto algo, eso es lo
-        // que se ve a partir de ahora, y no lo que se escribio.
-        this.nameTouched.set(false);
+        // Si se ha escrito otro nombre mientras volaba el PATCH, se conserva como borrador;
+        // el effect solo resincroniza cuando ya no queda texto distinto del valor guardado.
+        this.nameTouched.set(nameDraftIsDirty(this.nameDraft, this.savedName));
         this.toastService.success(this.i18n.t('account.nombre_guardado'));
       },
       error: () => {

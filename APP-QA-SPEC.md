@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas, las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1 y QA-AUTH.PW-LIMIT.1 tienen regresiones verificadas localmente; la revisión adicional confirmó el teardown del listener de foco y esperó la recarga real en E2E. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-ACCOUNT.DRAFT.1 y el barrido global siguen pendientes; el gate global de cobertura frontend continúa sin cumplir. QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx.
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas, las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1, QA-AUTH.PW-LIMIT.1 y QA-ACCOUNT.DRAFT.1 tienen regresiones verificadas localmente; la revisión adicional confirmó el teardown del listener de foco y esperó la recarga real en E2E. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. El barrido global sigue pendiente y el gate global de cobertura frontend continúa sin cumplir. QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx.
 - **Actualizado:** 2026-10-01
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -328,17 +328,25 @@ El harness usa el `Referer` same-origin para asociar el request a la ruta origen
 
 **Evidencia verde:** `account-responsive.spec.ts` recorre 21 combinaciones de viewport/estado por proyecto; ambas ejecuciones dan **1/1** y cero errores `pageerror`. Playwright full-stack con `E2E_RATE_LIMIT=on`, SQLite y puerto efímeros; build production y `tsc -p tsconfig.e2e.json --noEmit` pasan. Capturas finales inspeccionadas: `.e2e-screenshots/qa-account-responsive-20261001/final-desktop/account-1440x900.png` y `final-mobile/account-320x568.png`; el tab se mueve a una segunda fila en 320 px y no se corta. No hubo cambios de HTML/comportamiento ni datos personales.
 
-### QA-ACCOUNT.DRAFT.1 · conservar una edición de nombre durante PATCH (pendiente de reproducción)
+### QA-ACCOUNT.DRAFT.1 · conservar una edición de nombre durante PATCH (resuelta)
 
 **Fuente revalidada (2026-10-01):** `/account` deja habilitado el campo `account-name` mientras `PATCH /api/auth/profile` está pendiente. `saveName()` captura el valor recortado al enviar; al recibir la respuesta siempre pone `nameTouched=false`. El `effect` de `AccountComponent` observa `currentUserSignal` y, al no haber ya un campo marcado como tocado, sincroniza el nombre enviado en `nameDraft`. La prueba actual de `tests/e2e/account.spec.ts` cubre renombrar sin latencia, no editar de nuevo durante el vuelo. `HOGARIA-SPEC.md` §7 requiere que la pantalla refleje el usuario de sesión y el formulario da al usuario un campo editable; la expectativa de esta unidad es no descartar una edición posterior que aún no se guardó.
 
 **Conducta esperada:** el PATCH guarda el snapshot que se envió, pero cualquier texto que se escriba después permanece como borrador y se puede guardar o cancelar después. La respuesta actualiza el nombre de sesión/menú con el valor confirmado por el servidor. Un fallo conserva el último borrador y permite reintentar; una respuesta sin ediciones concurrentes sigue sincronizando el valor canónico del servidor.
 
-- [ ] Añadir primero una regresión Playwright determinista: retener la respuesta del PATCH mediante promesas/señales, editar el campo mientras vuela y comprobar que el borrador posterior sobrevive. Sin `waitForTimeout` ni datos compartidos; usar el runner SQLite aislado.
-- [ ] Probar éxito concurrente, error y reintento, guardar posterior, cancelar y la respuesta normal sin edición; comprobar estado del botón/toast, nombre confirmado en menú y texto accesible del error.
-- [ ] Añadir regresión unitaria o de componente para la decisión de conservar/sincronizar el borrador, con ≥70 % de coverage en statements, branches, functions y lines del alcance sin reducir gates globales.
-- [ ] Ejecutar Playwright real Chromium escritorio + Pixel 5 a 1440×900, 393×851, 320×568 y paisaje 568×320; comprobar foco/teclado, errores de página/red y overflow; guardar e inspeccionar capturas PC/móvil con fixtures sintéticas.
-- [ ] Registrar red/green TDD, comandos/resultados, typecheck/build, gates de cobertura, capturas ignoradas por Git y rollback antes de marcar la unidad resuelta.
+- [x] Añadir primero una regresión Playwright determinista: retener la respuesta del PATCH mediante promesas/señales, editar el campo mientras vuela y comprobar que el borrador posterior sobrevive. Sin `waitForTimeout` ni datos compartidos; usar el runner SQLite aislado.
+- [x] Probar éxito concurrente, error y reintento, guardar posterior, cancelar y la respuesta normal sin edición; comprobar estado del botón/toast, nombre confirmado en menú y texto accesible del error.
+- [x] Añadir regresión unitaria para la decisión de conservar/sincronizar el borrador, con ≥70 % de coverage en statements, branches, functions y lines del alcance sin reducir gates globales.
+- [x] Ejecutar Playwright real Chromium escritorio + Pixel 5 a 1440×900, 393×851, 320×568 y paisaje 568×320; comprobar foco/teclado, errores de página y overflow; guardar e inspeccionar capturas PC/móvil con fixtures sintéticas.
+- [x] Registrar red/green TDD, comandos/resultados, typecheck/build, gates de cobertura, capturas ignoradas por Git y rollback.
+
+**TDD rojo (2026-10-01):** `tests/e2e/account-name-draft.spec.ts` retuvo el PATCH tras recibir la respuesta real del servidor y editó el campo antes de liberarla. Chromium falló como se esperaba: valor esperado `Bea`, valor recibido `Ana Belen`. El arnés confirmó que la solicitud ya se había aplicado a la SQLite temporal; el fallo estaba en la sincronización del borrador del cliente, no en el servidor.
+
+**Implementación:** la decisión de mantener sincronizado el campo ahora usa la misma comparación normalizada que `nameDirty()`: si el borrador actual aún difiere del usuario actualizado por la respuesta, permanece tocado y no se pisa; si coincide, se permite resincronizar el valor canónico. El error local del nombre ahora queda enlazado mediante `aria-describedby` y se anuncia como `role="alert"`; el formulario conserva el borrador y permite reintentar.
+
+**Evidencia verde (2026-10-01):** Karma focal, Chrome Headless con permisos de navegador: **3/3**; `account-name-draft.ts` **100 % statements/branches/functions/lines**. E2E Playwright real con `E2E_RATE_LIMIT=off`, Chrome local, runner/puerto/SQLite/semilla temporales: **10/10** (**5 Chromium + 5 Pixel 5**). Retiene y libera la respuesta sin pausas fijas; verifica snapshot confirmado, borrador concurrente, segundo guardado, cancelar, error HTTP 500, alerta asociada, retry 200, teclado Enter y errores JS **0**. Los cuatro viewports no desbordan: 1440×900, 393×851, 320×568 y 568×320. `tsc -p tsconfig.e2e.json --noEmit`, Prettier focal, `git diff --check` y build de producción pasan; el build mantiene warnings existentes de budgets. No se redujo el gate global frontend de 80 %.
+
+**Capturas sintéticas inspeccionadas:** `.e2e-screenshots/qa-account-name-draft/chromium/name-draft-1440x900.png`, `.e2e-screenshots/qa-account-name-draft/mobile-chrome/name-draft-320x568.png` y `name-draft-568x320.png` (ignoradas por Git). Rollback: revertir la unidad atómica de Cuenta restaura `account.component.ts` y elimina `account-name-draft.ts`, sus pruebas y esta sección E2E/spec, sin tocar unidades ajenas.
 
 ## Unidad QA-PANTRY.1 · alta manual accesible en móvil (resuelta)
 
@@ -816,11 +824,10 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ## Siguiente unidad de trabajo
 
-1. Reproducir QA-ACCOUNT.DRAFT.1 con Playwright aislado; aún no se ha cambiado producción.
+1. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
 2. QA-REC.INGRESS.1 sigue como discrepancia estática: reproducir con Nginx real aislado cuando haya engine/runtime disponible y no cambiar límites antes de esa prueba.
-3. Continuar el barrido funcional pendiente de rutas, formularios y acciones con datos sintéticos y proveedor mock; volver a leer la fuente de verdad antes de cada unidad y marcar solo tras ejecución real.
-4. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
-5. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
-6. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
-7. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
-8. Dashboard/recetas y Pantry (incluida la unidad TOUCH.1) ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
+3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
+4. QA-04c: subir la suite frontend al gate global de coverage 80 %, en unidades revisables, revalidando fuentes antes de cada lote. No rebajar gates superiores existentes.
+5. QA-05: resolver en la fuente de verdad las 13 incidencias i18n `texto-en-un-catalogo` y agregar tests/regresión.
+6. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
+7. Dashboard/recetas y Pantry (incluida la unidad TOUCH.1) ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
