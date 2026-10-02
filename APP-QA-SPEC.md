@@ -959,6 +959,19 @@ Frontend: Karma `forgot-password.component.spec.ts` + `auth.service.spec.ts` **3
 
 Playwright real con `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/auth-forgot-password.spec.ts`, rate limit activo, SQLite/seed/puertos temporales: **4/4**. Comprueba vacío/malformado sin POST, respuesta igual para ambas cuentas, retry tras 503, un solo error accesible, orden de tab, target 44 px y documento sin overflow en escritorio/móvil. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-auth-forgot-password-qa-hogaria-e2e-RgSArN/error-chromium-1440x900.png` y `error-mobile-chrome-393x851.png`. No se usó `localhost:4200`, correo externo ni proveedor IA/LAN.
 
+## QA-AUTH.INVITE.ACTIONS.1 · aceptar, rechazar y recuperar una invitación
+
+**Fuente revalidada (2026-10-02):** `InviteComponent` consulta `GET /api/household/invite/:code`, ofrece aceptación/rechazo a personas autenticadas y conserva el código en los enlaces de login/registro. `accept()` llama a `HouseholdService.joinByCode()` y navega a `/household`; `decline()` vuelve a `/`. El endpoint de preview solo distingue código existente/inexistente y `alreadyMember`; `households` no tiene campo de expiración, así que un código anterior a regenerar es inválido pero no existe un estado de expiración por tiempo. `auth-onboarding-icons.spec.ts` cubre código inválido, miembro actual y CTA de registro; `household-action-ack.spec.ts` cubre unión directa desde Hogar, no aceptación/rechazo en la pantalla pública de invitación.
+
+- [ ] Añadir primero E2E real aislada para persona autenticada sin hogar: preview válido → aceptar → un único `POST /api/household/join/:code` → destino `/household` con membresía confirmada; usar owner/guest sintéticos.
+- [ ] Rechazar/cancelar una invitación no envía el POST de unión, no crea membresía y navega al destino definido por `decline()`; validar con API y estado visible.
+- [ ] Simular fallo de red/5xx al aceptar: conservar URL/código, anunciar error una sola vez, limpiar loading y permitir reintentar; mientras está pendiente, teclado/click no deben duplicar el POST.
+- [ ] Probar código inexistente y código invalidado por regeneración, además de la rama de miembro actual; no inventar expiración temporal mientras API/modelo no la definan.
+- [ ] Verificar en ES/EN y Chromium + Pixel 5: código preservado tanto en login como en registro, navegación directa, nombres/teclado/foco, controles táctiles ≥44 px y no-overflow a 320×568, 393×851, 568×320 y 1440×900; cero errores de consola de primera parte.
+- [ ] Si hace falta cambio de producción, escribir primero regresión unitaria, cubrir casos de error/reintento y mantener ≥70 % S/B/F/L en el fichero tocado sin rebajar gates; inspeccionar capturas PC/móvil cuando cambie la UI.
+
+**Evidencia y resultado:** pendiente de ejecución. El runner requerido es `node scripts/run-isolated-playwright.mjs`; solo permite su SQLite bajo `%TEMP%\hogaria-e2e-*`, puertos loopback efímeros y semilla sintética. No usar `localhost:4200`, la base normal ni proveedor IA/LAN.
+
 ## QA-PREFERENCES.CUSTOM-LIMIT.1 · opciones personalizadas y contrato de guardado (implementada)
 
 **Fuente revalidada antes de implementar (2026-10-01):** `ChipSelectComponent` se comparte entre Preferencias y onboarding. El cliente recorta el texto y evita duplicados sin distinguir mayúsculas, pero no limita el largo ni el número de opciones seleccionadas. El contrato vigente del servidor, `stringList` en `server/src/utils/taste-profile.ts`, exige entre 1 y 60 caracteres tras `trim()` y como máximo 60 valores por lista (`allergies`, `likes`, `dislikes`); `PATCH /api/auth/taste` devuelve rechazo de validación fuera de esos límites. Una opción personalizada demasiado larga o una lista de más de 60 se puede añadir en pantalla y volver imposible guardar junto con el resto de los cambios. Las alergias persistidas se incorporan como exclusiones estrictas en el prompt de IA (`tastePromptLines`), así que no se debe truncar, normalizar destructivamente ni ocultar el rechazo.
@@ -988,7 +1001,7 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 - [ ] `/auth/login`: correo/contraseña válidos e inválidos, campos vacíos, revelar/ocultar contraseña, loading, error genérico y redirección correcta.
 - [ ] `/auth/register`: requerido/formato, política de contraseña y límites, correo duplicado, error del servidor, registro normal y retorno con `?code=` de invitación.
 - [ ] `/auth/forgot-password`: correo vacío/mal formado/válido, respuesta que no revela si existe la cuenta, loading y error recuperable.
-- [ ] `/invite/:code`: código válido, inválido/caducado, invitación repetida, ya pertenece al hogar, aceptar/rechazar con sesión y entrada por registro/login preservando el código.
+- [ ] `/invite/:code`: código válido, inválido o invalidado al regenerar (sin expiración temporal en el modelo actual), invitación repetida, ya pertenece al hogar, aceptar/rechazar con sesión y entrada por registro/login preservando el código.
 - [ ] `/onboarding`: validar los seis pasos de §12C/§12E; Pantry conserva la edición de utensilios y `kitchen` solo enlaza según §8c. Probar perfil, alergias/gustos/objetivos, horario, siguiente/anterior, omitir, persistencia, salida, recarga y reanudación.
 
 ### Navegación y superficies de hogar
