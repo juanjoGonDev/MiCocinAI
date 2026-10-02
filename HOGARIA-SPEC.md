@@ -4773,3 +4773,28 @@ de cola sí supera 70 % en statements/branches/functions/lines: 96.24/81.16/97.1
 rebajó ningún gate. `ng build --configuration production` y `check-ui` pasan; el build conserva
 warnings existentes de budget del bundle/estilos. `pnpm run typecheck:e2e` está bloqueado por
 `EPERM` de Corepack en Windows, pero el mismo `tsc -p tsconfig.e2e.json --noEmit` directo pasa.
+
+## 12ao — Metadatos detectados del ticket, edición permanente e historial
+
+**Decisión actualizada por el usuario (2026-10-03):** se conserva el contrato de §12aj de enviar la
+imagen/PDF directamente a la IA, sin una etapa OCR; además, la IA debe detectar la tienda/local y la
+fecha impresa de compra. Ambos campos son datos del ticket, no del momento de subida: la fecha de
+compra se guarda como fecha civil `YYYY-MM-DD`; si el comprobante no contiene una fecha legible o es
+ambigua, se devuelve `null` y nunca se sustituye por `created_at`. La tienda puede quedar vacía si no
+se puede identificar. El modelo no debe inventar ninguno de esos valores.
+
+La ficha del ticket permite corregir tienda y fecha desde la UI en los tickets analizados y desde su
+historial, también después de confirmar el ticket. Guardar una corrección modifica los metadatos del
+recibo, no vuelve a confirmar el inventario ni duplica movimientos. El valor manual guardado prevalece
+sobre resultados tardíos de análisis/reintentos. El historial es un apartado identificable de `/receipts`,
+persistente al recargar o volver a iniciar sesión; contiene tickets cuyo procesamiento terminó
+(`review`, `confirmed`, `failed` o `stopped`), excluye los trabajos aún `queued`/`analyzing`, permite
+abrir la ficha y no oculta recibos antiguos por el límite actual de la bandeja. Si la lista necesita
+paginación, esta debe permitir recorrer el historial completo. Los límites de usuario/hogar, borrado,
+autorización y disponibilidad de adjuntos conservan las reglas existentes.
+
+La fecha desconocida permanece vacía en UI; el campo es accesible y editable con teclado, valida una
+fecha civil real y persiste al volver a abrir el ticket. El historial ordena por fecha de compra cuando
+existe y usa fecha de subida solo como criterio de desempate/agrupación, mostrándolas con etiquetas
+distintas para no confundirlas. Cada cambio de metadatos se guarda explícitamente y su error queda
+visible/reintentable; un ticket confirmado no repite el efecto de confirmación al editar.

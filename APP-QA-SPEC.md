@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1, QA-AUTH.PW-LIMIT.1, QA-ACCOUNT.DRAFT.1, QA-05.PATH.1, QA-SHOP-MOBILE.CTA.1, QA-ACCOUNT.E2E-TARGETS.1, QA-ACCOUNT.TABS.1, QA-ACCOUNT.PASSWORD.ERROR.1 y QA-AUTH.FORGOT.1 tienen regresiones verificadas localmente. QA-ONBOARDING.PANTRY-LINK.1 se resolvió con E2E desktop/móvil; ver evidencia abajo. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-RECIPES.AI-FLOW.1 pasa pruebas funcionales locales desktop/móvil; su cierre queda pendiente junto al gate de cobertura global frontend. QA-AI.PROVIDER-QUEUE.1 está implementada en HOGARIA-SPEC.md §12an y validada de nuevo en Chromium/Pixel 5 aislados (12/12); su gestor está en una ruta por proveedor, no embebido en la lista. QA-PREFERENCES.CUSTOM-LIMIT.1 está implementada y verificada abajo; QA-PREFERENCES.WIDTH.1 está implementada y verificada abajo. QA-HOUSEHOLD.ACTION-ACK.1 quedó verificada con Playwright Chromium/Pixel 5 aislado (12/12); ver evidencia abajo. La repetición del baseline recorrió las 28 rutas configuradas en 5 viewports, sin errores app-origin ni overflow; Google Fonts sigue bloqueada por el entorno. La recuperación de contraseña permanece sin entrega de correo/token; la UI lo comunica sin prometer un enlace. El barrido funcional completo sigue pendiente; QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx. QA-04c.ERROR-INTERCEPTOR.1 añade cobertura focal completa de la frontera HTTP común; suite frontend revalidada: **844/844** tests; coverage **74.97/62.80/72.66/76.47 % S/B/F/L**, bajo el gate existente de 80 % (ramas también bajo 70 %).
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1, QA-AUTH.PW-LIMIT.1, QA-ACCOUNT.DRAFT.1, QA-05.PATH.1, QA-SHOP-MOBILE.CTA.1, QA-ACCOUNT.E2E-TARGETS.1, QA-ACCOUNT.TABS.1, QA-ACCOUNT.PASSWORD.ERROR.1 y QA-AUTH.FORGOT.1 tienen regresiones verificadas localmente. QA-ONBOARDING.PANTRY-LINK.1 se resolvió con E2E desktop/móvil; ver evidencia abajo. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-RECIPES.AI-FLOW.1 pasa pruebas funcionales locales desktop/móvil; su cierre queda pendiente junto al gate de cobertura global frontend. QA-AI.PROVIDER-QUEUE.1 está implementada en HOGARIA-SPEC.md §12an y validada de nuevo en Chromium/Pixel 5 aislados (12/12); su gestor está en una ruta por proveedor, no embebido en la lista. QA-PREFERENCES.CUSTOM-LIMIT.1 está implementada y verificada abajo; QA-PREFERENCES.WIDTH.1 está implementada y verificada abajo. QA-HOUSEHOLD.ACTION-ACK.1 quedó verificada con Playwright Chromium/Pixel 5 aislado (12/12); ver evidencia abajo. La repetición del baseline recorrió las 28 rutas configuradas en 5 viewports, sin errores app-origin ni overflow; Google Fonts sigue bloqueada por el entorno. La recuperación de contraseña permanece sin entrega de correo/token; la UI lo comunica sin prometer un enlace. El barrido funcional completo sigue pendiente; QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx. QA-04c.ERROR-INTERCEPTOR.1 añade cobertura focal completa de la frontera HTTP común; la última suite frontend completa registrada fue **870/870** tests con coverage **76.58/63.69/74.77/78.15 % S/B/F/L**. Hay cambios/pruebas posteriores en la working tree: la suite completa debe repetirse antes de afirmar cifras actuales; el gate global de 80 % sigue abierto y branches no alcanzan el mínimo solicitado de 70 %. QA-RECEIPT.METADATA-HISTORY.1, QA-AI.REAL-INTEGRATIONS.1 y QA-LAYOUT.CONTENT-GUTTERS.1 quedan abiertas.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
-- **Actualizado:** 2026-10-02
+- **Actualizado:** 2026-10-03
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -1094,6 +1094,18 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 **Evidencia QA-SETTINGS.SURFACE.1 (2026-10-01):** fuente revalidada en `SettingsComponent`, `ThemeService` y `ModulesService`; las preferencias de tema se guardan y recargan desde `localStorage`, y los módulos se persisten mediante el perfil. Playwright aislado `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/settings-theme-i18n.spec.ts tests/e2e/settings-modules.spec.ts`, con rate limit activo, Chrome local y SQLite/puertos/semilla temporales: **34/34**. Comprueba tema claro/oscuro/sistema, idioma inglés con recarga, activación/desactivación, reinicio, error/guardado pendiente, teclado/foco, módulo apagado con navegación directa, límites de 320 px a 1023 px y orientación horizontal 852×393; el runner confirmó cleanup. Karma focal: **30/30**; cobertura por archivo `SettingsComponent` **100/100/100/100**, `ThemeService` **96.66/92.85/87.5/96.66** y `ModulesService` **97.91/90/100/100 % S/B/F/L**. El proceso focal conserva el umbral global de 80 % y sale con error porque el grafo agregado de la suite parcial da **35.09/9.09/26.71/37.98 % S/B/F/L**; no se bajó ningún gate y la casilla global de cobertura completa sigue abierta. Capturas sintéticas revisadas: `.e2e-screenshots/qa-settings-baseline-20261001-220732/settings-desktop.png` y `settings-mobile.png`.
 
+### QA-DASHBOARD.TODAY-MEALS.1 · reintento de comidas y fecha local
+
+**Fuente revalidada antes del ajuste (2026-10-02):** `DashboardComponent.loadDashboardData()` carga el rango de hoy mediante `CalendarService`; el template muestra error recuperable, carga o vacío de forma excluyente. El spec aislado `dashboard-today-meals.spec.ts` esperaba inicialmente el fallo HTTP después de `registerAndGoto()`, pero el helper visita el Dashboard durante `skipOnboarding()` y luego navega otra vez a la ruta solicitada. La interceptación 503 se consumía en la primera visita y la segunda ya respondía correctamente; esto falseaba el escenario de error, no demostraba un defecto de producto. Se armó la respuesta de error después del setup y se recargó explícitamente el Dashboard medido. No cambió código de producción.
+
+- [x] Reproducir el fallo inicial en Chromium y Pixel 5; confirmar desde `registerAndGoto()`/`registerUser()` la doble visita que consumía el fallo de una sola vez.
+- [x] Armado posterior al setup: comprobar error visible y recuperación por teclado con segundo request retenido/liberado; target real del retry ≥44×44 px.
+- [x] Verificar fixture SQLite sintética: solo comidas pendientes de hoy, sin ayer/mañana ni completadas, orden/tipo/hora, idioma ES/EN, limpieza de cada fila, CTA a Calendario y cero llamadas IA/errores JS.
+- [x] Matriz visual a 320, 393, 479, 480, 481, 767, 768, 769, 844×390, 1023, 1024 y 1440 px: sin overflow ni comida tapada por navegación fija.
+- [x] Ejecución focal tras el arreglo: `tests/e2e/dashboard-today-meals.spec.ts` **2/2** (Chromium + Pixel 5). Suite combinada `dashboard.spec.ts`, `dashboard-recipe-links.spec.ts` y `dashboard-today-meals.spec.ts`: **14/14** aislada con rate limit activo y SQLite/puertos temporales. Cobertura de producción N/A (solo se corrigió sincronización del test); no se cambió el gate.
+
+**Evidencia/limitación:** la primera suite combinada reprodujo **12/14**, con los dos fallos del mismo escenario de recuperación (desktop/móvil); tras armar el error después del helper, el spec focal pasa **2/2** y la suite combinada **14/14**. Estas corridas cubren estados vacíos/resumen, quick actions, deep links a recetas y comidas; no completan todos los vencimientos ni cada CTA de Dashboard. La casilla general `/dashboard` permanece abierta. Runner temporal sin escrituras a `localhost:4200` ni proveedor externo.
+
 ### QA-AUTH.LOGIN.DOUBLE-SUBMIT.1 · Evitar envíos concurrentes del login
 
 **Fuente revalidada (2026-10-01):** `LoginComponent.onSubmit()` comprueba campos vacíos y activa `isLoading`, pero no consulta ese estado antes de volver a enviar. El botón compartido queda `disabled` durante la carga, pero el formulario sigue teniendo un único listener `ngSubmit`; falta una prueba runtime que compruebe si una segunda petición de submit mientras la primera está pendiente genera otra llamada. Si el login lleva `?code=`, el éxito continúa con `HouseholdService.joinByCode()` y navega a `/household`; el fallo de login limpia `isLoading` y permite reintentar. La solución solo se aplicará si la regresión se reproduce.
@@ -1375,24 +1387,133 @@ La suite frontend completa pasa **844/844**, aunque su gate configurado de **80 
 
 **Fuente revalidada antes de implementar (2026-10-02):** el contrato vigente de internacionalización en `HOGARIA-SPEC.md` §12t centraliza `dateLocale()` en `core/time.ts` y exige que fechas y números —incluidas las kcal del calendario— sigan el idioma de la app; `I18nService.aplicaLocale()` cambia ese locale al alternar ES/EN. `calendar.util.ts` crea `numberFmt` en el ámbito del módulo con el locale que exista al importarlo, y `formatNumber()` lo reutiliza de por vida; a diferencia de `labels`, no consulta el idioma actual. El resultado puede conservar el separador español tras cambiar a inglés. No hay actualmente un spec unitario dedicado para `calendar.util.ts`. La conducta esperada es que la misma función refleje el locale activo en cada llamada, preservando su redondeo y la semántica de fecha local.
 
-- [ ] Añadir primero una regresión unitaria que cambie `dateLocale` de `es-ES` a `en-GB` después de importar el helper; reproducir que `formatNumber(1450)` conserva el separador español y restaurar el locale al terminar cada spec.
-- [ ] Cubrir helpers de calendario: round-trip ISO local y fechas malformadas/bisiestas, suma de días/meses en bordes de mes y cambio DST, semanas que empiezan en lunes, rejillas mensuales completas de 4–6 filas, diferencia de días y etiquetas del mismo mes/entre meses en ambos idiomas.
-- [ ] Corregir el mínimo necesario para que el formateador siga cambios de idioma sin capturar un formatter obsoleto; verificar redondeo, cero y valores negativos.
-- [ ] Alcanzar ≥70 % en statements/branches/functions/lines de cada archivo de producción tocado; no reducir el gate global de 80 %. Ejecutar build, typecheck, formato y `git diff --check`.
-- [ ] Playwright real y aislado en Chromium escritorio y Pixel 5: fixture sintética con calorías visibles, cambiar ES→EN→ES y comprobar el separador en el calendario, sin errores de consola ni overflow; usar DB/puertos propios y confirmar cleanup.
-- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil del mismo estado y revisar que no contengan datos personales; documentar el resultado actual del gate global y dejar abiertas las demás rutas/unidades de QA.
+- [x] Añadir primero una regresión unitaria que cambie `dateLocale` de `es-ES` a `en-GB` después de importar el helper; reproducir que `formatNumber(1450)` conserva el separador español y restaurar el locale al terminar cada spec. La prueba inicial también reprodujo la rejilla truncada.
+- [x] Cubrir helpers de calendario: round-trip ISO local y fechas malformadas/bisiestas, suma de días/meses en bordes de mes y cambio DST, semanas que empiezan en lunes, rejillas mensuales completas de 4–6 filas, diferencia de días y etiquetas del mismo mes/entre meses en ambos idiomas.
+- [x] Corregir el mínimo necesario para que el formateador siga cambios de idioma sin capturar un formatter obsoleto; verificar redondeo, cero y valores negativos. La rejilla calcula las semanas con el desplazamiento real del primer día del mes.
+- [x] Alcanzar ≥70 % en statements/branches/functions/lines de cada archivo de producción tocado; no reducir el gate global de 80 %. Ejecutar build, typecheck, formato y `git diff --check`.
+- [x] Playwright real y aislado en Chromium escritorio y Pixel 5: fixture sintética con calorías visibles, cambiar ES→EN→ES y comprobar el separador en el calendario, sin errores de consola ni overflow; usar DB/puertos propios y confirmar cleanup.
+- [x] Guardar e inspeccionar capturas sintéticas PC/móvil del mismo estado y revisar que no contengan datos personales; documentar el resultado actual del gate global y dejar abiertas las demás rutas/unidades de QA.
+
+**Evidencia QA-CALENDAR.NUMBER-LOCALE.1 (2026-10-02):** la regresión de `formatNumber(1450)` falló antes del arreglo al conservar es-ES tras cambiar a en-GB; pruebas adicionales encontraron una rejilla de agosto de 2020 con 35 celdas en vez de 42. `formatNumber()` cachea formatter por locale activo y conserva redondeo; la rejilla incluye el offset de lunes. Karma focal ejecutó **9/9** y `calendar.util.ts` mide **100 %** en statements (57/57), branches (18/18), functions (25/25) y lines (53/53). La corrida focal con `--code-coverage` también ejecutó 9/9, pero el comando devuelve exit 1 porque el gate local existente de 80 % se evalúa sobre el subconjunto (aggregate: S39.26/B18.81/F60/L44.11); no se modificó el umbral. La suite completa previamente documentada sigue bajo el gate frontend y su casilla permanece abierta.
+
+Playwright aislado en Chromium escritorio y Pixel 5: **2/2**. La misma sesión cambia ES→EN→ES desde Ajustes, crea una receta/calendario sintéticos, verifica separador de miles en resumen y celda visible en escritorio, sin overflow en móvil ni errores de consola; SQLite/puertos temporales se limpiaron. Capturas inspeccionadas: `.e2e-screenshots/calendar-locale-qa/calendar-locale-chromium.png` y `calendar-locale-mobile-chrome.png`. `npx tsc -p tsconfig.e2e.json --noEmit`, build de producción, Prettier focal y `git diff --check` pasan.
 
 **Rollback:** revertir la unidad atómica de `QA-CALENDAR.NUMBER-LOCALE.1` junto a su test unitario/E2E y esta sección; no cambia datos ni migraciones.
 
 ## Unidad QA-RECEIPT-QUEUE.ACTIONS.1 · detener y reintentar desde la cola global de tickets
 
-**Fuente revalidada antes de implementar (2026-10-02):** `HOGARIA-SPEC.md` §12aj exige que el panel del icono permita parar todo, detener un trabajo queued/running y reintentar uno failed/stopped; el retry debe borrar sus líneas parciales antes de procesar de nuevo. `ReceiptQueueComponent` llama a `ReceiptsService` para esas acciones y actualiza la vista con un refresh de cola, pero no tiene prueba unitaria. `tests/e2e/receipts.spec.ts` solo comprueba que aparece el botón de retry sin pulsarlo; su prueba de «Parar todo» usa una subida sin proveedor y condiciona el click a que el botón exista, por lo que no acredita transición ni aborto reales. Las E2E del gestor IA por proveedor verifican su propio dispatcher, no los controles del icono de tickets. Se conserva el panel global ya presente; esta unidad solo verifica sus acciones y su ciclo de datos, no reabre la geometría cerrada en QA-UI.1.
+**Fuente revalidada antes de implementar (2026-10-02):** `HOGARIA-SPEC.md` §12aj exige que el panel del icono permita parar todo, detener un trabajo queued/running y reintentar uno failed/stopped; el retry debe borrar sus líneas parciales antes de procesar de nuevo. `ReceiptQueueComponent` llamaba a `ReceiptsService` para esas acciones y actualizaba la vista con un refresh, pero no tenía prueba unitaria. `tests/e2e/receipts.spec.ts` solo comprobaba que aparecía el botón de retry sin pulsarlo; su prueba de «Parar todo» usaba una subida sin proveedor y condicionaba el click a que el botón existiera, por lo que no acreditaba transición ni aborto reales. Las E2E del gestor IA por proveedor verificaban su propio dispatcher, no los controles del icono de tickets. Se conserva el panel global ya presente; esta unidad verifica sus acciones y su ciclo de datos, no reabre la geometría cerrada en QA-UI.1.
 
-- [ ] Añadir primero unitarias para lifecycle de `watch/unwatch`, stop-all y acciones por id; queued/running detienen, failed/stopped reintentan, un trabajo sin `receipt_id` no emite petición, y cada mutación refresca la cola tras resolver incluso si el servicio informa fallo.
-- [ ] Ejecutar una E2E aislada de baseline que no permita pasar por un `if` cuando falta el botón; usar proveedor sintético loopback con respuestas hold/fail/success y comprobar estados por API, no solo que el panel siga visible.
-- [ ] En Chromium escritorio y Pixel 5: detener un trabajo running desde «Parar» tras recibir una línea parcial, verificar aborto real y conservar esa línea rescatable; reintentar desde la cola, confirmar transición terminal y que solo quedan las líneas del resultado final.
-- [ ] Verificar «Parar todo» con un job running y otro queued: ambos pasan a stopped, el proveedor running se aborta y el borrador incremental existente no se borra.
-- [ ] Alcanzar ≥70 % S/B/F/L en `receipt-queue.component.ts`, ejecutar typecheck/build/formato/diff y mantener el gate global 80 % sin reducir thresholds.
-- [ ] Capturar e inspeccionar estado de cola sintético PC/móvil, comprobar accesibilidad/targets táctiles y que la navegación al ticket cierra el panel; anotar cleanup de DB/puertos y los fallos de consola/red.
+**Evidencia QA-RECEIPT-QUEUE.ACTIONS.1 (2026-10-02):** una primera E2E reprodujo que «Abrir» cerraba sin navegar porque el panel se desmontaba antes del click de `RouterLink`; también midió «Parar» con solo 22 px de alto. Se movió el cierre a `NavigationEnd` y se habilitó el `touchTarget` de los controles del panel. La E2E aislada intercepta Google Fonts (sin acceso externo), configura un proveedor sintético loopback y consulta los estados persistidos por API. Las capturas contienen solo fixture sintética.
+
+- [x] Unitarias de `watch/unwatch`, stop-all, stop por id en queued/running, retry por id en failed/stopped y job sin `receipt_id`; cada mutación refresca incluso al resolver el servicio con `null`. `frontend`: `node ./node_modules/@angular/cli/bin/ng.js test --no-watch --include=src/app/shared/components/receipts/receipt-queue.component.spec.ts --karma-config=karma.conf.js --browsers=ChromeHeadlessLocal --progress=false` — **9/9**.
+- [x] Baseline Playwright aislado sin click condicional: `E2E_RATE_LIMIT=on`, `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/receipt-queue-actions.spec.ts`; el botón debe estar visible para hacer click. Proveedor solo `127.0.0.1` con hold/failure/success y oráculo de estados por API.
+- [x] Chromium escritorio y Pixel 5: la prueba detiene en curso tras persistir línea parcial; comprueba `AbortController`, línea parcial conservada, «Abrir» navega y cierra el panel, retry desde el panel llega a review/done y deja únicamente la línea final.
+- [x] «Parar todo» con running+queued: ambas fichas/job quedan stopped, la respuesta running se aborta y la línea incremental del running persiste; el queued no crea líneas.
+- [x] `receipt-queue.component.ts`: coverage focal **100 %** statements (48/48), branches (10/10), functions (17/17), lines (42/42). E2E `tsc -p tsconfig.e2e.json --noEmit`, `frontend: npm run build:prod`, Prettier y `git diff --check` pasan; no se rebajó el gate global 80 %.
+- [x] E2E final: **4/4** (Chromium + Pixel 5, dos escenarios por proyecto), sin errores JS/console/red observados; comprobados nombre accesible del diálogo, foco, Escape y botones con targets ≥44×44. El runner confirmó cleanup de SQLite, proceso y puertos. Capturas inspeccionadas: `.e2e-screenshots/receipt-queue-actions-qa/receipt-queue-chromium.png` y `receipt-queue-mobile-chrome.png`.
+
+**Limitación de cobertura global:** al ejecutar solo este spec con `--code-coverage`, pasan sus 9 tests y la cobertura focal anterior es 100 %, pero Karma devuelve fallo por comparar el subconjunto contra el umbral global 80 % (aggregate parcial: S31.62/B10.85/F15.7/L33.25). El umbral no se cambió; ese resultado no representa la corrida completa de cobertura del frontend.
 
 **Rollback:** revertir el commit atómico de `QA-RECEIPT-QUEUE.ACTIONS.1` con su unidad de pruebas/capturas y esta sección; no cambia datos ni migraciones.
+
+## Unidad QA-RECEIPT.METADATA-HISTORY.1 · tienda/fecha detectadas, editables e historial
+
+**Fuente revalidada (2026-10-03):** `ticket-prompt.ts` y `ticketAnswerSchema` aceptan la tienda,
+pero no una fecha de compra. La tabla `receipts` tampoco tiene `purchase_date`; `created_at` es la
+hora de subida y la UI la presenta como fecha del ticket (`receipts.component.ts` y
+`receipt-detail.component.ts`). La ficha permite corregir la tienda, pero no tiene campo de fecha.
+`GET /api/receipts` devuelve como máximo 100 recibos por `created_at`; la pantalla ya lista estados
+`review` y `confirmed`, pero no etiqueta/separa un historial ni garantiza acceso a registros más
+antiguos. Las E2E de recepción no verifican que un valor devuelto por IA se persista, se pueda corregir
+y se conserve en recarga. El contrato nuevo de `HOGARIA-SPEC.md` §12ao prevalece sobre cualquier
+descripción histórica de §12aj en lo relativo a fecha e historial; se mantiene la decisión de no usar
+OCR.
+
+Conducta esperada: la respuesta IA incluye `store` y `purchaseDate` (`YYYY-MM-DD` o `null` si falta o
+es ambigua); no se deriva la fecha de `created_at`. La ficha permite editar y guardar ambos valores
+desde todos los recibos con análisis terminado, incluidos los confirmados; corregir uno no confirma
+de nuevo ni duplica movimientos de inventario. La sección «Historial» de `/receipts` conserva y permite
+abrir todos los tickets con procesamiento terminado (`review`, `confirmed`, `failed`, `stopped`), no
+los trabajos en curso; paginar es válido si se puede recorrer la colección completa. Ámbitos de hogar,
+usuario y propiedad de adjuntos deben mantenerse.
+
+- [ ] Escribir primero regresiones unitarias para prompt/validación/serialización: tienda detectada,
+      fecha válida, fecha ausente, fecha civil imposible, año bisiesto y respuesta malformada. La fecha
+      ausente nunca usa el timestamp de carga como fallback.
+- [ ] Añadir primero regresiones de rutas/SQLite en DB temporal: migración aditiva a `purchase_date`
+      conserva los tickets existentes con fecha desconocida; POST/GET/PATCH persisten fecha y tienda,
+      validan ownership y aislamiento entre usuarios/hogares, y una edición en ticket confirmado no
+      repite el `confirm` ni cambia stock.
+- [ ] Implementar la extracción multimodal sin OCR y persistencia de la fecha civil; E2E sintética
+      loopback comprueba el JSON generado, la tienda/fecha en API y UI, valores null y su distinción de
+      la fecha de subida, ES/EN y persistencia tras recargar/reabrir.
+- [ ] En UI, ambos campos tienen nombre accesible, operación por teclado, guardado/error recuperable y
+      siguen editables en `review` y `confirmed`. Un valor manual guardado no puede perderse por una
+      respuesta de análisis tardía/reintento.
+- [ ] Añadir un apartado visible «Historial» con los cuatro estados acordados, orden coherente por fecha
+      de compra y subida, navegación al detalle y paginación/carga adicional si hay más resultados que
+      el tamaño de página. E2E verifica tickets >100, recarga, búsqueda del más antiguo, apertura,
+      estado vacío/error, autorización e idioma.
+- [ ] Ejecutar E2E real aislada en Chromium escritorio y Pixel 5, en 320×568, 393×851 y breakpoints del
+      código: alta/análisis, corrección, confirmación, historial, recarga, navegación de teclado/foco y
+      ausencia de overflow. Usar sólo fixture sintética, DB/puertos/semilla temporales, rate limit y
+      cleanup; guardar e inspeccionar capturas PC/móvil sin datos personales.
+- [ ] Alcanzar ≥70 % de statements/branches/functions/lines por cada archivo de producción tocado, no
+      reducir el gate frontend existente de 80 % ni el del server, ejecutar build/typecheck/formato/
+      `check-ui` y mantener abierta cualquier casilla sin evidencia reproducible.
+
+**Límite de esta unidad:** los stubs loopback son regresión repetible del pipeline; no prueban la
+calidad del modelo real. Esa comprobación se registra por separado en `QA-AI.REAL-INTEGRATIONS.1`.
+
+## Unidad QA-AI.REAL-INTEGRATIONS.1 · smoke real de proveedores IA
+
+**Fuente revalidada (2026-10-03):** las pruebas existentes reemplazan `fetch` o usan proveedores
+loopback sintéticos; no se encontró un smoke opt-in que alcance proveedor/modelo real ni que verifique
+los datos devueltos por el servicio local de WebAPI en puerto 3001. Estos stubs se conservan para la
+suite repetible. El usuario autoriza utilizar el token facilitado y la WebAPI local, pero el secreto
+debe obtenerse del almacenamiento seguro/configuración de ejecución, nunca copiarse a argumentos,
+fuentes, specs, logs, capturas, traces, fixtures o memoria persistente.
+
+- [ ] Inventariar en la UI/API los proveedores realmente disponibles y su ruta efectiva; confirmar qué
+      token/configuración está activo sin leerlo ni imprimirlo. No afirmar que se probaron proveedores
+      que no estén configurados.
+- [ ] Diseñar un smoke explícito y opt-in, separado de CI/suite repetible; consume el token existente
+      desde entorno/almacén seguro, no guarda secretos, usa solicitud mínima y fixture sintética, redirige
+      artefactos sensibles fuera de Git y redacciona salida/error/respuesta.
+- [ ] Conectar el smoke al flujo real de la aplicación (no al proveedor loopback) a través de la
+      WebAPI local autorizada en 3001 y del endpoint/modelo configurado; verificar respuesta válida para
+      generación de receta y lectura de ticket con tienda/fecha conocidas, además de timeout/error sin
+      filtrado de token. Registrar modelo/proveedor, resultado y coste/llamadas sin guardar payloads.
+- [ ] Ejecutar en un entorno aislado cada integración disponible con la autorización del usuario,
+      controlar reintentos y gasto, comprobar que la suite normal no contacta al exterior y que un
+      smoke omitido/fallido nunca aparece como verde. El smoke real queda marcado manualmente y no se
+      incluye en CI automático.
+
+## Unidad QA-LAYOUT.CONTENT-GUTTERS.1 · márgenes homogéneos en las vistas
+
+**Fuente revalidada (2026-10-03):** `app.routes.ts` monta las rutas privadas de producto bajo
+`MainLayoutComponent`; Auth, invitación y onboarding tienen shells separados por diseño. El shell
+principal no posee un contenedor/gutter común de contenido y las features declaran máximos y padding
+propios (p. ej. Dashboard 800 px, Calendar 1280 px, Preferences 1360 px). `DESIGN-SYSTEM.md` ya fija
+`--container-max: 1280px` y gutters de 16/24/32 px según breakpoint, pero `route-baseline.spec.ts` solo
+mide visibilidad, errores y overflow en 28 rutas; no compara bordes de contenido ni comprueba qué shell
+espera cada ruta. La intención explícita del usuario es homogeneizar los márgenes sin ensanchar
+formularios/columnas de lectura por encima de límites útiles.
+
+- [ ] Convertir los gutters de `DESIGN-SYSTEM.md` en un único contenedor/patrón compartido de página;
+      eliminar paddings laterales literales divergentes en wrappers externos de features. Contenido
+      interno más estrecho puede conservar `max-width` propio, centrado y legible.
+- [ ] Mantener shells intencionales: privada usa `MainLayout`; Auth, invitación y onboarding conservan
+      su composición específica, pero aplican los gutters comunes. Ninguna ruta protegida puede perder
+      el shell o renderizar un segundo shell.
+- [ ] Extender el manifiesto E2E a todas las rutas reales, parámetros/detalles y vistas por módulo;
+      afirmar shell esperado y medir en navegador el mismo gutter/borde exterior por viewport. Incluir
+      cada breakpoint hallado en código y 320 px/orientación horizontal; no sustituir mediciones por
+      `scrollWidth` solamente.
+- [ ] Ejecutar la matriz real en desktop y móvil: bordes alineados, sin clipping/overflow, safe-area,
+      scroll, navegación fija, drawers/modales, teclado/foco y targets táctiles; guardar e inspeccionar
+      capturas sintéticas comparables PC/móvil y mantener los anchos internos intencionalmente distintos.
+- [ ] Añadir pruebas unitarias para la regla compartida, ejecutar E2E completo del manifiesto en
+      Chromium escritorio y Pixel 5, build/typecheck/formato/diff checks y cobertura por archivo ≥70 %;
+      no marcar como homogéneo un baseline que solo haya comprobado ausencia de overflow.
