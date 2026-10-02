@@ -16,6 +16,13 @@ const REPO_ROOT = join(__dirname, '..', '..', '..');
 const SEED = join(__dirname, 'seed-data.ts');
 const LABELS = join(REPO_ROOT, 'frontend/src/app/core/i18n/labels.ts');
 const DICT = join(REPO_ROOT, 'frontend/src/app/core/i18n/dict/pantry.ts');
+const FRONT = join(REPO_ROOT, 'frontend/src/app');
+// El onboarding pinta preferencias del comensal, no nombres del semillero de despensa/utensilios.
+const PANTALLAS_QUE_PINTAN_SEMILLERO = [
+  'features/pantry/pantry.component.ts',
+  'features/recipes/recipes.component.ts',
+  'features/shopping/shopping-list-detail.component.ts'
+];
 
 const seed = readFileSync(SEED, 'utf8');
 const labels = readFileSync(LABELS, 'utf8');
@@ -114,15 +121,8 @@ describe('los dos catalogos del semillero (## 12w)', () => {
 });
 
 describe('los puntos de pintura del catalogo (## 12w)', () => {
-  const FRONT = join(REPO_ROOT, 'frontend/src/app');
-
   it('quien lee un nombre del semillero lo pasa por la etiqueta', () => {
-    for (const f of [
-      'features/pantry/pantry.component.ts',
-      'features/onboarding/onboarding.component.ts',
-      'features/recipes/recipes.component.ts',
-      'features/shopping/shopping-list-detail.component.ts'
-    ]) {
+    for (const f of PANTALLAS_QUE_PINTAN_SEMILLERO) {
       const texto = readFileSync(join(FRONT, f), 'utf8');
       expect(/\{\{ *[a-zA-Z_.]+\.name \| catalog \}\}/.test(texto)).toBe(true);
     }
@@ -147,13 +147,8 @@ describe('la pipe de lectura (## 12w)', () => {
   });
 
   it('y esta declarada en cada pantalla que pinta un nombre del semillero', () => {
-    for (const f of [
-      'features/pantry/pantry.component.ts',
-      'features/onboarding/onboarding.component.ts',
-      'features/recipes/recipes.component.ts',
-      'features/shopping/shopping-list-detail.component.ts'
-    ]) {
-      const texto = readFileSync(join(REPO_ROOT, 'frontend/src/app', f), 'utf8');
+    for (const f of PANTALLAS_QUE_PINTAN_SEMILLERO) {
+      const texto = readFileSync(join(FRONT, f), 'utf8');
       expect(texto).toContain('CatalogLabelPipe');
     }
   });

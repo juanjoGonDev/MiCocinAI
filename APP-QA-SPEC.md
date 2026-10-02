@@ -645,9 +645,11 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 **Baseline visual real:** `tests/e2e/onboarding.spec.ts` ejecutada con `scripts/run-isolated-playwright.mjs`, rate limit activo, DB/puertos/semilla temporales y cleanup: **12/12** entre Chromium escritorio y Pixel 5. La ruta directa del test está en código actual; no se accedió al dev server ni a la base de datos normal.
 
-- [ ] Limitar la expectativa estática a pantallas que realmente leen el semillero (`pantry`, `recipes`, `shopping-list-detail`); no imponer `CatalogLabelPipe` al onboarding de preferencias.
-- [ ] Conservar el contrato de dejar `line.name` del ticket intacto y ejecutar las 19 assertions enfocadas.
-- [ ] Repetir la suite completa de server con coverage, comprobar typecheck/build y `git diff --check`; registrar sin ocultar los fallos que queden, sin cambiar lógica de producción ni thresholds.
+- [x] Limitar la expectativa estática a pantallas que realmente leen el semillero (`pantry`, `recipes`, `shopping-list-detail`); no imponer `CatalogLabelPipe` al onboarding de preferencias.
+- [x] Conservar el contrato de dejar `line.name` del ticket intacto y ejecutar las 19 assertions enfocadas.
+- [x] Repetir la suite completa de server con coverage, comprobar typecheck/build y `git diff --check`; registrar sin ocultar los fallos que queden, sin cambiar lógica de producción ni thresholds.
+
+**Evidencia QA-04c.TESTPORT.CATALOG.1 (2026-10-02):** ajuste solo de la lista de consumidoras en el test estático; ninguna lógica de producto cambió. `npm run test --prefix server -- src/utils/pantry-catalog-i18n.spec.ts`: **19/19**. La aserción de líneas de ticket (`line.name` crudo y sin `| catalog`) permanece activa. `npm run test:coverage --prefix server -- --reporter=dot`: **45/45 archivos de test, 922/922 pruebas**, salida **0** y coverage **93.97/85.60/95.19/96.66 %** en statements/branches/functions/lines; se satisface el umbral configurado por archivo de 70 % sin alterarlo. `npm run build --prefix server` y `git diff --check` pasan. `prettier --check` ya fallaba para este archivo en el `HEAD` previo; no se reformateó su contenido histórico. La E2E de onboarding citada arriba recorrió Chromium + Pixel 5 con SQLite aislada y cleanup; no se cambió interfaz ni se usó `localhost:4200`.
 
 ### QA-04c.UI.DATATABLE.1 · cobertura del componente compartido de tabla (en curso)
 
