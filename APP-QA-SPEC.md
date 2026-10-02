@@ -965,12 +965,14 @@ Playwright real con `node scripts/run-isolated-playwright.mjs --workers=1 --proj
 
 - [ ] Añadir primero E2E real aislada para persona autenticada sin hogar: preview válido → aceptar → un único `POST /api/household/join/:code` → destino `/household` con membresía confirmada; usar owner/guest sintéticos.
 - [ ] Rechazar/cancelar una invitación no envía el POST de unión, no crea membresía y navega al destino definido por `decline()`; validar con API y estado visible.
-- [ ] Simular fallo de red/5xx al aceptar: conservar URL/código, anunciar error una sola vez, limpiar loading y permitir reintentar; mientras está pendiente, teclado/click no deben duplicar el POST.
+- [ ] Simular fallo de red/5xx al aceptar: conservar URL/código, mostrar un `role="alert"` visible dentro de la propia página (el shell público no monta `app-toast`), limpiar loading y permitir reintentar; mientras está pendiente, teclado/click no deben duplicar el POST.
 - [ ] Probar código inexistente y código invalidado por regeneración, además de la rama de miembro actual; no inventar expiración temporal mientras API/modelo no la definan.
 - [ ] Verificar en ES/EN y Chromium + Pixel 5: código preservado tanto en login como en registro, navegación directa, nombres/teclado/foco, controles táctiles ≥44 px y no-overflow a 320×568, 393×851, 568×320 y 1440×900; cero errores de consola de primera parte.
 - [ ] Si hace falta cambio de producción, escribir primero regresión unitaria, cubrir casos de error/reintento y mantener ≥70 % S/B/F/L en el fichero tocado sin rebajar gates; inspeccionar capturas PC/móvil cuando cambie la UI.
 
-**Evidencia y resultado:** pendiente de ejecución. El runner requerido es `node scripts/run-isolated-playwright.mjs`; solo permite su SQLite bajo `%TEMP%\hogaria-e2e-*`, puertos loopback efímeros y semilla sintética. No usar `localhost:4200`, la base normal ni proveedor IA/LAN.
+**TDD rojo (2026-10-02):** `tests/e2e/invite-actions.spec.ts` con `node scripts/run-isolated-playwright.mjs`, Chromium + Pixel 5, rate limit activo y SQLite/semillas/puertos únicos bajo `%TEMP%`: el rechazo y la invalidación del código regenerado pasan (**4/4**). En aceptación, una respuesta simulada 503 deja **cero** `.toast--error` visibles en ambos proyectos: `AppComponent` solo monta `router-outlet` y `app-toast` vive en `MainLayoutComponent`, que la ruta pública no usa; `InviteComponent.accept()` no presenta error inline. La medición real inicial en Chromium/Pixel 5 registró botones de login/registro de **32 px** a 320 px CSS frente al mínimo de 44 px; el CTA usa `app-button` sin `[touchTarget]`. Una primera aserción de enlaces de invitado se ejecutó por error después de registrar/loguear el usuario; corregí el fixture y la regresión ya recorre correctamente tanto el estado público como el autenticado. No se tocó `localhost:4200` ni proveedor externo.
+
+**Evidencia y resultado:** la corrección aún está pendiente. El runner requerido es `node scripts/run-isolated-playwright.mjs`; solo permite su SQLite bajo `%TEMP%\hogaria-e2e-*`, puertos loopback efímeros y semilla sintética. No usar `localhost:4200`, la base normal ni proveedor IA/LAN.
 
 ## QA-PREFERENCES.CUSTOM-LIMIT.1 · opciones personalizadas y contrato de guardado (implementada)
 
