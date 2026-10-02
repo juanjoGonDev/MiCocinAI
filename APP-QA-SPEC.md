@@ -1169,6 +1169,20 @@ La coverage focal S/B/F/L de `HouseholdComponent` es **88.04/95.65/74.28/87.2 %*
 
 **Rollback:** revertir el commit atómico de esta unidad restaura el feedback previo de acciones de Hogar; afecta únicamente `HouseholdComponent`, `HouseholdService`, las traducciones de Hogar, sus pruebas y esta sección de checklist. No hay migración ni escritura persistente fuera de las fixtures aisladas.
 
+### QA-HOUSEHOLD.CLIPBOARD.1 · no confirmar copiado si falla el portapapeles
+
+**Fuente revalidada antes de implementar (2026-10-02):** `HouseholdComponent.copyLink()` invoca `navigator.clipboard.writeText()` sin esperar la promesa y muestra éxito inmediatamente. Si el navegador rechaza el permiso, la UI afirma algo falso y la promesa puede generar un `unhandledrejection`. `LogsComponent` sí espera la promesa, pero mantiene una segunda implementación que usa `document.execCommand('copy')` sin comprobar su resultado ni limpiar el `textarea` ante excepción. Los diccionarios de Hogar ya tienen feedback de éxito, no de fallo; Logs ya distingue fallo.
+
+**Conducta esperada:** extraer una única operación de copia compartida. Si existe Clipboard API, solo resolverá cuando `writeText` confirme; rechazo se propaga sin éxito falso. En contextos sin esa API, el fallback legacy debe resolver únicamente si `execCommand('copy')` devuelve `true`, y retirar siempre el `textarea`. Hogar informa el fallo de forma localizada en español e inglés y mantiene visible el enlace para copiar manualmente; Logs conserva sus feedbacks actuales y no genera `pageerror`/rechazos sin manejar.
+
+- [ ] Escribir primero unitarias de la utilidad compartida: éxito/rechazo de Clipboard API, API no disponible + fallback true/false/throw y limpieza del DOM; reproducir los feedbacks incorrectos de Hogar y Logs antes de implementar.
+- [ ] Playwright real aislada Chromium/Pixel 5: simular permiso de portapapeles rechazado en Household y Logs; verificar error localizado, enlace conservado, sin éxito simultáneo, `pageerror` ni `unhandledrejection`.
+- [ ] Confirmar Household en ES/EN y anchos 320, 393 y 1440 px sin desbordamiento; capturas sintéticas de error en PC/móvil guardadas e inspeccionadas.
+- [ ] Alcanzar ≥70 % de statements/branches/functions/lines de cada fuente de producción tocada; ejecutar suites unitarias focales, E2E real aislada, typecheck, build, formato y `git diff --check`, sin bajar el gate global.
+- [ ] Mantener abierta la casilla amplia `/household` y registrar comandos/resultados, artefactos y rollback exacto de esta unidad.
+
+**Rollback:** revertir la unidad atómica que agrega el servicio compartido de clipboard, su cableado de Household/Logs, traducción de fallo, pruebas y esta sección. No cambia datos persistidos ni contratos HTTP.
+
 ### QA-ONBOARDING.PANTRY-LINK.1 · Mantener Pantry como fuente de verdad de utensilios
 
 **Fuente revalidada antes de implementar (2026-10-01):** `HOGARIA-SPEC.md` §8c establece paridad: los utensilios se editan en Pantry y el tour solo enlaza. §12C añadió el paso de horarios y §12E documenta el contador `Paso 3 de 6`; prevalece sobre el conteo inicial de cinco de §8b. `ONBOARDING_STEPS` actual contiene `profile, allergies, tastes, goal, meals, kitchen`, como requiere el contrato posterior. Sin embargo, la plantilla actual de `kitchen` renderiza checkboxes que llaman `toggleUtensil()` → `PantryService.updateUtensil()`, mutando inventario desde el tour. La conducta esperada es conservar seis pasos y convertir `kitchen` en un paso informativo con enlace accesible a `/pantry?tab=utensils`; las modificaciones de disponibilidad se hacen allí.
