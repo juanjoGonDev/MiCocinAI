@@ -79,6 +79,19 @@ describe('rotarOrden (el ciclo del encabezado, ## 12ab)', () => {
     ).toEqual([{ clave: 'cantidad', dir: 'asc' }]);
   });
 
+  it('el clic suelto sobre una clave activa tambien deja solo esa columna', () => {
+    expect(
+      rotarOrden(
+        [
+          { clave: 'nombre', dir: 'asc' },
+          { clave: 'cantidad', dir: 'asc' }
+        ],
+        'nombre',
+        false
+      )
+    ).toEqual([{ clave: 'nombre', dir: 'desc' }]);
+  });
+
   it('direccion y posicion para pintar el encabezado', () => {
     const multi: OrdenTabla = [
       { clave: 'cat', dir: 'asc' },
@@ -358,6 +371,7 @@ describe('recortarFiltro, filtroActivo y companeros menores', () => {
 
   it('coincideEnMenu sin acentos y sin mayusculas', () => {
     expect(coincideEnMenu('Lechuga hoja de roble', 'ROBLE')).toBe(true);
+    expect(coincideEnMenu('Verduras', 'verd')).toBe(true);
     expect(coincideEnMenu('Queso curado', 'curau')).toBe(false);
     expect(coincideEnMenu('Aguacate', '')).toBe(true);
   });

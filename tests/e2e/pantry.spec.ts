@@ -1,5 +1,7 @@
 import { test, expect } from './fixtures';
 import type { Page, Locator } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { registerWithHousehold } from './helpers/auth';
 import { ponTamano } from './helpers/tabla';
 
@@ -45,6 +47,24 @@ async function darAlta(
   await expect(page.locator('.toast--success').last()).toContainText('Agregado');
 }
 
+async function capturarInventario(
+  page: Page,
+  testInfo: { project: { name: string } }
+): Promise<void> {
+  const directory = join(process.cwd(), '.e2e-screenshots', 'qa-datatable-20261002');
+  await mkdir(directory, { recursive: true });
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error('Playwright debe configurar un viewport para capturar la tabla.');
+  await page.screenshot({
+    path: join(
+      directory,
+      `pantry-${testInfo.project.name}-${viewport.width}x${viewport.height}.png`
+    ),
+    fullPage: true,
+    animations: 'disabled'
+  });
+}
+
 test.describe('Pantry — inventario en tabla', () => {
   test.beforeEach(async ({ page }) => {
     // El seed de ingredientes se crea junto al hogar, todo a cero: el inventario empieza vacio.
@@ -62,11 +82,15 @@ test.describe('Pantry — inventario en tabla', () => {
     await expect(tabla(page).locator('tr.tabla__fila')).toHaveCount(0);
   });
 
-  test('el alta pinta la fila con su cantidad y sube el contador global', async ({ page }) => {
+  test('el alta pinta la fila con su cantidad y sube el contador global', async ({
+    page
+  }, testInfo) => {
     await darAlta(page, { nombre: 'Tomate', cantidad: '500' });
     await expect(fila(page, 'Tomate')).toHaveCount(1);
     await expect(fila(page, 'Tomate')).toContainText('500 g'); // el modal nace en gramos
     await expect(page.locator('.stat-card--total .stat-card__value')).toHaveText('1');
+    await expect(page.locator('.toast-container .toast')).toHaveCount(0, { timeout: 90_000 });
+    await capturarInventario(page, testInfo);
   });
 
   test('la busqueda es instantanea, ignora mayusculas y acentos, y viaja en la URL', async ({
@@ -336,14 +360,54 @@ test.describe('Pantry — inventario en tabla', () => {
 
     // y el filtro: la hoja encaja el mismo panel del cabezal, sin copias
     await page.locator('[data-test="hoja-filtro-unit"]').click();
-    await page
-      .locator('.hoja__cuerpo .menu__fila', { hasText: 'l' })
-      .locator('button[role="checkbox"]')
-      .click();
+    const menuUnidad = page.locator('.hoja__cuerpo .menu');
+    await menuUnidad.locator('[data-test="tabla-menu-nada"]').click();
+    await menuUnidad.getByRole('checkbox', { name: 'l', exact: true }).click();
+    await page.locator('[data-test="hoja-volver"]').click();
     await page.locator('[data-test="hoja-cerrar"]').click();
 
     await expect(tabla(page).locator('tr.ingredient-item')).toHaveCount(1);
     await expect(fila(page, 'Leche')).toHaveCount(1);
+  });
+
+  test('la tabla cruza el limite movil/escritorio sin overflow en formatos estrechos y apaisados', async ({
+    page
+  }, testInfo) => {
+    await darAlta(page, { nombre: 'Tomate responsive', cantidad: '500' });
+
+    for (const viewport of [
+      { width: 320, height: 568 },
+      { width: 393, height: 851 },
+      { width: 568, height: 320 },
+      { width: 719, height: 800 },
+      { width: 720, height: 800 }
+    ]) {
+      await page.setViewportSize(viewport);
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(viewport.width);
+
+      const hojaAbrir = tabla(page).locator('[data-test="tabla-hoja-abrir"]');
+      if (viewport.width < 720) {
+        await expect(hojaAbrir).toBeVisible();
+        await expect(hojaAbrir).toHaveAccessibleName('Ordenar y filtrar');
+        await expect(tabla(page).locator('[data-test="tabla-filtro-name"]:visible')).toHaveCount(0);
+        await expect(tabla(page).locator('thead')).toBeHidden();
+        if (testInfo.project.name === 'mobile-chrome') {
+          await hojaAbrir.tap();
+        } else {
+          await hojaAbrir.focus();
+          await page.keyboard.press('Enter');
+        }
+        await expect(page.getByRole('dialog', { name: 'Ordenar y filtrar' })).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.locator('[data-test="tabla-hoja"]')).toHaveCount(0);
+      } else {
+        await expect(hojaAbrir).toBeHidden();
+        await expect(tabla(page).locator('[data-test="tabla-filtro-name"]:visible')).toHaveCount(1);
+        await expect(tabla(page).locator('thead')).toBeVisible();
+      }
+    }
   });
 
   test('las sugerencias viven en un expand cerrado; al abrirlo, el chip prellena el alta', async ({

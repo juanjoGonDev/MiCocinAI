@@ -7,6 +7,7 @@ import {
   EventEmitter,
   HostListener,
   Input,
+  OnInit,
   Output,
   TemplateRef,
   afterNextRender,
@@ -75,6 +76,7 @@ export class DataTableCellDirective {
 }
 
 type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
+type RangoSeleccion = { ids: string[]; origen: number; destino: number };
 
 /**
  * La tabla de datos de la casa (HOGARIA-SPEC ## 12ab).
@@ -244,6 +246,8 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
                 @if (seleccionable()) {
                   <td
                     class="tabla__td--check tabla__td"
+                    (mousedown)="registrarShift($event)"
+                    (keydown)="registrarShift($event)"
                     (click)="alPulsarMarca($any($event), fila)"
                   >
                     <app-checkbox
@@ -1309,7 +1313,7 @@ type EstadoCapa = { col: string; sup: 'cabezal' | 'hoja' };
     `
   ]
 })
-export class DataTableComponent implements AfterContentInit {
+export class DataTableComponent implements AfterContentInit, OnInit {
   @ContentChildren(DataTableCellDirective) private celdasProyectadas?: DataTableCellDirective[];
 
   /** Las filas completas de la pantalla: la tabla no pide nada, pero si filtra, ordena y corta. */
@@ -1366,13 +1370,28 @@ export class DataTableComponent implements AfterContentInit {
         window.removeEventListener('resize', reposicionar);
       });
     });
-    // Cambiar filtro, tamano o cualquier cosa que reordene el mundo: la pagina se reinicia. Sin esto, estar
-    // en la pagina 4 y filtrar deja una tabla vacia «sin motivo».
+    // Los filtros sí reinician la página; cambiar tamaño usa su propio reanclaje y no debe pasar por aquí.
     effect(() => {
       this.filtros();
-      this.tamano();
       this.pagina.set(1);
     });
+    // Si desaparece una fila seleccionada (p. ej. tras borrarla y recargar), la barra de lote del
+    // consumidor debe recibir la selección viva, no conservar un objeto/ID que ya no existe.
+    effect(() => {
+      const filas = this.filas();
+      const seleccion = this.seleccion();
+      const clavesVivas = new Set(filas.map((fila) => this.identificadorDe(fila)));
+      const podar = [...seleccion].some((id) => !clavesVivas.has(id));
+      if (!podar) return;
+
+      const idsVivos = new Set([...seleccion].filter((id) => clavesVivas.has(id)));
+      this.seleccion.set(idsVivos);
+      this.seleccionChange.emit(filas.filter((fila) => idsVivos.has(this.identificadorDe(fila))));
+    });
+  }
+
+  ngOnInit(): void {
+    // Angular asigna los signal inputs después del constructor; leerlos allí usa solo sus defaults.
     const t = this.tamanoInicial();
     if (this.tamanos().includes(t)) this.tamano.set(t);
   }
@@ -1723,6 +1742,15 @@ export class DataTableComponent implements AfterContentInit {
   }
   protected marcarFila(fila: unknown, valor: boolean): void {
     const id = this.identificadorDe(fila);
+    if (this.gestoShift) {
+      const rango = this.rangoPara(id);
+      if (rango) {
+        // El checkbox comunica su nuevo valor antes de que el click llegue al <td>. Guardamos el tramo y
+        // dejamos que alPulsarMarca emita solo el resultado final, no el toggle intermedio.
+        this.rangoShiftPendiente = { id, rango };
+        return;
+      }
+    }
     const copia = new Set(this.seleccion());
     if (valor) copia.add(id);
     else copia.delete(id);
@@ -1750,6 +1778,19 @@ export class DataTableComponent implements AfterContentInit {
   }
   /** Ancla del tramo con Shift: el id de la ultima pulsacion simple (envejece solo, como en Windows). */
   private anclaMarca: string | null = null;
+  private gestoShift = false;
+  private rangoShiftPendiente: { id: string; rango: RangoSeleccion } | null = null;
+
+  protected registrarShift(evento: MouseEvent | KeyboardEvent): void {
+    if (
+      evento instanceof KeyboardEvent &&
+      evento.key !== ' ' &&
+      evento.key !== 'Spacebar' &&
+      evento.key !== 'Enter'
+    )
+      return;
+    this.gestoShift = evento.shiftKey;
+  }
 
   /**
    * Shift+click en la casilla: tramo desde la ancla hasta aqui, inclusivo y SOBRE LA PAGINA visible (## 12ad).
@@ -1759,22 +1800,32 @@ export class DataTableComponent implements AfterContentInit {
    */
   protected alPulsarMarca(evento: MouseEvent, fila: unknown): void {
     const id = this.identificadorDe(fila);
+    this.gestoShift = false;
     if (!evento.shiftKey) {
+      this.rangoShiftPendiente = null;
       this.anclaMarca = id;
       return;
     }
+    const pendiente = this.rangoShiftPendiente;
+    this.rangoShiftPendiente = null;
+    const rango = pendiente?.id === id ? pendiente.rango : this.rangoPara(id);
+    if (!rango) return; // sin ancla valida: el toggle normal del checkbox permanece intacto
     // El tramo se mide sobre el resultado ordenado completo —el ancla puede vivir en otra pagina—, pero solo
     // entran en la seleccion las filas que estan en la pagina visible (## 12ad, B).
-    const todas = this.resultado().map((f) => this.identificadorDe(f));
     const visibles = new Set(this.vista().filas.map((f) => this.identificadorDe(f)));
-    const destino = todas.indexOf(id);
-    const origen = this.anclaMarca === null ? -1 : todas.indexOf(this.anclaMarca);
-    if (origen < 0 || destino < 0) return; // sin ancla: el toggle de siempre del boton, ni tramo ni susto
     // Como en el explorador: el tramo REEMPLAZA la seleccion —no se suma—, y el ancla se queda donde estaba.
-    const tramo = tramoDeIndices(origen, destino)
-      .map((i) => todas[i])
+    const tramo = tramoDeIndices(rango.origen, rango.destino)
+      .map((i) => rango.ids[i])
       .filter((k) => visibles.has(k));
     this.aplicarSeleccion(new Set(tramo));
+  }
+
+  private rangoPara(id: string): RangoSeleccion | null {
+    if (this.anclaMarca === null) return null;
+    const ids = this.resultado().map((fila) => this.identificadorDe(fila));
+    const origen = ids.indexOf(this.anclaMarca);
+    const destino = ids.indexOf(id);
+    return origen < 0 || destino < 0 ? null : { ids, origen, destino };
   }
 
   /** El tamano no se cambia a ciegas: se re-ancla la pagina para que la primera fila vista siga a la vista. */

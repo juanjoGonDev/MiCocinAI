@@ -79,6 +79,7 @@ export function rotarOrden(actual: OrdenTabla, clave: string, multiple: boolean)
   }
   const criterio = actual[indice];
   if (criterio.dir === 'asc') {
+    if (!multiple) return [{ clave, dir: 'desc' }];
     const copia = [...actual];
     copia[indice] = { clave, dir: 'desc' };
     return copia;
@@ -298,7 +299,7 @@ export function pasarFiltros<T>(
 export function coincideEnMenu(valorEtiqueta: string, busqueda: string): boolean {
   const q = busqueda.trim().toLowerCase();
   if (!q) return true;
-  return quitarAcentos(valorEtiqueta).includes(quitarAcentos(q));
+  return quitarAcentos(valorEtiqueta.toLowerCase()).includes(quitarAcentos(q));
 }
 
 export function quitarAcentos(texto: string): string {
