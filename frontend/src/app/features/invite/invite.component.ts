@@ -40,7 +40,9 @@ import { I18nService } from '../../core/services/i18n.service';
             <h1 class="invite-card__title">{{ 'invite.invitacion_no_valida' | t }}</h1>
             <p class="invite-card__text">{{ error() }}</p>
             <a routerLink="/" class="invite-card__link">
-              <app-button variant="primary">{{ 'invite.ir_al_inicio' | t }}</app-button>
+              <app-button variant="primary" [touchTarget]="true">
+                {{ 'invite.ir_al_inicio' | t }}
+              </app-button>
             </a>
           </ng-container>
 
@@ -57,20 +59,34 @@ import { I18nService } from '../../core/services/i18n.service';
             <ng-container *ngIf="preview()?.alreadyMember; else joinActions">
               <p class="invite-card__info">{{ 'invite.ya_eres_miembro_de' | t }}</p>
               <a routerLink="/household" class="invite-card__link">
-                <app-button variant="primary">{{ 'invite.ir_a_mi_hogar' | t }}</app-button>
+                <app-button variant="primary" [touchTarget]="true">
+                  {{ 'invite.ir_a_mi_hogar' | t }}
+                </app-button>
               </a>
             </ng-container>
 
             <ng-template #joinActions>
               <ng-container *ngIf="authService.isAuthenticated(); else loginCta">
                 <div class="invite-card__actions">
-                  <app-button variant="ghost" (onClick)="decline()">{{
-                    'common.cancel' | t
-                  }}</app-button>
-                  <app-button variant="primary" [loading]="joining()" (onClick)="accept()">
+                  <app-button
+                    variant="ghost"
+                    [touchTarget]="true"
+                    [disabled]="joining()"
+                    (onClick)="decline()"
+                    >{{ 'common.cancel' | t }}</app-button
+                  >
+                  <app-button
+                    variant="primary"
+                    [touchTarget]="true"
+                    [loading]="joining()"
+                    (onClick)="accept()"
+                  >
                     {{ 'invite.unirme_al_hogar' | t }}
                   </app-button>
                 </div>
+                <p *ngIf="acceptError()" class="invite-card__error" role="alert">
+                  {{ acceptError() }}
+                </p>
               </ng-container>
 
               <ng-template #loginCta>
@@ -79,10 +95,14 @@ import { I18nService } from '../../core/services/i18n.service';
                 </p>
                 <div class="invite-card__actions">
                   <a [routerLink]="['/auth/login']" [queryParams]="{ code: inviteCode() }">
-                    <app-button variant="primary">{{ 'auth.login' | t }}</app-button>
+                    <app-button variant="primary" [touchTarget]="true">
+                      {{ 'auth.login' | t }}
+                    </app-button>
                   </a>
                   <a [routerLink]="['/auth/register']" [queryParams]="{ code: inviteCode() }">
-                    <app-button variant="outline">{{ 'auth.register' | t }}</app-button>
+                    <app-button variant="outline" [touchTarget]="true">
+                      {{ 'auth.register' | t }}
+                    </app-button>
                   </a>
                 </div>
               </ng-template>
@@ -132,6 +152,11 @@ import { I18nService } from '../../core/services/i18n.service';
         font-size: var(--text-sm);
         margin: 0;
       }
+      .invite-card__error {
+        color: var(--error);
+        font-size: var(--text-sm);
+        margin: 0;
+      }
       .invite-card__actions {
         display: flex;
         gap: var(--space-3);
@@ -161,6 +186,7 @@ export class InviteComponent implements OnInit {
 
   preview = signal<InvitePreview | null>(null);
   error = signal<string | null>(null);
+  acceptError = signal<string | null>(null);
   loading = signal(true);
   joining = signal(false);
   inviteCode = signal<string>('');
@@ -190,9 +216,16 @@ export class InviteComponent implements OnInit {
   }
 
   accept(): void {
+    if (this.joining()) return;
+
+    this.acceptError.set(null);
     this.joining.set(true);
-    this.householdService.joinByCode(this.inviteCode()).subscribe({
-      next: () => {
+    this.householdService.joinByCode(this.inviteCode(), { silentToast: true }).subscribe({
+      next: (result) => {
+        if (result?.success !== true) {
+          this.showAcceptError();
+          return;
+        }
         this.toastService.success(
           this.i18n.t('auth.unido'),
           this.i18n.t('household.ahora_eres_miembro_del')
@@ -200,14 +233,17 @@ export class InviteComponent implements OnInit {
         this.joining.set(false);
         this.router.navigate(['/household']);
       },
-      error: () => {
-        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('ui.no_se_pudo_unir'));
-        this.joining.set(false);
-      }
+      error: () => this.showAcceptError()
     });
   }
 
   decline(): void {
+    if (this.joining()) return;
     this.router.navigate(['/']);
+  }
+
+  private showAcceptError(): void {
+    this.acceptError.set(this.i18n.t('ui.no_se_pudo_unir'));
+    this.joining.set(false);
   }
 }

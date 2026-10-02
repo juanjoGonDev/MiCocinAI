@@ -77,8 +77,9 @@ export class HouseholdService {
   }
 
   /** Join household by invite code (for already-logged-in users). */
-  joinByCode(code: string): Observable<any> {
-    return this.http.post<any>(`${this.apiUrl}/join/${code}`, {}).pipe(
+  joinByCode(code: string, options: { silentToast?: boolean } = {}): Observable<any> {
+    const requestOptions = options.silentToast ? { context: this.silentToastContext() } : {};
+    return this.http.post<any>(`${this.apiUrl}/join/${code}`, {}, requestOptions).pipe(
       tap(() => this.loadHousehold()),
       catchError((err) => {
         throw err;

@@ -1,5 +1,6 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import type { Observable } from 'rxjs';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import type {
   Household,
@@ -259,6 +260,7 @@ describe('HouseholdService', () => {
     const join = http.expectOne(`${API_URL}/join/ABC12345`);
     expect(join.request.method).toBe('POST');
     expect(join.request.body).toEqual({});
+    expect(join.request.context.get(SILENT_TOAST)).toBeFalse();
     join.flush({ success: true, message: 'Joined household' });
     expect(joined).toEqual({ success: true, message: 'Joined household' });
     http.expectOne(API_URL).flush({ data: household() });
@@ -268,6 +270,20 @@ describe('HouseholdService', () => {
     service.joinByCode('BADCODE').subscribe({ error: (error) => (joinError = error) });
     http.expectOne(`${API_URL}/join/BADCODE`).flush({}, { status: 404, statusText: 'Not Found' });
     expect(joinError).toBeTruthy();
+  });
+
+  it('can silence the global error toast for a caller that renders its own error', () => {
+    const joinByCode = service.joinByCode as unknown as (
+      inviteCode: string,
+      options: { silentToast: true }
+    ) => Observable<unknown>;
+    joinByCode.call(service, 'INVITE123', { silentToast: true }).subscribe();
+
+    const join = http.expectOne(`${API_URL}/join/INVITE123`);
+    expect(join.request.method).toBe('POST');
+    expect(join.request.context.get(SILENT_TOAST)).toBeTrue();
+    join.flush({ success: true, message: 'Joined household' });
+    http.expectOne(API_URL).flush({ data: household() });
   });
 
   it('joins by request body, reloads on success and returns null on failure', () => {
