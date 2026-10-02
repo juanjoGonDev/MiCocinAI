@@ -461,12 +461,16 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 ### QA-REC.UPLOAD-BOUNDARY.1 · límites de subida en el backend
 
-- [ ] Añadir regresiones a `POST /api/receipts`: 0 bytes → 400 `EMPTY_FILE`; PNG sintética válida de exactamente 10 MiB → 201 y flujo sin proveedor → `NO_CONFIG`; 10 MiB + 1 byte → 413 `FILE_TOO_LARGE`, sin guardar ticket ni archivo.
-- [ ] Ejecutar el test con SQLite en memoria/temporal y proveedor stub/no configurado; limpiar el archivo sintético aunque falle una aserción. Mantener firma como autoridad, no confiar en `Content-Type`.
+- [x] Añadir regresiones a `POST /api/receipts`: 0 bytes → 400 `EMPTY_FILE`; PNG sintética con firma de exactamente 10 MiB → 201 y flujo sin proveedor → `NO_CONFIG`; 10 MiB + 1 byte → 413 `FILE_TOO_LARGE`, sin guardar ticket ni archivo.
+- [x] Ejecutar el test con SQLite en memoria y proveedor no configurado; limpiar el archivo sintético en `finally`. Mantener la firma como autoridad: el caso exacto de 10 MiB usa `application/octet-stream` y aun así se clasifica PNG por sus bytes iniciales.
 - [ ] Ejecutar cobertura de servidor sin bajar el umbral, typecheck/build y comprobar `git diff --check`; actualizar esta checklist solo con resultados ejecutados.
 
+**Evidencia de límites backend (2026-10-02):** baseline del archivo, antes de agregar los tres bordes: Vitest **11/11**. Después: `npm run test --prefix server -- src/routes/receipts.routes.spec.ts` **14/14**; la ejecución de 10 MiB se procesa hasta `NO_CONFIG`, y `finally` borra el archivo temporal. El caso +1 devuelve 413 `FILE_TOO_LARGE` y no crea fila ni archivo; 0 bytes devuelve 400 `EMPTY_FILE` sin persistencia. `npm run build --prefix server` y `git diff --check` pasan. El test de archivo completo no pasa `prettier --check` ya en `HEAD`; se evitó reformatear cientos de líneas fuera del cambio.
+
+**Gate global observado, no atribuido a esta unidad:** `npm run test:coverage --prefix server -- --reporter=dot` termina con **917/922** pruebas. Fallan dos assertions de `pantry-catalog-i18n.spec.ts` que buscan plantillas/imports históricos que ya no coinciden con `onboarding.component.ts`, y tres casos de `uploads.spec.ts` que presuponen semántica POSIX/permisos `chmod` no efectiva en Windows. La suite de coverage no alcanza a dar evidencia verde del gate; QA-04c permanece abierta. En el checkout no hay `docker`/`nginx` ni listener en 80/443, por lo que el ingress sigue pendiente y no se modificó su límite.
+
 - [ ] Preparar una prueba real por el ingress Nginx efectivo con backend/SQLite aislados: una PNG sintética válida de 513 KiB debe alcanzar el backend y, sin proveedor configurado, terminar en `NO_CONFIG`; no usar `page.route` que evite el proxy.
-- [ ] Añadir pruebas del backend para firma/tamaño en 0 bytes, 10 MiB exactos y 10 MiB + 1 byte; validar 413 con `FILE_TOO_LARGE` solo al superar el límite.
+- [x] Añadir pruebas del backend para firma/tamaño en 0 bytes, 10 MiB exactos y 10 MiB + 1 byte; validar 413 con `FILE_TOO_LARGE` solo al superar el límite. (QA-REC.UPLOAD-BOUNDARY.1; 14/14 del archivo dirigido.)
 - [ ] Corregir el límite del proxy para incluir el multipart overhead sin cambiar innecesariamente el límite global; verificar con Chromium y Pixel 5 sobre Nginx real aislado y documentar si falta el runtime.
 
 ## Unidad QA-REC.FAV.1 · quitar favoritos desde la pestaña filtrada (resuelta)

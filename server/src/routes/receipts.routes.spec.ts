@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
+import { existsSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { deleteUpload, resolveUploadUrl, uploadsRoot } from '../utils/uploads.js';
 
 /**
  * La lectura de tickets por IA (HOGARIA-SPEC ## 12aj), sin montar un proveedor: lo que se
@@ -52,6 +55,12 @@ async function call(method: string, path: string, body?: unknown, token = alice.
 
 /** Un PNG de mentira: la firma de 8 bytes es lo que la ruta valida. */
 const PNG_FIRMA = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const MAX_TICKET_BYTES = 10 * 1024 * 1024;
+
+function archivosDeTickets(): string[] {
+  const dir = join(uploadsRoot(':memory:'), 'receipts');
+  return existsSync(dir) ? readdirSync(dir).sort() : [];
+}
 
 async function subirTicket(nombre = 'ticket.png', bytes: Buffer = PNG_FIRMA, tipo = 'image/png') {
   const formulario = new FormData();
@@ -133,6 +142,59 @@ describe('POST / (subir)', () => {
       body: new FormData()
     });
     expect(response.status).toBe(400);
+  });
+
+  it('rechaza un fichero vacío sin guardar ticket ni archivo', async () => {
+    const archivosAntes = archivosDeTickets();
+    const vacio = await subirTicket('vacio.png', Buffer.alloc(0));
+
+    expect(vacio.status).toBe(400);
+    expect(vacio.payload.error).toBe('EMPTY_FILE');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM receipts').get()).toEqual({ n: 0 });
+    expect(archivosDeTickets()).toEqual(archivosAntes);
+  });
+
+  it('acepta exactamente 10 MiB por firma y la cola falla limpiamente sin proveedor', async () => {
+    const archivosAntes = archivosDeTickets();
+    const bytes = Buffer.alloc(MAX_TICKET_BYTES);
+    PNG_FIRMA.copy(bytes);
+    let fileUrl: string | undefined;
+
+    try {
+      // El MIME no es la fuente de verdad: los primeros bytes sí son una firma PNG.
+      const subida = await subirTicket('limite.png', bytes, 'application/octet-stream');
+      if (subida.status === 201) fileUrl = subida.payload.data.fileUrl;
+
+      expect(subida.status).toBe(201);
+      expect(subida.payload.data.fileKind).toBe('png');
+      expect(fileUrl).toMatch(/^\/api\/uploads\/receipts\//);
+
+      const ficha = await esperarEstado(subida.payload.data.id, 'failed');
+      expect(ficha.error).toBe('NO_CONFIG');
+
+      const ruta = resolveUploadUrl(fileUrl!, uploadsRoot(':memory:'));
+      expect(ruta).not.toBeNull();
+      expect(statSync(ruta!).size).toBe(MAX_TICKET_BYTES);
+    } finally {
+      const root = uploadsRoot(':memory:');
+      for (const file of archivosDeTickets()) {
+        if (!archivosAntes.includes(file)) deleteUpload(`/api/uploads/receipts/${file}`, root);
+      }
+    }
+
+    expect(archivosDeTickets()).toEqual(archivosAntes);
+  });
+
+  it('rechaza 10 MiB + 1 con FILE_TOO_LARGE antes de persistir nada', async () => {
+    const archivosAntes = archivosDeTickets();
+    const bytes = Buffer.alloc(MAX_TICKET_BYTES + 1);
+    PNG_FIRMA.copy(bytes);
+    const subida = await subirTicket('demasiado-grande.png', bytes);
+
+    expect(subida.status).toBe(413);
+    expect(subida.payload.error).toBe('FILE_TOO_LARGE');
+    expect(db.prepare('SELECT COUNT(*) AS n FROM receipts').get()).toEqual({ n: 0 });
+    expect(archivosDeTickets()).toEqual(archivosAntes);
   });
 });
 
