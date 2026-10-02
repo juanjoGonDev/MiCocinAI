@@ -10,7 +10,6 @@ import {
   loginSchema,
   registerSchema,
   refreshTokenSchema,
-  forgotPasswordSchema,
   resetPasswordSchema,
   changePasswordSchema,
   updateProfileSchema
@@ -19,6 +18,7 @@ import { deleteUpload, parseImageDataUrl, MAX_AVATAR_BYTES, storeImage } from '.
 import { avatarImageSchema } from '../schemas/auth.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 import { seedDefaultsForUser } from '../utils/seed-data.js';
+import { forgotPasswordRoutes } from './forgot-password.routes.js';
 import {
   readTasteResponse,
   saveTasteProfile,
@@ -192,19 +192,7 @@ authRoutes.post('/refresh', async (c) => {
 });
 
 // POST /api/auth/forgot-password
-authRoutes.post('/forgot-password', async (c) => {
-  const body = await c.req.json();
-  const input = forgotPasswordSchema.parse(body);
-
-  const db = getDatabase();
-  db.prepare('SELECT id FROM users WHERE email = ?').get(input.email);
-
-  // Always return success to prevent email enumeration
-  return c.json({
-    success: true,
-    message: 'If the email exists, a reset link has been sent'
-  });
-});
+authRoutes.route('/', forgotPasswordRoutes);
 
 // POST /api/auth/reset-password
 authRoutes.post('/reset-password', async (c) => {

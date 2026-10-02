@@ -237,7 +237,11 @@ export class AuthService {
   }
 
   forgotPassword(email: string): Observable<void> {
-    return this.http.post<void>(`${this.apiUrl}/forgot-password`, { email });
+    return this.http.post<void>(
+      `${this.apiUrl}/forgot-password`,
+      { email },
+      { context: new HttpContext().set(SILENT_TOAST, true) }
+    );
   }
 
   resetPassword(token: string, newPassword: string): Observable<void> {

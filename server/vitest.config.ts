@@ -13,11 +13,9 @@ import { defineConfig } from 'vitest/config';
  * las ramas del bootstrap que estos tests no montan, no codigo sin probar).
  *
  * Hoy quedan fuera, con su prueba atada a la fase que les corresponde:
- *   - src/routes/** (salvo shopping.routes.ts, que tiene spec desde la ronda 9, y
- *     household.routes.ts, que entra con su spec focal, y src/routes/pantry.routes.ts,
- *     que empezo en la 10 con los filtros por dias: el
- *     fichero entero no entra hasta que el alta y los utensilios tengan la suya, porque
- *     el umbral es por fichero y un 20 % maquillaria la rampa) y src/index.ts
+ *   - src/routes/** (salvo shopping.routes.ts, household.routes.ts y
+ *     forgot-password.routes.ts, con spec propia; pantry.routes.ts conserva cobertura parcial de sus filtros pero no entra
+ *     hasta probar el alta/utensilios, porque el umbral es por fichero) y src/index.ts
  *                             → el resto se prueba de momento con la suite e2e
  *   - src/middleware/** (salvo timestamp, que entro el dia que se escribio),
  *     src/schemas/**, src/utils/log-store.ts,
@@ -27,6 +25,7 @@ import { defineConfig } from 'vitest/config';
 const COVERED = [
   'src/routes/shopping.routes.ts',
   'src/routes/household.routes.ts',
+  'src/routes/forgot-password.routes.ts',
   'src/routes/ai-queue.routes.ts',
   'src/schemas/shopping.schema.ts',
   'src/utils/product-key.ts',

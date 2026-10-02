@@ -314,6 +314,7 @@ describe('AuthService', () => {
       const req = httpMock.expectOne('/api/auth/forgot-password');
       expect(req.request.method).toBe('POST');
       expect(req.request.body).toEqual({ email: 'test@test.com' });
+      expect(req.request.context.get(SILENT_TOAST)).toBeTrue();
       req.flush({});
     });
 
