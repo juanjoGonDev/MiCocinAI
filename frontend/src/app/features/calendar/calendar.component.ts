@@ -522,6 +522,16 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         (onClose)="closeMealModal()"
       >
         <div class="meal-form">
+          <div
+            *ngIf="mealDeletionFailed()"
+            class="meal-form__error"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
+            <strong>{{ 'ui.error' | t }}</strong>
+            <span>{{ 'calendar.no_se_pudo_quitar_comida' | t }}</span>
+          </div>
           <div class="meal-form__when">
             <span class="meal-form__band" [attr.data-meal]="draft.mealType" aria-hidden="true"></span>
             <strong>{{ mealLabel(draft.mealType) }}</strong>
@@ -605,7 +615,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             ></textarea>
           </div>
 
-          <div class="meal-form__actions">
+          <div class="meal-form__actions meal-edit-actions">
             <button
               *ngIf="draft.id"
               type="button"
@@ -1157,6 +1167,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       display: inline-flex;
       align-items: center;
       gap: var(--space-2);
+      min-height: 48px;
       padding: 6px 14px;
       font: inherit;
       font-size: var(--text-sm);
@@ -1385,6 +1396,25 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       font-size: var(--text-sm);
     }
 
+    .meal-form__error {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      padding: var(--space-3) var(--space-4);
+      color: var(--text-primary);
+      background: var(--error-subtle);
+      border: 1px solid color-mix(in srgb, var(--error) 30%, var(--cal-line));
+      border-left: 4px solid var(--error);
+      border-radius: var(--radius-lg);
+      font-size: var(--text-sm);
+      line-height: 1.5;
+    }
+
+    .meal-form__error strong {
+      color: var(--error);
+      font-weight: var(--font-semibold);
+    }
+
     .meal-form__band {
       width: 3px;
       height: 15px;
@@ -1439,6 +1469,27 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       align-items: center;
       gap: var(--space-2);
       padding-top: var(--space-1);
+    }
+
+    @media (max-width: 360px) {
+      .meal-edit-actions {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .meal-edit-actions > .meal-form__grow {
+        display: none;
+      }
+
+      .meal-edit-actions > .cal-btn {
+        width: 100%;
+        min-width: 0;
+        justify-content: center;
+      }
+
+      .meal-edit-actions > .cal-btn--primary {
+        grid-column: 1 / -1;
+      }
     }
 
     .meal-form__grow {
@@ -1681,6 +1732,7 @@ export class CalendarComponent implements OnInit {
   readonly anchor = signal<Date>(startOfDay(new Date()));
 
   readonly isMealModalOpen = signal(false);
+  readonly mealDeletionFailed = signal(false);
   readonly isGoalsModalOpen = signal(false);
   readonly isGenerateModalOpen = signal(false);
   readonly isGenerating = signal(false);
@@ -2054,6 +2106,7 @@ export class CalendarComponent implements OnInit {
   }
 
   openAddModal(date: string, mealType: MealType, time?: string): void {
+    this.mealDeletionFailed.set(false);
     this.draft = emptyDraft(date, mealType);
     // La hora es la de la casa, no una pregunta: acabamos de decir a que hora se cena, y volver a
     // pedirla por cada comida seria no haberse enterado. Se puede vaciar la casilla, y entonces la
@@ -2067,6 +2120,7 @@ export class CalendarComponent implements OnInit {
   }
 
   openEditModal(meal: CalendarMeal): void {
+    this.mealDeletionFailed.set(false);
     this.draft = {
       id: meal.id,
       date: meal.date,
@@ -2088,6 +2142,7 @@ export class CalendarComponent implements OnInit {
   }
 
   closeMealModal(): void {
+    this.mealDeletionFailed.set(false);
     this.isMealModalOpen.set(false);
     // El modal ya no está: la pestaña deja de tener sentido en la URL.
     clearTabParam(this.router, this.route, 'mealTab');
@@ -2159,7 +2214,13 @@ export class CalendarComponent implements OnInit {
 
   async removeMealById(id: string, title?: string): Promise<void> {
     // El nombre por defecto tambien se traduce: si se resolviera en la firma, el ingles llegaria tarde.
-    const que = title ?? this.i18n.t('calendar.esta_comida');
+    const savedTitle = this.calendarService.meals().find((meal) => meal.id === id)?.title;
+    const draftTitle =
+      this.draft.id === id
+        ? this.draft.customMeal.trim() ||
+          this.recipeService.recipes().find((recipe) => recipe.id === this.draft.recipeId)?.name
+        : undefined;
+    const que = title?.trim() || savedTitle || draftTitle || this.i18n.t('calendar.esta_comida');
     const accepted = await this.confirmService.confirm({
       title: this.i18n.t('calendar.eliminar_comida'),
       message: this.i18n.t('calendar.quitar_de_la_planificacion', { title: que }),
@@ -2167,7 +2228,13 @@ export class CalendarComponent implements OnInit {
     });
     if (!accepted) return;
 
-    this.calendarService.deleteMeal(id).subscribe(() => {
+    this.mealDeletionFailed.set(false);
+    this.calendarService.deleteMeal(id).subscribe((removed) => {
+      if (!removed) {
+        this.mealDeletionFailed.set(true);
+        return;
+      }
+
       this.toastService.success(
         this.i18n.t('calendar.quitada'),
         this.i18n.t('calendar.ya_no_esta_en_el', { title: que })

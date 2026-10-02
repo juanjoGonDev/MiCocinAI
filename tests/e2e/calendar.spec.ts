@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { expect, test } from './fixtures';
 import { registerAndGoto, skipOnboarding } from './helpers/auth';
 
@@ -27,6 +29,20 @@ async function addMealThroughModal(page: import('@playwright/test').Page, dish: 
   await page.fill('#meal-custom', dish);
   await page.locator('app-modal').getByRole('button', { name: 'Añadir', exact: true }).click();
   await expect(page.locator('.modal-overlay')).toHaveCount(0);
+}
+
+async function openMealEditorFromTimeline(
+  page: import('@playwright/test').Page,
+  dish: string
+): Promise<import('@playwright/test').Locator> {
+  const meal = page.locator('[data-test="timeline-block-meal"]').filter({ hasText: dish });
+  await expect(meal).toHaveCount(1);
+  await meal.click();
+
+  const editor = page.locator('app-modal:has(#meal-custom)');
+  await expect(editor.locator('.modal__title')).toContainText('Editar Comida');
+  await expect(editor.locator('#meal-custom')).toHaveValue(dish);
+  return editor;
 }
 
 test.describe('Calendario', () => {
@@ -120,26 +136,193 @@ test.describe('Calendario', () => {
     await expect(page.locator('.cal-strip__done')).toContainText('1 hecha');
   });
 
-  test('quitar una comida pasa por el dialogo de la app', async ({ page }) => {
+  test('conserva la comida y permite reintentar si falla el borrado', async ({ page }, testInfo) => {
+    const pageErrors: string[] = [];
+    const deleteStatuses: number[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    page.on('response', (response) => {
+      if (
+        response.request().method() === 'DELETE' &&
+        new URL(response.url()).pathname.includes('/api/calendar/meals/')
+      ) {
+        deleteStatuses.push(response.status());
+      }
+    });
+
     await addMealThroughModal(page, 'Ensalada completa');
-    await expect(page.locator('.cal-event')).toHaveCount(1);
+    await expect(page.locator('[data-test="timeline-block-meal"]')).toHaveCount(1);
 
-    const event = page.locator('.cal-event');
-    await event.hover();
-    await event.getByRole('button', { name: 'Quitar comida' }).click();
+    const editor = await openMealEditorFromTimeline(page, 'Ensalada completa');
+    const deleteButton = editor.getByRole('button', { name: 'Eliminar', exact: true });
+    const deleteButtonBounds = await deleteButton.boundingBox();
 
-    // El titulo lo luce el modal que envuelve el dialogo; el mensaje, el propio
-    // componente: se comprueba el mensaje, que es lo que habla de la comida concreta.
-    const dialog = page.locator('.confirm');
-    await expect(page.locator('.modal__title')).toContainText('Eliminar comida');
-    await expect(dialog.locator('.confirm__message')).toContainText(
+    // Cancelar debe conservar el editor y no iniciar ninguna petición de escritura.
+    await deleteButton.click();
+    const confirmation = page.locator('.confirm');
+    const confirmationDialog = page.locator('app-confirm-dialog [role="dialog"]');
+    await expect(confirmation.locator('.confirm__message')).toContainText(
       'Quitar «Ensalada completa» de la planificación'
     );
-    await dialog.getByRole('button', { name: 'Eliminar' }).click();
+    const focusIsInsideConfirmation = await confirmationDialog.evaluate((dialog) =>
+      dialog.contains(document.activeElement)
+    );
+    expect(focusIsInsideConfirmation).toBe(true);
+    await page.keyboard.press('Escape');
+    await expect(confirmation).toHaveCount(0);
+    await expect(editor.locator('.modal-overlay')).toBeVisible();
+    expect(deleteStatuses).toEqual([]);
 
-    await expect(page.locator('.cal-event')).toHaveCount(0);
+    await deleteButton.click();
+    await page.locator('.confirm').getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await expect(page.locator('.confirm')).toHaveCount(0);
+    expect(deleteStatuses).toEqual([]);
+
+    let deleteAttempts = 0;
+    await page.route('**/api/calendar/meals/*', async (route) => {
+      if (route.request().method() !== 'DELETE') {
+        await route.continue();
+        return;
+      }
+
+      deleteAttempts++;
+      if (deleteAttempts === 1) {
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: false, message: 'Synthetic temporary outage' })
+        });
+        return;
+      }
+
+      await route.continue();
+    });
+
+    await deleteButton.click();
+    const failedConfirmation = page.locator('.confirm');
+    await failedConfirmation.getByRole('button', { name: 'Eliminar', exact: true }).click();
+
+    const deletionError = editor.getByRole('alert');
+    await expect(deletionError).toHaveCount(1);
+    await expect(deletionError).toHaveAttribute('aria-live', 'assertive');
+    await expect(deletionError).toContainText('Error');
+    await expect(deletionError).toContainText('No se pudo quitar la comida. Vuelve a intentarlo.');
+    await expect(page.locator('.toast--error')).toHaveCount(0);
+    await expect(page.locator('.toast--success')).toHaveCount(0);
+    await expect(page.locator('.confirm')).toHaveCount(0);
+    await expect(editor.locator('.modal-overlay')).toBeVisible();
+    await expect(page.locator('[data-test="timeline-block-meal"]')).toContainText(
+      'Ensalada completa'
+    );
+    expect(deleteStatuses).toEqual([503]);
+
+    const screenshotDirectory = resolve(
+      process.cwd(),
+      '.e2e-screenshots',
+      'qa-calendar-delete-failure'
+    );
+    mkdirSync(screenshotDirectory, { recursive: true });
+    await page.screenshot({
+      path: resolve(screenshotDirectory, `${testInfo.project.name}.png`)
+    });
+
+    const mobileOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+    );
+    if (testInfo.project.name === 'mobile-chrome') {
+      expect(mobileOverflow).toBe(false);
+
+      const pixelViewport = page.viewportSize();
+      expect(pixelViewport).not.toBeNull();
+      await page.setViewportSize({ width: 320, height: 568 });
+      const narrowOverflow = await page.evaluate(
+        () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+      );
+      expect(narrowOverflow).toBe(false);
+      const alertDoesNotOverlapHeader = await deletionError.evaluate((alert) => {
+        const dialog = alert.closest('[role="dialog"]');
+        const header = dialog?.querySelector('.modal__header');
+        if (!dialog || !header) return false;
+        const alertBounds = alert.getBoundingClientRect();
+        const headerBounds = header.getBoundingClientRect();
+        return alertBounds.top >= headerBounds.bottom || alertBounds.bottom <= headerBounds.top;
+      });
+      expect(alertDoesNotOverlapHeader).toBe(true);
+      await editor.locator('.modal__close').focus();
+      await page.evaluate(() => document.scrollingElement?.scrollTo(0, 0));
+      await page.screenshot({
+        path: resolve(screenshotDirectory, 'mobile-chrome-320x568-top.png')
+      });
+      const documentScrollBeforeWheel = await page.evaluate(
+        () => document.scrollingElement?.scrollTop ?? 0
+      );
+      expect(documentScrollBeforeWheel).toBe(0);
+
+      const modalBody = editor.locator('.modal__body');
+      const initialModalScroll = await modalBody.evaluate((element) => ({
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight
+      }));
+      if (initialModalScroll.scrollHeight > initialModalScroll.clientHeight) {
+        const bodyBounds = await modalBody.boundingBox();
+        expect(bodyBounds).not.toBeNull();
+        if (bodyBounds) {
+          await page.mouse.move(
+            bodyBounds.x + bodyBounds.width / 2,
+            bodyBounds.y + bodyBounds.height / 2
+          );
+          await page.mouse.wheel(
+            0,
+            initialModalScroll.scrollHeight - initialModalScroll.clientHeight + 16
+          );
+        }
+      }
+      const narrowDeleteButtonBounds = await deleteButton.boundingBox();
+      const modalScroll = await modalBody.evaluate((element) => ({
+        scrollTop: element.scrollTop,
+        scrollHeight: element.scrollHeight,
+        clientHeight: element.clientHeight
+      }));
+      const documentScrollTop = await page.evaluate(
+        () => document.scrollingElement?.scrollTop ?? 0
+      );
+      expect(narrowDeleteButtonBounds?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(documentScrollTop).toBe(documentScrollBeforeWheel);
+      if (modalScroll.scrollHeight > modalScroll.clientHeight) {
+        expect(modalScroll.scrollTop).toBeGreaterThan(0);
+      }
+      const clippedMealActions = await editor.locator('.meal-form__actions').evaluate((actions) => {
+        const dialog = actions.closest('[role="dialog"]');
+        if (!dialog) return ['missing dialog'];
+        const dialogBounds = dialog.getBoundingClientRect();
+
+        return Array.from(actions.querySelectorAll('button'))
+          .filter((button) => {
+            const bounds = button.getBoundingClientRect();
+            return bounds.left < dialogBounds.left || bounds.right > dialogBounds.right;
+          })
+          .map((button) => button.innerText.trim());
+      });
+      expect(clippedMealActions).toEqual([]);
+      await page.screenshot({
+        path: resolve(screenshotDirectory, 'mobile-chrome-320x568-actions.png')
+      });
+      if (pixelViewport) await page.setViewportSize(pixelViewport);
+    }
+
+    await deleteButton.click();
+    const retryConfirmation = page.locator('.confirm');
+    await retryConfirmation.getByRole('button', { name: 'Eliminar', exact: true }).click();
+    await expect(page.locator('.toast--success')).toBeVisible();
+    await expect(editor.locator('.modal-overlay')).toHaveCount(0);
+    await expect(page.locator('[data-test="timeline-block-meal"]')).toHaveCount(0);
+    expect(deleteStatuses).toEqual([503, 200]);
+
     await page.reload();
-    await expect(page.locator('.cal-event')).toHaveCount(0);
+    await expect(page.locator('[data-test="timeline-block-meal"]')).toHaveCount(0);
+    if (testInfo.project.name === 'mobile-chrome') {
+      expect(deleteButtonBounds?.height ?? 0).toBeGreaterThanOrEqual(44);
+    }
+    expect(pageErrors).toEqual([]);
   });
 
   test('la navegacion cambia de semana y «Hoy» vuelve a la actual', async ({ page }) => {

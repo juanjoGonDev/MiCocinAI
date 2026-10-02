@@ -32,6 +32,15 @@ describe('diccionario simetrico', () => {
     }
   });
 
+  it('explica en ambos idiomas el error al quitar una comida', () => {
+    expect(es['calendar.no_se_pudo_quitar_comida']).toBe(
+      'No se pudo quitar la comida. Vuelve a intentarlo.'
+    );
+    expect(en['calendar.no_se_pudo_quitar_comida']).toBe(
+      "The meal couldn't be removed. Try again."
+    );
+  });
+
   it('no calca frases largas del castellano', () => {
     const calcos = Object.keys(es).filter((clave) => {
       const a = es[clave];

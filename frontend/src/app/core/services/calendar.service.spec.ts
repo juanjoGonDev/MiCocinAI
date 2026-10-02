@@ -1,6 +1,7 @@
 import { HttpRequest } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import { I18nService } from './i18n.service';
 import { CalendarService } from './calendar.service';
 
@@ -227,5 +228,47 @@ describe('CalendarService visible range concurrency', () => {
 
     expect(service.householdEvents().map((event) => event.title)).toEqual(['Latest event']);
     expect(service.eventsLoading()).toBeFalse();
+  });
+
+  it('returns false and restores the meal after a failed delete without a duplicate global toast', () => {
+    service.loadRange(RANGE_A.start, RANGE_A.end);
+    http.expectOne(rangeRequest(RANGE_A)).flush(rangeResponse(RANGE_A.start, 'Saved meal', 1800));
+
+    const results: boolean[] = [];
+    service.deleteMeal(`meal-${RANGE_A.start}`).subscribe((result) => results.push(result));
+
+    const deletion = http.expectOne((request) =>
+      request.url.endsWith(`/calendar/meals/meal-${RANGE_A.start}`)
+    );
+    expect(deletion.request.method).toBe('DELETE');
+    expect(deletion.request.context.get(SILENT_TOAST)).toBeTrue();
+    deletion.flush({}, { status: 503, statusText: 'Unavailable' });
+
+    expect(results).toEqual([false]);
+    expect(service.meals()).toEqual([]);
+
+    http.expectOne(rangeRequest(RANGE_A)).flush(rangeResponse(RANGE_A.start, 'Saved meal', 1800));
+    expect(service.meals().map((meal) => meal.title)).toEqual(['Saved meal']);
+  });
+
+  it('returns true and refreshes the range after a successful delete', () => {
+    service.loadRange(RANGE_A.start, RANGE_A.end);
+    const existingRange = rangeResponse(RANGE_A.start, 'Saved meal', 1800);
+    http.expectOne(rangeRequest(RANGE_A)).flush(existingRange);
+
+    const results: boolean[] = [];
+    service.deleteMeal(`meal-${RANGE_A.start}`).subscribe((result) => results.push(result));
+
+    const deletion = http.expectOne((request) =>
+      request.url.endsWith(`/calendar/meals/meal-${RANGE_A.start}`)
+    );
+    expect(deletion.request.method).toBe('DELETE');
+    expect(deletion.request.context.get(SILENT_TOAST)).toBeTrue();
+    deletion.flush({ success: true });
+
+    expect(results).toEqual([true]);
+    const refreshedRange = { ...existingRange, data: { ...existingRange.data, meals: [] } };
+    http.expectOne(rangeRequest(RANGE_A)).flush(refreshedRange);
+    expect(service.meals()).toEqual([]);
   });
 });

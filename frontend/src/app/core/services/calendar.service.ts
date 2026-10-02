@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Observable, catchError, map, of, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
@@ -13,6 +13,7 @@ import {
 } from '../../shared/models/calendar.model';
 import { I18nService } from '../../core/services/i18n.service';
 import { LatestRequest } from '../utils/latest-request';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 
 /** Fila cruda de `meals` tal y como la devuelve la API (snake_case). */
 interface MealRow {
@@ -176,13 +177,18 @@ export class CalendarService {
   deleteMeal(id: string): Observable<boolean> {
     // Fuera de la lista antes de responder: la rejilla se vacía al instante.
     this.mealsSignal.update((meals) => meals.filter((meal) => meal.id !== id));
-    return this.http.delete<any>(`${this.apiUrl}/meals/${id}`).pipe(
-      tap(() => this.refresh()),
-      catchError(() => {
-        this.refresh();
-        return of(false);
+    return this.http
+      .delete<any>(`${this.apiUrl}/meals/${id}`, {
+        context: new HttpContext().set(SILENT_TOAST, true)
       })
-    );
+      .pipe(
+        map(() => true),
+        tap(() => this.refresh()),
+        catchError(() => {
+          this.refresh();
+          return of(false);
+        })
+      );
   }
 
   /** Optimista: se marca y se confirma con el servidor; si falla, se revierte. */

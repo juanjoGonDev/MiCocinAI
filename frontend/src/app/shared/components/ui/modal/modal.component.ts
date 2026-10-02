@@ -137,7 +137,9 @@ const FOCUSABLE_SELECTOR =
 
       .modal__body {
         flex: 1;
+        min-height: 0;
         overflow-y: auto;
+        overscroll-behavior: contain;
         padding: var(--space-6);
       }
 
@@ -207,9 +209,10 @@ export class ModalComponent implements OnChanges, AfterViewChecked {
     }
   }
 
-  @HostListener('document:keydown.escape')
-  onEscapeKey(): void {
-    if (this.closable && this.isOpen && this._isTopmostDialog()) {
+  @HostListener('document:keydown.escape', ['$event'])
+  onEscapeKey(event: KeyboardEvent): void {
+    if (!event.defaultPrevented && this.closable && this.isOpen && this._isTopmostDialog()) {
+      event.preventDefault();
       this.close();
     }
   }

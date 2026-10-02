@@ -228,10 +228,16 @@ describe('ModalComponent', () => {
     expect(topDialog.getAttribute('aria-modal')).toBe('true');
     expect(topDialog.hasAttribute('inert')).toBeFalse();
 
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    const escape = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true
+    });
+    document.dispatchEvent(escape);
     topFixture.detectChanges();
     fixture.detectChanges();
 
+    expect(escape.defaultPrevented).toBeTrue();
     expect(topComponent.isOpen).toBeFalse();
     expect(component.isOpen).toBeTrue();
     expect(document.querySelectorAll('.modal-overlay').length).toBe(1);
