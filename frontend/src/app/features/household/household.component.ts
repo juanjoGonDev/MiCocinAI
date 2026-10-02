@@ -3,6 +3,7 @@ import { Component, inject, OnInit, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HouseholdService } from '../../core/services/household.service';
+import { ClipboardService } from '../../core/services/clipboard.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
@@ -619,6 +620,7 @@ import type { TranslationKey } from '../../core/i18n';
 })
 export class HouseholdComponent implements OnInit {
   private readonly i18n = inject(I18nService);
+  private readonly clipboardService = inject(ClipboardService);
 
   /** «4 miembros» / «1 miembro»: el contador de la casa, con su sustantivo en el diccionario. */
   miembrosLabel(cantidad: number): string {
@@ -667,10 +669,13 @@ export class HouseholdComponent implements OnInit {
   }
 
   copyLink(): void {
-    navigator.clipboard.writeText(this.inviteLink());
-    this.toastService.success(
-      this.i18n.t('household.copiado'),
-      this.i18n.t('household.enlace_de_invitacion_copiado')
+    this.clipboardService.copy(this.inviteLink()).then(
+      () =>
+        this.toastService.success(
+          this.i18n.t('household.copiado'),
+          this.i18n.t('household.enlace_de_invitacion_copiado')
+        ),
+      () => this.notifyMutationError('household.no_se_pudo_copiar')
     );
   }
 

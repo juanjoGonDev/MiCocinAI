@@ -204,6 +204,24 @@ describe('LogsComponent', () => {
     else Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
   });
 
+  it('does not report success when the legacy clipboard fallback rejects the copy command', async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    spyOn(document, 'execCommand').and.returnValue(false);
+
+    try {
+      component.copyVisible();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(toastService.success).not.toHaveBeenCalled();
+      expect(toastService.error).toHaveBeenCalledWith('ui.error', 'logs.no_se_pudo_copiar');
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    }
+  });
+
   it('scrolls only when enabled and disconnects on destroy', () => {
     const body = fixture.nativeElement.querySelector('.terminal__body') as HTMLElement;
     spyOn(window, 'requestAnimationFrame').and.callFake((callback: FrameRequestCallback) => {

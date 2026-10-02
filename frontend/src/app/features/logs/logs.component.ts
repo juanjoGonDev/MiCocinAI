@@ -2,6 +2,7 @@ import { Component, inject, signal, OnInit, OnDestroy, AfterViewChecked, Element
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { clientTimeZone, formatTimePrecise, timeZoneLabel } from '../../core/time';
+import { ClipboardService } from '../../core/services/clipboard.service';
 import { LogService, LogEntry, LogLevel, LogSource } from '../../core/services/log.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
@@ -441,6 +442,7 @@ interface FilterOption<T extends string> {
 })
 export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   private readonly i18n = inject(I18nService);
+  private readonly clipboardService = inject(ClipboardService);
   logService = inject(LogService);
   private toastService = inject(ToastService);
   private confirmService = inject(ConfirmService);
@@ -561,7 +563,7 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
 
     const text = entries.map(e => this.formatEntry(e)).join('\n');
-    this.copyToClipboard(text).then(
+    this.clipboardService.copy(text).then(
       () => this.toastService.success(
         this.i18n.t('household.copiado'),
         this.i18n.t(
@@ -581,23 +583,6 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
       entry.message
     ].join(' ');
     return entry.stack ? `${head}\n${entry.stack}` : head;
-  }
-
-  private async copyToClipboard(text: string): Promise<void> {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-    // Respaldo para contextos no seguros (http, LAN) sin navigator.clipboard
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.setAttribute('readonly', '');
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    textarea.select();
-    document.execCommand('copy');
-    document.body.removeChild(textarea);
   }
 
   /** 'En vivo' · 'Reintentando en 5 s' · 'Sin conexion (lo intentaba cada X s)'. */

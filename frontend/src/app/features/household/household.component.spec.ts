@@ -89,6 +89,67 @@ describe('HouseholdComponent', () => {
     fixture.detectChanges();
   });
 
+  it('only confirms copying the invite link after the clipboard write resolves', async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    let confirmWrite!: () => void;
+    const writeText = jasmine.createSpy('writeText').and.returnValue(
+      new Promise<void>((resolve) => {
+        confirmWrite = resolve;
+      })
+    );
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText }
+    });
+
+    try {
+      service.household.set(HOUSEHOLD);
+      fixture.detectChanges();
+      component.copyLink();
+
+      expect(writeText).toHaveBeenCalledWith('https://app.example.test/invite/SYNTHETIC1');
+      expect(toast.success).not.toHaveBeenCalled();
+
+      confirmWrite();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(toast.success).toHaveBeenCalledWith(
+        'household.copiado',
+        'household.enlace_de_invitacion_copiado'
+      );
+      expect(toast.error).not.toHaveBeenCalled();
+    } finally {
+      confirmWrite();
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    }
+  });
+
+  it('shows the translated copy error when the browser denies access to the clipboard', async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: jasmine.createSpy('writeText').and.returnValue(Promise.reject()) }
+    });
+
+    try {
+      service.household.set(HOUSEHOLD);
+      fixture.detectChanges();
+      component.copyLink();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(toast.success).not.toHaveBeenCalled();
+      expect(toast.error).toHaveBeenCalledWith('ui.error', 'household.no_se_pudo_copiar');
+      expect(householdEs['household.no_se_pudo_copiar']).toContain('manualmente');
+      expect(householdEn['household.no_se_pudo_copiar']).toContain('manually');
+    } finally {
+      if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      else Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    }
+  });
+
   it('keeps create open and retryable when the service emits its failure sentinel', () => {
     service.createHousehold.and.returnValues(of(null), of(HOUSEHOLD));
     component.openCreateModal();

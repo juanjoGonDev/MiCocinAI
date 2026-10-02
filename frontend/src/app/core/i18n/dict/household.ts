@@ -18,6 +18,8 @@ export const householdEs = {
   'household.no_se_pudo_actualizar': 'No se pudo actualizar',
   'household.ajustes_del_hogar_guardados': 'Ajustes del hogar guardados',
   'household.enlace_de_invitacion_copiado': 'Enlace de invitación copiado',
+  'household.no_se_pudo_copiar':
+    'No se pudo copiar el enlace. Puedes seleccionarlo y copiarlo manualmente.',
   'household.copiado': 'Copiado',
   'household.despensa_individual': 'Inventario individual',
   'household.calendario_compartido': 'Calendario compartido',
@@ -73,6 +75,8 @@ export const householdEn: Record<keyof typeof householdEs, string> = {
   'household.no_se_pudo_actualizar': 'Could not update',
   'household.ajustes_del_hogar_guardados': 'Household settings saved',
   'household.enlace_de_invitacion_copiado': 'Invitation link copied',
+  'household.no_se_pudo_copiar':
+    'Could not copy the invitation link. You can select it and copy it manually.',
   'household.copiado': 'Copied',
   'household.despensa_individual': 'Separate inventory per member',
   'household.calendario_compartido': 'Shared calendar',
