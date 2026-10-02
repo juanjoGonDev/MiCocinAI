@@ -629,6 +629,14 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 **Rollback:** revertir la unidad del gate restaura el builder Angular sin `karmaConfig`, elimina el guard de configuración/launcher local y quita su step de CI y script de test; no cambia los thresholds ni lógica de producto.
 
+### QA-04c.TESTPORT.UPLOADS.1 · portabilidad de los tests de filesystem en Windows
+
+**Baseline actual (2026-10-02):** `npm run test --prefix server -- src/utils/uploads.spec.ts` reproduce **3 fallos / 6 pases**. `isInside` recibe una ruta POSIX pero usa por defecto el separador del host (`\`); `uploadsRoot` usa `resolve` nativo y el test exige una ruta POSIX literal; y la prueba de solo lectura usa `chmod(0o500)`, que en este NTFS/proceso no impide escribir. `server/src/utils/uploads.ts` expone explícitamente el separador de `isInside` y resuelve las rutas con `node:path`; no se ha observado defecto de producción en esta evidencia. El objetivo es corregir solo las expectativas/fixture para que midan contratos de ruta y fallo de filesystem reproducibles entre hosts.
+
+- [ ] Probar ambos separadores explícitamente, comparar `uploadsRoot` con la resolución nativa del host y reemplazar la dependencia de permisos `chmod` por una falla determinista de filesystem; sin cambiar la lógica de producción.
+- [ ] Ejecutar `uploads.spec.ts` y el build/typecheck del servidor; confirmar sin residuos de archivos en la prueba y actualizar evidencia.
+- [ ] Repetir la suite server con coverage y registrar todos los fallos restantes; no bajar thresholds ni presentar como verde un gate bloqueado por otras suites.
+
 ### QA-04c.UI.DATATABLE.1 · cobertura del componente compartido de tabla (en curso)
 
 **Fuente revalidada (2026-10-02):** el contrato vigente de `app-data-table` está en `HOGARIA-SPEC.md` §§12ab–12ad. `DataTableComponent` recibe filas/columnas y presenta búsqueda proyectada, celdas proyectadas, orden multi-columna, filtros de texto/número/fecha, paginación, selección y una hoja móvil; `data-table.util.spec.ts` ya cubría helpers puros, y `pantry.spec.ts`, `pantry-managers.spec.ts` y `pantry-catalog.spec.ts` recorren consumidores reales. No había `data-table.component.spec.ts`; LCOV atribuyó **2/254 líneas, 0/163 ramas y 0/97 funciones**. Se añadió cobertura directa y solo se cambió comportamiento respaldado por regresiones rojas.
