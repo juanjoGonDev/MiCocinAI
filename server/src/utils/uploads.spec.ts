@@ -1,7 +1,7 @@
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { dirname, join, resolve } from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   MAX_AVATAR_BYTES,
   assertWritten,
@@ -25,6 +25,10 @@ const PNG_1PX = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfF
 let root: string;
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'hogaria-uploads-'));
+});
+
+afterEach(() => {
+  if (root) rmSync(root, { recursive: true, force: true });
 });
 
 describe('uploads — la foto de la cuenta', () => {
@@ -61,10 +65,10 @@ describe('uploads — la foto de la cuenta', () => {
     expect(isInside(winDir, 'D:\\windows\\system32\\drivers\\etc\\hosts', '\\')).toBe(false);
     expect(isInside(winDir, winDir, '\\')).toBe(false); // el propio directorio no es un fichero dentro
 
-    // Y en POSIX sigue valiendo para lo que tiene que valer, con el separador por defecto.
-    expect(isInside('/srv/uploads/avatars', '/srv/uploads/avatars/a.png')).toBe(true);
+    // Las rutas POSIX se prueban con su separador explícito, incluso al ejecutar en Windows.
+    expect(isInside('/srv/uploads/avatars', '/srv/uploads/avatars/a.png', '/')).toBe(true);
     // Un prefijo comun no es un hijo: sin la barra final, esto se colaria.
-    expect(isInside('/srv/uploads/avatars', '/srv/uploads/avatars-x/a.png')).toBe(false);
+    expect(isInside('/srv/uploads/avatars', '/srv/uploads/avatars-x/a.png', '/')).toBe(false);
   });
 
   it('la foto se lee por su URL, y una URL que no es nuestra no lee nada', () => {
@@ -96,8 +100,9 @@ describe('uploads — la foto de la cuenta', () => {
     const dir = uploadsRoot(':memory:');
     expect(dir).toContain('hogaria-uploads-');
     expect(dir).not.toContain('data');
-    // Y con una ruta normal, al lado de la BD: un solo volumen que montar.
-    expect(uploadsRoot('/srv/hogaria/data/hogar.sqlite')).toBe('/srv/hogaria/data/uploads');
+    // La ruta resultante usa la semántica nativa del host (POSIX o Windows).
+    const databasePath = '/srv/hogaria/data/hogar.sqlite';
+    expect(uploadsRoot(databasePath)).toBe(join(dirname(resolve(databasePath)), 'uploads'));
   });
 
   it('assertWritten: ni un fichero que no esta, ni uno a medias', () => {
@@ -110,16 +115,13 @@ describe('uploads — la foto de la cuenta', () => {
     expect(() => assertWritten(join(root, 'no-esta.png'), 1)).toThrow(/no se ha creado/);
   });
 
-  it('si el disco no escribe, se dice: nunca un 200 con la foto fuera', () => {
-    const ro = mkdtempSync(join(tmpdir(), 'hogaria-uploads-ro-'));
-    mkdirSync(join(ro, 'avatars'));
-    chmodSync(join(ro, 'avatars'), 0o500); // lectura y recorrido, sin escritura
-    try {
-      expect(() => storeImage('avatars', 'u-ana', parseImageDataUrl(PNG_1PX)!, ro)).toThrow();
-      expect(readdirSync(join(ro, 'avatars'))).toEqual([]);
-    } finally {
-      chmodSync(join(ro, 'avatars'), 0o700);
-    }
+  it('si no se puede crear el directorio de destino, no devuelve una URL', () => {
+    const blocker = join(root, 'avatars');
+    writeFileSync(blocker, 'no es un directorio');
+
+    expect(() => storeImage('avatars', 'u-ana', parseImageDataUrl(PNG_1PX)!, root)).toThrow();
+    expect(readFileSync(blocker, 'utf8')).toBe('no es un directorio');
+    expect(readdirSync(root)).toEqual(['avatars']);
   });
 
   it('una escritura repetida no pisa la foto de nadie', () => {

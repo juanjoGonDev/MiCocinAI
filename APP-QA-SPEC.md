@@ -633,9 +633,11 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 **Baseline actual (2026-10-02):** `npm run test --prefix server -- src/utils/uploads.spec.ts` reproduce **3 fallos / 6 pases**. `isInside` recibe una ruta POSIX pero usa por defecto el separador del host (`\`); `uploadsRoot` usa `resolve` nativo y el test exige una ruta POSIX literal; y la prueba de solo lectura usa `chmod(0o500)`, que en este NTFS/proceso no impide escribir. `server/src/utils/uploads.ts` expone explícitamente el separador de `isInside` y resuelve las rutas con `node:path`; no se ha observado defecto de producción en esta evidencia. El objetivo es corregir solo las expectativas/fixture para que midan contratos de ruta y fallo de filesystem reproducibles entre hosts.
 
-- [ ] Probar ambos separadores explícitamente, comparar `uploadsRoot` con la resolución nativa del host y reemplazar la dependencia de permisos `chmod` por una falla determinista de filesystem; sin cambiar la lógica de producción.
-- [ ] Ejecutar `uploads.spec.ts` y el build/typecheck del servidor; confirmar sin residuos de archivos en la prueba y actualizar evidencia.
-- [ ] Repetir la suite server con coverage y registrar todos los fallos restantes; no bajar thresholds ni presentar como verde un gate bloqueado por otras suites.
+- [x] Probar ambos separadores explícitamente, comparar `uploadsRoot` con la resolución nativa del host y reemplazar la dependencia de permisos `chmod` por una falla determinista de filesystem; sin cambiar la lógica de producción.
+- [x] Ejecutar `uploads.spec.ts` y el build/typecheck del servidor; confirmar sin residuos de archivos en la prueba y actualizar evidencia.
+- [x] Repetir la suite server con coverage y registrar todos los fallos restantes; no bajar thresholds ni presentar como verde un gate bloqueado por otras suites.
+
+**Evidencia QA-04c.TESTPORT.UPLOADS.1 (2026-10-02):** rojo aislado inicial: `uploads.spec.ts` **6/9**, con los tres fallos descritos. Después, los separadores POSIX y Windows quedan explícitos, `uploadsRoot` se contrasta con `node:path` del host y el error de filesystem se reproduce mediante un archivo que bloquea la carpeta de destino (sin depender de `chmod`). `afterEach` limpia la carpeta temporal propia. `npm run test --prefix server -- src/utils/uploads.spec.ts` pasa **9/9**; `npm run build --prefix server` y `git diff --check` pasan. La suite completa con coverage mejora de **917/922** a **920/922**; únicamente siguen fallando las dos aserciones estáticas de `pantry-catalog-i18n.spec.ts` contra imports/markup históricos. Al fallar pruebas, Vitest no presenta un resultado verde del gate de coverage. `prettier --check` también falla sobre este archivo en el contenido de `HEAD` anterior a la unidad; no se reformateó el archivo entero para evitar ruido ajeno.
 
 ### QA-04c.UI.DATATABLE.1 · cobertura del componente compartido de tabla (en curso)
 
