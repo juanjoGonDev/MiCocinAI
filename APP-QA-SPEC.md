@@ -1856,3 +1856,39 @@ excepciones deliberadas antes de implantarlas; no hay excepciones visuales impl�
 
 **Rollback:** revertir solo los tokens/primitivas y ajustes geométricos de esta unidad, sus pruebas/capturas
 ignoradas y este subapartado; preservar el marco/gutters compartidos y las correcciones ajenas.
+
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.CALENDAR.1 · barra y rejilla de `/calendar`
+
+**Fuente revalidada (2026-10-03):** la barra combina `.cal-btn`, `.cal-pill`, `.cal-segment__btn`,
+botones de icono y selector de fecha; antes declaraban alto/padding/tipografía distintos. En móvil, los
+siete tracks de la rejilla reducían weekday/número/acción a menos de su contenido; elevar el mínimo de
+columna por sí solo ensanchaba `.cal-body` fuera del panel en vez de crear un scroll local.
+
+- [x] E2E primero en rojo: medir controles equivalentes de la barra en 7 tamaños (320, 393, 568×320,
+      767, 768, 1024 y 1440 px), verificar estilo calculado y límites de los encabezados de día; baseline
+      falla con 48 px vs 30 px, padding 6/14 vs 5/11 px y texto 14 vs 12 px, y encabezados móviles fuera
+      de su columna.
+- [x] Normalizar altura (48 px), padding/tipografía/radio/gap de controles de texto y targets de icono;
+      el énfasis de «Planificar IA» queda solo en color. Mantener la anchura natural del texto y dar a cada
+      columna móvil un mínimo táctil de 48 px, con scroll horizontal contenido y nombres apilados.
+- [x] Limitar el elemento grid padre para que el overflow quede dentro del visor; probar 320 px, recorrer
+      por Tab hasta el último día y comprobar desplazamiento/foco sin expandir el documento.
+- [x] Verificar Playwright real aislado con rate limit activo, SQLite/semilla/puertos temporales:
+      `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/ui-geometry-consistency.spec.ts --reporter=dot`
+      pasó **2/2**; recorre siete viewports, compara rectángulos y estilos y guarda capturas de escritorio/móvil.
+      `calendar-mobile-header-layout.spec.ts` pasó **2/2** (modal, teclado, foco y scroll).
+- [x] Añadir prueba unitaria para semana vacía/7 días; Karma ejecuta **2/2**. Las líneas de los dos métodos
+      geométricos cambiados quedan cubiertas; el gate global en la corrida focal no pasa (21,42/0/2,94/25,04
+      % S/B/F/L por excluir el resto de la suite), sin modificar el umbral 80 %.
+- [x] `pnpm run typecheck:e2e`, `pnpm run check:ui` (**188 ficheros, 20 reglas**), `git diff --check` y
+      Prettier de las dos pruebas nuevas pasan. El archivo de producción `calendar-timeline.component.ts`
+      ya falla Prettier en `HEAD` y se conserva sin reformat masivo. Build de producción pasa; mantiene
+      avisos existentes de bundle inicial (**715,17 kB frente a 500 kB**), estilos calendar/pantry y
+      imports/expresiones Angular sin uso. No se rebajaron gates.
+
+Capturas sintéticas inspeccionadas: `.e2e-screenshots/calendar-geometry-final/ui-geometry-desktop.png` y
+`ui-geometry-mobile.png`. La matriz global sigue abierta: estos resultados solo cierran el primer grupo
+visual de `/calendar`; aún faltan familias/rutas públicas y privadas.
+
+**Rollback focal:** revertir solo los estilos de barra, mínimo de columnas/scroll local, las dos pruebas de
+geometría y este subapartado; no revertir `AGENTS.md` ni la matriz global.

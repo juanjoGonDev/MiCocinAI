@@ -980,6 +980,11 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
     /* ── Cabecera ── */
     .cal-top {
+      --cal-control-size: 48px;
+      --cal-control-pad-block: var(--space-2);
+      --cal-control-pad-inline: var(--space-4);
+      --cal-control-font-size: var(--text-sm);
+
       display: flex;
       align-items: center;
       flex-wrap: wrap;
@@ -1017,10 +1022,6 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     .cal-top__right {
       display: flex;
       align-items: center;
-      gap: var(--space-1);
-    }
-
-    .cal-top__right {
       gap: var(--space-2);
     }
 
@@ -1039,8 +1040,9 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     .cal-icon-btn {
       display: grid;
       place-items: center;
-      width: 30px;
-      height: 30px;
+      box-sizing: border-box;
+      width: var(--cal-control-size);
+      height: var(--cal-control-size);
       padding: 0;
       color: var(--text-secondary);
       background: none;
@@ -1066,7 +1068,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     }
 
     .cal-pill {
-      padding: 5px 11px;
+      padding: var(--cal-control-pad-block) var(--cal-control-pad-inline);
       font: inherit;
       font-size: var(--text-xs);
       font-weight: var(--font-medium);
@@ -1090,8 +1092,9 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       position: relative;
       display: grid;
       place-items: center;
-      width: 30px;
-      height: 30px;
+      box-sizing: border-box;
+      width: var(--cal-control-size);
+      height: var(--cal-control-size);
       color: var(--text-secondary);
       border: 1px solid transparent;
       border-radius: var(--radius-full);
@@ -1126,14 +1129,15 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     /* Conmutador de vistas: segmentado, como el Day/Week/Month de Google. */
     .cal-segment {
       display: inline-flex;
-      padding: 2px;
+      box-sizing: border-box;
+      height: var(--cal-control-size);
       background: var(--bg-tertiary);
-      border: 1px solid var(--cal-line);
+      box-shadow: inset 0 0 0 1px var(--cal-line);
       border-radius: var(--radius-full);
     }
 
     .cal-segment__btn {
-      padding: 4px 12px;
+      padding: var(--cal-control-pad-block) var(--cal-control-pad-inline);
       font: inherit;
       font-size: var(--text-xs);
       font-weight: var(--font-medium);
@@ -1178,6 +1182,31 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       border-radius: var(--radius-full);
       cursor: pointer;
       transition: var(--transition-fast);
+    }
+
+    .cal-top .cal-pill,
+    .cal-top .cal-segment__btn,
+    .cal-top .cal-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      width: auto;
+      height: var(--cal-control-size);
+      min-height: var(--cal-control-size);
+      gap: var(--space-2);
+      padding: var(--cal-control-pad-block) var(--cal-control-pad-inline);
+      font-family: var(--font-sans);
+      font-size: var(--cal-control-font-size);
+      font-weight: var(--font-medium);
+      line-height: var(--leading-none);
+      border-radius: var(--radius-full);
+      border-width: 1px;
+      border-style: solid;
+    }
+
+    .cal-top .cal-segment__btn {
+      border-color: transparent;
     }
 
     .cal-btn:hover:not(:disabled) {
@@ -1324,6 +1353,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     /* ── Cuerpo ── */
     .cal-body {
       position: relative;
+      min-width: 0;
       min-height: 260px;
     }
 

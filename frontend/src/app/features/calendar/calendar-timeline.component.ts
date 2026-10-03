@@ -45,6 +45,7 @@ import { MEAL_LABEL_KEYS } from '../../core/i18n/labels';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 
 const TIMELINE_GUTTER_WIDTH_PX = 60;
+const MIN_DAY_COLUMN_WIDTH_PX = 48;
 
 /**
  * La rejilla de horas del día y de la semana —el sustituto de las cuatro franjas de comida.
@@ -68,121 +69,128 @@ const TIMELINE_GUTTER_WIDTH_PX = 60;
     TranslatePipe,CommonModule, IconButtonComponent, AvatarComponent],
   template: `
     <div class="tl" [class.tl--single]="single()" [style.--hour-px]="hourPx">
-      <!-- Cabecera: el hueco de las horas + una columna por dia. -->
-      <div class="tl__head" [style.grid-template-columns]="columns()">
-        <span class="tl__gutter" aria-hidden="true"></span>
-        @for (day of days; track day.iso) {
-          <div class="tl__dayhead" [class.is-today]="day.isToday">
-            <button
-              type="button"
-              class="tl__daynum"
-              [attr.aria-current]="day.isToday ? 'date' : null"
-              [title]="'calendar.view_day_date' | t:{date: day.iso}"
-              (click)="openDay.emit(day.iso)"
-            >
-              <span class="tl__dow">{{ dayLabel(day) }}</span>
-              <span class="tl__num">{{ dayNumber(day) }}</span>
-            </button>
-            <!-- Las calorias del dia viven aqui desde que la vista de dia es la misma rejilla: era lo
-                 unico que la vista antigua aportaba, y perderlo habria sido cambiar un diseno por una
-                 perdida de funcion. -->
-            @if (kitchen && (day.hasNutrition || (single() && targetCalories > 0))) {
-              <span class="tl__kcal" data-test="timeline-kcal" [title]="kcalTip(day)">{{ kcalOf(day) }}</span>
-            }
-            @if (kitchen) {
-              <app-icon-button
-                icon="add"
-                [label]="'calendar.anadir_comida' | t"
-                size="sm"
-                variant="ghost"
-                data-test="timeline-add-meal"
-                [attr.title]="'calendar.add_meal_on' | t:{date: day.iso}"
-                (onClick)="onAddMeal(day)"
-              />
-            }
-          </div>
-        }
-      </div>
-
-      <!-- Banda de «todo el dia»: lo que no tiene hora no se inventa una. -->
-      <div class="tl__band" [style.grid-template-columns]="columns()">
-        <span class="tl__gutter tl__gutter--band">{{ 'calendar.todo_el_dia' | t }}</span>
-        @for (day of days; track day.iso) {
-          <div
-            class="tl__bandcol"
-            data-test="timeline-band"
-            (click)="onBandClick(day)"
-          >
-            @for (item of bandOf(day); track item.id) {
+      <div
+        class="tl__viewport"
+        role="region"
+        [attr.aria-label]="'calendar.vista_del_calendario' | t"
+        [style.--tl-grid-min-width]="gridMinWidth()"
+      >
+        <!-- Cabecera: el hueco de las horas + una columna por dia. -->
+        <div class="tl__head" [style.grid-template-columns]="columns()">
+          <span class="tl__gutter" aria-hidden="true"></span>
+          @for (day of days; track day.iso) {
+            <div class="tl__dayhead" [class.is-today]="day.isToday">
               <button
                 type="button"
-                class="tl__chip"
-                [style.--event-color]="colorOf(item)"
-                [attr.title]="tipOf(item)"
-                (click)="$event.stopPropagation(); onOpen(item)"
+                class="tl__daynum"
+                [attr.aria-current]="day.isToday ? 'date' : null"
+                [title]="'calendar.view_day_date' | t:{date: day.iso}"
+                (click)="openDay.emit(day.iso)"
               >
-                {{ titleOf(item) }}
+                <span class="tl__dow">{{ dayLabel(day) }}</span>
+                <span class="tl__num">{{ dayNumber(day) }}</span>
               </button>
-            }
-            @if (!bandOf(day).length) {
-              <span class="tl__bandempty" aria-hidden="true">—</span>
-            }
-          </div>
-        }
-      </div>
-
-      <!-- La rejilla. Un scroll propio, con alturas fijas: es lo que hace que la cabecera no se vaya. -->
-      <div class="tl__scroll" #scroll (click)="onGridClick($event)">
-        <div class="tl__inner" [style.height.px]="heightPx()" [style.grid-template-columns]="columns()">
-          <div class="tl__gutter tl__hours" aria-hidden="true">
-            @for (hour of hourLabels(); track hour) {
-              <span class="tl__hour">{{ hourLabel(hour) }}</span>
-            }
-          </div>
-
-          @for (day of days; track day.iso) {
-            <div
-              class="tl__col"
-              [class.is-today]="day.isToday"
-              [attr.data-date]="day.iso"
-              data-test="timeline-col"
-            >
-
-              @if (day.isToday && nowTop() !== null) {
-                <span class="tl__now" [style.top.px]="nowTop()" aria-hidden="true"></span>
+              <!-- Las calorias del dia viven aqui desde que la vista de dia es la misma rejilla: era lo
+                   unico que la vista antigua aportaba, y perderlo habria sido cambiar un diseno por una
+                   perdida de funcion. -->
+              @if (kitchen && (day.hasNutrition || (single() && targetCalories > 0))) {
+                <span class="tl__kcal" data-test="timeline-kcal" [title]="kcalTip(day)">{{ kcalOf(day) }}</span>
               }
-              @for (block of blocksOf(day); track block.item.id) {
-                <button
-                  type="button"
-                  class="tl__block"
-                  [class.tl__block--meal]="block.item.kind === 'meal'"
-                  [class.is-done]="block.item.meal?.completed"
-                  [style.--event-color]="colorOf(block.item)"
-                  [style.top.px]="block.topPx"
-                  [style.height.px]="block.heightPx"
-                  [style.left.%]="(block.column / block.columns) * 100"
-                  [style.width.%]="100 / block.columns - 0.6"
-                  [attr.title]="tipOf(block.item)"
-                  [attr.data-test]="'timeline-block-' + block.item.kind"
-                  (click)="$event.stopPropagation(); onOpen(block.item)"
-                >
-                  <span class="tl__block-when">{{ whenOf(block.item) }}</span>
-                  <span class="tl__block-title">{{ titleOf(block.item) }}</span>
-                  @if (facesOf(block.item).length) {
-                    <!-- Las caras son identidad: la de quien escribio el evento (solo si no soy yo,
-                         que para eso esta el boton de salir) y la de quien esta invitado. Un nombre sin
-                         foto es media identidad, y media identidad es lo que hace preguntar «¿cuanta
-                         Ana?» cuando en la casa hay dos. -->
-                    <span class="tl__block-faces" aria-hidden="true">
-                      @for (person of facesOf(block.item); track person.id) {
-                        <app-avatar [name]="person.name" [src]="person.avatar ?? undefined" size="xs" [title]="person.who" />
-                      }
-                    </span>
-                  }
-                </button>
+              @if (kitchen) {
+                <app-icon-button
+                  icon="add"
+                  [label]="'calendar.anadir_comida' | t"
+                  size="sm"
+                  variant="ghost"
+                  data-test="timeline-add-meal"
+                  [attr.title]="'calendar.add_meal_on' | t:{date: day.iso}"
+                  (onClick)="onAddMeal(day)"
+                />
               }
             </div>
           }
+        </div>
+
+        <!-- Banda de «todo el dia»: lo que no tiene hora no se inventa una. -->
+        <div class="tl__band" [style.grid-template-columns]="columns()">
+          <span class="tl__gutter tl__gutter--band">{{ 'calendar.todo_el_dia' | t }}</span>
+          @for (day of days; track day.iso) {
+            <div
+              class="tl__bandcol"
+              data-test="timeline-band"
+              (click)="onBandClick(day)"
+            >
+              @for (item of bandOf(day); track item.id) {
+                <button
+                  type="button"
+                  class="tl__chip"
+                  [style.--event-color]="colorOf(item)"
+                  [attr.title]="tipOf(item)"
+                  (click)="$event.stopPropagation(); onOpen(item)"
+                >
+                  {{ titleOf(item) }}
+                </button>
+              }
+              @if (!bandOf(day).length) {
+                <span class="tl__bandempty" aria-hidden="true">—</span>
+              }
+            </div>
+          }
+        </div>
+
+        <!-- La rejilla conserva su scroll vertical dentro del viewport común de las columnas. -->
+        <div class="tl__scroll" #scroll (click)="onGridClick($event)">
+          <div class="tl__inner" [style.height.px]="heightPx()" [style.grid-template-columns]="columns()">
+            <div class="tl__gutter tl__hours" aria-hidden="true">
+              @for (hour of hourLabels(); track hour) {
+                <span class="tl__hour">{{ hourLabel(hour) }}</span>
+              }
+            </div>
+
+            @for (day of days; track day.iso) {
+              <div
+                class="tl__col"
+                [class.is-today]="day.isToday"
+                [attr.data-date]="day.iso"
+                data-test="timeline-col"
+              >
+
+                @if (day.isToday && nowTop() !== null) {
+                  <span class="tl__now" [style.top.px]="nowTop()" aria-hidden="true"></span>
+                }
+                @for (block of blocksOf(day); track block.item.id) {
+                  <button
+                    type="button"
+                    class="tl__block"
+                    [class.tl__block--meal]="block.item.kind === 'meal'"
+                    [class.is-done]="block.item.meal?.completed"
+                    [style.--event-color]="colorOf(block.item)"
+                    [style.top.px]="block.topPx"
+                    [style.height.px]="block.heightPx"
+                    [style.left.%]="(block.column / block.columns) * 100"
+                    [style.width.%]="100 / block.columns - 0.6"
+                    [attr.title]="tipOf(block.item)"
+                    [attr.data-test]="'timeline-block-' + block.item.kind"
+                    (click)="$event.stopPropagation(); onOpen(block.item)"
+                  >
+                    <span class="tl__block-when">{{ whenOf(block.item) }}</span>
+                    <span class="tl__block-title">{{ titleOf(block.item) }}</span>
+                    @if (facesOf(block.item).length) {
+                      <!-- Las caras son identidad: la de quien escribio el evento (solo si no soy yo,
+                           que para eso esta el boton de salir) y la de quien esta invitado. Un nombre sin
+                           foto es media identidad, y media identidad es lo que hace preguntar «¿cuanta
+                           Ana?» cuando en la casa hay dos. -->
+                      <span class="tl__block-faces" aria-hidden="true">
+                        @for (person of facesOf(block.item); track person.id) {
+                          <app-avatar [name]="person.name" [src]="person.avatar ?? undefined" size="xs" [title]="person.who" />
+                        }
+                      </span>
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </div>
         </div>
       </div>
     </div>
@@ -211,10 +219,13 @@ const TIMELINE_GUTTER_WIDTH_PX = 60;
 
       :host {
         display: block;
+        min-width: 0;
       }
       .tl {
         display: flex;
         flex-direction: column;
+        width: 100%;
+        min-width: 0;
         border: 1px solid var(--border-default);
         border-radius: var(--radius-lg);
         background: var(--bg-secondary);
@@ -226,6 +237,22 @@ const TIMELINE_GUTTER_WIDTH_PX = 60;
       .tl__inner {
         display: grid;
         align-items: stretch;
+        min-width: var(--tl-grid-min-width);
+      }
+
+      .tl__viewport {
+        min-width: 0;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-x: contain;
+      }
+
+      .tl__viewport:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: -2px;
       }
 
       .tl__head {
@@ -343,7 +370,9 @@ const TIMELINE_GUTTER_WIDTH_PX = 60;
            ya recorta, y si recorta mucho el usuario scrollea dos franjas, no doce. */
         max-height: min(62vh, 560px);
         overflow-y: auto;
+        overflow-x: hidden;
         overscroll-behavior: contain;
+        min-width: var(--tl-grid-min-width);
       }
 
       .tl__inner {
@@ -479,6 +508,21 @@ const TIMELINE_GUTTER_WIDTH_PX = 60;
       }
 
       @media (max-width: 720px) {
+        .tl__dayhead {
+          flex-direction: column;
+          justify-content: center;
+          gap: var(--space-1);
+          padding: var(--space-1);
+        }
+        .tl__daynum {
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          min-height: 44px;
+          gap: 0;
+          padding: 0;
+        }
         .tl__hour {
           font-size: 9px;
         }
@@ -549,7 +593,11 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   protected columns(): string {
     // El track común contiene la etiqueta más larga («Todo el día») y las horas («22:00»),
     // de modo que cabecera, banda y rejilla sigan alineadas sin recortar texto.
-    return `${TIMELINE_GUTTER_WIDTH_PX}px repeat(${Math.max(1, this.days.length)}, minmax(0, 1fr))`;
+    return `${TIMELINE_GUTTER_WIDTH_PX}px repeat(${Math.max(1, this.days.length)}, minmax(${MIN_DAY_COLUMN_WIDTH_PX}px, 1fr))`;
+  }
+
+  protected gridMinWidth(): string {
+    return `${TIMELINE_GUTTER_WIDTH_PX + Math.max(1, this.days.length) * MIN_DAY_COLUMN_WIDTH_PX}px`;
   }
 
   /** La altura de hora, una sola vez: la geometria y el CSS tienen que medir lo mismo. */
