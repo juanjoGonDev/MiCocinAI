@@ -1970,3 +1970,24 @@ coverage instrumentable S/B/F/L: N/A. DB, semillas, servidor y artefactos E2E fu
 
 **Rollback focal:** revertir solo el token/uso del padding vertical común, la regresión E2E y este
 subapartado; preservar gutters horizontales y los paddings internos de cada componente.
+
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.ALL-PRIVATE-ROOTS.1 · padding de todas las vistas privadas
+
+**Fuente revalidada (2026-10-03):** `tests/e2e/helpers/route-layout-manifest.ts` declara las raíces
+privadas y ocho rutas dinámicas que deben renderizar fixtures reales. La matriz `page-spacing-consistency.spec.ts`
+solo cubre siete raíces; omite Ajustes, Cuenta, Preferencias, Hogar, Configuración IA, cola IA y vistas de
+detalle. El CSS actual presenta diferencias comprobables: Ajustes cambia de 16 a 32 px; Cuenta y Preferencias
+usan 16 px fijos; Hogar y Configuración IA usan 16/24 px; detalles y gestores de Despensa añaden padding
+inferior desigual. Ese último espacio se medirá aparte y solo se conserva si evita que una acción fija o el
+safe-area tape contenido; no se asume que sea una excepción válida por existir hoy.
+
+- [ ] Añadir primero E2E sobre cada raíz privada distinta del manifiesto, incluidos detalles con fixtures
+      sintéticos; medir `padding-block-start/end` frente al `--container-padding` calculado del marco en los
+      diez viewports de la subunidad anterior. Registrar la línea base roja por ruta, viewport y eje.
+- [ ] Normalizar con el token común cada margen de raíz sin función distinta; mantener intacto el padding
+      interno de paneles y anotar cualquier excepción de safe-area/acción fija con evidencia de no ocultación.
+- [ ] Repetir Playwright aislado en Chromium y Pixel 5; probar scroll, ausencia de overflow, estados con
+      contenido sintético, capturar e inspeccionar PC/móvil y registrar gates, limitaciones y resultado.
+
+**Rollback focal:** revertir solo las reglas de padding de las raíces privadas adicionales, la extensión de
+la regresión E2E y este subapartado; conservar la unidad de gutters y `PAGE-SPACING.1` ya verificada.
