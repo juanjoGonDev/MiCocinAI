@@ -1,6 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, tap, catchError, of } from 'rxjs';
+import { Observable, tap, catchError, map, of } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { Recipe, RecipeFilter, RecipeListResponse } from '../../shared/models/recipe.model';
 
@@ -16,6 +16,7 @@ export class RecipeService {
   private currentRecipeSignal = signal<Recipe | null>(null);
   private isLoadingSignal = signal(false);
   private totalSignal = signal(0);
+  private currentFilter: RecipeFilter | undefined;
 
   readonly recipes = this.recipesSignal.asReadonly();
   readonly currentRecipe = this.currentRecipeSignal.asReadonly();
@@ -35,6 +36,7 @@ export class RecipeService {
 
     this.http.get<any>(this.apiUrl, { params }).pipe(
       tap(response => {
+        this.currentFilter = filter;
         this.recipesSignal.set(response.data.recipes);
         this.totalSignal.set(response.data.total);
         this.isLoadingSignal.set(false);
@@ -47,16 +49,18 @@ export class RecipeService {
   }
 
   getRecipe(id: string): Observable<Recipe | null> {
-    return this.http.get<any>(`${this.apiUrl}/${id}`).pipe(
-      tap(response => this.currentRecipeSignal.set(response.data)),
+    return this.http.get<{ data: Recipe }>(`${this.apiUrl}/${id}`).pipe(
+      map(response => response.data),
+      tap(recipe => this.currentRecipeSignal.set(recipe)),
       catchError(() => of(null))
     );
   }
 
   createRecipe(recipe: Partial<Recipe>): Observable<Recipe | null> {
-    return this.http.post<any>(this.apiUrl, recipe).pipe(
-      tap(response => {
-        this.recipesSignal.update(list => [response.data, ...list]);
+    return this.http.post<{ data: Recipe }>(this.apiUrl, recipe).pipe(
+      map(response => response.data),
+      tap(created => {
+        this.recipesSignal.update(list => [created, ...list]);
       }),
       catchError(() => of(null))
     );
@@ -65,8 +69,19 @@ export class RecipeService {
   toggleFavorite(id: string): void {
     this.http.post<any>(`${this.apiUrl}/${id}/favorite`, {}).pipe(
       tap(response => {
+        const isFavorite = response.data.isFavorite;
+        if (this.currentFilter?.isFavorite && !isFavorite) {
+          const current = this.recipesSignal();
+          const remaining = current.filter(recipe => recipe.id !== id);
+          this.recipesSignal.set(remaining);
+          if (remaining.length < current.length) {
+            this.totalSignal.update(total => Math.max(0, total - 1));
+          }
+          return;
+        }
+
         this.recipesSignal.update(list =>
-          list.map(r => r.id === id ? { ...r, isFavorite: response.data.isFavorite } : r)
+          list.map(r => r.id === id ? { ...r, isFavorite } : r)
         );
       }),
       catchError(() => of(null))
@@ -89,7 +104,8 @@ export class RecipeService {
   }
 
   deleteRecipe(id: string): Observable<boolean> {
-    return this.http.delete<any>(`${this.apiUrl}/${id}`).pipe(
+    return this.http.delete<unknown>(`${this.apiUrl}/${id}`).pipe(
+      map(() => true),
       tap(() => {
         this.recipesSignal.update(list => list.filter(r => r.id !== id));
       }),

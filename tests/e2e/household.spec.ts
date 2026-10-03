@@ -1,19 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
+import { skipOnboarding } from './helpers/auth';
 
 test.describe('Household sharing & invite flow', () => {
   test('invite code appears immediately after creating household and is a full URL', async ({ page }) => {
     const email = `hh-${Date.now()}@example.com`;
     await page.goto('/auth/register');
-    await page.fill('#name', 'Homeowner');
-    await page.fill('#email', email);
-    await page.fill('#password', 'Test1234');
+    await page.fill('input#name', 'Homeowner');
+    await page.fill('input#email', email);
+    await page.fill('input#password', 'Test1234');
     await page.click('button[type="submit"]');
+    await skipOnboarding(page);
     await page.waitForURL(/.*dashboard/);
 
     // Create household
     await page.goto('/household');
     await page.getByRole('button', { name: /Crear hogar/i }).click();
-    await page.fill('#householdName', 'Mi Casa');
+    await page.fill('input#householdName', 'Mi Casa');
     await page.click('button[type="submit"]');
 
     // Invite code should be a full URL (http.../invite/CODE)
@@ -21,11 +23,12 @@ test.describe('Household sharing & invite flow', () => {
     // Copy link button present
     await expect(page.getByRole('button', { name: /Copiar enlace/ })).toBeVisible();
     // Share toggles present (admin sees them)
-    await expect(page.getByText(/Despensa compartida/)).toBeVisible();
-    await expect(page.getByText(/Recetas compartidas/)).toBeVisible();
-    await expect(page.getByText(/Calendario compartido/)).toBeVisible();
+    const shareSection = page.locator('.settings-section');
+    await expect(shareSection).toContainText('Inventario compartido'); // ## 12aa: la pantalla es del inventario de la casa, no solo de la cocina
+    await expect(shareSection).toContainText('Recetas compartidas');
+    await expect(shareSection).toContainText('Calendario compartido');
     // Admin badge on member list
-    await expect(page.locator('text=Admin')).toBeVisible();
+    await expect(page.locator('.member-card').first()).toContainText('Admin');
   });
 
   test('public invite page shows household name and join/login CTAs for logged-out users', async ({ browser }) => {
@@ -34,14 +37,15 @@ test.describe('Household sharing & invite flow', () => {
     const ownerPage = await ownerCtx.newPage();
     const email = `owner-${Date.now()}@example.com`;
     await ownerPage.goto('/auth/register');
-    await ownerPage.fill('#name', 'Owner');
-    await ownerPage.fill('#email', email);
-    await ownerPage.fill('#password', 'Test1234');
+    await ownerPage.fill('input#name', 'Owner');
+    await ownerPage.fill('input#email', email);
+    await ownerPage.fill('input#password', 'Test1234');
     await ownerPage.click('button[type="submit"]');
+    await skipOnboarding(ownerPage);
     await ownerPage.waitForURL(/.*dashboard/);
     await ownerPage.goto('/household');
     await ownerPage.getByRole('button', { name: /Crear hogar/i }).click();
-    await ownerPage.fill('#householdName', 'Familia López');
+    await ownerPage.fill('input#householdName', 'Familia López');
     await ownerPage.click('button[type="submit"]');
     const inviteUrl = await ownerPage.locator('.invite-card__code').textContent();
     expect(inviteUrl).toContain('/invite/');
@@ -52,7 +56,7 @@ test.describe('Household sharing & invite flow', () => {
     const guestCtx = await browser.newContext();
     const guestPage = await guestCtx.newPage();
     await guestPage.goto(`/invite/${code}`);
-    await expect(guestPage.locator('text=Familia López')).toBeVisible();
+    await expect(guestPage.locator('.invite-card__title')).toContainText('Familia López');
     await expect(guestPage.getByRole('link', { name: /Iniciar sesión/ })).toBeVisible();
     await expect(guestPage.getByRole('link', { name: /Crear cuenta/ })).toBeVisible();
     await guestCtx.close();

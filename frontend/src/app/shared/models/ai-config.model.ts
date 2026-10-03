@@ -12,6 +12,8 @@ export interface AIProviderConfig {
   presencePenalty?: number;
   timeout: number;
   retryAttempts: number;
+  /** Máximo de trabajos IA en vuelo por proveedor; 0 = ilimitado. */
+  concurrency: number;
   isActive: boolean;
   lastTested?: Date;
   testStatus?: TestStatus;
@@ -170,6 +172,8 @@ export interface AITestConnectionResponse {
   model: string;
   latency: number;
   error?: string;
+  /** Lo que el modelo contesto cuando la prueba pasa (el JSON pedido, validado en el server). */
+  message?: string;
 }
 
 export const AI_PROVIDER_LABELS: Record<AIProvider, string> = {
@@ -177,8 +181,4 @@ export const AI_PROVIDER_LABELS: Record<AIProvider, string> = {
   custom: 'Custom (OpenAI-like)'
 };
 
-export const DETAIL_LEVEL_LABELS: Record<DetailLevel, string> = {
-  basic: 'Básico',
-  intermediate: 'Intermedio',
-  expert: 'Experto'
-};
+

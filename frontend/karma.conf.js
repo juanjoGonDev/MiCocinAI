@@ -34,6 +34,20 @@ module.exports = function (config) {
         }
       }
     },
+    customLaunchers: {
+      ChromeHeadlessLocal: {
+        base: 'ChromeHeadless',
+        flags: [
+          '--no-sandbox',
+          '--disable-gpu',
+          '--disable-gpu-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-background-networking',
+          '--use-gl=angle',
+          '--use-angle=swiftshader'
+        ]
+      }
+    },
     reporters: ['progress', 'kjhtml', 'coverage'],
     port: 9876,
     colors: true,

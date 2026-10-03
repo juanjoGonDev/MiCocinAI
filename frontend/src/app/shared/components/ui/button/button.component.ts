@@ -47,27 +47,26 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
       }
     }
 
-    /* Sizes */
-    .btn--sm {
-      padding: var(--space-1) var(--space-3);
-      font-size: var(--text-xs);
-      border-radius: var(--radius-md);
-    }
-
-    .btn--md {
+    /* The sm, md, and lg values remain accepted for template compatibility. Text-button geometry
+       is intentionally shared: importance is communicated by variant/color, not by size. */
+    .btn--sm,
+    .btn--md,
+    .btn--lg {
+      box-sizing: border-box;
+      min-height: 44px;
       padding: var(--space-2) var(--space-4);
       font-size: var(--text-sm);
-    }
-
-    .btn--lg {
-      padding: var(--space-3) var(--space-6);
-      font-size: var(--text-base);
-      border-radius: var(--radius-xl);
+      border-radius: var(--radius-lg);
     }
 
     .btn--icon {
       padding: var(--space-2);
       aspect-ratio: 1;
+    }
+
+    .btn--touch-target {
+      min-width: 44px;
+      min-height: 44px;
     }
 
     /* Variants */
@@ -79,11 +78,10 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
       &:hover:not(:disabled) {
         background: var(--primary-dark);
         box-shadow: var(--shadow-md);
-        transform: translateY(-1px);
       }
 
       &:active:not(:disabled) {
-        transform: translateY(0);
+        box-shadow: var(--shadow-sm);
       }
     }
 
@@ -95,7 +93,6 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
       &:hover:not(:disabled) {
         background: var(--secondary-dark);
         box-shadow: var(--shadow-md);
-        transform: translateY(-1px);
       }
     }
 
@@ -152,6 +149,7 @@ export class ButtonComponent {
   @Input() loading = false;
   @Input() type: 'button' | 'submit' | 'reset' = 'button';
   @Input() fullWidth = false;
+  @Input() touchTarget = false;
 
   @Output() onClick = new EventEmitter<Event>();
 
@@ -159,6 +157,7 @@ export class ButtonComponent {
     const classes = ['btn', `btn--${this.variant}`, `btn--${this.size}`];
     if (this.fullWidth) classes.push('btn--full-width');
     if (this.loading) classes.push('btn--loading');
+    if (this.touchTarget) classes.push('btn--touch-target');
     return classes.join(' ');
   }
 }

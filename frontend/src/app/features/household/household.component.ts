@@ -1,48 +1,71 @@
+import { cookingLevelWord } from '../../shared/models';
 import { Component, inject, OnInit, signal, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HouseholdService } from '../../core/services/household.service';
+import { ClipboardService } from '../../core/services/clipboard.service';
 import { ToastService } from '../../core/services/toast.service';
+import { ConfirmService } from '../../core/services/confirm.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
+import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { I18nService } from '../../core/services/i18n.service';
+import type { TranslationKey } from '../../core/i18n';
 
 @Component({
   selector: 'app-household',
   standalone: true,
   imports: [
-    CommonModule, FormsModule,
-    ButtonComponent, InputComponent, BadgeComponent,
-    AvatarComponent, ModalComponent, LoadingComponent
+    CommonModule,
+    FormsModule,
+    TranslatePipe,
+    ButtonComponent,
+    InputComponent,
+    BadgeComponent,
+    AvatarComponent,
+    ModalComponent,
+    LoadingComponent,
+    IconComponent
   ],
   template: `
     <div class="household">
       <!-- Header -->
       <div class="household__header">
-        <h1 class="household__title">👨‍👩‍👧‍👦 Hogar</h1>
+        <h1 class="household__title">
+          <app-icon name="group" [size]="24" [label]="null" />
+          <span>{{ 'household.hogar' | t }}</span>
+        </h1>
       </div>
 
       <!-- Loading -->
-      <app-loading *ngIf="householdService.isLoading()" message="Cargando..."></app-loading>
+      <app-loading
+        *ngIf="householdService.isLoading()"
+        [message]="'common.loading' | t"
+      ></app-loading>
 
       <!-- No Household -->
-      <div *ngIf="!householdService.isLoading() && !householdService.household()" class="no-household">
+      <div
+        *ngIf="!householdService.isLoading() && !householdService.household()"
+        class="no-household"
+      >
         <div class="no-household__content">
-          <span class="no-household__icon">🏠</span>
-          <h2 class="no-household__title">No tienes un hogar</h2>
+          <app-icon class="no-household__icon" name="home" [size]="56" [label]="null" />
+          <h2 class="no-household__title">{{ 'household.no_tienes_un_hogar' | t }}</h2>
           <p class="no-household__text">
-            Crea un hogar o únete a uno existente para compartir despensa y recetas.
+            {{ 'household.crea_un_hogar_o' | t }}
           </p>
-          
+
           <div class="no-household__actions">
             <app-button variant="primary" (onClick)="openCreateModal()">
-              Crear hogar
+              {{ 'household.crear_hogar_2' | t }}
             </app-button>
             <app-button variant="outline" (onClick)="openJoinModal()">
-              Unirse con código
+              {{ 'household.unirse_con_codigo' | t }}
             </app-button>
           </div>
         </div>
@@ -55,25 +78,38 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
           <div class="household-info__header">
             <div>
               <h2 class="household-info__name">{{ household.name }}</h2>
-              <span class="household-info__members">{{ household.members?.length || 0 }} miembros</span>
+              <span class="household-info__members">{{
+                miembrosLabel(household.members?.length ?? 0)
+              }}</span>
             </div>
             <app-badge variant="primary">
-              {{ household.sharedPantry ? 'Despensa compartida' : 'Despensa individual' }}
+              {{
+                household.sharedPantry
+                  ? ('household.despensa_compartida' | t)
+                  : ('household.despensa_individual' | t)
+              }}
             </app-badge>
           </div>
 
           <!-- Invite Code -->
           <div class="invite-card">
             <div class="invite-card__content">
-              <span class="invite-card__label">Enlace de invitación</span>
+              <span class="invite-card__label">{{ 'household.enlace_de_invitacion' | t }}</span>
               <span class="invite-card__code">{{ inviteLink() }}</span>
             </div>
             <div class="invite-card__actions">
               <app-button variant="outline" size="sm" (onClick)="copyLink()">
-                📋 Copiar enlace
+                <app-icon name="content_copy" [size]="16" [label]="null" />
+                {{ 'household.copiar_enlace' | t }}
               </app-button>
-              <app-button variant="ghost" size="sm" (onClick)="regenerateCode()" *ngIf="canInvite()">
-                🔄 Regenerar
+              <app-button
+                variant="ghost"
+                size="sm"
+                (onClick)="regenerateCode()"
+                *ngIf="canInvite()"
+              >
+                <app-icon name="refresh" [size]="16" [label]="null" />
+                {{ 'household.regenerar' | t }}
               </app-button>
             </div>
           </div>
@@ -82,16 +118,16 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
         <!-- Members -->
         <div class="members-section">
           <div class="members-section__header">
-            <h3>Miembros</h3>
+            <h3>{{ 'dashboard.members' | t }}</h3>
             <app-button variant="outline" size="sm" (onClick)="openInviteModal()">
-              + Invitar
+              {{ 'household.invitar' | t }}
             </app-button>
           </div>
 
           <div class="members-list">
             <div *ngFor="let member of household.members" class="member-card">
               <app-avatar [name]="member.name" size="md"></app-avatar>
-              
+
               <div class="member-card__info">
                 <span class="member-card__name">{{ member.name }}</span>
                 <span class="member-card__email">{{ member.email }}</span>
@@ -111,19 +147,34 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
 
         <!-- Sharing & Settings (admins only) -->
         <section class="settings-section" *ngIf="isAdmin()">
-          <h3 class="settings-section__title">🔗 Compartir en el hogar</h3>
+          <h3 class="settings-section__title">
+            <app-icon name="link" [size]="18" [label]="null" />
+            <span>{{ 'household.compartir_en_el_hogar' | t }}</span>
+          </h3>
           <div class="settings-section__options">
             <label class="setting-toggle">
-              <input type="checkbox" [checked]="household.sharedPantry" (change)="toggleSetting('sharedPantry', $any($event.target).checked)" />
-              <span>Despensa compartida</span>
+              <input
+                type="checkbox"
+                [checked]="household.sharedPantry"
+                (change)="toggleSetting('sharedPantry', $any($event.target).checked, $event)"
+              />
+              <span>{{ 'household.despensa_compartida' | t }}</span>
             </label>
             <label class="setting-toggle">
-              <input type="checkbox" [checked]="household.shareRecipes" (change)="toggleSetting('shareRecipes', $any($event.target).checked)" />
-              <span>Recetas compartidas</span>
+              <input
+                type="checkbox"
+                [checked]="household.shareRecipes"
+                (change)="toggleSetting('shareRecipes', $any($event.target).checked, $event)"
+              />
+              <span>{{ 'household.recetas_compartidas' | t }}</span>
             </label>
             <label class="setting-toggle">
-              <input type="checkbox" [checked]="household.shareCalendar" (change)="toggleSetting('shareCalendar', $any($event.target).checked)" />
-              <span>Calendario compartido</span>
+              <input
+                type="checkbox"
+                [checked]="household.shareCalendar"
+                (change)="toggleSetting('shareCalendar', $any($event.target).checked, $event)"
+              />
+              <span>{{ 'household.calendario_compartido' | t }}</span>
             </label>
           </div>
         </section>
@@ -131,7 +182,8 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
         <!-- Actions -->
         <div class="household__actions">
           <app-button variant="danger" (onClick)="leaveHousehold()">
-            🚪 Salir del hogar
+            <app-icon name="logout" [size]="16" [label]="null" />
+            {{ 'household.salir_del_hogar' | t }}
           </app-button>
         </div>
       </div>
@@ -139,7 +191,7 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
       <!-- Create Modal -->
       <app-modal
         [isOpen]="isCreateModalOpen()"
-        title="Crear Hogar"
+        [title]="'household.crear_hogar' | t"
         size="md"
         (onClose)="closeCreateModal()"
       >
@@ -147,8 +199,8 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
           <app-input
             id="householdName"
             name="householdName"
-            label="Nombre del hogar"
-            placeholder="Ej: Mi hogar"
+            [label]="'household.nombre_del_hogar' | t"
+            [placeholder]="'household.ej_mi_hogar' | t"
             [(ngModel)]="createForm.name"
             [required]="true"
           ></app-input>
@@ -156,13 +208,25 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
           <div class="form-field">
             <label class="form-checkbox">
               <input type="checkbox" [(ngModel)]="createForm.sharedPantry" name="sharedPantry" />
-              <span>Compartir despensa entre miembros</span>
+              <span>{{ 'household.compartir_despensa_entre_miembros' | t }}</span>
             </label>
           </div>
 
           <div class="form-actions">
-            <app-button variant="ghost" type="button" (onClick)="closeCreateModal()">Cancelar</app-button>
-            <app-button variant="primary" type="submit" [loading]="isSaving()">Crear</app-button>
+            <app-button
+              variant="ghost"
+              type="button"
+              [touchTarget]="true"
+              (onClick)="closeCreateModal()"
+              >{{ 'common.cancel' | t }}</app-button
+            >
+            <app-button
+              variant="primary"
+              type="submit"
+              [touchTarget]="true"
+              [loading]="isSaving()"
+              >{{ 'common.create' | t }}</app-button
+            >
           </div>
         </form>
       </app-modal>
@@ -170,27 +234,39 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
       <!-- Join Modal -->
       <app-modal
         [isOpen]="isJoinModalOpen()"
-        title="Unirse a un Hogar"
+        [title]="'household.unirse_a_un_hogar' | t"
         size="md"
         (onClose)="closeJoinModal()"
       >
         <form (ngSubmit)="joinHousehold()" class="join-form">
           <p class="join-form__description">
-            Introduce el código de invitación que te ha compartido el administrador del hogar.
+            {{ 'household.introduce_el_codigo_de' | t }}
           </p>
 
           <app-input
             id="inviteCode"
             name="inviteCode"
-            label="Código de invitación"
-            placeholder="Ej: ABC12345"
+            [label]="'household.codigo_de_invitacion' | t"
+            [placeholder]="'household.ej_abc12345' | t"
             [(ngModel)]="joinForm.inviteCode"
             [required]="true"
           ></app-input>
 
           <div class="form-actions">
-            <app-button variant="ghost" type="button" (onClick)="closeJoinModal()">Cancelar</app-button>
-            <app-button variant="primary" type="submit" [loading]="isSaving()">Unirse</app-button>
+            <app-button
+              variant="ghost"
+              type="button"
+              [touchTarget]="true"
+              (onClick)="closeJoinModal()"
+              >{{ 'common.cancel' | t }}</app-button
+            >
+            <app-button
+              variant="primary"
+              type="submit"
+              [touchTarget]="true"
+              [loading]="isSaving()"
+              >{{ 'household.unirse' | t }}</app-button
+            >
           </div>
         </form>
       </app-modal>
@@ -198,296 +274,358 @@ import { LoadingComponent } from '../../shared/components/ui/loading/loading.com
       <!-- Invite Modal -->
       <app-modal
         [isOpen]="isInviteModalOpen()"
-        title="Invitar Miembro"
+        [title]="'household.invitar_miembro' | t"
         size="md"
         (onClose)="closeInviteModal()"
       >
         <div class="invite-modal">
-          <p>Comparte este código con la persona que quieres invitar:</p>
-          
+          <p>{{ 'household.comparte_este_codigo_con' | t }}</p>
+
           <div class="invite-code-display">
-            <span class="invite-code-display__code">{{ householdService.household()?.inviteCode }}</span>
-            <app-button variant="primary" (onClick)="copyCode()">
-              📋 Copiar
+            <span class="invite-code-display__code">{{
+              householdService.household()?.inviteCode
+            }}</span>
+            <app-button variant="primary" [touchTarget]="true" (onClick)="copyCode()">
+              <app-icon name="content_copy" [size]="16" [label]="null" />
+              {{ 'household.copiar' | t }}
             </app-button>
           </div>
         </div>
       </app-modal>
     </div>
   `,
-  styles: [`
-    .household {
-      padding: var(--space-4);
-      max-width: 800px;
-      margin: 0 auto;
-    }
+  styles: [
+    `
+      .household {
+        padding-block: var(--container-padding);
+        max-width: 800px;
+        margin: 0 auto;
+      }
 
-    @media (min-width: 768px) {
-      .household { padding: var(--space-6); }
-    }
+      .household__header {
+        margin-bottom: var(--space-6);
+      }
 
-    .household__header {
-      margin-bottom: var(--space-6);
-    }
+      .household__title {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-family: var(--font-display);
+        font-size: var(--text-2xl);
+        font-weight: var(--font-bold);
+      }
 
-    .household__title {
-      font-family: var(--font-display);
-      font-size: var(--text-2xl);
-      font-weight: var(--font-bold);
-    }
+      /* No Household */
+      .no-household {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 60vh;
+      }
 
-    /* No Household */
-    .no-household {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 60vh;
-    }
+      .no-household__content {
+        text-align: center;
+        max-width: 400px;
+      }
 
-    .no-household__content {
-      text-align: center;
-      max-width: 400px;
-    }
+      .no-household__icon {
+        display: block;
+        margin-bottom: var(--space-4);
+        color: var(--primary);
+      }
 
-    .no-household__icon {
-      font-size: 64px;
-      display: block;
-      margin-bottom: var(--space-4);
-    }
+      .no-household__title {
+        font-family: var(--font-display);
+        font-size: var(--text-2xl);
+        font-weight: var(--font-bold);
+        margin-bottom: var(--space-2);
+      }
 
-    .no-household__title {
-      font-family: var(--font-display);
-      font-size: var(--text-2xl);
-      font-weight: var(--font-bold);
-      margin-bottom: var(--space-2);
-    }
+      .no-household__text {
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        margin-bottom: var(--space-6);
+      }
 
-    .no-household__text {
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-      margin-bottom: var(--space-6);
-    }
+      .no-household__actions {
+        display: flex;
+        gap: var(--space-3);
+        justify-content: center;
+      }
 
-    .no-household__actions {
-      display: flex;
-      gap: var(--space-3);
-      justify-content: center;
-    }
+      /* Household Info */
+      .household-info {
+        margin-bottom: var(--space-6);
+      }
 
-    /* Household Info */
-    .household-info {
-      margin-bottom: var(--space-6);
-    }
+      .household-info__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: var(--space-4);
+      }
 
-    .household-info__header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: var(--space-4);
-    }
-
-    .household-info__name {
-      font-family: var(--font-display);
-      font-size: var(--text-xl);
-      font-weight: var(--font-semibold);
-    }
-
-    .household-info__members {
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-    }
-
-    /* Invite Card */
-    .invite-card {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: var(--space-4);
-      background: var(--bg-tertiary);
-      border-radius: var(--radius-lg);
-    }
-
-    .invite-card__content {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .invite-card__label {
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-    }
-
-    .invite-card__code {
-      font-family: var(--font-mono);
-      font-size: var(--text-xl);
-      font-weight: var(--font-bold);
-      letter-spacing: var(--tracking-wider);
-    }
-
-    .invite-card__actions {
-      display: flex;
-      gap: var(--space-2);
-    }
-
-    /* Members */
-    .members-section {
-      margin-bottom: var(--space-6);
-    }
-
-    .members-section__header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: var(--space-4);
-
-      h3 {
-        font-size: var(--text-lg);
+      .household-info__name {
+        font-family: var(--font-display);
+        font-size: var(--text-xl);
         font-weight: var(--font-semibold);
       }
-    }
 
-    .members-list {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    .member-card {
-      display: flex;
-      align-items: center;
-      gap: var(--space-3);
-      padding: var(--space-3);
-      background: var(--bg-secondary);
-      border-radius: var(--radius-lg);
-      border: 1px solid var(--border-default);
-    }
-
-    .member-card__info {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .member-card__name {
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-    }
-
-    .member-card__email {
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-    }
-
-    .member-card__meta {
-      display: flex;
-      gap: var(--space-2);
-    }
-
-    /* Settings section */
-    .settings-section {
-      margin-bottom: var(--space-6);
-      padding: var(--space-4);
-      background: var(--bg-secondary);
-      border-radius: var(--radius-xl);
-      border: 1px solid var(--border-default);
-    }
-    .settings-section__title {
-      font-size: var(--text-base);
-      font-weight: var(--font-semibold);
-      margin: 0 0 var(--space-3) 0;
-    }
-    .settings-section__options {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-    .setting-toggle {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      font-size: var(--text-sm);
-      cursor: pointer;
-      input[type="checkbox"] { width: 18px; height: 18px; }
-    }
-
-    /* Actions */
-    .household__actions {
-      display: flex;
-      gap: var(--space-3);
-      justify-content: flex-end;
-    }
-
-    /* Forms */
-    .create-form,
-    .join-form {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
-    }
-
-    .join-form__description {
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-    }
-
-    .form-field {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-    }
-
-    .form-checkbox {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      font-size: var(--text-sm);
-      cursor: pointer;
-
-      input[type="checkbox"] {
-        width: 18px;
-        height: 18px;
-        cursor: pointer;
-      }
-    }
-
-    .form-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--space-3);
-      margin-top: var(--space-4);
-    }
-
-    /* Invite Modal */
-    .invite-modal {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
-
-      p {
+      .household-info__members {
         font-size: var(--text-sm);
         color: var(--text-secondary);
       }
-    }
 
-    .invite-code-display {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: var(--space-4);
-      background: var(--bg-tertiary);
-      border-radius: var(--radius-lg);
-    }
+      /* Invite Card */
+      .invite-card {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-4);
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-lg);
+      }
 
-    .invite-code-display__code {
-      font-family: var(--font-mono);
-      font-size: var(--text-2xl);
-      font-weight: var(--font-bold);
-    }
-  `]
+      .invite-card__content {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .invite-card__label {
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+      }
+
+      .invite-card__code {
+        font-family: var(--font-mono);
+        font-size: var(--text-xl);
+        font-weight: var(--font-bold);
+        letter-spacing: var(--tracking-wider);
+      }
+
+      .invite-card__actions {
+        display: flex;
+        gap: var(--space-2);
+      }
+
+      /* Members */
+      .members-section {
+        margin-bottom: var(--space-6);
+      }
+
+      .members-section__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: var(--space-4);
+
+        h3 {
+          font-size: var(--text-lg);
+          font-weight: var(--font-semibold);
+        }
+      }
+
+      .members-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+
+      .member-card {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3);
+        background: var(--bg-secondary);
+        border-radius: var(--radius-lg);
+        border: 1px solid var(--border-default);
+      }
+
+      .member-card__info {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .member-card__name {
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+      }
+
+      .member-card__email {
+        font-size: var(--text-xs);
+        color: var(--text-secondary);
+      }
+
+      .member-card__meta {
+        display: flex;
+        gap: var(--space-2);
+      }
+
+      @media (max-width: 767px) {
+        .member-card {
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+
+        .member-card__name,
+        .member-card__email {
+          overflow-wrap: anywhere;
+        }
+
+        .member-card__meta {
+          grid-column: 1 / -1;
+          flex-wrap: wrap;
+        }
+      }
+
+      /* Settings section */
+      .settings-section {
+        margin-bottom: var(--space-6);
+        padding: var(--space-4);
+        background: var(--bg-secondary);
+        border-radius: var(--radius-xl);
+        border: 1px solid var(--border-default);
+      }
+      .settings-section__title {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-base);
+        font-weight: var(--font-semibold);
+        margin: 0 0 var(--space-3) 0;
+      }
+      .settings-section__options {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+      .setting-toggle {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+        cursor: pointer;
+        input[type='checkbox'] {
+          width: 18px;
+          height: 18px;
+        }
+      }
+
+      /* Actions */
+      .household__actions {
+        display: flex;
+        gap: var(--space-3);
+        justify-content: flex-end;
+      }
+
+      /* Forms */
+      .create-form,
+      .join-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+      }
+
+      .join-form__description {
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+      }
+
+      .form-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+
+      .form-checkbox {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+        cursor: pointer;
+
+        input[type='checkbox'] {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+        }
+      }
+
+      .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--space-3);
+        margin-top: var(--space-4);
+      }
+
+      /* Invite Modal */
+      .invite-modal {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-4);
+
+        p {
+          font-size: var(--text-sm);
+          color: var(--text-secondary);
+        }
+      }
+
+      .invite-code-display {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--space-4);
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-lg);
+      }
+
+      .invite-code-display__code {
+        font-family: var(--font-mono);
+        font-size: var(--text-2xl);
+        font-weight: var(--font-bold);
+      }
+
+      @media (max-width: 767px) {
+        .invite-card {
+          align-items: stretch;
+          flex-direction: column;
+          gap: var(--space-3);
+        }
+
+        .invite-card__content {
+          min-width: 0;
+        }
+
+        .invite-card__code {
+          max-width: 100%;
+          overflow-wrap: anywhere;
+          font-size: var(--text-base);
+          letter-spacing: normal;
+        }
+
+        .invite-card__actions {
+          flex-wrap: wrap;
+        }
+      }
+    `
+  ]
 })
 export class HouseholdComponent implements OnInit {
+  private readonly i18n = inject(I18nService);
+  private readonly clipboardService = inject(ClipboardService);
+
+  /** «4 miembros» / «1 miembro»: el contador de la casa, con su sustantivo en el diccionario. */
+  miembrosLabel(cantidad: number): string {
+    return this.i18n.plural(cantidad, 'household.n_miembros_uno', 'household.n_miembros_varios', {
+      count: cantidad
+    });
+  }
+
   householdService = inject(HouseholdService);
   private toastService = inject(ToastService);
+  private confirmService = inject(ConfirmService);
 
   isCreateModalOpen = signal(false);
   isJoinModalOpen = signal(false);
@@ -525,14 +663,37 @@ export class HouseholdComponent implements OnInit {
   }
 
   copyLink(): void {
-    navigator.clipboard.writeText(this.inviteLink());
-    this.toastService.success('Copiado', 'Enlace de invitación copiado');
+    this.clipboardService.copy(this.inviteLink()).then(
+      () =>
+        this.toastService.success(
+          this.i18n.t('household.copiado'),
+          this.i18n.t('household.enlace_de_invitacion_copiado')
+        ),
+      () => this.notifyMutationError('household.no_se_pudo_copiar')
+    );
   }
 
-  toggleSetting(key: 'sharedPantry' | 'shareRecipes' | 'shareCalendar', value: boolean): void {
+  toggleSetting(
+    key: 'sharedPantry' | 'shareRecipes' | 'shareCalendar',
+    value: boolean,
+    event?: Event
+  ): void {
+    const input = event?.target as HTMLInputElement | null;
+    const confirmedHousehold = this.householdService.household();
+    if (input && confirmedHousehold) input.checked = confirmedHousehold[key];
+
     this.householdService.updateSettings({ [key]: value }).subscribe({
-      next: () => this.toastService.success('Actualizado', 'Ajustes del hogar guardados'),
-      error: () => this.toastService.error('Error', 'No se pudo actualizar')
+      next: (updated) => {
+        if (!updated) {
+          this.notifyMutationError('household.no_se_pudo_actualizar');
+          return;
+        }
+        this.toastService.success(
+          this.i18n.t('ai_config.actualizado'),
+          this.i18n.t('household.ajustes_del_hogar_guardados')
+        );
+      },
+      error: () => this.notifyMutationError('household.no_se_pudo_actualizar')
     });
   }
 
@@ -567,34 +728,52 @@ export class HouseholdComponent implements OnInit {
   }
 
   createHousehold(): void {
-    if (!this.createForm.name) return;
+    if (!this.createForm.name || this.isSaving()) return;
 
     this.isSaving.set(true);
-    this.householdService.createHousehold(this.createForm.name, this.createForm.sharedPantry).subscribe({
-      next: () => {
-        this.toastService.success('¡Creado!', 'Tu hogar ha sido creado');
-        this.closeCreateModal();
-        this.isSaving.set(false);
-      },
-      error: () => {
-        this.toastService.error('Error', 'No se pudo crear el hogar');
-        this.isSaving.set(false);
-      }
-    });
+    this.householdService
+      .createHousehold(this.createForm.name, this.createForm.sharedPantry)
+      .subscribe({
+        next: (household) => {
+          if (!household) {
+            this.notifyMutationError('household.no_se_pudo_crear');
+            this.isSaving.set(false);
+            return;
+          }
+          this.toastService.success(
+            this.i18n.t('household.creado'),
+            this.i18n.t('household.tu_hogar_ha_sido')
+          );
+          this.closeCreateModal();
+          this.isSaving.set(false);
+        },
+        error: () => {
+          this.notifyMutationError('household.no_se_pudo_crear');
+          this.isSaving.set(false);
+        }
+      });
   }
 
   joinHousehold(): void {
-    if (!this.joinForm.inviteCode) return;
+    if (!this.joinForm.inviteCode || this.isSaving()) return;
 
     this.isSaving.set(true);
     this.householdService.joinHousehold(this.joinForm.inviteCode).subscribe({
-      next: () => {
-        this.toastService.success('¡Te has unido!', 'Ahora eres miembro del hogar');
+      next: (result) => {
+        if (result?.success !== true) {
+          this.notifyMutationError('household.codigo_invalido_o_ya');
+          this.isSaving.set(false);
+          return;
+        }
+        this.toastService.success(
+          this.i18n.t('household.te_has_unido'),
+          this.i18n.t('household.ahora_eres_miembro_del')
+        );
         this.closeJoinModal();
         this.isSaving.set(false);
       },
       error: () => {
-        this.toastService.error('Error', 'Código inválido o ya eres miembro');
+        this.notifyMutationError('household.codigo_invalido_o_ya');
         this.isSaving.set(false);
       }
     });
@@ -606,45 +785,69 @@ export class HouseholdComponent implements OnInit {
 
   regenerateCode(): void {
     this.householdService.regenerateInviteCode().subscribe({
-      next: () => {
-        this.toastService.success('Regenerado', 'Nuevo código de invitación generado');
-      }
+      next: (inviteCode) => {
+        if (!inviteCode) {
+          this.notifyMutationError('household.no_se_pudo_regenerar');
+          return;
+        }
+        this.toastService.success(
+          this.i18n.t('household.regenerado'),
+          this.i18n.t('household.nuevo_codigo_de_invitacion')
+        );
+      },
+      error: () => this.notifyMutationError('household.no_se_pudo_regenerar')
     });
   }
 
-  leaveHousehold(): void {
-    if (confirm('¿Estás seguro de salir del hogar?')) {
-      this.householdService.leaveHousehold().subscribe({
-        next: () => {
-          this.toastService.success('Saliste', 'Has salido del hogar');
+  async leaveHousehold(): Promise<void> {
+    const accepted = await this.confirmService.confirm({
+      title: this.i18n.t('household.salir_del_hogar'),
+      message: this.i18n.t('household.estas_seguro_de_salir'),
+      confirmText: this.i18n.t('household.salir')
+    });
+    if (!accepted) return;
+
+    this.householdService.leaveHousehold().subscribe({
+      next: (left) => {
+        if (left !== true) {
+          this.notifyMutationError('household.no_se_pudo_salir');
+          return;
         }
-      });
-    }
+        this.toastService.success(
+          this.i18n.t('household.saliste'),
+          this.i18n.t('household.has_salido_del_hogar')
+        );
+      },
+      error: () => this.notifyMutationError('household.no_se_pudo_salir')
+    });
+  }
+
+  private notifyMutationError(message: TranslationKey): void {
+    this.toastService.error(this.i18n.t('ui.error'), this.i18n.t(message));
   }
 
   getRoleVariant(role: string): 'primary' | 'secondary' | 'neutral' {
     switch (role) {
-      case 'admin': return 'primary';
-      case 'member': return 'secondary';
-      default: return 'neutral';
+      case 'admin':
+        return 'primary';
+      case 'member':
+        return 'secondary';
+      default:
+        return 'neutral';
     }
   }
 
   getRoleLabel(role: string): string {
-    const labels: Record<string, string> = {
-      admin: 'Admin',
-      member: 'Miembro',
-      child: 'Niño'
+    const labelKeys: Record<string, TranslationKey> = {
+      admin: 'household.rol_admin',
+      member: 'household.rol_miembro',
+      child: 'household.rol_nino'
     };
-    return labels[role] || role;
+    const key = labelKeys[role];
+    return key ? this.i18n.t(key) : role;
   }
 
   getLevelLabel(level: string): string {
-    const labels: Record<string, string> = {
-      beginner: 'Principiante',
-      intermediate: 'Intermedio',
-      expert: 'Experto'
-    };
-    return labels[level] || level;
+    return cookingLevelWord(level, (clave) => this.i18n.t(clave), level);
   }
 }

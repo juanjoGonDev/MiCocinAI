@@ -177,7 +177,8 @@ export const userRecipesRelations = relations(userRecipes, ({ one }) => ({
 
 export const weeklyCalendars = sqliteTable('weekly_calendars', {
   id: text('id').primaryKey(),
-  householdId: text('household_id').notNull(),
+  // NULL = calendario personal (sin hogar). Ver la migración en config/database.ts.
+  householdId: text('household_id'),
   userId: text('user_id').notNull(),
   weekStart: text('week_start').notNull(),
   weekEnd: text('week_end').notNull(),
@@ -248,6 +249,7 @@ export const aiConfigs = sqliteTable('ai_configs', {
   presencePenalty: real('presence_penalty'),
   timeout: integer('timeout').default(30000),
   retryAttempts: integer('retry_attempts').default(3),
+  concurrency: integer('concurrency').notNull().default(0),
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
   lastTested: text('last_tested'),
   testStatus: text('test_status'),
@@ -262,3 +264,24 @@ export const aiConfigsRelations = relations(aiConfigs, ({ one }) => ({
     references: [users.id]
   })
 }));
+
+/** Metadata only: non-ticket request bodies, prompts and attachments intentionally stay in memory. */
+export const aiJobs = sqliteTable('ai_jobs', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  configId: text('config_id'),
+  kind: text('kind').notNull().default('receipt'),
+  receiptId: text('receipt_id'),
+  status: text('status').notNull().default('queued'),
+  attempts: integer('attempts').notNull().default(0),
+  maxAttempts: integer('max_attempts').notNull().default(3),
+    queueOrder: integer('queue_order').notNull().default(0),
+    claimGeneration: integer('claim_generation').notNull().default(0),
+  leaseUntil: text('lease_until'),
+  errorCode: text('error_code'),
+  errorDetail: text('error_detail'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+  startedAt: text('started_at'),
+  finishedAt: text('finished_at')
+});

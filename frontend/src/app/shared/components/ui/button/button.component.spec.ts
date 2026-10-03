@@ -40,6 +40,20 @@ describe('ButtonComponent', () => {
     expect(button.className).toContain('btn--lg');
   });
 
+  it('should expose a touch target class when requested', () => {
+    component.touchTarget = true;
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('button');
+    expect(button.className).toContain('btn--touch-target');
+  });
+
+  it('should not add the touch target class by default', () => {
+    const button = fixture.nativeElement.querySelector('button');
+
+    expect(button.className).not.toContain('btn--touch-target');
+  });
+
   it('should disable button when disabled is true', () => {
     component.disabled = true;
     fixture.detectChanges();
