@@ -1634,6 +1634,7 @@ no contacta la red exterior.
 - [ ] Automatizar la attestation del proceso WebAPI aislado, el veto por puerto ocupado/Agenta activo, DB/log/artifacts temporales y cleanup del PID/directorio propio.
 - [ ] Completar el smoke opt-in con los ocho `AiJobKind`, presupuesto 9–10, una sola configuración activa, concurrencia 1, `retryAttempts: 0` al crear y parada ante el primer fallo.
 - [ ] Hacer que la E2E valide los contratos de cada resultado; para ticket verificar tienda/fecha reales de la imagen sintética, edición UI, persistencia tras recarga e historial.
+- [ ] Mantener `server/src/routes/ai.routes.ts` con cobertura focal ≥70 % en statements, branches, functions y lines; incluir recomendaciones, persistencia de plan semanal y comparador de recetas con varios ingredientes.
 - [ ] Probar setup, opt-in/CI, allowlist, redacción, cancelación, exceso de presupuesto y cleanup; ejecutar suites sintéticas fuera de red y verificar que omisión/fallo del smoke es rojo, no verde.
 - [ ] Ejecutar una corrida live autorizada en el modelo activo; registrar solo modelo, resultado, recuento/latencia/uso y coste si está disponible. Mantenerla manual y fuera de CI.
 ### Subunidad QA-AI.SECRET-REDACTION.1 · proteger credenciales y datos en errores upstream
