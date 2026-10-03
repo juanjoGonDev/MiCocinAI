@@ -1752,3 +1752,22 @@ siendo 64 px además del área segura. En cero inset y en escritorio la geometr�
 
 **Rollback:** revertir solo los tokens/reglas de safe-area, la E2E focal y este subapartado; no revertir
 el contenedor común ni otros cambios del layout.
+
+**Evidencia QA-LAYOUT.SAFE-AREA.SYNTHETIC.1 (2026-10-03):** TDD reprodujo primero el fallo en ambos
+proyectos: con inset superior sintético de 24 px, el header seguía midiendo 56 px frente a los 80 px
+esperados. Tras añadir tokens CSS para top/right/bottom/left, la primera corrida validó la geometría;
+la captura encontró una espera frágil (`boundingBox()` devolvía null para el drawer ya fuera de vista).
+Se cambió a sondeo de `getBoundingClientRect()` y se espera a que termine la transición de apertura
+antes de medir el cierre y sus controles. La corrida final con un worker pasó **2/2** en Chromium y
+Pixel 5; cubre 393×851 y 568×320, inset cero/no nulo, click de Recetas/Inicio, header, contenido, barra
+inferior, drawer, foco/Escape, scroll corto, hit targets y ausencia de overflow.
+
+Comando: `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/safe-area-layout.spec.ts --reporter=dot`, con `E2E_RATE_LIMIT=on`, Chrome local y DB/puertos/
+semilla/artefactos temporales; runner limpió tras detener su app. `pnpm run typecheck:e2e`,
+`pnpm --filter @hogaria/web run build:prod`, Prettier focal y `git diff --check` pasan. El build conserva
+warnings existentes de bundle, presupuesto e imports; no se rebajaron gates. Solo se modificó CSS de
+producción (`styles.scss`), sin archivo TS instrumentable para cobertura; cobertura S/B/F/L: N/A.
+Capturas sintéticas revisadas en `%TEMP%\hogaria-safe-area-final-b8dcc311afa94912afce3c827a458c7d\`
+(`safe-area-desktop-chromium.png`, `safe-area-mobile-mobile-chrome.png`). No se probó iOS nativo: la
+revisión WebKit requerida sigue ausente y Pixel 5 no expone inset nativo no nulo; la última casilla queda abierta.
