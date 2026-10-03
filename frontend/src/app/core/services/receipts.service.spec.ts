@@ -17,6 +17,7 @@ const RECEIPT: Receipt = {
   id: 'receipt-1',
   status: 'queued',
   store: 'Tienda de prueba',
+  purchaseDate: null,
   currency: 'EUR',
   totalMinor: 725,
   notes: null,
@@ -99,7 +100,7 @@ describe('ReceiptsService', () => {
 
     service.loadReceipts();
     expect(service.loading()).toBeTrue();
-    const list = http.expectOne(API);
+    const list = http.expectOne(`${API}?scope=active&limit=100`);
     expect(list.request.method).toBe('GET');
     list.flush({ success: true, data: [RECEIPT] });
     expect(service.receipts()).toEqual([RECEIPT]);
@@ -119,7 +120,7 @@ describe('ReceiptsService', () => {
     service.loadReceipts();
     expect(service.loading()).toBeTrue();
     http
-      .expectOne(API)
+      .expectOne(`${API}?scope=active&limit=100`)
       .flush({ error: 'temporary' }, { status: 503, statusText: 'Service Unavailable' });
     expect(service.loading()).toBeFalse();
     expect(service.receipts()).toEqual([RECEIPT]);
@@ -133,6 +134,76 @@ describe('ReceiptsService', () => {
     expect(service.loadingReceipt()).toBeFalse();
     expect(service.receipt()).toEqual(DETAIL);
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('loads history in pages, appends older receipts and preserves its cursor after errors', () => {
+    const pageOf = (start: number) =>
+      Array.from({ length: 50 }, (_, index) => ({
+        ...RECEIPT,
+        id: `receipt-${start + index}`,
+        status: 'confirmed' as const
+      }));
+    service.loadHistory();
+    expect(service.historyLoading()).toBeTrue();
+    const first = http.expectOne(`${API}?scope=history&limit=50&offset=0`);
+    expect(first.request.method).toBe('GET');
+    first.flush({
+      success: true,
+      data: pageOf(0),
+      pagination: { offset: 0, limit: 50, hasMore: true }
+    });
+    expect(service.history().length).toBe(50);
+    expect(service.historyHasMore()).toBeTrue();
+    expect(service.historyLoading()).toBeFalse();
+
+    service.loadMoreHistory();
+    const second = http.expectOne(`${API}?scope=history&limit=50&offset=50`);
+    second.flush({
+      success: true,
+      data: pageOf(50),
+      pagination: { offset: 50, limit: 50, hasMore: true }
+    });
+    expect(service.history().length).toBe(100);
+    expect(service.historyHasMore()).toBeTrue();
+    expect(service.historyLoading()).toBeFalse();
+
+    service.loadMoreHistory();
+    http
+      .expectOne(`${API}?scope=history&limit=50&offset=100`)
+      .flush({}, { status: 503, statusText: 'Service Unavailable' });
+    expect(service.history().length).toBe(100);
+    expect(service.historyHasMore()).toBeTrue();
+    expect(service.historyError()).toBeTrue();
+    expect(service.historyLoading()).toBeFalse();
+
+    service.retryHistory();
+    http.expectOne(`${API}?scope=history&limit=50&offset=100`).flush({
+      success: true,
+      data: [{ ...RECEIPT, id: 'receipt-oldest', status: 'failed' }],
+      pagination: { offset: 100, limit: 50, hasMore: false }
+    });
+    expect(service.history().length).toBe(101);
+    expect(service.historyHasMore()).toBeFalse();
+    expect(service.historyError()).toBeFalse();
+  });
+
+  it('retries a failed history refresh from the first page without dropping loaded history', () => {
+    service.history.set([RECEIPT]);
+    service.loadHistory();
+    http
+      .expectOne(`${API}?scope=history&limit=50&offset=0`)
+      .flush({}, { status: 503, statusText: 'Service Unavailable' });
+    expect(service.history()).toEqual([RECEIPT]);
+    expect(service.historyError()).toBeTrue();
+
+    service.retryHistory();
+    http.expectOne(`${API}?scope=history&limit=50&offset=0`).flush({
+      success: true,
+      data: [RECEIPT],
+      pagination: { offset: 0, limit: 50, hasMore: false }
+    });
+    expect(service.history()).toEqual([RECEIPT]);
+    expect(service.historyError()).toBeFalse();
   });
 
   it('uploads a synthetic File as multipart and unwraps the receipt response', async () => {
@@ -187,13 +258,29 @@ describe('ReceiptsService', () => {
   });
 
   it('sends receipt and line CRUD plus confirm/stop/retry requests with their API contracts', async () => {
-    const headerPatch = { store: 'Mercado de prueba', notes: 'Compra semanal' };
+    service.receipt.set(DETAIL);
+    service.receipts.set([RECEIPT]);
+    service.history.set([RECEIPT]);
+    const headerPatch = {
+      store: 'Mercado de prueba',
+      purchaseDate: '2026-10-01',
+      notes: 'Compra semanal'
+    };
     const updateReceipt = service.updateReceipt(RECEIPT.id, headerPatch);
     const headerRequest = http.expectOne(`${API}/${RECEIPT.id}`);
     expect(headerRequest.request.method).toBe('PATCH');
     expect(headerRequest.request.body).toEqual(headerPatch);
-    headerRequest.flush({ success: true, data: RECEIPT });
-    expect(await updateReceipt).toEqual(RECEIPT);
+    const updatedReceipt = {
+      ...RECEIPT,
+      store: 'Mercado de prueba',
+      purchaseDate: '2026-10-01',
+      notes: 'Compra semanal'
+    };
+    headerRequest.flush({ success: true, data: updatedReceipt });
+    expect(await updateReceipt).toEqual(updatedReceipt);
+    expect(service.receipt()).toEqual(jasmine.objectContaining(updatedReceipt));
+    expect(service.receipts()[0]).toEqual(jasmine.objectContaining(updatedReceipt));
+    expect(service.history()[0]).toEqual(jasmine.objectContaining(updatedReceipt));
 
     const deleteReceipt = service.deleteReceipt(RECEIPT.id);
     const deleteReceiptRequest = http.expectOne(`${API}/${RECEIPT.id}`);
@@ -256,8 +343,8 @@ describe('ReceiptsService', () => {
 
     expect(await pending).toBeNull();
     expect(translate).toHaveBeenCalledWith('ui.error');
-    expect(translate).toHaveBeenCalledWith('receipts.no_se_ha_podido');
-    expect(toast.error).toHaveBeenCalledOnceWith('ui.error', 'receipts.no_se_ha_podido');
+    expect(translate).toHaveBeenCalledWith('receipts.error_operacion');
+    expect(toast.error).toHaveBeenCalledOnceWith('ui.error', 'receipts.error_operacion');
   });
 
   it('keeps queueBusy through stop-all and clears it on both success and failure', async () => {
@@ -278,7 +365,7 @@ describe('ReceiptsService', () => {
       .flush({}, { status: 503, statusText: 'Service Unavailable' });
     expect(await failure).toBeNull();
     expect(service.queueBusy()).toBeFalse();
-    expect(toast.error).toHaveBeenCalledOnceWith('ui.error', 'receipts.no_se_ha_podido');
+    expect(toast.error).toHaveBeenCalledOnceWith('ui.error', 'receipts.error_operacion');
   });
 
   it('refreshes immediately for the first watcher, polls once per second while watched, and clamps at zero', fakeAsync(() => {
@@ -324,7 +411,7 @@ describe('ReceiptsService', () => {
       startupRequests.forEach((request) => request.flush({ success: true, data: QUEUE }));
 
       service.loadReceipts();
-      const listRequest = http.expectOne(API);
+      const listRequest = http.expectOne(`${API}?scope=active&limit=100`);
       tick(1000);
       const pollRequest = http.expectOne(`${API}/queue`);
 

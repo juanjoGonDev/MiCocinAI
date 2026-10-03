@@ -46,10 +46,26 @@ describe('buildTicketPrompt (## 12aj)', () => {
 
   it('la forma prometida tiene todo lo que el esquema va a validar', () => {
     expect(TICKET_SHAPE).toContain('"store"');
+    expect(TICKET_SHAPE).toContain('"purchaseDate"');
     expect(TICKET_SHAPE).toContain('"priceMinor"');
     expect(TICKET_SHAPE).toContain('"totalMinor"');
     expect(TICKET_SHAPE).toContain('"warnings"');
     expect(TICKET_SHAPE).toContain('"offer"');
+  });
+
+  it('pide tienda/local y fecha impresa sin sustituirla por el momento de subida', () => {
+    const { system } = buildTicketPrompt({
+      inventarioJson: buildInventarioJson(inventario),
+      esPdf: false
+    });
+
+    expect(system).toContain('`store` es la tienda de la cabecera del ticket');
+    expect(system).toContain('el nombre del establecimiento');
+    expect(system).toContain(
+      '`purchaseDate` es la fecha impresa de compra en formato `YYYY-MM-DD`'
+    );
+    expect(system).toContain('Si falta, no se lee o es ambigua, `purchaseDate` es null');
+    expect(system).toContain('Nunca uses la fecha de subida ni `created_at` como fecha de compra');
   });
 
   it('el PDF se anuncia como PDF y la imagen como imagen', () => {

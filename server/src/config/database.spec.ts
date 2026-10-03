@@ -50,7 +50,7 @@ describe('adoptLegacyDatabase', () => {
     const legacy = join(dir, 'recipeapp.db');
     const handle = new Database(legacy);
     handle.pragma('journal_mode = WAL');
-    handle.exec('CREATE TABLE t (v TEXT); INSERT INTO t VALUES (\'sigue aqui\')');
+    handle.exec("CREATE TABLE t (v TEXT); INSERT INTO t VALUES ('sigue aqui')");
     handle.close();
     writeFileSync(`${legacy}-wal`, 'wal-sucio');
     writeFileSync(`${legacy}-shm`, 'shm-sucio');
@@ -103,10 +103,48 @@ describe('adoptLegacyDatabase', () => {
 });
 
 describe('initializeDatabase con fichero heredado', () => {
+  it('anade purchase_date a recibos antiguos sin inventar una fecha de compra', async () => {
+    const databaseFile = target();
+    const previous = new Database(databaseFile);
+    previous.exec(`
+      CREATE TABLE receipts (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        store TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO receipts (id, user_id, store, created_at)
+      VALUES ('old-receipt', 'synthetic-user', 'Tienda antigua', '2024-02-29 12:30:00');
+    `);
+    previous.close();
+
+    const mod = await dbModuleWith(databaseFile);
+    try {
+      await mod.initializeDatabase();
+
+      const receipt = mod
+        .getDatabase()
+        .prepare(
+          'SELECT id, store, created_at, purchase_date, store_manual, purchase_date_manual FROM receipts WHERE id = ?'
+        )
+        .get('old-receipt');
+      expect(receipt).toEqual({
+        id: 'old-receipt',
+        store: 'Tienda antigua',
+        created_at: '2024-02-29 12:30:00',
+        purchase_date: null,
+        store_manual: 0,
+        purchase_date_manual: 0
+      });
+    } finally {
+      mod.closeDatabase();
+    }
+  });
+
   it('renombra antes de abrir y migra la adoptada, sin perder filas', async () => {
     const legacy = join(dir, 'recipeapp.db');
     const handle = new Database(legacy);
-    handle.exec('CREATE TABLE t (v TEXT); INSERT INTO t VALUES (\'de la version anterior\')');
+    handle.exec("CREATE TABLE t (v TEXT); INSERT INTO t VALUES ('de la version anterior')");
     handle.close();
 
     const mod = await dbModuleWith(target());

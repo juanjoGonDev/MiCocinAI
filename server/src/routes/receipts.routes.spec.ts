@@ -23,11 +23,11 @@ let db: Sql;
 let closeDatabase: () => void;
 let alice: { id: string; token: string };
 
-async function makeUser(email: string) {
+async function makeUser(email: string, householdId: string | null = null) {
   const id = `u-${email.split('@')[0]}`;
   db.prepare(
     'INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)'
-  ).run(id, email, 'Cocinera', 'hash', null);
+  ).run(id, email, 'Cocinera', 'hash', householdId);
   const config = await import('../config/app.config.js');
   return {
     id,
@@ -112,6 +112,8 @@ describe('POST / (subir)', () => {
     expect(subida.status).toBe(201);
     expect(subida.payload.data.status).toBe('queued');
     expect(subida.payload.data.fileKind).toBe('png');
+    expect(subida.payload.data.purchaseDate).toBeNull();
+    expect(subida.payload.data.createdAt).toBeTruthy();
 
     const trabajo = db
       .prepare('SELECT * FROM ai_jobs WHERE receipt_id = ?')
@@ -243,6 +245,62 @@ describe('la cola', () => {
   });
 });
 
+describe('historial completo', () => {
+  it('pagina más de cien recibos terminados, ordena por compra y excluye trabajos en curso', async () => {
+    const insert = db.prepare(
+      `INSERT INTO receipts (id, user_id, status, store, purchase_date, file_url, file_kind, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'png', ?)`
+    );
+    for (let index = 0; index < 105; index += 1) {
+      const purchaseDate =
+        index === 0 ? null : new Date(Date.UTC(2024, 0, index + 1)).toISOString().slice(0, 10);
+      const uploadedAt = new Date(Date.UTC(2024, 0, index + 1)).toISOString();
+      insert.run(
+        `history-${index.toString().padStart(3, '0')}`,
+        alice.id,
+        index % 2 === 0 ? 'review' : 'confirmed',
+        `Tienda ${index}`,
+        purchaseDate,
+        `/api/uploads/receipts/history-${index}.png`,
+        uploadedAt
+      );
+    }
+    for (const status of ['queued', 'analyzing']) {
+      insert.run(
+        `active-${status}`,
+        alice.id,
+        status,
+        'En curso',
+        null,
+        `/api/uploads/receipts/active-${status}.png`,
+        '2025-01-01T00:00:00.000Z'
+      );
+    }
+
+    const firstPage = await call('GET', '?scope=history&limit=50&offset=0');
+    expect(firstPage.status).toBe(200);
+    expect(firstPage.payload.data).toHaveLength(50);
+    expect(firstPage.payload.pagination).toMatchObject({ offset: 0, limit: 50, hasMore: true });
+    expect(firstPage.payload.data[0].purchaseDate).toBe('2024-04-14');
+    expect(
+      firstPage.payload.data.every(
+        (receipt: any) => !['queued', 'analyzing'].includes(receipt.status)
+      )
+    ).toBe(true);
+
+    const all = [...firstPage.payload.data];
+    for (let offset = 50; ; offset += 50) {
+      const page = await call('GET', `?scope=history&limit=50&offset=${offset}`);
+      all.push(...page.payload.data);
+      if (!page.payload.pagination.hasMore) break;
+    }
+
+    expect(all).toHaveLength(105);
+    expect(new Set(all.map((receipt: any) => receipt.id)).size).toBe(105);
+    expect(all.at(-1)).toMatchObject({ id: 'history-000', purchaseDate: null });
+  });
+});
+
 describe('la revision y el confirm', () => {
   async function ticketEnRevision() {
     const subida = await subirTicket();
@@ -288,6 +346,49 @@ describe('la revision y el confirm', () => {
     expect(despues.payload.data.lines[0].quantity).toBe(2);
   });
 
+  it('actualiza todos los campos opcionales de una linea, permite limpiarlos y acepta PATCH vacio', async () => {
+    const id = await ticketEnRevision();
+    const ficha = await call('GET', `/${id}`);
+    const primera = ficha.payload.data.lines[0];
+
+    const establecida = await call('PATCH', `/${id}/items/${primera.id}`, {
+      name: 'Leche nueva',
+      quantity: 3,
+      unit: 'L',
+      category: 'dairy',
+      priceMinor: 599,
+      offer: { buy: 3, take: 2 },
+      note: 'revisado'
+    });
+    expect(establecida.status).toBe(200);
+
+    const limpiada = await call('PATCH', `/${id}/items/${primera.id}`, {
+      name: 'Leche nueva',
+      quantity: 3,
+      unit: null,
+      category: null,
+      priceMinor: null,
+      offer: null,
+      note: null
+    });
+    expect(limpiada.status).toBe(200);
+
+    const vacia = await call('PATCH', `/${id}/items/${primera.id}`, {});
+    expect(vacia.status).toBe(200);
+
+    const despues = await call('GET', `/${id}`);
+    expect(despues.payload.data.lines[0]).toMatchObject({
+      id: primera.id,
+      name: 'Leche nueva',
+      quantity: 3,
+      unit: null,
+      category: 'other',
+      priceMinor: null,
+      offer: null,
+      note: null
+    });
+  });
+
   it('confirmar registra la tienda, apunta el precio y sube la compra al inventario con SU categoria', async () => {
     const id = await ticketEnRevision();
     const confirmado = await call('POST', `/${id}/confirm`);
@@ -316,9 +417,102 @@ describe('la revision y el confirm', () => {
     const pan = db.prepare('SELECT * FROM ingredients WHERE name = ?').get('Pan de pueblo') as any;
     expect(pan.category).toBe('other');
 
-    // Confirmado es confirmado: no se reconfirma ni se edita.
+    // Confirmado no se puede confirmar otra vez; sus metadatos pueden corregirse sin repetir efectos.
     expect((await call('POST', `/${id}/confirm`)).status).toBe(409);
-    expect((await call('PATCH', `/${id}`, { store: 'Lidl' })).status).toBe(409);
+    expect((await call('PATCH', `/${id}`, { store: 'Lidl' })).status).toBe(200);
+  });
+
+  it('corrige tienda y fecha tras confirmar sin duplicar stock ni observaciones', async () => {
+    const id = await ticketEnRevision();
+    await call('PATCH', `/${id}`, { store: 'Mercadona Centro', purchaseDate: '2024-02-29' });
+    const confirmado = await call('POST', `/${id}/confirm`);
+    expect(confirmado.status).toBe(200);
+
+    const stockAntes = db.prepare('SELECT name, quantity FROM ingredients ORDER BY name').all();
+    const preciosAntes = db.prepare('SELECT COUNT(*) AS n FROM price_observations').get();
+    const correccion = await call('PATCH', `/${id}`, {
+      store: 'Tienda corregida',
+      purchaseDate: '2025-03-01'
+    });
+
+    expect(correccion.status).toBe(200);
+    expect(correccion.payload.data).toMatchObject({
+      status: 'confirmed',
+      store: 'Tienda corregida',
+      purchaseDate: '2025-03-01'
+    });
+    const reabierto = await call('GET', `/${id}`);
+    expect(reabierto.payload.data).toMatchObject({
+      store: 'Tienda corregida',
+      purchaseDate: '2025-03-01'
+    });
+    expect(
+      db.prepare('SELECT store_manual, purchase_date_manual FROM receipts WHERE id = ?').get(id)
+    ).toEqual({ store_manual: 1, purchase_date_manual: 1 });
+    expect(db.prepare('SELECT name, quantity FROM ingredients ORDER BY name').all()).toEqual(
+      stockAntes
+    );
+    expect(db.prepare('SELECT COUNT(*) AS n FROM price_observations').get()).toEqual(preciosAntes);
+  });
+
+  it('rechaza una fecha civil imposible y deja la ficha intacta', async () => {
+    const id = await ticketEnRevision();
+    await call('PATCH', `/${id}`, { store: 'Mercadona', purchaseDate: '2026-02-29' });
+
+    const before = await call('GET', `/${id}`);
+    const invalid = await call('PATCH', `/${id}`, { purchaseDate: '2026-02-29' });
+    const after = await call('GET', `/${id}`);
+
+    expect(invalid.status).toBe(400);
+    expect(after.payload.data.purchaseDate).toBe(before.payload.data.purchaseDate ?? null);
+    expect(after.payload.data.store).toBe(before.payload.data.store);
+  });
+
+  it('mantiene los metadatos aislados del ticket de otra persona', async () => {
+    const id = await ticketEnRevision();
+    const other = await makeUser(`other-${Math.random().toString(36).slice(2)}@test.local`);
+
+    const result = await call(
+      'PATCH',
+      `/${id}`,
+      { store: 'Intrusa', purchaseDate: '2024-02-29' },
+      other.token
+    );
+
+    expect(result.status).toBe(404);
+    expect((await call('GET', `/${id}`)).payload.data.store).toBe('Mercadona');
+    const otherHistory = await call('GET', '?scope=history', undefined, other.token);
+    expect(otherHistory.payload.data.map((receipt: any) => receipt.id)).not.toContain(id);
+  });
+
+  it('permite a otra persona del mismo hogar corregir los metadatos compartidos', async () => {
+    const householdId = 'house-receipts-metadata';
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      householdId,
+      'Casa sintética',
+      'invite-receipts-metadata'
+    );
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(householdId, alice.id);
+    const id = await ticketEnRevision();
+    const member = await makeUser(
+      `member-${Math.random().toString(36).slice(2)}@test.local`,
+      householdId
+    );
+
+    const updated = await call(
+      'PATCH',
+      `/${id}`,
+      { store: 'Tienda del hogar', purchaseDate: '2024-02-29' },
+      member.token
+    );
+
+    expect(updated.status).toBe(200);
+    expect(updated.payload.data).toMatchObject({
+      store: 'Tienda del hogar',
+      purchaseDate: '2024-02-29'
+    });
+    const sharedHistory = await call('GET', '?scope=history', undefined, member.token);
+    expect(sharedHistory.payload.data.map((receipt: any) => receipt.id)).toContain(id);
   });
 
   it('confirmar de nuevo con stock existente SUMA unidades en vez de duplicar la ficha', async () => {

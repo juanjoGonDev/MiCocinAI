@@ -49,6 +49,7 @@ function pintar(recibo: Record<string, any>, items: number) {
     id: recibo.id,
     status: recibo.status,
     store: recibo.store,
+    purchaseDate: recibo.purchase_date ?? null,
     currency: recibo.currency,
     totalMinor: recibo.total_minor,
     notes: recibo.notes,
@@ -157,16 +158,46 @@ receiptsRoutes.post('/queue/stop', async (c) => {
 receiptsRoutes.get('/', async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();
+  const scope = c.req.query('scope') ?? 'all';
+  if (scope !== 'all' && scope !== 'active' && scope !== 'history') {
+    return c.json(
+      { success: false, error: 'INVALID_SCOPE', message: 'Sección de tickets no válida' },
+      400
+    );
+  }
   const hogar = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
     { household_id: string | null } | undefined;
+  const scoped = scope !== 'all';
+  const parsedLimit = Number(c.req.query('limit'));
+  const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 50;
+  const parsedOffset = Number(c.req.query('offset'));
+  const offset = Number.isInteger(parsedOffset) && parsedOffset > 0 ? parsedOffset : 0;
+  const statusFilter =
+    scope === 'history'
+      ? "AND r.status IN ('review', 'confirmed', 'failed', 'stopped')"
+      : scope === 'active'
+        ? "AND r.status IN ('queued', 'analyzing')"
+        : '';
+  const order =
+    scope === 'history'
+      ? `ORDER BY CASE WHEN r.purchase_date IS NULL OR TRIM(r.purchase_date) = '' THEN 1 ELSE 0 END,
+                  r.purchase_date DESC, r.created_at DESC, r.id DESC`
+      : 'ORDER BY r.created_at DESC, r.id DESC';
+  const pageSize = scope === 'history' ? limit + 1 : 100;
   const recibos = db
     .prepare(
       `SELECT r.*, (SELECT COUNT(*) FROM receipt_items i WHERE i.receipt_id = r.id) AS items
-       FROM receipts r WHERE r.user_id = ? OR r.household_id = ?
-       ORDER BY r.created_at DESC LIMIT 100`
+       FROM receipts r WHERE (r.user_id = ? OR r.household_id = ?) ${statusFilter}
+       ${order} LIMIT ? OFFSET ?`
     )
-    .all(userId, hogar?.household_id ?? null) as any[];
-  return c.json({ success: true, data: recibos.map((recibo) => pintar(recibo, recibo.items)) });
+    .all(userId, hogar?.household_id ?? null, pageSize, scoped ? offset : 0) as any[];
+  const hasMore = scope === 'history' && recibos.length > limit;
+  const pagina = scope === 'history' ? recibos.slice(0, limit) : recibos;
+  return c.json({
+    success: true,
+    data: pagina.map((recibo) => pintar(recibo, recibo.items)),
+    ...(scope === 'history' ? { pagination: { offset, limit, hasMore } } : {})
+  });
 });
 
 receiptsRoutes.get('/:id', async (c) => {
@@ -219,23 +250,28 @@ receiptsRoutes.patch('/:id', async (c) => {
       { success: false, error: 'RECEIPT_NOT_FOUND', message: 'Ticket no encontrado' },
       404
     );
-  if (recibo.status === 'confirmed') {
+  // `formPartial` pierde el tipado fino a proposito (form.ts): el repo lo consume con casts tras
+  // el parse, y aqui igual —la validez la garantizo el esquema, no el tipo.
+  const input = updateReceiptSchema.parse(await c.req.json().catch(() => ({}))) as {
+    store?: string | null;
+    purchaseDate?: string | null;
+    notes?: string | null;
+  };
+  if (recibo.status === 'confirmed' && input.notes !== undefined) {
     return c.json(
       { success: false, error: 'RECEIPT_CONFIRMED', message: 'Un ticket confirmado no se retoca' },
       409
     );
   }
-  // `formPartial` pierde el tipado fino a proposito (form.ts): el repo lo consume con casts tras
-  // el parse, y aqui igual —la validez la garantizo el esquema, no el tipo.
-  const input = updateReceiptSchema.parse(await c.req.json().catch(() => ({}))) as {
-    store?: string | null;
-    notes?: string | null;
-  };
   const sets: string[] = [];
   const valores: unknown[] = [];
   if (input.store !== undefined) {
-    sets.push('store = ?');
+    sets.push('store = ?', 'store_manual = 1');
     valores.push(input.store?.trim() || null);
+  }
+  if (input.purchaseDate !== undefined) {
+    sets.push('purchase_date = ?', 'purchase_date_manual = 1');
+    valores.push(input.purchaseDate);
   }
   if (input.notes !== undefined) {
     sets.push('notes = ?');

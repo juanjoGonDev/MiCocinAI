@@ -691,18 +691,24 @@ async function correr(
       }
 
       const tienda = validado.data.store?.trim() || null;
-      if (tienda) registrarTienda(db, userId, tienda);
       db.prepare(
-        `UPDATE receipts SET status = 'review', store = COALESCE(?, store), currency = ?, total_minor = ?,
+        `UPDATE receipts SET status = 'review',
+           store = CASE WHEN store_manual = 1 THEN store ELSE ? END,
+           purchase_date = CASE WHEN purchase_date_manual = 1 THEN purchase_date ELSE ? END,
+           currency = ?, total_minor = ?,
            warnings = ?, error_code = NULL, error_detail = NULL, updated_at = CURRENT_TIMESTAMP
          WHERE id = ? AND status = 'analyzing'`
       ).run(
         tienda,
+        validado.data.purchaseDate,
         validado.data.currency ?? 'EUR',
         validado.data.totalMinor ?? null,
         JSON.stringify(validado.data.warnings ?? []),
         recibo.id
       );
+      const tiendaFinal = db.prepare('SELECT store FROM receipts WHERE id = ?').get(recibo.id) as
+        { store: string | null } | undefined;
+      if (tiendaFinal?.store) registrarTienda(db, userId, tiendaFinal.store);
       db.prepare(
         `UPDATE ai_jobs SET status = 'done', finished_at = CURRENT_TIMESTAMP, lease_until = NULL
          WHERE id = ? AND status = 'running' AND claim_generation = ?`

@@ -460,6 +460,7 @@ describe('AI provider queue dispatcher', () => {
           { name: 'Pan', priceMinor: 150 }
         ],
         store: 'Mercado sintético',
+        purchaseDate: '2024-02-29',
         currency: 'EUR',
         totalMinor: 650,
         warnings: []
@@ -494,11 +495,14 @@ describe('AI provider queue dispatcher', () => {
       });
       expect(
         db
-          .prepare('SELECT status, store, currency, total_minor FROM receipts WHERE id = ?')
+          .prepare(
+            'SELECT status, store, purchase_date, currency, total_minor FROM receipts WHERE id = ?'
+          )
           .get(receiptId)
       ).toMatchObject({
         status: 'review',
         store: 'Mercado sintético',
+        purchase_date: '2024-02-29',
         currency: 'EUR',
         total_minor: 650
       });
@@ -515,6 +519,45 @@ describe('AI provider queue dispatcher', () => {
       expect(db.prepare('SELECT name FROM stores WHERE user_id = ?').get(userId)).toMatchObject({
         name: 'Mercado sintético'
       });
+
+      const manualReceiptId = 'synthetic-manual-receipt';
+      db.prepare(
+        `INSERT INTO receipts
+          (id, user_id, status, file_url, file_kind, store, store_manual,
+           purchase_date, purchase_date_manual)
+         VALUES (?, ?, 'queued', ?, 'png', 'Tienda manual', 1, NULL, 1)`
+      ).run(manualReceiptId, userId, fileUrl);
+      const manualAnswer = {
+        lines: [],
+        store: 'Tienda inventada por IA',
+        purchaseDate: '2020-12-01',
+        currency: 'EUR',
+        totalMinor: 0,
+        warnings: []
+      };
+      const manualFrames = [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(manualAnswer) } }] })}\n\n`,
+        'data: [DONE]\n\n'
+      ].join('');
+      vi.mocked(fetch).mockResolvedValueOnce(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(encoder.encode(manualFrames));
+              controller.close();
+            }
+          }),
+          { status: 200, headers: { 'content-type': 'text/event-stream' } }
+        )
+      );
+      const manualJobId = encolarTicket(db, userId, manualReceiptId);
+      await waitFor(() => jobRow(manualJobId).status === 'done');
+      expect(
+        db.prepare('SELECT store, purchase_date FROM receipts WHERE id = ?').get(manualReceiptId)
+      ).toEqual({ store: 'Tienda manual', purchase_date: null });
+      expect(
+        db.prepare('SELECT COUNT(*) AS n FROM stores WHERE name = ?').get('Tienda inventada por IA')
+      ).toEqual({ n: 0 });
     } finally {
       stopWorker();
       process.env.DATABASE_PATH = originalDatabasePath ?? ':memory:';

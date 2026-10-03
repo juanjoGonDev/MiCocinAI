@@ -1,4 +1,4 @@
-import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule, DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -83,7 +83,13 @@ interface LineaEnPantalla extends ReceiptItem {
             </h1>
             <div class="ficha__meta">
               <app-badge [variant]="variante(t.status)">{{ estado(t.status) | t }}</app-badge>
-              <span class="ficha__fecha">{{ t.createdAt | date: 'short' }}</span>
+              <span class="ficha__fecha">
+                {{ 'receipts.fecha_compra' | t }}:
+                {{ t.purchaseDate || ('receipts.fecha_no_detectada' | t) }}
+              </span>
+              <span class="ficha__fecha"
+                >{{ 'receipts.subido' | t }}: {{ t.createdAt | date: 'short' }}</span
+              >
               <a class="ficha__fichero" [href]="t.fileUrl" target="_blank" rel="noopener">
                 <app-icon
                   [name]="t.fileKind === 'pdf' ? 'description' : 'receipt_long'"
@@ -150,8 +156,8 @@ interface LineaEnPantalla extends ReceiptItem {
           </section>
         }
 
-        <!-- La cabecera corregible: tienda y notas. -->
-        @if (revisable(t.status)) {
+        <!-- Tienda y fecha siguen corregibles en el historial; las notas solo en revisión. -->
+        @if (metadatosEditables(t.status)) {
           <section class="ficha__cabecera">
             <div class="ficha__campo">
               <app-input
@@ -160,19 +166,53 @@ interface LineaEnPantalla extends ReceiptItem {
                 type="text"
                 [label]="'receipts.tienda' | t"
                 [placeholder]="'receipts.tienda_no_detectada' | t"
-                [ngModel]="t.store ?? ''"
-                (ngModelChange)="guardarTienda($event)"
+                [ngModel]="tiendaDraft()"
+                (ngModelChange)="cambiarTienda($event)"
               />
             </div>
             <div class="ficha__campo">
               <app-input
-                id="ticket-notas"
-                name="notes"
-                type="text"
-                [label]="'receipts.notas' | t"
-                [ngModel]="t.notes ?? ''"
-                (ngModelChange)="guardarNotas($event)"
+                id="ticket-fecha-compra"
+                name="purchaseDate"
+                type="date"
+                [label]="'receipts.fecha_compra' | t"
+                [ngModel]="fechaCompraDraft()"
+                (ngModelChange)="cambiarFechaCompra($event)"
               />
+            </div>
+            @if (revisable(t.status)) {
+              <div class="ficha__campo">
+                <app-input
+                  id="ticket-notas"
+                  name="notes"
+                  type="text"
+                  [label]="'receipts.notas' | t"
+                  [ngModel]="t.notes ?? ''"
+                  (ngModelChange)="guardarNotas($event)"
+                />
+              </div>
+            }
+            <div class="ficha__metadatos-acciones">
+              <app-button
+                variant="outline"
+                type="button"
+                [disabled]="!metadatosCambiados() || metadatosGuardando()"
+                [loading]="metadatosGuardando()"
+                (onClick)="guardarMetadatos()"
+                data-test="save-receipt-metadata"
+              >
+                {{ 'receipts.guardar_metadatos' | t }}
+              </app-button>
+              @if (metadatosGuardados()) {
+                <span role="status" class="ficha__metadatos-estado">
+                  {{ 'receipts.metadatos_guardados' | t }}
+                </span>
+              }
+              @if (errorMetadatos()) {
+                <span role="alert" class="ficha__metadatos-error">
+                  {{ 'receipts.metadatos_error' | t }}
+                </span>
+              }
             </div>
           </section>
         } @else if (t.store) {
@@ -462,6 +502,27 @@ interface LineaEnPantalla extends ReceiptItem {
       .ficha__fichero {
         font-size: var(--text-xs, 12px);
         color: var(--text-secondary);
+      }
+
+      .ficha__metadatos-acciones {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: var(--space-2, 8px);
+      }
+
+      .ficha__metadatos-estado,
+      .ficha__metadatos-error {
+        font-size: var(--text-sm, 14px);
+      }
+
+      .ficha__metadatos-estado {
+        color: var(--success, #3e9e5b);
+      }
+
+      .ficha__metadatos-error {
+        color: var(--danger, #d64545);
       }
 
       .ficha__fichero {
@@ -823,6 +884,11 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
   private readonly i18n = inject(I18nService);
 
   readonly confirmando = signal(false);
+  readonly tiendaDraft = signal('');
+  readonly fechaCompraDraft = signal('');
+  readonly metadatosGuardando = signal(false);
+  readonly metadatosGuardados = signal(false);
+  readonly errorMetadatos = signal(false);
   readonly resultado = signal<{
     pricesRecorded: number;
     pantryMoved: number;
@@ -848,6 +914,14 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
     if (!t || t.totalMinor === null) return true;
     return t.totalMinor === this.suma();
   });
+  readonly metadatosCambiados = computed(() => {
+    const receipt = this.ticket();
+    if (!receipt) return false;
+    return (
+      (this.tiendaDraft().trim() || null) !== receipt.store ||
+      (this.fechaCompraDraft() || null) !== receipt.purchaseDate
+    );
+  });
 
   /** Categorias de la despensa: el vocabulario de la revision. */
   readonly opcionesCategoria = computed(() =>
@@ -861,9 +935,18 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
   private readonly id: string;
   private pollActivo = false;
   private lineasPrevias = 0;
+  private metadatosInicializadosPara: string | null = null;
 
   constructor() {
     this.id = String(this.route.snapshot.paramMap.get('id') ?? '');
+    effect(() => {
+      const receipt = this.service.receipt();
+      if (!receipt || receipt.id !== this.id || this.metadatosInicializadosPara === receipt.id)
+        return;
+      this.metadatosInicializadosPara = receipt.id;
+      this.tiendaDraft.set(receipt.store ?? '');
+      this.fechaCompraDraft.set(receipt.purchaseDate ?? '');
+    });
   }
 
   ngOnInit(): void {
@@ -906,6 +989,12 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
 
   revisable = revisable;
 
+  metadatosEditables(status: ReceiptStatus): boolean {
+    return (
+      status === 'review' || status === 'confirmed' || status === 'failed' || status === 'stopped'
+    );
+  }
+
   nombreCategoria(clave: string): string {
     return this.pantry.categories().find((categoria) => categoria.key === clave)?.name ?? clave;
   }
@@ -934,8 +1023,40 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
 
   // ------------------------------------------------------------ ediciones
 
-  async guardarTienda(valor: string): Promise<void> {
-    await this.service.updateReceipt(this.id, { store: valor.trim() || null });
+  private cambiarMetadatos(): void {
+    this.metadatosGuardados.set(false);
+    this.errorMetadatos.set(false);
+  }
+
+  cambiarTienda(valor: string): void {
+    this.tiendaDraft.set(valor);
+    this.cambiarMetadatos();
+  }
+
+  cambiarFechaCompra(valor: string): void {
+    this.fechaCompraDraft.set(valor);
+    this.cambiarMetadatos();
+  }
+
+  async guardarMetadatos(): Promise<void> {
+    const current = this.ticket();
+    if (!current || !this.metadatosCambiados() || this.metadatosGuardando()) return;
+    const input: { store?: string | null; purchaseDate?: string | null } = {};
+    const store = this.tiendaDraft().trim() || null;
+    const purchaseDate = this.fechaCompraDraft() || null;
+    if (store !== current.store) input.store = store;
+    if (purchaseDate !== current.purchaseDate) input.purchaseDate = purchaseDate;
+
+    this.metadatosGuardando.set(true);
+    this.metadatosGuardados.set(false);
+    this.errorMetadatos.set(false);
+    const updated = await this.service.updateReceipt(this.id, input);
+    this.metadatosGuardando.set(false);
+    if (!updated) {
+      this.errorMetadatos.set(true);
+      return;
+    }
+    this.metadatosGuardados.set(true);
   }
 
   async guardarNotas(valor: string): Promise<void> {

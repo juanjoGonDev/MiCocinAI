@@ -11,6 +11,7 @@ import {
   ReceiptDetail,
   ReceiptItem,
   ReceiptJob,
+  ReceiptHistoryPage,
   ReceiptQueueSnapshot
 } from '../../shared/models/receipt.model';
 
@@ -38,6 +39,13 @@ export class ReceiptsService {
   /** La bandeja completa (estados incluidos). */
   readonly receipts = signal<Receipt[]>([]);
   readonly loading = signal(false);
+  readonly history = signal<Receipt[]>([]);
+  readonly historyLoading = signal(false);
+  readonly historyHasMore = signal(false);
+  readonly historyError = signal(false);
+  private historyOffset = 0;
+  private readonly historyPageSize = 50;
+  private historyRetryReset = true;
 
   /** La ficha abierta y su trabajo. */
   readonly receipt = signal<ReceiptDetail | null>(null);
@@ -96,7 +104,7 @@ export class ReceiptsService {
   loadReceipts(): void {
     this.loading.set(true);
     this.http
-      .get<{ data: Receipt[] }>(this.apiUrl)
+      .get<{ data: Receipt[] }>(`${this.apiUrl}?scope=active&limit=100`)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
@@ -105,6 +113,48 @@ export class ReceiptsService {
         },
         error: () => this.loading.set(false)
       });
+  }
+
+  loadHistory(reset = true): void {
+    if (this.historyLoading()) return;
+    if (!reset && !this.historyHasMore()) return;
+    const offset = reset ? 0 : this.historyOffset;
+    this.historyRetryReset = reset;
+    this.historyError.set(false);
+    this.historyLoading.set(true);
+    this.http
+      .get<ReceiptHistoryPage>(
+        `${this.apiUrl}?scope=history&limit=${this.historyPageSize}&offset=${offset}`
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          const currentIds = new Set(this.history().map((receipt) => receipt.id));
+          this.history.set(
+            reset
+              ? response.data
+              : [
+                  ...this.history(),
+                  ...response.data.filter((receipt) => !currentIds.has(receipt.id))
+                ]
+          );
+          this.historyOffset = response.pagination.offset + response.data.length;
+          this.historyHasMore.set(response.pagination.hasMore);
+          this.historyLoading.set(false);
+        },
+        error: () => {
+          this.historyError.set(true);
+          this.historyLoading.set(false);
+        }
+      });
+  }
+
+  loadMoreHistory(): void {
+    this.loadHistory(false);
+  }
+
+  retryHistory(): void {
+    this.loadHistory(this.historyError() ? this.historyRetryReset : this.history().length === 0);
   }
 
   /** Sube un ticket (imagen o PDF, ≤10 MB): entra en la cola y vuelve ya con su id. */
@@ -143,13 +193,26 @@ export class ReceiptsService {
 
   updateReceipt(
     id: string,
-    input: { store?: string | null; notes?: string | null }
+    input: { store?: string | null; purchaseDate?: string | null; notes?: string | null }
   ): Promise<Receipt | null> {
     return this.first<Receipt>(
       this.http
         .patch<{ data: Receipt }>(`${this.apiUrl}/${id}`, input)
         .pipe(map((response) => response.data))
-    );
+    ).then((updated) => {
+      if (updated) {
+        this.receipt.update((current) =>
+          current?.id === id ? { ...current, ...updated } : current
+        );
+        this.receipts.update((current) =>
+          current.map((receipt) => (receipt.id === id ? updated : receipt))
+        );
+        this.history.update((current) =>
+          current.map((receipt) => (receipt.id === id ? updated : receipt))
+        );
+      }
+      return updated;
+    });
   }
 
   deleteReceipt(id: string): Promise<unknown> {
@@ -224,7 +287,7 @@ export class ReceiptsService {
         });
       });
     } catch {
-      this.toast.error(this.i18n.t('ui.error'), this.i18n.t('receipts.no_se_ha_podido'));
+      this.toast.error(this.i18n.t('ui.error'), this.i18n.t('receipts.error_operacion'));
       return null;
     }
   }

@@ -85,52 +85,151 @@ const ESTADO_VARIANTE: Record<
         <p class="tickets__error" data-test="ticket-upload-error">{{ errorSubida() }}</p>
       }
 
-      @if (service.loading()) {
-        <app-loading />
-      } @else if (service.receipts().length === 0) {
+      @if (
+        !service.loading() &&
+        !service.historyLoading() &&
+        service.receipts().length === 0 &&
+        service.history().length === 0
+      ) {
         <div class="tickets__vacio">
           <span class="tickets__vacio-title">{{ 'receipts.sin_tickets' | t }}</span>
           <span class="tickets__vacio-hint">{{ 'receipts.sin_tickets_hint' | t }}</span>
         </div>
-      } @else {
-        <ul class="tickets__lista">
-          @for (ticket of service.receipts(); track ticket.id) {
-            <li class="ticket" [attr.data-test]="'ticket-' + ticket.status">
-              <a class="ticket__main" [routerLink]="['/receipts', ticket.id]">
-                <span class="ticket__icono">
-                  <app-icon
-                    [name]="ticket.fileKind === 'pdf' ? 'description' : 'receipt_long'"
-                    [size]="20"
-                    [label]="null"
-                  />
-                </span>
-                <span class="ticket__datos">
-                  <span class="ticket__nombre">{{
-                    ticket.store || ticket.fileName || ('receipts.abrir_ticket' | t)
-                  }}</span>
-                  <span class="ticket__meta">
-                    {{ ticket.createdAt | date: 'short' }} ·
-                    {{
-                      ticket.items === 1
-                        ? ('receipts.una_linea' | t)
-                        : ('receipts.lineas' | t: { n: ticket.items })
-                    }}
+      }
+
+      @if (service.receipts().length > 0) {
+        <section class="tickets__seccion" aria-labelledby="tickets-active-heading">
+          <h2 class="tickets__section-title" id="tickets-active-heading">
+            {{ 'receipts.en_curso' | t }}
+          </h2>
+          <ul class="tickets__lista">
+            @for (ticket of service.receipts(); track ticket.id) {
+              <li class="ticket" [attr.data-test]="'ticket-' + ticket.status">
+                <a class="ticket__main" [routerLink]="['/receipts', ticket.id]">
+                  <span class="ticket__icono">
+                    <app-icon
+                      [name]="ticket.fileKind === 'pdf' ? 'description' : 'receipt_long'"
+                      [size]="20"
+                      [label]="null"
+                    />
                   </span>
-                </span>
-              </a>
-              <div class="ticket__lado">
-                @if (ticket.totalMinor !== null) {
-                  <span class="ticket__total"
-                    >{{ ticket.totalMinor / 100 | number: '1.2-2' }} €</span
-                  >
-                }
-                <app-badge [variant]="variante(ticket.status)">{{
-                  estado(ticket.status) | t
-                }}</app-badge>
-              </div>
-            </li>
-          }
-        </ul>
+                  <span class="ticket__datos">
+                    <span class="ticket__nombre">{{
+                      ticket.store || ticket.fileName || ('receipts.abrir_ticket' | t)
+                    }}</span>
+                    <span class="ticket__meta">
+                      {{ 'receipts.subido' | t }}: {{ ticket.createdAt | date: 'short' }} ·
+                      {{
+                        ticket.items === 1
+                          ? ('receipts.una_linea' | t)
+                          : ('receipts.lineas' | t: { n: ticket.items })
+                      }}
+                    </span>
+                  </span>
+                </a>
+                <div class="ticket__lado">
+                  @if (ticket.totalMinor !== null) {
+                    <span class="ticket__total"
+                      >{{ ticket.totalMinor / 100 | number: '1.2-2' }} €</span
+                    >
+                  }
+                  <app-badge [variant]="variante(ticket.status)">{{
+                    estado(ticket.status) | t
+                  }}</app-badge>
+                </div>
+              </li>
+            }
+          </ul>
+        </section>
+      }
+
+      <section
+        class="tickets__seccion"
+        aria-labelledby="tickets-history-heading"
+        data-test="receipt-history"
+      >
+        <h2 class="tickets__section-title" id="tickets-history-heading">
+          {{ 'receipts.historial' | t }}
+        </h2>
+        @if (service.history().length > 0) {
+          <ul class="tickets__lista">
+            @for (ticket of service.history(); track ticket.id) {
+              <li class="ticket" data-test="ticket-history-item">
+                <a class="ticket__main" [routerLink]="['/receipts', ticket.id]">
+                  <span class="ticket__icono">
+                    <app-icon
+                      [name]="ticket.fileKind === 'pdf' ? 'description' : 'receipt_long'"
+                      [size]="20"
+                      [label]="null"
+                    />
+                  </span>
+                  <span class="ticket__datos">
+                    <span class="ticket__nombre">{{
+                      ticket.store || ticket.fileName || ('receipts.abrir_ticket' | t)
+                    }}</span>
+                    <span class="ticket__meta">
+                      {{ 'receipts.fecha_compra' | t }}:
+                      {{
+                        ticket.purchaseDate
+                          ? (ticket.purchaseDate | date: 'shortDate')
+                          : ('receipts.fecha_no_detectada' | t)
+                      }}
+                      · {{ 'receipts.subido' | t }}: {{ ticket.createdAt | date: 'short' }} ·
+                      {{
+                        ticket.items === 1
+                          ? ('receipts.una_linea' | t)
+                          : ('receipts.lineas' | t: { n: ticket.items })
+                      }}
+                    </span>
+                  </span>
+                </a>
+                <div class="ticket__lado">
+                  @if (ticket.totalMinor !== null) {
+                    <span class="ticket__total"
+                      >{{ ticket.totalMinor / 100 | number: '1.2-2' }} €</span
+                    >
+                  }
+                  <app-badge [variant]="variante(ticket.status)">{{
+                    estado(ticket.status) | t
+                  }}</app-badge>
+                </div>
+              </li>
+            }
+          </ul>
+        } @else if (!service.historyLoading() && !service.historyError()) {
+          <p class="tickets__history-empty">{{ 'receipts.historial_vacio' | t }}</p>
+        }
+        @if (service.historyError()) {
+          <div class="tickets__history-error" role="alert">
+            <span>{{ 'receipts.historial_error' | t }}</span>
+            <app-button
+              variant="outline"
+              size="sm"
+              type="button"
+              (onClick)="service.retryHistory()"
+            >
+              {{ 'receipts.reintentar_historial' | t }}
+            </app-button>
+          </div>
+        }
+        @if (service.historyHasMore()) {
+          <app-button
+            variant="outline"
+            type="button"
+            [loading]="service.historyLoading()"
+            (onClick)="service.loadMoreHistory()"
+            data-test="load-more-history"
+          >
+            {{ 'receipts.cargar_mas_historial' | t }}
+          </app-button>
+        }
+      </section>
+
+      @if (
+        (service.loading() && service.receipts().length === 0) ||
+        (service.historyLoading() && service.history().length === 0)
+      ) {
+        <app-loading />
       }
     </div>
   `,
@@ -147,6 +246,18 @@ const ESTADO_VARIANTE: Record<
       .tickets__head {
         display: grid;
         gap: 4px;
+      }
+
+      .tickets__seccion {
+        display: grid;
+        gap: var(--space-3, 12px);
+      }
+
+      .tickets__section-title {
+        margin: 0;
+        font-size: var(--text-lg, 18px);
+        font-weight: var(--font-semibold, 600);
+        color: var(--text-primary);
       }
 
       .tickets__title {
@@ -233,6 +344,22 @@ const ESTADO_VARIANTE: Record<
       .tickets__vacio-hint {
         font-size: var(--text-sm, 14px);
         color: var(--text-secondary);
+      }
+
+      .tickets__history-empty,
+      .tickets__history-error {
+        margin: 0;
+        font-size: var(--text-sm, 14px);
+        color: var(--text-secondary);
+      }
+
+      .tickets__history-error {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-2, 8px);
+        color: var(--danger, #d64545);
       }
 
       .tickets__lista {
@@ -337,8 +464,11 @@ export class ReceiptsComponent implements OnInit, OnDestroy {
     if (firma === this.firmaDeCola) return;
     const primera = this.firmaDeCola === '';
     this.firmaDeCola = firma;
-    // La primera foto de la cola no dispara nada: la lista ya se acaba de cargar.
-    if (!primera && firma !== '') this.service.loadReceipts();
+    // La primera foto de la cola no dispara una recarga: ambas secciones ya se están cargando.
+    if (!primera) {
+      this.service.loadReceipts();
+      this.service.loadHistory();
+    }
   });
 
   readonly arrastrando = signal(false);
@@ -348,6 +478,7 @@ export class ReceiptsComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.service.watch();
     this.service.loadReceipts();
+    this.service.loadHistory();
   }
 
   ngOnDestroy(): void {
@@ -404,6 +535,9 @@ export class ReceiptsComponent implements OnInit, OnDestroy {
     this.subiendo.set(false);
     if (subido) {
       this.service.loadReceipts();
+      // La primera lectura de la cola puede llegar cuando el trabajo ya está creado y no
+      // dispara el efecto de cambios; recarga también el historial tras aceptar el fichero.
+      this.service.loadHistory();
       void this.service.refreshQueue().subscribe(() => undefined);
     } else {
       this.errorSubida.set(this.translate('receipts.no_se_ha_podido'));

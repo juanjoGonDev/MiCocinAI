@@ -4,7 +4,11 @@ import { config } from './app.config.js';
 import * as schema from '../models/schema.js';
 import { existsSync, mkdirSync, renameSync } from 'fs';
 import { dirname, join } from 'path';
-import { backfillHouseholdSeeds, backfillUserSeeds, asegurarPadreAlimentosTodas } from '../utils/seed-data.js';
+import {
+  backfillHouseholdSeeds,
+  backfillUserSeeds,
+  asegurarPadreAlimentosTodas
+} from '../utils/seed-data.js';
 
 let db: Database.Database;
 let drizzleDb: ReturnType<typeof drizzle>;
@@ -488,6 +492,9 @@ async function runMigrations(db: Database.Database): Promise<void> {
       household_id TEXT,
       status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'analyzing', 'review', 'confirmed', 'failed', 'stopped')),
       store TEXT,
+      store_manual INTEGER NOT NULL DEFAULT 0,
+      purchase_date TEXT,
+      purchase_date_manual INTEGER NOT NULL DEFAULT 0,
       currency TEXT,
       total_minor INTEGER,
       notes TEXT,
@@ -585,7 +592,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // Auto-migrations: add columns that may be missing in older databases
   const addColumnIfMissing = (table: string, column: string, definition: string) => {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
-    if (!cols.some(c => c.name === column)) {
+    if (!cols.some((c) => c.name === column)) {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
       console.log(`[DB] Added ${table}.${column}`);
     }
@@ -594,7 +601,9 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // por producto rechazaria 'product' con un error de constraint, y ese fallo no se ve
   // hasta que alguien intenta guardarlo. Se reconstruye la tabla si el CHECK es viejo.
   const discountTable = db
-    .prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'shopping_list_discounts'`)
+    .prepare(
+      `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'shopping_list_discounts'`
+    )
     .get() as { sql: string | null } | undefined;
   if (discountTable?.sql && !discountTable.sql.includes("'product'")) {
     db.exec(`
@@ -622,7 +631,10 @@ async function runMigrations(db: Database.Database): Promise<void> {
 
   addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
   addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
-  addColumnIfMissing('household_members', 'permissions', 'TEXT DEFAULT \'{}\'');
+  addColumnIfMissing('receipts', 'store_manual', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing('receipts', 'purchase_date', 'TEXT');
+  addColumnIfMissing('receipts', 'purchase_date_manual', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing('household_members', 'permissions', "TEXT DEFAULT '{}'");
   // Recurrencia de las sueltas (HOGARIA-SPEC 12t-R). En una base con filas no se puede anadir el CHECK
   // —ALTER TABLE no puede restringir lo que ya existe—, asi que en las viejas la cadencia la sujeta
   // el schema de entrada, y la expansion ignora un valor desconocido en vez de romper la lectura.
@@ -653,7 +665,8 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // la configuracion activa que mejor representa el comportamiento anterior; no se vuelve a
   // consultar la activa al despachar. Los jobs sin configuracion quedan sin config_id y fallan
   // de forma explicita al procesarse, en vez de adoptar una clave futura silenciosamente.
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE ai_jobs
        SET config_id = (
          SELECT id FROM ai_configs
@@ -662,7 +675,8 @@ async function runMigrations(db: Database.Database): Promise<void> {
        )
      WHERE ai_jobs.kind = 'receipt' AND ai_jobs.config_id IS NULL
        AND ai_jobs.status IN ('queued', 'running')
-  `).run();
+  `
+  ).run();
   db.exec(`
     CREATE INDEX IF NOT EXISTS idx_ai_jobs_provider_queue
       ON ai_jobs(config_id, status, queue_order, created_at);

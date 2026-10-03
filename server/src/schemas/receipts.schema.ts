@@ -22,6 +22,24 @@ const offerTicket = formField(
     })
 );
 
+const purchaseDateValueSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha de compra: usa AAAA-MM-DD')
+  .refine((value) => {
+    const [, yearText, monthText, dayText] = value.match(/^(\d{4})-(\d{2})-(\d{2})$/) ?? [];
+    if (!yearText || !monthText || !dayText) return false;
+
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    if (year < 1 || month < 1 || month > 12) return false;
+
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    return day >= 1 && day <= daysInMonth[month - 1]!;
+  }, 'Fecha de compra: el día no existe en ese mes');
+const purchaseDateSchema = z.union([purchaseDateValueSchema, z.null()]);
+
 /** Lo que el modelo contesta al leer un ticket. */
 export const ticketAnswerSchema = z.object({
   lines: z
@@ -43,6 +61,8 @@ export const ticketAnswerSchema = z.object({
     )
     .max(300),
   store: formField(z.string().trim().max(80)),
+  // Required key with an explicit null when the ticket has no readable purchase date.
+  purchaseDate: purchaseDateSchema,
   currency: formField(z.enum(['EUR', 'eur'])),
   totalMinor: formField(z.coerce.number().int().min(0).max(100_000_000)),
   warnings: formField(z.array(z.string().trim().max(280)).max(20))
@@ -67,6 +87,7 @@ export const updateReceiptItemSchema = formPartial(receiptItemInput);
 export const updateReceiptSchema = formPartial(
   z.object({
     store: formField(z.string().trim().max(80)),
+    purchaseDate: purchaseDateSchema,
     notes: formField(z.string().trim().max(500))
   })
 );

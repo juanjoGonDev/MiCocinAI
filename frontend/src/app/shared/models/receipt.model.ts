@@ -35,6 +35,7 @@ export interface Receipt {
   id: string;
   status: ReceiptStatus;
   store: string | null;
+  purchaseDate: string | null;
   currency: string | null;
   totalMinor: number | null;
   notes: string | null;
@@ -47,6 +48,11 @@ export interface Receipt {
   updatedAt: string;
   confirmedAt: string | null;
   items: number;
+}
+
+export interface ReceiptHistoryPage {
+  data: Receipt[];
+  pagination: { offset: number; limit: number; hasMore: boolean };
 }
 
 export interface ReceiptDetail extends Receipt {

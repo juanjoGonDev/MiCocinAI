@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1, QA-AUTH.PW-LIMIT.1, QA-ACCOUNT.DRAFT.1, QA-05.PATH.1, QA-SHOP-MOBILE.CTA.1, QA-ACCOUNT.E2E-TARGETS.1, QA-ACCOUNT.TABS.1, QA-ACCOUNT.PASSWORD.ERROR.1 y QA-AUTH.FORGOT.1 tienen regresiones verificadas localmente. QA-ONBOARDING.PANTRY-LINK.1 se resolvió con E2E desktop/móvil; ver evidencia abajo. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-RECIPES.AI-FLOW.1 pasa pruebas funcionales locales desktop/móvil; su cierre queda pendiente junto al gate de cobertura global frontend. QA-AI.PROVIDER-QUEUE.1 está implementada en HOGARIA-SPEC.md §12an y validada de nuevo en Chromium/Pixel 5 aislados (12/12); su gestor está en una ruta por proveedor, no embebido en la lista. QA-PREFERENCES.CUSTOM-LIMIT.1 está implementada y verificada abajo; QA-PREFERENCES.WIDTH.1 está implementada y verificada abajo. QA-HOUSEHOLD.ACTION-ACK.1 quedó verificada con Playwright Chromium/Pixel 5 aislado (12/12); ver evidencia abajo. La repetición del baseline recorrió las 28 rutas configuradas en 5 viewports, sin errores app-origin ni overflow; Google Fonts sigue bloqueada por el entorno. La recuperación de contraseña permanece sin entrega de correo/token; la UI lo comunica sin prometer un enlace. El barrido funcional completo sigue pendiente; QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx. QA-04c.ERROR-INTERCEPTOR.1 añade cobertura focal completa de la frontera HTTP común; la última suite frontend completa registrada fue **870/870** tests con coverage **76.58/63.69/74.77/78.15 % S/B/F/L**. Hay cambios/pruebas posteriores en la working tree: la suite completa debe repetirse antes de afirmar cifras actuales; el gate global de 80 % sigue abierto y branches no alcanzan el mínimo solicitado de 70 %. QA-RECEIPT.METADATA-HISTORY.1, QA-AI.REAL-INTEGRATIONS.1 y QA-LAYOUT.CONTENT-GUTTERS.1 quedan abiertas.
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1, QA-AUTH.PW-LIMIT.1, QA-ACCOUNT.DRAFT.1, QA-05.PATH.1, QA-SHOP-MOBILE.CTA.1, QA-ACCOUNT.E2E-TARGETS.1, QA-ACCOUNT.TABS.1, QA-ACCOUNT.PASSWORD.ERROR.1 y QA-AUTH.FORGOT.1 tienen regresiones verificadas localmente. QA-ONBOARDING.PANTRY-LINK.1 se resolvió con E2E desktop/móvil; ver evidencia abajo. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-RECIPES.AI-FLOW.1 pasa pruebas funcionales locales desktop/móvil; su cierre queda pendiente junto al gate de cobertura global frontend. QA-AI.PROVIDER-QUEUE.1 está implementada en HOGARIA-SPEC.md §12an y validada de nuevo en Chromium/Pixel 5 aislados (12/12); su gestor está en una ruta por proveedor, no embebido en la lista. QA-PREFERENCES.CUSTOM-LIMIT.1 está implementada y verificada abajo; QA-PREFERENCES.WIDTH.1 está implementada y verificada abajo. QA-HOUSEHOLD.ACTION-ACK.1 quedó verificada con Playwright Chromium/Pixel 5 aislado (12/12); ver evidencia abajo. La repetición del baseline recorrió las 28 rutas configuradas en 5 viewports, sin errores app-origin ni overflow; Google Fonts sigue bloqueada por el entorno. La recuperación de contraseña permanece sin entrega de correo/token; la UI lo comunica sin prometer un enlace. El barrido funcional completo sigue pendiente; QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx. QA-04c.ERROR-INTERCEPTOR.1 añade cobertura focal completa de la frontera HTTP común; la revalidación completa más reciente (2026-10-03) ejecutó **907/907** tests con coverage **77.41/64.50/75.64/78.99 % S/B/F/L**. El gate global de 80 % sigue abierto y branches no alcanzan el mínimo solicitado de 70 %. QA-RECEIPT.METADATA-HISTORY.1 quedó verificada localmente; siguen abiertos QA-AI.REAL-INTEGRATIONS.1 y QA-LAYOUT.CONTENT-GUTTERS.1.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-03
 
@@ -1438,33 +1438,120 @@ abrir todos los tickets con procesamiento terminado (`review`, `confirmed`, `fai
 los trabajos en curso; paginar es válido si se puede recorrer la colección completa. Ámbitos de hogar,
 usuario y propiedad de adjuntos deben mantenerse.
 
-- [ ] Escribir primero regresiones unitarias para prompt/validación/serialización: tienda detectada,
+Un error al consultar historial no equivale a una respuesta vacía: «sin tickets» solo aparece tras una
+carga exitosa sin resultados; en error se muestra el aviso accesible y se conserva el reintento.
+
+- [x] Escribir primero regresiones unitarias para prompt/validación/serialización: tienda detectada,
       fecha válida, fecha ausente, fecha civil imposible, año bisiesto y respuesta malformada. La fecha
       ausente nunca usa el timestamp de carga como fallback.
-- [ ] Añadir primero regresiones de rutas/SQLite en DB temporal: migración aditiva a `purchase_date`
+
+**TDD unitario (2026-10-03):** el rojo de `src/schemas/receipts.schema.spec.ts` y
+`src/utils/ticket-prompt.spec.ts` produjo 11 fallos y 3 pases antes de producción: faltaba la fecha
+en el contrato del prompt/esquema, se aceptaban días imposibles y no se rechazaba una respuesta sin
+`purchaseDate` aunque incluyera `created_at`. Tras añadir fecha civil requerida o `null` y las reglas
+del prompt, `pnpm --filter @hogaria/server exec vitest run src/schemas/receipts.schema.spec.ts
+src/utils/ticket-prompt.spec.ts` pasa **14/14**. La ejecución inicial aislada bloqueó el subproceso
+esbuild (`EPERM`); el mismo test focal pasó con ejecución local aprobada. Esta evidencia cierra solo
+la casilla unitaria.
+
+- [x] Añadir primero regresiones de rutas/SQLite en DB temporal: migración aditiva a `purchase_date`
       conserva los tickets existentes con fecha desconocida; POST/GET/PATCH persisten fecha y tienda,
       validan ownership y aislamiento entre usuarios/hogares, y una edición en ticket confirmado no
       repite el `confirm` ni cambia stock.
-- [ ] Implementar la extracción multimodal sin OCR y persistencia de la fecha civil; E2E sintética
+
+**TDD rutas/SQLite (2026-10-03):** las regresiones detectaron la ausencia de `purchase_date` en una
+base heredada, fechas civiles inválidas aceptadas, PATCH metadata bloqueado tras confirmar y el límite
+de 100 resultados sin paginación. Tras migración aditiva y rutas validadas,
+`pnpm --filter @hogaria/server exec vitest run src/config/database.spec.ts
+src/schemas/receipts.schema.spec.ts src/utils/ticket-prompt.spec.ts src/utils/ai-queue.spec.ts
+src/routes/receipts.routes.spec.ts` pasa **63/63** en 5 archivos. Incluye persistencia/ownership,
+aislamiento de hogar, metadata confirmada sin repetir efectos de inventario/precios y recorrido paginado
+de más de 100 recibos con estados terminales; DB de test aislada.
+
+- [x] Implementar la extracción multimodal sin OCR y persistencia de la fecha civil; E2E sintética
       loopback comprueba el JSON generado, la tienda/fecha en API y UI, valores null y su distinción de
       la fecha de subida, ES/EN y persistencia tras recargar/reabrir.
-- [ ] En UI, ambos campos tienen nombre accesible, operación por teclado, guardado/error recuperable y
+- [x] En UI, ambos campos tienen nombre accesible, operación por teclado, guardado/error recuperable y
       siguen editables en `review` y `confirmed`. Un valor manual guardado no puede perderse por una
       respuesta de análisis tardía/reintento.
-- [ ] Añadir un apartado visible «Historial» con los cuatro estados acordados, orden coherente por fecha
+- [x] Añadir un apartado visible «Historial» con los cuatro estados acordados, orden coherente por fecha
       de compra y subida, navegación al detalle y paginación/carga adicional si hay más resultados que
       el tamaño de página. E2E verifica tickets >100, recarga, búsqueda del más antiguo, apertura,
       estado vacío/error, autorización e idioma.
-- [ ] Ejecutar E2E real aislada en Chromium escritorio y Pixel 5, en 320×568, 393×851 y breakpoints del
+- [x] Ejecutar E2E real aislada en Chromium escritorio y Pixel 5, en 320×568, 393×851 y breakpoints del
       código: alta/análisis, corrección, confirmación, historial, recarga, navegación de teclado/foco y
       ausencia de overflow. Usar sólo fixture sintética, DB/puertos/semilla temporales, rate limit y
       cleanup; guardar e inspeccionar capturas PC/móvil sin datos personales.
-- [ ] Alcanzar ≥70 % de statements/branches/functions/lines por cada archivo de producción tocado, no
+- [x] Alcanzar ≥70 % de statements/branches/functions/lines por cada archivo de producción tocado, no
       reducir el gate frontend existente de 80 % ni el del server, ejecutar build/typecheck/formato/
       `check-ui` y mantener abierta cualquier casilla sin evidencia reproducible.
+- [x] Añadir al gate por archivo del servidor el esquema, prompt y ruta de tickets con regresiones
+      propias; mantener intacto el umbral existente del 70 % en las cuatro métricas.
+- [x] Añadir tests unitarios focales de bandeja y ficha y comprobar ≥70 % por cada componente
+      en statements/branches/functions/lines, sin reducir el gate global frontend.
 
 **Límite de esta unidad:** los stubs loopback son regresión repetible del pipeline; no prueban la
 calidad del modelo real. Esa comprobación se registra por separado en `QA-AI.REAL-INTEGRATIONS.1`.
+
+**Evidencia UI/E2E (2026-10-03):** `receipts.service.spec.ts` pasa 11/11; la regresión de cola
+comprueba que fecha/tienda manuales prevalecen ante respuesta del modelo y reintento (incluido `null`).
+La ejecución final de `tests/e2e/receipts.spec.ts`, con servidor/SQLite aislados y rate limit activo,
+pasa **18/18** entre Chromium escritorio y Pixel 5 (0 fallos, skips o pruebas flaky). El flujo sintético
+completa carga fallida, edición de tienda/fecha, PATCH 503 seguido de reintento exitoso por teclado,
+confirmación y edición posterior sin cambiar las unidades de inventario; verifica persistencia por API
+y las etiquetas «Fecha de compra»/«Subido» en historial. La navegación pagina 105 tickets, muestra los
+cuatro estados terminales, excluye trabajos activos y abre el más antiguo; la prueba del PDF verifica su
+estado terminal. Resultados: `%TEMP%\hogaria-e2e-eyYgtr\results.json`; capturas de metadata/historial:
+`%TEMP%\hogaria-e2e-eyYgtr\artifacts\receipts-tickets-la-cola-d-c5d43-tienda-precios-e-inventario-{chromium,mobile-chrome}\receipt-{metadata,history}.png`.
+
+**Regresión error ≠ vacío (2026-10-03):** primero, la prueba de `receipts.component.spec.ts` falló
+con **9 pases/1 fallo** porque un HTTP 503 mostraba el estado vacío de historial; tras condicionar ese
+estado a carga exitosa, pasó **10/10**. La E2E final simula 503, comprueba aviso y reintento sin falso
+vacío, y muestra vacío solo después de una respuesta exitosa sin resultados y tras recargar. También
+verifica 401 directo a la API, redirección de sesión invitada a `/auth/login`, teclado y límites/overflow
+en 320×568, 393×851, 480/481, 568×320, 640/641 y 1280×720. Capturas de error/reintento inspeccionadas:
+`%TEMP%\hogaria-e2e-eyYgtr\artifacts\receipts-tickets-la-cola-d-0d122-intenta-y-protege-el-acceso-chromium\receipt-history-error-desktop.png`
+y `%TEMP%\hogaria-e2e-eyYgtr\artifacts\receipts-tickets-la-cola-d-0d122-intenta-y-protege-el-acceso-mobile-chrome\receipt-history-error-mobile.png`.
+
+**Loopback multimodal (2026-10-03):** el spec levanta un proveedor OpenAI-compatible en `127.0.0.1` con
+puerto aleatorio, sin credenciales reales, que responde por SSE. Comprueba que el proveedor recibe el
+prompt con `purchaseDate` e imagen sintética, y que tienda/fecha pasan de la respuesta a ficha, API e
+historial tras recargar. Casos español con `2024-02-29` e inglés con `null` (sin fallback a subida):
+**4/4** entre Chromium escritorio y Pixel 5. Ejecución aislada con `CI=true`, Chromium de sistema,
+SQLite/puertos/semilla únicos y rate limit activo. El primer intento no pudo abrir el Chromium
+empaquetado ausente; la repetición con `C:\Program Files\Google\Chrome\Application\chrome.exe` pasó.
+Capturas sintéticas inspeccionadas en `%TEMP%\hogaria-e2e-6Ojcjp\artifacts\` (`receipt-loopback-es.png`
+y `receipt-loopback-en.png` para escritorio y Pixel 5). `pnpm run typecheck:e2e` pasa. Tras recargar la
+ficha, la geometría de ambos campos y el documento se verifica sin overflow en 320×568, 480/481 px,
+568×320, 640/641 px y 1280×720 en ambos proyectos.
+
+**Coverage de componentes de recibos (2026-10-03):** specs nuevas `receipts.component.spec.ts` (10/10)
+y `receipt-detail.component.spec.ts` (25/25) pasan en ChromeHeadless. Medición focal instrumentada en
+un directorio temporal externo, sin escribir `frontend/coverage`: bandeja **100/100/100/100 % S/B/F/L**;
+ficha **98.63/88.75/100/100 %**. El comando focal deja el resumen global por debajo del gate porque ejecuta
+solo dos specs; los umbrales del proyecto permanecen en 80 %. La cobertura global completa se reejecutó
+por separado y su resultado vigente se registra a continuación.
+Informe: `%TEMP%\hogaria-receipts-components-coverage-1b265243c8da4810bb2d23f749613628`.
+
+**Revalidación global frontend (2026-10-03):** Karma/ChromeHeadlessLocal ejecutó **907/907** tests. Los
+archivos de recibos cumplen el mínimo por archivo: `receipts.service.ts` **100/71.43/100/100 %**,
+`receipts.component.ts` **100/100/100/100 %**, `receipt-detail.component.ts`
+**100/88.75/100/100 %**, y `receipt-queue.component.ts` y `receipt-queue-position.ts` **100/100/100/100 %
+S/B/F/L**. El gate global existente de 80 % falla en **77.41/64.50/75.64/78.99 % S/B/F/L**; branches
+también está bajo 70 %. No se alteraron umbrales. El reporte global actualizado está en
+`%TEMP%\hogaria-frontend-finalcov-580337b4f7dc4cb8b4a2f736fce6394d\coverage`; `frontend/coverage` quedó intacto.
+
+**Cobertura del servidor (2026-10-03):** `server/vitest.config.ts` incluye ahora `receipts.routes.ts`,
+`receipts.schema.ts` y `ticket-prompt.ts` en el gate por archivo, sin tocar umbrales. La revalidación
+completa pasó **46/46 archivos y 943/943 pruebas**, con **93.01/84.52/94.81/95.45 % S/B/F/L** globales;
+las rutas, esquema y prompt de tickets superan el 70 % por archivo. Reportes y SQLite se escribieron
+solo bajo `%TEMP%`; `server/coverage` quedó intacto.
+
+**Cierre local de QA-RECEIPT.METADATA-HISTORY.1 (2026-10-03):** completados los estados de historial,
+el flujo de error/vacío, autorización, paginación, navegación, teclado y matriz responsive en E2E real
+aislada; build, `typecheck:e2e`, `check-ui`, formato y `git diff --check` pasaron. La cobertura por archivo
+de recibos cumple el 70 % sin rebajar gates. El gate global frontend permanece abierto y el smoke de
+proveedores reales corresponde a `QA-AI.REAL-INTEGRATIONS.1`, fuera de esta unidad.
 
 ## Unidad QA-AI.REAL-INTEGRATIONS.1 · smoke real de proveedores IA
 

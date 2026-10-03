@@ -12,6 +12,7 @@
 
 export const TICKET_SHAPE = `{
   "store": "Mercadona",
+  "purchaseDate": "2024-05-10",
   "lines": [
     {
       "name": "Leche semidesnatada 1,5L",
@@ -54,11 +55,12 @@ export function buildTicketPrompt(input: { inventarioJson: string; esPdf: boolea
     '2. El importe de cada linea del ticket es lo PAGADO por esa cantidad, no el precio por unidad: si la linea dice «2 x 1,10», son 2 unidades y priceMinor 220.',
     '3. NO inventes precios. Si el numero no se lee, `priceMinor` es null y lo dices en `warnings`. Una estimacion tuya acabaria en el historial de precios de la casa como si fuera un dato real.',
     '4. `store` es la tienda de la cabecera del ticket (el nombre del establecimiento, no su CIF ni su direccion). Si no se distingue, null.',
-    '5. `category` es la CLAVE de una categoria del «inventario» adjunto. Busca primero en los productos ya registrados: como se llame alli algo parecido, usa su misma categoria. Si no encaja ninguna y tiene sentido, propone una clave nueva (en minusculas, sin espacios ni acentos) con `createCategory: true`.',
-    '6. `quantity` es cuantas unidades se llevan; `unit` la unidad corta (ud, kg, g, l, ml, pack, lata, botella, caja). Las ofertas tipo «3x2» van en `offer`, no en el precio.',
-    '7. `confidence` entre 0 y 1: lo que se lee claro vale 0.95, lo deducido de una letra borrosa vale 0.3.',
-    '8. `totalMinor` es el total final del ticket. Si no cuadra con la suma de tus lineas, dilo en `warnings` en vez de cuadrarlo tu.',
-    '9. Si una linea no se lee, no la metas: es mejor una linea menos que un producto que nadie compro.'
+    '5. `purchaseDate` es la fecha impresa de compra en formato `YYYY-MM-DD`. Si falta, no se lee o es ambigua, `purchaseDate` es null. Nunca uses la fecha de subida ni `created_at` como fecha de compra.',
+    '6. `category` es la CLAVE de una categoria del «inventario» adjunto. Busca primero en los productos ya registrados: como se llame alli algo parecido, usa su misma categoria. Si no encaja ninguna y tiene sentido, propone una clave nueva (en minusculas, sin espacios ni acentos) con `createCategory: true`.',
+    '7. `quantity` es cuantas unidades se llevan; `unit` la unidad corta (ud, kg, g, l, ml, pack, lata, botella, caja). Las ofertas tipo «3x2» van en `offer`, no en el precio.',
+    '8. `confidence` entre 0 y 1: lo que se lee claro vale 0.95, lo deducido de una letra borrosa vale 0.3.',
+    '9. `totalMinor` es el total final del ticket. Si no cuadra con la suma de tus lineas, dilo en `warnings` en vez de cuadrarlo tu.',
+    '10. Si una linea no se lee, no la metas: es mejor una linea menos que un producto que nadie compro.'
   ].join('\n');
 
   const user = [

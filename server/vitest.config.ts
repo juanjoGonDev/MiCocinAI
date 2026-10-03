@@ -13,12 +13,13 @@ import { defineConfig } from 'vitest/config';
  * las ramas del bootstrap que estos tests no montan, no codigo sin probar).
  *
  * Hoy quedan fuera, con su prueba atada a la fase que les corresponde:
- *   - src/routes/** (salvo shopping.routes.ts, household.routes.ts y
- *     forgot-password.routes.ts, con spec propia; pantry.routes.ts conserva cobertura parcial de sus filtros pero no entra
+ *   - src/routes/** (salvo shopping.routes.ts, household.routes.ts,
+ *     forgot-password.routes.ts y receipts.routes.ts, con spec propia;
+ *     pantry.routes.ts conserva cobertura parcial de sus filtros pero no entra
  *     hasta probar el alta/utensilios, porque el umbral es por fichero) y src/index.ts
  *                             → el resto se prueba de momento con la suite e2e
  *   - src/middleware/** (salvo timestamp, que entro el dia que se escribio),
- *     src/schemas/**, src/utils/log-store.ts,
+ *     src/schemas/** (salvo receipts.schema.ts), src/utils/log-store.ts,
  *     src/utils/logger.ts      → unidades puras; entran con P1/P2, que es cuando se
  *     escriben sus tests de contrato
  */
@@ -28,6 +29,7 @@ const COVERED = [
   'src/routes/forgot-password.routes.ts',
   'src/routes/ai-queue.routes.ts',
   'src/schemas/shopping.schema.ts',
+  'src/schemas/receipts.schema.ts',
   'src/utils/product-key.ts',
   'src/utils/shopping-categories.ts',
   'src/utils/list-discount.ts',
@@ -37,6 +39,8 @@ const COVERED = [
   'src/utils/live-hub.ts',
   'src/utils/ai-client.ts',
   'src/utils/ticket-queue.ts',
+  'src/utils/ticket-prompt.ts',
+  'src/routes/receipts.routes.ts',
   'src/config/database.ts',
   'src/utils/memory-monitor.ts',
   'src/utils/seed-data.ts',
