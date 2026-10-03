@@ -2008,3 +2008,28 @@ safe-area tape contenido; no se asume que sea una excepción válida por existir
 
 **Rollback focal:** revertir solo las reglas de padding de las raíces privadas adicionales, la extensión de
 la regresión E2E y este subapartado; conservar la unidad de gutters y `PAGE-SPACING.1` ya verificada.
+
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.SHARED-BUTTONS.1 · tamaños del botón compartido
+
+**Fuente revalidada (2026-10-03):** `app-button` se usa en vistas públicas y privadas, y expone `sm`, `md`
+y `lg`. En `button.component.ts`, esas clases cambian actualmente padding, tamaño tipográfico y, en `sm/lg`,
+radio; además los estilos hover de primary/secondary trasladan el botón 1 px. Las llamadas existentes
+distribuyen tamaños por pantalla/acción (p. ej. login/registro `lg`, acciones de lista `sm`, acciones generales
+`md`), así que la importancia se está expresando parcialmente mediante geometría. El contrato global vigente
+de la unidad padre exige que el énfasis cambie por color/icono/estado; se conserva ancho fluido o `fullWidth`
+por su función de contenido/layout y se excluyen solo controles realmente de familia icon-only.
+
+- [ ] Añadir primero regresión roja para comparar la geometría renderizada de `sm/md/lg` (rectángulo,
+      padding, familia/tamaño/peso/interlineado tipográfico, radio y borde), además de comprobar que los estados
+      hover/disabled/loading no desplacen ni redimensionen el control.
+- [ ] Normalizar el botón de texto compartido para que sus tamaños nominales tengan un contrato geométrico
+      idéntico en todas las variantes de color; la jerarquía se expresa visualmente y ningún CTA crece por ser
+      principal. Mantener explícitos ancho completo, control icon-only y target táctil funcional.
+- [ ] Medir los consumidores reales del manifiesto público/privado con fixtures sintéticos en escritorio y
+      móvil, incluidos botones de formularios, listados, navegación/acciones y diálogos representativos; guardar
+      e inspeccionar capturas PC/móvil, sin usar cuentas/datos personales.
+- [ ] Ejecutar regresiones unitarias, Playwright real aislado, typecheck, formato, `check:ui`, build y
+      `git diff --check`; registrar métricas y limitaciones sin cerrar el inventario visual global.
+
+**Rollback focal:** restaurar únicamente las reglas de tamaño/estados de `app-button`, retirar las aserciones
+geométricas correspondientes y este subapartado; mantener abiertas las demás familias de la matriz global.
