@@ -1934,3 +1934,25 @@ pero aún no existe comparación calculada de todas las familias interiores del 
 **Rollback focal:** restaurar la declaración `display: block` de ese selector y quitar únicamente la
 aserción `expectedRootDisplay`, los tres valores del manifiesto y este subapartado; conservar el resto
 de la normalización de ancho/gutters.
+
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.PAGE-SPACING.1 · separación vertical común
+
+**Fuente revalidada (2026-10-03):** el marco privado ya unifica gutters horizontales, pero cada vista fija
+su propio padding vertical: Dashboard usa 16/32 px; Recetas, Despensa y Logs 16/24 px; Calendario 12/32 px
+en móvil y 16/40 px en escritorio; Compra y Tickets 16 px en ambos. El proyecto ya usa el par 16/24 px en
+varias raíces, por lo que se propone como escala común de contenido privado: 16 px en móvil y 24 px desde
+768 px. Los shells públicos, diálogos y espaciados dentro de tarjetas pertenecen a familias aparte y no
+se deben forzar dentro de esta unidad.
+
+- [ ] Añadir primero E2E Playwright que compare `padding-block-start/end` calculado de las raíces de
+      Dashboard, Recetas, Despensa, Calendario, Compra, Tickets y Logs en 320, 393, 568×320, 767, 768,
+      1024 y 1440 px; verificar el baseline rojo antes de ajustar estilos.
+- [ ] Aplicar un único token común (16 px móvil, 24 px desde 768 px) a esas raíces sin alterar padding
+      interior de paneles, formularios, tarjetas ni safe-area; registrar en spec cualquier excepción
+      funcional detectada antes de conservarla.
+- [ ] Repetir la comparación Playwright en Chromium escritorio y Pixel 5, cubrir breakpoints B−1/B/B+1,
+      teclado/scroll y overflow, guardar e inspeccionar capturas sintéticas PC/móvil y ejecutar los gates
+      focales; los shells públicos y el censo completo de controles siguen abiertos en la unidad padre.
+
+**Rollback focal:** revertir solo el token/uso del padding vertical común, la regresión E2E y este
+subapartado; preservar gutters horizontales y los paddings internos de cada componente.
