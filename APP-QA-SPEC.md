@@ -1604,6 +1604,13 @@ el modelo activo disponible en esa WebAPI, sin afirmar cobertura de vendors no c
 | `shopping_photo`   | `POST /api/shopping/lists/:id/photo/analyze` | Foto PNG sintética produce al menos una línea de compra editable.                                                 |
 | `receipt`          | `POST /api/receipts`                         | Ticket PNG sintético; el modelo reconoce tienda y fecha impresas, la UI permite corregirlas y persiste historial. |
 
+**Resolución de discrepancia para `multiple_recipes`:** la ruta no debe reportar éxito parcial ni aceptar
+dos borradores equivalentes. Cada candidato debe ser utilizable por el flujo actual de mostrar/guardar
+receta; la distinción se comprobará con una huella normalizada de nombre, ingredientes (nombre/cantidad/
+unidad) y pasos (instrucción), no solo con el título. El prompt puede pedir variación, pero la validación
+en servidor decide el éxito. Si una candidata no cumple el contrato de borrador o duplica otra, toda la
+petición falla sin persistir recetas ni hacer llamadas correctivas.
+
 El `retryAttempts: 0` debe establecerse al crear la configuración aislada (el valor omitido es 3;
 PATCH/formulario no es evidencia de cero). Con el contrato actual, el máximo esperado es 9 completions:
 una por integración salvo `multiple_recipes` (2); el recibo puede usar hasta 2 dentro de su único
@@ -1634,9 +1641,13 @@ no contacta la red exterior.
 - [ ] Automatizar la attestation del proceso WebAPI aislado, el veto por puerto ocupado/Agenta activo, DB/log/artifacts temporales y cleanup del PID/directorio propio.
 - [ ] Completar el smoke opt-in con los ocho `AiJobKind`, presupuesto 9–10, una sola configuración activa, concurrencia 1, `retryAttempts: 0` al crear y parada ante el primer fallo.
 - [ ] Hacer que la E2E valide los contratos de cada resultado; para ticket verificar tienda/fecha reales de la imagen sintética, edición UI, persistencia tras recarga e historial.
-- [ ] Mantener `server/src/routes/ai.routes.ts` con cobertura focal ≥70 % en statements, branches, functions y lines; incluir recomendaciones, persistencia de plan semanal y comparador de recetas con varios ingredientes.
+- [x] Mantener `server/src/routes/ai.routes.ts` con cobertura focal ≥70 % en statements, branches, functions y lines; incluir recomendaciones, persistencia de plan semanal y comparador de recetas con varios ingredientes.
 - [ ] Probar setup, opt-in/CI, allowlist, redacción, cancelación, exceso de presupuesto y cleanup; ejecutar suites sintéticas fuera de red y verificar que omisión/fallo del smoke es rojo, no verde.
 - [ ] Ejecutar una corrida live autorizada en el modelo activo; registrar solo modelo, resultado, recuento/latencia/uso y coste si está disponible. Mantenerla manual y fuera de CI.
+
+**Evidencia focal de rutas AI (2026-10-03):** el baseline con las pruebas anteriores pasó **17/17**, pero `ai.routes.ts` quedó bajo el gate: **66.16/65/72.41/66.15 % S/B/F/L**.
+Se añadieron recomendaciones con preferencias/comidas recientes, persistencia semanal y comidas bloqueadas, y una segunda receta con varios ingredientes para ejecutar el comparador. Con `DATABASE_PATH=:memory:`, el run final pasó **20/20**; cobertura focal **83.83/72.50/96.55/83.58 % S/B/F/L**.
+Informe `%TEMP%\hogaria-ai-routes-coverage-20261003-r5`; build del servidor, Prettier focal y `git diff --check` pasan. `fetch` usa fixture, sin llamadas externas.
 ### Subunidad QA-AI.SECRET-REDACTION.1 · proteger credenciales y datos en errores upstream
 
 **Fuente revalidada (2026-10-03):** `ai-client.ts` era una frontera común para errores upstream,

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
+import { z } from 'zod';
 import { getDatabase } from '../config/database.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import {
@@ -8,8 +9,10 @@ import {
   testConnectionSchema,
   generateRecipeSchema,
   generateWeeklyPlanSchema,
-  getRecommendationsSchema
+  getRecommendationsSchema,
+  type GenerateRecipeInput
 } from '../schemas/ai.schema.js';
+import { createRecipeSchema } from '../schemas/recipe.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 
 import {
@@ -25,7 +28,7 @@ import {
 } from '../utils/taste-profile.js';
 import { persistWeeklyPlan, resolveMealTypes } from '../utils/weekly-plan.js';
 import { bloqueDeCaducidades } from '../utils/caducidades.js';
-import { callAI, extractJsonObject, pingDeConexion } from '../utils/ai-client.js';
+import { AiCallError, callAI, extractJsonObject, pingDeConexion } from '../utils/ai-client.js';
 import type { AiConfigRow } from '../utils/ai-client.js';
 import {
   cancelarColaDeConfiguracion,
@@ -45,7 +48,10 @@ aiRoutes.get('/configs', async (c) => {
 
   const configs = db.prepare('SELECT * FROM ai_configs WHERE user_id = ?').all(userId);
 
-  return c.json({ success: true, data: configs.map(row => toClientConfig(row as Record<string, unknown>)) });
+  return c.json({
+    success: true,
+    data: configs.map((row) => toClientConfig(row as Record<string, unknown>))
+  });
 });
 
 // POST /api/ai/configs
@@ -90,13 +96,27 @@ aiRoutes.post('/configs', async (c) => {
     .prepare('SELECT id FROM ai_configs WHERE user_id = ? AND is_active = 1')
     .all(userId) as { id: string }[];
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, temperature, max_tokens, top_p, frequency_penalty, presence_penalty, timeout, retry_attempts, concurrency)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id, userId, input.name, input.provider, input.baseUrl, input.apiKey, input.model,
-    input.temperature, input.maxTokens, input.topP, input.frequencyPenalty,
-    input.presencePenalty, input.timeout, input.retryAttempts, input.concurrency
+  `
+  ).run(
+    id,
+    userId,
+    input.name,
+    input.provider,
+    input.baseUrl,
+    input.apiKey,
+    input.model,
+    input.temperature,
+    input.maxTokens,
+    input.topP,
+    input.frequencyPenalty,
+    input.presencePenalty,
+    input.timeout,
+    input.retryAttempts,
+    input.concurrency
   );
 
   // La configuracion recien creada es LA activa, y solo hay una. Si no, la primera fila (la
@@ -120,7 +140,9 @@ aiRoutes.patch('/configs/:id', async (c) => {
 
   const db = getDatabase();
 
-  const existing = db.prepare('SELECT id FROM ai_configs WHERE id = ? AND user_id = ?').get(id, userId);
+  const existing = db
+    .prepare('SELECT id FROM ai_configs WHERE id = ? AND user_id = ?')
+    .get(id, userId);
   if (!existing) {
     return c.json({ success: false, message: 'Config not found' }, 404);
   }
@@ -133,20 +155,44 @@ aiRoutes.patch('/configs/:id', async (c) => {
         .all(userId, id) as { id: string }[])
     : [];
 
-  if (input.name !== undefined) { updates.push('name = ?'); values.push(input.name); }
-  if (input.baseUrl !== undefined) { updates.push('base_url = ?'); values.push(input.baseUrl); }
-  if (input.apiKey !== undefined) { updates.push('api_key = ?'); values.push(input.apiKey); }
-  if (input.model !== undefined) { updates.push('model = ?'); values.push(input.model); }
-  if (input.temperature !== undefined) { updates.push('temperature = ?'); values.push(input.temperature); }
-  if (input.maxTokens !== undefined) { updates.push('max_tokens = ?'); values.push(input.maxTokens); }
+  if (input.name !== undefined) {
+    updates.push('name = ?');
+    values.push(input.name);
+  }
+  if (input.baseUrl !== undefined) {
+    updates.push('base_url = ?');
+    values.push(input.baseUrl);
+  }
+  if (input.apiKey !== undefined) {
+    updates.push('api_key = ?');
+    values.push(input.apiKey);
+  }
+  if (input.model !== undefined) {
+    updates.push('model = ?');
+    values.push(input.model);
+  }
+  if (input.temperature !== undefined) {
+    updates.push('temperature = ?');
+    values.push(input.temperature);
+  }
+  if (input.maxTokens !== undefined) {
+    updates.push('max_tokens = ?');
+    values.push(input.maxTokens);
+  }
   if (input.isActive) {
     // Activar es elegir: solo una configuracion de la casa responde a la vez, y activar una
     // apaga las demas. (Desactivar la activa es legitimo: ahi la IA simplemente no esta.)
     db.prepare('UPDATE ai_configs SET is_active = 0 WHERE user_id = ?').run(userId);
   }
-  if (input.isActive !== undefined) { updates.push('is_active = ?'); values.push(input.isActive ? 1 : 0); }
+  if (input.isActive !== undefined) {
+    updates.push('is_active = ?');
+    values.push(input.isActive ? 1 : 0);
+  }
   // La concurrencia máxima de esta configuración (## 12an) se edita en caliente.
-  if (input.concurrency !== undefined) { updates.push('concurrency = ?'); values.push(input.concurrency); }
+  if (input.concurrency !== undefined) {
+    updates.push('concurrency = ?');
+    values.push(input.concurrency);
+  }
 
   if (updates.length > 0) {
     updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -174,7 +220,9 @@ aiRoutes.delete('/configs/:id', async (c) => {
   const id = c.req.param('id');
   const db = getDatabase();
 
-  const existe = db.prepare('SELECT id FROM ai_configs WHERE id = ? AND user_id = ?').get(id, userId);
+  const existe = db
+    .prepare('SELECT id FROM ai_configs WHERE id = ? AND user_id = ?')
+    .get(id, userId);
   if (!existe) {
     return c.json({ success: false, message: 'Config not found' }, 404);
   }
@@ -197,7 +245,9 @@ aiRoutes.post('/test-connection', async (c) => {
 
   let config;
   if (input.configId) {
-    config = db.prepare('SELECT * FROM ai_configs WHERE id = ? AND user_id = ?').get(input.configId, userId) as any;
+    config = db
+      .prepare('SELECT * FROM ai_configs WHERE id = ? AND user_id = ?')
+      .get(input.configId, userId) as any;
   } else if (input.baseUrl && input.apiKey && input.model) {
     // La prueba del FORMULARIO: los datos tal cual estan escritos, sin guardar nada. Es lo que
     // permite descartar una configuracion mala antes de que exista en la bandeja.
@@ -209,7 +259,9 @@ aiRoutes.post('/test-connection', async (c) => {
       timeout: input.timeout ?? null
     };
   } else {
-    config = db.prepare('SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1').get(userId) as any;
+    config = db
+      .prepare('SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1')
+      .get(userId) as any;
   }
 
   if (!config) {
@@ -220,52 +272,63 @@ aiRoutes.post('/test-connection', async (c) => {
   // `response_format` de esquema estricto —el mismo contrato que exige el resto de la app, que
   // parsea JSON en todas sus funciones de IA— y se valida la contestacion. Un proveedor que no
   // sabe responder esto no sirve para la casa, y es mejor saberlo en Ajustes que en un ticket.
-  const veredicto = await pingDeConexion({
-    base_url: config.base_url,
-    api_key: config.api_key,
-    model: config.model,
-    timeout: config.timeout
-  }, {
-    db,
-    userId,
-    config: {
-      id: config.id ?? `ephemeral-${userId}`,
-      name: String(config.name ?? 'Connection test'),
-      provider: String(config.provider ?? 'custom'),
+  const veredicto = await pingDeConexion(
+    {
       base_url: config.base_url,
       api_key: config.api_key,
       model: config.model,
-      temperature: (config.temperature as number | null) ?? null,
-      max_tokens: (config.max_tokens as number | null) ?? null,
-      top_p: (config.top_p as number | null) ?? null,
-      frequency_penalty: (config.frequency_penalty as number | null) ?? null,
-      presence_penalty: (config.presence_penalty as number | null) ?? null,
-      timeout: (config.timeout as number | null) ?? null,
-      retry_attempts: (config.retry_attempts as number | null) ?? 0,
-      concurrency: (config.concurrency as number | null) ?? 0
-    } satisfies AiConfigRow,
-    configId: input.configId ? String(config.id) : null
-  });
+      timeout: config.timeout
+    },
+    {
+      db,
+      userId,
+      config: {
+        id: config.id ?? `ephemeral-${userId}`,
+        name: String(config.name ?? 'Connection test'),
+        provider: String(config.provider ?? 'custom'),
+        base_url: config.base_url,
+        api_key: config.api_key,
+        model: config.model,
+        temperature: (config.temperature as number | null) ?? null,
+        max_tokens: (config.max_tokens as number | null) ?? null,
+        top_p: (config.top_p as number | null) ?? null,
+        frequency_penalty: (config.frequency_penalty as number | null) ?? null,
+        presence_penalty: (config.presence_penalty as number | null) ?? null,
+        timeout: (config.timeout as number | null) ?? null,
+        retry_attempts: (config.retry_attempts as number | null) ?? 0,
+        concurrency: (config.concurrency as number | null) ?? 0
+      } satisfies AiConfigRow,
+      configId: input.configId ? String(config.id) : null
+    }
+  );
 
   // El estado de la prueba solo se persiste cuando se prueba una config GUARDADA; la del
   // formulario se ensena y ya.
   if (input.configId) {
-    db.prepare('UPDATE ai_configs SET test_status = ?, test_error = ?, last_tested = CURRENT_TIMESTAMP WHERE id = ?').run(
-      veredicto.ok ? 'success' : 'failed',
-      veredicto.ok ? null : veredicto.error,
-      config.id
-    );
+    db.prepare(
+      'UPDATE ai_configs SET test_status = ?, test_error = ?, last_tested = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(veredicto.ok ? 'success' : 'failed', veredicto.ok ? null : veredicto.error, config.id);
   }
 
   if (!veredicto.ok) {
     return c.json({
       success: false,
-      data: { success: false, model: config.model, latency: veredicto.latency, error: veredicto.error }
+      data: {
+        success: false,
+        model: config.model,
+        latency: veredicto.latency,
+        error: veredicto.error
+      }
     });
   }
   return c.json({
     success: true,
-    data: { success: true, model: config.model, latency: veredicto.latency, message: veredicto.message }
+    data: {
+      success: true,
+      model: config.model,
+      latency: veredicto.latency,
+      message: veredicto.message
+    }
   });
 });
 
@@ -273,24 +336,191 @@ aiRoutes.post('/test-connection', async (c) => {
 // AI Generation
 // ═══════════════════════════════════════════════════════════════════
 
-// POST /api/ai/generate-recipe
-aiRoutes.post('/generate-recipe', async (c) => {
-  const userId = c.get('userId');
-  const body = await c.req.json();
-  // El nivel de cocina del comensal fija cuánto hay que explicar, salvo que la
-  // petición traiga un detalle explícito (lo que elija el formulario manda).
-  const input = generateRecipeSchema.parse({
-    ...body,
-    detailLevel:
-      typeof body?.detailLevel === 'string'
-        ? body.detailLevel
-        : detailLevelForCookingLevel(readCookingLevel(getDatabase(), userId))
+const generatedRecipeCandidateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    description: z.string().trim().min(1).max(1000),
+    difficulty: z.enum(['easy', 'medium', 'hard']),
+    cuisine: z.string().max(50).nullish(),
+    totalTime: z.number().int().positive(),
+    prepTime: z.number().int().positive(),
+    cookTime: z.number().int().positive(),
+    restTime: z.number().int().positive().nullish(),
+    servings: z.number().int().positive(),
+    calories: z.number().positive().nullish(),
+    ingredients: z
+      .array(
+        z
+          .object({
+            name: z.string().trim().min(1),
+            quantity: z.number().positive(),
+            unit: z.enum([
+              'g',
+              'kg',
+              'ml',
+              'l',
+              'cup',
+              'tbsp',
+              'tsp',
+              'unit',
+              'bunch',
+              'slice',
+              'piece'
+            ]),
+            preparation: z.string().nullish(),
+            notes: z.string().nullish()
+          })
+          .passthrough()
+      )
+      .min(1),
+    utensils: z.array(z.string()),
+    steps: z
+      .array(
+        z
+          .object({
+            stepNumber: z.number().int().positive(),
+            instruction: z.string().trim().min(1),
+            duration: z.number().int().positive().nullish(),
+            tips: z.string().nullish(),
+            warning: z.string().nullish()
+          })
+          .passthrough()
+      )
+      .min(1),
+    nutrition: z
+      .object({
+        calories: z.number(),
+        protein: z.number(),
+        carbs: z.number(),
+        fat: z.number(),
+        fiber: z.number().nullish()
+      })
+      .nullish(),
+    storage: z
+      .object({
+        method: z.string().trim().min(1),
+        duration: z.string().trim().min(1),
+        reheating: z.string().nullish()
+      })
+      .passthrough()
+      .nullish()
+  })
+  .passthrough();
+
+type GeneratedRecipeCandidate = z.infer<typeof generatedRecipeCandidateSchema>;
+
+/** Contrato de lo que el modal existente entrega a POST /api/recipes al guardar. */
+function isSavableGeneratedRecipe(recipe: GeneratedRecipeCandidate): boolean {
+  const savePayload = {
+    name: recipe.name,
+    description: recipe.description,
+    difficulty: recipe.difficulty,
+    cuisine: recipe.cuisine,
+    totalTime: recipe.totalTime,
+    prepTime: recipe.prepTime,
+    cookTime: recipe.cookTime,
+    restTime: recipe.restTime,
+    servings: recipe.servings,
+    calories: recipe.calories,
+    ingredients: recipe.ingredients.map((ingredient) => ({
+      name: ingredient.name,
+      quantity: ingredient.quantity,
+      unit: ingredient.unit,
+      preparation: ingredient.preparation,
+      isOptional: false,
+      notes: ingredient.notes
+    })),
+    utensils: recipe.utensils,
+    steps: recipe.steps.map((step) => ({
+      stepNumber: step.stepNumber,
+      instruction: step.instruction,
+      duration: step.duration,
+      timerRequired: Boolean(step.duration),
+      timerDuration: step.duration,
+      tips: step.tips,
+      warning: step.warning
+    })),
+    nutrition: recipe.nutrition
+      ? {
+          calories: recipe.nutrition.calories,
+          protein: recipe.nutrition.protein,
+          carbs: recipe.nutrition.carbs,
+          fat: recipe.nutrition.fat,
+          fiber: recipe.nutrition.fiber || 0
+        }
+      : recipe.nutrition,
+    storage: recipe.storage
+      ? {
+          method: recipe.storage.method,
+          container: 'Apropiado',
+          duration: recipe.storage.duration,
+          reheatingInstructions: recipe.storage.reheating,
+          freezingPossible: false
+        }
+      : recipe.storage,
+    tags: []
+  };
+
+  return createRecipeSchema.safeParse(savePayload).success;
+}
+
+function normalizeRecipeText(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function candidateFingerprints(recipe: GeneratedRecipeCandidate): {
+  full: string;
+  content: string;
+} {
+  const ingredients = recipe.ingredients
+    .map((ingredient) => [
+      normalizeRecipeText(ingredient.name),
+      String(ingredient.quantity),
+      normalizeRecipeText(ingredient.unit)
+    ])
+    .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  const steps = recipe.steps.map((step) => normalizeRecipeText(step.instruction));
+  const content = JSON.stringify({ ingredients, steps });
+
+  return {
+    full: JSON.stringify({ name: normalizeRecipeText(recipe.name), ingredients, steps }),
+    content
+  };
+}
+
+function isDuplicateCandidate(
+  candidate: GeneratedRecipeCandidate,
+  existing: GeneratedRecipeCandidate[]
+): boolean {
+  const fingerprints = candidateFingerprints(candidate);
+  return existing.some((recipe) => {
+    const previous = candidateFingerprints(recipe);
+    // Un título distinto no convierte el mismo conjunto de ingredientes y pasos en otra receta.
+    return fingerprints.full === previous.full || fingerprints.content === previous.content;
   });
+}
 
-  const db = getDatabase();
-
-  const ingredientList = input.ingredients.map(i => `${i.quantity} ${i.unit} de ${i.name}`).join(', ');
-  const utensilList = input.utensils.filter(u => u.available).map(u => u.name).join(', ');
+/** Genera y valida un borrador sin modificar recetas persistidas. */
+async function generateRecipeDraft(
+  userId: string,
+  input: GenerateRecipeInput,
+  db: ReturnType<typeof getDatabase>,
+  kind: 'recipe' | 'multiple_recipes' = 'recipe',
+  candidateNumber?: number
+) {
+  const ingredientList = input.ingredients
+    .map((i) => `${i.quantity} ${i.unit} de ${i.name}`)
+    .join(', ');
+  const utensilList = input.utensils
+    .filter((u) => u.available)
+    .map((u) => u.name)
+    .join(', ');
 
   // El perfil del comensal (alergias, gustos, objetivo) se añade siempre: lo
   // respondió en el onboarding y es lo que hace que la receta sea suya.
@@ -300,7 +530,8 @@ aiRoutes.post('/generate-recipe', async (c) => {
   const detailInstructions: Record<string, string> = {
     basic: 'Instrucciones breves y claras.',
     intermediate: 'Instrucciones detalladas con consejos útiles.',
-    expert: 'Instrucciones muy detalladas incluyendo técnicas culinarias, tiempos exactos, temperaturas, cómo cortar y preparar cada ingrediente paso a paso, tiempos de reposo, y cómo almacenar las sobras.'
+    expert:
+      'Instrucciones muy detalladas incluyendo técnicas culinarias, tiempos exactos, temperaturas, cómo cortar y preparar cada ingrediente paso a paso, tiempos de reposo, y cómo almacenar las sobras.'
   };
 
   const prompt = `Genera una receta de cocina con las siguientes características:
@@ -315,6 +546,7 @@ ${input.allergies.length > 0 ? `Alergias: ${input.allergies.join(', ')}` : ''}
 ${input.preferences.length > 0 ? `Preferencias: ${input.preferences.join(', ')}` : ''}
 ${tasteBlock}
 ${input.cookingTime ? `Tiempo de cocción: entre ${input.cookingTime.min} y ${input.cookingTime.max} minutos` : ''}
+${kind === 'multiple_recipes' && candidateNumber !== undefined ? `Esta es la candidata ${candidateNumber} de ${input.count}. Propón una alternativa culinariamente distinta, variando de forma real los ingredientes y/o la técnica, sin dejar de respetar los ingredientes disponibles y las restricciones.` : ''}
 
 Responde SOLO con un JSON válido con esta estructura:
 {
@@ -336,30 +568,55 @@ Responde SOLO con un JSON válido con esta estructura:
   "tags": ["tag1", "tag2"]
 }`;
 
-  try {
-    const response = await callAI(userId, [
-      { role: 'system', content: 'Eres un chef profesional. Responde SOLO con JSON válido, sin markdown ni explicaciones.' },
+  const response = await callAI(
+    userId,
+    [
+      {
+        role: 'system',
+        content:
+          'Eres un chef profesional. Responde SOLO con JSON válido, sin markdown ni explicaciones.'
+      },
       { role: 'user', content: prompt }
-    ], db);
+    ],
+    db,
+    kind
+  );
 
-    // Parse JSON from response
-    const recipe = extractJsonObject(response) as any;
+  const recipe = extractJsonObject(response);
+  const name =
+    recipe && typeof recipe === 'object' && !Array.isArray(recipe)
+      ? (recipe as Record<string, unknown>).name
+      : undefined;
+  if (
+    typeof recipe !== 'object' ||
+    recipe === null ||
+    Array.isArray(recipe) ||
+    typeof name !== 'string' ||
+    !name.trim()
+  ) {
+    throw new AiCallError('BAD_JSON', 'AI response does not contain a usable recipe draft');
+  }
 
-    // Save recipe to database
-    const id = nanoid();
-    db.prepare(`
-      INSERT INTO recipes (id, name, description, difficulty, cuisine, meal_type, total_time, prep_time, cook_time, rest_time, servings, calories, ingredients, utensils, steps, nutrition, storage, author, author_id, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id, recipe.name, recipe.description, recipe.difficulty, recipe.cuisine,
-      JSON.stringify([]), recipe.totalTime, recipe.prepTime, recipe.cookTime, recipe.restTime,
-      recipe.servings, recipe.calories, JSON.stringify(recipe.ingredients),
-      JSON.stringify(recipe.utensils), JSON.stringify(recipe.steps),
-      JSON.stringify(recipe.nutrition), JSON.stringify(recipe.storage),
-      'ai', userId, JSON.stringify(recipe.tags || [])
-    );
+  return recipe as Record<string, unknown>;
+}
 
-    return c.json({ success: true, data: { id, ...recipe } });
+// POST /api/ai/generate-recipe
+aiRoutes.post('/generate-recipe', async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json();
+  // El nivel de cocina del comensal fija cuánto hay que explicar, salvo que la
+  // petición traiga un detalle explícito (lo que elija el formulario manda).
+  const input = generateRecipeSchema.parse({
+    ...body,
+    detailLevel:
+      typeof body?.detailLevel === 'string'
+        ? body.detailLevel
+        : detailLevelForCookingLevel(readCookingLevel(getDatabase(), userId))
+  });
+
+  try {
+    const recipe = await generateRecipeDraft(userId, input, getDatabase());
+    return c.json({ success: true, data: recipe });
   } catch (error: any) {
     return c.json({ success: false, message: error.message }, 500);
   }
@@ -378,30 +635,26 @@ aiRoutes.post('/generate-multiple-recipes', async (c) => {
         : detailLevelForCookingLevel(readCookingLevel(getDatabase(), userId))
   });
 
-  const recipes = [];
+  try {
+    const db = getDatabase();
+    const recipes: GeneratedRecipeCandidate[] = [];
 
-  for (let i = 0; i < (input.count || 3); i++) {
-    try {
-      // Reuse the single recipe generation logic
-      const response = await fetch('http://localhost:3000/api/ai/generate-recipe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': c.req.header('Authorization') || ''
-        },
-        body: JSON.stringify(input)
-      });
-
-      const result = await response.json() as { success: boolean; data: unknown };
-      if (result.success) {
-        recipes.push(result.data);
+    for (let i = 0; i < input.count; i++) {
+      const rawRecipe = await generateRecipeDraft(userId, input, db, 'multiple_recipes', i + 1);
+      const parsedRecipe = generatedRecipeCandidateSchema.safeParse(rawRecipe);
+      if (!parsedRecipe.success || !isSavableGeneratedRecipe(parsedRecipe.data)) {
+        throw new AiCallError('BAD_JSON', 'AI response does not contain a usable recipe draft');
       }
-    } catch {
-      // Continue with other recipes
+      if (isDuplicateCandidate(parsedRecipe.data, recipes)) {
+        throw new AiCallError('BAD_JSON', 'AI generated duplicate recipe drafts');
+      }
+      recipes.push(parsedRecipe.data);
     }
-  }
 
-  return c.json({ success: true, data: recipes });
+    return c.json({ success: true, data: recipes });
+  } catch (error: any) {
+    return c.json({ success: false, message: error.message }, 500);
+  }
 });
 
 // POST /api/ai/recommendations
@@ -418,7 +671,7 @@ aiRoutes.post('/recommendations', async (c) => {
 
   const prompt = `Basándote en la siguiente información, recomienda ${input.count} recetas:
 
-Comidas recientes: ${input.recentMeals.map(m => `${m.date}: ${m.meal}`).join(', ') || 'Ninguna'}
+Comidas recientes: ${input.recentMeals.map((m) => `${m.date}: ${m.meal}`).join(', ') || 'Ninguna'}
 Ingredientes disponibles: ${input.availableIngredients.join(', ') || 'Ninguno específico'}
 ${input.householdPreferences ? `Preferencias: Likes=${input.householdPreferences.likes.join(',')}, Dislikes=${input.householdPreferences.dislikes.join(',')}, Alergias=${input.householdPreferences.allergies.join(',')}` : ''}
 ${caducan ? `${caducan}` : ''}
@@ -426,10 +679,15 @@ ${caducan ? `${caducan}` : ''}
 Responde SOLO con un JSON válido: {"recommendations": [{"name": "", "reason": "", "ingredients": [], "estimatedTime": 0}]}`;
 
   try {
-    const response = await callAI(userId, [
-      { role: 'system', content: 'Eres un chef profesional. Responde SOLO con JSON válido.' },
-      { role: 'user', content: prompt }
-    ], db, 'recommendations');
+    const response = await callAI(
+      userId,
+      [
+        { role: 'system', content: 'Eres un chef profesional. Responde SOLO con JSON válido.' },
+        { role: 'user', content: prompt }
+      ],
+      db,
+      'recommendations'
+    );
 
     const result = extractJsonObject(response) as any;
     return c.json({ success: true, data: result.recommendations });
@@ -506,10 +764,15 @@ ${mealShape}
 }`;
 
   try {
-    const response = await callAI(userId, [
-      { role: 'system', content: 'Eres un nutricionista y chef. Responde SOLO con JSON válido.' },
-      { role: 'user', content: prompt }
-    ], db, 'weekly_plan');
+    const response = await callAI(
+      userId,
+      [
+        { role: 'system', content: 'Eres un nutricionista y chef. Responde SOLO con JSON válido.' },
+        { role: 'user', content: prompt }
+      ],
+      db,
+      'weekly_plan'
+    );
 
     const plan = extractJsonObject(response) as any;
 
