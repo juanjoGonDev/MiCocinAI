@@ -1586,28 +1586,56 @@ proveedores reales corresponde a `QA-AI.REAL-INTEGRATIONS.1`, fuera de esta unid
 
 ## Unidad QA-AI.REAL-INTEGRATIONS.1 · smoke real de proveedores IA
 
-**Fuente revalidada (2026-10-03):** las pruebas existentes reemplazan `fetch` o usan proveedores
-loopback sintéticos; no se encontró un smoke opt-in que alcance proveedor/modelo real ni que verifique
-los datos devueltos por el servicio local de WebAPI en puerto 3001. Estos stubs se conservan para la
-suite repetible. El usuario autoriza utilizar el token facilitado y la WebAPI local, pero el secreto
-debe obtenerse del almacenamiento seguro/configuración de ejecución, nunca copiarse a argumentos,
-fuentes, specs, logs, capturas, traces, fixtures o memoria persistente.
+**Fuente revalidada (2026-10-03):** `server/src/utils/ai-client.ts` declara ocho `AiJobKind` y sus
+rutas están repartidas entre `ai.routes.ts`, `pantry.routes.ts`, `shopping.routes.ts` y
+`receipts.routes.ts`. Las pruebas existentes usan `fetch` simulado o proveedor loopback; el smoke real
+preparado hasta ahora solo recorría receta y ticket, por lo que no demuestra el resto de los flujos.
+El usuario autoriza el perfil local de WebAPI y sus llamadas reales; el proveedor objetivo será solo
+el modelo activo disponible en esa WebAPI, sin afirmar cobertura de vendors no configurados.
 
-- [ ] Inventariar en la UI/API los proveedores realmente disponibles y su ruta efectiva; confirmar qué
-      token/configuración está activo sin leerlo ni imprimirlo. No afirmar que se probaron proveedores
-      que no estén configurados.
-- [ ] Diseñar un smoke explícito y opt-in, separado de CI/suite repetible; consume el token existente
-      desde entorno/almacén seguro, no guarda secretos, usa solicitud mínima y fixture sintética, redirige
-      artefactos sensibles fuera de Git y redacciona salida/error/respuesta.
-- [ ] Conectar el smoke al flujo real de la aplicación (no al proveedor loopback) a través de la
-      WebAPI local autorizada en 3001 y del endpoint/modelo configurado; verificar respuesta válida para
-      generación de receta y lectura de ticket con tienda/fecha conocidas, además de timeout/error sin
-      filtrado de token. Registrar modelo/proveedor, resultado y coste/llamadas sin guardar payloads.
-- [ ] Ejecutar en un entorno aislado cada integración disponible con la autorización del usuario,
-      controlar reintentos y gasto, comprobar que la suite normal no contacta al exterior y que un
-      smoke omitido/fallido nunca aparece como verde. El smoke real queda marcado manualmente y no se
-      incluye en CI automático.
+| `AiJobKind`        | Ruta de la aplicación                        | Aserción real mínima con fixture sintética                                                                        |
+| ------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `connection_test`  | `POST /api/ai/test-connection`               | Veredicto válido del esquema JSON estricto.                                                                       |
+| `recipe`           | `POST /api/ai/generate-recipe`               | Borrador JSON con nombre no vacío, mostrado en la UI.                                                             |
+| `multiple_recipes` | `POST /api/ai/generate-multiple-recipes`     | Dos borradores distintos/validables (`count: 2`), ambos devueltos.                                                |
+| `recommendations`  | `POST /api/ai/recommendations`               | Lista JSON de recomendaciones; admite inventario sintético vacío.                                                 |
+| `weekly_plan`      | `POST /api/ai/plan-week`                     | Plan JSON del intervalo sintético persistido en calendario/planificador.                                          |
+| `expiry_estimate`  | `POST /api/pantry/expiry/estimate`           | Ingrediente sintético no catalogado recibe días estimados persistidos.                                            |
+| `shopping_photo`   | `POST /api/shopping/lists/:id/photo/analyze` | Foto PNG sintética produce al menos una línea de compra editable.                                                 |
+| `receipt`          | `POST /api/receipts`                         | Ticket PNG sintético; el modelo reconoce tienda y fecha impresas, la UI permite corregirlas y persiste historial. |
 
+El `retryAttempts: 0` debe establecerse al crear la configuración aislada (el valor omitido es 3;
+PATCH/formulario no es evidencia de cero). Con el contrato actual, el máximo esperado es 9 completions:
+una por integración salvo `multiple_recipes` (2); el recibo puede usar hasta 2 dentro de su único
+intento si el stream cae antes del primer fragmento. Por tanto, el proxy aplica techo duro de **10**,
+acepta 9–10 respuestas 2xx y falla ante cualquier exceso, ruta ausente, veredicto inválido o error
+de limpieza. Concurrencia 1; parar en el primer fallo; no hacer reintentos manuales.
+
+**Privacidad y aislamiento obligatorio:** el puerto 3001 no tenía listener durante la revalidación y
+`AGENTA_ENABLED=false`, `AGENTA_CAPTURE_CONTENT=false`, `AGENTA_API_KEY=''` anulan el `.env` de
+WebAPI en un preflight de proceso que verificó esas tres condiciones sin leer/imprimir la credencial;
+`DATABASE_PATH=:memory:` también se resolvió como se esperaba. La ejecución live debe iniciar solo
+un proceso propio en `127.0.0.1:3001`, si el puerto sigue libre, con DB/backup/log/artifacts temporales
+y las tres anulaciones; un bootstrap en ese mismo proceso comprueba flags y rutas antes de importar
+`main.ts`. Si falla la attestation o el puerto está ocupado, no inicia ni contacta al proveedor. No
+edita `.env`/fuentes WebAPI ni inicia el servidor con su configuración normal. Captura de cuerpos,
+Agenta/tracing y otros destinos de telemetría de contenido quedan desactivados; se detiene únicamente
+el PID propio y se eliminan solo los temporales creados por el smoke.
+
+El token WebAPI será temporal, caducará y se borrará en `finally`; solo se entrega al proceso backend
+aislado. No aparece en argumentos, navegador, fuentes, specs, logs, capturas, traces, fixtures, SQLite
+ni memoria persistente. El proxy solo reenvía a `127.0.0.1:3001`, rechaza redirects/hosts/rutas ajenos,
+no guarda prompt/respuesta y expone únicamente estado, modelo, duración y uso/coste si WebAPI los
+devuelve. El smoke es opt-in, prohibido en CI y excluido de la suite normal; el fallo o la omisión
+nunca se reporta como verde. Una E2E sintética independiente seguirá comprobando que la suite normal
+no contacta la red exterior.
+
+- [ ] Mantener la tabla exhaustiva alineada con el enum y rutas vigentes; comprobar modelo activo/texto+imagen sin leer ni imprimir bearer.
+- [ ] Automatizar la attestation del proceso WebAPI aislado, el veto por puerto ocupado/Agenta activo, DB/log/artifacts temporales y cleanup del PID/directorio propio.
+- [ ] Completar el smoke opt-in con los ocho `AiJobKind`, presupuesto 9–10, una sola configuración activa, concurrencia 1, `retryAttempts: 0` al crear y parada ante el primer fallo.
+- [ ] Hacer que la E2E valide los contratos de cada resultado; para ticket verificar tienda/fecha reales de la imagen sintética, edición UI, persistencia tras recarga e historial.
+- [ ] Probar setup, opt-in/CI, allowlist, redacción, cancelación, exceso de presupuesto y cleanup; ejecutar suites sintéticas fuera de red y verificar que omisión/fallo del smoke es rojo, no verde.
+- [ ] Ejecutar una corrida live autorizada en el modelo activo; registrar solo modelo, resultado, recuento/latencia/uso y coste si está disponible. Mantenerla manual y fuera de CI.
 ### Subunidad QA-AI.SECRET-REDACTION.1 · proteger credenciales y datos en errores upstream
 
 **Fuente revalidada (2026-10-03):** `ai-client.ts` era una frontera común para errores upstream,
