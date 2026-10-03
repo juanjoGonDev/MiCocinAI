@@ -2033,3 +2033,28 @@ por su función de contenido/layout y se excluyen solo controles realmente de fa
 
 **Rollback focal:** restaurar únicamente las reglas de tamaño/estados de `app-button`, retirar las aserciones
 geométricas correspondientes y este subapartado; mantener abiertas las demás familias de la matriz global.
+
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.SHOPPING-PRIMARY.1 · CTA primario de Compra
+
+**Fuente revalidada (2026-10-03):** `shopping-lists.component.ts` declara `.tray__primary` con alto mínimo
+de 40 px y padding vertical `--space-2`; `shopping-list-detail.component.ts` declara `.detail__primary` y
+`.detail__add-btn` con alto mínimo de 48 px y padding vertical `--space-3`. Son acciones primarias de texto
+rellenas del mismo flujo Compra, no controles compactos ni icon-only. El `app-button` vigente ya fija para
+todo botón de texto 44 px, padding `--space-2 var(--space-4)`, `--text-sm`, `--font-sans`, peso medio,
+`--leading-none` y `--radius-lg`; ese es el contrato geométrico común que deben reutilizar, con el énfasis
+expresado por color y sin imponer igual anchura a etiquetas de longitudes distintas.
+
+- [ ] Añadir primero E2E aislada que cree usuario/lista/artículo sintéticos y compare el botón de crear lista
+      en `/shopping` con añadir/finalizar en `/shopping/:id`; medir caja, padding, fuente, interlineado, borde,
+      radio, margen y transform con tolerancia de 1 CSS px. El baseline debe reproducir 40 px frente a 48 px.
+- [ ] Alinear los primarios textuales de las dos vistas al contrato `app-button` sin cambiar sus acciones,
+      semántica, color de énfasis ni reglas de anchura; disabled/loading/focus no debe mover ni redimensionar.
+- [ ] Repetir Playwright real aislado en Chromium y Pixel 5 a 320×568, 393×851, 719/720/721 px y 1440×900;
+      cubrir teclado/foco, estado deshabilitado, ausencia de overflow y persistencia de la lista sintética.
+- [ ] Guardar e inspeccionar capturas sintéticas comparables PC/móvil. Ejecutar typecheck E2E, `check:ui`,
+      formato, build Angular y `git diff --check`; producción es solo CSS (coverage S/B/F/L: N/A salvo que
+      la E2E descubra y requiera cambiar lógica instrumentable). Mantener abierto el censo global.
+
+**Rollback focal:** revertir únicamente la geometría local de `.tray__primary`, `.detail__primary` y
+`.detail__add-btn`, esta regresión E2E y este subapartado; no revertir la unidad `app-button` ni otros cambios
+de Compra.
