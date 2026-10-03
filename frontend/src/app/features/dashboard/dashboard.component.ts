@@ -199,15 +199,9 @@ interface SuggestedRecipe {
   styles: [
     `
       .dashboard {
-        padding-block: var(--space-4);
+        padding-block: var(--container-padding);
         max-width: 800px;
         margin: 0 auto;
-      }
-
-      @media (min-width: 768px) {
-        .dashboard {
-          padding-block: var(--space-8);
-        }
       }
 
       .dashboard__welcome {

@@ -958,13 +958,9 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     }
 
     .calendar {
-      padding: var(--space-3) var(--space-4) var(--space-8);
+      padding-block: var(--container-padding);
       max-width: 1280px;
       margin: 0 auto;
-    }
-
-    @media (min-width: 768px) {
-      .calendar { padding: var(--space-4) var(--space-6) var(--space-10); }
     }
 
     /* Una sola superficie con líneas finas: el aspecto de un calendario real,

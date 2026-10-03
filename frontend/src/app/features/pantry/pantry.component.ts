@@ -738,14 +738,9 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
   styles: [
     `
       .pantry {
-        padding-block: var(--space-4);
+        padding-block: var(--container-padding);
         max-width: 1000px;
         margin: 0 auto;
-      }
-      @media (min-width: 768px) {
-        .pantry {
-          padding-block: var(--space-6);
-        }
       }
 
       .pantry__header {

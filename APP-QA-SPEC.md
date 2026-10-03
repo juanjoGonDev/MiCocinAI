@@ -1945,15 +1945,28 @@ de cada raíz privada use ese mismo `--container-padding`: así bloque e inline 
 mismo gutter del main content en cada breakpoint, sin inventar otro token. Los shells públicos, diálogos
 y espaciados dentro de tarjetas pertenecen a familias aparte y no se deben forzar dentro de esta unidad.
 
-- [ ] Añadir primero E2E Playwright que compare `padding-block-start/end` calculado con `--container-padding`
+- [x] Añadir primero E2E Playwright que compare `padding-block-start/end` calculado con `--container-padding`
       de las raíces de Dashboard, Recetas, Despensa, Calendario, Compra, Tickets y Logs en 320, 393,
-      568×320, 767, 768, 1023, 1024 y 1440 px; verificar el baseline rojo antes de ajustar estilos.
-- [ ] Hacer que esas raíces usen el token horizontal `--container-padding` en bloque, sin alterar padding
+      568×320, 767, 768, 769, 1023, 1024, 1025 y 1440 px; el baseline falla antes de ajustar estilos en ambos proyectos.
+- [x] Hacer que esas raíces usen el token horizontal `--container-padding` en bloque, sin alterar padding
       interior de paneles, formularios, tarjetas ni safe-area; registrar en spec cualquier excepción
       funcional detectada antes de conservarla.
-- [ ] Repetir la comparación Playwright en Chromium escritorio y Pixel 5, cubrir breakpoints B−1/B/B+1,
-      teclado/scroll y overflow, guardar e inspeccionar capturas sintéticas PC/móvil y ejecutar los gates
-      focales; los shells públicos y el censo completo de controles siguen abiertos en la unidad padre.
+- [x] Repetir la comparación Playwright en Chromium escritorio y Pixel 5, cubrir breakpoints B−1/B/B+1,
+      scroll y ausencia de overflow horizontal; guardar e inspeccionar capturas sintéticas PC/móvil y ejecutar
+      gates focales. Esta unidad no modifica controles ni modales; los shells públicos y el censo completo
+      de familias siguen abiertos en la unidad padre.
+
+**Evidencia (2026-10-03):** TDD aislado primero falló en Chromium y Pixel 5 con **28 diferencias** entre
+padding vertical de raíz e inline del main content en los 56 pares ruta×viewport iniciales. Tras usar el
+token común, `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/page-spacing-consistency.spec.ts --reporter=dot` pasó **2/2**; la matriz final recorre 7 rutas ×
+10 viewports (320, 393, 568×320, 767, 768, 769, 1023, 1024, 1025 y 1440 px) por proyecto y valida padding
+en ambos ejes más overflow horizontal. `pnpm run typecheck:e2e`, `pnpm run check:ui` (**188 ficheros, 20
+reglas, 0 incidencias**), Prettier de la nueva E2E, `git diff --check` y build Angular de producción pasan.
+El build mantiene warnings existentes de bundle (715,16 kB > 500 kB), estilos de componentes e imports
+Angular sin uso; no se rebajaron gates. Capturas sintéticas PC/móvil inspeccionadas en
+`.e2e-screenshots/qa-page-spacing-20261003/` para las siete rutas. Producción modificada solo en padding CSS;
+coverage instrumentable S/B/F/L: N/A. DB, semillas, servidor y artefactos E2E fueron temporales/aislados.
 
 **Rollback focal:** revertir solo el token/uso del padding vertical común, la regresión E2E y este
 subapartado; preservar gutters horizontales y los paddings internos de cada componente.
