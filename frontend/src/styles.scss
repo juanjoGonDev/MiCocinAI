@@ -596,7 +596,6 @@ app-page-container.page-container--bounded {
 app-page-container.page-container.page-container--full-content > :not(router-outlet),
 app-page-container.page-container.page-container--full-content > router-outlet + *,
 app-page-container.page-container.page-container--full-content > router-outlet + * > :first-child {
-  display: block;
   width: 100%;
   max-width: none;
   min-width: 0;

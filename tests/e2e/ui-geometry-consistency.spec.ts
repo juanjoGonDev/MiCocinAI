@@ -222,6 +222,9 @@ test('las acciones equivalentes de la cabecera del calendario comparten geometr√
     scrollWidth: element.scrollWidth
   }));
   expect(scrollMetrics.scrollWidth).toBeGreaterThan(scrollMetrics.clientWidth);
+  await expect(page.locator('.tl__scroll')).toHaveCSS('cursor', 'pointer');
+  await expect(page.locator('.tl__col').first()).toHaveCSS('cursor', 'pointer');
+  await expect(page.locator('.tl__hours').first()).toHaveCSS('cursor', 'auto');
 
   const dayButtons = page.locator('.tl__daynum');
   await dayButtons.first().focus();

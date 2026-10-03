@@ -211,11 +211,17 @@ async function checkPageContainer(
         start: rect.left,
         end: rect.right,
         width: rect.width,
+        display: style.display,
         maxWidth: style.maxWidth,
         paddingStart: Number.parseFloat(style.paddingInlineStart),
         paddingEnd: Number.parseFloat(style.paddingInlineEnd)
       };
     });
+    if (target.expectedRootDisplay && root.display !== target.expectedRootDisplay) {
+      mismatches.push(
+        `${target.path} @ ${viewport.width}x${viewport.height}: display de raíz esperado ${target.expectedRootDisplay}, actual ${root.display}`
+      );
+    }
     if (
       Math.abs(root.start - geometry.contentStart) > tolerance ||
       Math.abs(root.end - geometry.contentEnd) > tolerance ||
@@ -423,6 +429,24 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
 
   for (const target of AUTHENTICATED_ROUTES) {
     await checkRouteAcrossViewports(page, target, mismatches, async (viewport) => {
+      const captureDesktop =
+        target.expectedRootDisplay &&
+        testInfo.project.name === 'chromium' &&
+        viewport.width === 1440;
+      const captureMobile =
+        target.expectedRootDisplay &&
+        testInfo.project.name === 'mobile-chrome' &&
+        viewport.width === 393;
+      if (captureDesktop || captureMobile) {
+        const directory = process.env.E2E_SCREENSHOT_DIR;
+        const screenshotName = `${target.component.replace(/^app-/, '')}-${captureDesktop ? 'desktop' : 'mobile'}.png`;
+        const screenshotPath = directory
+          ? join(directory, screenshotName)
+          : testInfo.outputPath(screenshotName);
+        mkdirSync(dirname(screenshotPath), { recursive: true });
+        await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled' });
+      }
+
       if (
         target.path === '/dashboard' &&
         ((testInfo.project.name === 'chromium' && viewport.width === 1440) ||

@@ -8,6 +8,7 @@ export type RouteCase = {
   shell: RouteShell;
   pageRoot?: string;
   contentRoot?: string;
+  expectedRootDisplay?: 'block' | 'flex' | 'grid';
   readySelector?: string;
   readyContent?: { selector: string; text: string };
   finalPath?: string;
@@ -189,7 +190,8 @@ export const AUTHENTICATED_ROUTES: RouteCase[] = [
     component: 'app-caducidades',
     access: 'authenticated',
     shell: 'private',
-    pageRoot: 'app-caducidades > .cad'
+    pageRoot: 'app-caducidades > .cad',
+    expectedRootDisplay: 'grid'
   },
   {
     path: '/pantry/inventario/qa-baseline-missing-item',
@@ -274,7 +276,8 @@ export const AUTHENTICATED_ROUTES: RouteCase[] = [
     component: 'app-receipts',
     access: 'authenticated',
     shell: 'private',
-    pageRoot: 'app-receipts > .tickets'
+    pageRoot: 'app-receipts > .tickets',
+    expectedRootDisplay: 'grid'
   },
   {
     path: '/receipts/qa-baseline-missing-receipt',
@@ -323,7 +326,8 @@ export const AUTHENTICATED_ROUTES: RouteCase[] = [
     component: 'app-preferences',
     access: 'authenticated',
     shell: 'private',
-    pageRoot: 'app-preferences > .preferences-page'
+    pageRoot: 'app-preferences > .preferences-page',
+    expectedRootDisplay: 'flex'
   },
   {
     path: '/settings',

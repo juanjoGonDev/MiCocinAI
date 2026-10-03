@@ -366,6 +366,7 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
 
       .tl__scroll {
         position: relative;
+        cursor: pointer;
         /* Las 24 horas no caben en una pantalla, y a proposito no se fuerza que quepan: la ventana
            ya recorta, y si recorta mucho el usuario scrollea dos franjas, no doce. */
         max-height: min(62vh, 560px);
@@ -382,6 +383,7 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
       .tl__hours {
         display: grid;
         grid-template-rows: repeat(auto-fill, var(--hour-px));
+        cursor: auto;
         padding-top: 0;
       }
 
@@ -400,7 +402,7 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
         position: relative;
         min-width: 0;
         border-left: 1px solid var(--border-default);
-        cursor: copy;
+        cursor: pointer;
       }
 
       .tl__col.is-today {

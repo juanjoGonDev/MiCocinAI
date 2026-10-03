@@ -1873,6 +1873,9 @@ columna por sí solo ensanchaba `.cal-body` fuera del panel en vez de crear un s
       columna móvil un mínimo táctil de 48 px, con scroll horizontal contenido y nombres apilados.
 - [x] Limitar el elemento grid padre para que el overflow quede dentro del visor; probar 320 px, recorrer
       por Tab hasta el último día y comprobar desplazamiento/foco sin expandir el documento.
+- [x] Hacer coherente la señal del cursor con la acción: antes la zona delegada calculaba `auto` y la
+      columna `copy`, pese a que abrir un evento no copia nada; ahora el área/columna clicable calcula
+      `pointer` y el gutter conserva cursor normal. E2E verifica los tres estilos.
 - [x] Verificar Playwright real aislado con rate limit activo, SQLite/semilla/puertos temporales:
       `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/ui-geometry-consistency.spec.ts --reporter=dot`
       pasó **2/2**; recorre siete viewports, compara rectángulos y estilos y guarda capturas de escritorio/móvil.
@@ -1892,3 +1895,42 @@ visual de `/calendar`; aún faltan familias/rutas públicas y privadas.
 
 **Rollback focal:** revertir solo los estilos de barra, mínimo de columnas/scroll local, las dos pruebas de
 geometría y este subapartado; no revertir `AGENTS.md` ni la matriz global.
+
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.ROOT-DISPLAY.1 · preservar el layout de las raíces
+
+**Fuente revalidada (2026-10-03):** la regla común de `styles.scss` normaliza ancho, max-width y márgenes,
+pero también imponía `display: block` al primer hijo de cada `app-page-container`. Esto anulaba reglas
+de layout intencionales de `.cad` y `.tickets` (`display: grid`) y `.preferences-page` (`display: flex`).
+La matriz anterior medía sus cajas, no el `display` calculado; por tanto podía pasar pese a que el contenido
+interno de esas vistas se hubiera desarmado.
+
+- [x] Extender primero la E2E real para contrastar el `display` calculado de esas tres raíces en todos
+      los viewports del manifiesto; antes del cambio falla en Chromium mostrando `block` en vez de
+      `grid/flex` a través de todos los anchos (TDD rojo).
+- [x] Quitar solo el override global de `display`; conservar `width`, `max-width`, `min-width` y los
+      márgenes del contenedor común para no modificar gutters ni límites horizontales.
+- [x] Ejecutar la matriz estática en escritorio y Pixel 5, guardar/inspeccionar capturas sintéticas
+      de Caducidades, Tickets y Preferencias en ambos tamaños; repetir el manifiesto completo incluidas
+      rutas dinámicas antes de cerrar esta subunidad.
+- [ ] Extender el censo a todas las raíces y familias internas; esta regresión cubre tres raíces
+      representativas, no declara la auditoría visual global completa.
+
+**Evidencia de la subunidad (2026-10-03):** TDD aislado reprodujo `display:block` para las tres raíces en
+todos los anchos; tras quitar únicamente esa declaración, la matriz completa estática + dinámica y el
+test de calendario pasaron **6/6** con Chrome/Chromium desktop y emulación Pixel 5, 39 rutas y 50
+viewports por proyecto, incluida orientación horizontal y B−1/B/B+1. Los roots mantienen caja/gutters,
+sin overflow; las raíces elegidas conservan `grid/grid/flex`. Capturas sintéticas guardadas e inspeccionadas
+en `.e2e-screenshots/qa-ui-uniformidad-20261003/` (incluye Caducidades, Tickets, Preferencias, receta,
+Dashboard y geometría del calendario, PC/móvil). `pnpm run typecheck:e2e`, `pnpm run check:ui` (**188
+ficheros, 20 reglas, 0 incidencias**), Prettier focal y `git diff --check` pasan. Build de producción
+aislado pasa; conserva avisos previos de bundle inicial (**715,16 kB > 500 kB**), estilos de Calendar y
+otros componentes e imports Angular sin uso. Los cambios de producción de esta subunidad son CSS (global
+y estilos inline); coverage instrumentable S/B/F/L: N/A. No se modificaron gates ni datos normales.
+
+El checkbox del inventario global sigue abierto deliberadamente: se preservaron tres layouts de raíz,
+pero aún no existe comparación calculada de todas las familias interiores del sitio; no se declara
+«pixel-perfect» ni finalizada la auditoría.
+
+**Rollback focal:** restaurar la declaración `display: block` de ese selector y quitar únicamente la
+aserción `expectedRootDisplay`, los tres valores del manifiesto y este subapartado; conservar el resto
+de la normalización de ancho/gutters.
