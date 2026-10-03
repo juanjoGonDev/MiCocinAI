@@ -196,9 +196,22 @@
 
   /* ─── Layout ─── */
   --container-max: 1280px;
+  --container-padding: var(--space-4);
   --sidebar-width: 280px;
   --header-height: 64px;
   --bottom-nav-height: 64px;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --container-padding: var(--space-6);
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --container-padding: var(--space-8);
+  }
 }
 
 /* Con la barra de navegacion inferior, el borde de abajo de la ventana esta ocupado: quien se trae a la
@@ -562,16 +575,32 @@ ol {
 .container {
   width: 100%;
   max-width: var(--container-max);
-  margin: 0 auto;
-  padding: 0 var(--space-4);
+  margin-inline: auto;
+  padding-inline: var(--container-padding);
+}
 
-  @media (min-width: 768px) {
-    padding: 0 var(--space-6);
-  }
+app-page-container.page-container {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding-inline: var(--container-padding);
+}
 
-  @media (min-width: 1024px) {
-    padding: 0 var(--space-8);
-  }
+app-page-container.page-container--bounded {
+  max-width: var(--container-max);
+  margin-inline: auto;
+}
+
+/* El frame compartido es la única fuente de ancho/gutters de cada vista. Las raíces privadas y de
+   onboarding llenan su caja útil; las tarjetas/forms pueden limitarse dentro sin estrechar la página. */
+app-page-container.page-container.page-container--full-content > :not(router-outlet),
+app-page-container.page-container.page-container--full-content > router-outlet + *,
+app-page-container.page-container.page-container--full-content > router-outlet + * > :first-child {
+  display: block;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin-inline: 0;
 }
 
 .grid {

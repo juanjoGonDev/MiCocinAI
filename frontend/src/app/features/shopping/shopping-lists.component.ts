@@ -541,7 +541,7 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
       }
 
       .tray {
-        padding: var(--space-4);
+        padding-block: var(--space-4);
         max-width: 1040px;
         margin: 0 auto;
         display: flex;

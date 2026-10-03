@@ -31,6 +31,7 @@ import {
   tourStatus
 } from '../../core/onboarding-steps';
 import { I18nService } from '../../core/services/i18n.service';
+import { PageContainerComponent } from '../../shared/components/page-container/page-container.component';
 
 /**
  * Configuración inicial, nada más registrarse: alergias, gustos, objetivo y
@@ -48,230 +49,235 @@ import { I18nService } from '../../core/services/i18n.service';
     ChipSelectComponent,
     MealHoursComponent,
     HomeProfilePickerComponent,
-    IconComponent
+    IconComponent,
+    PageContainerComponent
   ],
   template: `
-    <div class="onboarding">
-      <div class="onboarding__card" (keydown)="onCardKeydown($event)">
-        <header class="onboarding__header">
-          <span class="onboarding__logo">
-            <app-icon name="home" [size]="40" [label]="null" />
-          </span>
-          <h1 class="onboarding__title">{{ 'onboarding.configura_tu_hogaria' | t }}</h1>
-          <p class="onboarding__subtitle">
-            {{ 'onboarding.preguntas_cortas' | t: { n: steps.length } }}
-          </p>
-        </header>
+    <app-page-container [bounded]="true">
+      <div class="onboarding">
+        <div class="onboarding__card" (keydown)="onCardKeydown($event)">
+          <header class="onboarding__header">
+            <span class="onboarding__logo">
+              <app-icon name="home" [size]="40" [label]="null" />
+            </span>
+            <h1 class="onboarding__title">{{ 'onboarding.configura_tu_hogaria' | t }}</h1>
+            <p class="onboarding__subtitle">
+              {{ 'onboarding.preguntas_cortas' | t: { n: steps.length } }}
+            </p>
+          </header>
 
-        <div class="onboarding__progress">
-          <span class="onboarding__step-label" data-test="onboarding-step-label">
-            {{ stepLabel() }}
-          </span>
-          <span class="onboarding__bar" aria-hidden="true">
-            <span class="onboarding__bar-fill" [style.width.%]="progress()"></span>
-          </span>
-          <button type="button" class="onboarding__skip" (click)="skip()">
-            {{ 'onboarding.saltar_por_ahora' | t }}
-          </button>
+          <div class="onboarding__progress">
+            <span class="onboarding__step-label" data-test="onboarding-step-label">
+              {{ stepLabel() }}
+            </span>
+            <span class="onboarding__bar" aria-hidden="true">
+              <span class="onboarding__bar-fill" [style.width.%]="progress()"></span>
+            </span>
+            <button type="button" class="onboarding__skip" (click)="skip()">
+              {{ 'onboarding.saltar_por_ahora' | t }}
+            </button>
+          </div>
+
+          <section class="onboarding__step" [ngSwitch]="steps[stepIndex()]">
+            <!-- 1 · Alergias e intolerancias -->
+            <ng-container *ngSwitchCase="'profile'">
+              <h2 class="onboarding__step-title">{{ 'preferences.tu_perfil' | t }}</h2>
+              <p class="onboarding__step-hint">
+                {{ 'onboarding.hogaria_es_tu_dia_a_dia' | t }}
+              </p>
+              <app-home-profile-picker
+                [(profile)]="profile"
+                (profileChange)="persistProgress()"
+              ></app-home-profile-picker>
+            </ng-container>
+
+            <ng-container *ngSwitchCase="'allergies'">
+              <h2 class="onboarding__step-title">
+                {{ 'preferences.alergias_o_intolerancias' | t }}
+              </h2>
+              <p class="onboarding__step-hint">
+                {{ 'preferences.marca_todo_lo_que' | t }}
+              </p>
+              <app-chip-select
+                [label]="'preferences.alergias_e_intolerancias' | t"
+                [options]="allergenOptions"
+                [(value)]="taste.allergies"
+                [customPlaceholder]="'ui.otra_alergia_o_intolerancia' | t"
+                [hint]="'ui.no_esta_escribelo' | t"
+              ></app-chip-select>
+            </ng-container>
+
+            <!-- 2 · Gustos -->
+            <ng-container *ngSwitchCase="'tastes'">
+              <h2 class="onboarding__step-title">{{ 'preferences.que_te_gusta_y' | t }}</h2>
+              <p class="onboarding__step-hint">
+                {{ 'preferences.sirve_para_priorizar_unos' | t }}
+              </p>
+
+              <div class="onboarding__field">
+                <h3 class="onboarding__field-title">{{ 'onboarding.me_gusta' | t }}</h3>
+                <app-chip-select
+                  [label]="'preferences.lo_que_mas_te' | t"
+                  [options]="likeOptions"
+                  [(value)]="taste.likes"
+                  [customPlaceholder]="'ui.otro_alimento_o_tipo_de_cocina' | t"
+                ></app-chip-select>
+              </div>
+
+              <div class="onboarding__field">
+                <h3 class="onboarding__field-title">{{ 'onboarding.mejor_no' | t }}</h3>
+                <app-chip-select
+                  [label]="'preferences.lo_que_prefieres_evitar' | t"
+                  [options]="dislikeOptions"
+                  [(value)]="taste.dislikes"
+                  [customPlaceholder]="'ui.otro_alimento_que_no_te_gusta' | t"
+                ></app-chip-select>
+              </div>
+
+              <div class="onboarding__field">
+                <label class="onboarding__field-title" for="tasteNotes">
+                  {{ 'onboarding.y_lo_que_quieras' | t }}
+                </label>
+                <textarea
+                  id="tasteNotes"
+                  name="tasteNotes"
+                  class="onboarding__textarea"
+                  rows="3"
+                  maxlength="1000"
+                  [placeholder]="'preferences.ej_ceno_pronto_nada' | t"
+                  [(ngModel)]="taste.notes"
+                ></textarea>
+              </div>
+            </ng-container>
+
+            <!-- 3 · Objetivo -->
+            <ng-container *ngSwitchCase="'goal'">
+              <h2 class="onboarding__step-title">{{ 'preferences.cual_es_tu_objetivo' | t }}</h2>
+              <p class="onboarding__step-hint">
+                {{ 'onboarding.marca_el_plato_no' | t }}
+              </p>
+
+              <div class="onboarding__goals">
+                <button
+                  *ngFor="let goal of goalOptions"
+                  type="button"
+                  class="onboarding__goal"
+                  [class.onboarding__goal--on]="taste.goal === goal.value"
+                  [attr.aria-pressed]="taste.goal === goal.value"
+                  (click)="selectGoal(goal.value)"
+                >
+                  <span class="onboarding__goal-icon">
+                    <app-icon [name]="goal.icon" [size]="20" [label]="null" />
+                  </span>
+                  <span class="onboarding__goal-label">{{ goal.labelKey | t }}</span>
+                  <span class="onboarding__goal-hint">{{ goal.hintKey | t }}</span>
+                </button>
+              </div>
+
+              <div class="onboarding__field">
+                <label class="onboarding__field-title" for="goalNotes">
+                  {{
+                    taste.goal === 'custom'
+                      ? ('calendar.describe_tu_objetivo' | t)
+                      : ('onboarding.mas_sobre_el_objetivo' | t)
+                  }}
+                </label>
+                <textarea
+                  id="goalNotes"
+                  name="goalNotes"
+                  class="onboarding__textarea"
+                  rows="3"
+                  maxlength="500"
+                  [placeholder]="
+                    taste.goal === 'custom'
+                      ? ('onboarding.ej_sin_carne_los_lunes' | t)
+                      : ('onboarding.ej_prioriza_proteina_en_la_cena' | t)
+                  "
+                  [(ngModel)]="taste.goalNotes"
+                ></textarea>
+              </div>
+            </ng-container>
+
+            <!-- 4 · Horarios de las comidas -->
+            <ng-container *ngSwitchCase="'meals'">
+              <h2 class="onboarding__step-title">{{ 'onboarding.a_que_hora_comeis' | t }}</h2>
+              <p class="onboarding__step-hint">
+                {{ 'onboarding.no_es_un_adorno' | t }}
+              </p>
+
+              <app-meal-hours
+                idPrefix="ob-meal"
+                dataTest="onboarding-meal-time"
+                [times]="mealTimes"
+              />
+
+              <p class="onboarding__step-hint">
+                {{ 'onboarding.cada_hora_que_cambies' | t }}
+              </p>
+            </ng-container>
+
+            <!-- 5 · Utensilios -->
+            <ng-container *ngSwitchCase="'kitchen'">
+              <h2 class="onboarding__step-title">{{ 'onboarding.con_que_cuentas_en' | t }}</h2>
+              <p class="onboarding__step-hint">
+                {{ 'onboarding.utensilios_en_despensa' | t }}
+              </p>
+
+              <p class="onboarding__link-row">
+                <a href="/pantry?tab=utensils" (click)="navigateToPantry($event, 'utensils')">
+                  {{ 'onboarding.gestionar_utensilios' | t }}
+                </a>
+                <a href="/pantry?tab=ingredients" (click)="navigateToPantry($event, 'ingredients')">
+                  {{ 'onboarding.revisar_la_despensa' | t }}
+                </a>
+              </p>
+            </ng-container>
+          </section>
+
+          <footer class="onboarding__nav">
+            <app-button
+              variant="ghost"
+              [touchTarget]="true"
+              [disabled]="stepIndex() === 0 || isSaving()"
+              (onClick)="back()"
+            >
+              {{ 'onboarding.atras' | t }}
+            </app-button>
+            <!-- Saltar UN paso: hasta aqui «no quiero hablar de esto ahora» cerraba el tour entero, que
+                 es lo contrario de lo que la persona acaba de pedir. -->
+            <button
+              type="button"
+              class="onboarding__skip onboarding__skip--step"
+              data-test="onboarding-skip-step"
+              (click)="skipStep()"
+            >
+              {{ 'onboarding.saltar_este_paso' | t }}
+            </button>
+            <app-button
+              *ngIf="!isLastStep()"
+              variant="primary"
+              [touchTarget]="true"
+              (onClick)="next()"
+            >
+              {{ 'onboarding.siguiente' | t }}
+            </app-button>
+            <app-button
+              *ngIf="isLastStep()"
+              variant="primary"
+              [touchTarget]="true"
+              [loading]="isSaving()"
+              (onClick)="finish()"
+            >
+              {{ 'onboarding.guardar_y_empezar' | t }}
+            </app-button>
+          </footer>
         </div>
 
-        <section class="onboarding__step" [ngSwitch]="steps[stepIndex()]">
-          <!-- 1 · Alergias e intolerancias -->
-          <ng-container *ngSwitchCase="'profile'">
-            <h2 class="onboarding__step-title">{{ 'preferences.tu_perfil' | t }}</h2>
-            <p class="onboarding__step-hint">
-              {{ 'onboarding.hogaria_es_tu_dia_a_dia' | t }}
-            </p>
-            <app-home-profile-picker
-              [(profile)]="profile"
-              (profileChange)="persistProgress()"
-            ></app-home-profile-picker>
-          </ng-container>
-
-          <ng-container *ngSwitchCase="'allergies'">
-            <h2 class="onboarding__step-title">{{ 'preferences.alergias_o_intolerancias' | t }}</h2>
-            <p class="onboarding__step-hint">
-              {{ 'preferences.marca_todo_lo_que' | t }}
-            </p>
-            <app-chip-select
-              [label]="'preferences.alergias_e_intolerancias' | t"
-              [options]="allergenOptions"
-              [(value)]="taste.allergies"
-              [customPlaceholder]="'ui.otra_alergia_o_intolerancia' | t"
-              [hint]="'ui.no_esta_escribelo' | t"
-            ></app-chip-select>
-          </ng-container>
-
-          <!-- 2 · Gustos -->
-          <ng-container *ngSwitchCase="'tastes'">
-            <h2 class="onboarding__step-title">{{ 'preferences.que_te_gusta_y' | t }}</h2>
-            <p class="onboarding__step-hint">
-              {{ 'preferences.sirve_para_priorizar_unos' | t }}
-            </p>
-
-            <div class="onboarding__field">
-              <h3 class="onboarding__field-title">{{ 'onboarding.me_gusta' | t }}</h3>
-              <app-chip-select
-                [label]="'preferences.lo_que_mas_te' | t"
-                [options]="likeOptions"
-                [(value)]="taste.likes"
-                [customPlaceholder]="'ui.otro_alimento_o_tipo_de_cocina' | t"
-              ></app-chip-select>
-            </div>
-
-            <div class="onboarding__field">
-              <h3 class="onboarding__field-title">{{ 'onboarding.mejor_no' | t }}</h3>
-              <app-chip-select
-                [label]="'preferences.lo_que_prefieres_evitar' | t"
-                [options]="dislikeOptions"
-                [(value)]="taste.dislikes"
-                [customPlaceholder]="'ui.otro_alimento_que_no_te_gusta' | t"
-              ></app-chip-select>
-            </div>
-
-            <div class="onboarding__field">
-              <label class="onboarding__field-title" for="tasteNotes">
-                {{ 'onboarding.y_lo_que_quieras' | t }}
-              </label>
-              <textarea
-                id="tasteNotes"
-                name="tasteNotes"
-                class="onboarding__textarea"
-                rows="3"
-                maxlength="1000"
-                [placeholder]="'preferences.ej_ceno_pronto_nada' | t"
-                [(ngModel)]="taste.notes"
-              ></textarea>
-            </div>
-          </ng-container>
-
-          <!-- 3 · Objetivo -->
-          <ng-container *ngSwitchCase="'goal'">
-            <h2 class="onboarding__step-title">{{ 'preferences.cual_es_tu_objetivo' | t }}</h2>
-            <p class="onboarding__step-hint">
-              {{ 'onboarding.marca_el_plato_no' | t }}
-            </p>
-
-            <div class="onboarding__goals">
-              <button
-                *ngFor="let goal of goalOptions"
-                type="button"
-                class="onboarding__goal"
-                [class.onboarding__goal--on]="taste.goal === goal.value"
-                [attr.aria-pressed]="taste.goal === goal.value"
-                (click)="selectGoal(goal.value)"
-              >
-                <span class="onboarding__goal-icon">
-                  <app-icon [name]="goal.icon" [size]="20" [label]="null" />
-                </span>
-                <span class="onboarding__goal-label">{{ goal.labelKey | t }}</span>
-                <span class="onboarding__goal-hint">{{ goal.hintKey | t }}</span>
-              </button>
-            </div>
-
-            <div class="onboarding__field">
-              <label class="onboarding__field-title" for="goalNotes">
-                {{
-                  taste.goal === 'custom'
-                    ? ('calendar.describe_tu_objetivo' | t)
-                    : ('onboarding.mas_sobre_el_objetivo' | t)
-                }}
-              </label>
-              <textarea
-                id="goalNotes"
-                name="goalNotes"
-                class="onboarding__textarea"
-                rows="3"
-                maxlength="500"
-                [placeholder]="
-                  taste.goal === 'custom'
-                    ? ('onboarding.ej_sin_carne_los_lunes' | t)
-                    : ('onboarding.ej_prioriza_proteina_en_la_cena' | t)
-                "
-                [(ngModel)]="taste.goalNotes"
-              ></textarea>
-            </div>
-          </ng-container>
-
-          <!-- 4 · Horarios de las comidas -->
-          <ng-container *ngSwitchCase="'meals'">
-            <h2 class="onboarding__step-title">{{ 'onboarding.a_que_hora_comeis' | t }}</h2>
-            <p class="onboarding__step-hint">
-              {{ 'onboarding.no_es_un_adorno' | t }}
-            </p>
-
-            <app-meal-hours
-              idPrefix="ob-meal"
-              dataTest="onboarding-meal-time"
-              [times]="mealTimes"
-            />
-
-            <p class="onboarding__step-hint">
-              {{ 'onboarding.cada_hora_que_cambies' | t }}
-            </p>
-          </ng-container>
-
-          <!-- 5 · Utensilios -->
-          <ng-container *ngSwitchCase="'kitchen'">
-            <h2 class="onboarding__step-title">{{ 'onboarding.con_que_cuentas_en' | t }}</h2>
-            <p class="onboarding__step-hint">
-              {{ 'onboarding.utensilios_en_despensa' | t }}
-            </p>
-
-            <p class="onboarding__link-row">
-              <a href="/pantry?tab=utensils" (click)="navigateToPantry($event, 'utensils')">
-                {{ 'onboarding.gestionar_utensilios' | t }}
-              </a>
-              <a href="/pantry?tab=ingredients" (click)="navigateToPantry($event, 'ingredients')">
-                {{ 'onboarding.revisar_la_despensa' | t }}
-              </a>
-            </p>
-          </ng-container>
-        </section>
-
-        <footer class="onboarding__nav">
-          <app-button
-            variant="ghost"
-            [touchTarget]="true"
-            [disabled]="stepIndex() === 0 || isSaving()"
-            (onClick)="back()"
-          >
-            {{ 'onboarding.atras' | t }}
-          </app-button>
-          <!-- Saltar UN paso: hasta aqui «no quiero hablar de esto ahora» cerraba el tour entero, que
-               es lo contrario de lo que la persona acaba de pedir. -->
-          <button
-            type="button"
-            class="onboarding__skip onboarding__skip--step"
-            data-test="onboarding-skip-step"
-            (click)="skipStep()"
-          >
-            {{ 'onboarding.saltar_este_paso' | t }}
-          </button>
-          <app-button
-            *ngIf="!isLastStep()"
-            variant="primary"
-            [touchTarget]="true"
-            (onClick)="next()"
-          >
-            {{ 'onboarding.siguiente' | t }}
-          </app-button>
-          <app-button
-            *ngIf="isLastStep()"
-            variant="primary"
-            [touchTarget]="true"
-            [loading]="isSaving()"
-            (onClick)="finish()"
-          >
-            {{ 'onboarding.guardar_y_empezar' | t }}
-          </app-button>
-        </footer>
+        <p class="onboarding__footnote">
+          {{ 'onboarding.se_guarda_en_tu' | t }}
+        </p>
       </div>
-
-      <p class="onboarding__footnote">
-        {{ 'onboarding.se_guarda_en_tu' | t }}
-      </p>
-    </div>
+    </app-page-container>
   `,
   styles: [
     `
@@ -279,16 +285,17 @@ import { I18nService } from '../../core/services/i18n.service';
         display: block;
         min-height: 100vh;
         background: var(--bg-secondary);
-        padding: var(--space-6) var(--space-4);
+        padding-block: var(--space-6);
       }
       .onboarding {
-        max-width: 720px;
-        margin: 0 auto;
         display: flex;
         flex-direction: column;
         gap: var(--space-3);
       }
       .onboarding__card {
+        width: 100%;
+        max-width: 720px;
+        margin-inline: auto;
         background: var(--bg-primary);
         border: 1px solid var(--border-default);
         border-radius: var(--radius-xl);

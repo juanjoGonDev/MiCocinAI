@@ -1771,3 +1771,45 @@ producción (`styles.scss`), sin archivo TS instrumentable para cobertura; cober
 Capturas sintéticas revisadas en `%TEMP%\hogaria-safe-area-final-b8dcc311afa94912afce3c827a458c7d\`
 (`safe-area-desktop-chromium.png`, `safe-area-mobile-mobile-chrome.png`). No se probó iOS nativo: la
 revisión WebKit requerida sigue ausente y Pixel 5 no expone inset nativo no nulo; la última casilla queda abierta.
+
+### QA-LAYOUT.MAIN-CONTENT-WIDTH.1 · mismo ancho útil en todas las vistas
+
+**Fuente revalidada (2026-10-03):** `MainLayoutComponent` limita `app-page-container` a
+`--container-max: 1280px` y aplica gutters de 16/24/32 px. Sin embargo, las raíces de página conservan
+límites independientes: Dashboard 800 px, Ajustes 640 px, Cuenta 720 px, tickets 760 px, Pantry 860–1000
+px, Compras 760–1040 px y otros. `layout-gutters.spec.ts` comprueba la geometría del marco compartido y
+que el wrapper raíz no duplique padding, pero no compara el ancho real de ese root con el contenido del
+marco. Por eso el baseline aprobaba mientras el contenido visible variaba entre vistas. La instrucción
+posterior del usuario exige que cada vista use exactamente la misma caja útil del contenido de `main`;
+prevalece sobre la excepción anterior que permitía anchos máximos distintos en wrappers de página.
+
+- [x] Unificar el marco de contenido en todas las rutas y shells con el ancho máximo común de 1280 px y
+      los gutters responsivos existentes. Fondos a sangre completa pueden seguir fuera del marco.
+- [x] Hacer que cada raíz de vista/render de ruta ocupe exactamente el área interior del marco común,
+      sin `max-width`, padding lateral ni centrado independientes. Si una tarjeta o formulario requiere
+      lectura estrecha, limitar solo ese elemento interior sin estrechar el root de la vista.
+- [x] Extender el manifiesto/Playwright para comparar bordes reales de cada root con el área útil de
+      `app-page-container` en rutas públicas, onboarding, privadas y detalles poblados; incluir 320 px,
+      horizontal, 1920 px y cada breakpoint ±1, con tolerancia geométrica ≤1 px y sin overflow.
+- [ ] Ejecutar primero la regresión roja; luego matriz Chromium escritorio/Pixel 5, comprobar shells,
+      scroll, drawer/modal/teclado/foco/targets táctiles y safe-area; guardar e inspeccionar capturas
+      sintéticas PC/móvil. Correr build, typecheck, formato, diff-check y cobertura por archivo ≥70 % sin
+      rebajar gates existentes.
+
+**Rollback:** revertir únicamente los cambios de anchura de raíces de página, su cobertura en manifiesto/
+E2E y este subapartado; conservar el contenedor compartido y las pruebas de safe-area ya existentes.
+
+**Evidencia QA-LAYOUT.MAIN-CONTENT-WIDTH.1 (2026-10-03):** TDD reprodujo primero la diferencia a 1440 px:
+`/account` tenía una raíz de 720 px frente a los 1096 px útiles del main. Tras el cambio, la matriz `layout-gutters.spec.ts`
+pasó **4/4** en Chromium escritorio y Pixel 5; verificó 31 rutas estáticas y 8 detalles poblados en 50 viewports
+(320 px, horizontal, 1920 px y bordes de breakpoint ±1), alineación ≤1 px y ausencia de overflow. Las regresiones
+adyacentes de drawer, safe-area sintética y acciones/teclado del detalle pasaron **6/6**. Capturas sintéticas revisadas
+(PC/móvil): `.e2e-screenshots/qa-layout-main-width-697042c84fd041f58eaae287424ce3f7/dashboard-{desktop,mobile}.png`
+y `recipe-detail-{desktop,mobile}.png`.
+
+`pnpm run typecheck:e2e`, `pnpm run check:ui` (**188 ficheros, 20 reglas, sin incidencias**), build de producción y
+`git diff --check` pasan; el build conserva avisos existentes de bundle/imports. La suite Karma completa pasó **912/912**,
+pero el reporte agregado no supera el gate global configurado (coverage **77.43/64.51/75.65/78.93 % S/B/F/L**); no se
+rebajó. Prettier focal pasa en los demás archivos cambiados, pero señala `logs.component.ts` y `caducidades.component.ts`
+por formato histórico: se conservaron sin reformateo masivo. Por estos gates de cobertura/formato, la última casilla
+permanece abierta y el Draft PR no se marca listo.

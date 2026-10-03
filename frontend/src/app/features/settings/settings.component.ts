@@ -152,7 +152,7 @@ interface Option<T extends string> {
       }
 
       .settings-page {
-        padding: var(--space-4);
+        padding-block: var(--space-4);
         max-width: 640px;
         margin: 0 auto;
         display: flex;
@@ -162,7 +162,7 @@ interface Option<T extends string> {
 
       @media (min-width: 768px) {
         .settings-page {
-          padding: var(--space-8);
+          padding-block: var(--space-8);
         }
       }
 

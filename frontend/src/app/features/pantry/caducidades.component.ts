@@ -206,7 +206,7 @@ type Columna = 'caduca' | 'nombre' | 'dura';
         gap: var(--space-4, 16px);
         max-width: 860px;
         margin: 0 auto;
-        padding: var(--space-4, 16px);
+        padding-block: var(--space-4, 16px);
       }
 
       .cad__head {

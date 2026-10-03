@@ -412,14 +412,14 @@ import { recipeCategoryEmoji } from './recipe-category-emoji';
       }
 
       .recipes {
-        padding: var(--space-4);
+        padding-block: var(--space-4);
         max-width: 1000px;
         margin: 0 auto;
       }
 
       @media (min-width: 768px) {
         .recipes {
-          padding: var(--space-6);
+          padding-block: var(--space-6);
         }
       }
 

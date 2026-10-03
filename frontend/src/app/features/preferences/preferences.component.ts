@@ -269,7 +269,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
   styles: [
     `
       .preferences-page {
-        padding: var(--space-4);
+        padding-block: var(--space-4);
         max-width: 1360px;
         margin: 0 auto;
         display: flex;

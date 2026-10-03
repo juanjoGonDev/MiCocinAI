@@ -5,6 +5,7 @@ import { ToastComponent } from '../../shared/components/ui/toast/toast.component
 import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { PageContainerComponent } from '../../shared/components/page-container/page-container.component';
 
 @Component({
   selector: 'app-auth-layout',
@@ -15,25 +16,28 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
     RouterOutlet,
     ToastComponent,
     ConfirmDialogComponent,
-    IconComponent
+    IconComponent,
+    PageContainerComponent
   ],
   template: `
     <div class="auth-layout">
       <div class="auth-layout__background"></div>
 
-      <div class="auth-layout__container">
-        <div class="auth-layout__header">
-          <span class="auth-layout__logo">
-            <app-icon name="home" [size]="64" [label]="null" />
-          </span>
-          <h1 class="auth-layout__title">{{ 'app.name' | t }}</h1>
-          <p class="auth-layout__subtitle">{{ 'auth.tu_asistente_del_hogar' | t }}</p>
-        </div>
+      <app-page-container [bounded]="true">
+        <div class="auth-layout__container">
+          <div class="auth-layout__header">
+            <span class="auth-layout__logo">
+              <app-icon name="home" [size]="64" [label]="null" />
+            </span>
+            <h1 class="auth-layout__title">{{ 'app.name' | t }}</h1>
+            <p class="auth-layout__subtitle">{{ 'auth.tu_asistente_del_hogar' | t }}</p>
+          </div>
 
-        <div class="auth-layout__content">
-          <router-outlet></router-outlet>
+          <div class="auth-layout__content">
+            <router-outlet></router-outlet>
+          </div>
         </div>
-      </div>
+      </app-page-container>
     </div>
 
     <app-toast></app-toast>
@@ -46,7 +50,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: var(--space-4);
+        padding-block: var(--space-4);
         position: relative;
         overflow: hidden;
       }
@@ -67,7 +71,6 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
         position: relative;
         z-index: 1;
         width: 100%;
-        max-width: 400px;
         display: flex;
         flex-direction: column;
         gap: var(--space-8);
@@ -97,6 +100,9 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
       }
 
       .auth-layout__content {
+        width: 100%;
+        max-width: 400px;
+        margin-inline: auto;
         background: var(--bg-secondary);
         border-radius: var(--radius-2xl);
         box-shadow: var(--shadow-xl);

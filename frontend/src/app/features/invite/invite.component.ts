@@ -12,6 +12,7 @@ import { environment } from '../../../environments/environment';
 import { InvitePreview } from '../../shared/models/household.model';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { I18nService } from '../../core/services/i18n.service';
+import { PageContainerComponent } from '../../shared/components/page-container/page-container.component';
 
 @Component({
   selector: 'app-invite',
@@ -22,94 +23,97 @@ import { I18nService } from '../../core/services/i18n.service';
     RouterLink,
     ButtonComponent,
     LoadingComponent,
-    IconComponent
+    IconComponent,
+    PageContainerComponent
   ],
   template: `
     <div class="invite-page">
-      <div class="invite-card">
-        <span class="invite-card__icon">
-          <app-icon name="home" [size]="64" [label]="null" />
-        </span>
+      <app-page-container [bounded]="true" [fullContent]="false">
+        <div class="invite-card">
+          <span class="invite-card__icon">
+            <app-icon name="home" [size]="64" [label]="null" />
+          </span>
 
-        <ng-container *ngIf="loading(); else loaded">
-          <app-loading [message]="'invite.comprobando_invitacion' | t"></app-loading>
-        </ng-container>
-
-        <ng-template #loaded>
-          <ng-container *ngIf="error(); else valid">
-            <h1 class="invite-card__title">{{ 'invite.invitacion_no_valida' | t }}</h1>
-            <p class="invite-card__text">{{ error() }}</p>
-            <a routerLink="/" class="invite-card__link">
-              <app-button variant="primary" [touchTarget]="true">
-                {{ 'invite.ir_al_inicio' | t }}
-              </app-button>
-            </a>
+          <ng-container *ngIf="loading(); else loaded">
+            <app-loading [message]="'invite.comprobando_invitacion' | t"></app-loading>
           </ng-container>
 
-          <ng-template #valid>
-            <h1 class="invite-card__title">
-              {{ 'invite.invitacion_a' | t: { household: preview()?.householdName } }}
-            </h1>
-            <p class="invite-card__text">
-              {{ 'invite.te_han_invitado_a' | t }}
-              <strong>{{ preview()?.householdName }}</strong>
-              ({{ memberLabel() }}).
-            </p>
-
-            <ng-container *ngIf="preview()?.alreadyMember; else joinActions">
-              <p class="invite-card__info">{{ 'invite.ya_eres_miembro_de' | t }}</p>
-              <a routerLink="/household" class="invite-card__link">
+          <ng-template #loaded>
+            <ng-container *ngIf="error(); else valid">
+              <h1 class="invite-card__title">{{ 'invite.invitacion_no_valida' | t }}</h1>
+              <p class="invite-card__text">{{ error() }}</p>
+              <a routerLink="/" class="invite-card__link">
                 <app-button variant="primary" [touchTarget]="true">
-                  {{ 'invite.ir_a_mi_hogar' | t }}
+                  {{ 'invite.ir_al_inicio' | t }}
                 </app-button>
               </a>
             </ng-container>
 
-            <ng-template #joinActions>
-              <ng-container *ngIf="authService.isAuthenticated(); else loginCta">
-                <div class="invite-card__actions">
-                  <app-button
-                    variant="ghost"
-                    [touchTarget]="true"
-                    [disabled]="joining()"
-                    (onClick)="decline()"
-                    >{{ 'common.cancel' | t }}</app-button
-                  >
-                  <app-button
-                    variant="primary"
-                    [touchTarget]="true"
-                    [loading]="joining()"
-                    (onClick)="accept()"
-                  >
-                    {{ 'invite.unirme_al_hogar' | t }}
+            <ng-template #valid>
+              <h1 class="invite-card__title">
+                {{ 'invite.invitacion_a' | t: { household: preview()?.householdName } }}
+              </h1>
+              <p class="invite-card__text">
+                {{ 'invite.te_han_invitado_a' | t }}
+                <strong>{{ preview()?.householdName }}</strong>
+                ({{ memberLabel() }}).
+              </p>
+
+              <ng-container *ngIf="preview()?.alreadyMember; else joinActions">
+                <p class="invite-card__info">{{ 'invite.ya_eres_miembro_de' | t }}</p>
+                <a routerLink="/household" class="invite-card__link">
+                  <app-button variant="primary" [touchTarget]="true">
+                    {{ 'invite.ir_a_mi_hogar' | t }}
                   </app-button>
-                </div>
-                <p *ngIf="acceptError()" class="invite-card__error" role="alert">
-                  {{ acceptError() }}
-                </p>
+                </a>
               </ng-container>
 
-              <ng-template #loginCta>
-                <p class="invite-card__info">
-                  {{ 'invite.inicia_sesion_o_crea' | t }}
-                </p>
-                <div class="invite-card__actions">
-                  <a [routerLink]="['/auth/login']" [queryParams]="{ code: inviteCode() }">
-                    <app-button variant="primary" [touchTarget]="true">
-                      {{ 'auth.login' | t }}
+              <ng-template #joinActions>
+                <ng-container *ngIf="authService.isAuthenticated(); else loginCta">
+                  <div class="invite-card__actions">
+                    <app-button
+                      variant="ghost"
+                      [touchTarget]="true"
+                      [disabled]="joining()"
+                      (onClick)="decline()"
+                      >{{ 'common.cancel' | t }}</app-button
+                    >
+                    <app-button
+                      variant="primary"
+                      [touchTarget]="true"
+                      [loading]="joining()"
+                      (onClick)="accept()"
+                    >
+                      {{ 'invite.unirme_al_hogar' | t }}
                     </app-button>
-                  </a>
-                  <a [routerLink]="['/auth/register']" [queryParams]="{ code: inviteCode() }">
-                    <app-button variant="outline" [touchTarget]="true">
-                      {{ 'auth.register' | t }}
-                    </app-button>
-                  </a>
-                </div>
+                  </div>
+                  <p *ngIf="acceptError()" class="invite-card__error" role="alert">
+                    {{ acceptError() }}
+                  </p>
+                </ng-container>
+
+                <ng-template #loginCta>
+                  <p class="invite-card__info">
+                    {{ 'invite.inicia_sesion_o_crea' | t }}
+                  </p>
+                  <div class="invite-card__actions">
+                    <a [routerLink]="['/auth/login']" [queryParams]="{ code: inviteCode() }">
+                      <app-button variant="primary" [touchTarget]="true">
+                        {{ 'auth.login' | t }}
+                      </app-button>
+                    </a>
+                    <a [routerLink]="['/auth/register']" [queryParams]="{ code: inviteCode() }">
+                      <app-button variant="outline" [touchTarget]="true">
+                        {{ 'auth.register' | t }}
+                      </app-button>
+                    </a>
+                  </div>
+                </ng-template>
               </ng-template>
             </ng-template>
           </ng-template>
-        </ng-template>
-      </div>
+        </div>
+      </app-page-container>
     </div>
   `,
   styles: [
@@ -119,7 +123,7 @@ import { I18nService } from '../../core/services/i18n.service';
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: var(--space-4);
+        padding-block: var(--space-4);
         background: var(--bg-primary);
       }
       .invite-card {
@@ -133,6 +137,7 @@ import { I18nService } from '../../core/services/i18n.service';
         display: flex;
         flex-direction: column;
         gap: var(--space-4);
+        margin-inline: auto;
       }
       .invite-card__icon {
         color: var(--primary);

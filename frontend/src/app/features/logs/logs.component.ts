@@ -180,7 +180,7 @@ interface FilterOption<T extends string> {
   
 
     .logs-page {
-      padding: var(--space-4);
+      padding-block: var(--space-4);
       display: flex;
       flex-direction: column;
       gap: var(--space-3);
@@ -189,7 +189,7 @@ interface FilterOption<T extends string> {
 
     @media (min-width: 1024px) {
       .logs-page {
-        padding: var(--space-6);
+        padding-block: var(--space-6);
         height: 100vh;
       }
     }

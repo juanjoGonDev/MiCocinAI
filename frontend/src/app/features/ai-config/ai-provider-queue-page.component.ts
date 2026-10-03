@@ -78,12 +78,12 @@ import { AiProviderQueueComponent } from './ai-provider-queue.component';
         width: min(100%, 800px);
         min-width: 0;
         margin: 0 auto;
-        padding: var(--space-4);
+        padding-block: var(--space-4);
       }
 
       @media (min-width: 768px) {
         .ai-queue-page {
-          padding: var(--space-6);
+          padding-block: var(--space-6);
         }
       }
 

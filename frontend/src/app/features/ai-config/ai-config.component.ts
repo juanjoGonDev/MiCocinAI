@@ -392,14 +392,14 @@ import { RouterLink } from '@angular/router';
   styles: [
     `
       .ai-config {
-        padding: var(--space-4);
+        padding-block: var(--space-4);
         max-width: 800px;
         margin: 0 auto;
       }
 
       @media (min-width: 768px) {
         .ai-config {
-          padding: var(--space-6);
+          padding-block: var(--space-6);
         }
       }
 

@@ -1862,7 +1862,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         white-space: nowrap;
       }
       .detail {
-        padding: var(--space-4) var(--space-4) var(--space-16);
+        padding-block: var(--space-4) var(--space-16);
         max-width: 760px;
         margin: 0 auto;
         display: flex;

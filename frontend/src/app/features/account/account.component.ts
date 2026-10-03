@@ -411,7 +411,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
   styles: [
     `
       .account-page {
-        padding: var(--space-4);
+        padding-block: var(--space-4);
         max-width: 720px;
         margin: 0 auto;
         display: flex;

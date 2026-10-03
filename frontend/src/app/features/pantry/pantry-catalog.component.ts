@@ -244,12 +244,12 @@ import {
         width: 100%;
         max-width: 1000px;
         margin: 0 auto;
-        padding: var(--space-4) var(--space-4) var(--space-16);
+        padding-block: var(--space-4) var(--space-16);
       }
       @media (min-width: 768px) {
         .gestor {
           gap: var(--space-6);
-          padding: var(--space-6) var(--space-6) var(--space-20);
+          padding-block: var(--space-6) var(--space-20);
         }
       }
 

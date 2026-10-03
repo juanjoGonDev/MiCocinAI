@@ -12,6 +12,7 @@ import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { ConfirmDialogComponent } from '../../shared/components/ui/confirm-dialog/confirm-dialog.component';
 import { ReceiptQueueComponent } from '../../shared/components/receipts/receipt-queue.component';
+import { PageContainerComponent } from '../../shared/components/page-container/page-container.component';
 import type { TranslationKey } from '../../core/i18n';
 
 interface NavItem {
@@ -28,7 +29,20 @@ interface NavItem {
 @Component({
   selector: 'app-main-layout',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, AvatarComponent, IconComponent, IconButtonComponent, TranslatePipe, ConfirmDialogComponent, ReceiptQueueComponent],
+  imports: [
+    CommonModule,
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    ToastComponent,
+    AvatarComponent,
+    IconComponent,
+    IconButtonComponent,
+    TranslatePipe,
+    ConfirmDialogComponent,
+    ReceiptQueueComponent,
+    PageContainerComponent
+  ],
   template: `
     <div class="layout">
       <!-- Mobile Header -->
@@ -117,7 +131,9 @@ interface NavItem {
 
       <!-- Main Content -->
       <main class="main">
-        <router-outlet></router-outlet>
+        <app-page-container [bounded]="true">
+          <router-outlet></router-outlet>
+        </app-page-container>
       </main>
 
       <!-- Mobile Bottom Navigation -->
