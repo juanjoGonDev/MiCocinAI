@@ -13,13 +13,11 @@ import { I18nService } from '../../../core/services/i18n.service';
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [
-    TranslatePipe,
-    CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
+  imports: [TranslatePipe, CommonModule, RouterLink, FormsModule, ButtonComponent, InputComponent],
   template: `
     <form (ngSubmit)="onSubmit()" class="login-form">
       <h2 class="login-form__title">{{ 'auth.login' | t }}</h2>
-      
+
       <app-input
         id="email"
         name="email"
@@ -66,50 +64,52 @@ import { I18nService } from '../../../core/services/i18n.service';
       </div>
     </form>
   `,
-  styles: [`
-    .login-form {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-6);
-    }
-
-    .login-form__title {
-      font-family: var(--font-display);
-      font-size: var(--text-2xl);
-      font-weight: var(--font-bold);
-      color: var(--text-primary);
-      text-align: center;
-    }
-
-    .login-form__actions {
-      display: flex;
-      justify-content: flex-end;
-    }
-
-    .login-form__link {
-      font-size: var(--text-sm);
-      color: var(--primary);
-      text-decoration: none;
-      transition: var(--transition-fast);
-
-      &:hover {
-        color: var(--primary-dark);
+  styles: [
+    `
+      .login-form {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
       }
 
-      &--bold {
-        font-weight: var(--font-semibold);
+      .login-form__title {
+        font-family: var(--font-display);
+        font-size: var(--text-2xl);
+        font-weight: var(--font-bold);
+        color: var(--text-primary);
+        text-align: center;
       }
-    }
 
-    .login-form__footer {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: var(--space-2);
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-    }
-  `]
+      .login-form__actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      .login-form__link {
+        font-size: var(--text-sm);
+        color: var(--primary);
+        text-decoration: none;
+        transition: var(--transition-fast);
+
+        &:hover {
+          color: var(--primary-dark);
+        }
+
+        &--bold {
+          font-weight: var(--font-semibold);
+        }
+      }
+
+      .login-form__footer {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--space-2);
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+      }
+    `
+  ]
 })
 export class LoginComponent {
   private readonly i18n = inject(I18nService);
@@ -160,13 +160,24 @@ export class LoginComponent {
 
     this.authService.login({ email: this.email, password: this.password }).subscribe({
       next: () => {
-        this.toastService.success(this.i18n.t('auth.bienvenido'), this.i18n.t('auth.has_iniciado_sesion_correctamente'));
+        this.toastService.success(
+          this.i18n.t('auth.bienvenido'),
+          this.i18n.t('auth.has_iniciado_sesion_correctamente')
+        );
         this.householdService.loadHousehold();
         this.redirectAfterAuth();
       },
       error: (error) => {
         this.isLoading.set(false);
-        this.toastService.error(this.i18n.t('ui.error'), error.message || this.i18n.t('auth.credenciales_incorrectas'));
+        if (error?.status === 401) {
+          this.passwordError.set(this.i18n.t('auth.credenciales_incorrectas'));
+          return;
+        }
+
+        this.toastService.error(
+          this.i18n.t('ui.error'),
+          error.message || this.i18n.t('auth.credenciales_incorrectas')
+        );
       }
     });
   }

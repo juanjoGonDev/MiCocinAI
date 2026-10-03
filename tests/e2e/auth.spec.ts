@@ -19,13 +19,40 @@ test.describe('Authentication', () => {
     await expect(page.locator('button[type="submit"]')).toBeVisible();
   });
 
-  test('should stay on login with unknown credentials', async ({ page }) => {
-    await page.fill('input#email', 'no-existe@example.com');
+  test('shows an accessible credential error instead of a stale-session toast', async ({
+    page
+  }, testInfo) => {
+    const email = await registerUser(page, 'Login feedback');
+    await logout(page);
+    await page.fill('input#email', email);
     await page.fill('input#password', 'WrongPassword1');
-    await page.click('button[type="submit"]');
+    await page.locator('#password').press('Enter');
 
     await expect(page).toHaveURL(/.*auth\/login/);
     await expect(page).not.toHaveURL(/.*dashboard/);
+    await expect(page.locator('#password-error')).toHaveText('Credenciales incorrectas');
+    await expect(page.locator('#password')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByText(/La sesi[oó]n que guarda este navegador ya no vale/i)).toHaveCount(
+      0
+    );
+    await expect(page.locator('#email')).toBeEnabled();
+    await expect(page.locator('#password')).toBeEnabled();
+    await expect(page.locator('button[type="submit"]')).toBeEnabled();
+
+    const viewport = await page.evaluate(() => ({
+      width: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth
+    }));
+    expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.width);
+    await page.screenshot({
+      path: testInfo.outputPath(`login-invalid-credentials-${testInfo.project.name}.png`),
+      fullPage: true,
+      animations: 'disabled'
+    });
+
+    await page.locator('#password').fill('Test1234');
+    await page.locator('#password').press('Enter');
+    await expect(page).toHaveURL(/.*dashboard/);
   });
 
   test('should navigate to register page', async ({ page }) => {

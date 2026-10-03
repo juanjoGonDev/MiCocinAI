@@ -96,6 +96,30 @@ describe('LoginComponent', () => {
     expect(component.isLoading()).toBeFalse();
   });
 
+  it('shows rejected credentials beside the password without a session-expired toast', () => {
+    authService.login.and.returnValue(
+      throwError(() => ({ status: 401, message: 'ui.la_sesion_que_guarda' })) as never
+    );
+
+    component.onSubmit();
+
+    expect(component.isLoading()).toBeFalse();
+    expect(component.passwordError()).toBe('auth.credenciales_incorrectas');
+    expect(toastService.error).not.toHaveBeenCalled();
+  });
+
+  it('keeps a recoverable toast for network or server errors', () => {
+    authService.login.and.returnValue(
+      throwError(() => ({ status: 503, message: 'ui.servicio_no_disponible' })) as never
+    );
+
+    component.onSubmit();
+
+    expect(component.isLoading()).toBeFalse();
+    expect(component.passwordError()).toBe('');
+    expect(toastService.error).toHaveBeenCalledOnceWith('ui.error', 'ui.servicio_no_disponible');
+  });
+
   it('joins the invite once after a successful login with a code', () => {
     inviteCode = 'SYNTHETIC-CODE';
     component.onSubmit();
