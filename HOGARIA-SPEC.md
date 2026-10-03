@@ -311,9 +311,9 @@ cooking-only question no longer describes the user. The concept moves, it does n
   round-trip for the tour and for Preferences, `cooking_level` staying the only source for the level
   (Preferences never replaces the whole preferences blob, so it cannot wipe theme/language).
 - **The level has to do something.** `detailLevelForCookingLevel(level)` maps `none|beginner → basic`,
-  `intermediate → intermediate`, `expert → expert`, and `POST /api/ai/generate-recipe`
-  (`/multiple` too) uses it **only when the request omits `detailLevel`**: an explicit choice from the
-  recipe UI still wins. That is the whole point of asking.
+  `intermediate → intermediate`, `expert → expert`. Single and multiple recipe generation always return
+  all three instruction variants; this mapping chooses the **initially displayed** variant only when
+  the request omits `detailLevel`. An explicit choice from the recipe UI still wins.
 - Modules drive what HogarIA highlights (dashboard cards, which sections the tour mentions); the three
   not shipped yet are listed with a _pronto/soon_ mark so the picker is honest about the roadmap.
 
@@ -334,9 +334,9 @@ cooking-only question no longer describes the user. The concept moves, it does n
   (`GET /api/auth/taste` returns them) and survives a reload of Preferencias › Perfil.
 - `cooking_level = 'none'` is accepted by `/api/auth/profile` and renders as "Apenas cocino" in the
   household member list.
-- With `cooking_level = 'beginner'` and no `detailLevel` in the request, the generated prompt contains
-  `Nivel de detalle: basic`; with `expert`, `Nivel de detalle: expert`; with an explicit
-  `detailLevel: 'expert'` and level `beginner`, the explicit value wins.
+- With `cooking_level = 'beginner'` and no `detailLevel` in the request, the initially selected
+  variant is `basic`; with `expert`, it is `expert`; with explicit `detailLevel: 'expert'` and level
+  `beginner`, the initial selection is `expert`. Every response still contains all three variants.
 - Skipping the tour keeps defaults (`beginner`, no modules) and never blocks the dashboard.
 
 ### Checklist for this feature
@@ -363,6 +363,28 @@ Preferencias tab strip keeps its emoji labels — they are replaced together wit
 commit, so the tab row stays visually consistent until then. Test hooks are attributes
 (`[data-level]`, `label[data-module]`, `input[data-module-input]`), never label copy: hints repeat
 words across options and `hasText` already resolved to two elements.
+
+### Recipe generation returns instructions for every detail level
+
+The existing `detailLevel` selection continues to choose the **initially displayed** instructions, not which variant the model generates. The cooking-level mapping in §8b remains the default only when the user has not explicitly chosen a level.
+
+**Contract**
+
+- Single and multiple recipe generation return one complete candidate object per recipe. Shared recipe fields (including ingredients, portions and time) appear once, not once per detail level.
+- Every candidate contains `instructionsByLevel` with exactly `basic`, `intermediate` and `expert`. Each value is a complete, ordered, non-empty list of steps appropriate to that level; it is not a partial patch or an abbreviated summary.
+- All three variants are produced in the same provider response for each candidate. Changing the level in a generated or saved recipe view changes only which instruction list is rendered: it must not call AI again, alter shared recipe data, create another recipe row, or lose the other variants.
+- Saving persists one recipe with its shared fields and all three instruction lists. Loading/reloading preserves them. Older saved recipes with only the legacy `steps` list remain readable; they are not presented as if they had three distinct generated variants.
+- The level selector is available in the generated recipe preview and saved recipe view, has an accessible name and keyboard behavior, and uses the existing Spanish/English translations.
+- In multiple-generation mode, distinct candidates remain distinct recipes; each candidate independently includes all three instruction lists.
+
+**Acceptance checklist (spec-first; implementation pending)**
+
+- [ ] Add failing schema/API/service/UI tests for all three complete variants, malformed or missing variants, and one provider call per generated candidate.
+- [ ] Make single and multiple generation return the shared recipe fields once plus `instructionsByLevel`; keep `detailLevel` only as the initially selected view level, with the §8b cooking-level default when omitted.
+- [ ] Add the level selector to generated previews and saved recipe views; switching it is local-only, accessible, translated, and does not duplicate a recipe or regenerate.
+- [ ] Persist and reload all variants in one recipe while preserving existing saved recipes with only `steps`.
+- [ ] Verify single/multiple success, provider/schema errors, retry, cancellation, save/cancel counts and reload using isolated SQLite plus a loopback synthetic provider; do not use a live provider for repeatable tests.
+- [ ] Run desktop and mobile Playwright for generated and saved views, keyboard/focus and existing breakpoints; inspect synthetic captures, typecheck/build, focused coverage (≥70% S/B/F/L for instrumentable scope), and diff checks without lowering existing gates.
 
 ## 8c. Configuración vs Preferencias: qué se configura donde, y en caliente
 
