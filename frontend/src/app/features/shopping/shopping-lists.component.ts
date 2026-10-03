@@ -13,6 +13,7 @@ import {
   ShoppingList
 } from '../../shared/models/shopping.model';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
@@ -69,6 +70,7 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
     TranslatePipe,
     CommonModule,
     FormsModule,
+    ButtonComponent,
     IconComponent,
     IconButtonComponent,
     PickerComponent,
@@ -152,14 +154,15 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
             <button type="button" class="tray__ghost" (click)="cancelCreate()">
               {{ 'common.cancel' | t }}
             </button>
-            <button
+            <app-button
               type="submit"
-              class="tray__primary"
+              variant="primary"
+              size="md"
               data-test="create-submit"
               [disabled]="!draftName.trim() || busy()"
             >
               {{ busy() ? ('shopping_lists.creando' | t) : ('shopping_lists.crear_y_abrir' | t) }}
-            </button>
+            </app-button>
           </div>
         </form>
       }
@@ -290,9 +293,9 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
               {{ 'shopping_lists.quitar_los_filtros_2' | t }}
             </button>
           } @else if (status() === 'active') {
-            <button type="button" class="tray__primary" (click)="creating.set(true)">
+            <app-button type="button" variant="primary" size="md" (onClick)="creating.set(true)">
               {{ 'shopping_lists.empezar_una_lista' | t }}
-            </button>
+            </app-button>
           }
         </section>
       } @else {
@@ -509,8 +512,7 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
      * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
      * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
      */
-      .tray__new:hover:not(:disabled),
-      .tray__primary:hover:not(:disabled) {
+      .tray__new:hover:not(:disabled) {
         background: var(--primary-dark);
         box-shadow: var(--shadow-sm);
       }
@@ -940,22 +942,6 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
         font-family: inherit;
         cursor: pointer;
         min-height: 38px;
-      }
-      .tray__primary {
-        border: none;
-        border-radius: var(--radius-lg);
-        background: var(--primary);
-        color: var(--white);
-        font-size: var(--text-sm);
-        font-weight: var(--font-semibold);
-        font-family: inherit;
-        padding: var(--space-2) var(--space-4);
-        min-height: 40px;
-        cursor: pointer;
-      }
-      .tray__primary:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
       }
       /* El movil no tiene seis columnas: la misma fila se convierte en tarjeta de dos
          lineas y cada dato lleva delante la etiqueta que antes estaba en la cabecera. */

@@ -65,7 +65,7 @@ test.describe('lo que cuesta, y en que tienda', () => {
     await expect(sheet).toContainText('Mercadona');
     // Con una linea sin escribir, el boton primario no se puede pulsar: el server se niega,
     // y dejar que el usuario reciba un 409 al final es ensenarle un codigo en vez de un campo.
-    await expect(page.locator('[data-test="pay-confirm"]')).toBeDisabled();
+    await expect(page.locator('[data-test="pay-confirm"] button')).toBeDisabled();
 
     const money = sheet.locator('input[inputmode="decimal"]');
     await money.nth(0).fill('0,95');

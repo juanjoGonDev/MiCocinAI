@@ -41,6 +41,7 @@ import {
   PhotoLine
 } from '../../shared/models/shopping.model';
 import { LongPressDirective, SwipeRowDirective } from '../../shared/directives/swipe-row.directive';
+import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
@@ -112,6 +113,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
     RouterLink,
     SwipeRowDirective,
     LongPressDirective,
+    ButtonComponent,
     IconComponent,
     IconButtonComponent,
     PickerComponent,
@@ -245,16 +247,16 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             </ul>
           }
         </div>
-        <button
+        <app-button
           type="submit"
-          class="detail__add-btn"
+          size="md"
           data-test="add-submit"
           [disabled]="!draftItem.trim()"
           (mousedown)="mantenerFocoParaAnadir($event)"
         >
           <app-icon name="add" [size]="18" [label]="null" />
           <span>{{ 'ui.anadir' | t }}</span>
-        </button>
+        </app-button>
         <app-icon-button
           icon="content_paste"
           [label]="'shopping_list_detail.pegar_la_lista_de' | t"
@@ -295,15 +297,16 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
             <span class="detail__hint">{{
               'shopping_list_detail.una_linea_por_producto' | t
             }}</span>
-            <button
+            <app-button
               type="button"
-              class="detail__primary"
+              variant="primary"
+              size="md"
               data-test="paste-submit"
-              (click)="paste()"
+              (onClick)="paste()"
               [disabled]="!draftPaste.trim()"
             >
               {{ 'shopping_list_detail.anadir_a_la_lista' | t }}
-            </button>
+            </app-button>
           </div>
         </div>
       }
@@ -539,9 +542,15 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           >
             {{ 'shopping_list_detail.vaciar_carro' | t }}
           </button>
-          <button type="button" class="detail__primary" data-test="complete" (click)="complete()">
+          <app-button
+            type="button"
+            variant="primary"
+            size="md"
+            data-test="complete"
+            (onClick)="complete()"
+          >
             {{ 'shopping_list_detail.terminar_compra' | t }}
-          </button>
+          </app-button>
         </div>
       </footer>
 
@@ -877,9 +886,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               >
                 {{ 'shopping_list_detail.quitar_linea' | t }}
               </button>
-              <button type="button" class="detail__primary" (click)="closeEdit()">
+              <app-button type="button" variant="primary" size="md" (onClick)="closeEdit()">
                 {{ 'shopping_list_detail.hecho' | t }}
-              </button>
+              </app-button>
             </div>
             <p class="detail__hint">{{ 'shopping_list_detail.los_cambios_se_guardan' | t }}</p>
           </section>
@@ -1164,14 +1173,15 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   {{ 'shopping_list_detail.quitar_descuento' | t }}
                 </button>
               }
-              <button
+              <app-button
                 type="button"
-                class="detail__primary"
+                variant="primary"
+                size="md"
                 data-test="discount-save"
-                (click)="saveDiscount()"
+                (onClick)="saveDiscount()"
               >
                 {{ 'common.save' | t }}
-              </button>
+              </app-button>
             </div>
           </section>
         </div>
@@ -1309,16 +1319,17 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
               >
                 {{ 'common.cancel' | t }}
               </button>
-              <button
+              <app-button
                 type="button"
-                class="detail__primary"
+                variant="primary"
+                size="md"
                 data-test="pay-confirm"
                 [disabled]="payMissing() > 0"
-                (click)="finishPurchase()"
+                (onClick)="finishPurchase()"
               >
                 <app-icon name="done_all" [size]="16" [label]="null" />
                 {{ 'shopping_list_detail.guardar_y_terminar' | t }}
-              </button>
+              </app-button>
             </div>
             <p class="detail__hint" data-test="pay-foot">
               @if (payMissing() > 0) {
@@ -1497,35 +1508,37 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 <button type="button" class="detail__ghost" (click)="analyzePhoto()">
                   {{ 'shopping_list_detail.otro_intento' | t }}
                 </button>
-                <button
+                <app-button
                   type="button"
-                  class="detail__primary"
+                  variant="primary"
+                  size="md"
                   data-test="photo-apply"
                   [disabled]="keptPhotoLines().length === 0 || photoApplying()"
-                  (click)="applyPhoto()"
+                  (onClick)="applyPhoto()"
                 >
                   {{
                     photoApplying()
                       ? ('shopping_list_detail.anadiendo' | t)
                       : ('shopping_list_detail.anadir_lineas' | t: { n: keptPhotoLines().length })
                   }}
-                </button>
+                </app-button>
               </div>
             } @else {
               <div class="detail__sheet-actions">
-                <button
+                <app-button
                   type="button"
-                  class="detail__primary"
+                  variant="primary"
+                  size="md"
                   data-test="photo-analyze"
                   [disabled]="!photoData() || photoBusy()"
-                  (click)="analyzePhoto()"
+                  (onClick)="analyzePhoto()"
                 >
                   {{
                     photoData()
                       ? ('shopping_list_detail.analizar_la_foto' | t)
                       : ('shopping_list_detail.elige_una_foto' | t)
                   }}
-                </button>
+                </app-button>
               </div>
             }
           </section>
@@ -1957,23 +1970,6 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         font-size: var(--text-base);
         min-height: 48px;
       }
-      .detail__add-btn,
-      .detail__primary {
-        border: none;
-        border-radius: var(--radius-lg);
-        background: var(--primary);
-        color: var(--white);
-        font-size: var(--text-sm);
-        font-weight: var(--font-semibold);
-        padding: var(--space-3) var(--space-4);
-        min-height: 48px;
-        cursor: pointer;
-      }
-      .detail__add-btn:disabled,
-      .detail__primary:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
       .detail__ghost {
         border: 1px solid var(--border-default);
         border-radius: var(--radius-lg);
@@ -2216,7 +2212,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       }
       .detail__bar-actions {
         display: flex;
+        flex-wrap: wrap;
         gap: var(--space-2);
+        max-width: 100%;
       }
       .detail__estimate {
         list-style: none;
@@ -2606,12 +2604,6 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         border-color: var(--primary);
         background: var(--primary-subtle);
         color: var(--primary-dark);
-      }
-
-      .detail__add-btn:hover:not(:disabled),
-      .detail__primary:hover:not(:disabled) {
-        background: var(--primary-dark);
-        box-shadow: var(--shadow-sm);
       }
 
       .detail__ghost--danger:hover:not(:disabled) {

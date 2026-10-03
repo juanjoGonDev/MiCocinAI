@@ -150,7 +150,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     await page.locator('[data-test="create-submit"]').click();
 
     const input = page.locator('[data-test="add-input"]');
-    const addButton = page.locator('[data-test="add-submit"]');
+    const addButton = page.locator('[data-test="add-submit"] button');
     for (const [index, viewport] of viewports.entries()) {
       if (index > 0) await page.setViewportSize(viewport);
       await input.fill('2 LecHE');
