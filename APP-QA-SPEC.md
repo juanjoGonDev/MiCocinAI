@@ -1666,3 +1666,15 @@ formularios/columnas de lectura por encima de límites útiles.
 - [ ] Añadir pruebas unitarias para la regla compartida, ejecutar E2E completo del manifiesto en
       Chromium escritorio y Pixel 5, build/typecheck/formato/diff checks y cobertura por archivo ≥70 %;
       no marcar como homogéneo un baseline que solo haya comprobado ausencia de overflow.
+
+### QA-LAYOUT.RECIPE-DETAIL.1 · medir la ficha real de receta desde su deep link
+
+**Fuente revalidada (2026-10-03):** `tests/e2e/helpers/recipe-fixtures.ts` ya crea y elimina recetas sintéticas; `/recipes?recipe=<id>` llama a `getRecipe()` y abre el diálogo real. Sin embargo, `route-layout-manifest.ts` solo prueba esa query con un ID inexistente y espera el fallback `/recipes`, por lo que la ficha real no entra en la matriz de gutters. La lista actual del manifiesto tiene 35 casos —4 públicos, onboarding, 23 autenticados y 7 poblados—, frente a los 31 de la evidencia de layout; además faltan las redirecciones `/`, `/auth` y `**` anotadas en los route files. La app mantiene un único gutter en el marco, pero todavía no se prueba esta superficie poblada con contenido real ni el ajuste interno del diálogo.
+
+- [ ] Reconciliar el censo del manifiesto con `app.routes.ts` y rutas de features; probar las redirecciones raíz, `/auth` y fallback, y no fijar un total obsoleto.
+- [ ] Añadir la receta sintética guardada al manifiesto mediante `createSyntheticRecipe()`; abrir `/recipes?recipe=<id>`, comprobar diálogo/receta reales (no 404/fallback) y borrar solo esa fixture incluso ante fallo.
+- [ ] Recorrer la ficha real en Chromium y Pixel 5 por los viewports y límites de breakpoint ya medidos; confirmar shell único, contenedor/gutters 16/24/32 px, límites internos intencionales y ausencia de clipping/overflow.
+- [ ] Verificar el diálogo accesible desde el deep link: foco inicial/trampa, scroll del cuerpo, Escape/cierre y limpieza del query; incluir 320×568, 393×851 y 1440×900.
+- [ ] Guardar e inspeccionar capturas sintéticas comparables de la ficha en PC y móvil; typecheck, E2E focal/full manifest, build, formato, diff checks y coverage focal ≥70 % sin bajar gates. Mantener abierta la validación de safe-area iOS/WebKit si el runtime continúa sin ese navegador.
+
+**Rollback:** revertir solo la extensión de receta/redirect del manifiesto, sus E2E y este subapartado; no cambia el contrato ni los datos de producción.
