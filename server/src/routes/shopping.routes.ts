@@ -1501,10 +1501,10 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
  * una (configurar la IA, reintentar, acortar la foto, o aceptar que el modelo no ha
  * entendido nada y escribir la linea a mano).
  */
-function aiError(c: any, error: unknown) {
+function aiError(c: any, error: unknown, muestraSegura?: string) {
   const code = error instanceof AiCallError ? error.code : 'PROVIDER';
   const detail =
-    error instanceof AiCallError ? (error.detail ?? null) : String(error).slice(0, 200);
+    error instanceof AiCallError ? (error.detail ?? null) : 'AI provider request failed';
   if (code === 'NO_CONFIG') {
     return c.json(
       { success: false, message: 'AI_NOT_CONFIGURED', data: { redirect: '/ai-config' } },
@@ -1513,7 +1513,11 @@ function aiError(c: any, error: unknown) {
   }
   if (code === 'BAD_JSON') {
     return c.json(
-      { success: false, message: 'AI_ANSWER_NOT_UNDERSTOOD', data: { sample: detail } },
+      {
+        success: false,
+        message: 'AI_ANSWER_NOT_UNDERSTOOD',
+        data: { sample: muestraSegura ?? detail }
+      },
       422
     );
   }
@@ -1590,7 +1594,8 @@ shoppingRoutes.post('/lists/:id/photo/analyze', async (c) => {
   try {
     raw = extractJsonObject(answer);
   } catch (error) {
-    return aiError(c, error);
+    // `callAI` devuelve la respuesta tras sanear la credencial configurada.
+    return aiError(c, error, answer.slice(0, 200));
   }
 
   const validated = photoLinesSchema.safeParse(raw);

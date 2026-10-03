@@ -82,10 +82,7 @@ describe('callAI', () => {
       });
     });
 
-    const out = await callAITransport(
-      CONFIG,
-      [{ role: 'user', content: 'hola' }]
-    );
+    const out = await callAITransport(CONFIG, [{ role: 'user', content: 'hola' }]);
 
     expect(out).toBe('{"ok":true}');
     // `base_url` acabado en `/` no debe producir `//chat/completions`
@@ -101,7 +98,7 @@ describe('callAI', () => {
     });
   });
 
-  it('un 500 del proveedor se propaga con su cuerpo recortado', async () => {
+  it('un 500 conserva el estado HTTP pero no expone el cuerpo arbitrario del proveedor', async () => {
     vi.stubGlobal(
       'fetch',
       async () =>
@@ -113,18 +110,83 @@ describe('callAI', () => {
     const error = await callAITransport(CONFIG, []).catch((e) => e);
     expect(error).toBeInstanceOf(AiCallError);
     expect(error.code).toBe('PROVIDER');
-    expect(error.message).toContain('upstream exploded');
-    expect(error.detail).toHaveLength(400);
+    expect(error.message).toContain('HTTP 502');
+    expect(error.message).not.toContain('upstream exploded');
+    expect(error.detail).toBe('HTTP 502');
   });
 
-  it('una respuesta sin choices se dice como respuesta mala, no como fallo de red', async () => {
+  it('no devuelve una credencial si el proveedor la repite en su respuesta HTTP', async () => {
+    const secret = 'synthetic-provider-secret-sentinel';
     vi.stubGlobal(
       'fetch',
-      async () => new Response(JSON.stringify({ choices: [] }), { status: 200 })
+      async () => new Response(`Authorization rejected: Bearer ${secret}`, { status: 401 })
     );
-    await expect(callAITransport(CONFIG, [])).rejects.toMatchObject({
+    const error = await callAITransport({ ...CONFIG, api_key: secret }, []).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(error.message).not.toContain(secret);
+    expect(error.detail).not.toContain(secret);
+    expect(error.detail).toBe('HTTP 401');
+  });
+
+  it('no expone la credencial si el error de transporte la incluye', async () => {
+    const secret = 'synthetic-provider-secret-sentinel';
+    vi.stubGlobal('fetch', async () => {
+      throw new Error(`request failed for ${secret}`);
+    });
+    const error = await callAITransport({ ...CONFIG, api_key: secret }, []).catch((e) => e);
+
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(error.message).not.toContain(secret);
+    expect(error.detail).not.toContain(secret);
+  });
+
+  it('una respuesta sin choices se dice como respuesta mala sin volcar payload del proveedor', async () => {
+    const secret = 'synthetic-provider-secret-sentinel';
+    vi.stubGlobal(
+      'fetch',
+      async () => new Response(JSON.stringify({ api_key: secret, choices: [] }), { status: 200 })
+    );
+    const error = await callAITransport({ ...CONFIG, api_key: secret }, []).catch(
+      (reason) => reason
+    );
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(JSON.stringify({ message: error.message, detail: error.detail })).not.toContain(secret);
+    expect(error).toMatchObject({
       code: 'BAD_JSON'
     });
+  });
+
+  it('un cuerpo 200 que no sea JSON genera un error fijo, no el excerpt de parseo', async () => {
+    const secret = 'synthetic-malformed-body-sentinel';
+    vi.stubGlobal('fetch', async () => new Response(`Invalid API key: ${secret}`, { status: 200 }));
+    const error = await callAITransport({ ...CONFIG, api_key: secret }, []).catch(
+      (reason) => reason
+    );
+
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(error.code).toBe('BAD_JSON');
+    expect(JSON.stringify({ message: error.message, detail: error.detail })).not.toContain(secret);
+    expect(error.message).toBe('Invalid AI response format');
+  });
+
+  it('redacta la clave incluso cuando el modelo la devuelve dentro de JSON valido', async () => {
+    const secret = 'synthetic-valid-output-sentinel';
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: JSON.stringify({ name: `Recipe ${secret}` }) } }]
+          }),
+          { status: 200 }
+        )
+    );
+
+    const content = await callAITransport({ ...CONFIG, api_key: secret }, []);
+
+    expect(content).not.toContain(secret);
+    expect(content).toContain('[redactado]');
   });
 
   it('un fetch que revienta (DNS, timeout) es PROVIDER o TIMEOUT, y no se traga el motivo', async () => {
@@ -153,7 +215,7 @@ describe('extractJsonObject', () => {
     });
   });
 
-  it('si no hay objeto, el error trae lo que contesto el modelo', () => {
+  it('si no hay objeto, el error no conserva el texto arbitrario del modelo', () => {
     const error = (() => {
       try {
         extractJsonObject('no veo ninguna lista en la imagen');
@@ -163,15 +225,14 @@ describe('extractJsonObject', () => {
       }
     })();
     expect(error?.code).toBe('BAD_JSON');
-    expect(error?.detail).toContain('no veo ninguna lista');
+    expect(error?.detail).toBeUndefined();
   });
 
   it('un objeto roto no se disfraza de vacio', () => {
     // Sin llave de cierre no hay ni donde mirar: BAD_JSON por ausencia de objeto...
     expect(() => extractJsonObject('{"a":')).toThrowError(/Invalid AI response format/);
-    // ...y con ella pero mal formado (lo tipico de un modelo cortado por
-    // max_tokens) tambien, con el parseo original en el detalle para poder
-    // diagnosticar sin re-ejecutar la llamada.
+    // ...y con ella pero mal formado tambien. No se copia contenido arbitrario del
+    // proveedor en el detalle que luego puede persistirse o mostrarse en la UI.
     const error = (() => {
       try {
         // La llave de mas es lo que deja el greedy `\{...\}` con un JSON ya
@@ -183,9 +244,7 @@ describe('extractJsonObject', () => {
       }
     })();
     expect(error?.code).toBe('BAD_JSON');
-    expect(error?.detail).toContain('{"a": 1');
-    // La coma suelta que sueltos los modelos cortados por `max_tokens`: el detalle
-    // tiene que decir QUE caducidad del JSON es, no solo «formato malo».
+    expect(error?.detail).toBeUndefined();
     expect(error?.message).toContain('Invalid AI response format');
   });
 });
@@ -232,7 +291,7 @@ describe('callAIStreaming', () => {
     );
 
     expect(texto).toBe('{"lines":[{"name":"Leche"}');
-    expect(deltas).toEqual(['{"lines":[', '{"name":"Leche"}']);
+    expect(deltas.join('')).toBe(texto);
     // El stream va de verdad en el body, y la senal de abort viaja con el fetch.
     expect(seen[0].body.stream).toBe(true);
   });
@@ -249,28 +308,28 @@ describe('callAIStreaming', () => {
     ).rejects.toMatchObject({ code: 'NO_CONFIG' });
   });
 
-  it('un 4xx/5xx del proveedor es PROVIDER con el cuerpo recortado', async () => {
-    vi.stubGlobal('fetch', async () => new Response('boom ' + 'y'.repeat(500), { status: 500 }));
+  it('un 4xx/5xx del proveedor es PROVIDER y conserva solo el status', async () => {
+    const secret = 'synthetic-provider-secret-sentinel';
+    vi.stubGlobal(
+      'fetch',
+      async () => new Response(`upstream rejected ${secret}`, { status: 500 })
+    );
     const error = await callAIStreamingTransport(
-      CONFIG,
+      { ...CONFIG, api_key: secret },
       [],
       () => undefined,
       new AbortController().signal
     ).catch((e) => e);
     expect(error).toBeInstanceOf(AiCallError);
     expect(error.code).toBe('PROVIDER');
-    expect(error.detail).toHaveLength(400);
+    expect(error.detail).toBe('HTTP 500');
+    expect(JSON.stringify({ message: error.message, detail: error.detail })).not.toContain(secret);
   });
 
   it('un stream que no trajo nada de texto es BAD_JSON, no un exito silencioso', async () => {
     vi.stubGlobal('fetch', async () => new Response(sse(['data: [DONE]\n']), { status: 200 }));
     await expect(
-      callAIStreamingTransport(
-        CONFIG,
-        [],
-        () => undefined,
-        new AbortController().signal
-      )
+      callAIStreamingTransport(CONFIG, [], () => undefined, new AbortController().signal)
     ).rejects.toMatchObject({ code: 'BAD_JSON' });
   });
 
@@ -298,21 +357,78 @@ describe('callAIStreaming', () => {
     expect(error.detail).toBe('CANCELLED');
   });
 
+  it('redacta una clave repartida entre deltas antes de entregarla al llamante', async () => {
+    const secret = 'synthetic-stream-secret-sentinel';
+    const deltas: string[] = [];
+    const answer = `{"name":"${secret}"}`;
+    const chunks = answer.split(secret).flatMap((chunk, index, all) => {
+      const parts = [`data: ${JSON.stringify({ choices: [{ delta: { content: chunk } }] })}\n`];
+      if (index < all.length - 1) {
+        parts.push(`data: ${JSON.stringify({ choices: [{ delta: { content: secret } }] })}\n`);
+      }
+      return parts;
+    });
+    vi.stubGlobal('fetch', async () => new Response(sse(chunks), { status: 200 }));
+
+    const content = await callAIStreamingTransport(
+      { ...CONFIG, api_key: secret },
+      [],
+      (delta) => deltas.push(delta),
+      new AbortController().signal
+    );
+
+    expect(content).not.toContain(secret);
+    expect(deltas.join('')).not.toContain(secret);
+    expect(content).toContain('[redactado]');
+  });
+
+  it('no filtra una clave periodica al mover el limite seguro de un delta', async () => {
+    const secret = 'ababababab';
+    const deltas: string[] = [];
+    const content = `${secret}zzzzzzzzz`;
+    const event = `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n`;
+    vi.stubGlobal('fetch', async () => new Response(sse([event]), { status: 200 }));
+
+    await callAIStreamingTransport(
+      { ...CONFIG, api_key: secret },
+      [],
+      (delta) => deltas.push(delta),
+      new AbortController().signal
+    );
+
+    expect(deltas.join('')).not.toContain(secret);
+  });
+
+  it('normaliza un error del lector del stream sin persistir el mensaje del transporte', async () => {
+    const secret = 'synthetic-stream-reader-secret-sentinel';
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new Error(`connection reset after ${secret}`));
+      }
+    });
+    vi.stubGlobal('fetch', async () => new Response(stream, { status: 200 }));
+    const error = await callAIStreamingTransport(
+      { ...CONFIG, api_key: secret },
+      [],
+      () => undefined,
+      new AbortController().signal
+    ).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(error.code).toBe('PROVIDER');
+    expect(JSON.stringify({ message: error.message, detail: error.detail })).not.toContain(secret);
+    expect(error.message).toBe('AI provider stream connection failed');
+  });
+
   it('un fetch que revienta con abort/timeout es TIMEOUT', async () => {
     vi.stubGlobal('fetch', async () => {
       throw new Error('The operation was aborted due to timeout');
     });
     await expect(
-      callAIStreamingTransport(
-        CONFIG,
-        [],
-        () => undefined,
-        new AbortController().signal
-      )
+      callAIStreamingTransport(CONFIG, [], () => undefined, new AbortController().signal)
     ).rejects.toMatchObject({ code: 'TIMEOUT' });
   });
 });
-
 
 // ── El endpoint tolerante y la prueba de conexion (revision a peticion del usuario) ──────
 
@@ -322,8 +438,12 @@ describe('endpoint', () => {
   });
 
   it('la base que ya trae su version se respeta, barra final incluida', () => {
-    expect(endpoint('https://api.openai.com/v1')).toBe('https://api.openai.com/v1/chat/completions');
-    expect(endpoint('http://localhost:11434/v1/')).toBe('http://localhost:11434/v1/chat/completions');
+    expect(endpoint('https://api.openai.com/v1')).toBe(
+      'https://api.openai.com/v1/chat/completions'
+    );
+    expect(endpoint('http://localhost:11434/v1/')).toBe(
+      'http://localhost:11434/v1/chat/completions'
+    );
     expect(endpoint('http://x/api/v2')).toBe('http://x/api/v2/chat/completions');
   });
 
@@ -335,28 +455,38 @@ describe('endpoint', () => {
 describe('callAI: el cuerpo lleva solo lo configurado', () => {
   it('los parametros en null no viajan: un proveedor estricto no recibe basura', async () => {
     let cuerpo: any;
-    vi.stubGlobal(
-      'fetch',
-      async (_url: string, init: RequestInit) => {
-        cuerpo = JSON.parse(String(init.body));
-        return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 });
-      }
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      cuerpo = JSON.parse(String(init.body));
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+        status: 200
+      });
+    });
+    await callAITransport(
+      {
+        ...CONFIG,
+        temperature: null,
+        max_tokens: null,
+        top_p: null,
+        frequency_penalty: null,
+        presence_penalty: null
+      },
+      [{ role: 'user', content: 'hola' }]
     );
-    await callAITransport({ ...CONFIG, temperature: null, max_tokens: null, top_p: null, frequency_penalty: null, presence_penalty: null }, [{ role: 'user', content: 'hola' }]);
     vi.unstubAllGlobals();
     expect(cuerpo).toEqual({ model: CONFIG.model, messages: [{ role: 'user', content: 'hola' }] });
   });
 
   it('los parametros con valor si viajan', async () => {
     let cuerpo: any;
-    vi.stubGlobal(
-      'fetch',
-      async (_url: string, init: RequestInit) => {
-        cuerpo = JSON.parse(String(init.body));
-        return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), { status: 200 });
-      }
-    );
-    await callAITransport({ ...CONFIG, temperature: 0.2, max_tokens: 500 }, [{ role: 'user', content: 'hola' }]);
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      cuerpo = JSON.parse(String(init.body));
+      return new Response(JSON.stringify({ choices: [{ message: { content: 'ok' } }] }), {
+        status: 200
+      });
+    });
+    await callAITransport({ ...CONFIG, temperature: 0.2, max_tokens: 500 }, [
+      { role: 'user', content: 'hola' }
+    ]);
     vi.unstubAllGlobals();
     expect(cuerpo.temperature).toBe(0.2);
     expect(cuerpo.max_tokens).toBe(500);
@@ -369,14 +499,15 @@ describe('pingDeConexion', () => {
 
   it('pide el JSON dado con response_format de esquema estricto, y lo valida', async () => {
     let cuerpo: any;
-    vi.stubGlobal(
-      'fetch',
-      async (_url: string, init: RequestInit) => {
-        cuerpo = JSON.parse(String(init.body));
-        return respuesta('{"status":"ok","message":"conexión establecida"}');
-      }
-    );
-    const veredicto = await pingDeConexionTransport({ base_url: 'http://x:8000', api_key: 'k', model: 'gpt-5' });
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      cuerpo = JSON.parse(String(init.body));
+      return respuesta('{"status":"ok","message":"conexión establecida"}');
+    });
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x:8000',
+      api_key: 'k',
+      model: 'gpt-5'
+    });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(true);
     // El contrato del proveedor, como el ejemplo del usuario: json_schema estricto.
@@ -390,8 +521,19 @@ describe('pingDeConexion', () => {
   });
 
   it('un 200 con cuerpo que no es JSON (el proxy con su pagina HTML) es veredicto de error, no un vuelco', async () => {
-    vi.stubGlobal('fetch', async () => new Response('<html>Bad Gateway</html>', { status: 200, headers: { 'content-type': 'text/html' } }));
-    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    vi.stubGlobal(
+      'fetch',
+      async () =>
+        new Response('<html>Bad Gateway</html>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' }
+        })
+    );
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x/v1',
+      api_key: 'k',
+      model: 'm'
+    });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(false);
     if (!veredicto.ok) expect(veredicto.error).toContain('no tiene la forma esperada');
@@ -404,19 +546,33 @@ describe('pingDeConexion', () => {
       }
     });
     vi.stubGlobal('fetch', async () => new Response(cuerpoRoto, { status: 502 }));
-    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x/v1',
+      api_key: 'k',
+      model: 'm'
+    });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(false);
     // Sin cuerpo no hay texto del proveedor: queda el HTTP, que es lo unico cierto.
     if (!veredicto.ok) expect(veredicto.error).toContain('HTTP 502');
   });
 
-  it('un «Hello» ambiguo ya no vale: el modelo tiene que devolver el JSON pedido', async () => {
-    vi.stubGlobal('fetch', async () => respuesta('Hello! How can I help you today?'));
-    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
-    vi.unstubAllGlobals();
+  it('un «Hello» ambiguo no vale y la respuesta del modelo no aparece en el error', async () => {
+    const secret = 'synthetic-provider-secret-sentinel';
+    vi.stubGlobal('fetch', async () =>
+      respuesta(`Hello! Bearer ${secret} is not the requested JSON`)
+    );
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x/v1',
+      api_key: secret,
+      model: 'm'
+    });
     expect(veredicto.ok).toBe(false);
-    if (!veredicto.ok) expect(veredicto.error).toContain('no devolvió el JSON pedido');
+    if (!veredicto.ok) {
+      expect(veredicto.error).toContain('no devolvió el JSON pedido');
+      expect(veredicto.error).not.toContain(secret);
+      expect(veredicto.error).not.toContain('Hello!');
+    }
   });
 
   it('un 400 del proveedor se cuenta con su texto', async () => {
@@ -424,21 +580,93 @@ describe('pingDeConexion', () => {
       'fetch',
       async () => new Response('{"error":"max_tokens is not supported"}', { status: 400 })
     );
-    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x/v1',
+      api_key: 'k',
+      model: 'm'
+    });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(false);
-    if (!veredicto.ok) expect(veredicto.error).toContain('max_tokens is not supported');
+    if (!veredicto.ok) {
+      expect(veredicto.error).toBe('HTTP 400');
+      expect(veredicto.error).not.toContain('max_tokens is not supported');
+    }
+  });
+
+  it('no devuelve la credencial aunque el proveedor la repita en el cuerpo 401', async () => {
+    const secret = 'synthetic-provider-secret-sentinel';
+    vi.stubGlobal('fetch', async () => new Response(`Invalid API key: ${secret}`, { status: 401 }));
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x/v1',
+      api_key: secret,
+      model: 'm'
+    });
+
+    expect(veredicto.ok).toBe(false);
+    if (!veredicto.ok) {
+      expect(veredicto.error).not.toContain(secret);
+      expect(veredicto.error).toBe('HTTP 401');
+    }
+  });
+
+  it('no devuelve una credencial si el modelo la repite en el mensaje de éxito', async () => {
+    const secret = 'synthetic-provider-secret-sentinel';
+    vi.stubGlobal('fetch', async () =>
+      respuesta(JSON.stringify({ status: 'ok', message: `Bearer ${secret}` }))
+    );
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x/v1',
+      api_key: secret,
+      model: 'm'
+    });
+
+    expect(veredicto.ok).toBe(true);
+    if (veredicto.ok) expect(veredicto.message).not.toContain(secret);
+  });
+
+  it('redacta una clave corta si el modelo la devuelve como mensaje de éxito', async () => {
+    const secret = 'sk-x';
+    vi.stubGlobal('fetch', async () =>
+      respuesta(JSON.stringify({ status: 'ok', message: `La clave usada fue ${secret}` }))
+    );
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x/v1',
+      api_key: secret,
+      model: 'm'
+    });
+
+    expect(veredicto.ok).toBe(true);
+    if (veredicto.ok) {
+      expect(veredicto.message).not.toContain(secret);
+      expect(veredicto.message).toContain('[redactado]');
+    }
   });
 
   it('la red caida es un veredicto, no una excepcion', async () => {
-    vi.stubGlobal(
-      'fetch',
-      async () => {
-        throw new Error('fetch failed');
-      }
-    );
-    const veredicto = await pingDeConexionTransport({ base_url: 'http://x/v1', api_key: 'k', model: 'm' });
+    vi.stubGlobal('fetch', async () => {
+      throw new Error('fetch failed');
+    });
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x/v1',
+      api_key: 'k',
+      model: 'm'
+    });
     vi.unstubAllGlobals();
     expect(veredicto.ok).toBe(false);
+  });
+
+  it('no devuelve la credencial si el error de red la incluye', async () => {
+    const secret = 'synthetic-provider-secret-sentinel';
+    vi.stubGlobal('fetch', async () => {
+      throw new Error(`socket failure ${secret}`);
+    });
+    const veredicto = await pingDeConexionTransport({
+      base_url: 'http://x/v1',
+      api_key: secret,
+      model: 'm'
+    });
+
+    expect(veredicto.ok).toBe(false);
+    if (!veredicto.ok) expect(veredicto.error).not.toContain(secret);
   });
 });

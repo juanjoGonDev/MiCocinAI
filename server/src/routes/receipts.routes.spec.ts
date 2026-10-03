@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
 import { existsSync, readdirSync, statSync } from 'node:fs';
@@ -98,6 +98,7 @@ beforeAll(async () => {
 });
 
 afterAll(() => closeDatabase?.());
+afterEach(() => vi.unstubAllGlobals());
 
 beforeEach(async () => {
   db.exec(
@@ -125,6 +126,70 @@ describe('POST / (subir)', () => {
     const ficha = await esperarEstado(subida.payload.data.id, 'failed');
     expect(ficha.error).toBe('NO_CONFIG');
     expect(ficha.job.status).toBe('failed');
+  });
+
+  it('no persiste ni expone una clave que el proveedor repita al fallar', async () => {
+    const secret = 'synthetic-receipt-provider-secret';
+    const configId = 'receipt-redaction-config';
+    const filesBefore = archivosDeTickets();
+    vi.stubGlobal(
+      'fetch',
+      async () => new Response(`Provider rejected Bearer ${secret}`, { status: 401 })
+    );
+    db.prepare(
+      `INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, retry_attempts, concurrency, is_active)
+       VALUES (?, ?, 'Synthetic provider', 'custom', 'https://receipt-redaction.invalid/v1', ?, 'synthetic-model', 0, 0, 1)`
+    ).run(configId, alice.id, secret);
+
+    try {
+      const uploaded = await subirTicket();
+      expect(uploaded.status).toBe(201);
+
+      const detail = await esperarEstado(uploaded.payload.data.id, 'failed');
+      const job = db
+        .prepare('SELECT error_code, error_detail FROM ai_jobs WHERE receipt_id = ?')
+        .get(uploaded.payload.data.id) as { error_code: string; error_detail: string };
+
+      expect(job.error_code).toBe('PROVIDER');
+      expect(job.error_detail).toBe('AI API error: HTTP 401');
+      expect(JSON.stringify(detail.job)).not.toContain(secret);
+      expect(JSON.stringify(detail)).not.toContain(secret);
+    } finally {
+      const root = uploadsRoot(':memory:');
+      for (const file of archivosDeTickets()) {
+        if (!filesBefore.includes(file)) deleteUpload(`/api/uploads/receipts/${file}`, root);
+      }
+    }
+  });
+
+  it('no persiste excerpts del parseador si el proveedor devuelve un body 200 que no es JSON', async () => {
+    const secret = 'synthetic-malformed-receipt-secret';
+    const configId = 'receipt-malformed-redaction-config';
+    const filesBefore = archivosDeTickets();
+    vi.stubGlobal('fetch', async () => new Response(`Invalid API key: ${secret}`, { status: 200 }));
+    db.prepare(
+      `INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, retry_attempts, concurrency, is_active)
+       VALUES (?, ?, 'Synthetic provider', 'custom', 'https://receipt-redaction.invalid/v1', ?, 'synthetic-model', 0, 0, 1)`
+    ).run(configId, alice.id, secret);
+
+    try {
+      const uploaded = await subirTicket();
+      expect(uploaded.status).toBe(201);
+
+      const detail = await esperarEstado(uploaded.payload.data.id, 'failed');
+      const job = db
+        .prepare('SELECT error_code, error_detail FROM ai_jobs WHERE receipt_id = ?')
+        .get(uploaded.payload.data.id) as { error_code: string; error_detail: string };
+
+      expect(job.error_code).toBe('BAD_JSON');
+      expect(job.error_detail).toBe('Invalid AI response format');
+      expect(JSON.stringify(detail)).not.toContain(secret);
+    } finally {
+      const root = uploadsRoot(':memory:');
+      for (const file of archivosDeTickets()) {
+        if (!filesBefore.includes(file)) deleteUpload(`/api/uploads/receipts/${file}`, root);
+      }
+    }
   });
 
   it('la firma manda: un exe con nombre de png no pasa, y un PDF si', async () => {

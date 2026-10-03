@@ -1594,6 +1594,37 @@ fuentes, specs, logs, capturas, traces, fixtures o memoria persistente.
       smoke omitido/fallido nunca aparece como verde. El smoke real queda marcado manualmente y no se
       incluye en CI automático.
 
+### Subunidad QA-AI.SECRET-REDACTION.1 · proteger credenciales y datos en errores upstream
+
+**Fuente revalidada (2026-10-03):** `ai-client.ts` era una frontera común para errores upstream,
+lecturas de JSON y streaming; `ai.routes.ts` devuelve el borrador completo de receta y la cola de
+tickets persiste fallos en `ai_jobs.error_detail`. El runner Playwright común conserva artefactos/SQLite
+cuando CI está activo o el test falla, por lo que no es seguro usarlo sin cambios con una configuración
+que contenga una credencial real.
+
+- [x] Antes de un smoke real, añadir pruebas con un token sentinel sintético que el proveedor simulado
+      repite en respuestas HTTP, cuerpo JSON/stream y fallo de transporte; exigir que no aparece en
+      mensajes/API/filas persistidas, sin borrar códigos útiles de error ni semántica de timeout/cancel.
+- [x] Redactar los diagnósticos de generación, conexión y lectura de tickets antes de que alcancen la
+      UI, base de datos o logs; conservar solo información de transporte/estado que no incluya secretos
+      ni payloads arbitrarios.
+- [ ] Separar la limpieza del smoke con credencial del runner general: salida/trace/video/screenshot
+      desactivados, 1 worker, reintentos apagados y limpieza garantizada de SQLite, uploads y artefactos
+      incluso si el proceso falla; demostrar que la suite normal nunca usa red exterior.
+
+**Evidencia TDD (2026-10-03):** las pruebas se añadieron antes del endurecimiento y fallaron con
+sentinels en errores HTTP/transporte, respuesta JSON válida/malformada, eco de clave corta, streaming,
+respuesta de conexión, API de receta y fila/consulta de ticket. Con `DATABASE_PATH=:memory:`:
+
+- `$env:DATABASE_PATH=':memory:'; pnpm --filter @hogaria/server test`: **959/959**.
+- `$env:DATABASE_PATH=':memory:'; $report = Join-Path $env:TEMP 'hogaria-server-coverage-20261003-r2'; pnpm --filter @hogaria/server exec vitest run --coverage.enabled --coverage.reportsDirectory=$report`: **959/959**; todas las unidades incluidas superan 70 % en statements/branches/functions/lines (total: 93.07/84.58/95.15/95.59 %).
+- `pnpm --filter @hogaria/server run build` y `git diff --check`: pasan.
+
+Las respuestas upstream de estas pruebas son simuladas, sin llamadas externas. `shopping.routes.ts`
+ya fallaba `prettier --check` en el `HEAD` inicial; se conservaron sus líneas ajenas al cambio sin
+reformatear el archivo entero. El manejo del runner con secretos y la verificación explícita de red
+quedan pendientes; no se hizo ninguna llamada real a proveedor.
+
 ## Unidad QA-LAYOUT.CONTENT-GUTTERS.1 · márgenes homogéneos en las vistas
 
 **Fuente revalidada (2026-10-03):** `app.routes.ts` monta las rutas privadas de producto bajo

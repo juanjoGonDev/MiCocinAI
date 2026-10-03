@@ -15,7 +15,10 @@ export type AiMessagePart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } };
 
-export type AiMessage = { role: 'system' | 'user' | 'assistant'; content: string | AiMessagePart[] };
+export type AiMessage = {
+  role: 'system' | 'user' | 'assistant';
+  content: string | AiMessagePart[];
+};
 export type AiJobKind =
   | 'receipt'
   | 'recipe'
@@ -66,7 +69,9 @@ export class AiCallError extends Error {
 /** La fila activa de `ai_config`: se lee siempre desde la BD, no se guarda en memoria. */
 export function activeAiConfig(db: SqlDb, userId: string) {
   return db
-    .prepare('SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1 ORDER BY updated_at DESC LIMIT 1')
+    .prepare(
+      'SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1 ORDER BY updated_at DESC LIMIT 1'
+    )
     .get(userId) as AiConfigRow | undefined;
 }
 
@@ -123,7 +128,6 @@ export async function callAIWithConfig(
   messages: AiMessage[],
   signal?: AbortSignal
 ): Promise<string> {
-
   let response: Response;
   try {
     response = await fetch(endpoint(active.base_url), {
@@ -138,20 +142,31 @@ export async function callAIWithConfig(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const timedOut = /timeout|abort/i.test(message);
-    throw new AiCallError(timedOut ? 'TIMEOUT' : 'PROVIDER', `AI API error: ${message}`, message);
+    const detail = timedOut ? 'TIMEOUT' : 'CONNECTION_FAILED';
+    throw new AiCallError(
+      timedOut ? 'TIMEOUT' : 'PROVIDER',
+      timedOut ? 'AI provider request timed out' : 'AI provider connection failed',
+      detail
+    );
   }
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    throw new AiCallError('PROVIDER', `AI API error: ${text.slice(0, 400)}`, text.slice(0, 400));
+    await response.body?.cancel().catch(() => undefined);
+    const detail = `HTTP ${response.status}`;
+    throw new AiCallError('PROVIDER', `AI API error: ${detail}`, detail);
   }
 
-  const payload = (await response.json()) as any;
+  let payload: any;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new AiCallError('BAD_JSON', 'Invalid AI response format');
+  }
   const content = payload?.choices?.[0]?.message?.content;
   if (typeof content !== 'string') {
-    throw new AiCallError('BAD_JSON', 'Invalid AI response format', JSON.stringify(payload).slice(0, 200));
+    throw new AiCallError('BAD_JSON', 'Invalid AI response format');
   }
-  return content;
+  return redactarSecreto(content, active.api_key);
 }
 
 /**
@@ -206,50 +221,69 @@ export async function callAIStreamingWithConfig(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const timedOut = /timeout|abort/i.test(message);
-    throw new AiCallError(timedOut ? 'TIMEOUT' : 'PROVIDER', `AI API error: ${message}`, message);
+    const detail = timedOut ? 'TIMEOUT' : 'CONNECTION_FAILED';
+    throw new AiCallError(
+      timedOut ? 'TIMEOUT' : 'PROVIDER',
+      timedOut ? 'AI provider stream timed out' : 'AI provider stream connection failed',
+      detail
+    );
   }
 
   if (!response.ok || !response.body) {
-    const text = await response.text().catch(() => '');
-    throw new AiCallError('PROVIDER', `AI API error: ${text.slice(0, 400)}`, text.slice(0, 400));
+    await response.body?.cancel().catch(() => undefined);
+    const detail = response.ok ? 'EMPTY_STREAM' : `HTTP ${response.status}`;
+    throw new AiCallError('PROVIDER', `AI API error: ${detail}`, detail);
   }
 
   const decoder = new TextDecoder();
   let entero = '';
   let porProcesar = '';
-  for await (const trozo of response.body) {
-    if (signal.aborted) throw new AiCallError('PROVIDER', 'Cancelado', 'CANCELLED');
-    porProcesar += decoder.decode(trozo, { stream: true });
-    // El SSE llega en lineas «data: {...}» separadas por saltos; una linea «data: [DONE]» cierra.
-    const lineas = porProcesar.split('\n');
-    porProcesar = lineas.pop() ?? '';
-    for (const linea of lineas) {
-      const recorte = linea.trim();
-      if (!recorte.startsWith('data:')) continue;
-      const dato = recorte.slice(5).trim();
-      if (!dato || dato === '[DONE]') continue;
-      try {
-        const delta = (JSON.parse(dato) as any)?.choices?.[0]?.delta?.content;
-        if (typeof delta === 'string' && delta) {
-          entero += delta;
-          onDelta(delta);
+  let pendienteDeRedaccion = '';
+  try {
+    for await (const trozo of response.body) {
+      if (signal.aborted) throw new AiCallError('PROVIDER', 'Cancelado', 'CANCELLED');
+      porProcesar += decoder.decode(trozo, { stream: true });
+      // El SSE llega en lineas «data: {...}» separadas por saltos; una linea «data: [DONE]» cierra.
+      const lineas = porProcesar.split('\n');
+      porProcesar = lineas.pop() ?? '';
+      for (const linea of lineas) {
+        const recorte = linea.trim();
+        if (!recorte.startsWith('data:')) continue;
+        const dato = recorte.slice(5).trim();
+        if (!dato || dato === '[DONE]') continue;
+        try {
+          const delta = (JSON.parse(dato) as any)?.choices?.[0]?.delta?.content;
+          if (typeof delta === 'string' && delta) {
+            entero += delta;
+            pendienteDeRedaccion += delta;
+            const seguroHasta = prefijoSeguroHasta(pendienteDeRedaccion, active.api_key);
+            if (seguroHasta > 0) {
+              onDelta(redactarSecreto(pendienteDeRedaccion.slice(0, seguroHasta), active.api_key));
+              pendienteDeRedaccion = pendienteDeRedaccion.slice(seguroHasta);
+            }
+          }
+        } catch {
+          // Un trozo que no es JSON: los proveedores mandan comentarios y keep-alives; a otra cosa.
         }
-      } catch {
-        // Un trozo que no es JSON: los proveedores mandan comentarios y keep-alives; a otra cosa.
       }
     }
+  } catch (error) {
+    if (error instanceof AiCallError) throw error;
+    if (senal.aborted) throw new AiCallError('PROVIDER', 'Cancelado', 'CANCELLED');
+    if (signal.aborted) throw new AiCallError('TIMEOUT', 'AI provider stream timed out', 'TIMEOUT');
+    throw new AiCallError('PROVIDER', 'AI provider stream connection failed', 'CONNECTION_FAILED');
   }
   if (!entero) {
     throw new AiCallError('BAD_JSON', 'El stream no trajo nada de texto', '');
   }
-  return entero;
+  if (pendienteDeRedaccion) onDelta(redactarSecreto(pendienteDeRedaccion, active.api_key));
+  return redactarSecreto(entero, active.api_key);
 }
 
 /**
  * El modelo escribe a veces ```json ... ``` o añade una frase antes del objeto.
- * Se saca el objeto y se parsea; si no lo hay, el error lleva los primeros 200
- * caracteres para que el visor de logs permita ver QUE contesto, que es lo unico
- * que sirve cuando falla la interpretacion de una foto.
+ * Se saca el objeto y se parsea; los errores nunca incluyen el texto generado por
+ * el proveedor, porque puede terminar persistido o visible en diagnósticos.
  */
 export function extractJsonObject(raw: string): unknown {
   const cleaned = raw
@@ -258,21 +292,14 @@ export function extractJsonObject(raw: string): unknown {
     .replace(/```\s*$/, '');
   const match = cleaned.match(/\{[\s\S]*\}/);
   if (!match) {
-    throw new AiCallError('BAD_JSON', 'Invalid AI response format', raw.slice(0, 200));
+    throw new AiCallError('BAD_JSON', 'Invalid AI response format');
   }
   try {
     return JSON.parse(match[0]);
-  } catch (error) {
-    throw new AiCallError(
-      'BAD_JSON',
-      'Invalid AI response format',
-      // Sin ternario `instanceof`: `JSON.parse` siempre lanza un Error, y la rama
-      // imposible es una linea que nadie va a cubrir jamas.
-      `${String((error as Error)?.message ?? error)} · ${raw.slice(0, 200)}`
-    );
+  } catch {
+    throw new AiCallError('BAD_JSON', 'Invalid AI response format');
   }
 }
-
 
 // ── La prueba de conexión (HOGARIA-SPEC ## 8f, revisada a peticion del usuario) ──────────
 
@@ -308,7 +335,9 @@ export async function pingDeConexion(
     timeout?: number | null;
   },
   context: { db: SqlDb; userId: string; config: AiConfigRow; configId: string | null }
-): Promise<{ ok: true; latency: number; message: string } | { ok: false; latency: number; error: string }> {
+): Promise<
+  { ok: true; latency: number; message: string } | { ok: false; latency: number; error: string }
+> {
   const { dispatchPingDeConexion } = await import('./ticket-queue.js');
   return dispatchPingDeConexion(config, context);
 }
@@ -320,7 +349,9 @@ export async function pingDeConexionTransport(config: {
   model: string;
   timeout?: number | null;
   signal?: AbortSignal;
-}): Promise<{ ok: true; latency: number; message: string } | { ok: false; latency: number; error: string }> {
+}): Promise<
+  { ok: true; latency: number; message: string } | { ok: false; latency: number; error: string }
+> {
   const startTime = Date.now();
   try {
     const response = await fetch(endpoint(config.base_url), {
@@ -356,14 +387,18 @@ export async function pingDeConexionTransport(config: {
     const latency = Date.now() - startTime;
 
     if (!response.ok) {
-      const error = (await response.text().catch(() => '')).slice(0, 400) || `HTTP ${response.status}`;
-      return { ok: false, latency, error };
+      await response.body?.cancel().catch(() => undefined);
+      return { ok: false, latency, error: `HTTP ${response.status}` };
     }
 
     const payload = (await response.json().catch(() => null)) as any;
     const content = payload?.choices?.[0]?.message?.content;
     if (typeof content !== 'string') {
-      return { ok: false, latency, error: 'La respuesta del proveedor no tiene la forma esperada (choices[0].message.content)' };
+      return {
+        ok: false,
+        latency,
+        error: 'La respuesta del proveedor no tiene la forma esperada (choices[0].message.content)'
+      };
     }
     type Veredicto = ReturnType<typeof testAnswerSchema.safeParse>;
     let contestacion: Veredicto;
@@ -373,22 +408,93 @@ export async function pingDeConexionTransport(config: {
       return {
         ok: false,
         latency,
-        error: `El modelo no devolvió el JSON pedido: ${content.slice(0, 200)}`
+        error: 'El modelo no devolvió el JSON pedido (respuesta no válida)'
       };
     }
     if (!contestacion.success) {
       return {
         ok: false,
         latency,
-        error: `El modelo no devolvió el JSON pedido: ${content.slice(0, 200)}`
+        error: 'El modelo no devolvió el JSON pedido (respuesta no válida)'
       };
     }
-    return { ok: true, latency, message: contestacion.data.message };
+    return {
+      ok: true,
+      latency,
+      message: redactarSecreto(contestacion.data.message, config.api_key)
+    };
   } catch (error) {
     const latency = Date.now() - startTime;
     const mensaje = error instanceof Error ? error.message : String(error);
-    return { ok: false, latency, error: mensaje };
+    const timedOut = /timeout|abort/i.test(mensaje);
+    return {
+      ok: false,
+      latency,
+      error: timedOut ? 'Tiempo de espera agotado' : 'No se pudo conectar con el proveedor'
+    };
   }
+}
+
+function variantesDeSecreto(secreto: string): string[] {
+  if (!secreto) return [];
+  return [
+    ...new Set([secreto, encodeURIComponent(secreto), JSON.stringify(secreto).slice(1, -1)])
+  ].filter(Boolean);
+}
+
+/** Devuelve cuánto texto puede emitirse sin partir una clave o un prefijo suyo. */
+function prefijoSeguroHasta(texto: string, secreto: string): number {
+  const variantes = variantesDeSecreto(secreto);
+  if (!variantes.length) return texto.length;
+
+  const mayor = Math.max(...variantes.map((variante) => variante.length));
+  let limite = texto.length - mayor + 1;
+  if (limite <= 0) return 0;
+
+  // No cortar una clave completa por la mitad, aunque haya empezado antes del margen.
+  while (limite > 0) {
+    let claveCruzada = false;
+    for (const variante of variantes) {
+      const inicioMinimo = Math.max(0, limite - variante.length + 1);
+      let inicio = texto.indexOf(variante, inicioMinimo);
+      while (inicio >= 0 && inicio < limite) {
+        if (inicio + variante.length > limite) {
+          limite = inicio;
+          claveCruzada = true;
+          break;
+        }
+        inicio = texto.indexOf(variante, inicio + 1);
+      }
+      if (claveCruzada) break;
+    }
+    if (claveCruzada) continue;
+
+    // Tampoco emitir el sufijo que podria ser el inicio de una clave aun incompleta.
+    const maxOverlap = Math.min(limite, mayor - 1);
+    let overlap = 0;
+    for (let longitud = maxOverlap; longitud > 0; longitud -= 1) {
+      const sufijo = texto.slice(limite - longitud, limite);
+      if (variantes.some((variante) => variante.startsWith(sufijo))) {
+        overlap = longitud;
+        break;
+      }
+    }
+    if (!overlap) return limite;
+    // El nuevo limite puede cortar otra clave repetida; vuelve a comprobar ambos casos.
+    limite -= overlap;
+  }
+  return 0;
+}
+
+function redactarSecreto(texto: string, secreto: string): string {
+  return variantesDeSecreto(secreto).reduce((resultado, variante) => {
+    if (variante.length >= 8) return resultado.replaceAll(variante, '[redactado]');
+    const escapada = variante.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return resultado.replace(
+      new RegExp(`(?<![A-Za-z0-9_])${escapada}(?![A-Za-z0-9_])`, 'g'),
+      '[redactado]'
+    );
+  }, texto);
 }
 
 function señalConTimeout(signal: AbortSignal | undefined, timeoutMs: number): AbortSignal {
