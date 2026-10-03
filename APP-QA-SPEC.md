@@ -1981,13 +1981,30 @@ usan 16 px fijos; Hogar y Configuración IA usan 16/24 px; detalles y gestores d
 inferior desigual. Ese último espacio se medirá aparte y solo se conserva si evita que una acción fija o el
 safe-area tape contenido; no se asume que sea una excepción válida por existir hoy.
 
-- [ ] Añadir primero E2E sobre cada raíz privada distinta del manifiesto, incluidos detalles con fixtures
+- [x] Añadir primero E2E sobre cada raíz privada distinta del manifiesto, incluidos detalles con fixtures
       sintéticos; medir `padding-block-start/end` frente al `--container-padding` calculado del marco en los
-      diez viewports de la subunidad anterior. Registrar la línea base roja por ruta, viewport y eje.
-- [ ] Normalizar con el token común cada margen de raíz sin función distinta; mantener intacto el padding
-      interno de paneles y anotar cualquier excepción de safe-area/acción fija con evidencia de no ocultación.
-- [ ] Repetir Playwright aislado en Chromium y Pixel 5; probar scroll, ausencia de overflow, estados con
-      contenido sintético, capturar e inspeccionar PC/móvil y registrar gates, limitaciones y resultado.
+      diez viewports de la subunidad anterior. La línea base aislada falla primero: **507 discrepancias** en
+      rutas estáticas y **277** en ocho detalles poblados, Chromium escritorio, 39 rutas y 10 tamaños por
+      ruta (50 viewports en la matriz; los detalles solo en los tamaños habilitados para ellos). El primer
+      intento sin `E2E_CHROME_BIN` no llegó al test body porque falta el Chromium descargado por Playwright;
+      se repitió con Chrome instalado, manteniendo el runner, DB y puertos aislados.
+- [x] Normalizar las raíces privadas omitidas con `padding-block: var(--container-padding)`: Ajustes,
+      Cuenta, Preferencias, Hogar, Configuración IA, cola IA, Caducidades, ticket, artículo de despensa,
+      edición, gestores de catálogo/categorías/productos y detalle de compra. Se conservaron paddings
+      internos; el espacio extra de gestores ya se reserva dentro de la tabla (`.lote__empuje`) y la barra
+      del detalle de compra permanece en flujo sticky, así que no hay excepción de padding de raíz.
+- [x] Repetir Playwright aislado en Chromium escritorio y Pixel 5: **4/4** pruebas de rutas estáticas y
+      ocho detalles sintéticos, 39 rutas y 10 viewports por ruta/proyecto (incluye orientación horizontal y
+      B−1/B/B+1); todas las raíces privadas comparten padding en bloque con el gutter inline, llegan al final
+      por scroll por encima de la navegación fija y no desbordan. Se guardaron **68 capturas PC/móvil** en
+      `.e2e-screenshots/qa-private-root-padding-20261003/` y se inspeccionaron visualmente las vistas
+      modificadas. Regresión de acciones Despensa/Compra: **65 pasaron, 1 omitida**. `typecheck:e2e`,
+      `check:ui` (188 ficheros, 20 reglas), Prettier de la prueba, `git diff --check` y build de producción
+      pasan. El build mantiene avisos existentes (bundle inicial 715,16 kB frente al límite 500 kB, estilos
+      grandes/imports Angular no usados); no se bajaron gates. El `--check` global de fuentes detecta que
+      `caducidades.component.ts` ya incumple Prettier en `HEAD`; se preservó ese formato histórico y solo
+      cambió una declaración CSS. Cobertura de código no aplica a este cambio de estilos; DB, servidor y
+      semillas fueron temporales/aislados.
 
 **Rollback focal:** revertir solo las reglas de padding de las raíces privadas adicionales, la extensión de
 la regresión E2E y este subapartado; conservar la unidad de gutters y `PAGE-SPACING.1` ya verificada.

@@ -152,18 +152,12 @@ interface Option<T extends string> {
       }
 
       .settings-page {
-        padding-block: var(--space-4);
+        padding-block: var(--container-padding);
         max-width: 640px;
         margin: 0 auto;
         display: flex;
         flex-direction: column;
         gap: var(--space-6);
-      }
-
-      @media (min-width: 768px) {
-        .settings-page {
-          padding-block: var(--space-8);
-        }
       }
 
       .settings-title {

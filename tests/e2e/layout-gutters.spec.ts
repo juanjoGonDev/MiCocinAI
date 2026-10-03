@@ -214,7 +214,9 @@ async function checkPageContainer(
         display: style.display,
         maxWidth: style.maxWidth,
         paddingStart: Number.parseFloat(style.paddingInlineStart),
-        paddingEnd: Number.parseFloat(style.paddingInlineEnd)
+        paddingEnd: Number.parseFloat(style.paddingInlineEnd),
+        paddingBlockStart: Number.parseFloat(style.paddingBlockStart),
+        paddingBlockEnd: Number.parseFloat(style.paddingBlockEnd)
       };
     });
     if (target.expectedRootDisplay && root.display !== target.expectedRootDisplay) {
@@ -231,6 +233,15 @@ async function checkPageContainer(
     ) {
       mismatches.push(
         `${target.path} @ ${viewport.width}x${viewport.height}: raíz ${root.width}px (max-width ${root.maxWidth}, padding ${root.paddingStart}/${root.paddingEnd}) no ocupa el contenido común del main (${geometry.contentStart}–${geometry.contentEnd}px)`
+      );
+    }
+    if (
+      target.shell === 'private' &&
+      (Math.abs(root.paddingBlockStart - geometry.gutterStart) > tolerance ||
+        Math.abs(root.paddingBlockEnd - geometry.gutterEnd) > tolerance)
+    ) {
+      mismatches.push(
+        `${target.path} @ ${viewport.width}x${viewport.height}: padding vertical de raíz ${root.paddingBlockStart}/${root.paddingBlockEnd}px; gutter inline del main ${geometry.gutterStart}/${geometry.gutterEnd}px`
       );
     }
   }
@@ -413,6 +424,56 @@ async function assertDashboardCaptureReady(page: Page, viewport: ViewportCase): 
   }
 }
 
+function privateRouteScreenshotName(
+  target: RouteCase,
+  state: 'route' | 'populated',
+  viewport: 'desktop' | 'mobile'
+): string {
+  const route = target.path
+    .replace(/[A-Za-z0-9_-]{15,}/g, 'fixture')
+    .replace(/[^A-Za-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase();
+  return `${target.component.replace(/^app-/, '')}-${route}-${state}-${viewport}.png`;
+}
+
+async function assertPrivateContentCanReachEnd(
+  page: Page,
+  target: RouteCase,
+  viewport: ViewportCase,
+  mismatches: string[]
+): Promise<void> {
+  if (!target.pageRoot) return;
+
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const scrollState = await page.evaluate((selector) => {
+    const root = document.querySelector<HTMLElement>(selector);
+    const navigation = document.querySelector<HTMLElement>('.bottom-nav');
+    const navigationRect = navigation?.getBoundingClientRect();
+    const scrollable = document.scrollingElement;
+    return {
+      scrollTop: scrollable?.scrollTop ?? 0,
+      maxScroll: Math.max(0, (scrollable?.scrollHeight ?? 0) - window.innerHeight),
+      rootBottom: root?.getBoundingClientRect().bottom ?? 0,
+      obstructionTop:
+        navigationRect && navigationRect.height > 0 ? navigationRect.top : window.innerHeight
+    };
+  }, target.pageRoot);
+
+  if (scrollState.maxScroll > 1 && scrollState.scrollTop < scrollState.maxScroll - 1) {
+    mismatches.push(
+      `${target.path} @ ${viewport.width}x${viewport.height}: el documento no llega al final con scroll (${scrollState.scrollTop}/${scrollState.maxScroll}px)`
+    );
+  }
+  if (scrollState.rootBottom > scrollState.obstructionTop + 1) {
+    mismatches.push(
+      `${target.path} @ ${viewport.width}x${viewport.height}: el final de la raíz queda bajo la navegación fija (${scrollState.rootBottom}/${scrollState.obstructionTop}px)`
+    );
+  }
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+}
+
 test('todas las rutas conservan su shell y aplican un único gutter común', async ({
   page
 }, testInfo) => {
@@ -429,17 +490,25 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
 
   for (const target of AUTHENTICATED_ROUTES) {
     await checkRouteAcrossViewports(page, target, mismatches, async (viewport) => {
+      if (viewport.width === 393 || viewport.width === 1440) {
+        await assertPrivateContentCanReachEnd(page, target, viewport, mismatches);
+      }
+
       const captureDesktop =
-        target.expectedRootDisplay &&
+        target.shell === 'private' &&
         testInfo.project.name === 'chromium' &&
         viewport.width === 1440;
       const captureMobile =
-        target.expectedRootDisplay &&
+        target.shell === 'private' &&
         testInfo.project.name === 'mobile-chrome' &&
         viewport.width === 393;
       if (captureDesktop || captureMobile) {
         const directory = process.env.E2E_SCREENSHOT_DIR;
-        const screenshotName = `${target.component.replace(/^app-/, '')}-${captureDesktop ? 'desktop' : 'mobile'}.png`;
+        const screenshotName = privateRouteScreenshotName(
+          target,
+          'route',
+          captureDesktop ? 'desktop' : 'mobile'
+        );
         const screenshotPath = directory
           ? join(directory, screenshotName)
           : testInfo.outputPath(screenshotName);
@@ -478,7 +547,7 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
 
   expect(
     mismatches,
-    'todas las rutas deben conservar el shell esperado, el mismo marco de 1280px/gutter y raíces alineadas con el contenido del main'
+    'todas las rutas deben conservar el shell, alinear la raíz con el marco común y compartir el gutter del main también en el eje vertical privado'
   ).toEqual([]);
 });
 
@@ -496,7 +565,10 @@ test('los detalles dinámicos poblados conservan shell, raíz, gutter y ancho', 
     const populatedRoutes = populatedDynamicRoutes(fixtures);
     for (const target of populatedRoutes) {
       await checkRouteAcrossViewports(page, target, mismatches, async (viewport) => {
-        if (!target.path.startsWith('/recipes?recipe=')) return;
+        if (viewport.width === 393 || viewport.width === 1440) {
+          await assertPrivateContentCanReachEnd(page, target, viewport, mismatches);
+        }
+
         const captureDesktop = testInfo.project.name === 'chromium' && viewport.width === 1440;
         const captureMobile = testInfo.project.name === 'mobile-chrome' && viewport.width === 393;
         if (!captureDesktop && !captureMobile) return;
@@ -505,10 +577,10 @@ test('los detalles dinámicos poblados conservan shell, raíz, gutter y ancho', 
         const screenshotPath = directory
           ? join(
               directory,
-              captureDesktop ? 'recipe-detail-desktop.png' : 'recipe-detail-mobile.png'
+              privateRouteScreenshotName(target, 'populated', captureDesktop ? 'desktop' : 'mobile')
             )
           : testInfo.outputPath(
-              captureDesktop ? 'recipe-detail-desktop.png' : 'recipe-detail-mobile.png'
+              privateRouteScreenshotName(target, 'populated', captureDesktop ? 'desktop' : 'mobile')
             );
         mkdirSync(dirname(screenshotPath), { recursive: true });
         await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled' });

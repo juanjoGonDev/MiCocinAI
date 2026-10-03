@@ -258,7 +258,7 @@ const VACIO: FormularioArticulo = {
         gap: var(--space-5);
         max-width: 640px;
         margin: 0 auto;
-        padding-block: var(--space-4) var(--space-8);
+        padding-block: var(--container-padding);
       }
       .editar__volver {
         display: inline-flex;
@@ -410,9 +410,6 @@ const VACIO: FormularioArticulo = {
         padding: var(--space-6) 0;
       }
       @media (max-width: 640px) {
-        .editar {
-          padding-block: var(--space-3) var(--space-6);
-        }
         .editar__cuerpo,
         .editar__cabecera {
           padding: var(--space-4);

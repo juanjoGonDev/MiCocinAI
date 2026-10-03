@@ -449,7 +449,7 @@ interface LineaEnPantalla extends ReceiptItem {
         gap: var(--space-4, 16px);
         max-width: 860px;
         margin: 0 auto;
-        padding-block: var(--space-4, 16px);
+        padding-block: var(--container-padding);
       }
 
       .ficha__head {

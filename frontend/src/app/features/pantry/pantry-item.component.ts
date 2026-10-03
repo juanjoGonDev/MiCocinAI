@@ -304,7 +304,7 @@ type ItemTab = 'detalles' | 'precios';
         gap: var(--space-5);
         max-width: 880px;
         margin: 0 auto;
-        padding-block: var(--space-4) var(--space-8);
+        padding-block: var(--container-padding);
       }
       .item__volver {
         display: inline-flex;
@@ -678,9 +678,6 @@ type ItemTab = 'detalles' | 'precios';
 
       /* ── movil: la cabecera se apila y el historial respira ── */
       @media (max-width: 640px) {
-        .item {
-          padding-block: var(--space-3) var(--space-6);
-        }
         .item__cabecera {
           padding: var(--space-4);
         }

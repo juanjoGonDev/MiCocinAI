@@ -297,15 +297,9 @@ import type { TranslationKey } from '../../core/i18n';
   styles: [
     `
       .household {
-        padding-block: var(--space-4);
+        padding-block: var(--container-padding);
         max-width: 800px;
         margin: 0 auto;
-      }
-
-      @media (min-width: 768px) {
-        .household {
-          padding-block: var(--space-6);
-        }
       }
 
       .household__header {
