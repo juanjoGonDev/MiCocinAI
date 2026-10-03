@@ -57,17 +57,22 @@ export class AuthService {
   login(credentials: AuthCredentials): Observable<AuthResponse> {
     this.isLoadingSignal.set(true);
 
-    return this.http.post<any>(`${this.apiUrl}/login`, credentials).pipe(
-      map((response) => this.unwrap(response)),
-      tap((response) => {
-        this.handleAuthResponse(response);
-        this.isLoadingSignal.set(false);
-      }),
-      catchError((error) => {
-        this.isLoadingSignal.set(false);
-        throw error;
+    return this.http
+      .post<any>(`${this.apiUrl}/login`, credentials, {
+        // LoginComponent owns recoverable errors; a global toast would duplicate its feedback.
+        context: new HttpContext().set(SILENT_TOAST, true)
       })
-    );
+      .pipe(
+        map((response) => this.unwrap(response)),
+        tap((response) => {
+          this.handleAuthResponse(response);
+          this.isLoadingSignal.set(false);
+        }),
+        catchError((error) => {
+          this.isLoadingSignal.set(false);
+          throw error;
+        })
+      );
   }
 
   register(data: RegisterData): Observable<AuthResponse> {

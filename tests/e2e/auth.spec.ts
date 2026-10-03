@@ -19,6 +19,76 @@ test.describe('Authentication', () => {
     await expect(page.locator('button[type="submit"]')).toBeVisible();
   });
 
+  test('shows accessible inline validation for empty login fields', async ({ page }) => {
+    await page.locator('button[type="submit"]').click();
+
+    await expect(page.locator('#email-error')).toHaveText('El email es requerido');
+    await expect(page.locator('#email')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('#email')).toHaveAttribute('aria-describedby', 'email-error');
+
+    await page.locator('#email').fill('login@example.test');
+    await page.locator('button[type="submit"]').click();
+
+    await expect(page.locator('#password-error')).toHaveText('La contraseña es requerida');
+    await expect(page.locator('#password')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('#password')).toHaveAttribute('aria-describedby', 'password-error');
+  });
+
+  test('reveals and hides the password using its accessible toggle', async ({ page }) => {
+    const password = page.locator('#password');
+    await password.fill('SyntheticPassword123');
+
+    const reveal = page.getByRole('button', { name: 'Mostrar contraseña' });
+    await expect(reveal).toBeVisible();
+    await reveal.click();
+    await expect(password).toHaveAttribute('type', 'text');
+
+    const hide = page.getByRole('button', { name: 'Ocultar contraseña' });
+    await hide.click();
+    await expect(password).toHaveAttribute('type', 'password');
+  });
+
+  test('shows loading and a recoverable message when the login service is unavailable', async ({
+    page
+  }) => {
+    let releaseResponse!: () => void;
+    let markRequestSeen!: () => void;
+    const responseGate = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    const requestSeen = new Promise<void>((resolve) => {
+      markRequestSeen = resolve;
+    });
+
+    await page.route('**/api/auth/login', async (route) => {
+      markRequestSeen();
+      await responseGate;
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: 'Synthetic service outage' })
+      });
+    });
+
+    await page.locator('#email').fill('login@example.test');
+    await page.locator('#password').fill('SyntheticPassword123');
+    await page.locator('button[type="submit"]').click();
+
+    try {
+      await requestSeen;
+      const submit = page.locator('button[type="submit"]');
+      await expect(submit).toBeDisabled();
+      await expect(page.locator('.btn__spinner')).toBeVisible();
+      releaseResponse();
+
+      await expect(page.getByText('Servicio no disponible', { exact: true })).toBeVisible();
+      await expect(page).toHaveURL(/.*auth\/login/);
+      await expect(submit).toBeEnabled();
+    } finally {
+      releaseResponse();
+    }
+  });
+
   test('shows an accessible credential error instead of a stale-session toast', async ({
     page
   }, testInfo) => {

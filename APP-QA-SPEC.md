@@ -1062,7 +1062,9 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ### Acceso y primer uso
 
-- [ ] `/auth/login`: correo/contraseña válidos e inválidos, campos vacíos, revelar/ocultar contraseña, loading, error genérico y redirección correcta.
+- [x] `/auth/login`: correo/contraseña válidos e inválidos, campos vacíos, revelar/ocultar contraseña, loading, error genérico y redirección correcta.
+
+**Evidencia QA-AUTH.LOGIN.1 (2026-10-03):** la E2E aislada `pnpm run test:e2e -- --project=chromium --project=mobile-chrome tests/e2e/auth.spec.ts` pasa **20/20** con SQLite/puertos/semillas temporales; cubre credenciales válidas e inválidas, campos vacíos, revelar/ocultar, loading, 503 recuperable y redirección. La primera corrida detectó dos toasts idénticos ante 503: el interceptor global y el formulario notificaban a la vez. `AuthService.login()` ahora marca `SILENT_TOAST` para que el formulario gestione ese error una sola vez. `AuthService` focal pasa **26/26** con **96/81.81/91.89/97.89 %** statements/branches/functions/lines en reporte temporal; typecheck E2E, formato y `git diff --check` pasan. Las rutas de registro, recuperación, invitación y onboarding continúan abiertas.
 - [ ] `/auth/register`: requerido/formato, política de contraseña y límites, correo duplicado, error del servidor, registro normal y retorno con `?code=` de invitación.
 - [ ] `/auth/forgot-password`: correo vacío/mal formado/válido, respuesta que no revela si existe la cuenta, loading y error recuperable.
 - [ ] `/invite/:code`: código válido, inválido o invalidado al regenerar (sin expiración temporal en el modelo actual), invitación repetida, ya pertenece al hogar, aceptar/rechazar con sesión y entrada por registro/login preservando el código.
