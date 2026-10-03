@@ -1721,3 +1721,34 @@ formularios/columnas de lectura por encima de límites útiles.
 - [ ] Guardar e inspeccionar capturas sintéticas comparables de la ficha en PC y móvil; typecheck, E2E focal/full manifest, build, formato, diff checks y coverage focal ≥70 % sin bajar gates. Mantener abierta la validación de safe-area iOS/WebKit si el runtime continúa sin ese navegador.
 
 **Rollback:** revertir solo la extensión de receta/redirect del manifiesto, sus E2E y este subapartado; no cambia el contrato ni los datos de producción.
+
+### QA-LAYOUT.SAFE-AREA.SYNTHETIC.1 · geometría del shell con inset inyectado
+
+**Fuente revalidada (2026-10-03):** `index.html` declara `viewport-fit=cover`, pero el header ocupa
+56 px desde el borde superior, `.main` solo reserva esos 56 px, y el drawer va de borde a borde sin
+padding de notch/home indicator. `.bottom-nav` declara 64 px totales y añade `padding-bottom` dentro de
+esa altura por `box-sizing:border-box`, reduciendo el área de sus controles; `.main` sí reserva el
+inset inferior. Playwright en Pixel 5 informa `env(safe-area-inset-*) = 0`, así que la matriz actual no
+prueba inset no nulo. WebKit/iPhone nativo sigue sin poder ejecutarse por la revisión de navegador
+ausente y no se atribuirá evidencia nativa a insets sintéticos.
+
+Contrato esperado: con insets superior/inferior/laterales no nulos, el shell móvil mantiene visibles y
+tocables el header, drawer, contenido y navegación inferior; el alto útil de la barra inferior sigue
+siendo 64 px además del área segura. En cero inset y en escritorio la geometría existente permanece.
+
+- [ ] Escribir primero una E2E aislada que inyecte tokens CSS app de safe-area no nulos y reproduzca
+      header/control bajo el notch, controles del drawer bajo notch/home indicator y barra inferior sin
+      64 px útiles; cubrir retrato y paisaje sin depender del valor `env()` del navegador.
+- [ ] Implementar tokens app derivados de `env(safe-area-inset-*, 0px)` y aplicarlos a header, gutter
+      compartido, drawer, barra inferior y reserva del contenido; conservar el shell desktop y el caso
+      inset cero.
+- [ ] Comprobar geometría, hit-test/teclado del drawer, objetivos inferiores ≥44×44, scroll corto y
+      ausencia de clipping/overflow en 393×851 y 568×320 con insets sintéticos declarados.
+- [ ] Ejecutar Playwright aislado en Chromium y Pixel 5, build/typecheck/formato, diff-check y cobertura
+      de cada archivo de producción tocado ≥70 % S/B/F/L; guardar e inspeccionar capturas sintéticas
+      comparables PC/móvil. Mantener los gates globales sin rebajarlos.
+- [ ] Ejecutar aparte `mobile-safari` y observar inset nativo superior/inferior no nulo antes de afirmar
+      validación real iOS; si falta WebKit o devuelve cero, registrar el bloqueo y dejar abierta esta casilla.
+
+**Rollback:** revertir solo los tokens/reglas de safe-area, la E2E focal y este subapartado; no revertir
+el contenedor común ni otros cambios del layout.
