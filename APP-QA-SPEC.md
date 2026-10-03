@@ -1813,3 +1813,46 @@ pero el reporte agregado no supera el gate global configurado (coverage **77.43/
 rebajó. Prettier focal pasa en los demás archivos cambiados, pero señala `logs.component.ts` y `caducidades.component.ts`
 por formato histórico: se conservaron sin reformateo masivo. Por estos gates de cobertura/formato, la última casilla
 permanece abierta y el Draft PR no se marca listo.
+### QA-LAYOUT.VISUAL-CONSISTENCY.1 · geometría uniforme en toda la interfaz
+
+**Fuente revalidada (2026-10-03):** `AGENTS.md` solo pide consistencia visual de forma general y la matriz
+global de `APP-QA-SPEC.md` valida responsive/accesibilidad sin comparar la geometría de componentes
+equivalentes entre rutas. `DESIGN-SYSTEM.md` define spacing base de 4 px y una clase `.btn` común, pero
+`calendar.component.ts` conserva clases propias: `.cal-btn` fija `min-height: 48px` y `padding: 6px 14px`,
+mientras `.cal-pill` usa `padding: 5px 11px`; la acción primaria «Planificar IA» y las acciones vecinas
+pueden diferir aunque convivan en la misma barra. La captura compartida por el usuario señala `/calendar`;
+la medida reproducible del navegador queda pendiente del baseline de esta unidad. `layout-gutters.spec.ts`
+solo compara el marco y la raíz de cada vista, no botones, campos, tarjetas ni el ritmo de espaciado interior.
+
+**Contrato esperado:** los controles/componentes equivalentes usan el mismo contrato geométrico y tokens
+en todas las vistas: dimensiones por familia, tipografía, alineación, padding, gaps, márgenes, radios y
+bordes. La prioridad visual cambia mediante color, icono o estado, no aumentando dimensiones. Anchos
+ligados al texto solo se permiten cuando el contrato de la familia los define así; controles pares de una
+misma barra/grupo comparten tamaño. Variantes compactas, icon-only y touch-target pueden diferir solo por
+función o accesibilidad, deben ser explícitas y no pueden servir para destacar importancia. Se documentan
+excepciones deliberadas antes de implantarlas; no hay excepciones visuales implícitas por página.
+
+- [ ] Recorrer el manifiesto vigente de rutas, shells y vistas pobladas con fixtures sintéticos; inventariar
+      familias equivalentes de botones/acciones, tabs/segmentos, campos, tarjetas, modales, navegación,
+      encabezados, gutters y espaciado interior. Registrar rutas/estados no cubiertos y el baseline calculado.
+- [ ] Añadir primero una regresión E2E roja que mida «Planificar IA» y sus acciones pares en `/calendar`,
+      y compare cada familia equivalente entre rutas. Registrar rectángulos, padding, font/line-height,
+      gap, margen y radio calculados con tolerancia ≤1 CSS px; un cambio de color/estado no debe alterar caja.
+- [ ] Extender la comprobación a loading/disabled/focus/validación y overlays relevantes; verificar que no
+      haya overrides locales contradictorios y que los mismos tokens produzcan las mismas medidas.
+- [ ] Normalizar las familias en tokens/primitivas compartidas; eliminar el tamaño diferencial de CTA por
+      jerarquía y usar color/icono/estado para el énfasis. Mantener diferencias solo para familias
+      funcionales explícitas (p. ej., icon-only o touch target) y dejar su contrato en el sistema de diseño.
+- [ ] Auditar todas las vistas privadas y públicas, además de los shells y detalles poblados; revisar
+      márgenes, padding, alineación, controles, tipografía, radios, bordes y separación de secciones, no solo
+      el ancho del contenedor. Corregir discrepancias en unidades revisables y revalidar rutas fuente.
+- [ ] Ejecutar Playwright real aislado en escritorio Chromium y Pixel 5: ancho mínimo, móviles comunes,
+      orientación vertical/horizontal, cada breakpoint B−1/B/B+1, tablet y escritorio ancho; cubrir scroll,
+      safe-area, teclado, foco, modales/drawers y ausencia de overflow. Usar iOS/WebKit si está disponible;
+      si no, dejar explícita la limitación.
+- [ ] Guardar e inspeccionar capturas sintéticas comparables PC/móvil por grupo corregido y actualizar la
+      matriz con comandos, resultados, errores existentes, gates de formato/build y cobertura ≥70 % S/B/F/L
+      del alcance. No bajar gates superiores ni declarar la web pixel-perfect si queda una familia pendiente.
+
+**Rollback:** revertir solo los tokens/primitivas y ajustes geométricos de esta unidad, sus pruebas/capturas
+ignoradas y este subapartado; preservar el marco/gutters compartidos y las correcciones ajenas.
