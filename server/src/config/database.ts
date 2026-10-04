@@ -122,6 +122,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
       shared_pantry INTEGER DEFAULT 1,
       share_recipes INTEGER DEFAULT 1,
       share_calendar INTEGER DEFAULT 1,
+      ai_owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -631,6 +632,27 @@ async function runMigrations(db: Database.Database): Promise<void> {
 
   addColumnIfMissing('households', 'share_recipes', 'INTEGER DEFAULT 1');
   addColumnIfMissing('households', 'share_calendar', 'INTEGER DEFAULT 1');
+  addColumnIfMissing(
+    'households',
+    'ai_owner_user_id',
+    'TEXT REFERENCES users(id) ON DELETE SET NULL'
+  );
+  // Los hogares anteriores no persistían al creador. Backfill idempotente: solo hogares aún sin
+  // propietario reciben el admin más antiguo; miembros y admins más recientes nunca desplazan
+  // una asignación ya guardada. El desempate por user_id hace estable el resultado.
+  db.prepare(
+    `
+    UPDATE households
+       SET ai_owner_user_id = (
+         SELECT hm.user_id
+           FROM household_members hm
+          WHERE hm.household_id = households.id AND hm.role = 'admin'
+          ORDER BY hm.joined_at ASC, hm.user_id ASC
+          LIMIT 1
+       )
+     WHERE ai_owner_user_id IS NULL
+  `
+  ).run();
   addColumnIfMissing('receipts', 'store_manual', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing('receipts', 'purchase_date', 'TEXT');
   addColumnIfMissing('receipts', 'purchase_date_manual', 'INTEGER NOT NULL DEFAULT 0');

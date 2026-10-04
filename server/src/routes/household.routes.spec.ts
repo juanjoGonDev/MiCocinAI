@@ -301,6 +301,17 @@ describe('household create and join transactions', () => {
     expect(result.success).toBe(true);
     expect(result.data.id).toBeTruthy();
     expect(
+      db
+        .prepare(
+          `SELECT h.ai_owner_user_id, hm.role
+             FROM households h
+             JOIN household_members hm
+               ON hm.household_id = h.id AND hm.user_id = h.ai_owner_user_id
+            WHERE h.id = ?`
+        )
+        .get(result.data.id)
+    ).toEqual({ ai_owner_user_id: owner.id, role: 'admin' });
+    expect(
       (
         db.prepare('SELECT household_id FROM users WHERE id = ?').get(owner.id) as {
           household_id: string | null;

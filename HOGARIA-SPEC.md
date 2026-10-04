@@ -4870,7 +4870,7 @@ se usa silenciosamente su configuración personal.
 
 ### Checklist QA-AI.HOUSEHOLD-SHARING.1
 
-- [ ] Añadir primero pruebas rojas de migración/backfill y crear-hogar: nuevo creador como owner,
+- [x] Añadir primero pruebas rojas de migración/backfill y crear-hogar: nuevo creador como owner,
       hogar antiguo elige solo admin más antiguo (empate estable), ninguno deja `NULL`, idempotencia y
       conservación exacta de configuraciones/trabajos existentes.
 - [ ] Probar sucesión atómica al salir, cambiar de hogar, remover o degradar al owner; elección del
@@ -4891,6 +4891,22 @@ se usa silenciosamente su configuración personal.
       loopback, reload y cola sin fugas. Capturas sintéticas solamente.
 - [ ] Ejecutar migración contra DB anterior aislada, tests server/frontend, typechecks, build,
       `check-ui`, E2E y coverage de cada archivo tocado ≥70 % en S/B/F/L; no rebajar gates globales.
+
+**Evidencia de la subunidad inicial (2026-10-04):** TDD reprodujo el fallo antes del cambio: ambas
+regresiones consultaban una columna inexistente (`ai_owner_user_id`). La migración añadida la crea y
+backfillea únicamente filas sin propietario, filtrando `role='admin'` y ordenando por
+`joined_at ASC, user_id ASC`; hogares sin admin permanecen en `NULL`. La creación nueva guarda al
+creador como owner en la misma transacción que su membresía admin. La repetición del arranque deja
+las asignaciones estables y conserva exactamente las filas previas de `ai_configs` y `ai_jobs`.
+
+`npm test -- --reporter=dot src/config/database.spec.ts src/routes/household.routes.spec.ts`:
+**25/25**; `npm run build`: pasa. El test de migración abre una SQLite legacy temporal y la
+reinicializa; las rutas usan SQLite en memoria, sin servidor/proveedor externos. Coverage focal
+por archivo: `database.ts` **87.36/76.66/80/86.66 %** y `household.routes.ts`
+**100/90.36/100/100 %** (S/B/F/L). El comando de coverage filtrado devuelve código no cero porque
+el gate existente también evalúa otros archivos cubiertos que no ejecutó ese filtro; su cobertura
+completa queda pendiente y no se rebajó ningún umbral. Sucesión, resolución/ACL IA, UI, E2E y suite
+completa siguen pendientes.
 
 **Riesgos a cerrar con evidencia:** los hogares antiguos no guardan creador; `seed-data.ts` ordena
 miembros sin filtrar rol y no se reutiliza para elegir owner. Cambiar solo `activeAiConfig()` es

@@ -171,4 +171,143 @@ describe('initializeDatabase con fichero heredado', () => {
     mod.closeDatabase();
     expect(() => mod.getDatabase().prepare('SELECT 1').get()).toThrow();
   });
+
+  it('elige al admin elegible más antiguo en hogares legacy de forma estable e idempotente', async () => {
+    const databaseFile = target();
+    const previous = new Database(databaseFile);
+    previous.exec(`
+      CREATE TABLE households (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        invite_code TEXT UNIQUE NOT NULL,
+        shared_pantry INTEGER DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        password_hash TEXT NOT NULL,
+        avatar TEXT,
+        household_id TEXT,
+        cooking_level TEXT DEFAULT 'beginner',
+        preferences TEXT DEFAULT '{}',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE household_members (
+        id TEXT PRIMARY KEY,
+        household_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT DEFAULT 'member',
+        joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(household_id, user_id)
+      );
+      CREATE TABLE ai_configs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        provider TEXT,
+        base_url TEXT NOT NULL,
+        api_key TEXT NOT NULL,
+        model TEXT NOT NULL,
+        is_active INTEGER DEFAULT 1,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE ai_jobs (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'receipt',
+        status TEXT NOT NULL DEFAULT 'queued',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      INSERT INTO households (id, name, invite_code) VALUES
+        ('legacy-house', 'Hogar antiguo', 'LEGACY01'),
+        ('empty-admin-house', 'Sin administrador', 'NOADMIN1');
+      INSERT INTO users (id, email, name, password_hash, household_id) VALUES
+        ('member-first', 'member-first@test.invalid', 'Member', '', 'legacy-house'),
+        ('admin-z', 'admin-z@test.invalid', 'Admin Z', '', 'legacy-house'),
+        ('admin-a', 'admin-a@test.invalid', 'Admin A', '', 'legacy-house'),
+        ('admin-newer', 'admin-newer@test.invalid', 'Admin newer', '', 'legacy-house'),
+        ('only-member', 'only-member@test.invalid', 'Only member', '', 'empty-admin-house');
+      INSERT INTO household_members (id, household_id, user_id, role, joined_at) VALUES
+        ('member-row', 'legacy-house', 'member-first', 'member', '2019-01-01 00:00:00'),
+        ('admin-z-row', 'legacy-house', 'admin-z', 'admin', '2020-01-01 00:00:00'),
+        ('admin-a-row', 'legacy-house', 'admin-a', 'admin', '2020-01-01 00:00:00'),
+        ('admin-newer-row', 'legacy-house', 'admin-newer', 'admin', '2021-01-01 00:00:00'),
+        ('only-member-row', 'empty-admin-house', 'only-member', 'member', '2018-01-01 00:00:00');
+      INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, is_active)
+        VALUES ('historic-config', 'admin-a', 'Existing config', 'custom', 'http://127.0.0.1', '', 'test-model', 1);
+      INSERT INTO ai_jobs (id, user_id, kind, status, created_at)
+        VALUES ('historic-job', 'member-first', 'custom', 'done', '2020-02-03 04:05:06');
+    `);
+    previous.close();
+
+    const mod = await dbModuleWith(databaseFile);
+    let restarted: DbModule | undefined;
+    try {
+      await mod.initializeDatabase();
+      const db = mod.getDatabase();
+      expect(
+        db.prepare('SELECT ai_owner_user_id FROM households WHERE id = ?').get('legacy-house')
+      ).toEqual({ ai_owner_user_id: 'admin-a' });
+      expect(
+        db.prepare('SELECT ai_owner_user_id FROM households WHERE id = ?').get('empty-admin-house')
+      ).toEqual({ ai_owner_user_id: null });
+
+      const configsBeforeRestart = db
+        .prepare('SELECT id, user_id, name, api_key, model, is_active FROM ai_configs ORDER BY id')
+        .all();
+      const jobsBeforeRestart = db
+        .prepare('SELECT id, user_id, kind, status, created_at FROM ai_jobs ORDER BY id')
+        .all();
+      expect(configsBeforeRestart).toEqual([
+        {
+          id: 'historic-config',
+          user_id: 'admin-a',
+          name: 'Existing config',
+          api_key: '',
+          model: 'test-model',
+          is_active: 1
+        }
+      ]);
+      expect(jobsBeforeRestart).toEqual([
+        {
+          id: 'historic-job',
+          user_id: 'member-first',
+          kind: 'custom',
+          status: 'done',
+          created_at: '2020-02-03 04:05:06'
+        }
+      ]);
+
+      mod.closeDatabase();
+      restarted = await dbModuleWith(databaseFile);
+      await restarted.initializeDatabase();
+      const restartedDb = restarted.getDatabase();
+      expect(
+        restartedDb.prepare('SELECT id, ai_owner_user_id FROM households ORDER BY id').all()
+      ).toEqual([
+        { id: 'empty-admin-house', ai_owner_user_id: null },
+        { id: 'legacy-house', ai_owner_user_id: 'admin-a' }
+      ]);
+      expect(
+        restartedDb
+          .prepare(
+            'SELECT id, user_id, name, api_key, model, is_active FROM ai_configs ORDER BY id'
+          )
+          .all()
+      ).toEqual(configsBeforeRestart);
+      expect(
+        restartedDb
+          .prepare('SELECT id, user_id, kind, status, created_at FROM ai_jobs ORDER BY id')
+          .all()
+      ).toEqual(jobsBeforeRestart);
+    } finally {
+      restarted?.closeDatabase();
+      mod.closeDatabase();
+    }
+  });
 });

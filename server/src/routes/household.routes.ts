@@ -153,10 +153,11 @@ householdRoutes.post('/', authMiddleware, async (c) => {
 
     db.prepare(
       `
-      INSERT INTO households (id, name, invite_code, shared_pantry, share_recipes, share_calendar)
-      VALUES (?, ?, ?, ?, 1, 1)
+      INSERT INTO households (
+        id, name, invite_code, shared_pantry, share_recipes, share_calendar, ai_owner_user_id
+      ) VALUES (?, ?, ?, ?, 1, 1, ?)
     `
-    ).run(id, input.name, inviteCode, input.sharedPantry ? 1 : 0);
+    ).run(id, input.name, inviteCode, input.sharedPantry ? 1 : 0, userId);
 
     const perms = JSON.stringify(defaultPermissions('admin'));
     db.prepare(
