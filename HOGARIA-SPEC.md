@@ -4856,6 +4856,16 @@ visible/reintentable; un ticket confirmado no repite el efecto de confirmación 
 - [ ] E2E Playwright aislado con dos hogares y membresías compartidas: selector/refresh, calendario, inventario, compra, recibos, IA/configuración y colas; escritorio y móvil, capturas con datos sintéticos solamente. Verificar teclado, foco, nombre accesible y bordes de breakpoints.
 - [ ] Ejecutar migraciones y tests con DB temporal y fixtures sintéticos; proveedores repetibles se simulan, smoke real opt-in solo contra loopback. Registrar comandos/resultados; typecheck, build, check-ui, E2E y coverage por archivo ≥70 % S/B/F/L sin rebajar gates existentes.
 
+### QA-HOUSEHOLD.MULTI-MEMBERSHIP.SELECTOR-API.1 — completada
+
+- [x] Agregar listado seguro de membresías propias y selección persistente del hogar activo; rechazar ID vacío o hogar ajeno sin alterar la selección.
+- [x] Crear/unirse a un segundo hogar conserva membresías previas y no traslada filas de otra casa; salir elimina solo la membresía activa y selecciona una restante.
+- [x] Una selección guardada inválida se corrige automáticamente solo cuando queda una membresía; con varias, GET del hogar no revela datos ni elige una casa implícitamente.
+
+**Evidencia TDD (2026-10-04):** antes de la implementación, el nuevo test de membresías falló porque `GET /memberships` devolvía 404; tras añadir la API, ampliar create/join/leave y vincular `users.household_id` a selección validada, `npm test -- --reporter=dot src/routes/household.routes.spec.ts` pasa **19/19** con `DATABASE_PATH=:memory:`. `npm run build` pasa. Coverage focal del archivo `household.routes.ts`: **98.95/88.57/100/100 %** S/B/F/L. La corrida de coverage sin filtro también se intentó; falló únicamente porque no ejecuta las suites de los demás archivos del gate, sin cambiar umbrales. `git diff --check` y Prettier focal pasan. Harness runtime: Hono real de las rutas, SQLite en memoria; no UI, DB persistente ni proveedor externo.
+
+**Rollback:** commit atómico solo de rutas/tests/spec, sin migración de esquema. Revertir antes de usar hogares múltiples fuera de desarrollo; nunca borrar membresías o datos como parte del rollback.
+
 **Rollback:** cada subunidad queda en commit atómico. La selección activa se puede restablecer al hogar válido anterior sin borrar membresías/datos. Desasociar IA revierte solo filas/claves nuevas creadas por la migración; no elimina las configuraciones personales originales, ai_jobs ni datos de otros hogares. No se borra ai_owner_user_id durante este cambio.
 
 ## 12aq — Mejoras solicitadas: planificación, objetivos y contenido multimedia

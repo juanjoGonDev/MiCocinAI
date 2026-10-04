@@ -182,6 +182,83 @@ describe('household create and join transactions', () => {
     ).toBe(false);
   });
 
+  it('lista hogares propios y solo permite seleccionar una membresía existente', async () => {
+    const { member } = await createJoinFixture();
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('member-target-membership', 'target-house', member.id);
+
+    const memberships = await call(member, 'GET', '/memberships');
+    expect(memberships.status).toBe(200);
+    expect(await memberships.json()).toMatchObject({
+      success: true,
+      data: {
+        activeHouseholdId: 'old-house',
+        memberships: [
+          { id: 'old-house', name: 'Hogar anterior', role: 'member', active: true },
+          { id: 'target-house', name: 'Hogar destino', role: 'member', active: false }
+        ]
+      }
+    });
+
+    const switched = await call(member, 'POST', '/active', { householdId: 'target-house' });
+    expect(switched.status).toBe(200);
+    expect(
+      (db.prepare('SELECT household_id FROM users WHERE id = ?').get(member.id) as any).household_id
+    ).toBe('target-house');
+    expect((await call(member, 'GET', '')).status).toBe(200);
+
+    const rejected = await call(member, 'POST', '/active', { householdId: 'unknown-house' });
+    expect(rejected.status).toBe(404);
+    expect(
+      (db.prepare('SELECT household_id FROM users WHERE id = ?').get(member.id) as any).household_id
+    ).toBe('target-house');
+
+    const invalid = await call(member, 'POST', '/active', { householdId: '  ' });
+    expect(invalid.status).toBe(400);
+    expect(
+      (db.prepare('SELECT household_id FROM users WHERE id = ?').get(member.id) as any).household_id
+    ).toBe('target-house');
+  });
+
+  it('repara una selección obsoleta solo si queda una membresía y no filtra con varias', async () => {
+    await createJoinFixture();
+    const stale = await makeUser('stale-selection', 'target-house');
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('stale-old-membership', 'old-house', stale.id);
+
+    const repaired = await call(stale, 'GET', '/memberships');
+    expect(repaired.status).toBe(200);
+    expect(await repaired.json()).toMatchObject({
+      success: true,
+      data: { activeHouseholdId: 'old-house', memberships: [{ id: 'old-house', active: true }] }
+    });
+    expect(
+      (db.prepare('SELECT household_id FROM users WHERE id = ?').get(stale.id) as any).household_id
+    ).toBe('old-house');
+
+    const unselected = await makeUser('multiple-without-selection', null);
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('multi-old-membership', 'old-house', unselected.id);
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('multi-target-membership', 'target-house', unselected.id);
+
+    const noImplicitChoice = await call(unselected, 'GET', '');
+    expect(noImplicitChoice.status).toBe(200);
+    expect(await noImplicitChoice.json()).toMatchObject({ success: true, data: null });
+    expect(
+      (db.prepare('SELECT household_id FROM users WHERE id = ?').get(unselected.id) as any)
+        .household_id
+    ).toBeNull();
+  });
+
   it('rolls back household creation when seeding fails after personal rows are adopted', async () => {
     const owner = await makeUser('create-owner', null);
     addPersonalRows(owner.id);
@@ -305,12 +382,11 @@ describe('household create and join transactions', () => {
         .prepare(
           `SELECT h.ai_owner_user_id, hm.role
              FROM households h
-             JOIN household_members hm
-               ON hm.household_id = h.id AND hm.user_id = h.ai_owner_user_id
+             JOIN household_members hm ON hm.household_id = h.id AND hm.user_id = ?
             WHERE h.id = ?`
         )
-        .get(result.data.id)
-    ).toEqual({ ai_owner_user_id: owner.id, role: 'admin' });
+        .get(owner.id, result.data.id)
+    ).toEqual({ ai_owner_user_id: null, role: 'admin' });
     expect(
       (
         db.prepare('SELECT household_id FROM users WHERE id = ?').get(owner.id) as {
@@ -341,27 +417,41 @@ describe('household create and join transactions', () => {
     ).toEqual({ count: 13 });
   });
 
-  it('no crea un segundo hogar si el usuario ya pertenece a uno', async () => {
+  it('permite crear otro hogar sin eliminar la membresía anterior ni adoptar datos de esa casa', async () => {
     const { member } = await createJoinFixture();
 
-    const response = await call(member, 'POST', '', { name: 'Hogar duplicado' });
+    const response = await call(member, 'POST', '', { name: 'Segundo hogar' });
+    const body = (await response.json()) as { data: { id: string } };
 
-    expect(response.status).toBe(409);
-    expect(db.prepare('SELECT COUNT(*) AS count FROM households').get()).toEqual({ count: 2 });
+    expect(response.status).toBe(201);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM households').get()).toEqual({ count: 3 });
+    expect(
+      db
+        .prepare('SELECT id FROM household_members WHERE household_id = ? AND user_id = ?')
+        .get('old-house', member.id)
+    ).toBeTruthy();
+    expect(
+      db
+        .prepare('SELECT role FROM household_members WHERE household_id = ? AND user_id = ?')
+        .get(body.data.id, member.id)
+    ).toEqual({ role: 'admin' });
+    expect(
+      (db.prepare('SELECT household_id FROM users WHERE id = ?').get(member.id) as any).household_id
+    ).toBe(body.data.id);
     expect(
       (
-        db.prepare('SELECT household_id FROM users WHERE id = ?').get(member.id) as {
-          household_id: string | null;
-        }
+        db
+          .prepare('SELECT household_id FROM ingredients WHERE id = ?')
+          .get('personal-ingredient') as any
       ).household_id
-    ).toBe('old-house');
+    ).toBeNull();
   });
 
   it.each([
     { label: 'el endpoint con código en el body', path: '/join', useBody: true },
     { label: 'el endpoint con código en la ruta', path: '/join/TARGET01', useBody: false }
   ])(
-    'une y adopta los datos personales si termina la siembra por $label',
+    'añade una segunda membresía sin mover datos de la casa anterior por $label',
     async ({ path, useBody }) => {
       const { member } = await createJoinFixture();
 
@@ -384,7 +474,7 @@ describe('household create and join transactions', () => {
         db
           .prepare('SELECT id FROM household_members WHERE household_id = ? AND user_id = ?')
           .get('old-house', member.id)
-      ).toBeUndefined();
+      ).toEqual({ id: 'old-membership' });
       expect(
         db
           .prepare('SELECT id FROM household_members WHERE household_id = ? AND user_id = ?')
@@ -398,14 +488,14 @@ describe('household create and join transactions', () => {
             household_id: string | null;
           }
         ).household_id
-      ).toBe('target-house');
+      ).toBeNull();
       expect(
         (
           db.prepare('SELECT household_id FROM utensils WHERE id = ?').get('personal-utensil') as {
             household_id: string | null;
           }
         ).household_id
-      ).toBe('target-house');
+      ).toBeNull();
       expect(
         db
           .prepare('SELECT COUNT(*) AS count FROM pantry_categories WHERE household_id = ?')
@@ -414,7 +504,7 @@ describe('household create and join transactions', () => {
     }
   );
 
-  it('une a una cuenta sin hogar sin borrar una membresía anterior', async () => {
+  it('une a una cuenta sin hogar y adopta sus filas personales al primer hogar', async () => {
     db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
       'target-house',
       'Hogar destino',
@@ -617,6 +707,31 @@ describe('household create and join transactions', () => {
         .prepare('SELECT id FROM household_members WHERE household_id = ? AND user_id = ?')
         .get('old-house', oldAdmin.id)
     ).toEqual({ id: 'old-admin-membership' });
+  });
+
+  it('al salir de la casa activa conserva y selecciona otra membresía', async () => {
+    const { member } = await createJoinFixture();
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('member-target-membership', 'target-house', member.id);
+
+    const response = await call(member, 'DELETE', '/leave');
+
+    expect(response.status).toBe(200);
+    expect(
+      db
+        .prepare('SELECT id FROM household_members WHERE household_id = ? AND user_id = ?')
+        .get('old-house', member.id)
+    ).toBeUndefined();
+    expect(
+      db
+        .prepare('SELECT id FROM household_members WHERE household_id = ? AND user_id = ?')
+        .get('target-house', member.id)
+    ).toEqual({ id: 'member-target-membership' });
+    expect(
+      (db.prepare('SELECT household_id FROM users WHERE id = ?').get(member.id) as any).household_id
+    ).toBe('target-house');
   });
 
   it('al salir el único admin elimina el hogar y solo su inventario compartido', async () => {

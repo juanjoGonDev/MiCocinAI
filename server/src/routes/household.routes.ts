@@ -67,6 +67,30 @@ export function defaultPermissions(role: string) {
   };
 }
 
+function activeHouseholdId(db: ReturnType<typeof getDatabase>, userId: string): string | null {
+  const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
+    { household_id: string | null } | undefined;
+  if (user?.household_id) {
+    const membership = db
+      .prepare('SELECT 1 FROM household_members WHERE household_id = ? AND user_id = ?')
+      .get(user.household_id, userId);
+    if (membership) return user.household_id;
+  }
+
+  const memberships = db
+    .prepare(
+      'SELECT household_id FROM household_members WHERE user_id = ? ORDER BY joined_at, household_id'
+    )
+    .all(userId) as Array<{ household_id: string }>;
+  if (memberships.length !== 1) return null;
+
+  db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(
+    memberships[0].household_id,
+    userId
+  );
+  return memberships[0].household_id;
+}
+
 // Public (no auth) invite info endpoint — so links work for non-logged users
 householdRoutes.get('/invite/:code', optionalAuthMiddleware, async (c) => {
   const code = c.req.param('code');
@@ -99,6 +123,69 @@ householdRoutes.get('/invite/:code', optionalAuthMiddleware, async (c) => {
   });
 });
 
+// GET /api/household/memberships — list the user's homes and current selection
+householdRoutes.get('/memberships', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+  const db = getDatabase();
+  const currentHouseholdId = activeHouseholdId(db, userId);
+  const memberships = db
+    .prepare(
+      `SELECT h.id, h.name, hm.role, hm.permissions, hm.joined_at
+         FROM household_members hm
+         JOIN households h ON h.id = hm.household_id
+        WHERE hm.user_id = ?
+        ORDER BY hm.joined_at ASC, h.id ASC`
+    )
+    .all(userId) as Array<{
+    id: string;
+    name: string;
+    role: string;
+    permissions: string | null;
+    joined_at: string;
+  }>;
+
+  return c.json({
+    success: true,
+    data: {
+      activeHouseholdId: currentHouseholdId,
+      memberships: memberships.map((membership) => ({
+        id: membership.id,
+        name: membership.name,
+        role: membership.role,
+        permissions: membership.permissions
+          ? JSON.parse(membership.permissions)
+          : defaultPermissions(membership.role),
+        joinedAt: membership.joined_at,
+        active: membership.id === currentHouseholdId
+      }))
+    }
+  });
+});
+
+// POST /api/household/active — change selection only to an existing membership
+householdRoutes.post('/active', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json();
+  const householdId = body && typeof body.householdId === 'string' ? body.householdId.trim() : '';
+  if (!householdId) {
+    return c.json({ success: false, message: 'Household is required' }, 400);
+  }
+  const db = getDatabase();
+  const selected = db.transaction(() => {
+    const membership = db
+      .prepare('SELECT 1 FROM household_members WHERE household_id = ? AND user_id = ?')
+      .get(householdId, userId);
+    if (!membership) return false;
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(householdId, userId);
+    return true;
+  })();
+  if (!selected) {
+    return c.json({ success: false, message: 'Household membership not found' }, 404);
+  }
+
+  return c.json({ success: true, data: { activeHouseholdId: householdId } });
+});
+
 // POST /api/household/join/:code — join by code (also accepts the link from invite page)
 householdRoutes.post('/join/:code', authMiddleware, async (c) => {
   const userId = c.get('userId');
@@ -110,16 +197,20 @@ householdRoutes.post('/join/:code', authMiddleware, async (c) => {
 householdRoutes.get('/', authMiddleware, async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();
+  const selectedHouseholdId = activeHouseholdId(db, userId);
 
-  const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as any;
-
-  if (!user?.household_id) {
+  if (!selectedHouseholdId) {
     return c.json({ success: true, data: null });
   }
 
   const household = db
-    .prepare('SELECT * FROM households WHERE id = ?')
-    .get(user.household_id) as any;
+    .prepare(
+      `SELECT h.* FROM households h
+       JOIN household_members hm ON hm.household_id = h.id
+       WHERE h.id = ? AND hm.user_id = ?`
+    )
+    .get(selectedHouseholdId, userId) as any;
+  if (!household) return c.json({ success: true, data: null });
   const members = db
     .prepare(
       `
@@ -129,7 +220,7 @@ householdRoutes.get('/', authMiddleware, async (c) => {
     WHERE hm.household_id = ?
   `
     )
-    .all(user.household_id);
+    .all(selectedHouseholdId);
 
   return c.json({
     success: true,
@@ -147,17 +238,18 @@ householdRoutes.post('/', authMiddleware, async (c) => {
   const id = nanoid();
   const inviteCode = generateInviteCode();
 
-  const created = db.transaction(() => {
-    const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as any;
-    if (user?.household_id) return false;
+  db.transaction(() => {
+    const hasMembership = Boolean(
+      db.prepare('SELECT 1 FROM household_members WHERE user_id = ? LIMIT 1').get(userId)
+    );
 
     db.prepare(
       `
       INSERT INTO households (
-        id, name, invite_code, shared_pantry, share_recipes, share_calendar, ai_owner_user_id
-      ) VALUES (?, ?, ?, ?, 1, 1, ?)
+        id, name, invite_code, shared_pantry, share_recipes, share_calendar
+      ) VALUES (?, ?, ?, ?, 1, 1)
     `
-    ).run(id, input.name, inviteCode, input.sharedPantry ? 1 : 0, userId);
+    ).run(id, input.name, inviteCode, input.sharedPantry ? 1 : 0);
 
     const perms = JSON.stringify(defaultPermissions('admin'));
     db.prepare(
@@ -169,18 +261,13 @@ householdRoutes.post('/', authMiddleware, async (c) => {
 
     db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(id, userId);
 
-    // Lo que el usuario tuviera a nivel personal pasa a ser del hogar (asi no se
-    // duplica el catalogo) y despues se siembra lo que falte.
-    adoptPersonalRowsIntoHousehold(db, id, userId);
+    // Solo la primera casa adopta las filas personales; crear otra no copia ni
+    // mueve datos que ya pertenecen a otra casa.
+    if (!hasMembership) adoptPersonalRowsIntoHousehold(db, id, userId);
 
     // Seed default pantry items and utensils for the household (assigned to admin)
     seedDefaultsForHousehold(db, id, userId);
-    return true;
   })();
-
-  if (!created) {
-    return c.json({ success: false, message: 'User already has a household' }, 409);
-  }
 
   const household = db.prepare('SELECT * FROM households WHERE id = ?').get(id) as any;
   const members = db
@@ -217,17 +304,9 @@ async function doJoin(c: any, userId: string, inviteCode: string) {
       .get(household.id, userId);
     if (existing) return 'already-member';
 
-    // If user already belongs to another household, leave it first.
-    // Keep the move and the pantry adoption in this same transaction.
-    const currentUser = db
-      .prepare('SELECT household_id FROM users WHERE id = ?')
-      .get(userId) as any;
-    if (currentUser?.household_id && currentUser.household_id !== household.id) {
-      db.prepare('DELETE FROM household_members WHERE household_id = ? AND user_id = ?').run(
-        currentUser.household_id,
-        userId
-      );
-    }
+    const hasMembership = Boolean(
+      db.prepare('SELECT 1 FROM household_members WHERE user_id = ? LIMIT 1').get(userId)
+    );
 
     const perms = JSON.stringify(defaultPermissions('member'));
     db.prepare(
@@ -239,10 +318,9 @@ async function doJoin(c: any, userId: string, inviteCode: string) {
 
     db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(household.id, userId);
 
-    // El nuevo miembro no debe ver el catálogo duplicado: lo que tuviera a nivel
-    // personal se fusiona con el del hogar (sus marcas pasan al hogar) y se
-    // siembra lo que al hogar le falte.
-    adoptPersonalRowsIntoHousehold(db, household.id, userId);
+    // Solo el primer hogar adopta filas personales; un segundo hogar no absorbe
+    // datos personales ni de una casa a la que el usuario ya pertenece.
+    if (!hasMembership) adoptPersonalRowsIntoHousehold(db, household.id, userId);
     seedDefaultsForHousehold(db, household.id, userId);
     return 'joined';
   })();
@@ -263,14 +341,14 @@ householdRoutes.patch('/', authMiddleware, async (c) => {
   const body = await c.req.json();
 
   const db = getDatabase();
-  const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as any;
-  if (!user?.household_id) {
+  const selectedHouseholdId = activeHouseholdId(db, userId);
+  if (!selectedHouseholdId) {
     return c.json({ success: false, message: 'No household found' }, 404);
   }
 
   const membership = db
     .prepare('SELECT role FROM household_members WHERE household_id = ? AND user_id = ?')
-    .get(user.household_id, userId) as any;
+    .get(selectedHouseholdId, userId) as any;
   if (!membership || membership.role !== 'admin') {
     return c.json({ success: false, message: 'Only admins can change settings' }, 403);
   }
@@ -279,7 +357,7 @@ householdRoutes.patch('/', authMiddleware, async (c) => {
   if (updatesMember) {
     const targetMember = db
       .prepare('SELECT id FROM household_members WHERE id = ? AND household_id = ?')
-      .get(body.memberId, user.household_id);
+      .get(body.memberId, selectedHouseholdId);
     if (!targetMember) {
       return c.json({ success: false, message: 'Member not found' }, 404);
     }
@@ -307,7 +385,7 @@ householdRoutes.patch('/', authMiddleware, async (c) => {
 
   if (updates.length > 0) {
     updates.push('updated_at = CURRENT_TIMESTAMP');
-    values.push(user.household_id);
+    values.push(selectedHouseholdId);
     db.prepare(`UPDATE households SET ${updates.join(', ')} WHERE id = ?`).run(...values);
   }
 
@@ -330,7 +408,7 @@ householdRoutes.patch('/', authMiddleware, async (c) => {
       memUpdates.push('permissions = ?');
       memValues.push(JSON.stringify(defaultPermissions(body.memberRole)));
     }
-    memValues.push(body.memberId, user.household_id);
+    memValues.push(body.memberId, selectedHouseholdId);
     db.prepare(
       `UPDATE household_members SET ${memUpdates.join(', ')} WHERE id = ? AND household_id = ?`
     ).run(...memValues);
@@ -338,7 +416,7 @@ householdRoutes.patch('/', authMiddleware, async (c) => {
 
   const household = db
     .prepare('SELECT * FROM households WHERE id = ?')
-    .get(user.household_id) as any;
+    .get(selectedHouseholdId) as any;
   const members = db
     .prepare(
       `
@@ -346,7 +424,7 @@ householdRoutes.patch('/', authMiddleware, async (c) => {
     FROM household_members hm JOIN users u ON u.id = hm.user_id WHERE hm.household_id = ?
   `
     )
-    .all(user.household_id);
+    .all(selectedHouseholdId);
   return c.json({ success: true, data: mapHousehold({ ...household, members }) });
 });
 
@@ -355,15 +433,15 @@ householdRoutes.post('/regenerate-invite', authMiddleware, async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();
 
-  const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as any;
-  if (!user?.household_id) {
+  const selectedHouseholdId = activeHouseholdId(db, userId);
+  if (!selectedHouseholdId) {
     return c.json({ success: false, message: 'No household found' }, 404);
   }
 
   const newCode = generateInviteCode();
   db.prepare(
     'UPDATE households SET invite_code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).run(newCode, user.household_id);
+  ).run(newCode, selectedHouseholdId);
 
   return c.json({ success: true, data: { inviteCode: newCode } });
 });
@@ -372,31 +450,45 @@ householdRoutes.post('/regenerate-invite', authMiddleware, async (c) => {
 householdRoutes.delete('/leave', authMiddleware, async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();
+  const leftHouseholdId = db.transaction(() => {
+    const selectedHouseholdId = activeHouseholdId(db, userId);
+    if (!selectedHouseholdId) return null;
 
-  const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as any;
-  if (!user?.household_id) {
-    return c.json({ success: false, message: 'No household found' }, 404);
-  }
+    const memberCount = db
+      .prepare('SELECT COUNT(*) as c FROM household_members WHERE household_id = ?')
+      .get(selectedHouseholdId) as { c: number };
+    const membership = db
+      .prepare('SELECT role FROM household_members WHERE household_id = ? AND user_id = ?')
+      .get(selectedHouseholdId, userId) as { role: string } | undefined;
+    if (!membership) return null;
 
-  // If admin and only member, delete household entirely
-  const memberCount = db
-    .prepare('SELECT COUNT(*) as c FROM household_members WHERE household_id = ?')
-    .get(user.household_id) as any;
-  const membership = db
-    .prepare('SELECT role FROM household_members WHERE household_id = ? AND user_id = ?')
-    .get(user.household_id, userId) as any;
+    db.prepare('DELETE FROM household_members WHERE household_id = ? AND user_id = ?').run(
+      selectedHouseholdId,
+      userId
+    );
 
-  db.prepare('DELETE FROM household_members WHERE household_id = ? AND user_id = ?').run(
-    user.household_id,
-    userId
-  );
-  db.prepare('UPDATE users SET household_id = NULL WHERE id = ?').run(userId);
+    const nextMembership = db
+      .prepare(
+        `SELECT household_id FROM household_members
+          WHERE user_id = ?
+          ORDER BY joined_at DESC, household_id ASC
+          LIMIT 1`
+      )
+      .get(userId) as { household_id: string } | undefined;
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(
+      nextMembership?.household_id ?? null,
+      userId
+    );
 
-  if (membership?.role === 'admin' && memberCount.c <= 1) {
-    db.prepare('DELETE FROM ingredients WHERE household_id = ?').run(user.household_id);
-    db.prepare('DELETE FROM utensils WHERE household_id = ?').run(user.household_id);
-    db.prepare('DELETE FROM households WHERE id = ?').run(user.household_id);
-  }
+    // Existing last-admin cleanup applies only to the household being left.
+    if (membership.role === 'admin' && memberCount.c <= 1) {
+      db.prepare('DELETE FROM ingredients WHERE household_id = ?').run(selectedHouseholdId);
+      db.prepare('DELETE FROM utensils WHERE household_id = ?').run(selectedHouseholdId);
+      db.prepare('DELETE FROM households WHERE id = ?').run(selectedHouseholdId);
+    }
+    return selectedHouseholdId;
+  })();
+  if (!leftHouseholdId) return c.json({ success: false, message: 'No household found' }, 404);
 
   return c.json({ success: true, message: 'Left household' });
 });
