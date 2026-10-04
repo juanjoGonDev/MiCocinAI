@@ -2100,3 +2100,29 @@ que no contienen hoy se conserva el recorte y auto-scroll por eventos actuales.
 
 **Rollback focal:** revertir únicamente el cálculo de ventana/auto-scroll para el presente, sus regresiones
 unitarias y E2E, y este subapartado; conservar el resto de las unidades del calendario.
+
+### QA-RECEIPT.REVIEW-METADATA.1 · editar metadatos tras una lectura correcta
+
+**Fuente revalidada (2026-10-04):** el prompt admite tienda/fecha no detectadas (`null`) y el esquema
+mantiene la fecha civil `YYYY-MM-DD`. La ficha habilita ambos campos en estado `review`; las pruebas
+unitarias cubren cambios y errores de guardado. La E2E de proveedor loopback ya comprueba lectura
+exitosa con valores presentes/ausentes y persistencia sin cambiar metadatos, pero todavía no demuestra
+que una persona pueda corregir desde esa ficha una tienda desconocida o fecha ausente y conservar la
+corrección en historial. El loopback es fixture sintético: no prueba reconocimiento visual real; eso
+pertenece a `QA-AI.REAL-INTEGRATIONS.1`.
+
+**Contrato:** tras terminar el análisis, si tienda o fecha no se reconocen, sus controles accesibles
+quedan vacíos y editables. La persona puede completar ambos, guardar, recargar y ver los valores en
+detalle/historial. Los nombres accesibles deben estar traducidos ES/EN. En `queued`/`analyzing` siguen
+sin edición para evitar competir con el worker activo.
+
+- [ ] Ampliar la E2E de loopback para responder `store: null` y `purchaseDate: null` en un idioma,
+      usar nombres accesibles para tienda/fecha en ES y EN, y rellenar/corregir ambos desde `review`.
+- [ ] Comprobar guardado por UI, detalle API, recarga y fila del historial para ambos idiomas; conservar
+      los checks existentes de ausencia de overflow, fecha civil y proveedor exclusivamente loopback.
+- [ ] Ejecutar primero la E2E aislada en Chromium y Pixel 5; luego unitarias focales, coverage por
+      archivo ≥70 % S/B/F/L si cambia producción, `typecheck:e2e`, build, checks de formato/diff y revisar
+      capturas sintéticas comparables. No contactar WebAPI ni enviar tickets reales en esta unidad.
+
+**Rollback:** retirar solo la ampliación E2E y esta subunidad; cambiar código de producción únicamente
+si la regresión demuestra un defecto.
