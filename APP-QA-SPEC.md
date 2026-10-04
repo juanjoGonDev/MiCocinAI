@@ -1700,43 +1700,50 @@ live sigue pendiente y nunca se declara verde.
 
 ### Subunidad QA-AI.EXISTING-WEBAPI.1 · usar la instancia local autorizada
 
-**Fuente revalidada (2026-10-04):** la instrucción activa del usuario pide WebAPI existente en
-`localhost:3001`, configuración `webapi / Custom / gpt-5 / concurrencia 1` y el token “Nunca” ya
-creado. El runner actual (`run-ai-real-smoke.mjs`) rechaza un bearer existente, crea otro de 30 min,
-modifica settings de request/session logging y levanta un proceso propio; su supervisor podría
-reutilizar el perfil personal de Patchright. La conectividad anónima del coordinador confirma que
-WebAPI responde, pero no valida bearer ni modelo; el `401` de MCP Browser es independiente. La spec
-anterior que exigía iniciar una WebAPI aislada no satisface la instrucción vigente y queda reemplazada
-para el smoke live por este contrato.
+**Fuente revalidada (2026-10-04):** la instrucción activa del usuario pide la WebAPI existente en
+`localhost:3001`, configuración `webapi / Custom / gpt-5 / concurrencia 1`, usar el token local
+autorizado y, si no está disponible desde una fuente segura, permite crear uno para las pruebas. El
+usuario había especificado que ese token no caducara; el smoke debe borrarlo al terminar. El runner
+actual (`run-ai-real-smoke.mjs`) rechaza un bearer existente, crea otro de 30 min, modifica settings de
+request/session logging y levanta un proceso propio; su supervisor podría reutilizar el perfil personal
+de Patchright. No hay evidencia de que el token copiado esté disponible desde una fuente segura ni se
+ha validado bearer/modelo. La conectividad anónima del coordinador confirma que WebAPI responde, pero
+no valida bearer ni modelo; el `401` de MCP Browser es independiente. Esta subunidad reemplaza para
+el smoke live las instrucciones anteriores incompatibles de iniciar una WebAPI aislada, cambiar sus
+settings o usar un token corto.
 
-**Contrato:** modo manual independiente y opt-in para hablar con la instancia ya existente. No crear,
-borrar, revocar ni rotar tokens; no iniciar, parar o reconfigurar WebAPI; no cambiar settings de
-privacidad/logs, base, proceso o perfil personal. El preflight se ejecuta desde el proceso coordinador
-real y debe demostrar que llega al origin fijo `http://127.0.0.1:3001`, que el bearer autorizado es
-válido y que `gpt-5` está activo con texto+imagen. Si ese namespace no lo alcanza, devolver fallo sin
-fallback a Browser MCP ni a una segunda WebAPI.
+**Contrato único para el smoke live:** modo manual independiente y opt-in contra la instancia ya
+existente. Nunca iniciar, parar o reconfigurar WebAPI; no cambiar sus settings de privacidad/logs,
+base, proceso o perfil personal; no modificar tokens preexistentes. Primero intentar obtener el bearer
+de una fuente segura y efímera. Dado que el usuario autorizó expresamente crear un token si hace falta,
+si esa fuente no lo proporciona, el coordinador puede crear exactamente un token dedicado con
+caducidad **Nunca**, mantenerlo solo en memoria y borrar/verificar borrado únicamente de ese token ID
+en `finally`. La creación/borrado de ese token propio son las únicas escrituras administrativas
+permitidas; si no se puede garantizar su limpieza, abortar antes de llamar al modelo. El preflight se
+ejecuta desde el coordinador real y debe demostrar acceso al origin fijo `http://127.0.0.1:3001`,
+validez del bearer y disponibilidad estricta de `gpt-5` con texto+imagen; ante fallo, termina en rojo
+sin fallback a Browser MCP, otro modelo ni una segunda WebAPI.
 
-El bearer solo se obtiene de una fuente efímera expresamente autorizada y permanece en memoria del
-coordinador/proxy; nunca va en argumentos, logs, UI, backend E2E, capturas, artefactos, fixtures,
-SQLite o memoria persistente. El proxy solo permite el host/rutas/modelo aprobados y la clave aleatoria
-del proxy es la única credencial que recibe el runner. El preflight debe comprobar sin revelar valores
-que ni Authorization ni cuerpos/prompt/respuesta quedan en los logs existentes; si no puede demostrar
-redacción y captura desactivada, abortar sin cambiar la configuración del servicio. La app bajo prueba
-usa DB/puertos/seed propios y el cleanup se confirma antes de borrar sus temporales; el WebAPI/profile
-existente queda intacto. Los tickets reales no entran en capturas, traces, vídeos, reportes o fixtures;
-solo se conservan resultados/contadores agregados sin tienda, artículos, importes ni fechas personales.
+El bearer solo permanece en memoria del coordinador/proxy; nunca va en argumentos, variables del
+runner/navegador, logs, UI, E2E backend, capturas, artefactos, fixtures, SQLite o memoria persistente.
+El proxy solo permite host/rutas/modelo aprobados y la clave aleatoria del proxy es la única
+credencial que recibe el runner. Antes de procesar datos de tickets, el preflight debe comprobar sin
+revelar valores que la captura de cuerpos/sesiones está desactivada y que Authorization, prompt y
+respuesta no quedan registrados en los logs existentes; no cambiar settings para conseguirlo. Si no
+puede demostrar redacción y captura desactivada, abortar sin enviar tickets. La app bajo prueba usa
+DB/puertos/seed propios y el cleanup se confirma antes de borrar sus temporales. Los tickets reales no
+entran en capturas, traces, vídeos, reportes o fixtures; solo se conservan resultado, recuentos,
+latencias/uso/coste agregados, sin tienda, artículos, importes ni fechas personales.
 
 - [x] Confirmar desde Node coordinador `GET /health/ready` y `/` sin Authorization (200/200, identidad
       `web-api`); esto solo prueba conectividad/identidad, no autoriza modelo ni bearer.
-- [ ] Obtener bearer únicamente de fuente segura/efímera y validar desde ese mismo proceso el acceso y
-      capacidades de `gpt-5`; abortar rojo ante servicio, token o modelo no disponible, sin crear procesos
-      externos ni usar Browser MCP como proxy.
-- [ ] Implementar fuente efímera del bearer y modo `existing-webapi`; probar opt-in/CI, servicio ausente,
-      401, modelo incorrecto, redacción, llamadas fuera de allowlist y que no toca settings/perfil.
+- [ ] Implementar fuente efímera del bearer para `existing-webapi`, incluida creación opcional del token
+      propio autorizado y su borrado/verificación; probar opt-in/CI, servicio ausente, 401, modelo
+      incorrecto, redacción, allowlist y que no toca settings/perfil/tokens preexistentes.
 - [ ] Añadir primero E2E/test de coordinador con mocks loopback: secreto nunca entra al runner, artefactos,
       SQLite o logs; budget y concurrency siguen limitados; la ruta antigua no se activa como fallback.
-- [ ] Verificar redacción/captura de request y session logs desde el servicio ya levantado, sin mutarlo;
-      si no es verificable, no enviar datos reales ni completar smoke live.
+- [ ] Verificar de solo lectura redacción/captura de request y session logs desde el servicio ya
+      levantado; si no es verificable, no enviar tickets reales ni completar smoke live.
 - [ ] Ejecutar los ocho flujos reales opt-in con `gpt-5`, stop-on-first-failure y métricas agregadas; sin
       reintentos/manual retries, conservar DB/artifacts solo mientras se demuestra cleanup.
 - [ ] En unidad separada, procesar los seis tickets solicitados (PDF/JPEG, priorizar el marcado “mejor”),
