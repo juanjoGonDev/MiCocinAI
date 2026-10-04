@@ -75,6 +75,31 @@ describe('calendar-grid: la ventana que se ensena', () => {
     expect(windowFor([]).endMinutes - windowFor([]).startMinutes).toBeLessThan(24 * 60);
   });
 
+  it('incluye la madrugada actual si hoy esta en el rango, aunque no haya eventos', () => {
+    const window = windowFor([], { minHours: 8, focusMinutes: at(2, 8) });
+    expect(window.startMinutes).toBe(at(1));
+    expect(window.endMinutes).toBe(at(9));
+    expect(hoursOf(window)).toContain(2);
+  });
+
+  it('la hora actual amplia los limites sin recortar eventos posteriores', () => {
+    const window = windowFor([timed(at(10), at(11))], { minHours: 8, focusMinutes: at(2, 8) });
+    expect(window.startMinutes).toBe(at(1));
+    expect(window.endMinutes).toBe(at(12));
+    expect(window.endMinutes).toBeGreaterThanOrEqual(at(11));
+  });
+
+  it('clampa la ventana a medianoche en ambos extremos y conserva el minimo posible', () => {
+    expect(windowFor([], { minHours: 8, focusMinutes: at(0, 8) })).toEqual({
+      startMinutes: 0,
+      endMinutes: at(8)
+    });
+    expect(windowFor([], { minHours: 8, focusMinutes: at(23, 52) })).toEqual({
+      startMinutes: at(16),
+      endMinutes: 1440
+    });
+  });
+
   it('los limites son los del contenido, con una hora de aire y en punto', () => {
     const items = [timed(at(9, 20), at(10)), timed(at(19), at(20, 10))];
     const window = windowFor(items);
@@ -190,11 +215,24 @@ describe('calendar-grid: la comida sin hora y el gesto del usuario', () => {
     expect(mealTypeForMinutes(23 * 60 + 50)).toBe('dinner');
   });
 
-  it('al cargar se va al primer bulto del dia, y hoy, a la hora actual', () => {
+  it('al cargar se va al primer bulto si no es hoy, y a la hora actual si hoy esta visible', () => {
     const window = { startMinutes: 7 * 60, endMinutes: 23 * 60 };
     const items = [timed(at(12), at(13))];
     expect(scrollTopFor(window, items, false, at(9))).toBe((((at(12) - 30) - 7 * 60) / 60) * HOUR_HEIGHT_PX);
-    // Un día vacio no scrolla a ningun sitio: se queda arriba.
-    expect(scrollTopFor(window, [], true)).toBe(0);
+    expect(scrollTopFor(window, items, true, at(9))).toBe(
+      (((at(9) - 30) - 7 * 60) / 60) * HOUR_HEIGHT_PX
+    );
+    expect(scrollTopFor(window, [], false)).toBe(0);
+  });
+
+  it('una madrugada con evento futuro se abre cerca de ahora, no en el primer evento', () => {
+    const now = at(2, 8);
+    const window = windowFor([timed(at(10), at(11))], { minHours: 8, focusMinutes: now });
+    expect(scrollTopFor(window, [timed(at(10), at(11))], true, now)).toBe(
+      ((now - 30 - window.startMinutes) / 60) * HOUR_HEIGHT_PX
+    );
+    expect(scrollTopFor(window, [], true, now)).toBe(
+      ((now - 30 - window.startMinutes) / 60) * HOUR_HEIGHT_PX
+    );
   });
 });

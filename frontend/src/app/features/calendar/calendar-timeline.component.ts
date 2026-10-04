@@ -56,8 +56,9 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
  * calendario que la gente ya sabe leer, y la comida es UNA COSA MAS con su color y su etiqueta.
  *
  * Por que no se ven 24 horas: `windowFor` recorta la vista a lo que hay (mas una hora de aire por
- * lado, redondeado a hora en punto). Enseñar las 24 y dejar que el usuario busque es lo que hacia
- * esta pantalla antes, con la diferencia de que antes no habia nada que buscar.
+ * lado, redondeado a hora en punto) y, cuando hoy esta visible, incluye tambien la hora actual.
+ * Enseñar las 24 y dejar que el usuario busque es lo que hacia esta pantalla antes, con la diferencia
+ * de que antes no habia nada que buscar.
  *
  * La geometria no vive aqui: vive en `core/calendar-grid.ts`, que es un fichero de numeros y por eso
  * se puede probar. Este componente solo pinta lo que aquellos numeros dicen.
@@ -754,6 +755,7 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   private rebuild(): void {
     const map = new Map<string, TimelineItem[]>();
     const all: TimelineItem[] = [];
+    const today = this.days.some((day) => day.isToday);
     for (const day of this.days) {
       const items: TimelineItem[] = [];
       if (this.kitchen) {
@@ -797,7 +799,12 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
       all.push(...items);
     }
     this.gridItems.set(map);
-    this.window.set(windowFor(all, { minHours: this.days.length === 1 ? 6 : 8 }));
+    this.window.set(
+      windowFor(all, {
+        minHours: this.days.length === 1 ? 6 : 8,
+        focusMinutes: today ? nowMinutes() : undefined
+      })
+    );
   }
 
   private scrollToStart(): void {

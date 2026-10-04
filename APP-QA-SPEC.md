@@ -2077,18 +2077,26 @@ contenga hoy, tanto con la agenda vacía como con bloques posteriores, sin recor
 24 horas si el mínimo de ventana permite evitarlo. Cerca de medianoche se clampa al día (00:00–24:00). En rangos
 que no contienen hoy se conserva el recorte y auto-scroll por eventos actuales.
 
-- [ ] Añadir primero pruebas unitarias rojas para 02:08 vacío y con un evento posterior, incluyendo ventana,
-      etiqueta 02:00, línea actual y posición inicial; cubrir límites 00:xx/23:xx y comprobar que un rango sin
-      hoy conserva su comportamiento.
-- [ ] Implementar el mínimo ajuste de geometría/auto-scroll para usar una hora actual inyectable en pruebas,
-      preservar todos los eventos de la ventana y mostrar la línea «ahora» cuando hoy esté en el rango.
-- [ ] Validar día y semana con Playwright real aislado y reloj fijo: Chromium escritorio + Pixel 5, 02:08,
-      estado vacío y evento sintético futuro, scroll al presente, ausencia de marcador fuera de hoy, sin
-      errores/overflow. Guardar e inspeccionar capturas sintéticas PC/móvil; probar los límites responsive
-      ya existentes y teclado/foco sin alterar la geometría de componentes.
-- [ ] Ejecutar Vitest/Karma focal según el runner vigente, typecheck E2E, `check:ui`, formato, build frontend,
-      `git diff --check` y medir coverage del código instrumentado tocado (mínimo 70 % S/B/F/L, sin reducir
-      el gate global). Registrar cada comando, resultado, capturas y limitación; no marcar casillas sin evidencia.
+- [x] Añadir primero pruebas unitarias rojas para 02:08 vacío y con un evento posterior, incluyendo ventana,
+      etiqueta 02:00 y posición inicial; cubrir límites 00:xx/23:xx y comportamiento sin hoy. Antes de la
+      corrección, el unitario focal dio **17/22** y el Playwright real **0/2** (Chromium y Pixel 5): no existía
+      la etiqueta 02:00 y la ventana permanecía en 07:00–23:00.
+- [x] Implementar el mínimo ajuste de geometría/auto-scroll: cuando hoy está en el rango, incluir la hora
+      actual en la ventana y enfocar «ahora» aunque haya eventos posteriores; preservar esos eventos. Fuera
+      de hoy se conserva el recorte por eventos/ventana predeterminada.
+- [x] Validar Día/Semana con Playwright real aislado y reloj fijo a las 02:08 de Madrid: Chromium escritorio
+      + Pixel 5, agenda vacía y evento sintético a las 10:00, línea ahora visible, sin línea mañana ni errores,
+      y sin overflow en 320, 393, 568×320, 767/768/769, 1023/1024/1025 y 1440 px. Teclado/foco probado al
+      cambiar de vista y guardar el evento. E2E final **2/2**; DB, seed y puertos temporales propios limpiados.
+      Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-calendar-early-hours-1/`
+      (`chromium-week-empty-0208.png`, `mobile-chrome-week-empty-0208.png` y vistas con evento).
+- [x] Ejecutar las comprobaciones focales: Karma **22/22**; coverage de `calendar-grid.ts`
+      **97,05/87,17/96,15/100 % S/B/F/L**; `typecheck:e2e`, `check:ui` (**189 ficheros, 20 reglas, 0
+      incidencias**), build Angular producción y `git diff --check` pasan. Prettier pasa para la nueva E2E;
+      `calendar-grid.ts`, su spec y el componente ya fallaban `prettier --check` en `HEAD`, por lo que se
+      preservó su formato local y se evitó reformatear líneas ajenas. Build conserva warnings de bundle
+      inicial (**715,14 kB/500 kB**) y CSS en componentes fuera del cambio. Sin CSS/layout modificados; Pixel
+      5 emulado no simula un inset nativo de safe-area. No se rebajó ningún gate.
 
 **Rollback focal:** revertir únicamente el cálculo de ventana/auto-scroll para el presente, sus regresiones
 unitarias y E2E, y este subapartado; conservar el resto de las unidades del calendario.
