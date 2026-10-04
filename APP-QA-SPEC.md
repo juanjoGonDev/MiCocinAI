@@ -2337,3 +2337,37 @@ Prettier, `check:ui`, build y limitación del gate global están documentados en
 
 **Rollback:** revertir solo los formateadores/uso de fecha del historial, sus pruebas y este subapartado;
 conservar la edición de metadatos y el resto del historial.
+
+#### Subunidad QA-RECEIPT.ACTIVE-METADATA.1 · editar tienda y fecha mientras el ticket se analiza
+
+**Fuente revalidada (2026-10-04):** `HOGARIA-SPEC.md §12ao` permite editar tickets analizados y conserva
+correcciones manuales frente a respuestas tardías/reintentos, pero la petición explícita del usuario dice
+que la tienda y la fecha deben quedar «siempre» editables. `ReceiptDetailComponent.metadatosEditables()`
+excluye `queued` y `analyzing`, aunque `PATCH /api/receipts/:id` acepta esos estados, fija los indicadores
+manuales por campo y el worker consulta dichos indicadores al persistir el resultado final. La conducta
+se concreta aquí: siempre significa desde que el detalle del ticket está disponible, incluidos ambos
+estados activos; la edición no espera a que termine la IA.
+
+**Contrato:** la ficha muestra campos accesibles y editables de tienda y fecha civil en `queued`,
+`analyzing` y todos los estados terminales. Guardar durante el análisis no cancela, duplica ni cambia el
+estado del trabajo. Cada campo es independiente: una corrección manual prevalece sobre la respuesta y los
+reintentos posteriores; un campo no editado aún puede completarse desde la IA. Si el ticket se guarda en
+cola y se abre al llegar a `analyzing`, los borradores no se pierden con el refresco de estado. La revisión
+de líneas, notas y confirmación de inventario conserva sus límites actuales; este cambio solo extiende
+tienda/fecha.
+
+- [ ] Añadir primero pruebas de componente rojas: campos visibles/editables en `queued` y `analyzing`,
+      accesibilidad/teclado y conservación de borrador mientras el ticket recibido se refresca por polling.
+- [ ] Añadir regresiones SQLite de PATCH en ambos estados y worker con respuesta de proveedor retenida:
+      los flags manuales se respetan por campo, el campo intacto recibe el valor IA, y no se altera el
+      estado/efectos del ticket por guardar metadata.
+- [ ] Añadir E2E loopback aislada: abrir un ticket con IA pendiente, corregir tienda/fecha desde la UI,
+      guardar antes de liberar la respuesta, terminar análisis, y comprobar API, reload e historial; cubrir
+      queued/analyzing, ES/EN, errores reintentables, teclado y Chromium/Pixel 5 sin overflow.
+- [ ] Ejecutar primero la reproducción roja; después Karma/Vitest y Playwright aislados con SQLite/puertos/
+      seed temporales, coverage ≥70 % S/B/F/L por archivo instrumentable, `typecheck:e2e`, formato,
+      `check:ui`, build y `git diff --check`. Solo fixtures sintéticas; sin archivos de Descargas ni llamadas
+      a WebAPI/proveedores reales en esta unidad.
+
+**Rollback:** retirar únicamente el permiso de edición durante `queued`/`analyzing`, sus pruebas y este
+subapartado; conservar la detección, edición terminal e historial.
