@@ -2064,6 +2064,37 @@ expresado por color y sin imponer igual anchura a etiquetas de longitudes distin
 **Rollback focal:** revertir únicamente la migración de los CTA primarios de Compra a `app-button`, esta
 regresión E2E y este subapartado; no revertir la unidad `app-button` ni otros cambios de Compra.
 
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.TEXT-FIELDS.1 · campos de texto de una línea
+
+**Fuente revalidada (2026-10-04):** el marco/gutter y las raíces ya se comparan en `layout-gutters.spec.ts`,
+pero aún no hay una E2E que contraste controles interiores equivalentes. El mismo campo estándar tiene
+geometrías distintas en tres superficies reales: login usa `app-input` (label a 4 px, control de 16 px/
+24 px, radio 12 px); Cuenta usa `.account__field`/`.account__input` (gap 8 px, label semibold, control
+14 px y radio 8 px); el diálogo de Evento en Calendario usa `.meal-form__field`/`.cal-input` (gap 8 px,
+label 12 px y control 14 px/radio 8 px). La discrepancia es de componentes equivalentes, no de ancho de
+columna. Esta pasada se limita a inputs de texto estándar; `date/time`, `select`, `textarea`, archivo,
+icon-only y filtros compactos quedan en sus familias funcionales hasta que se especifiquen aparte.
+
+**Contrato:** inputs de texto estándar y sus labels comparten la geometría media del `app-input` vigente:
+label 14 px/medium con 4 px hasta el control; control con la misma altura calculada, fuente/interlineado,
+padding 8/12 px, borde 1 px y radio 12 px. El control ocupa el ancho de su contenedor; no se fuerza la
+misma anchura entre formularios con columnas intencionalmente distintas. Foco/validación pueden cambiar
+color, borde o anillo, pero no caja, padding ni flujo vertical. No se añade una variante por ruta.
+
+- [ ] Añadir primero una regresión E2E aislada para Email de login, Nombre de Cuenta y título del diálogo
+      Evento; medir label-control, caja, padding, márgenes, fuente, interlineado, borde y radio calculados,
+      documentar el baseline rojo y comprobar que un login inválido no hace POST.
+- [ ] Normalizar la geometría de los tres inputs al contrato compartido sin alterar su semántica, validación,
+      focos accesibles ni anchura de formulario; mantener iguales medidas en estados normal/foco/error.
+- [ ] Verificar Chromium y Pixel 5 a 320×568, 393×851, 568×320, 767/768/769, 1023/1024/1025 y 1440×900;
+      revisar teclado, label/nombre, foco, error, scroll y ausencia de overflow. Comparar propiedades con
+      tolerancia ≤1 CSS px y guardar/inspeccionar capturas sintéticas PC/móvil.
+- [ ] Ejecutar Karma focal, cobertura ≥70 % S/B/F/L para cada archivo instrumentable modificado,
+      `typecheck:e2e`, Prettier focal, `check:ui`, build de producción y `git diff --check`; no rebajar gates.
+
+**Rollback focal:** retirar únicamente los tokens/reglas de geometría de inputs de texto estándar, esta
+regresión E2E y esta subunidad; conservar el contrato global, el marco común y estilos de otras familias.
+
 ### Subunidad QA-CALENDAR.EARLY-HOURS.1 · hora actual visible en la rejilla
 
 **Fuente revalidada antes de implementar (2026-10-04):** el contrato histórico vigente de `HOGARIA-SPEC.md §8f`
