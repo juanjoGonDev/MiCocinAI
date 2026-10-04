@@ -26,6 +26,11 @@ const SORT_COLUMN_MAP: Record<string, string> = {
 
 // Helper to convert snake_case DB row to camelCase API object
 function mapRecipe(r: Record<string, unknown>) {
+  const storedSteps = JSON.parse((r.steps as string) || '[]');
+  const instructionData = Array.isArray(storedSteps)
+    ? { steps: storedSteps }
+    : { instructionsByLevel: storedSteps };
+
   return {
     id: r.id,
     name: r.name,
@@ -42,7 +47,7 @@ function mapRecipe(r: Record<string, unknown>) {
     image: r.image,
     ingredients: JSON.parse((r.ingredients as string) || '[]'),
     utensils: JSON.parse((r.utensils as string) || '[]'),
-    steps: JSON.parse((r.steps as string) || '[]'),
+    ...instructionData,
     tags: JSON.parse((r.tags as string) || '[]'),
     nutrition: r.nutrition ? JSON.parse(r.nutrition as string) : null,
     storage: r.storage ? JSON.parse(r.storage as string) : null,
@@ -97,7 +102,7 @@ recipeRoutes.get('/', async (c) => {
   }
 
   if (filter.mealType) {
-    conditions.push("meal_type LIKE ?");
+    conditions.push('meal_type LIKE ?');
     params.push(`%${filter.mealType}%`);
   }
 
@@ -127,13 +132,15 @@ recipeRoutes.get('/', async (c) => {
   const sortColumn = SORT_COLUMN_MAP[filter.sortBy] || 'created_at';
   const sortOrder = filter.sortOrder === 'asc' ? 'ASC' : 'DESC';
 
-  const countResult = db.prepare(
-    `SELECT COUNT(*) as total FROM recipes ${whereClause}`
-  ).get(...params) as Record<string, unknown>;
+  const countResult = db
+    .prepare(`SELECT COUNT(*) as total FROM recipes ${whereClause}`)
+    .get(...params) as Record<string, unknown>;
 
-  const recipes = db.prepare(
-    `SELECT * FROM recipes ${whereClause} ORDER BY ${sortColumn} ${sortOrder} LIMIT ? OFFSET ?`
-  ).all(...params, filter.pageSize, offset) as Record<string, unknown>[];
+  const recipes = db
+    .prepare(
+      `SELECT * FROM recipes ${whereClause} ORDER BY ${sortColumn} ${sortOrder} LIMIT ? OFFSET ?`
+    )
+    .all(...params, filter.pageSize, offset) as Record<string, unknown>[];
 
   return c.json({
     success: true,
@@ -151,7 +158,8 @@ recipeRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');
   const db = getDatabase();
 
-  const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+  const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id) as
+    Record<string, unknown> | undefined;
 
   if (!recipe) {
     return c.json({ success: false, message: 'Recipe not found' }, 404);
@@ -172,10 +180,12 @@ recipeRoutes.post('/', async (c) => {
   const db = getDatabase();
   const id = nanoid();
 
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO recipes (id, name, description, difficulty, cuisine, meal_type, total_time, prep_time, cook_time, rest_time, servings, calories, image, ingredients, utensils, steps, nutrition, storage, author, author_id, tags, is_public)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  `
+  ).run(
     id,
     input.name,
     input.description,
@@ -191,7 +201,7 @@ recipeRoutes.post('/', async (c) => {
     input.image,
     JSON.stringify(input.ingredients),
     JSON.stringify(input.utensils),
-    JSON.stringify(input.steps),
+    JSON.stringify(input.instructionsByLevel ?? input.steps),
     input.nutrition ? JSON.stringify(input.nutrition) : null,
     input.storage ? JSON.stringify(input.storage) : null,
     'user',
@@ -202,7 +212,7 @@ recipeRoutes.post('/', async (c) => {
 
   const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id);
 
-  return c.json({ success: true, data: recipe }, 201);
+  return c.json({ success: true, data: mapRecipe(recipe as Record<string, unknown>) }, 201);
 });
 
 // PATCH /api/recipes/:id
@@ -221,10 +231,22 @@ recipeRoutes.patch('/:id', async (c) => {
   const updates: string[] = [];
   const values: any[] = [];
 
-  if (input.name !== undefined) { updates.push('name = ?'); values.push(input.name); }
-  if (input.description !== undefined) { updates.push('description = ?'); values.push(input.description); }
-  if (input.difficulty !== undefined) { updates.push('difficulty = ?'); values.push(input.difficulty); }
-  if (input.isFavorite !== undefined) { updates.push('is_favorite = ?'); values.push(input.isFavorite ? 1 : 0); }
+  if (input.name !== undefined) {
+    updates.push('name = ?');
+    values.push(input.name);
+  }
+  if (input.description !== undefined) {
+    updates.push('description = ?');
+    values.push(input.description);
+  }
+  if (input.difficulty !== undefined) {
+    updates.push('difficulty = ?');
+    values.push(input.difficulty);
+  }
+  if (input.isFavorite !== undefined) {
+    updates.push('is_favorite = ?');
+    values.push(input.isFavorite ? 1 : 0);
+  }
 
   if (updates.length > 0) {
     updates.push('updated_at = CURRENT_TIMESTAMP');
@@ -233,7 +255,7 @@ recipeRoutes.patch('/:id', async (c) => {
   }
 
   const recipe = db.prepare('SELECT * FROM recipes WHERE id = ?').get(id);
-  return c.json({ success: true, data: recipe });
+  return c.json({ success: true, data: mapRecipe(recipe as Record<string, unknown>) });
 });
 
 // DELETE /api/recipes/:id
@@ -259,7 +281,9 @@ recipeRoutes.post('/:id/favorite', async (c) => {
     return c.json({ success: false, message: 'Recipe not found' }, 404);
   }
 
-  db.prepare('UPDATE recipes SET is_favorite = CASE WHEN is_favorite = 1 THEN 0 ELSE 1 END WHERE id = ?').run(id);
+  db.prepare(
+    'UPDATE recipes SET is_favorite = CASE WHEN is_favorite = 1 THEN 0 ELSE 1 END WHERE id = ?'
+  ).run(id);
   const updated = db.prepare('SELECT is_favorite FROM recipes WHERE id = ?').get(id) as any;
 
   return c.json({
@@ -277,21 +301,25 @@ recipeRoutes.post('/:id/cook', async (c) => {
   db.prepare('UPDATE recipes SET times_cooked = times_cooked + 1 WHERE id = ?').run(id);
 
   // Update user recipe history
-  const existing = db.prepare(
-    'SELECT id FROM user_recipes WHERE user_id = ? AND recipe_id = ?'
-  ).get(userId, id);
+  const existing = db
+    .prepare('SELECT id FROM user_recipes WHERE user_id = ? AND recipe_id = ?')
+    .get(userId, id);
 
   if (existing) {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE user_recipes 
       SET times_cooked = times_cooked + 1, last_cooked_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
       WHERE user_id = ? AND recipe_id = ?
-    `).run(userId, id);
+    `
+    ).run(userId, id);
   } else {
-    db.prepare(`
+    db.prepare(
+      `
       INSERT INTO user_recipes (id, user_id, recipe_id, times_cooked, last_cooked_at)
       VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)
-    `).run(nanoid(), userId, id);
+    `
+    ).run(nanoid(), userId, id);
   }
 
   return c.json({ success: true, message: 'Recipe cooked recorded' });

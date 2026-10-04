@@ -19,7 +19,8 @@ import { TimerComponent } from '../../shared/components/ui/timer/timer.component
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { Recipe, Difficulty } from '../../shared/models/recipe.model';
-import { AIRecipeResponse } from '../../shared/models/ai-config.model';
+import type { AIRecipeResponse, DetailLevel } from '../../shared/models/ai-config.model';
+import { recipeInstructionsForLevel } from '../../shared/models/recipe-instructions';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
 import type { TranslationKey } from '../../core/i18n';
@@ -276,8 +277,29 @@ import { recipeCategoryEmoji } from './recipe-category-emoji';
           <!-- Steps -->
           <div class="generated-recipe__section">
             <h4>{{ 'recipes.preparacion' | t }}</h4>
+            <div
+              *ngIf="recipe.instructionsByLevel"
+              class="ai-form__field generated-recipe__detail-level"
+            >
+              <label class="ai-form__label" for="generated-recipe-detail-level">
+                {{ 'recipes.detalle' | t }}
+              </label>
+              <select
+                id="generated-recipe-detail-level"
+                class="form-select"
+                [ngModel]="singleGeneratedDetailLevel()"
+                (ngModelChange)="setSingleGeneratedDetailLevel($event)"
+              >
+                <option value="basic">{{ 'recipes.basico' | t }}</option>
+                <option value="intermediate">{{ 'auth.intermediate' | t }}</option>
+                <option value="expert">{{ 'auth.expert' | t }}</option>
+              </select>
+            </div>
             <div class="generated-recipe__steps">
-              <div *ngFor="let step of recipe.steps" class="step">
+              <div
+                *ngFor="let step of getGeneratedRecipeSteps(recipe, singleGeneratedDetailLevel())"
+                class="step"
+              >
                 <span class="step__number">{{ step.stepNumber }}</span>
                 <div class="step__content">
                   <p class="step__instruction">{{ step.instruction }}</p>
@@ -304,6 +326,70 @@ import { recipeCategoryEmoji } from './recipe-category-emoji';
             </app-button>
           </div>
         </div>
+
+        <!-- Multiple results are drafts: persist only the one the user explicitly saves. -->
+        <section
+          *ngIf="aiService.generatedRecipes().length > 0"
+          class="generated-options"
+          [attr.aria-label]="'recipes.elige_una_para_guardar' | t"
+        >
+          <h3 class="generated-options__title">{{ 'recipes.elige_una_para_guardar' | t }}</h3>
+          <div class="generated-options__list">
+            <article
+              *ngFor="let recipe of aiService.generatedRecipes(); let i = index"
+              class="generated-option"
+              [attr.aria-label]="recipe.name"
+            >
+              <div class="generated-option__header">
+                <h4 class="generated-option__title">{{ recipe.name }}</h4>
+                <div class="generated-option__meta">
+                  <app-badge variant="primary">{{
+                    'recipes.min' | t: { n: recipe.totalTime }
+                  }}</app-badge>
+                  <app-badge variant="secondary">{{
+                    'recipes.porciones' | t: { n: recipe.servings }
+                  }}</app-badge>
+                </div>
+              </div>
+              <p class="generated-option__description">{{ recipe.description }}</p>
+              <div
+                *ngIf="recipe.instructionsByLevel"
+                class="ai-form__field generated-option__detail-level"
+              >
+                <label class="ai-form__label" [attr.for]="'generated-option-level-' + i">
+                  {{ 'recipes.detalle' | t }}
+                </label>
+                <select
+                  [id]="'generated-option-level-' + i"
+                  class="form-select"
+                  [ngModel]="generatedRecipeDetailLevel(i)"
+                  (ngModelChange)="setGeneratedRecipeDetailLevel(i, $event)"
+                >
+                  <option value="basic">{{ 'recipes.basico' | t }}</option>
+                  <option value="intermediate">{{ 'auth.intermediate' | t }}</option>
+                  <option value="expert">{{ 'auth.expert' | t }}</option>
+                </select>
+                <ol class="generated-option__steps">
+                  <li
+                    *ngFor="
+                      let step of getGeneratedRecipeSteps(recipe, generatedRecipeDetailLevel(i))
+                    "
+                  >
+                    {{ step.instruction }}
+                  </li>
+                </ol>
+              </div>
+              <div class="generated-option__actions">
+                <app-button
+                  variant="primary"
+                  (onClick)="saveGeneratedRecipe(recipe, generatedRecipeDetailLevel(i))"
+                >
+                  {{ 'recipes.guardar_receta' | t }}
+                </app-button>
+              </div>
+            </article>
+          </div>
+        </section>
       </app-modal>
 
       <!-- Recipe Detail Modal -->
@@ -342,8 +428,29 @@ import { recipeCategoryEmoji } from './recipe-category-emoji';
           <!-- Steps with Timers -->
           <div class="recipe-detail__section">
             <h3>{{ 'recipes.preparacion' | t }}</h3>
+            <div
+              *ngIf="recipe.instructionsByLevel"
+              class="ai-form__field recipe-detail__detail-level"
+            >
+              <label class="ai-form__label" for="saved-recipe-detail-level">
+                {{ 'recipes.detalle' | t }}
+              </label>
+              <select
+                id="saved-recipe-detail-level"
+                class="form-select"
+                [ngModel]="selectedRecipeDetailLevel()"
+                (ngModelChange)="setSelectedRecipeDetailLevel($event)"
+              >
+                <option value="basic">{{ 'recipes.basico' | t }}</option>
+                <option value="intermediate">{{ 'auth.intermediate' | t }}</option>
+                <option value="expert">{{ 'auth.expert' | t }}</option>
+              </select>
+            </div>
             <div class="recipe-detail__steps">
-              <div *ngFor="let step of recipe.steps" class="step-card">
+              <div
+                *ngFor="let step of getRecipeSteps(recipe, selectedRecipeDetailLevel())"
+                class="step-card"
+              >
                 <div class="step-card__header">
                   <span class="step-card__number">{{
                     'recipes.paso_n' | t: { n: step.stepNumber }
@@ -695,6 +802,68 @@ import { recipeCategoryEmoji } from './recipe-category-emoji';
         margin-top: var(--space-6);
       }
 
+      .generated-options {
+        display: grid;
+        gap: var(--space-3);
+        margin-top: var(--space-6);
+      }
+
+      .generated-options__title {
+        margin: 0;
+        font-size: var(--text-lg);
+        font-weight: var(--font-semibold);
+      }
+
+      .generated-options__list {
+        display: grid;
+        gap: var(--space-3);
+      }
+
+      .generated-option {
+        display: grid;
+        gap: var(--space-3);
+        min-width: 0;
+        padding: var(--space-4);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--bg-primary);
+      }
+
+      .generated-option__header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        min-width: 0;
+      }
+
+      .generated-option__title {
+        min-width: 0;
+        margin: 0;
+        font-size: var(--text-base);
+        font-weight: var(--font-semibold);
+        overflow-wrap: anywhere;
+      }
+
+      .generated-option__meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+      }
+
+      .generated-option__description {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        overflow-wrap: anywhere;
+      }
+
+      .generated-option__actions {
+        display: flex;
+        justify-content: flex-end;
+      }
+
       /* Recipe Detail */
       .recipe-detail__header {
         margin-bottom: var(--space-6);
@@ -847,6 +1016,14 @@ import { recipeCategoryEmoji } from './recipe-category-emoji';
         .recipe-detail__actions {
           flex-direction: column;
         }
+
+        .generated-option__header {
+          flex-direction: column;
+        }
+
+        .generated-option__actions app-button {
+          width: 100%;
+        }
       }
     `
   ]
@@ -873,6 +1050,9 @@ export class RecipesComponent implements OnInit {
   isDetailModalOpen = signal(false);
   selectedRecipe = signal<Recipe | null>(null);
   selectedIngredients = signal<any[]>([]);
+  selectedRecipeDetailLevel = signal<DetailLevel>('intermediate');
+  singleGeneratedDetailLevel = signal<DetailLevel>('intermediate');
+  private generatedRecipeLevels = signal<Record<number, DetailLevel>>({});
 
   aiOptions = {
     difficulty: 'medium',
@@ -971,7 +1151,33 @@ export class RecipesComponent implements OnInit {
 
   viewRecipe(recipe: Recipe): void {
     this.selectedRecipe.set(recipe);
+    this.selectedRecipeDetailLevel.set(this.singleGeneratedDetailLevel());
     this.isDetailModalOpen.set(true);
+  }
+
+  getRecipeSteps(recipe: Recipe, level: DetailLevel) {
+    return recipeInstructionsForLevel(recipe, level);
+  }
+
+  getGeneratedRecipeSteps(recipe: AIRecipeResponse, level: DetailLevel) {
+    return recipeInstructionsForLevel(recipe, level);
+  }
+
+  generatedRecipeDetailLevel(index: number): DetailLevel {
+    return this.generatedRecipeLevels()[index] ?? (this.aiOptions.detailLevel as DetailLevel);
+  }
+
+  setGeneratedRecipeDetailLevel(index: number, level: DetailLevel): void {
+    this.generatedRecipeLevels.update((levels) => ({ ...levels, [index]: level }));
+  }
+
+  setSingleGeneratedDetailLevel(level: DetailLevel): void {
+    this.singleGeneratedDetailLevel.set(level);
+    this.selectedRecipeDetailLevel.set(level);
+  }
+
+  setSelectedRecipeDetailLevel(level: DetailLevel): void {
+    this.selectedRecipeDetailLevel.set(level);
   }
 
   closeDetailModal(): void {
@@ -1012,6 +1218,7 @@ export class RecipesComponent implements OnInit {
   }
 
   generateSingle(): void {
+    this.singleGeneratedDetailLevel.set(this.aiOptions.detailLevel as DetailLevel);
     const request = {
       ingredients: this.selectedIngredients().map((i) => ({
         id: i.id,
@@ -1029,19 +1236,25 @@ export class RecipesComponent implements OnInit {
     };
 
     this.aiService.generateRecipe(request).subscribe({
-      next: () => {
+      next: (recipe) => {
+        if (!recipe) {
+          this.showRecipeGenerationError('recipes.no_se_pudo_generar');
+          return;
+        }
+        this.singleGeneratedDetailLevel.set(
+          recipe.selectedDetailLevel ?? (this.aiOptions.detailLevel as DetailLevel)
+        );
         this.toastService.success(
           this.i18n.t('recipes.receta_generada'),
           this.i18n.t('recipes.la_ia_ha_creado')
         );
       },
-      error: () => {
-        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('recipes.no_se_pudo_generar'));
-      }
+      error: () => this.showRecipeGenerationError('recipes.no_se_pudo_generar')
     });
   }
 
   generateMultiple(): void {
+    this.generatedRecipeLevels.set({});
     const request = {
       ingredients: this.selectedIngredients().map((i) => ({
         id: i.id,
@@ -1060,27 +1273,61 @@ export class RecipesComponent implements OnInit {
     };
 
     this.aiService.generateMultipleRecipes(request).subscribe({
-      next: () => {
+      next: (recipes) => {
+        if (!recipes?.length) {
+          this.showRecipeGenerationError('recipes.no_se_pudieron_generar');
+          return;
+        }
+        const initialLevel = this.aiOptions.detailLevel as DetailLevel;
+        this.generatedRecipeLevels.set(
+          recipes.reduce<Record<number, DetailLevel>>((levels, recipe, index) => {
+            levels[index] = recipe.selectedDetailLevel ?? initialLevel;
+            return levels;
+          }, {})
+        );
         this.toastService.success(
           this.i18n.t('recipes.recetas_generadas'),
           this.i18n.t('recipes.selecciona_tu_favorita')
         );
       },
-      error: () => {
-        this.toastService.error(
-          this.i18n.t('ui.error'),
-          this.i18n.t('recipes.no_se_pudieron_generar')
-        );
-      }
+      error: () => this.showRecipeGenerationError('recipes.no_se_pudieron_generar')
     });
   }
 
-  saveGeneratedRecipe(recipe: AIRecipeResponse): void {
+  private showRecipeGenerationError(messageKey: TranslationKey): void {
+    this.toastService.error(this.i18n.t('ui.error'), this.i18n.t(messageKey));
+  }
+
+  saveGeneratedRecipe(recipe: AIRecipeResponse, selectedLevel?: DetailLevel): void {
+    this.singleGeneratedDetailLevel.set(
+      selectedLevel ?? recipe.selectedDetailLevel ?? (this.aiOptions.detailLevel as DetailLevel)
+    );
+    const convertSteps = (
+      steps: NonNullable<AIRecipeResponse['instructionsByLevel']>['basic']
+    ) =>
+      steps.map((step) => ({
+        stepNumber: step.stepNumber,
+        instruction: step.instruction,
+        duration: step.duration,
+        timerRequired: Boolean(step.duration),
+        timerDuration: step.duration,
+        tips: step.tips,
+        warning: step.warning
+      }));
+    const instructionsByLevel = recipe.instructionsByLevel
+      ? {
+          basic: convertSteps(recipe.instructionsByLevel.basic),
+          intermediate: convertSteps(recipe.instructionsByLevel.intermediate),
+          expert: convertSteps(recipe.instructionsByLevel.expert)
+        }
+      : undefined;
+
     this.recipeService
       .createRecipe({
         name: recipe.name,
         description: recipe.description,
         difficulty: recipe.difficulty as Difficulty,
+        cuisine: recipe.cuisine,
         totalTime: recipe.totalTime,
         prepTime: recipe.prepTime,
         cookTime: recipe.cookTime,
@@ -1092,38 +1339,33 @@ export class RecipesComponent implements OnInit {
           quantity: i.quantity,
           unit: i.unit as any,
           preparation: i.preparation,
-          isOptional: false,
+          isOptional: i.isOptional ?? false,
           notes: i.notes
         })),
         utensils: recipe.utensils,
-        steps: recipe.steps.map((s) => ({
-          stepNumber: s.stepNumber,
-          instruction: s.instruction,
-          duration: s.duration,
-          timerRequired: !!s.duration,
-          timerDuration: s.duration,
-          tips: s.tips,
-          warning: s.warning
-        })),
+        ...(instructionsByLevel
+          ? { instructionsByLevel }
+          : { steps: convertSteps(recipe.steps ?? []) }),
         nutrition: recipe.nutrition
           ? {
               calories: recipe.nutrition.calories,
               protein: recipe.nutrition.protein,
               carbs: recipe.nutrition.carbs,
               fat: recipe.nutrition.fat,
-              fiber: recipe.nutrition.fiber || 0
+              fiber: recipe.nutrition.fiber
             }
           : undefined,
         storage: recipe.storage
           ? {
               method: recipe.storage.method,
-              container: 'Apropiado',
+              container: recipe.storage.container,
               duration: recipe.storage.duration,
               reheatingInstructions: recipe.storage.reheating,
-              freezingPossible: false
+              freezingPossible: recipe.storage.freezingPossible ?? false,
+              freezingDuration: recipe.storage.freezingDuration
             }
           : undefined,
-        tags: []
+        tags: recipe.tags ?? []
       })
       .subscribe({
         next: () => {

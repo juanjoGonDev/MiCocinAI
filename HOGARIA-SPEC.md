@@ -377,14 +377,16 @@ The existing `detailLevel` selection continues to choose the **initially display
 - The level selector is available in the generated recipe preview and saved recipe view, has an accessible name and keyboard behavior, and uses the existing Spanish/English translations.
 - In multiple-generation mode, distinct candidates remain distinct recipes; each candidate independently includes all three instruction lists.
 
-**Acceptance checklist (spec-first; implementation pending)**
+**Acceptance checklist (implemented; synthetic verification complete)**
 
-- [ ] Add failing schema/API/service/UI tests for all three complete variants, malformed or missing variants, and one provider call per generated candidate.
-- [ ] Make single and multiple generation return the shared recipe fields once plus `instructionsByLevel`; keep `detailLevel` only as the initially selected view level, with the §8b cooking-level default when omitted.
-- [ ] Add the level selector to generated previews and saved recipe views; switching it is local-only, accessible, translated, and does not duplicate a recipe or regenerate.
-- [ ] Persist and reload all variants in one recipe while preserving existing saved recipes with only `steps`.
-- [ ] Verify single/multiple success, provider/schema errors, retry, cancellation, save/cancel counts and reload using isolated SQLite plus a loopback synthetic provider; do not use a live provider for repeatable tests.
-- [ ] Run desktop and mobile Playwright for generated and saved views, keyboard/focus and existing breakpoints; inspect synthetic captures, typecheck/build, focused coverage (≥70% S/B/F/L for instrumentable scope), and diff checks without lowering existing gates.
+- [x] Add failing schema/API/frontend model/UI tests for all three complete variants, malformed or missing variants, and one provider call per generated candidate.
+- [x] Make single and multiple generation return the shared recipe fields once plus `instructionsByLevel`; keep `detailLevel` only as the initially selected view level, with the §8b cooking-level default when omitted.
+- [x] Add the level selector to generated previews and saved recipe views; switching it is local-only, accessible, translated, and does not duplicate a recipe or regenerate.
+- [x] Persist and reload all variants in one recipe while preserving existing saved recipes with only `steps`.
+- [x] Verify single/multiple success, provider/schema errors, retry, cancellation, save/cancel counts and reload using isolated SQLite plus a loopback synthetic provider; do not use a live provider for repeatable tests.
+- [x] Run desktop and mobile Playwright for generated and saved views, keyboard/focus and existing breakpoints; inspect synthetic captures, typecheck/build, focused coverage (≥70% S/B/F/L for instrumentable scope), and diff checks without lowering existing gates.
+
+**Verification evidence (2026-10-04):** focused server tests passed **355/355**; recipe API/schema/form tests passed **327/327**. Focused coverage passed all four metrics: `ai.routes.ts` **84.15/72.89/96.77/83.91%**, generated-recipe schema **100/100/100/100%**, recipe input schema **100/100/100/100%**. The frontend instruction helper passed **3/3** at **100/100/100/100%**. The full recipe-generation Playwright file passed **11/11** on isolated SQLite and a loopback synthetic provider, including desktop, mobile, 320 px and landscape cases, selector keyboard interaction, retry/cancel, save and reload. Synthetic PC/mobile screenshots were inspected. Frontend/server builds, E2E typecheck and `git diff --check` passed. These results do not claim a live-model run; that remains tracked separately in `APP-QA-SPEC.md`.
 
 ## 8c. Configuración vs Preferencias: qué se configura donde, y en caliente
 

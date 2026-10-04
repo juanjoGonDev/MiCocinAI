@@ -228,26 +228,54 @@ const recetaGenerada = {
     { name: 'lentejas', quantity: 200, unit: 'g', preparation: '', isOptional: false, notes: '' }
   ],
   utensils: ['Olla'],
-  steps: [
-    {
-      stepNumber: 1,
-      instruction: 'Cocer las lentejas.',
-      duration: 20,
-      timerRequired: true,
-      timerDuration: 20,
-      tips: '',
-      warning: ''
-    }
-  ],
+  instructionsByLevel: {
+    basic: [
+      { stepNumber: 1, instruction: 'Cocer las lentejas.', duration: 20, tips: '', warning: '' }
+    ],
+    intermediate: [
+      {
+        stepNumber: 1,
+        instruction: 'Sofreír y cocer las lentejas hasta que estén tiernas.',
+        duration: 20,
+        tips: '',
+        warning: ''
+      }
+    ],
+    expert: [
+      {
+        stepNumber: 1,
+        instruction: 'Sofreír a fuego medio y cocer a hervor suave hasta textura al dente.',
+        duration: 20,
+        tips: '',
+        warning: ''
+      }
+    ]
+  },
   nutrition: { calories: 420, protein: 24, carbs: 60, fat: 8, fiber: 14 },
   storage: {
     method: 'Refrigerar',
     duration: '3 días',
     reheating: 'Calentar',
+    container: null,
     freezingPossible: true,
     freezingDuration: '3 meses'
   },
   tags: ['vegetariana']
+};
+
+const recetaConInstruccionesPorNivel = {
+  ...recetaGenerada,
+  instructionsByLevel: {
+    basic: recetaGenerada.instructionsByLevel.basic,
+    intermediate: recetaGenerada.instructionsByLevel.intermediate.map((step) => ({
+      ...step,
+      instruction: 'Sofreír las verduras y cocer las lentejas con el caldo.'
+    })),
+    expert: recetaGenerada.instructionsByLevel.expert.map((step) => ({
+      ...step,
+      instruction: 'Sofreír a fuego medio y cocer a hervor suave hasta textura al dente.'
+    }))
+  }
 };
 
 const peticionGeneracion = {
@@ -285,6 +313,66 @@ function recipeCount(): number {
 }
 
 describe('POST /generate-recipe y /generate-multiple-recipes', () => {
+  it('single rechaza la respuesta si falta un nivel de instrucciones', async () => {
+    await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+    const requests = stubRecipeProvider(
+      () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    ...recetaGenerada,
+                    instructionsByLevel: {
+                      basic: recetaGenerada.instructionsByLevel.basic
+                    }
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+    );
+
+    const response = await call(alice, 'POST', '/generate-recipe', peticionGeneracion);
+    const result = await json(response);
+
+    expect(response.status).toBe(500);
+    expect(result.success).toBe(false);
+    expect(result).not.toHaveProperty('data');
+    expect(requests).toHaveLength(1);
+    expect(recipeCount()).toBe(0);
+  });
+
+  it('single devuelve todas las instrucciones y la selección inicial en una llamada', async () => {
+    await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+    const requests = stubRecipeProvider(
+      () =>
+        new Response(
+          JSON.stringify({
+            choices: [{ message: { content: JSON.stringify(recetaConInstruccionesPorNivel) } }]
+          }),
+          { status: 200 }
+        )
+    );
+
+    const response = await call(alice, 'POST', '/generate-recipe', peticionGeneracion);
+    const result = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(result.data.instructionsByLevel).toEqual(
+      recetaConInstruccionesPorNivel.instructionsByLevel
+    );
+    expect(result.data.selectedDetailLevel).toBe('basic');
+    expect(result.data).not.toHaveProperty('steps');
+    expect(requests).toHaveLength(1);
+    const prompt = JSON.parse(requests[0].body).messages[1].content as string;
+    expect(prompt).toContain('genera SIEMPRE los tres niveles completos');
+    expect(recipeCount()).toBe(0);
+  });
+
   it('single devuelve un borrador con el prompt vigente y no crea filas', async () => {
     await crearConfig(alice, 'Proveedor de prueba', 'http://ai.test/v1');
     const requests = stubRecipeProvider();
@@ -305,7 +393,8 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
     expect(prompt).toContain('Utensilios disponibles: Olla');
     expect(prompt).toContain('Porciones: 2');
     expect(prompt).toContain('Dificultad: easy');
-    expect(prompt).toContain('Nivel de detalle: basic - Instrucciones breves y claras.');
+    expect(prompt).toContain('Nivel seleccionado al abrir la ficha: basic');
+    expect(prompt).toContain('genera SIEMPRE los tres niveles completos');
     expect(prompt).toContain('Restricciones dietéticas: vegetariana');
     expect(prompt).toContain('Alergias: cacahuete');
     expect(prompt).toContain('Preferencias: picante');
@@ -322,10 +411,20 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
           ...ingredient,
           name: `ingrediente ${callIndex}`
         })),
-        steps: recetaGenerada.steps.map((step) => ({
-          ...step,
-          instruction: `Preparar receta ${callIndex}.`
-        }))
+        instructionsByLevel: {
+          basic: recetaGenerada.instructionsByLevel.basic.map((step) => ({
+            ...step,
+            instruction: `Preparar receta ${callIndex} en versión basic.`
+          })),
+          intermediate: recetaGenerada.instructionsByLevel.intermediate.map((step) => ({
+            ...step,
+            instruction: `Preparar receta ${callIndex} en versión intermediate.`
+          })),
+          expert: recetaGenerada.instructionsByLevel.expert.map((step) => ({
+            ...step,
+            instruction: `Preparar receta ${callIndex} en versión expert.`
+          }))
+        }
       };
       return new Response(
         JSON.stringify({ choices: [{ message: { content: JSON.stringify(recipe) } }] }),
@@ -374,7 +473,7 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
       cookTime: 20,
       servings: 2,
       ingredients: [{ name: 'lentejas', quantity: 200, unit: 'g' }],
-      steps: [{ stepNumber: 1, instruction: 'Cocer las lentejas.' }]
+      instructionsByLevel: recetaGenerada.instructionsByLevel
     });
     expect(requests).toHaveLength(1);
     expect(recipeCount()).toBe(0);
@@ -418,12 +517,30 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
             name: isSecondCall ? 'LÉNTEJAS' : 'lentejas'
           }
         ],
-        steps: [
-          {
-            ...recetaGenerada.steps[0],
-            instruction: isSecondCall ? 'COCER las lentejas!!!' : 'Cocer las lentejas.'
-          }
-        ]
+        instructionsByLevel: {
+          basic: [
+            {
+              ...recetaGenerada.instructionsByLevel.basic[0],
+              instruction: isSecondCall ? 'COCER las lentejas!!!' : 'Cocer las lentejas.'
+            }
+          ],
+          intermediate: [
+            {
+              ...recetaGenerada.instructionsByLevel.intermediate[0],
+              instruction: isSecondCall
+                ? 'SOFREÍR y cocer las lentejas hasta que estén tiernas!!!'
+                : 'Sofreír y cocer las lentejas hasta que estén tiernas.'
+            }
+          ],
+          expert: [
+            {
+              ...recetaGenerada.instructionsByLevel.expert[0],
+              instruction: isSecondCall
+                ? 'SOFREÍR a fuego medio y cocer a hervor suave hasta textura al dente!!!'
+                : 'Sofreír a fuego medio y cocer a hervor suave hasta textura al dente.'
+            }
+          ]
+        }
       };
       return new Response(
         JSON.stringify({ choices: [{ message: { content: JSON.stringify(recipe) } }] }),
@@ -460,12 +577,23 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
             name: callIndex === 1 ? 'zanahoria' : 'calabacín'
           }
         ],
-        steps: [
-          {
-            ...recetaGenerada.steps[0],
+        instructionsByLevel: {
+          basic: recetaGenerada.instructionsByLevel.basic.map((step) => ({
+            ...step,
             instruction: callIndex === 1 ? 'Cocer las lentejas.' : 'Hornear los garbanzos.'
-          }
-        ]
+          })),
+          intermediate: recetaGenerada.instructionsByLevel.intermediate.map((step) => ({
+            ...step,
+            instruction: callIndex === 1 ? 'Sofreír las lentejas.' : 'Dorar los garbanzos.'
+          })),
+          expert: recetaGenerada.instructionsByLevel.expert.map((step) => ({
+            ...step,
+            instruction:
+              callIndex === 1
+                ? 'Cocer las lentejas a hervor suave.'
+                : 'Asar los garbanzos a temperatura controlada.'
+          }))
+        }
       };
       return new Response(
         JSON.stringify({ choices: [{ message: { content: JSON.stringify(recipe) } }] }),
@@ -484,7 +612,9 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
     expect(result.data).toHaveLength(2);
     expect(result.data[0].ingredients[0].name).toBe('lentejas');
     expect(result.data[1].ingredients[0].name).toBe('garbanzos');
-    expect(result.data[0].steps[0].instruction).not.toBe(result.data[1].steps[0].instruction);
+    expect(result.data[0].instructionsByLevel.basic[0].instruction).not.toBe(
+      result.data[1].instructionsByLevel.basic[0].instruction
+    );
     expect(requests).toHaveLength(2);
     expect(recipeCount()).toBe(0);
   });

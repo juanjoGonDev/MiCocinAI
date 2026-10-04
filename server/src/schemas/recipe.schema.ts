@@ -4,7 +4,17 @@ import { formDefault, formField, formPartial } from './form.js';
 const difficultyEnum = z.enum(['easy', 'medium', 'hard']);
 const mealTypeEnum = z.enum(['breakfast', 'brunch', 'lunch', 'snack', 'dinner', 'dessert']);
 const measurementUnitEnum = z.enum([
-  'g', 'kg', 'ml', 'l', 'cup', 'tbsp', 'tsp', 'unit', 'bunch', 'slice', 'piece'
+  'g',
+  'kg',
+  'ml',
+  'l',
+  'cup',
+  'tbsp',
+  'tsp',
+  'unit',
+  'bunch',
+  'slice',
+  'piece'
 ]);
 
 const recipeIngredientSchema = z.object({
@@ -47,15 +57,22 @@ const nutritionInfoSchema = z.object({
 
 const storageInfoSchema = z.object({
   method: z.string(),
-  container: z.string(),
+  container: formField(z.string()),
   duration: z.string(),
   reheatingInstructions: formField(z.string()),
   freezingPossible: formDefault(z.boolean(), false),
   freezingDuration: formField(z.string())
 });
 
-// Create recipe schema
-export const createRecipeSchema = z.object({
+const instructionsByLevelSchema = z
+  .object({
+    basic: z.array(recipeStepSchema).min(1),
+    intermediate: z.array(recipeStepSchema).min(1),
+    expert: z.array(recipeStepSchema).min(1)
+  })
+  .strict();
+
+const createRecipeFieldsSchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   description: formField(z.string().max(1000)),
   difficulty: formDefault(difficultyEnum, 'medium'),
@@ -70,15 +87,30 @@ export const createRecipeSchema = z.object({
   image: formField(z.string().url()),
   ingredients: z.array(recipeIngredientSchema).min(1, 'At least one ingredient is required'),
   utensils: formDefault(z.array(z.string()), []),
-  steps: z.array(recipeStepSchema).min(1, 'At least one step is required'),
+  steps: formField(z.array(recipeStepSchema).min(1, 'At least one step is required')),
+  instructionsByLevel: formField(instructionsByLevelSchema),
   nutrition: formField(nutritionInfoSchema),
   storage: formField(storageInfoSchema),
   tags: formDefault(z.array(z.string()), []),
   isPublic: formDefault(z.boolean(), false)
 });
 
+// A recipe stores either its historical flat `steps` list or all generated variants, never both.
+export const createRecipeSchema = createRecipeFieldsSchema.superRefine((recipe, context) => {
+  const hasLegacySteps = Array.isArray(recipe.steps);
+  const hasInstructionLevels = recipe.instructionsByLevel != null;
+
+  if (hasLegacySteps === hasInstructionLevels) {
+    context.addIssue({
+      code: 'custom',
+      path: ['steps'],
+      message: 'Provide either legacy steps or all detail-level instructions, but not both'
+    });
+  }
+});
+
 // Update recipe schema
-export const updateRecipeSchema = formPartial(createRecipeSchema).extend({
+export const updateRecipeSchema = formPartial(createRecipeFieldsSchema).extend({
   isFavorite: formField(z.boolean())
 });
 
@@ -94,7 +126,10 @@ export const recipeFilterSchema = z.object({
   author: formField(z.enum(['ai', 'user'])),
   page: formDefault(z.number().int().positive(), 1),
   pageSize: formDefault(z.number().int().positive().max(100), 20),
-  sortBy: formDefault(z.enum(['name', 'difficulty', 'totalTime', 'rating', 'createdAt']), 'createdAt'),
+  sortBy: formDefault(
+    z.enum(['name', 'difficulty', 'totalTime', 'rating', 'createdAt']),
+    'createdAt'
+  ),
   sortOrder: formDefault(z.enum(['asc', 'desc']), 'desc')
 });
 

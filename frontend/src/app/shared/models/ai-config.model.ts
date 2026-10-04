@@ -1,3 +1,9 @@
+import type {
+  RecipeDetailLevel,
+  RecipeInstructionStep,
+  RecipeInstructionsByLevel
+} from './recipe-instructions';
+
 export interface AIProviderConfig {
   id: string;
   name: string;
@@ -40,7 +46,7 @@ export interface RecipeGenerationConfig {
   language: string;
 }
 
-export type DetailLevel = 'basic' | 'intermediate' | 'expert';
+export type DetailLevel = RecipeDetailLevel;
 
 export interface WeeklyPlanningConfig {
   considerSeasonal: boolean;
@@ -88,17 +94,24 @@ export interface AIRecipeResponse {
   name: string;
   description: string;
   difficulty: string;
+  cuisine?: string | null;
   totalTime: number;
   prepTime: number;
   cookTime: number;
   servings: number;
-  calories?: number;
+  calories?: number | null;
   ingredients: AIRecipeIngredient[];
   utensils: string[];
-  steps: AIRecipeStep[];
-  nutrition?: AINutritionInfo;
-  storage?: AIStorageInfo;
-  restTime?: number;
+  /** Canonical output: all detail variants in one provider response. */
+  instructionsByLevel?: RecipeInstructionsByLevel;
+  /** Initial view selection returned by the API; changing it is local-only. */
+  selectedDetailLevel?: DetailLevel;
+  /** Legacy provider response support during rolling upgrades. */
+  steps?: AIRecipeStep[];
+  tags?: string[];
+  nutrition?: AINutritionInfo | null;
+  storage?: AIStorageInfo | null;
+  restTime?: number | null;
   difficultyNotes?: string;
 }
 
@@ -106,16 +119,14 @@ export interface AIRecipeIngredient {
   name: string;
   quantity: number;
   unit: string;
-  preparation?: string;
-  notes?: string;
+  preparation?: string | null;
+  isOptional?: boolean;
+  notes?: string | null;
 }
 
-export interface AIRecipeStep {
-  stepNumber: number;
-  instruction: string;
-  duration?: number;
-  tips?: string;
-  warning?: string;
+export interface AIRecipeStep extends RecipeInstructionStep {
+  timerRequired?: boolean;
+  timerDuration?: number;
 }
 
 export interface AINutritionInfo {
@@ -123,13 +134,16 @@ export interface AINutritionInfo {
   protein: number;
   carbs: number;
   fat: number;
-  fiber?: number;
+  fiber?: number | null;
 }
 
 export interface AIStorageInfo {
   method: string;
   duration: string;
-  reheating?: string;
+  reheating?: string | null;
+  container?: string | null;
+  freezingPossible?: boolean;
+  freezingDuration?: string | null;
 }
 
 export interface AIWeeklyPlanRequest {
@@ -180,5 +194,3 @@ export const AI_PROVIDER_LABELS: Record<AIProvider, string> = {
   openai: 'OpenAI',
   custom: 'Custom (OpenAI-like)'
 };
-
-

@@ -1,20 +1,24 @@
+import type { RecipeInstructionStep, RecipeInstructionsByLevel } from './recipe-instructions';
+
 export interface Recipe {
   id: string;
   name: string;
   description: string;
   difficulty: Difficulty;
-  cuisine: string;
+  cuisine: string | null;
   mealType: MealType[];
   totalTime: number;
   prepTime: number;
   cookTime: number;
-  restTime?: number;
+  restTime?: number | null;
   servings: number;
-  calories?: number;
+  calories?: number | null;
   image?: string;
   ingredients: RecipeIngredient[];
   utensils: string[];
-  steps: RecipeStep[];
+  /** Legacy recipes keep their one historical list; new AI recipes use instructionsByLevel. */
+  steps?: RecipeStep[];
+  instructionsByLevel?: RecipeInstructionsByLevel;
   nutrition?: NutritionInfo;
   storage?: StorageInfo;
   author: AuthorType;
@@ -33,21 +37,14 @@ export interface RecipeIngredient {
   name: string;
   quantity: number;
   unit: MeasurementUnit;
-  preparation?: string;
+  preparation?: string | null;
   isOptional: boolean;
   substitutes?: string[];
-  notes?: string;
+  notes?: string | null;
 }
 
-export interface RecipeStep {
-  stepNumber: number;
-  instruction: string;
-  duration?: number;
+export interface RecipeStep extends RecipeInstructionStep {
   temperature?: Temperature;
-  timerRequired: boolean;
-  timerDuration?: number;
-  tips?: string;
-  warning?: string;
   image?: string;
 }
 
@@ -61,18 +58,18 @@ export interface NutritionInfo {
   protein: number;
   carbs: number;
   fat: number;
-  fiber: number;
+  fiber?: number | null;
   sugar?: number;
   sodium?: number;
 }
 
 export interface StorageInfo {
   method: string;
-  container: string;
+  container?: string | null;
   duration: string;
-  reheatingInstructions?: string;
+  reheatingInstructions?: string | null;
   freezingPossible: boolean;
-  freezingDuration?: string;
+  freezingDuration?: string | null;
 }
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -82,9 +79,7 @@ export type MealType = 'breakfast' | 'brunch' | 'lunch' | 'snack' | 'dinner' | '
 export type AuthorType = 'ai' | 'user';
 
 export type MeasurementUnit =
-  | 'g' | 'kg' | 'ml' | 'l'
-  | 'cup' | 'tbsp' | 'tsp'
-  | 'unit' | 'bunch' | 'slice' | 'piece';
+  'g' | 'kg' | 'ml' | 'l' | 'cup' | 'tbsp' | 'tsp' | 'unit' | 'bunch' | 'slice' | 'piece';
 
 export interface RecipeFilter {
   search?: string;

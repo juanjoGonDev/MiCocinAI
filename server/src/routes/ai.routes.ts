@@ -1,6 +1,5 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
-import { z } from 'zod';
 import { getDatabase } from '../config/database.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import {
@@ -13,6 +12,8 @@ import {
   type GenerateRecipeInput
 } from '../schemas/ai.schema.js';
 import { createRecipeSchema } from '../schemas/recipe.schema.js';
+import { generatedRecipeCandidateSchema } from '../schemas/generated-recipe.schema.js';
+import type { GeneratedRecipeCandidate } from '../schemas/generated-recipe.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 
 import {
@@ -336,81 +337,19 @@ aiRoutes.post('/test-connection', async (c) => {
 // AI Generation
 // ═══════════════════════════════════════════════════════════════════
 
-const generatedRecipeCandidateSchema = z
-  .object({
-    name: z.string().trim().min(1).max(200),
-    description: z.string().trim().min(1).max(1000),
-    difficulty: z.enum(['easy', 'medium', 'hard']),
-    cuisine: z.string().max(50).nullish(),
-    totalTime: z.number().int().positive(),
-    prepTime: z.number().int().positive(),
-    cookTime: z.number().int().positive(),
-    restTime: z.number().int().positive().nullish(),
-    servings: z.number().int().positive(),
-    calories: z.number().positive().nullish(),
-    ingredients: z
-      .array(
-        z
-          .object({
-            name: z.string().trim().min(1),
-            quantity: z.number().positive(),
-            unit: z.enum([
-              'g',
-              'kg',
-              'ml',
-              'l',
-              'cup',
-              'tbsp',
-              'tsp',
-              'unit',
-              'bunch',
-              'slice',
-              'piece'
-            ]),
-            preparation: z.string().nullish(),
-            notes: z.string().nullish()
-          })
-          .passthrough()
-      )
-      .min(1),
-    utensils: z.array(z.string()),
-    steps: z
-      .array(
-        z
-          .object({
-            stepNumber: z.number().int().positive(),
-            instruction: z.string().trim().min(1),
-            duration: z.number().int().positive().nullish(),
-            tips: z.string().nullish(),
-            warning: z.string().nullish()
-          })
-          .passthrough()
-      )
-      .min(1),
-    nutrition: z
-      .object({
-        calories: z.number(),
-        protein: z.number(),
-        carbs: z.number(),
-        fat: z.number(),
-        fiber: z.number().nullish()
-      })
-      .nullish(),
-    storage: z
-      .object({
-        method: z.string().trim().min(1),
-        duration: z.string().trim().min(1),
-        reheating: z.string().nullish()
-      })
-      .passthrough()
-      .nullish()
-  })
-  .passthrough();
-
-type GeneratedRecipeCandidate = z.infer<typeof generatedRecipeCandidateSchema>;
-
 /** Contrato de lo que el modal existente entrega a POST /api/recipes al guardar. */
 function isSavableGeneratedRecipe(recipe: GeneratedRecipeCandidate): boolean {
+  const saveSteps = (steps: GeneratedRecipeCandidate['instructionsByLevel']['basic']) =>
+    steps.map((step) => ({
+      stepNumber: step.stepNumber,
+      instruction: step.instruction,
+      duration: step.duration,
+      timerRequired: Boolean(step.duration),
+      timerDuration: step.duration,
+      tips: step.tips,
+      warning: step.warning
+    }));
+
   const savePayload = {
     name: recipe.name,
     description: recipe.description,
@@ -427,38 +366,35 @@ function isSavableGeneratedRecipe(recipe: GeneratedRecipeCandidate): boolean {
       quantity: ingredient.quantity,
       unit: ingredient.unit,
       preparation: ingredient.preparation,
-      isOptional: false,
+      isOptional: ingredient.isOptional ?? false,
       notes: ingredient.notes
     })),
     utensils: recipe.utensils,
-    steps: recipe.steps.map((step) => ({
-      stepNumber: step.stepNumber,
-      instruction: step.instruction,
-      duration: step.duration,
-      timerRequired: Boolean(step.duration),
-      timerDuration: step.duration,
-      tips: step.tips,
-      warning: step.warning
-    })),
+    instructionsByLevel: {
+      basic: saveSteps(recipe.instructionsByLevel.basic),
+      intermediate: saveSteps(recipe.instructionsByLevel.intermediate),
+      expert: saveSteps(recipe.instructionsByLevel.expert)
+    },
     nutrition: recipe.nutrition
       ? {
           calories: recipe.nutrition.calories,
           protein: recipe.nutrition.protein,
           carbs: recipe.nutrition.carbs,
           fat: recipe.nutrition.fat,
-          fiber: recipe.nutrition.fiber || 0
+          fiber: recipe.nutrition.fiber
         }
       : recipe.nutrition,
     storage: recipe.storage
       ? {
           method: recipe.storage.method,
-          container: 'Apropiado',
+          container: recipe.storage.container,
           duration: recipe.storage.duration,
           reheatingInstructions: recipe.storage.reheating,
-          freezingPossible: false
+          freezingPossible: recipe.storage.freezingPossible ?? false,
+          freezingDuration: recipe.storage.freezingDuration
         }
       : recipe.storage,
-    tags: []
+    tags: recipe.tags
   };
 
   return createRecipeSchema.safeParse(savePayload).success;
@@ -485,11 +421,20 @@ function candidateFingerprints(recipe: GeneratedRecipeCandidate): {
       normalizeRecipeText(ingredient.unit)
     ])
     .sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
-  const steps = recipe.steps.map((step) => normalizeRecipeText(step.instruction));
-  const content = JSON.stringify({ ingredients, steps });
+  const instructionsByLevel = Object.fromEntries(
+    (['basic', 'intermediate', 'expert'] as const).map((level) => [
+      level,
+      recipe.instructionsByLevel[level].map((step) => normalizeRecipeText(step.instruction))
+    ])
+  );
+  const content = JSON.stringify({ ingredients, instructionsByLevel });
 
   return {
-    full: JSON.stringify({ name: normalizeRecipeText(recipe.name), ingredients, steps }),
+    full: JSON.stringify({
+      name: normalizeRecipeText(recipe.name),
+      ingredients,
+      instructionsByLevel
+    }),
     content
   };
 }
@@ -527,20 +472,17 @@ async function generateRecipeDraft(
   const taste = readTasteProfile(db, userId);
   const tasteBlock = hasTasteProfile(taste) ? tastePromptLines(taste) : '';
 
-  const detailInstructions: Record<string, string> = {
-    basic: 'Instrucciones breves y claras.',
-    intermediate: 'Instrucciones detalladas con consejos útiles.',
-    expert:
-      'Instrucciones muy detalladas incluyendo técnicas culinarias, tiempos exactos, temperaturas, cómo cortar y preparar cada ingrediente paso a paso, tiempos de reposo, y cómo almacenar las sobras.'
-  };
-
   const prompt = `Genera una receta de cocina con las siguientes características:
 
 Ingredientes disponibles: ${ingredientList}
 Utensilios disponibles: ${utensilList}
 Porciones: ${input.servings}
 Dificultad: ${input.difficulty}
-Nivel de detalle: ${input.detailLevel} - ${detailInstructions[input.detailLevel]}
+Nivel seleccionado al abrir la ficha: ${input.detailLevel}. Es solo la selección inicial de la vista; genera SIEMPRE los tres niveles completos.
+Instrucciones por nivel:
+- basic: indicaciones breves, claras y suficientes para completar la receta.
+- intermediate: pasos detallados con señales de punto y consejos prácticos.
+- expert: técnicas culinarias, cortes, temperaturas y tiempos precisos, y señales observables de resultado.
 ${input.dietaryRestrictions.length > 0 ? `Restricciones dietéticas: ${input.dietaryRestrictions.join(', ')}` : ''}
 ${input.allergies.length > 0 ? `Alergias: ${input.allergies.join(', ')}` : ''}
 ${input.preferences.length > 0 ? `Preferencias: ${input.preferences.join(', ')}` : ''}
@@ -548,7 +490,7 @@ ${tasteBlock}
 ${input.cookingTime ? `Tiempo de cocción: entre ${input.cookingTime.min} y ${input.cookingTime.max} minutos` : ''}
 ${kind === 'multiple_recipes' && candidateNumber !== undefined ? `Esta es la candidata ${candidateNumber} de ${input.count}. Propón una alternativa culinariamente distinta, variando de forma real los ingredientes y/o la técnica, sin dejar de respetar los ingredientes disponibles y las restricciones.` : ''}
 
-Responde SOLO con un JSON válido con esta estructura:
+Responde SOLO con un JSON válido y exactamente estas propiedades. Los datos comunes se escriben una sola vez. No incluyas una propiedad steps aparte: cada lista de instrucciones vive solo en instructionsByLevel. Cada lista debe contener todos los pasos, numerados en orden empezando en 1.
 {
   "name": "Nombre de la receta",
   "description": "Descripción breve",
@@ -560,11 +502,15 @@ Responde SOLO con un JSON válido con esta estructura:
   "restTime": número en minutos o null,
   "servings": ${input.servings},
   "calories": número aproximado,
-  "ingredients": [{"name": "", "quantity": número, "unit": "", "preparation": "", "isOptional": false, "notes": ""}],
+  "ingredients": [{"name": "", "quantity": número, "unit": "g|kg|ml|l|cup|tbsp|tsp|unit|bunch|slice|piece", "preparation": "", "isOptional": false, "notes": ""}],
   "utensils": ["utensilios necesarios"],
-  "steps": [{"stepNumber": 1, "instruction": "", "duration": minutos, "timerRequired": true/false, "timerDuration": minutos, "tips": "", "warning": ""}],
-  "nutrition": {"calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0},
-  "storage": {"method": "", "duration": "", "reheating": "", "freezingPossible": true/false, "freezingDuration": ""},
+  "instructionsByLevel": {
+    "basic": [{"stepNumber": 1, "instruction": "", "duration": minutos o null, "tips": "" o null, "warning": "" o null}],
+    "intermediate": [{"stepNumber": 1, "instruction": "", "duration": minutos o null, "tips": "" o null, "warning": "" o null}],
+    "expert": [{"stepNumber": 1, "instruction": "", "duration": minutos o null, "tips": "" o null, "warning": "" o null}]
+  },
+  "nutrition": {"calories": 0, "protein": 0, "carbs": 0, "fat": 0, "fiber": 0} o null,
+  "storage": {"method": "", "duration": "", "reheating": "" o null, "container": "" o null, "freezingPossible": true/false, "freezingDuration": "" o null} o null,
   "tags": ["tag1", "tag2"]
 }`;
 
@@ -615,8 +561,15 @@ aiRoutes.post('/generate-recipe', async (c) => {
   });
 
   try {
-    const recipe = await generateRecipeDraft(userId, input, getDatabase());
-    return c.json({ success: true, data: recipe });
+    const rawRecipe = await generateRecipeDraft(userId, input, getDatabase());
+    const parsedRecipe = generatedRecipeCandidateSchema.safeParse(rawRecipe);
+    if (!parsedRecipe.success || !isSavableGeneratedRecipe(parsedRecipe.data)) {
+      throw new AiCallError('BAD_JSON', 'AI response does not contain a complete recipe draft');
+    }
+    return c.json({
+      success: true,
+      data: { ...parsedRecipe.data, selectedDetailLevel: input.detailLevel }
+    });
   } catch (error: any) {
     return c.json({ success: false, message: error.message }, 500);
   }
@@ -637,7 +590,9 @@ aiRoutes.post('/generate-multiple-recipes', async (c) => {
 
   try {
     const db = getDatabase();
-    const recipes: GeneratedRecipeCandidate[] = [];
+    const recipes: Array<
+      GeneratedRecipeCandidate & { selectedDetailLevel: GenerateRecipeInput['detailLevel'] }
+    > = [];
 
     for (let i = 0; i < input.count; i++) {
       const rawRecipe = await generateRecipeDraft(userId, input, db, 'multiple_recipes', i + 1);
@@ -648,7 +603,7 @@ aiRoutes.post('/generate-multiple-recipes', async (c) => {
       if (isDuplicateCandidate(parsedRecipe.data, recipes)) {
         throw new AiCallError('BAD_JSON', 'AI generated duplicate recipe drafts');
       }
-      recipes.push(parsedRecipe.data);
+      recipes.push({ ...parsedRecipe.data, selectedDetailLevel: input.detailLevel });
     }
 
     return c.json({ success: true, data: recipes });
