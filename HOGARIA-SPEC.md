@@ -4823,96 +4823,68 @@ existe y usa fecha de subida solo como criterio de desempate/agrupación, mostr�
 distintas para no confundirlas. Cada cambio de metadatos se guarda explícitamente y su error queda
 visible/reintentable; un ticket confirmado no repite el efecto de confirmación al editar.
 
-## 12ap — Configuración de IA compartida por hogar y sucesión del propietario
+## 12ap — Hogares múltiples y configuración de IA propia de cada hogar
 
-**Fuente revalidada (2026-10-04):** `ai_configs` guarda `user_id`, sin ámbito/propietario de hogar;
-las rutas de `/api/ai` y `activeAiConfig()` filtran por la cuenta autenticada. Crear un hogar da rol
-`admin` al creador, pero `households` no conserva quién lo creó. La cola conserva `ai_jobs.user_id`
-como actor y vincula el proveedor por `config_id`; varias rutas de trabajo/gestión presuponen que ambos
-pertenecen al mismo usuario. La configuración actual es por usuario, no compartida. El contrato de
-§4 (IA en `runtime_settings` de instancia) y el apunte de §13 sobre alcance multi-hogar no describen
-este requisito de producto y quedan subordinados a esta sección para el ámbito de proveedor IA.
+**Fuente revalidada (2026-10-04):** household_members ya permite varias membresías por usuario (UNIQUE(household_id, user_id)), pero users.household_id y las rutas/UI todavía tratan una sola casa como contexto. POST /api/household/join elimina la membresía anterior y adopta datos personales; muchas rutas vuelven a leer el puntero singular. No hay selector ni invalidación central de cachés al cambiar de hogar. ai_configs sigue siendo personal (user_id), el permiso settings se guarda por membresía pero no existe una comprobación común del servidor, y la pantalla de IA expone acciones sin filtrar por permiso. ai_jobs conserva actor y config_id, pero no el hogar; el worker puede volver a resolver datos usando el hogar actual del actor después de un cambio de contexto.
 
-**Decisión confirmada por el usuario:** en hogares nuevos, el creador del hogar es el propietario de
-IA y se usa su configuración activa. En hogares existentes sin creador persistido, y cuando el
-propietario deje el hogar, se asigna automáticamente como propietario el administrador actual más
-antiguo. Se desempata de forma determinista por `joined_at ASC, user_id ASC`. El propietario de IA
-debe ser miembro `admin` del mismo hogar. Si no hay ningún admin elegible, `ai_owner_user_id` queda
-`NULL` y la IA compartida falla de forma clara hasta que haya un admin; nunca se elige un miembro ni
-se usa silenciosamente su configuración personal.
+**Decisiones confirmadas por el usuario:** un usuario puede pertenecer a varios hogares y este soporte se incluye ahora. La IA queda asociada directamente a cada hogar. Reutilizar el permiso existente settings para ver y administrar su configuración. Para hogares nuevos, inicializar desde la configuración activa del creador; para hogares existentes, usar la configuración activa del admin de mayor antigüedad (joined_at ASC, user_id ASC). Conservar las configuraciones personales originales y las demás configuraciones; ningún hogar ni usuario sirve de fallback silencioso. La app está en desarrollo y se elige una migración idempotente sencilla, sin pedir decisiones adicionales por cada caso de datos.
 
-**Contrato:**
+**Contrato de hogares:**
 
-- Persistir `households.ai_owner_user_id`. Crear hogar fija el ID del creador en la misma transacción
-  que lo añade como admin. La migración de hogares existentes backfillea el admin elegible más antiguo
-  con desempate estable; no cambia IDs ni credenciales de `ai_configs`/`ai_jobs`, y es idempotente.
-- Al salir, cambiar de hogar, ser removido o dejar de ser admin el propietario actual, transferir el
-  campo en la misma transacción al admin elegible más antiguo restante. Si se crea/promueve un admin
-  en un hogar sin propietario, asignarlo; si no queda ninguno, dejar `NULL`. La selección y la
-  actualización no pueden observar un propietario que ya no sea admin del hogar.
-- Un miembro de hogar usa la configuración activa del propietario actual para **todos** los trabajos
-  IA. La cuenta sin hogar conserva su configuración propia. La configuración personal de un miembro
-  no propietario se conserva, pero no se usa como fallback ni reemplaza a la compartida mientras
-  pertenezca a ese hogar. Si el nuevo propietario no tiene configuración activa, el hogar queda sin IA
-  hasta que la configure; no copiar ni transferir API keys entre cuentas.
-- Solo el propietario actual administra, prueba, activa o elimina sus configuraciones compartidas.
-  Los demás miembros ven la configuración efectiva como solo lectura y pueden usarla desde las
-  funciones IA. DTOs, cola y errores nunca incluyen `api_key`, prompt, adjuntos ni respuestas; URLs con
-  credenciales embebidas se rechazan o redactan. Un usuario de otro hogar no puede leer ni usarla.
-- En la cola, `ai_jobs.user_id` sigue siendo quien pidió el trabajo y `config_id` sigue siendo el
-  proveedor fijado al admitirlo. La resolución de configuración del worker separa actor y propietario
-  sin atribuir datos del solicitante al dueño de la clave. Se preserva el proveedor de trabajos ya
-  admitidos tras un handoff; no se migran a la configuración nueva. La autorización de listado,
-  cancelación, reordenación y retry debe cubrir miembros del mismo hogar sin permitir que un miembro
-  actúe sobre trabajos ajenos; el gestor del proveedor expone solo metadatos seguros.
-- Fuera de un hogar, las rutas `/ai-config` mantienen el comportamiento individual existente. No
-  cambiar concurrencia, mono-actividad por propietario, retries o cancelación definidos en §12an.
+- household_members es la autoridad de membresía, rol y permisos. users.household_id se conserva como hogar actualmente seleccionado, no como prueba de membresía; toda ruta protegida resuelve hogar activo y verifica (user_id, household_id) contra membresía.
+- La UI presenta las casas disponibles y el hogar activo de forma accesible. Crear/unirse añade una membresía sin borrar otras y selecciona la casa nueva. Seleccionar un hogar valida la membresía en servidor; si la selección guardada ya no es válida, no se sirve ningún dato hasta recuperar una casa permitida. Con una sola membresía puede seleccionarse automáticamente; con varias se exige una selección válida. Salir elimina solo la membresía activa y conserva las demás; si quedan casas, el usuario puede seleccionar una de ellas. Ningún endpoint mezcla o adopta datos entre hogares al cambiar de selección.
+- Cada lectura/escritura, carga diferida, sondeo, reintento, SSE y operación asíncrona usa el contexto de hogar de la petición. Cachés/respuestas tardías y escrituras offline quedan vinculadas al hogar original: nunca se muestran ni se reenvían en el hogar recién seleccionado. Un hogar ajeno o una selección obsoleta falla cerrado. La lógica de pertenencia del calendario compartido/invitado se mantiene sin abrir acceso cruzado a otros datos.
+- Las selecciones y permisos se comprueban en backend; ocultar controles en frontend no es autorización. El DTO de membresías comunica los permisos efectivos de esa casa. La preferencia personal, idioma y módulos que actualmente son de usuario no se transforman accidentalmente en datos de hogar.
 
-### Checklist QA-AI.HOUSEHOLD-SHARING.1
+**Contrato de IA por hogar:**
 
-- [x] Añadir primero pruebas rojas de migración/backfill y crear-hogar: nuevo creador como owner,
-      hogar antiguo elige solo admin más antiguo (empate estable), ninguno deja `NULL`, idempotencia y
-      conservación exacta de configuraciones/trabajos existentes.
-- [ ] Probar sucesión atómica al salir, cambiar de hogar, remover o degradar al owner; elección del
-      siguiente admin; creación/promoción cuando no había owner; hogar borrado y ausencia de admin.
-- [ ] Separar actor de propietario en las ocho integraciones IA y en worker/dispatcher: miembro usa
-      configuración activa del owner aunque no tenga propia; su configuración personal nunca es
-      fallback; fuera de hogar sigue usando la suya; hogar ajeno/owner sin configuración falla cerrado.
-- [ ] Probar ACLs de CRUD/test de configuración y cola: solo owner administra proveedor; cada miembro
-      conserva `user_id`, puede actuar solo en sus trabajos, el owner no obtiene payloads personales y
-      otro hogar no ve datos. Verificar API keys ausentes y URLs con userinfo rechazadas/redactadas.
-- [ ] Validar handoff con trabajos queued/running/failed: proveedor ya admitido permanece fijado al
-      `config_id` anterior, trabajos nuevos usan el nuevo owner y concurrencia/retry/cancel respetan
-      §12an. Ningún worker consulta config por el `user_id` actor cuando actor y owner difieren.
-- [ ] Añadir pruebas de servicio/UI ES/EN: propietario administra; miembro reconoce el proveedor
-      compartido en modo solo lectura; carga, error `NO_CONFIG`, reintento y acceso no autorizado.
-- [ ] Ejecutar Playwright aislado con dos usuarios del mismo hogar y un tercero de otro hogar en
-      escritorio/móvil; cubrir join, owner, cambio de rol, leave/handoff, trabajo real con proveedor
-      loopback, reload y cola sin fugas. Capturas sintéticas solamente.
-- [ ] Ejecutar migración contra DB anterior aislada, tests server/frontend, typechecks, build,
-      `check-ui`, E2E y coverage de cada archivo tocado ≥70 % en S/B/F/L; no rebajar gates globales.
+- La configuración activa y sus alternativas pertenecen al hogar, no al usuario creador/admin. Crear un hogar la inicializa desde la configuración personal activa del creador; la preparación idempotente de hogares existentes la inicializa desde la del admin más antiguo (joined_at ASC, user_id ASC). Se crea una configuración independiente por hogar cuando una misma configuración origen se usa en más de uno; las filas personales de origen y demás configuraciones se conservan. Si no existe una configuración activa de origen, el hogar queda sin configurar hasta que alguien autorizado lo haga.
+- Todos los miembros del hogar pueden usar las funciones de IA disponibles en la aplicación con la configuración activa de ese hogar. Solo miembros cuya membresía tiene settings=true pueden abrir la sección y consultar, probar, crear, activar, editar o eliminar sus configuraciones. Esta ACL se aplica en servidor a todas las rutas, también llamadas directas. El permiso para configurar no se convierte en permiso para leer prompts, adjuntos o trabajos de otros miembros.
+- Las configuraciones de hogares distintos son independientes; no se comparte estado por pertenecer la misma persona a ambos. Las configuraciones personales no se usan como fallback en un hogar. Fuera de cualquier hogar se conserva el uso individual existente. La asociación/autorización se basa en el hogar explícito, no en el user_id histórico de la fila; cualquier valor de origen se conserva solo como procedencia. DTO, mensajes, errores, logs y respuestas nunca devuelven api_key; URLs con userinfo se rechazan o redactan.
+- Un job registra explícitamente su hogar, solicitante y config_id al admitirse. El worker conserva ese hogar/proveedor aunque el usuario cambie de casa, y no vuelve a escoger proveedor por el hogar actual. Listado, retry, cancelación y orden se autorizan por el actor según el contrato vigente de §12an; otra casa no ve jobs, metadatos privados, prompts ni adjuntos. Los límites de concurrencia y reintentos de §12an siguen aplicando por configuración/proveedor.
+- El commit publicado 4e260b3 feat(ai): set household AI owner implementó una dirección anterior, ahora supersedida por configuración directa al hogar. No reescribir historia publicada. En la nueva implementación se ignora ai_owner_user_id; por seguridad de datos no se elimina ni reconstruye esa columna salvo que una migración no destructiva lo requiera.
 
-**Evidencia de la subunidad inicial (2026-10-04):** TDD reprodujo el fallo antes del cambio: ambas
-regresiones consultaban una columna inexistente (`ai_owner_user_id`). La migración añadida la crea y
-backfillea únicamente filas sin propietario, filtrando `role='admin'` y ordenando por
-`joined_at ASC, user_id ASC`; hogares sin admin permanecen en `NULL`. La creación nueva guarda al
-creador como owner en la misma transacción que su membresía admin. La repetición del arranque deja
-las asignaciones estables y conserva exactamente las filas previas de `ai_configs` y `ai_jobs`.
+### Checklist QA-HOUSEHOLD.MULTI-AI.1
 
-`npm test -- --reporter=dot src/config/database.spec.ts src/routes/household.routes.spec.ts`:
-**25/25**; `npm run build`: pasa. El test de migración abre una SQLite legacy temporal y la
-reinicializa; las rutas usan SQLite en memoria, sin servidor/proveedor externos. Coverage focal
-por archivo: `database.ts` **87.36/76.66/80/86.66 %** y `household.routes.ts`
-**100/90.36/100/100 %** (S/B/F/L). El comando de coverage filtrado devuelve código no cero porque
-el gate existente también evalúa otros archivos cubiertos que no ejecutó ese filtro; su cobertura
-completa queda pendiente y no se rebajó ningún umbral. Sucesión, resolución/ACL IA, UI, E2E y suite
-completa siguen pendientes.
+- [ ] Pruebas rojas de contexto activo, alta/selección de segunda casa, membresía inválida, login con selección obsoleta y pertenencia cruzada; crear/unirse no elimina membresías o datos anteriores.
+- [ ] Cambiar rutas de crear/unirse/salir para membresías múltiples y selección activa; cubrir admin, permisos por hogar, transacciones/rollback y eliminación acotada al hogar correspondiente.
+- [ ] Proteger en servidor todas las rutas household-scoped con membresía del hogar activo; cubrir pantry, recetas, calendario, compra, tickets, categorías, caducidades, recomendaciones y SSE. Incluir operaciones personales sin hogar y casos de usuario de otra casa.
+- [ ] Selector accesible para escritorio/móvil; selección persiste tras refresh, datos de cada servicio cambian juntos, una respuesta tardía del hogar anterior no pisa el nuevo, y caches/deduplicación incluyen el contexto de hogar.
+- [ ] Pruebas para cola offline de compra y colas de recibos/IA: ninguna operación pendiente se redirige a otra casa; todo job lleva hogar, actor y config fijos aunque cambie la selección.
+- [ ] Migración aislada/idempotente de ai_configs a scope de hogar: nueva casa usa creador; antigua usa admin más antiguo con empate estable; copia independiente cuando un origen abastece varias casas; conserva originales y demás configuraciones; ausente activo deja hogar sin IA.
+- [ ] Resolver proveedor por hogar en cada ruta, prueba, dispatcher y worker; no hay fallback personal ni entre hogares. Probar admin/permisos settings de miembros, denegación API directa, miembro sin settings que usa IA sin ver la sección, keys ausentes y jobs aislados por casa/actor.
+- [ ] E2E Playwright aislado con dos hogares y membresías compartidas: selector/refresh, calendario, inventario, compra, recibos, IA/configuración y colas; escritorio y móvil, capturas con datos sintéticos solamente. Verificar teclado, foco, nombre accesible y bordes de breakpoints.
+- [ ] Ejecutar migraciones y tests con DB temporal y fixtures sintéticos; proveedores repetibles se simulan, smoke real opt-in solo contra loopback. Registrar comandos/resultados; typecheck, build, check-ui, E2E y coverage por archivo ≥70 % S/B/F/L sin rebajar gates existentes.
 
-**Riesgos a cerrar con evidencia:** los hogares antiguos no guardan creador; `seed-data.ts` ordena
-miembros sin filtrar rol y no se reutiliza para elegir owner. Cambiar solo `activeAiConfig()` es
-insuficiente: rutas de prueba/CRUD, claim/retry/cancel y el gestor filtran por el usuario actor. Las
-pruebas deben usar SQLite temporal; no leer secretos ni ejecutar contra la DB de uso normal.
+**Rollback:** cada subunidad queda en commit atómico. La selección activa se puede restablecer al hogar válido anterior sin borrar membresías/datos. Desasociar IA revierte solo filas/claves nuevas creadas por la migración; no elimina las configuraciones personales originales, ai_jobs ni datos de otros hogares. No se borra ai_owner_user_id durante este cambio.
 
-**Rollback:** revertir esta unidad junto con su migración y cambios de rutas/cola/UI; la migración de
-rollback preserva el esquema y los datos previos, elimina solo `ai_owner_user_id` y no borra filas de
-`ai_configs` ni `ai_jobs`.
+## 12aq — Mejoras solicitadas: planificación, objetivos y contenido multimedia
+
+Estas mejoras se desarrollan en subunidades separadas después de estabilizar el contexto multi-hogar; los detalles de proveedor se resuelven inspeccionando las integraciones existentes antes de cada subunidad, sin inventar capacidades ni guardar secretos en fixtures.
+
+### QA-PLANNER.GOALS-AND-PARTIAL-REPLAN.1
+
+- [ ] Permitir regenerar el día completo, un plato/slot concreto o solo los platos seleccionados; lo no seleccionado mantiene identidad, horario y datos salvo una dependencia explícita aprobada.
+- [ ] Aceptar varios objetivos de planificación en una sola petición y un objetivo de texto libre; la configuración de objetivos también permite varias opciones y texto custom, no una sola opción.
+- [ ] Mantener selección y objetivos visibles/editables antes de confirmar; los errores/cancelación no dejan un plan parcialmente sobrescrito. Persistir únicamente los cambios confirmados del hogar activo.
+- [ ] TDD para validación/round-trip, objetivos vacíos o mezclados, replan parcial, cancelación, repetición/idempotencia, error IA y aislamiento entre dos hogares; validar UI real desktop/móvil.
+
+### QA-RECIPE.DETAIL-LEVELS-AND-MEDIA.1
+
+- [ ] Una generación devuelve en un JSON toda la receta: metadatos e ingredientes una sola vez, con instrucciones completas para nivel básico, intermedio y experto. Cambiar nivel solo cambia la presentación; no hace otra llamada ni guarda otra receta/ingredientes duplicados.
+- [ ] La ficha permite cambiar el nivel de detalle después de generar y conserva la selección al reabrir la receta según el alcance definido por la UI existente.
+- [ ] Al crear/ver receta, intentar buscar imagen y/o vídeo relacionado en Internet si la integración disponible lo permite. Resultados opcionales muestran fuente; ausencia/fallo de búsqueda no bloquea la receta ni produce una imagen/video inventados como resultado de búsqueda.
+- [ ] TDD de schema/parser para los tres niveles, persistencia, alternancia sin duplicados, búsqueda con resultados/vacío/error/timeout y acceso seguro a URL. UI desktop/móvil con fuentes accesibles.
+
+### QA-PRODUCT.IMAGES.1
+
+- [ ] Al agregar un producto al inventario, iniciar búsqueda de imagen en background sin bloquear la operación del usuario y respetando la cola/concurrencia del proveedor ya configurado.
+- [ ] Usuario con permiso existente de edición del inventario puede reintentar una búsqueda fallida, revisar hasta diez imágenes encontradas y elegir una; puede solicitar además tres/cuatro candidatos generados por IA o subir imagen propia.
+- [ ] Estado queued/running/complete/failed, retry idempotente, cancelación/repetición pertinente y límites de tamaño/tipo se modelan explícitamente; solo hogar activo y permisos adecuados acceden al producto/medios. Fallos externos no revierten alta ni escriben en otro hogar.
+- [ ] TDD con proveedor falso y concurrencia controlada; E2E real de cola UI aislado. No incluir imágenes personales ni secretos en capturas/fixtures.
+
+### QA-SHOPPING.GROUP-AND-WEIGHT-ORDER.1
+
+- [ ] La lista puede agruparse por categoría y/o ordenarse por peso; las opciones se pueden combinar o desactivar sin cambiar cantidades, checks, productos ni orden persistido original.
+- [ ] Incluir orden pesado-primero y una opción para dejar congelados al final. Peso desconocido o unidades incompatibles se mantienen en una zona estable, sin conversiones inventadas.
+- [ ] TDD para mezcla de categorías, unidades comparables/no comparables, peso ausente, productos congelados, empate, checks/manual order y cambio de hogar; UI responsive y accesible.
