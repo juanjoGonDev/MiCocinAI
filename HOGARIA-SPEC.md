@@ -4909,3 +4909,19 @@ Estas mejoras se desarrollan en subunidades separadas después de estabilizar el
 - [x] Verificar el endpoint de salud del backend por el destino nuevo y describir el reinicio necesario del cliente si ya estaba iniciado.
 
 **Evidencia (2026-10-04):** `node --test scripts/karma-coverage-gate.test.mjs` pasa 3/3. `127.0.0.1:3000/api/health` devuelve HTTP 200 de HogarIA; `localhost:4200/api/health` en el proceso cliente ya iniciado seguía llegando al dashboard ajeno y devolvía HTTP 500. Una instancia temporal de Angular cargada con el proxy corregido respondió HTTP 200 a `/api/health` y a la ruta UI `/auth/login`. No se envió ninguna credencial real. El proxy de `ng serve` se lee al arrancar: para que el cliente existente en `localhost:4200` aplique el arreglo hay que reiniciar solo el servidor frontend; no hace falta tocar ni detener el API.
+
+## 12as — Rejilla del calendario de 24 horas y scroll contextual
+
+**Fuente revalidada (2026-10-04):** `CalendarTimelineComponent` usa `windowFor()` para recortar las horas a los eventos/anclas y desplaza el inicio hacia el primer evento cuando la fecha visible no es hoy. La captura del 5–11 de octubre muestra la rejilla comenzando sobre las 05:00 y terminando en las horas del mediodía, aunque al crear un evento se necesita poder acceder al resto del día. La rejilla ya tiene scroll interno y el marcador/scroll de hora actual condicionado a que hoy esté entre los días mostrados.
+
+**Decisión del usuario:** la rejilla de Día/Semana siempre abarca el día civil completo, de 00:00 a 24:00. Si la fecha actual está visible, la posición inicial muestra la hora actual; para cualquier otro día/semana comienza arriba a las 00:00, no saltando al primer evento. La persona puede recorrer las 24 horas con el scroll interno; no se comprime todo el día en una pantalla.
+
+### QA-CALENDAR.FULL-DAY-TIMELINE.1
+
+- [ ] Día y Semana mantienen la escala 00:00–24:00 aunque no haya eventos, solo haya elementos «todo el día» o los eventos estén agrupados en unas pocas horas. Las etiquetas cubren 00:00–23:00 y eventos/selección de hora cerca de ambos límites no quedan recortados.
+- [ ] La rejilla conserva scroll vertical interno para acceder a las 24 horas. Abrir un día/semana que incluye hoy desplaza inicialmente a la hora actual; abrir un periodo distinto comienza a medianoche aunque contenga un evento temprano o tardío.
+- [ ] Navegar a otra fecha con la misma rejilla montada recalcula la posición inicial por el nuevo periodo. Una recarga de datos en el mismo periodo no pisa un scroll que la persona ya movió.
+- [ ] TDD: tests unitarios cubren ventana completa, etiquetas, eventos 00:00/23:xx, auto-scroll de hoy/no-hoy y límites; Playwright real con datos sintéticos valida Día/Semana, crear evento para la semana siguiente, accesibilidad y scroll en PC/móvil. Guardar e inspeccionar capturas comparables; no incluir datos personales.
+- [ ] Cobertura del código ejecutable afectado ≥70 % en statements/branches/functions/lines; verificar build, typecheck, `check-ui`, E2E aislado y límites responsive sin bajar gates existentes.
+
+**Enlace con el contrato anterior:** esta unidad supersede solo el recorte de ventana y el salto al primer evento de §12h.D. Se conservan colocación, clics y duración de bloques, orden, invitados y representación del marcador de ahora.
