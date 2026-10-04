@@ -620,25 +620,28 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
       .account__field {
         display: flex;
         flex-direction: column;
-        gap: var(--space-2);
+        gap: var(--space-1);
         max-width: 420px;
         padding-top: var(--space-3);
         border-top: 1px solid var(--border-default);
       }
       .account__label {
         font-size: var(--text-sm);
-        font-weight: var(--font-semibold);
+        font-weight: var(--font-medium);
+        line-height: var(--leading-normal);
         color: var(--text-primary);
       }
       .account__input {
         width: 100%;
         padding: var(--space-2) var(--space-3);
         border: 1px solid var(--border-default);
-        border-radius: var(--radius-md);
+        border-radius: var(--radius-lg);
         background: var(--bg-primary);
         color: var(--text-primary);
         font-family: var(--font-sans);
-        font-size: var(--text-sm);
+        font-size: var(--text-base);
+        font-weight: var(--font-normal);
+        line-height: var(--leading-normal);
         transition: var(--transition-fast);
       }
       .account__input:focus {

@@ -101,6 +101,7 @@ export type InputSize = 'sm' | 'md' | 'lg';
       .input__label {
         font-size: var(--text-sm);
         font-weight: var(--font-medium);
+        line-height: var(--leading-normal);
         color: var(--text-primary);
       }
 
@@ -118,6 +119,7 @@ export type InputSize = 'sm' | 'md' | 'lg';
         width: 100%;
         font-family: var(--font-sans);
         font-size: var(--text-base);
+        font-weight: var(--font-normal);
         line-height: var(--leading-normal);
         color: var(--text-primary);
         background: var(--bg-secondary);

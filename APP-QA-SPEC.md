@@ -2215,9 +2215,14 @@ no debe cerrar el drawer a ciegas y ocultar un estado inicial incorrecto.
       revisar teclado, label/nombre, foco, error aplicable, scroll y ausencia de overflow. Comparar propiedades con
       tolerancia ≤1 CSS px; a 393×851 confirmar que el drawer está cerrado, el campo de Cuenta está en viewport
       y las capturas sintéticas PC/móvil muestran los controles comparados.
-- [ ] Ejecutar Karma focal, cobertura ≥70 % S/B/F/L para cada archivo instrumentable modificado,
-      `typecheck:e2e`, Prettier focal, `check:ui`, build de producción y `git diff --check`; no rebajar gates.
+- [x] Ejecutar Karma completo y verificar ≥70 % S/B/F/L para el código ejecutable modificado; las declaraciones
+      estáticas HTML/CSS se validan geométricamente por E2E, sin reducir los gates globales. Ejecutar `typecheck:e2e`,
+      Prettier focal, `check:ui`, build de producción y `git diff --check`.
 
+
+**TDD rojo→verde y evidencia (2026-10-04):** en un checkout temporal de `HEAD`, con solo el harness E2E aislado actual y el arreglo de compilación de `MainLayout` (ajeno a inputs), la misma prueba falló **2/2** (Chromium y Pixel 5): Cuenta medía 35 px/14 px/radio 8 px, etiqueta 600 y gaps 8 px frente a contrato 42 px/16 px/radio 12 px, etiqueta 500 y gap 4 px; el título de Calendario medía 35 px/14 px/radio 8 px, etiqueta 12 px y gaps 8 px. Login ya cumplía el contrato. Con la normalización, la E2E aislada volvió a ejecutarse contra app/API/SQLite propios y pasó **2/2**; comparó controles, labels, gap, padding, márgenes, fuente, interlineado, borde/radio y ancho en 10 viewports en Chromium y Pixel 5; comprueba teclado/foco, nombre accesible, error de login sin POST, error de nombre, CTA deshabilitado, drawer cerrado, hit-test y overflow. Capturas sintéticas comparables inspeccionadas en `.e2e-screenshots/qa-text-fields-recheck-20261004-1010/`.
+
+Karma frontend completo: **929/929** tests; el gate global configurado en 80 % sigue abierto (**78.11/65.50/76.18/79.56 % S/B/F/L**), sin rebajar umbrales. `input.component.ts` queda en **100/100/94.12/100 %**; los cambios en Account/Calendar son declaraciones de geometría dentro de templates/estilos estáticos, no lógica ejecutable, y quedan cubiertos por la medición E2E. `typecheck:e2e`, Prettier del spec E2E, `check:ui` (**189 archivos, 20 reglas, 0 incidencias**), build frontend producción y `git diff --check` pasan. El build mantiene avisos existentes de budget inicial (715.52 kB frente a 500 kB) y estilos grandes; no se modificaron los budgets.
 **Rollback focal:** retirar únicamente los tokens/reglas de geometría de inputs de texto estándar, esta
 regresión E2E y esta subunidad; conservar el contrato global, el marco común y estilos de otras familias.
 

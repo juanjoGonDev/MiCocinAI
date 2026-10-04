@@ -364,9 +364,9 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         (onClose)="closeEventModal()"
       >
         <div class="meal-form">
-          <div class="meal-form__field">
+          <div class="meal-form__field meal-form__field--text">
             <label for="event-title">{{ 'calendar.que_es' | t }}</label>
-            <input id="event-title" name="eventTitle" class="cal-input" maxlength="120" [(ngModel)]="eventDraft.title" data-test="event-title" [placeholder]="'calendar.carpinteria_medir_el_pasillo' | t" />
+            <input id="event-title" name="eventTitle" class="cal-input cal-input--text" maxlength="120" [(ngModel)]="eventDraft.title" data-test="event-title" [placeholder]="'calendar.carpinteria_medir_el_pasillo' | t" />
           </div>
 
           <div class="meal-form__row">
@@ -1482,6 +1482,17 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
     .meal-form__field--sm {
       max-width: 220px;
+    }
+
+    .meal-form__field--text {
+      gap: var(--space-1);
+    }
+
+    .meal-form__field--text > label {
+      font-size: var(--text-sm);
+      font-weight: var(--font-medium);
+      line-height: var(--leading-normal);
+      color: var(--text-primary);
     }
 
     .meal-form__row {
