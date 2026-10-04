@@ -1,5 +1,4 @@
 import {
-  DEFAULT_WINDOW,
   HOUR_HEIGHT_PX,
   MEAL_ANCHOR_MINUTES,
   MIN_BLOCK_HEIGHT_PX,
@@ -66,62 +65,18 @@ describe('calendar-grid: horas y minutos', () => {
 });
 
 describe('calendar-grid: la ventana que se ensena', () => {
-  it('sin nada con hora, la ventana por defecto (manana y tarde, no las 24 h)', () => {
-    expect(windowFor([])).toEqual({ startMinutes: DEFAULT_WINDOW.startMinutes, endMinutes: DEFAULT_WINDOW.endMinutes });
-    expect(windowFor([timed(0, 1440, { allDay: true, timed: false })])).toEqual({
-      startMinutes: DEFAULT_WINDOW.startMinutes,
-      endMinutes: DEFAULT_WINDOW.endMinutes
-    });
-    expect(windowFor([]).endMinutes - windowFor([]).startMinutes).toBeLessThan(24 * 60);
+  it('siempre cubre 00:00–24:00, sin depender de eventos ni de la hora actual', () => {
+    const window = windowFor();
+    expect(window).toEqual({ startMinutes: 0, endMinutes: 1440 });
+    expect(hoursOf(window)).toEqual(Array.from({ length: 24 }, (_, hour) => hour));
   });
 
-  it('incluye la madrugada actual si hoy esta en el rango, aunque no haya eventos', () => {
-    const window = windowFor([], { minHours: 8, focusMinutes: at(2, 8) });
-    expect(window.startMinutes).toBe(at(1));
-    expect(window.endMinutes).toBe(at(9));
-    expect(hoursOf(window)).toContain(2);
-  });
+  it('mantiene eventos de madrugada y del final del día dentro de la escala', () => {
+    const window = windowFor();
+    const blocks = placeDay([timed(0, 30), timed(at(23, 30), 1440)], window);
 
-  it('la hora actual amplia los limites sin recortar eventos posteriores', () => {
-    const window = windowFor([timed(at(10), at(11))], { minHours: 8, focusMinutes: at(2, 8) });
-    expect(window.startMinutes).toBe(at(1));
-    expect(window.endMinutes).toBe(at(12));
-    expect(window.endMinutes).toBeGreaterThanOrEqual(at(11));
-  });
-
-  it('clampa la ventana a medianoche en ambos extremos y conserva el minimo posible', () => {
-    expect(windowFor([], { minHours: 8, focusMinutes: at(0, 8) })).toEqual({
-      startMinutes: 0,
-      endMinutes: at(8)
-    });
-    expect(windowFor([], { minHours: 8, focusMinutes: at(23, 52) })).toEqual({
-      startMinutes: at(16),
-      endMinutes: 1440
-    });
-  });
-
-  it('los limites son los del contenido, con una hora de aire y en punto', () => {
-    const items = [timed(at(9, 20), at(10)), timed(at(19), at(20, 10))];
-    const window = windowFor(items);
-    expect(window.startMinutes).toBe(8 * 60); // 9:20 - 1h, redondeado hacia arriba de la hora
-    expect(window.endMinutes).toBe(22 * 60); // 20:10 + 1h, redondeado al final de la hora
-    expect(window.startMinutes % 60).toBe(0);
-    expect(window.endMinutes % 60).toBe(0);
-    // Y las horas de la etiqueta caben justo en esa ventana, empezando en la primera.
-    expect(hoursOf(window)).toEqual([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
-  });
-
-  it('un solo evento no deja una tira: hay un minimo de horas', () => {
-    const window = windowFor([timed(at(20), at(20, 45))]);
-    expect(window.endMinutes - window.startMinutes).toBeGreaterThanOrEqual(6 * 60);
-    expect(window.startMinutes).toBeLessThanOrEqual(at(20));
-    expect(window.endMinutes).toBeGreaterThanOrEqual(at(20, 45));
-  });
-
-  it('un dia entero no pasa de las 24 horas', () => {
-    const window = windowFor([timed(10, 20), timed(1430, 1440)]);
-    expect(window.startMinutes).toBe(0);
-    expect(window.endMinutes).toBe(1440);
+    expect(blocks.map((block) => block.topPx)).toEqual([0, 23.5 * HOUR_HEIGHT_PX]);
+    expect(blocks[1].topPx + blocks[1].heightPx).toBe(24 * HOUR_HEIGHT_PX);
   });
 });
 
@@ -215,24 +170,18 @@ describe('calendar-grid: la comida sin hora y el gesto del usuario', () => {
     expect(mealTypeForMinutes(23 * 60 + 50)).toBe('dinner');
   });
 
-  it('al cargar se va al primer bulto si no es hoy, y a la hora actual si hoy esta visible', () => {
-    const window = { startMinutes: 7 * 60, endMinutes: 23 * 60 };
-    const items = [timed(at(12), at(13))];
-    expect(scrollTopFor(window, items, false, at(9))).toBe((((at(12) - 30) - 7 * 60) / 60) * HOUR_HEIGHT_PX);
-    expect(scrollTopFor(window, items, true, at(9))).toBe(
-      (((at(9) - 30) - 7 * 60) / 60) * HOUR_HEIGHT_PX
-    );
-    expect(scrollTopFor(window, [], false)).toBe(0);
+  it('abre a medianoche fuera del periodo actual aunque haya eventos y enfoca ahora cuando hoy aparece', () => {
+    const window = { startMinutes: 0, endMinutes: 24 * 60 };
+    expect(scrollTopFor(window, false, at(9))).toBe(0);
+    expect(scrollTopFor(window, true, at(9))).toBe(((at(9) - 30) / 60) * HOUR_HEIGHT_PX);
   });
 
-  it('una madrugada con evento futuro se abre cerca de ahora, no en el primer evento', () => {
+  it('una madrugada con evento futuro conserva el foco de ahora dentro del día completo', () => {
     const now = at(2, 8);
-    const window = windowFor([timed(at(10), at(11))], { minHours: 8, focusMinutes: now });
-    expect(scrollTopFor(window, [timed(at(10), at(11))], true, now)).toBe(
+    const window = windowFor();
+    expect(scrollTopFor(window, true, now)).toBe(
       ((now - 30 - window.startMinutes) / 60) * HOUR_HEIGHT_PX
     );
-    expect(scrollTopFor(window, [], true, now)).toBe(
-      ((now - 30 - window.startMinutes) / 60) * HOUR_HEIGHT_PX
-    );
+    expect(scrollTopFor(window, false, now)).toBe(0);
   });
 });

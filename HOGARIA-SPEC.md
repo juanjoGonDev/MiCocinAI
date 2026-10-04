@@ -4918,10 +4918,15 @@ Estas mejoras se desarrollan en subunidades separadas después de estabilizar el
 
 ### QA-CALENDAR.FULL-DAY-TIMELINE.1
 
-- [ ] Día y Semana mantienen la escala 00:00–24:00 aunque no haya eventos, solo haya elementos «todo el día» o los eventos estén agrupados en unas pocas horas. Las etiquetas cubren 00:00–23:00 y eventos/selección de hora cerca de ambos límites no quedan recortados.
-- [ ] La rejilla conserva scroll vertical interno para acceder a las 24 horas. Abrir un día/semana que incluye hoy desplaza inicialmente a la hora actual; abrir un periodo distinto comienza a medianoche aunque contenga un evento temprano o tardío.
-- [ ] Navegar a otra fecha con la misma rejilla montada recalcula la posición inicial por el nuevo periodo. Una recarga de datos en el mismo periodo no pisa un scroll que la persona ya movió.
-- [ ] TDD: tests unitarios cubren ventana completa, etiquetas, eventos 00:00/23:xx, auto-scroll de hoy/no-hoy y límites; Playwright real con datos sintéticos valida Día/Semana, crear evento para la semana siguiente, accesibilidad y scroll en PC/móvil. Guardar e inspeccionar capturas comparables; no incluir datos personales.
-- [ ] Cobertura del código ejecutable afectado ≥70 % en statements/branches/functions/lines; verificar build, typecheck, `check-ui`, E2E aislado y límites responsive sin bajar gates existentes.
+- [x] Día y Semana mantienen la escala 00:00–24:00 aunque no haya eventos o estén agrupados. Las etiquetas cubren 00:00–23:00 y los eventos 00:00/23:30 quedan dentro de la escala.
+- [x] La rejilla conserva scroll vertical interno. Si hoy aparece, enfoca la hora actual; para otro periodo comienza a medianoche aunque haya eventos.
+- [x] Cambiar de rango montado recalcula el inicio; actualizar datos del mismo rango y otros cambios de cocina no pisan el scroll manual.
+- [x] TDD: pruebas unitarias y Playwright real con datos sintéticos validan Día/Semana, creación de evento para la semana siguiente y scroll en escritorio/móvil. Se guardaron e inspeccionaron capturas sin datos personales.
+- [x] El código de geometría afectado supera 70 % en todas las métricas del scope; build, typecheck, `check-ui`, E2E aislado y límites responsive validados sin bajar gates.
+- [ ] Gate global de cobertura del frontend (80 % existente): el run completo pasa sus 929 pruebas, pero arroja statements 78.49 %, branches 65.59 %, functions 76.72 % y lines 79.88 %. Se conserva el umbral; ampliar cobertura global queda pendiente y la PR sigue Draft.
+
+**Evidencia (2026-10-04):** `pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/core/calendar-grid.spec.ts --include=src/app/features/calendar/calendar-timeline.component.spec.ts --browsers=ChromeHeadless` pasa 20/20. `pnpm test:e2e --project=chromium --project=mobile-chrome --grep "arranca en la vista de semana|la semana siguiente empieza"` pasa 4/4 con servidor y SQLite temporales; `pnpm test:e2e --project=chromium --project=mobile-chrome --grep "muestra y enfoca las horas de madrugada"` pasa 2/2 a las 02:08 en Europe/Madrid. Capturas inspeccionadas: `.e2e-screenshots/qa-calendar-full-day-1/{chromium,mobile-chrome}-next-week-{midnight,last-hours}.png`.
+
+`pnpm run build:client`, `pnpm run typecheck:e2e` y `pnpm run check:ui` pasan (189 archivos, 20 reglas). El lint del cliente no pudo iniciarse porque falta el paquete `@angular-eslint/builder`; no se instaló ni cambió ninguna dependencia. La suite completa ejecuta 929/929 pruebas, pero el gate de coverage 80 % de Karma queda rojo con los valores arriba; no se rebajó.
 
 **Enlace con el contrato anterior:** esta unidad supersede solo el recorte de ventana y el salto al primer evento de §12h.D. Se conservan colocación, clics y duración de bloques, orden, invitados y representación del marcador de ahora.

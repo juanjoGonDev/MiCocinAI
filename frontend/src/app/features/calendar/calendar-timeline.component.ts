@@ -55,10 +55,10 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
  * franja del desayuno, que es peor que no tenerla). Aquí el eje es la hora, como en cualquier
  * calendario que la gente ya sabe leer, y la comida es UNA COSA MAS con su color y su etiqueta.
  *
- * Por que no se ven 24 horas: `windowFor` recorta la vista a lo que hay (mas una hora de aire por
- * lado, redondeado a hora en punto) y, cuando hoy esta visible, incluye tambien la hora actual.
- * Enseñar las 24 y dejar que el usuario busque es lo que hacia esta pantalla antes, con la diferencia
- * de que antes no habia nada que buscar.
+ * La escala siempre recorre el día completo: así los huecos de madrugada y noche también sirven para
+ * crear eventos. El scroll inicial enfoca la hora actual si hoy aparece; en otros periodos empieza a
+ * medianoche. Cambiar de periodo aplica ese inicio otra vez, pero actualizar datos no pisa el scroll
+ * que haya elegido la persona.
  *
  * La geometria no vive aqui: vive en `core/calendar-grid.ts`, que es un fichero de numeros y por eso
  * se puede probar. Este componente solo pinta lo que aquellos numeros dicen.
@@ -368,8 +368,7 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
       .tl__scroll {
         position: relative;
         cursor: pointer;
-        /* Las 24 horas no caben en una pantalla, y a proposito no se fuerza que quepan: la ventana
-           ya recorta, y si recorta mucho el usuario scrollea dos franjas, no doce. */
+        /* Se conserva el scroll interno: el día tiene 24 horas, más de lo que cabe en el viewport. */
         max-height: min(62vh, 560px);
         overflow-y: auto;
         overflow-x: hidden;
@@ -563,6 +562,9 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
 
   @ViewChild('scroll') private scroller?: ElementRef<HTMLDivElement>;
 
+  private viewInitialized = false;
+  private dateRangeKey = '';
+
   /** El ancho de las franjas vacias, y si el click ha caido en una. */
   private readonly stepMinutes = 30;
 
@@ -581,7 +583,13 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     // `mealAnchors` entra en la lista porque es una preferencia: cambiar a que hora se cena en
     // Preferencias y volver atras tiene que recolocar las comidas que no tienen hora escrita.
-    if (changes['days'] || changes['kitchen'] || changes['mealAnchors']) this.rebuild();
+    if (changes['days'] || changes['kitchen'] || changes['mealAnchors']) {
+      const dateRangeChanged =
+        Boolean(changes['days']) && this.currentDateRangeKey() !== this.dateRangeKey;
+      if (changes['days']) this.dateRangeKey = this.currentDateRangeKey();
+      this.rebuild();
+      if (dateRangeChanged && this.viewInitialized) this.scrollToStart();
+    }
   }
 
   /** Las anclas a usar: las de la casa si están, las de la rejilla si no. */
@@ -590,6 +598,7 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   }
 
   ngAfterViewInit(): void {
+    this.viewInitialized = true;
     this.scrollToStart();
   }
 
@@ -754,8 +763,6 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
 
   private rebuild(): void {
     const map = new Map<string, TimelineItem[]>();
-    const all: TimelineItem[] = [];
-    const today = this.days.some((day) => day.isToday);
     for (const day of this.days) {
       const items: TimelineItem[] = [];
       if (this.kitchen) {
@@ -796,23 +803,20 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
         });
       }
       map.set(day.iso, items);
-      all.push(...items);
     }
     this.gridItems.set(map);
-    this.window.set(
-      windowFor(all, {
-        minHours: this.days.length === 1 ? 6 : 8,
-        focusMinutes: today ? nowMinutes() : undefined
-      })
-    );
+    this.window.set(windowFor());
+  }
+
+  private currentDateRangeKey(): string {
+    return this.days.map((day) => day.iso).join('|');
   }
 
   private scrollToStart(): void {
     const scroller = this.scroller?.nativeElement;
     if (!scroller) return;
     const today = this.days.some((day) => day.isToday);
-    const items = this.days.flatMap((day) => this.gridItems().get(day.iso) ?? []);
-    scroller.scrollTop = scrollTopFor(this.window(), items, today);
+    scroller.scrollTop = scrollTopFor(this.window(), today);
   }
 }
 

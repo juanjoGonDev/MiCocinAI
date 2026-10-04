@@ -5,9 +5,9 @@ import { MealType } from '../shared/models/calendar.model';
  *
  * Por que existe aparte del componente: lo que decide este fichero es DONDE se pinta cada cosa y
  * CUANTO ocupa, y eso es exactamente lo que no se ve en un build. Un alto mal calculado hace que dos
- * citas se tapen, y una ventana de horas mal clampeada deja el calendario ensehando las 24 horas —o
- * tres— cuando lo que hay esta entre las 9 y las 21. Son numeros: se prueban mejor aqui que en una
- * captura, y el componente se queda en pintar lo que aqui se decide.
+ * citas se tapen, y una ventana que no abarca el día completo oculta horas a las que se puede crear
+ * un evento. Son numeros: se prueban mejor aqui que en una captura, y el componente se queda en
+ * pintar lo que aqui se decide.
  *
  * Unidades: minutos del día (0..1440) para todo lo que es tiempo, y pixeles solo al salir. La
  * conversion px/minutos vive en `HOUR_HEIGHT_PX`; si manana la altura por hora es configurable desde
@@ -44,9 +44,6 @@ export const MEAL_ANCHOR_MINUTES: Record<MealType, number> = {
   snack: 17 * 60 + 30,
   dinner: 21 * 60
 };
-
-/** Ventana de un rango vacio que no contiene hoy; para hoy se añade la hora actual al encuadre. */
-export const DEFAULT_WINDOW = { startMinutes: 7 * 60, endMinutes: 23 * 60 };
 
 export interface GridItem {
   id: string;
@@ -99,48 +96,9 @@ export function clampMinutes(minutes: number): number {
   return Math.max(0, Math.min(DAY_MINUTES, Math.round(minutes)));
 }
 
-/**
- * La ventana visible: los limites superior e inferior de lo que hay, no las 24 horas. Si el rango
- * contiene hoy, `focusMinutes` anade la hora actual para que la madrugada tambien se pueda ver.
- *
- * Es la parte de «como Google» que de verdad se usa a diario: el día tiene tres cosas y la rejilla
- * no puede obligar a hacer scroll por once franjas vacias. Se redondea a la hora para que la rejilla
- * empiece y acabe en una linea de hora (empezar a las 08:37 pinta una franja cortada, que parece un
- * fallo aunque no lo sea), se deja una hora de aire a cada lado para ver el contexto, y un minimo de
- * horas para que un único evento de las 20:00 no deje una tira de 48 px.
- */
-export function windowFor<T extends GridItem>(
-  items: T[],
-  options: { minHours?: number; padMinutes?: number; focusMinutes?: number } = {}
-): GridWindow {
-  const minHours = options.minHours ?? 6;
-  const pad = options.padMinutes ?? MINUTES_PER_HOUR;
-  const visible = items.filter((item) => !item.allDay);
-  const focus = Number.isFinite(options.focusMinutes) ? clampMinutes(options.focusMinutes!) : null;
-  if (!visible.length && focus === null) return { ...DEFAULT_WINDOW };
-
-  const starts = visible.map((item) => item.startMinutes);
-  const ends = visible.map((item) => item.endMinutes);
-  if (focus !== null) {
-    starts.push(focus);
-    ends.push(focus);
-  }
-  let start = Math.min(...starts);
-  let end = Math.max(...ends);
-  start = clampMinutes(start - pad);
-  end = clampMinutes(end + pad);
-
-  start = Math.floor(start / MINUTES_PER_HOUR) * MINUTES_PER_HOUR;
-  end = Math.ceil(end / MINUTES_PER_HOUR) * MINUTES_PER_HOUR;
-
-  if (end - start < minHours * MINUTES_PER_HOUR) {
-    // Se estira hacia abajo primero, y si no cabe, hacia arriba: «el día empieza pronto» es mas
-    // util que «acaba tarde» cuando el usuario mira la manana.
-    end = Math.max(end, Math.min(DAY_MINUTES, start + minHours * MINUTES_PER_HOUR));
-    if (end - start < minHours * MINUTES_PER_HOUR) start = Math.max(0, end - minHours * MINUTES_PER_HOUR);
-  }
-  if (end <= start) end = Math.min(DAY_MINUTES, start + MINUTES_PER_HOUR);
-  return { startMinutes: start, endMinutes: end };
+/** La escala civil completa que comparten las vistas de día y semana. */
+export function windowFor(): GridWindow {
+  return { startMinutes: 0, endMinutes: DAY_MINUTES };
 }
 
 /** Las horas que se pintan (etiquetas de la izquierda), siempre en punto. */
@@ -237,12 +195,12 @@ export function nowMinutes(date: Date = new Date()): number {
   return date.getHours() * MINUTES_PER_HOUR + date.getMinutes();
 }
 
-/** Si la ventana debe traer algo al cargar: el primer bloque del día, o «ahora» si es hoy. */
-export function scrollTopFor<T extends GridItem>(window: GridWindow, items: T[], today: boolean, now = nowMinutes()): number {
-  const first = items.filter((item) => !item.allDay).sort((a, b) => a.startMinutes - b.startMinutes)[0];
-  const desired = today ? now : first ? first.startMinutes : window.startMinutes;
-  const target = Math.max(window.startMinutes, Math.min(window.endMinutes, desired));
-  // Un poco de aire arriba: pegar el primer bloque al borde hace que parezca un recorte, no el
-  // principio de la vista.
-  return Math.max(0, ((Math.max(window.startMinutes, target - MINUTES_PER_HOUR / 2) - window.startMinutes) / MINUTES_PER_HOUR) * HOUR_HEIGHT_PX);
+/** Inicio del scroll: medianoche fuera de hoy, y media hora antes de ahora si hoy está visible. */
+export function scrollTopFor(window: GridWindow, today: boolean, now = nowMinutes()): number {
+  if (!today) return 0;
+  const target = Math.max(
+    window.startMinutes,
+    Math.min(window.endMinutes, clampMinutes(now - MINUTES_PER_HOUR / 2))
+  );
+  return ((target - window.startMinutes) / MINUTES_PER_HOUR) * HOUR_HEIGHT_PX;
 }

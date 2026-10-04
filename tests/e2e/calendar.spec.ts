@@ -64,11 +64,73 @@ test.describe('Calendario', () => {
       /\d{1,2} – \d{1,2} de |\d{1,2} [a-zñ]{3,4}\.? – \d{1,2} [a-zñ]{3,4}/
     );
 
-    // Siete columnas, y NO las 24 horas: la rejilla se recorta a lo que hay.
+    // Siete columnas y la escala civil completa; las horas vacías también deben poder abrirse.
     await expect(page.locator('[data-test="timeline-col"]')).toHaveCount(7);
     const hours = await page.locator('.tl__hour').count();
-    expect(hours).toBeGreaterThan(5);
-    expect(hours).toBeLessThan(24);
+    expect(hours).toBe(24);
+    await expect(page.locator('.tl__hour').first()).toHaveText('00:00');
+    await expect(page.locator('.tl__hour').last()).toHaveText('23:00');
+  });
+
+  test('la semana siguiente empieza a medianoche y permite crear un evento en la última franja', async ({
+    page
+  }, testInfo) => {
+    const targetDate = daysFromToday(7);
+    const timeline = page.locator('.tl__scroll');
+
+    await page.locator('input[type="date"]').fill(targetDate);
+    await expect(page).toHaveURL(/[?&]date=/);
+    await expect(page.locator('[data-test="timeline-col"]')).toHaveCount(7);
+    await expect(page.locator('.tl__hour')).toHaveCount(24);
+    await expect(page.locator('.tl__hour').first()).toHaveText('00:00');
+    await expect(page.locator('.tl__hour').last()).toHaveText('23:00');
+    await expect.poll(() => timeline.evaluate((element) => element.scrollTop)).toBe(0);
+
+    const scrollMetrics = await timeline.evaluate((element) => ({
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight
+    }));
+    expect(scrollMetrics.scrollHeight).toBeGreaterThan(scrollMetrics.clientHeight);
+
+    const screenshotDirectory = resolve('.e2e-screenshots/qa-calendar-full-day-1');
+    mkdirSync(screenshotDirectory, { recursive: true });
+    await page.screenshot({
+      path: resolve(screenshotDirectory, `${testInfo.project.name}-next-week-midnight.png`),
+      fullPage: false,
+      animations: 'disabled'
+    });
+
+    await page.locator('#cal-view-day').click();
+    await expect(page.locator('[data-test="timeline-col"]')).toHaveCount(1);
+    await expect(page.locator('.tl__hour')).toHaveCount(24);
+    await expect.poll(() => timeline.evaluate((element) => element.scrollTop)).toBe(0);
+    await page.locator('#cal-view-week').click();
+    await expect(page.locator('[data-test="timeline-col"]')).toHaveCount(7);
+    await expect.poll(() => timeline.evaluate((element) => element.scrollTop)).toBe(0);
+
+    await page.locator('[data-test="event-add"]').click();
+    await page.locator('#event-title').fill('Cita nocturna sintética');
+    await page.locator('#event-date').fill(targetDate);
+    await page.locator('#event-start').fill('23:30');
+    await page.locator('#event-end').fill('23:59');
+    await page.locator('[data-test="event-save"]').click();
+
+    const lateEvent = page.locator('[data-test="timeline-block-event"]').filter({
+      hasText: 'Cita nocturna sintética'
+    });
+    await expect(lateEvent).toHaveCount(1);
+    await expect.poll(() => timeline.evaluate((element) => element.scrollTop)).toBe(0);
+
+    await timeline.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await lateEvent.scrollIntoViewIfNeeded();
+    await expect(lateEvent).toBeInViewport();
+    await page.screenshot({
+      path: resolve(screenshotDirectory, `${testInfo.project.name}-next-week-last-hours.png`),
+      fullPage: false,
+      animations: 'disabled'
+    });
   });
 
   test('el conmutador cambia la vista, viaja en la URL y sobrevive a recargar', async ({ page }) => {
