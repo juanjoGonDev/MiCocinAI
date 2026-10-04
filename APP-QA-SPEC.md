@@ -2268,10 +2268,10 @@ que una persona pueda corregir desde esa ficha una tienda desconocida o fecha au
 corrección en historial. El loopback es fixture sintético: no prueba reconocimiento visual real; eso
 pertenece a `QA-AI.REAL-INTEGRATIONS.1`.
 
-**Contrato:** tras terminar el análisis, si tienda o fecha no se reconocen, sus controles accesibles
-quedan vacíos y editables. La persona puede completar ambos, guardar, recargar y ver los valores en
-detalle/historial. Los nombres accesibles deben estar traducidos ES/EN. En `queued`/`analyzing` siguen
-sin edición para evitar competir con el worker activo.
+**Contrato:** si tienda o fecha no se reconocen, sus controles accesibles quedan vacíos y editables.
+La persona puede completarlos, guardar, recargar y ver los valores en detalle/historial. Los nombres
+accesibles deben estar traducidos ES/EN. La unidad `QA-RECEIPT.ACTIVE-METADATA.1` amplía el mismo
+contrato a `queued`/`analyzing`, con precedencia manual por campo para no competir con el worker.
 
 - [x] Ampliar la E2E de loopback para responder `store: null` y `purchaseDate: null` en ES y EN,
       usar nombres accesibles para tienda/fecha en ES y EN, y rellenar/corregir ambos desde `review`.
@@ -2356,18 +2356,60 @@ cola y se abre al llegar a `analyzing`, los borradores no se pierden con el refr
 de líneas, notas y confirmación de inventario conserva sus límites actuales; este cambio solo extiende
 tienda/fecha.
 
-- [ ] Añadir primero pruebas de componente rojas: campos visibles/editables en `queued` y `analyzing`,
+- [x] Añadir primero pruebas de componente rojas: campos visibles/editables en `queued` y `analyzing`,
       accesibilidad/teclado y conservación de borrador mientras el ticket recibido se refresca por polling.
-- [ ] Añadir regresiones SQLite de PATCH en ambos estados y worker con respuesta de proveedor retenida:
+- [x] Añadir regresiones SQLite de PATCH en ambos estados y worker con respuesta de proveedor retenida:
       los flags manuales se respetan por campo, el campo intacto recibe el valor IA, y no se altera el
       estado/efectos del ticket por guardar metadata.
-- [ ] Añadir E2E loopback aislada: abrir un ticket con IA pendiente, corregir tienda/fecha desde la UI,
+- [x] Añadir E2E loopback aislada: abrir un ticket con IA pendiente, corregir tienda/fecha desde la UI,
       guardar antes de liberar la respuesta, terminar análisis, y comprobar API, reload e historial; cubrir
       queued/analyzing, ES/EN, errores reintentables, teclado y Chromium/Pixel 5 sin overflow.
-- [ ] Ejecutar primero la reproducción roja; después Karma/Vitest y Playwright aislados con SQLite/puertos/
+- [x] Ejecutar primero la reproducción roja; después Karma/Vitest y Playwright aislados con SQLite/puertos/
       seed temporales, coverage ≥70 % S/B/F/L por archivo instrumentable, `typecheck:e2e`, formato,
       `check:ui`, build y `git diff --check`. Solo fixtures sintéticas; sin archivos de Descargas ni llamadas
       a WebAPI/proveedores reales en esta unidad.
+
+**Evidencia QA-RECEIPT.ACTIVE-METADATA.1 (2026-10-04):** TDD rojo confirmado primero en Karma:
+`ReceiptDetailComponent` falló porque `metadatosEditables('queued')` devolvía `false` y los campos no se
+renderizaban. La E2E de Chromium/Pixel 5 reprodujo el mismo hueco en las cuatro combinaciones ES/EN,
+escritorio/móvil (`getByLabel('Tienda'/'Store')` ausente en cola). El cambio de producción se limita a
+permitir tienda/fecha en `queued` y `analyzing`; las notas, líneas y confirmación mantienen sus límites.
+
+La regresión SQLite de `PATCH` pasó para ambos estados conservando el estado y los flags manuales.
+El worker retuvo la respuesta, falló en stream y fallback para forzar el reintento, y luego comprobó que
+la tienda editada durante `analyzing` prevalece, la fecha intacta llega desde IA y no se registra la tienda
+detectada que se descartó. `pnpm --filter @hogaria/server exec vitest run
+src/routes/receipts.routes.spec.ts src/utils/ai-queue.spec.ts` pasó **46/46**.
+
+Con `--coverage`, las rutas instrumentadas de esta unidad superan 70 % en las cuatro métricas:
+`receipts.routes.ts` **82.99/72.58/85.18/84.23 %** y `ticket-queue.ts`
+**81.74/74.80/84.12/88.78 %** (S/B/F/L). El comando focal sale con código 1 porque la configuración
+existente aplica también su umbral por archivo a la lista global instrumentada, donde los ficheros no
+ejecutados por este subconjunto aparecen con cobertura cero; no se alteró el gate. El porcentaje de
+`ai-client.ts` en esta ejecución parcial no representa el alcance de la unidad.
+
+`E2E_CHROME_BIN` apunta al Chrome local del sistema porque no está instalado el ejecutable Chromium de
+Playwright. `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium
+--project=mobile-chrome tests/e2e/receipts.spec.ts --grep "guarda en cola y durante el análisis"
+--reporter=line` pasó **4/4** (Chrome escritorio + Pixel 5, ES/EN), con SQLite/semilla/puertos
+temporales y proveedor loopback. Cubrió guardar en cola, fallo PATCH 503 y reintento, borrador de fecha
+conservado por polling al pasar a análisis, guardar durante `analyzing`, respuesta posterior de IA,
+persistencia API/recarga/historial, teclado y ausencia de overflow en 320×568, 568×320, 768×1024 y
+1024×768. Chromium escritorio pasó **2/2** (ES/EN) y Pixel 5 móvil **2/2** (ES/EN). La E2E consulta
+`ai_jobs` mediante SQLite en solo lectura, valida que cada ticket conserva exactamente un trabajo y
+compara el número de solicitudes al proveedor antes/después de cada PATCH: guardar no provoca una
+solicitud extra ni duplica/cancela la ejecución. No se fija el total de solicitudes porque una ejecución
+puede incluir el fallback de streaming.
+Se cierran los avisos sintéticos antes de capturar. El runner confirmó limpieza del stack y SQLite.
+Capturas sintéticas revisadas e ignoradas por Git en `.e2e-screenshots/qa-receipt-active-metadata-1/`.
+
+Karma pasó **25/25**. Cobertura de `receipt-detail.component.ts`: **98.63/89.02/100/100 % S/B/F/L**;
+el run focal devuelve exit 1 solo porque el gate agregado existente exige 80 % global y el subconjunto
+alcanza **30.86/16.69/22.28/32.81 %**; no se cambió el gate. `pnpm run typecheck:e2e`, Prettier focal
+de los cinco archivos TypeScript, `pnpm run check:ui` (**189 archivos, 20 reglas**), build de
+producción y `git diff --check` pasan. El build mantiene avisos preexistentes de presupuesto y de
+imports/tipos en otras vistas; el archivo Markdown completo ya fallaba el chequeo Prettier en `HEAD` y
+este fragmento sí coincide con su salida formateada. Sin WebAPI, tokens ni tickets reales.
 
 **Rollback:** retirar únicamente el permiso de edición durante `queued`/`analyzing`, sus pruebas y este
 subapartado; conservar la detección, edición terminal e historial.
