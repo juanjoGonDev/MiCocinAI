@@ -1088,6 +1088,19 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 **Evidencia verde QA-SHELL.DRAWER.ESCAPE.1 (2026-10-01):** `frontend` Karma focal, 4/4; `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/main-layout-drawer.spec.ts`, 2/2, rate limit activo y cleanup del entorno temporal. Se ejercitaron teclado/Enter/Escape, foco devuelto, Escape no-op al cerrar y en desktop, dialog superior, cierre por botón/overlay/navegación y scroll del menú en horizontal 568×320. Matriz: 320×568, 393×851, 568×320, 1023×768, 1024×900, 1025×900 y 1440×900; no hubo overflow horizontal. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-shell-drawer-final-20261001/main-layout-drawer-desktop.png` y `main-layout-drawer-mobile.png`. Rollback: revertir el commit atómico QA-SHELL.DRAWER.ESCAPE.1; no hay migración de datos.
 
+### QA-SHELL.DRAWER.PROFILE-NAV.1 · cerrar el drawer al abrir Cuenta
+
+**Fuente revalidada (2026-10-04):** `MainLayoutComponent` cierra el drawer al navegar mediante `.sidebar__item` y Configuración, pero `.sidebar__account-main` llama a `navigateToProfile()`, que solo navega a `/account`. Si se usa el avatar/cuenta del drawer móvil, `isSidebarOpen` y el overlay persisten sobre Cuenta. La E2E del Escape prueba navegación por Recetas, no la acción de Cuenta; tampoco exige que el sidebar esté fuera del viewport antes de capturar campos.
+
+**Conducta esperada:** navegar a Cuenta desde el drawer móvil cierra el drawer y retira el overlay antes de mostrar la pantalla; el header de perfil sigue navegando como hasta ahora y el sidebar de escritorio sigue visible.
+
+- [ ] Añadir primero regresiones Karma y Playwright reales que abran el drawer, activen Cuenta y verifiquen destino, `aria-expanded=false`, overlay ausente y sidebar fuera del viewport; confirmar rojo antes de producción.
+- [ ] Cerrar el drawer en el flujo de perfil sin alterar la navegación, foco/teclado, header de perfil ni sidebar desktop.
+- [ ] En Chromium y Pixel 5 cubrir 393×851, 320×568, 568×320 y el borde 1023/1024/1025; probar también la captura móvil cerrada de Cuenta tras completar la transición, sin overflow.
+- [ ] Ejecutar Karma focal, cobertura ≥70 % S/B/F/L del componente instrumentable, `typecheck:e2e`, E2E aislada, Prettier focal y `git diff --check`; guardar e inspeccionar capturas sintéticas PC/móvil.
+
+**Rollback focal:** retirar el cierre al navegar desde el perfil del drawer, las regresiones de navegación/captura y este subapartado; no revertir los cierres existentes por enlace, overlay o Escape.
+
 - [ ] `/dashboard`: estados con/sin datos, resumen, vencimientos, comidas/recetas y cada CTA; verificar los destinos anotados en discrepancias.
 - [ ] `/household`: crear hogar, unirse por código, código incorrecto, copiar/regenerar invitación, miembros/roles, permisos para compartir, salir del hogar y estados sin hogar.
 - [ ] `/account`: tabs y URL, editar/cancelar nombre, seguridad/cambio de contraseña, cerrar sesión, información de cuenta; avatar: formatos/tamaño permitidos, recorte, zoom, recentrar, cancelar, subir, quitar, error y persistencia.
@@ -2084,6 +2097,12 @@ contenido posterior. El E2E prueba errores donde el campo los expone y, en el t�
 validación existente del botón deshabilitado sin inventar un estado de error que el producto no ofrece.
 No se añade una variante por ruta.
 
+**Hallazgo de captura (2026-10-04):** el artefacto sintético
+`.e2e-screenshots/qa-text-fields-1/mobile-chrome-account-393x851.png` muestra el drawer móvil abierto,
+que cubre el formulario aunque `toBeVisible()` siga considerando visible el input. La E2E debe comprobar
+el estado cerrado accesible del menú y que el campo queda dentro del viewport antes de guardar la captura;
+no debe cerrar el drawer a ciegas y ocultar un estado inicial incorrecto.
+
 - [ ] Añadir primero una regresión E2E aislada para Email de login, Nombre de Cuenta y título del diálogo
       Evento; medir label-control, caja, padding, márgenes, fuente, interlineado, borde y radio calculados,
       documentar el baseline rojo y comprobar que un login inválido no hace POST.
@@ -2091,7 +2110,8 @@ No se añade una variante por ruta.
       focos accesibles ni anchura de formulario; mantener iguales medidas en estados normal/foco/error.
 - [ ] Verificar Chromium y Pixel 5 a 320×568, 393×851, 568×320, 767/768/769, 1023/1024/1025 y 1440×900;
       revisar teclado, label/nombre, foco, error aplicable, scroll y ausencia de overflow. Comparar propiedades con
-      tolerancia ≤1 CSS px y guardar/inspeccionar capturas sintéticas PC/móvil.
+      tolerancia ≤1 CSS px; a 393×851 confirmar que el drawer está cerrado, el campo de Cuenta está en viewport
+      y las capturas sintéticas PC/móvil muestran los controles comparados.
 - [ ] Ejecutar Karma focal, cobertura ≥70 % S/B/F/L para cada archivo instrumentable modificado,
       `typecheck:e2e`, Prettier focal, `check:ui`, build de producción y `git diff --check`; no rebajar gates.
 
