@@ -4898,3 +4898,14 @@ Estas mejoras se desarrollan en subunidades separadas después de estabilizar el
 - [ ] La lista puede agruparse por categoría y/o ordenarse por peso; las opciones se pueden combinar o desactivar sin cambiar cantidades, checks, productos ni orden persistido original.
 - [ ] Incluir orden pesado-primero y una opción para dejar congelados al final. Peso desconocido o unidades incompatibles se mantienen en una zona estable, sin conversiones inventadas.
 - [ ] TDD para mezcla de categorías, unidades comparables/no comparables, peso ausente, productos congelados, empate, checks/manual order y cambio de hogar; UI responsive y accesible.
+
+## 12ar — Error de login por proxy local
+
+**Fuente revalidada (2026-10-04):** el navegador usa `frontend/proxy.conf.json` para enviar `/api` a `localhost:3000`. En el entorno actual `localhost` resuelve al listener IPv6 que sirve otro dashboard; el backend HogarIA responde correctamente por `127.0.0.1:3000`. El error visible como “Recurso no encontrado” es por tanto un destino de proxy equivocado, no una contraseña.
+
+### QA-LOCAL-DEV.PROXY-IPV4.1
+
+- [x] Fijar el proxy de desarrollo a `127.0.0.1` y añadir una prueba que impida volver a `localhost` ambiguo.
+- [x] Verificar el endpoint de salud del backend por el destino nuevo y describir el reinicio necesario del cliente si ya estaba iniciado.
+
+**Evidencia (2026-10-04):** `node --test scripts/karma-coverage-gate.test.mjs` pasa 3/3. `127.0.0.1:3000/api/health` devuelve HTTP 200 de HogarIA; `localhost:4200/api/health` en el proceso cliente ya iniciado seguía llegando al dashboard ajeno y devolvía HTTP 500. Una instancia temporal de Angular cargada con el proxy corregido respondió HTTP 200 a `/api/health` y a la ruta UI `/auth/login`. No se envió ninguna credencial real. El proxy de `ng serve` se lee al arrancar: para que el cliente existente en `localhost:4200` aplique el arreglo hay que reiniciar solo el servidor frontend; no hace falta tocar ni detener el API.

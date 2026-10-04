@@ -37,3 +37,10 @@ test('Karma keeps the 80% gate and CI default while exposing a local Chrome laun
   assert.equal(options.customLaunchers?.ChromeHeadlessLocal?.base, 'ChromeHeadless');
   assert.ok(options.customLaunchers.ChromeHeadlessLocal.flags.includes('--use-angle=swiftshader'));
 });
+
+test('the local frontend proxy uses explicit IPv4 loopback for API and health routes', () => {
+  const proxy = JSON.parse(readFileSync(join(repoRoot, 'frontend/proxy.conf.json'), 'utf8'));
+
+  assert.equal(proxy['/api'].target, 'http://127.0.0.1:3000');
+  assert.equal(proxy['/health'].target, 'http://127.0.0.1:3000');
+});
