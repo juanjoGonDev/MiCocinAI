@@ -2126,3 +2126,33 @@ sin edición para evitar competir con el worker activo.
 
 **Rollback:** retirar solo la ampliación E2E y esta subunidad; cambiar código de producción únicamente
 si la regresión demuestra un defecto.
+
+#### Subunidad QA-RECEIPT.HISTORY.DATE-LOCALE.1 · fecha civil localizada en el historial
+
+**Fuente revalidada (2026-10-04):** el idioma activo actualiza `dateLocale()` a `es-ES` o `en-GB`
+(`frontend/src/app/core/services/i18n.service.ts`), y `core/time.ts` define que las fechas deben
+seguir ese idioma. Sin embargo, el historial usa `DatePipe` con el `LOCALE_ID` estático. La E2E
+aislada mostró el defecto: `2024-03-01` aparece como `3/1/24` con la app en español; el formato
+esperado por `es-ES` es `1/3/24`. La E2E de edición también detectó que su expectativa de “No date”
+era obsoleta después de guardar la fecha corregida; se sustituyó por una verificación positiva del
+valor persistido que reveló la discrepancia de idioma. El endpoint conserva la fecha civil exacta.
+
+**Contrato:** el historial presenta la fecha de compra `YYYY-MM-DD` en formato corto del idioma
+activo, sin convertirla a otro día por zona horaria. La fecha de subida es un instante y se muestra
+con el idioma activo y la zona local del dispositivo. Un valor de compra nulo conserva el texto
+«Sin fecha / No date»; después de editarlo, el historial muestra el dato corregido.
+
+- [ ] Añadir primero pruebas unitarias para formatear fechas civiles cortas en `es-ES` y `en-GB`,
+      incluido valor nulo/ilegible y estabilidad del día frente a zona horaria; la E2E actual es roja
+      en español y pasa el caso de formato estadounidense en inglés.
+- [ ] Sustituir en el historial de tickets el `DatePipe` estático por formateadores compartidos de
+      `core/time.ts` para fecha civil y fecha/hora de subida; conservar etiqueta, fecha API y orden.
+- [ ] Ejecutar la E2E loopback en Chromium y Pixel 5: tienda/fecha iniciales nulas editables en ambos
+      idiomas, fecha localizada tras guardar/recargar, valor visible correcto en historial, diferencia
+      entre compra/subida, accesibilidad y breakpoints sin overflow. Revisar capturas solo sintéticas.
+- [ ] Ejecutar unitarias, typecheck, formato, `check:ui`, build, `git diff --check` y cobertura de
+      archivos instrumentables modificados ≥70 % S/B/F/L; no llamar WebAPI/proveedor ni usar tickets
+      reales en esta unidad.
+
+**Rollback:** revertir solo los formateadores/uso de fecha del historial, sus pruebas y este subapartado;
+conservar la edición de metadatos y el resto del historial.
