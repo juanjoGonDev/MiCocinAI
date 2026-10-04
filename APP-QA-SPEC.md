@@ -2063,3 +2063,32 @@ expresado por color y sin imponer igual anchura a etiquetas de longitudes distin
 
 **Rollback focal:** revertir únicamente la migración de los CTA primarios de Compra a `app-button`, esta
 regresión E2E y este subapartado; no revertir la unidad `app-button` ni otros cambios de Compra.
+
+### Subunidad QA-CALENDAR.EARLY-HOURS.1 · hora actual visible en la rejilla
+
+**Fuente revalidada antes de implementar (2026-10-04):** el contrato histórico vigente de `HOGARIA-SPEC.md §8f`
+establece que, al cargar, la rejilla debe acercarse a «ahora» si hoy está visible. En cambio,
+`frontend/src/app/core/calendar-grid.ts` devuelve siempre la ventana fija 07:00–23:00 cuando no hay eventos
+con hora; `calendar-timeline.component.ts` pinta la línea actual solo si «ahora» cae dentro de esa ventana,
+y su auto-scroll prioriza un primer evento futuro incluso si hoy ya va por la madrugada. La captura del usuario
+muestra el caso reproducible: calendario semanal con hoy domingo, reloj local 02:08 y rejilla empezando a 07:00.
+La conducta acordada para esta unidad es incluir y mantener visible la hora actual cuando el rango de día/semana
+contenga hoy, tanto con la agenda vacía como con bloques posteriores, sin recortar eventos ni expandir a las
+24 horas si el mínimo de ventana permite evitarlo. Cerca de medianoche se clampa al día (00:00–24:00). En rangos
+que no contienen hoy se conserva el recorte y auto-scroll por eventos actuales.
+
+- [ ] Añadir primero pruebas unitarias rojas para 02:08 vacío y con un evento posterior, incluyendo ventana,
+      etiqueta 02:00, línea actual y posición inicial; cubrir límites 00:xx/23:xx y comprobar que un rango sin
+      hoy conserva su comportamiento.
+- [ ] Implementar el mínimo ajuste de geometría/auto-scroll para usar una hora actual inyectable en pruebas,
+      preservar todos los eventos de la ventana y mostrar la línea «ahora» cuando hoy esté en el rango.
+- [ ] Validar día y semana con Playwright real aislado y reloj fijo: Chromium escritorio + Pixel 5, 02:08,
+      estado vacío y evento sintético futuro, scroll al presente, ausencia de marcador fuera de hoy, sin
+      errores/overflow. Guardar e inspeccionar capturas sintéticas PC/móvil; probar los límites responsive
+      ya existentes y teclado/foco sin alterar la geometría de componentes.
+- [ ] Ejecutar Vitest/Karma focal según el runner vigente, typecheck E2E, `check:ui`, formato, build frontend,
+      `git diff --check` y medir coverage del código instrumentado tocado (mínimo 70 % S/B/F/L, sin reducir
+      el gate global). Registrar cada comando, resultado, capturas y limitación; no marcar casillas sin evidencia.
+
+**Rollback focal:** revertir únicamente el cálculo de ventana/auto-scroll para el presente, sus regresiones
+unitarias y E2E, y este subapartado; conservar el resto de las unidades del calendario.
