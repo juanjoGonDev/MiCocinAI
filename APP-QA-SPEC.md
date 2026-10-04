@@ -2078,8 +2078,11 @@ icon-only y filtros compactos quedan en sus familias funcionales hasta que se es
 **Contrato:** inputs de texto estándar y sus labels comparten la geometría media del `app-input` vigente:
 label 14 px/medium con 4 px hasta el control; control con la misma altura calculada, fuente/interlineado,
 padding 8/12 px, borde 1 px y radio 12 px. El control ocupa el ancho de su contenedor; no se fuerza la
-misma anchura entre formularios con columnas intencionalmente distintas. Foco/validación pueden cambiar
-color, borde o anillo, pero no caja, padding ni flujo vertical. No se añade una variante por ruta.
+misma anchura entre formularios con columnas intencionalmente distintas. Foco/error no cambian las cajas,
+padding ni separación label-control; el texto de validación puede ocupar su propia fila y reordenar el
+contenido posterior. El E2E prueba errores donde el campo los expone y, en el título del evento, la
+validación existente del botón deshabilitado sin inventar un estado de error que el producto no ofrece.
+No se añade una variante por ruta.
 
 - [ ] Añadir primero una regresión E2E aislada para Email de login, Nombre de Cuenta y título del diálogo
       Evento; medir label-control, caja, padding, márgenes, fuente, interlineado, borde y radio calculados,
@@ -2087,7 +2090,7 @@ color, borde o anillo, pero no caja, padding ni flujo vertical. No se añade una
 - [ ] Normalizar la geometría de los tres inputs al contrato compartido sin alterar su semántica, validación,
       focos accesibles ni anchura de formulario; mantener iguales medidas en estados normal/foco/error.
 - [ ] Verificar Chromium y Pixel 5 a 320×568, 393×851, 568×320, 767/768/769, 1023/1024/1025 y 1440×900;
-      revisar teclado, label/nombre, foco, error, scroll y ausencia de overflow. Comparar propiedades con
+      revisar teclado, label/nombre, foco, error aplicable, scroll y ausencia de overflow. Comparar propiedades con
       tolerancia ≤1 CSS px y guardar/inspeccionar capturas sintéticas PC/móvil.
 - [ ] Ejecutar Karma focal, cobertura ≥70 % S/B/F/L para cada archivo instrumentable modificado,
       `typecheck:e2e`, Prettier focal, `check:ui`, build de producción y `git diff --check`; no rebajar gates.
