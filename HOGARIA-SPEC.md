@@ -4822,3 +4822,81 @@ fecha civil real y persiste al volver a abrir el ticket. El historial ordena por
 existe y usa fecha de subida solo como criterio de desempate/agrupación, mostrándolas con etiquetas
 distintas para no confundirlas. Cada cambio de metadatos se guarda explícitamente y su error queda
 visible/reintentable; un ticket confirmado no repite el efecto de confirmación al editar.
+
+## 12ap — Configuración de IA compartida por hogar y sucesión del propietario
+
+**Fuente revalidada (2026-10-04):** `ai_configs` guarda `user_id`, sin ámbito/propietario de hogar;
+las rutas de `/api/ai` y `activeAiConfig()` filtran por la cuenta autenticada. Crear un hogar da rol
+`admin` al creador, pero `households` no conserva quién lo creó. La cola conserva `ai_jobs.user_id`
+como actor y vincula el proveedor por `config_id`; varias rutas de trabajo/gestión presuponen que ambos
+pertenecen al mismo usuario. La configuración actual es por usuario, no compartida. El contrato de
+§4 (IA en `runtime_settings` de instancia) y el apunte de §13 sobre alcance multi-hogar no describen
+este requisito de producto y quedan subordinados a esta sección para el ámbito de proveedor IA.
+
+**Decisión confirmada por el usuario:** en hogares nuevos, el creador del hogar es el propietario de
+IA y se usa su configuración activa. En hogares existentes sin creador persistido, y cuando el
+propietario deje el hogar, se asigna automáticamente como propietario el administrador actual más
+antiguo. Se desempata de forma determinista por `joined_at ASC, user_id ASC`. El propietario de IA
+debe ser miembro `admin` del mismo hogar. Si no hay ningún admin elegible, `ai_owner_user_id` queda
+`NULL` y la IA compartida falla de forma clara hasta que haya un admin; nunca se elige un miembro ni
+se usa silenciosamente su configuración personal.
+
+**Contrato:**
+
+- Persistir `households.ai_owner_user_id`. Crear hogar fija el ID del creador en la misma transacción
+  que lo añade como admin. La migración de hogares existentes backfillea el admin elegible más antiguo
+  con desempate estable; no cambia IDs ni credenciales de `ai_configs`/`ai_jobs`, y es idempotente.
+- Al salir, cambiar de hogar, ser removido o dejar de ser admin el propietario actual, transferir el
+  campo en la misma transacción al admin elegible más antiguo restante. Si se crea/promueve un admin
+  en un hogar sin propietario, asignarlo; si no queda ninguno, dejar `NULL`. La selección y la
+  actualización no pueden observar un propietario que ya no sea admin del hogar.
+- Un miembro de hogar usa la configuración activa del propietario actual para **todos** los trabajos
+  IA. La cuenta sin hogar conserva su configuración propia. La configuración personal de un miembro
+  no propietario se conserva, pero no se usa como fallback ni reemplaza a la compartida mientras
+  pertenezca a ese hogar. Si el nuevo propietario no tiene configuración activa, el hogar queda sin IA
+  hasta que la configure; no copiar ni transferir API keys entre cuentas.
+- Solo el propietario actual administra, prueba, activa o elimina sus configuraciones compartidas.
+  Los demás miembros ven la configuración efectiva como solo lectura y pueden usarla desde las
+  funciones IA. DTOs, cola y errores nunca incluyen `api_key`, prompt, adjuntos ni respuestas; URLs con
+  credenciales embebidas se rechazan o redactan. Un usuario de otro hogar no puede leer ni usarla.
+- En la cola, `ai_jobs.user_id` sigue siendo quien pidió el trabajo y `config_id` sigue siendo el
+  proveedor fijado al admitirlo. La resolución de configuración del worker separa actor y propietario
+  sin atribuir datos del solicitante al dueño de la clave. Se preserva el proveedor de trabajos ya
+  admitidos tras un handoff; no se migran a la configuración nueva. La autorización de listado,
+  cancelación, reordenación y retry debe cubrir miembros del mismo hogar sin permitir que un miembro
+  actúe sobre trabajos ajenos; el gestor del proveedor expone solo metadatos seguros.
+- Fuera de un hogar, las rutas `/ai-config` mantienen el comportamiento individual existente. No
+  cambiar concurrencia, mono-actividad por propietario, retries o cancelación definidos en §12an.
+
+### Checklist QA-AI.HOUSEHOLD-SHARING.1
+
+- [ ] Añadir primero pruebas rojas de migración/backfill y crear-hogar: nuevo creador como owner,
+      hogar antiguo elige solo admin más antiguo (empate estable), ninguno deja `NULL`, idempotencia y
+      conservación exacta de configuraciones/trabajos existentes.
+- [ ] Probar sucesión atómica al salir, cambiar de hogar, remover o degradar al owner; elección del
+      siguiente admin; creación/promoción cuando no había owner; hogar borrado y ausencia de admin.
+- [ ] Separar actor de propietario en las ocho integraciones IA y en worker/dispatcher: miembro usa
+      configuración activa del owner aunque no tenga propia; su configuración personal nunca es
+      fallback; fuera de hogar sigue usando la suya; hogar ajeno/owner sin configuración falla cerrado.
+- [ ] Probar ACLs de CRUD/test de configuración y cola: solo owner administra proveedor; cada miembro
+      conserva `user_id`, puede actuar solo en sus trabajos, el owner no obtiene payloads personales y
+      otro hogar no ve datos. Verificar API keys ausentes y URLs con userinfo rechazadas/redactadas.
+- [ ] Validar handoff con trabajos queued/running/failed: proveedor ya admitido permanece fijado al
+      `config_id` anterior, trabajos nuevos usan el nuevo owner y concurrencia/retry/cancel respetan
+      §12an. Ningún worker consulta config por el `user_id` actor cuando actor y owner difieren.
+- [ ] Añadir pruebas de servicio/UI ES/EN: propietario administra; miembro reconoce el proveedor
+      compartido en modo solo lectura; carga, error `NO_CONFIG`, reintento y acceso no autorizado.
+- [ ] Ejecutar Playwright aislado con dos usuarios del mismo hogar y un tercero de otro hogar en
+      escritorio/móvil; cubrir join, owner, cambio de rol, leave/handoff, trabajo real con proveedor
+      loopback, reload y cola sin fugas. Capturas sintéticas solamente.
+- [ ] Ejecutar migración contra DB anterior aislada, tests server/frontend, typechecks, build,
+      `check-ui`, E2E y coverage de cada archivo tocado ≥70 % en S/B/F/L; no rebajar gates globales.
+
+**Riesgos a cerrar con evidencia:** los hogares antiguos no guardan creador; `seed-data.ts` ordena
+miembros sin filtrar rol y no se reutiliza para elegir owner. Cambiar solo `activeAiConfig()` es
+insuficiente: rutas de prueba/CRUD, claim/retry/cancel y el gestor filtran por el usuario actor. Las
+pruebas deben usar SQLite temporal; no leer secretos ni ejecutar contra la DB de uso normal.
+
+**Rollback:** revertir esta unidad junto con su migración y cambios de rutas/cola/UI; la migración de
+rollback preserva el esquema y los datos previos, elimina solo `ai_owner_user_id` y no borra filas de
+`ai_configs` ni `ai_jobs`.
