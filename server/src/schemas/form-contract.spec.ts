@@ -48,11 +48,8 @@ import {
   updateUtensilSchema,
   utensilFilterSchema
 } from './pantry.schema.js';
-import {
-  createRecipeSchema,
-  recipeFilterSchema,
-  updateRecipeSchema
-} from './recipe.schema.js';
+import { createRecipeSchema, recipeFilterSchema, updateRecipeSchema } from './recipe.schema.js';
+import { generatedRecipeCandidateSchema } from './generated-recipe.schema.js';
 import {
   applyLinesSchema,
   bulkItemsSchema,
@@ -221,6 +218,38 @@ const ROWS: Row[] = [
       name: 'Gaspacho',
       ingredients: [{ name: 'Tomate', quantity: 4, unit: 'unit' }],
       steps: [{ stepNumber: 1, instruction: 'Triturar' }]
+    },
+    except: {
+      steps:
+        'La creación acepta exactamente una forma: `steps` para recetas históricas o `instructionsByLevel` para las nuevas. Dejar ambos vacíos o mandarlos juntos duplica o elimina la preparación.'
+    }
+  },
+  {
+    name: 'generatedRecipeCandidateSchema',
+    schema: generatedRecipeCandidateSchema,
+    required: {
+      name: 'Crema',
+      description: 'Crema suave',
+      difficulty: 'easy',
+      cuisine: null,
+      totalTime: 20,
+      prepTime: 5,
+      cookTime: 15,
+      restTime: null,
+      servings: 2,
+      calories: 180,
+      ingredients: [
+        { name: 'Zanahoria', quantity: 2, unit: 'unit', preparation: null, isOptional: false, notes: null }
+      ],
+      utensils: [],
+      instructionsByLevel: {
+        basic: [{ stepNumber: 1, instruction: 'Cocer.', duration: null, tips: null, warning: null }],
+        intermediate: [{ stepNumber: 1, instruction: 'Cortar y cocer.', duration: null, tips: null, warning: null }],
+        expert: [{ stepNumber: 1, instruction: 'Cortar en dados y cocer a hervor suave.', duration: null, tips: null, warning: null }]
+      },
+      nutrition: { calories: 180, protein: 2, carbs: 20, fat: 5, fiber: 4 },
+      storage: null,
+      tags: []
     }
   },
   { name: 'updateRecipeSchema', schema: updateRecipeSchema },
