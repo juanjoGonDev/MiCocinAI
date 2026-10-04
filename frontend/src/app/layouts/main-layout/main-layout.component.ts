@@ -1,4 +1,4 @@
-import { Component, computed, OnInit, inject, signal } from '@angular/core';
+import { Component, computed, HostListener, OnInit, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterOutlet, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -47,8 +47,19 @@ interface NavItem {
     <div class="layout">
       <!-- Mobile Header -->
       <header class="header">
-        <button type="button" class="header__menu" (click)="toggleSidebar()">
-          <app-icon [name]="isSidebarOpen() ? 'close' : 'menu'" [size]="24" [label]="isSidebarOpen() ? ('ui.close_menu' | t) : ('ui.open_menu' | t)" />
+        <button
+          type="button"
+          class="header__menu"
+          aria-controls="primary-sidebar"
+          [attr.aria-expanded]="isSidebarOpen()"
+          [attr.aria-label]="(isSidebarOpen() ? 'ui.close_menu' : 'ui.open_menu') | t"
+          (click)="toggleSidebar($event)"
+        >
+          <app-icon
+            [name]="isSidebarOpen() ? 'close' : 'menu'"
+            [size]="24"
+            [label]="isSidebarOpen() ? ('ui.close_menu' | t) : ('ui.open_menu' | t)"
+          />
         </button>
         <span class="header__title">
           <app-icon name="home" [size]="20" [label]="null" />
@@ -81,7 +92,7 @@ interface NavItem {
             <app-icon name="close" [size]="20" [label]="'ui.close_menu' | t" />
           </button>
         </div>
-        
+
         <nav class="sidebar__nav">
           <a
             *ngFor="let item of visibleNavItems()"
@@ -525,23 +536,46 @@ export class MainLayoutComponent implements OnInit {
    * La navegacion deriva de los modulos: al activar o apagar uno en
    * Configuracion se repinta sola, sin recargar la pagina.
    */
-  readonly visibleNavItems = computed(() => this.navItems.filter((item) => this.modules.isPathVisible(item.path)));
+  readonly visibleNavItems = computed(() =>
+    this.navItems.filter((item) => this.modules.isPathVisible(item.path))
+  );
   readonly visibleMobileNavItems = computed(() =>
     this.mobileNavItems.filter((item) => this.modules.isPathVisible(item.path))
   );
 
-  toggleSidebar(): void {
-    this.isSidebarOpen.update(v => !v);
+  toggleSidebar(event: MouseEvent): void {
+    const opening = !this.isSidebarOpen();
+    this.sidebarTrigger =
+      opening && event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    this.isSidebarOpen.set(opening);
   }
 
   closeSidebar(): void {
     this.isSidebarOpen.set(false);
+    this.sidebarTrigger = null;
+  }
+
+  @HostListener('document:keydown.escape', ['$event'])
+  onEscapeKey(event: KeyboardEvent): void {
+    if (
+      !this.isSidebarOpen() ||
+      !window.matchMedia('(max-width: 1023px)').matches ||
+      document.querySelector('.modal-overlay [role="dialog"]')
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    const trigger = this.sidebarTrigger;
+    this.closeSidebar();
+    if (trigger?.isConnected) trigger.focus();
   }
 
   navigateToProfile(): void {
     // El avatar habla de la persona, y desde la ronda 13 tiene pagina propia: /account (nombre,
     // foto, contrasena). Preferencias es del comensal —gustos, alergias, objetivo— y Configuracion
     // de la app (tema, idioma, modulos): tres preguntas distintas, tres sitios.
+    this.closeSidebar();
     this.router.navigate(['/account']);
   }
 

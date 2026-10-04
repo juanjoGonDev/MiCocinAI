@@ -1094,10 +1094,16 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 **Conducta esperada:** navegar a Cuenta desde el drawer móvil cierra el drawer y retira el overlay antes de mostrar la pantalla; el header de perfil sigue navegando como hasta ahora y el sidebar de escritorio sigue visible.
 
-- [ ] Añadir primero regresiones Karma y Playwright reales que abran el drawer, activen Cuenta y verifiquen destino, `aria-expanded=false`, overlay ausente y sidebar fuera del viewport; confirmar rojo antes de producción.
-- [ ] Cerrar el drawer en el flujo de perfil sin alterar la navegación, foco/teclado, header de perfil ni sidebar desktop.
-- [ ] En Chromium y Pixel 5 cubrir 393×851, 320×568, 568×320 y el borde 1023/1024/1025; probar también la captura móvil cerrada de Cuenta tras completar la transición, sin overflow.
-- [ ] Ejecutar Karma focal, cobertura ≥70 % S/B/F/L del componente instrumentable, `typecheck:e2e`, E2E aislada, Prettier focal y `git diff --check`; guardar e inspeccionar capturas sintéticas PC/móvil.
+- [x] Añadir primero regresiones Karma y Playwright reales que abran el drawer, activen Cuenta y verifiquen destino, `aria-expanded=false`, overlay ausente y sidebar fuera del viewport; confirmar rojo antes de producción.
+- [x] Cerrar el drawer en el flujo de perfil sin alterar la navegación, foco/teclado, header de perfil ni sidebar desktop.
+- [x] En Chromium y Pixel 5 cubrir 393×851, 320×568, 568×320 y el borde 1023/1024/1025; probar también la captura móvil cerrada de Cuenta tras completar la transición, sin overflow.
+- [x] Ejecutar Karma focal, cobertura ≥70 % S/B/F/L del componente instrumentable, `typecheck:e2e`, E2E aislada, Prettier focal y `git diff --check`; guardar e inspeccionar capturas sintéticas PC/móvil.
+
+**Evidencia QA-SHELL.DRAWER.PROFILE-NAV.1 (2026-10-04):** TDD rojo en Karma (`pnpm exec ng test --no-watch --include src/app/layouts/main-layout/main-layout.component.spec.ts --browsers=ChromeHeadless`): **4/5** pasaban y la regresión nueva falló porque `isSidebarOpen` seguía en `true` y `.sidebar-overlay` permanecía. La E2E aislada Chromium, ejecutada contra el código pre-fix, reprodujo `aria-expanded=false` esperado frente a `true`. El cambio mínimo llama `closeSidebar()` antes de navegar a `/account`; el header de perfil conserva el destino y el sidebar desktop no se transforma en drawer.
+
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/main-layout-drawer.spec.ts --reporter=dot`, con `E2E_RATE_LIMIT=on`, SQLite/puertos/semillas temporales: **4/4** (`chromium` + Pixel 5) para los flujos previos del drawer y navegación a Cuenta. La regresión recorre 393×851, 320×568, 568×320 y 1023×768 en móvil; el sidebar desktop se espera estable y visible en 1024/1025/1440 px. Una primera aserción inmediata de `x=0` detectó solo la transición CSS aún en curso; se corrigió esperando la geometría estable antes de medir. Cuenta quedó en viewport y sin overlay/overflow. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-shell-profile-navigation-20261004/{chromium-account-mobile-closed.png,chromium-account-desktop.png,mobile-chrome-account-mobile-closed.png,mobile-chrome-account-desktop.png}`.
+
+`pnpm exec ng test --no-watch --include src/app/layouts/main-layout/main-layout.component.spec.ts --browsers=ChromeHeadless`: **7/7**. Cobertura focal de `main-layout.component.ts`: **100/81,81/100/100 % S/B/F/L**. El mismo comando con `--code-coverage` devuelve exit 1 por el gate global preexistente de 80 % aplicado al subconjunto (15,06/1,79/4,60/15,87 % agregado), no por las pruebas; no se rebajó. `pnpm run typecheck:e2e`, Prettier focal y `git diff --check` pasan. `git diff --check` solo emite avisos preexistentes de conversión LF/CRLF en archivos dirty no relacionados.
 
 **Rollback focal:** retirar el cierre al navegar desde el perfil del drawer, las regresiones de navegación/captura y este subapartado; no revertir los cierres existentes por enlace, overlay o Escape.
 
