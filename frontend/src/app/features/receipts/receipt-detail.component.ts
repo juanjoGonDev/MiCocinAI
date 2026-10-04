@@ -991,7 +991,12 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
 
   metadatosEditables(status: ReceiptStatus): boolean {
     return (
-      status === 'review' || status === 'confirmed' || status === 'failed' || status === 'stopped'
+      status === 'queued' ||
+      status === 'analyzing' ||
+      status === 'review' ||
+      status === 'confirmed' ||
+      status === 'failed' ||
+      status === 'stopped'
     );
   }
 

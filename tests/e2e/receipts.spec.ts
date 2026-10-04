@@ -31,6 +31,29 @@ async function tokenOf(page: Page): Promise<string> {
   return token as string;
 }
 
+function trabajosDeTicket(receiptId: string): number {
+  const runDirectory = process.env.E2E_RUN_DIR;
+  const databasePath = process.env.DATABASE_PATH;
+  if (!runDirectory || !databasePath) throw new Error('E2E requiere rutas temporales aisladas');
+  const relativeDatabasePath = relative(resolve(runDirectory), resolve(databasePath));
+  if (isAbsolute(relativeDatabasePath) || relativeDatabasePath.startsWith('..')) {
+    throw new Error('DATABASE_PATH debe permanecer dentro del directorio aislado del test');
+  }
+
+  const database = new Database(databasePath, { readonly: true, fileMustExist: true });
+  try {
+    return (
+      database
+        .prepare('SELECT COUNT(*) AS count FROM ai_jobs WHERE receipt_id = ?')
+        .get(receiptId) as {
+        count: number;
+      }
+    ).count;
+  } finally {
+    database.close();
+  }
+}
+
 /** Un PNG de mentira de 8 bytes: la firma es lo unico que la subida valida. */
 function pngDeMentira(): Buffer {
   return Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -58,7 +81,16 @@ type TicketProviderRequest = {
   messages?: TicketProviderMessage[];
 };
 
-async function iniciarProveedorDeTickets(respuesta: unknown) {
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
+async function iniciarProveedorDeTickets(
+  respuesta: unknown,
+  antesDeResponder?: (solicitud: TicketProviderRequest, indice: number) => Promise<void>
+) {
   const solicitudes: TicketProviderRequest[] = [];
   const proveedor = createServer((request, response) => {
     const chunks: Buffer[] = [];
@@ -77,19 +109,25 @@ async function iniciarProveedorDeTickets(respuesta: unknown) {
         return;
       }
       solicitudes.push(body);
-      const content = JSON.stringify(respuesta);
+      void (async () => {
+        await antesDeResponder?.(body, solicitudes.length - 1);
+        if (response.destroyed) return;
+        const content = JSON.stringify(respuesta);
 
-      if (body.stream) {
-        const delta = JSON.stringify({ choices: [{ delta: { content } }] });
+        if (body.stream) {
+          const delta = JSON.stringify({ choices: [{ delta: { content } }] });
+          response
+            .writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+            .end(`data: ${delta}\n\ndata: [DONE]\n\n`);
+          return;
+        }
+
         response
-          .writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
-          .end(`data: ${delta}\n\ndata: [DONE]\n\n`);
-        return;
-      }
-
-      response
-        .writeHead(200, { 'content-type': 'application/json' })
-        .end(JSON.stringify({ choices: [{ message: { content } }] }));
+          .writeHead(200, { 'content-type': 'application/json' })
+          .end(JSON.stringify({ choices: [{ message: { content } }] }));
+      })().catch(() => {
+        if (!response.destroyed) response.writeHead(500).end();
+      });
     });
   });
 
@@ -839,6 +877,279 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
         expect(erroresPagina).toEqual([]);
       } finally {
         await proveedor.close();
+      }
+    });
+  }
+});
+
+test.describe('metadatos editables mientras la IA trabaja', () => {
+  for (const scenario of [
+    {
+      language: 'es',
+      heading: 'Tickets',
+      storeLabel: 'Tienda',
+      dateLabel: 'Fecha de compra',
+      savedLabel: 'Cambios guardados',
+      manualStore: 'Tienda manual en cola'
+    },
+    {
+      language: 'en',
+      heading: 'Receipts',
+      storeLabel: 'Store',
+      dateLabel: 'Purchase date',
+      savedLabel: 'Changes saved',
+      manualStore: 'Store corrected while queued'
+    }
+  ] as const) {
+    test(`guarda en cola y durante el análisis, y respeta las correcciones (${scenario.language})`, async ({
+      page
+    }, testInfo) => {
+      const primerProveedorIniciado = deferred<TicketProviderRequest>();
+      const liberarPrimerProveedor = deferred();
+      const segundoProveedorIniciado = deferred<TicketProviderRequest>();
+      const liberarSegundoProveedor = deferred();
+      const providerAnswer = {
+        lines: [],
+        store: 'Tienda detectada por IA',
+        purchaseDate: '2020-01-02',
+        currency: 'EUR',
+        totalMinor: 0,
+        warnings: []
+      };
+      const provider = await iniciarProveedorDeTickets(providerAnswer, async (_request, index) => {
+        if (index === 0) {
+          primerProveedorIniciado.resolve(_request);
+          await liberarPrimerProveedor.promise;
+        } else if (index === 1) {
+          segundoProveedorIniciado.resolve(_request);
+          await liberarSegundoProveedor.promise;
+        }
+      });
+      const erroresPagina: string[] = [];
+      page.on('pageerror', (error) => erroresPagina.push(`${error.name}: ${error.message}`));
+
+      try {
+        await registerAndGoto(page, '/receipts');
+        await page.evaluate((language) => {
+          window.localStorage.setItem('hogar:v1:language', language);
+        }, scenario.language);
+        await page.reload();
+        await expect(page.getByRole('heading', { name: scenario.heading })).toBeVisible();
+        const token = await tokenOf(page);
+        const configuration = await page.request.post('/api/ai/configs', {
+          headers: { authorization: `Bearer ${token}` },
+          data: {
+            name: 'Proveedor sintético de metadatos activos',
+            provider: 'custom',
+            baseUrl: provider.baseUrl,
+            apiKey: 'synthetic-e2e-only',
+            model: 'synthetic-active-metadata-model',
+            timeout: 30_000,
+            retryAttempts: 0,
+            concurrency: 1
+          }
+        });
+        expect(configuration.status()).toBe(201);
+
+        const subirTicketSintetico = async (fileName: string) => {
+          const uploadResponse = page.waitForResponse(
+            (response) =>
+              new URL(response.url()).pathname === '/api/receipts' &&
+              response.request().method() === 'POST'
+          );
+          await page.setInputFiles('input[name="ticketFile"]', {
+            name: fileName,
+            mimeType: 'image/png',
+            buffer: pngDeMentira()
+          });
+          const response = await uploadResponse;
+          expect(response.status()).toBe(201);
+          return (await response.json()).data as { id: string; status: string };
+        };
+
+        const blocker = await subirTicketSintetico('bloqueo-sintetico.png');
+        expect(trabajosDeTicket(blocker.id)).toBe(1);
+        expect((await primerProveedorIniciado.promise).model).toBe(
+          'synthetic-active-metadata-model'
+        );
+        const target = await subirTicketSintetico('ticket-edicion-activa.png');
+        expect(target.status).toBe('queued');
+        expect(trabajosDeTicket(target.id)).toBe(1);
+        const queuedResponse = await page.request.get(`/api/receipts/${target.id}`, {
+          headers: { authorization: `Bearer ${token}` }
+        });
+        expect((await queuedResponse.json()).data.status).toBe('queued');
+
+        await page.goto(`/receipts/${target.id}`);
+        const storeField = page.getByLabel(scenario.storeLabel);
+        const purchaseDateField = page.getByLabel(scenario.dateLabel);
+        await expect(storeField).toHaveValue('');
+        await expect(storeField).toBeEnabled();
+        await expect(purchaseDateField).toHaveValue('');
+        await expect(purchaseDateField).toBeEnabled();
+        await storeField.focus();
+        await expect(storeField).toBeFocused();
+        await page.keyboard.press('Tab');
+        await expect(purchaseDateField).toBeFocused();
+        const llamadasAntesDeEditarEnCola = provider.solicitudes.length;
+
+        let fallarPrimerPatch = true;
+        await page.route(`**/api/receipts/${target.id}`, async (route) => {
+          if (route.request().method() === 'PATCH' && fallarPrimerPatch) {
+            fallarPrimerPatch = false;
+            await route.fulfill({
+              status: 503,
+              contentType: 'application/json',
+              body: JSON.stringify({ success: false, error: 'synthetic retryable failure' })
+            });
+            return;
+          }
+          await route.continue();
+        });
+        await storeField.fill(scenario.manualStore);
+        const queuedPatch = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === `/api/receipts/${target.id}` &&
+            response.request().method() === 'PATCH'
+        );
+        await page.locator('[data-test="save-receipt-metadata"]').click();
+        expect((await queuedPatch).status()).toBe(503);
+        await expect(page.locator('.ficha__metadatos-error')).toBeVisible();
+        const queuedAfterFailure = await page.request.get(`/api/receipts/${target.id}`, {
+          headers: { authorization: `Bearer ${token}` }
+        });
+        expect((await queuedAfterFailure.json()).data).toMatchObject({
+          status: 'queued',
+          store: null,
+          purchaseDate: null
+        });
+
+        const queuedRetry = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === `/api/receipts/${target.id}` &&
+            response.request().method() === 'PATCH'
+        );
+        await page.locator('[data-test="save-receipt-metadata"]').click();
+        expect((await queuedRetry).status()).toBe(200);
+        await expect(page.locator('.ficha__metadatos-estado')).toContainText(scenario.savedLabel);
+        const queuedAfterPatch = await page.request.get(`/api/receipts/${target.id}`, {
+          headers: { authorization: `Bearer ${token}` }
+        });
+        expect((await queuedAfterPatch.json()).data).toMatchObject({
+          status: 'queued',
+          store: scenario.manualStore,
+          purchaseDate: null
+        });
+        expect(trabajosDeTicket(target.id)).toBe(1);
+        expect(provider.solicitudes).toHaveLength(llamadasAntesDeEditarEnCola);
+
+        // Leave the civil-date draft unsaved while the polling UI transitions queued -> analyzing.
+        await purchaseDateField.fill('2024-02-29');
+        liberarPrimerProveedor.resolve();
+        expect((await segundoProveedorIniciado.promise).model).toBe(
+          'synthetic-active-metadata-model'
+        );
+        await expect
+          .poll(async () => {
+            const response = await page.request.get(`/api/receipts/${target.id}`, {
+              headers: { authorization: `Bearer ${token}` }
+            });
+            return (await response.json()).data.status;
+          })
+          .toBe('analyzing');
+        await expect(storeField).toHaveValue(scenario.manualStore);
+        await expect(purchaseDateField).toHaveValue('2024-02-29');
+        await expect(storeField).toBeEnabled();
+        await expect(purchaseDateField).toBeEnabled();
+
+        const llamadasAntesDeEditarEnAnalisis = provider.solicitudes.length;
+        const analyzingPatch = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === `/api/receipts/${target.id}` &&
+            response.request().method() === 'PATCH'
+        );
+        await page.locator('[data-test="save-receipt-metadata"]').click();
+        expect((await analyzingPatch).status()).toBe(200);
+        await expect(page.locator('.ficha__metadatos-estado')).toContainText(scenario.savedLabel);
+        const analyzingAfterPatch = await page.request.get(`/api/receipts/${target.id}`, {
+          headers: { authorization: `Bearer ${token}` }
+        });
+        expect((await analyzingAfterPatch.json()).data).toMatchObject({
+          status: 'analyzing',
+          store: scenario.manualStore,
+          purchaseDate: '2024-02-29'
+        });
+        expect(trabajosDeTicket(target.id)).toBe(1);
+        expect(provider.solicitudes).toHaveLength(llamadasAntesDeEditarEnAnalisis);
+
+        const screenshotDirectory =
+          process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-receipt-active-metadata-1';
+        await cerrarAvisos(page);
+        await terminarTransiciones(page);
+        mkdirSync(screenshotDirectory, { recursive: true });
+        await page.screenshot({
+          path: join(
+            screenshotDirectory,
+            `receipt-active-metadata-${testInfo.project.name}-${scenario.language}.png`
+          ),
+          fullPage: true
+        });
+
+        const originalViewport = page.viewportSize();
+        for (const viewport of [
+          { width: 320, height: 568 },
+          { width: 568, height: 320 },
+          { width: 768, height: 1024 },
+          { width: 1024, height: 768 }
+        ]) {
+          await page.setViewportSize(viewport);
+          await expect(storeField).toBeVisible();
+          await expect(purchaseDateField).toBeVisible();
+          const widths = await page.evaluate(() => ({
+            viewport: document.documentElement.clientWidth,
+            document: document.documentElement.scrollWidth
+          }));
+          expect(widths.document).toBeLessThanOrEqual(widths.viewport);
+        }
+        if (originalViewport) await page.setViewportSize(originalViewport);
+
+        liberarSegundoProveedor.resolve();
+        await expect
+          .poll(async () => {
+            const response = await page.request.get(`/api/receipts/${target.id}`, {
+              headers: { authorization: `Bearer ${token}` }
+            });
+            return (await response.json()).data.status;
+          })
+          .toBe('review');
+        const finalDetail = await page.request.get(`/api/receipts/${target.id}`, {
+          headers: { authorization: `Bearer ${token}` }
+        });
+        expect((await finalDetail.json()).data).toMatchObject({
+          status: 'review',
+          store: scenario.manualStore,
+          purchaseDate: '2024-02-29'
+        });
+        expect(trabajosDeTicket(target.id)).toBe(1);
+
+        await page.reload();
+        await expect(storeField).toHaveValue(scenario.manualStore);
+        await expect(purchaseDateField).toHaveValue('2024-02-29');
+        await page.goto('/receipts');
+        const history = page.locator('[data-test="receipt-history"]');
+        const targetHistoryRow = history
+          .locator('[data-test="ticket-history-item"]')
+          .filter({ hasText: scenario.manualStore });
+        await expect(targetHistoryRow).toHaveCount(1);
+        await expect(targetHistoryRow).toContainText(scenario.manualStore);
+        await expect(targetHistoryRow.locator('.ticket__meta')).toContainText(
+          scenario.language === 'es' ? 'Fecha de compra' : 'Purchase date'
+        );
+        expect(erroresPagina).toEqual([]);
+      } finally {
+        liberarPrimerProveedor.resolve();
+        liberarSegundoProveedor.resolve();
+        await provider.close();
       }
     });
   }

@@ -392,6 +392,32 @@ describe('la revision y el confirm', () => {
     return id;
   }
 
+  it('permite guardar tienda y fecha en cola o análisis sin cambiar el estado', async () => {
+    for (const status of ['queued', 'analyzing'] as const) {
+      const id = `editable-${status}`;
+      db.prepare(
+        `INSERT INTO receipts (id, user_id, status, file_url, file_kind)
+         VALUES (?, ?, ?, '/uploads/synthetic-active.png', 'png')`
+      ).run(id, alice.id, status);
+
+      const updated = await call('PATCH', `/${id}`, {
+        store: `  Tienda ${status}  `,
+        purchaseDate: '2024-02-29'
+      });
+
+      expect(updated.status).toBe(200);
+      expect(updated.payload.data).toMatchObject({
+        id,
+        status,
+        store: `Tienda ${status}`,
+        purchaseDate: '2024-02-29'
+      });
+      expect(
+        db.prepare('SELECT store_manual, purchase_date_manual FROM receipts WHERE id = ?').get(id)
+      ).toEqual({ store_manual: 1, purchase_date_manual: 1 });
+    }
+  });
+
   it('las lineas se editan una a una: categoria, precio, oferta y cantidad', async () => {
     const id = await ticketEnRevision();
     const ficha = await call('GET', `/${id}`);

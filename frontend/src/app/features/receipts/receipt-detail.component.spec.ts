@@ -155,12 +155,35 @@ describe('ReceiptDetailComponent', () => {
     expect(component.tiendaDraft()).toBe('unsaved draft');
   });
 
-  it('edits metadata only for review, confirmed, failed, and stopped states', () => {
-    for (const status of ['review', 'confirmed', 'failed', 'stopped'] as const) {
+  it('keeps store and purchase date editable in active and terminal receipt states', () => {
+    for (const status of [
+      'queued',
+      'analyzing',
+      'review',
+      'confirmed',
+      'failed',
+      'stopped'
+    ] as const) {
       expect(component.metadatosEditables(status)).toBeTrue();
     }
-    expect(component.metadatosEditables('queued')).toBeFalse();
-    expect(component.metadatosEditables('analyzing')).toBeFalse();
+
+    service.receipt.set(makeReceipt({ status: 'queued', store: null, purchaseDate: null }));
+    fixture.detectChanges();
+    const storeField = fixture.nativeElement.querySelector('#ticket-tienda') as HTMLInputElement;
+    const dateField = fixture.nativeElement.querySelector(
+      '#ticket-fecha-compra'
+    ) as HTMLInputElement;
+    expect(storeField).not.toBeNull();
+    expect(dateField).not.toBeNull();
+    expect(storeField.disabled).toBeFalse();
+    expect(dateField.disabled).toBeFalse();
+
+    component.cambiarTienda('Tienda manual en cola');
+    component.cambiarFechaCompra('2024-02-29');
+    service.receipt.set(makeReceipt({ status: 'analyzing', store: null, purchaseDate: null }));
+    fixture.detectChanges();
+    expect(component.tiendaDraft()).toBe('Tienda manual en cola');
+    expect(component.fechaCompraDraft()).toBe('2024-02-29');
 
     service.receipt.set(makeReceipt({ status: 'confirmed' }));
     fixture.detectChanges();

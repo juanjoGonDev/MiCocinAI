@@ -565,6 +565,89 @@ describe('AI provider queue dispatcher', () => {
     }
   });
 
+  it('preserves metadata edited during analysis while filling untouched metadata from the provider', async () => {
+    const originalDatabasePath = process.env.DATABASE_PATH;
+    const isolatedDirectory = mkdtempSync(join(tmpdir(), 'hogaria-ai-queue-active-metadata-'));
+    const providerStarted = deferred();
+    const releaseProvider = deferred();
+    const { encolarTicket, stopWorker } = await import('./ticket-queue.js');
+    try {
+      process.env.DATABASE_PATH = join(isolatedDirectory, 'database.sqlite');
+      const { parseImageDataUrl, storeImage, uploadsRoot } = await import('./uploads.js');
+      const image = parseImageDataUrl('data:image/png;base64,iVBORw0KGgo=');
+      expect(image).not.toBeNull();
+      const fileUrl = storeImage('receipts', 'synthetic-active-metadata', image!, uploadsRoot());
+      const receiptId = 'synthetic-active-metadata';
+      const finalAnswer = {
+        lines: [],
+        store: 'Tienda detectada por IA',
+        purchaseDate: '2024-02-29',
+        currency: 'EUR',
+        totalMinor: 0,
+        warnings: []
+      };
+      const frames = [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(finalAnswer) } }] })}\n\n`,
+        'data: [DONE]\n\n'
+      ].join('');
+      const encoder = new TextEncoder();
+      // The first streaming and non-streaming request both fail so the queue really retries.
+      vi.mocked(fetch).mockRejectedValueOnce(new Error('synthetic transient stream failure'));
+      vi.mocked(fetch).mockRejectedValueOnce(new Error('synthetic transient fallback failure'));
+      vi.mocked(fetch).mockImplementationOnce(async () => {
+        providerStarted.resolve();
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            async start(controller) {
+              await releaseProvider.promise;
+              controller.enqueue(encoder.encode(frames));
+              controller.close();
+            }
+          }),
+          { status: 200, headers: { 'content-type': 'text/event-stream' } }
+        );
+      });
+      db.prepare(
+        `INSERT INTO receipts (id, user_id, status, file_url, file_kind)
+         VALUES (?, ?, 'queued', ?, 'png')`
+      ).run(receiptId, userId, fileUrl);
+
+      const jobId = encolarTicket(db, userId, receiptId);
+      await providerStarted.promise;
+      expect(jobRow(jobId)).toMatchObject({ status: 'running', attempts: 2 });
+      expect(db.prepare('SELECT status FROM receipts WHERE id = ?').get(receiptId)).toEqual({
+        status: 'analyzing'
+      });
+
+      // Equivalent to the authorized metadata PATCH while the provider stream is still pending.
+      db.prepare('UPDATE receipts SET store = ?, store_manual = 1 WHERE id = ?').run(
+        'Tienda corregida durante análisis',
+        receiptId
+      );
+      releaseProvider.resolve();
+      await waitFor(() => jobRow(jobId).status === 'done');
+
+      expect(
+        db.prepare('SELECT status, store, purchase_date FROM receipts WHERE id = ?').get(receiptId)
+      ).toEqual({
+        status: 'review',
+        store: 'Tienda corregida durante análisis',
+        purchase_date: '2024-02-29'
+      });
+      expect(db.prepare('SELECT name FROM stores WHERE user_id = ?').get(userId)).toEqual({
+        name: 'Tienda corregida durante análisis'
+      });
+      expect(
+        db.prepare('SELECT COUNT(*) AS n FROM stores WHERE name = ?').get('Tienda detectada por IA')
+      ).toEqual({ n: 0 });
+    } finally {
+      releaseProvider.resolve();
+      stopWorker();
+      process.env.DATABASE_PATH = originalDatabasePath ?? ':memory:';
+      rmSync(isolatedDirectory, { recursive: true, force: true });
+    }
+  });
+
   it('keeps a failed connection check available for a manual retry after automatic attempts', async () => {
     const { dispatchPingDeConexion, queueForConfig, reintentarTrabajo } =
       await import('./ticket-queue.js');
