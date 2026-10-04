@@ -4941,15 +4941,88 @@ La repetición ofrecerá: no repetir, diaria, días laborables, semanal en el d�
 
 ### QA-CALENDAR.GOOGLE-LIKE.1
 
-- [ ] La cabecera ofrece fecha anterior/siguiente, Hoy, salto a fecha y un selector accesible con Día, 4 días, Semana, Mes, Año y Agenda; la selección y fecha sobreviven a recarga/atrás/adelante mediante URL. Cada navegación avanza el rango adecuado.
-- [ ] Día, 4 días y Semana muestran el timeline 00:00–24:00 de §12as; Mes y Año muestran rejillas con navegación a fecha, y Agenda agrupa eventos cronológicamente desde la fecha ancla durante los próximos 12 meses. El mini-calendario permite cambiar fecha/mes y las capas siguen filtrando el contenido.
-- [ ] El alta/edición de evento usa un popover compacto inspirado en la referencia, con título, fechas y horas, todo el día y repetición a un paso; «Más opciones» expande los campos reales de HogarIA. Cerrar, cancelar, Escape, foco, validación, guardar, editar, eliminar e invitados conservan su contrato actual.
-- [ ] El selector ofrece las cadencias descritas en esta sección. «Personalizar» abre un diálogo con intervalo/unidad, selección de días semanales y fin nunca/fecha/número de repeticiones; reabrir/editar no pierde configuración y cancelar no modifica el borrador.
-- [ ] API/base de datos validan y persisten reglas de repetición estructuradas y límite/fin. `calendar_events` continúa con una fila por serie; reglas antiguas se expanden igual que antes; los límites de expansión, exclusiones, fechas inválidas, años bisiestos, cambio de mes, intervalos y cuenta inclusiva están cubiertos.
-- [ ] TDD: unitarias de expansión/serialización y pruebas de ruta para altas, edición, límites, regresiones legacy, acceso y exclusiones. Playwright real e aislado demuestra el flujo y estado persistido con datos sintéticos.
-- [ ] Validación visual y funcional en escritorio y móvil: anchos mínimos y breakpoints presentes, orientación, scroll, popovers/modales, teclado/foco/nombres accesibles, botones táctiles y sin overflow. Guardar e inspeccionar capturas comparables desktop/móvil, sin datos personales.
-- [ ] Cada archivo de lógica/componente afectado alcanza ≥70 % de statements, branches, functions y lines dentro del alcance medido; ejecutar build, typecheck, check-ui, E2E y gates aplicables sin rebajarlos. Registrar el estado preexistente del gate global de cobertura (80 %) y cualquier limitación de lint/CI.
+- [x] El selector accesible contiene Día, 4 días, Semana, Mes, Año y Agenda. La vista elegida y la fecha/rango se enlazan en URL y sobreviven a recarga; elegir un número en la vista Mes abre esa fecha en Día. Evidencia: `tests/e2e/calendar.spec.ts`, `tests/e2e/calendar-google-like-ui.spec.ts`.
+- [x] Las utilidades calculan rangos y navegación natural para las seis vistas, incluyendo día bisiesto. Evidencia: `frontend/src/app/features/calendar/calendar-view.util.spec.ts`.
+- [ ] Falta probar en navegador atrás/adelante, salto a fecha desde todos los controles y la interacción del mini-calendario (cambio de mes, día seleccionado y Hoy).
+- [x] Día, 4 días y Semana conservan las 24 horas y desplazamiento; Mes presenta rejilla semanal y Año 12 rejillas mensuales. Agenda cubre 12 meses desde la fecha ancla. Evidencia: E2E de calendario y pruebas unitarias de rangos.
+- [ ] Falta demostrar en E2E que los filtros/capas se conservan en cada vista y que mini-calendario y navegación sincronizan día/mes/año.
+- [x] El editor compacto de evento incluye título, fecha/hora, todo el día y repetición de un paso; «Más opciones» expande datos propios de HogarIA. Escape/cierre y persistencia básica se ejercitan, con capturas sintéticas inspeccionadas en escritorio y móvil.
+- [ ] Pendiente completar la matriz de foco/teclado, validación, re-edición con todos los campos, cancelación sin cambios e invitados/borrado en este editor.
+- [x] El selector presenta las cadencias acordadas y «Personalizar» permite intervalo, unidad y fin; se probó persistencia de un intervalo con fin por número. La expansión conserva una fila por serie y las excepciones. Evidencia: `tests/e2e/calendar.spec.ts`, `server/src/utils/calendar-recurrence.spec.ts`, `server/src/routes/calendar.routes.spec.ts`.
+- [ ] Falta E2E del selector personalizado para selección de varios días semanales, fin por fecha, edición/reapertura y cancelación del borrador.
+- [x] API/base de datos validan y persisten la regla estructurada sin convertir destructivamente reglas antiguas; el set enfocado cubre límites, exclusiones, fechas inválidas, años bisiestos, fin de mes, intervalos y conteo inclusivo.
+- [x] Playwright real con Chrome y servicios/SQLite aislados ejecutó 46 escenarios de calendario en escritorio y móvil; otra ejecución añadió anchos de 320 px y horizontal (812×375), 2/2 pasaron. No se usan datos personales.
+- [ ] Falta auditar contraste, foco, objetivos táctiles y todos los breakpoints/orientaciones no incluidos en las capturas.
+- [ ] Cada archivo de lógica/componente afectado debe alcanzar ≥70 % de statements, branches, functions y lines. El intento medido del alcance filtrado no satisface los gates: cobertura global statements 17.22 %, branches 4.83 %, functions 9.39 % y lines 18.15 %; `calendar-view.util.ts` sí llega a 100 % en las cuatro métricas, pero el componente principal queda por debajo. No se han reducido los umbrales globales.
+
+### Evidencia ejecutada y límites (2026-10-04)
+
+- `pnpm run typecheck:e2e`: PASS.
+- `pnpm run check:ui`: PASS, 193 ficheros / 20 reglas.
+- `pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/core/calendar-grid.spec.ts --include=src/app/features/calendar/calendar-timeline.component.spec.ts --include=src/app/features/calendar/calendar-view.util.spec.ts --include=src/app/features/calendar/calendar.util.spec.ts --include=src/app/features/calendar/calendar.component.spec.ts --browsers=ChromeHeadless`: 35/35 PASS.
+- `pnpm test:e2e -- tests/e2e/calendar.spec.ts tests/e2e/calendar-google-like-ui.spec.ts --project=chromium --project=mobile-chrome`: 46/46 PASS con Chrome real, DB aislada y fixtures sintéticas.
+- `pnpm test:e2e -- tests/e2e/calendar-google-like-ui.spec.ts --project=chromium --project=mobile-chrome --grep 'ancho mínimo ni en horizontal'`: 2/2 PASS (320 px y 812×375); mismo estado de la página sin overflow horizontal.
+- `pnpm --filter @hogaria/server exec vitest run src/routes/calendar.routes.spec.ts src/config/database.spec.ts src/utils/calendar-recurrence.spec.ts`: 66 tests PASS (validación previa a esta actualización de la evidencia).
+- Una primera ejecución de E2E falló en el caso «No se repite» porque el menú abierto interceptaba el botón Guardar. Se ajustó el propio test para elegir/cerrar la opción predeterminada antes de guardar; el caso pasó en escritorio y móvil y la ejecución completa siguiente pasó 46/46.
+- El filtro de cobertura Angular se ejecutó pero el gate global existente (80 %) falló por el conjunto intencionalmente filtrado; no representa una ejecución completa de cobertura ni satisface el 70 % exigido por archivo.
+
+**Estado:** implementación funcional parcial, con vistas, modal, selector, recurrencia y validación Chrome desktop/móvil entregados. La unidad sigue abierta por los checks `[ ]`, especialmente cobertura por archivo, accesibilidad/teclado y navegación del mini-calendario. Las capturas de referencia inspiran la UI de HogarIA; no se afirma paridad píxel a píxel ni se simulan funciones externas de Google.
 
 **Plan TDD:** primero reglas puras de recurrencia y sus pruebas; luego persistencia/expansión API; después las reglas puras de rangos/URL de las seis vistas; finalmente el editor, el contenedor visual y Playwright. Antes de cada unidad, revalidar el contrato y los cambios sin commit existentes en los archivos de calendario. Los artefactos de prueba usarán servidor y SQLite temporales, seed sintética y cleanup propio; nunca la base de uso normal.
 
-**Estado:** spec/checklist publicada antes de implementar. La implementación aún no empieza.
+**Estado:** implementación funcional parcial con pruebas focales en desktop/móvil; quedan abiertos los
+checks de navegación del mini-calendario, accesibilidad/teclado, cobertura por archivo y revalidación
+completa del alcance. La nueva unidad del libro se especifica antes de su implementación.
+
+## 12au — Libro de recetas y catálogo tradicional por país
+
+**Fuente revalidada (2026-10-04):** la pantalla `/recipes` ya lista recetas y dispone de filtros rápidos,
+pero el control «Filtros» aún no tiene flujo funcional; API/modelo admiten `cuisine` y los tipos de
+comida existentes (`breakfast`, `brunch`, `lunch`, `snack`, `dinner`, `dessert`), pero no separan el
+país de origen. Las tarjetas no muestran de forma consistente una portada/imágen de la receta. La
+experiencia pedida se suma al catálogo actual como apartado identificable «Libro de recetas», no como
+otra copia de las mismas filas ni una librería desconectada.
+
+**Contrato:**
+
+- Incorporar una vista de libro accesible desde Recetas, con campo de búsqueda y filtros combinables
+  por país de origen, tipo de comida y los filtros que ya soporta el catálogo. La búsqueda cubre nombre,
+  ingredientes y etiquetas; filtros, resultados vacíos, limpieza de filtros, recarga, URL/paginación y
+  permisos mantienen un estado coherente. País (`countryCode`, ISO 3166-1 alpha-2) es un atributo
+  independiente de `cuisine`; no inferir país a partir de una cocina ambigua ni del idioma.
+- Mostrar recetas en tarjetas editoriales con portada (imagen de la receta, o fallback local accesible),
+  título, país, tipo de comida y metadatos útiles; el detalle conserva portada, origen y atribución. No
+  presentar imágenes externas como propias: búsqueda de media/atribución/validación de URL se rige por
+  §12aq y su proveedor; si no hay una fuente autorizada se muestra un fallback, nunca una URL inventada.
+- Sembrar un catálogo inicial pequeño pero útil con al menos seis recetas tradicionales de España y seis
+  de El Salvador, cubriendo más de un tipo de comida. Investigar/validar el origen de cada plato con
+  fuentes culinarias fiables, redactar ingredientes y pasos propios (no copiar artículos/recetas), y
+  guardar fuente/atribución del dato histórico e imagen/licencia cuando corresponda. Cada receta semilla
+  cumple el esquema actual, incluyendo instrucciones `basic`, `intermediate` y `expert` en una sola
+  receta; ingredientes, cantidades y metadatos se persisten una vez, no se duplican por nivel.
+- Seeds idempotentes, con identidad de catálogo estable y reversibles sin sobrescribir recetas de usuario.
+  El contenido editorial incorporado es de solo lectura. Favoritos, notas, nivel elegido y recetas
+  generadas siguen siendo propios del usuario/hogar activo; no mutar un favorito global ni exponer datos
+  de otro hogar al aplicar §12ap. Las recetas semilla se pueden descubrir desde cualquier hogar sin
+  compartir accidentalmente listas privadas.
+- El país y los filtros tienen etiquetas traducidas, controles accesibles por teclado/lector de pantalla,
+  diseño uniforme y probado en desktop/móvil; portadas tienen texto alternativo significativo cuando
+  aportan contenido, y alt vacío cuando son decorativas.
+
+### QA-RECIPES.BOOK.CATALOG.1
+
+- [ ] Contrato de país separado de cocina, tipos de comida combinables y migración/seed idempotente
+      probados con DB temporal y sin reemplazar recetas existentes.
+- [ ] Búsqueda y filtros combinados (país ES/SV, tipo de comida y cocina), URL/recarga/paginación,
+      vacíos, limpieza, resultados y aislamiento del hogar cubiertos por API y pruebas unitarias.
+- [ ] Libro muestra las semillas españolas y salvadoreñas con portada/atribución o fallback; ninguna
+      receta de usuario se pierde ni sus favoritos/notas se escriben en el catálogo global.
+- [ ] Al menos 6 recetas por país, verificadas con fuentes fiables, texto original, país/tipo correctos y
+      las tres instrucciones detalladas con ingredientes almacenados una sola vez.
+- [ ] Playwright real, aislado y sintético demuestra búsqueda, filtros combinados, abrir/cerrar detalle,
+      portada con y sin imagen, favoritos aislados, teclado/foco y layout sin overflow en desktop y móvil.
+- [ ] Archivos de alcance ≥70 % statement/branch/function/line coverage; ejecutar tests API/UI, build,
+      check-ui, Playwright y gates pertinentes. Registrar comandos, resultados y límites; no marcar esta
+      unidad completa con checks simulados ni solo por compilar.
+
+**Estado:** especificación añadida a petición del usuario; implementación pendiente.

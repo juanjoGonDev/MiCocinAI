@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1, QA-AUTH.PW-LIMIT.1, QA-ACCOUNT.DRAFT.1, QA-05.PATH.1, QA-SHOP-MOBILE.CTA.1, QA-ACCOUNT.E2E-TARGETS.1, QA-ACCOUNT.TABS.1, QA-ACCOUNT.PASSWORD.ERROR.1 y QA-AUTH.FORGOT.1 tienen regresiones verificadas localmente. QA-ONBOARDING.PANTRY-LINK.1 se resolvió con E2E desktop/móvil; ver evidencia abajo. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-RECIPES.AI-FLOW.1 pasa pruebas funcionales locales desktop/móvil; su cierre queda pendiente junto al gate de cobertura global frontend. QA-AI.PROVIDER-QUEUE.1 está implementada en HOGARIA-SPEC.md §12an y validada de nuevo en Chromium/Pixel 5 aislados (12/12); su gestor está en una ruta por proveedor, no embebido en la lista. QA-PREFERENCES.CUSTOM-LIMIT.1 está implementada y verificada abajo; QA-PREFERENCES.WIDTH.1 está implementada y verificada abajo. QA-HOUSEHOLD.ACTION-ACK.1 quedó verificada con Playwright Chromium/Pixel 5 aislado (12/12); ver evidencia abajo. La repetición del baseline recorrió las 28 rutas configuradas en 5 viewports, sin errores app-origin ni overflow; Google Fonts sigue bloqueada por el entorno. La recuperación de contraseña permanece sin entrega de correo/token; la UI lo comunica sin prometer un enlace. El barrido funcional completo sigue pendiente; QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx. QA-04c.ERROR-INTERCEPTOR.1 añade cobertura focal completa de la frontera HTTP común; la revalidación completa más reciente (2026-10-03) ejecutó **907/907** tests con coverage **77.41/64.50/75.64/78.99 % S/B/F/L**. El gate global de 80 % sigue abierto y branches no alcanzan el mínimo solicitado de 70 %. QA-RECEIPT.METADATA-HISTORY.1 quedó verificada localmente; siguen abiertos QA-AI.REAL-INTEGRATIONS.1 y QA-LAYOUT.CONTENT-GUTTERS.1.
+- **Estado:** aislamiento de Playwright, cola de tickets/Hogar, iconografía decorativa, tarjeta móvil de hogar, cabecera móvil de Inventario, comidas pendientes de hoy, rutas baseline, flujo SSE de Compra, overflow de Cuenta, error de carga de caducidades, pertenencia a Favoritas y las unidades QA-CALENDAR.RANGE-STALE.1, QA-CALENDAR.MOBILE-HEADER.1, QA-CALENDAR.ALL-DAY-GUTTER.1, QA-PANTRY.TOUCH.1, QA-AUTH.PW-LIMIT.1, QA-ACCOUNT.DRAFT.1, QA-05.PATH.1, QA-SHOP-MOBILE.CTA.1, QA-ACCOUNT.E2E-TARGETS.1, QA-ACCOUNT.TABS.1, QA-ACCOUNT.PASSWORD.ERROR.1 y QA-AUTH.FORGOT.1 tienen regresiones verificadas localmente. QA-ONBOARDING.PANTRY-LINK.1 se resolvió con E2E desktop/móvil; ver evidencia abajo. La revalidación actual no reproduce los dos fallos de las capturas adjuntas. QA-RECIPES.AI-FLOW.1 pasa pruebas funcionales locales desktop/móvil; su cierre queda pendiente junto al gate de cobertura global frontend. QA-AI.PROVIDER-QUEUE.1 está implementada en HOGARIA-SPEC.md §12an y validada de nuevo en Chromium/Pixel 5 aislados (12/12); su gestor está en una ruta por proveedor, no embebido en la lista. QA-PREFERENCES.CUSTOM-LIMIT.1 está implementada y verificada abajo; QA-PREFERENCES.WIDTH.1 está implementada y verificada abajo. QA-HOUSEHOLD.ACTION-ACK.1 quedó verificada con Playwright Chromium/Pixel 5 aislado (12/12); ver evidencia abajo. La repetición del baseline recorrió las 28 rutas configuradas en 5 viewports, sin errores app-origin ni overflow; Google Fonts sigue bloqueada por el entorno. La recuperación de contraseña permanece sin entrega de correo/token; la UI lo comunica sin prometer un enlace. El barrido funcional completo sigue pendiente; QA-REC.INGRESS.1 sigue pendiente por falta de runtime Nginx. QA-04c.ERROR-INTERCEPTOR.1 añade cobertura focal completa de la frontera HTTP común; la revalidación completa más reciente (2026-10-03) ejecutó **907/907** tests con coverage **77.41/64.50/75.64/78.99 % S/B/F/L**. El gate global de 80 % sigue abierto y branches no alcanzan el mínimo solicitado de 70 %. QA-RECEIPT.METADATA-HISTORY.1 quedó verificada localmente. QA-LAYOUT.CONTENT-GUTTERS.1 ya implementa el contenedor común y pasa una matriz real de geometría en rutas estáticas y detalles poblados de Chromium/Pixel 5; quedan abiertos safe-area no nula, cobertura por archivo y la auditoría visual/interactiva completa. QA-AI.REAL-INTEGRATIONS.1 sigue abierta.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-03
 
@@ -657,6 +657,16 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 **Evidencia QA-04c.TESTPORT.CATALOG.1 (2026-10-02):** ajuste solo de la lista de consumidoras en el test estático; ninguna lógica de producto cambió. `npm run test --prefix server -- src/utils/pantry-catalog-i18n.spec.ts`: **19/19**. La aserción de líneas de ticket (`line.name` crudo y sin `| catalog`) permanece activa. `npm run test:coverage --prefix server -- --reporter=dot`: **45/45 archivos de test, 922/922 pruebas**, salida **0** y coverage **93.97/85.60/95.19/96.66 %** en statements/branches/functions/lines; se satisface el umbral configurado por archivo de 70 % sin alterarlo. `npm run build --prefix server` y `git diff --check` pasan. `prettier --check` ya fallaba para este archivo en el `HEAD` previo; no se reformateó su contenido histórico. La E2E de onboarding citada arriba recorrió Chromium + Pixel 5 con SQLite aislada y cleanup; no se cambió interfaz ni se usó `localhost:4200`.
 
+### QA-04c.TESTPORT.PANTRY-CLOCK.1 · fixture civil frente al reloj UTC de SQLite
+
+**Fuente revalidada (2026-10-02/03):** `pantry.routes.ts` compara caducidades con `date('now')` y documenta UTC como reloj del servidor. El helper `dayFromNow()` del spec usaba getters/setters locales. A las 23:51 UTC del 2 de octubre (01:51 del día 3 en Europe/Madrid), «ayer» local generaba `2026-10-02`, igual al día SQLite; por eso la consulta `< date('now')` devolvía cero filas. La reproducción aislada confirma un desfase del fixture, no un cambio de conducta de producción.
+
+- [x] Reproducir la aserción de «caducó ayer» en DB temporal durante el desfase de medianoche local/UTC.
+- [x] Alinear el helper de fechas del spec al reloj UTC ya fijado por la ruta; no alterar lógica de producto ni configuración de zona.
+- [x] Ejecutar el spec completo de Pantry y repetir toda la suite del servidor con coverage en directorios temporales, comprobando `DATABASE_PATH` efectivo y conservando el umbral del 70 %.
+
+**TDD rojo→verde y cierre local (2026-10-03):** el test focal aislado falló antes del cambio (**1 fallo / 5 skips**, esperaba «Leche del lunes», recibió `[]`) y pasó después (**1/1**); el spec completo de Pantry pasó **6/6**. La suite server con coverage pasó **46/46 archivos, 943/943 pruebas**; resultado **93.01/84.52/94.81/95.45 % S/B/F/L**, incluidas las rutas/esquema de tickets por encima del 70 % por archivo. SQLite y reportes se limitaron a una carpeta `%TEMP%` única; se comprobó `DATABASE_PATH` antes de ejecutar y no se tocaron `server/coverage` ni la lógica de producción. Umbrales sin cambios.
+
 ### QA-04c.UI.DATATABLE.1 · cobertura del componente compartido de tabla (en curso)
 
 **Fuente revalidada (2026-10-02):** el contrato vigente de `app-data-table` está en `HOGARIA-SPEC.md` §§12ab–12ad. `DataTableComponent` recibe filas/columnas y presenta búsqueda proyectada, celdas proyectadas, orden multi-columna, filtros de texto/número/fecha, paginación, selección y una hoja móvil; `data-table.util.spec.ts` ya cubría helpers puros, y `pantry.spec.ts`, `pantry-managers.spec.ts` y `pantry-catalog.spec.ts` recorren consumidores reales. No había `data-table.component.spec.ts`; LCOV atribuyó **2/254 líneas, 0/163 ramas y 0/97 funciones**. Se añadió cobertura directa y solo se cambió comportamiento respaldado por regresiones rojas.
@@ -963,6 +973,17 @@ Evidencia de la suite frontend completa (2026-10-01): Karma **614/614** tests pa
 
 **Evidencia reproducible (2026-10-01):** TDD partió de los 13 falsos avisos `texto-en-un-catalogo` en `labels.ts:345-358`, causados por comparar rutas Windows con un literal POSIX. `node --test --experimental-test-coverage scripts/check-ui-paths.test.mjs`: **3/3**, el helper 100/100/100/100. Karma completo: **614/614**; incluye la tabla de las 13 categorías en ES/EN y los casos de rename, custom y huérfana; `labels.ts` mide 94.74/77.27/75.00/94.74 % (S/B/F/L), por encima del mínimo de 70 %. `node scripts/check-ui.mjs`: **181 ficheros, 20 reglas, sin incidencias**. Typecheck y build frontend pasan; no se cambió el gate global frontend de 80 % (el estado se documenta en QA-04c global). Rollback: revertir `scripts/check-ui-paths.mjs`, sus tests, las exclusiones normalizadas de `scripts/check-ui.mjs` y la ampliación de `pantry-gestor.util.spec.ts`.
 
+## QA-05.CHECK-UI.TEST-FIXTURES.1 · no analizar fixtures como texto visible
+
+**Fuente revalidada (2026-10-03):** `scripts/check-ui.mjs` excluye `.spec.ts`, pero analiza `frontend/src/app/core/interceptors/auth.interceptor.test-fixtures.ts` como interfaz. La única incidencia actual es `texto-en-un-catalogo` para `name: 'Auth Interceptor'`; la búsqueda del literal solo encuentra esta fixture sintética de `AuthResponse`, no texto que renderice una pantalla. La corrección debe excluir únicamente helpers de prueba y mantener analizado el código real.
+
+- [x] Reproducir el hallazgo en `check-ui` y confirmar que la cadena solo existe en la fixture de test.
+- [x] Añadir regresiones POSIX/Windows para excluir `*.test-fixtures.ts` y conservar dentro del análisis un `.ts` de pantalla real.
+- [x] Excluir esos helpers del escaneo visible sin añadir allowlist ni relajar reglas sobre producción; ejecutar tests del helper y `check-ui` completo.
+- [x] Reejecutar `git diff --check` y registrar limitaciones/gates globales sin cambiar sus umbrales.
+
+**Evidencia QA-05.CHECK-UI.TEST-FIXTURES.1 (2026-10-03):** antes del ajuste `node scripts/check-ui.mjs` marcó solo la fixture `Auth Interceptor` entre 188 archivos. Las dos regresiones nuevas fallaron antes de producción por falta del filtro; después `node --test --experimental-test-coverage scripts/check-ui-paths.test.mjs` pasa **5/5** y `check-ui-paths.mjs` alcanza **100/100/100/100 %** (sentencias/ramas/funciones/líneas). `node scripts/check-ui.mjs` pasa en **187 ficheros, 20 reglas, 0 incidencias**; rutas Windows/POSIX de specs/fixtures se excluyen y pantallas reales siguen dentro del escaneo. `git diff --check` pasa; no cambia UI de producto ni el gate de cobertura frontend.
+
 ## QA-RECIPES.AI-FLOW.1 · generación, selección y persistencia (validación funcional local; gate de coverage pendiente)
 
 **Fuente revalidada antes de codificar (2026-10-01):** baseline observado: el servicio devolvía `null` sin borrar borradores previos, el componente mostraba éxito aun con `null`/lista vacía, no renderizaba `generatedRecipes()`, ambos endpoints persistían prematuramente y el múltiple hacía self-fetch a `localhost:3000` (incompatible con puerto aislado). Los nuevos tests cubren el resultado nulo/500, la lista vacía/inválida, error de proveedor, conteos antes/después y reintento. La ruta AI está deliberadamente fuera de `COVERED` en `server/vitest.config.ts` (cobertura por fichero); se prueba por integración. No afirmar coverage global aprobada.
@@ -1065,6 +1086,7 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 - [x] `/auth/login`: correo/contraseña válidos e inválidos, campos vacíos, revelar/ocultar contraseña, loading, error genérico y redirección correcta.
 
 **Evidencia QA-AUTH.LOGIN.1 (2026-10-03):** la E2E aislada `pnpm run test:e2e -- --project=chromium --project=mobile-chrome tests/e2e/auth.spec.ts` pasa **20/20** con SQLite/puertos/semillas temporales; cubre credenciales válidas e inválidas, campos vacíos, revelar/ocultar, loading, 503 recuperable y redirección. La primera corrida detectó dos toasts idénticos ante 503: el interceptor global y el formulario notificaban a la vez. `AuthService.login()` ahora marca `SILENT_TOAST` para que el formulario gestione ese error una sola vez. `AuthService` focal pasa **26/26** con **96/81.81/91.89/97.89 %** statements/branches/functions/lines en reporte temporal; typecheck E2E, formato y `git diff --check` pasan. Las rutas de registro, recuperación, invitación y onboarding continúan abiertas.
+
 - [ ] `/auth/register`: requerido/formato, política de contraseña y límites, correo duplicado, error del servidor, registro normal y retorno con `?code=` de invitación.
 - [ ] `/auth/forgot-password`: correo vacío/mal formado/válido, respuesta que no revela si existe la cuenta, loading y error recuperable.
 - [ ] `/invite/:code`: código válido, inválido o invalidado al regenerar (sin expiración temporal en el modelo actual), invitación repetida, ya pertenece al hogar, aceptar/rechazar con sesión y entrada por registro/login preservando el código.
@@ -1603,6 +1625,24 @@ aislada; build, `typecheck:e2e`, `check-ui`, formato y `git diff --check` pasaro
 de recibos cumple el 70 % sin rebajar gates. El gate global frontend permanece abierto y el smoke de
 proveedores reales corresponde a `QA-AI.REAL-INTEGRATIONS.1`, fuera de esta unidad.
 
+### QA-RECEIPT.STOPPED-METADATA.1 · edición desde el historial de un ticket parado
+
+**Fuente revalidada (2026-10-03):** `receipts.spec.ts` ya siembra 105 tickets terminales y muestra el
+estado «Parado» en el historial; la fixture `history-003` es uno de ellos. El test actual abre el más
+antiguo (`history-000`), pero no abre ni edita un ticket `stopped`. `receipt-detail.component.spec.ts`
+sí comprueba que la ficha permite editar `review`, `confirmed`, `failed` y `stopped`; se añade aquí
+la prueba real de navegación/persistencia para cerrar la brecha de interacción del estado parado.
+
+- [x] E2E real aislada: abrir desde el historial el registro terminal `stopped`, cambiar tienda y fecha,
+      guardar por UI, verificar los metadatos por GET y reload, y comprobar que el estado sigue `stopped` sin
+      confirmar ni tocar inventario. Usar la SQLite/puertos/semilla temporales del runner existente.
+      **Evidencia QA-RECEIPT.STOPPED-METADATA.1 (2026-10-03):** el historial abre `history-003` con estado
+      `stopped`; se editaron tienda y fecha desde la ficha, el guardado mostró éxito, el GET y la recarga
+      conservaron ambos valores y el estado siguió parado. `node scripts/run-isolated-playwright.mjs
+--workers=1 --project=chromium --project=mobile-chrome tests/e2e/receipts.spec.ts --grep 'recorre el historial completo'
+--reporter=dot` pasó **2/2** (Chromium y Pixel 5); el runner confirmó parada de la app y limpieza de su
+      SQLite/artefactos temporales. No hizo falta cambiar producción.
+
 ## Unidad QA-AI.REAL-INTEGRATIONS.1 · smoke real de proveedores IA
 
 **Fuente revalidada (2026-10-03):** `server/src/utils/ai-client.ts` declara ocho `AiJobKind` y sus
@@ -1613,20 +1653,22 @@ hay suites sintéticas loopback para los contratos UI/API. Hallazgo: ambos usos 
 reutilizan `syntheticReceiptPng` y dejan el modo `auto`, así que el test no comprueba una foto
 de estantería ni el contrato de extracción por modo. Separar el fixture, elegir `shelf` por UI y
 comprobar el payload; la corrida real debe reconocer al menos un producto etiquetado. Ninguna corrida real está demostrada por
-esos fixtures. `run-ai-real-smoke.mjs` valida opt-in/CI antes de iniciar la WebAPI y siempre intenta
-cleanup en `finally`, pero todavía no hay prueba del coordinador de que omitir opt-in o usar `CI=true`
-no inicie supervisor, sesión, proxy ni Playwright. El controlador Playwright pide limpieza vía IPC;
-falta evidencia determinista del orden de cierre de toda la pila ante cancelación. El usuario autoriza
-el perfil local de WebAPI y sus llamadas reales; el proveedor objetivo será solo el modelo activo
-disponible en esa WebAPI, sin afirmar cobertura de vendors no configurados.
+esos fixtures. `run-ai-real-smoke.mjs` valida opt-in/CI y ejecuta una pila E2E con base temporal; el
+coordinador actual usa la WebAPI existente, verifica controles de privacidad sin cambiarlos y limpia
+su token propio, si lo crea, al terminar. Todavía falta prueba del coordinador de que omitir opt-in o
+usar `CI=true` no inicie sesión, proxy ni Playwright, y evidencia determinista de cleanup ante
+cancelación. El usuario autoriza el perfil local de WebAPI y sus llamadas reales; el proveedor objetivo será solo el modelo activo
+disponible en esa WebAPI, sin afirmar cobertura de vendors no configurados. El harness actual todavía
+usa solo `Tomate` en recetas, recetas múltiples, recomendaciones y planificación; no demuestra receta
+compleja ni salida live, por lo que esa evidencia sigue pendiente.
 
 | `AiJobKind`        | Ruta de la aplicación                        | Aserción real mínima con fixture sintética                                                                        |
 | ------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `connection_test`  | `POST /api/ai/test-connection`               | Veredicto válido del esquema JSON estricto.                                                                       |
-| `recipe`           | `POST /api/ai/generate-recipe`               | Borrador JSON con nombre no vacío, mostrado en la UI.                                                             |
-| `multiple_recipes` | `POST /api/ai/generate-multiple-recipes`     | Dos borradores distintos/validables (`count: 2`), ambos devueltos.                                                |
+| `recipe`           | `POST /api/ai/generate-recipe`               | Receta compleja con varios ingredientes y tres niveles de instrucciones válidos, mostrada en la UI.              |
+| `multiple_recipes` | `POST /api/ai/generate-multiple-recipes`     | Dos borradores distintos/validables (`count: 2`) con despensa de varios ingredientes, ambos devueltos.           |
 | `recommendations`  | `POST /api/ai/recommendations`               | Lista JSON de recomendaciones; admite inventario sintético vacío.                                                 |
-| `weekly_plan`      | `POST /api/ai/plan-week`                     | Plan JSON del intervalo sintético persistido en calendario/planificador.                                          |
+| `weekly_plan`      | `POST /api/ai/plan-week`                     | Plan JSON con objetivos múltiples/custom, persistido en calendario/planificador.                                  |
 | `expiry_estimate`  | `POST /api/pantry/expiry/estimate`           | Ingrediente sintético no catalogado recibe días estimados persistidos.                                            |
 | `shopping_photo`   | `POST /api/shopping/lists/:id/photo/analyze` | Foto PNG sintética produce al menos una línea de compra editable.                                                 |
 | `receipt`          | `POST /api/receipts`                         | Ticket PNG sintético; el modelo reconoce tienda y fecha impresas, la UI permite corregirlas y persiste historial. |
@@ -1703,14 +1745,14 @@ live sigue pendiente y nunca se declara verde.
 **Fuente revalidada (2026-10-04):** la instrucción activa del usuario pide la WebAPI existente en
 `localhost:3001`, configuración `webapi / Custom / gpt-5 / concurrencia 1`, usar el token local
 autorizado y, si no está disponible desde una fuente segura, permite crear uno para las pruebas. El
-usuario había especificado que ese token no caducara; el smoke debe borrarlo al terminar. El runner
-actual (`run-ai-real-smoke.mjs`) rechaza un bearer existente, crea otro de 30 min, modifica settings de
-request/session logging y levanta un proceso propio; su supervisor podría reutilizar el perfil personal
-de Patchright. No hay evidencia de que el token copiado esté disponible desde una fuente segura ni se
-ha validado bearer/modelo. La conectividad anónima del coordinador confirma que WebAPI responde, pero
-no valida bearer ni modelo; el `401` de MCP Browser es independiente. Esta subunidad reemplaza para
-el smoke live las instrucciones anteriores incompatibles de iniciar una WebAPI aislada, cambiar sus
-settings o usar un token corto.
+usuario había especificado que ese token no caducara; el smoke debe borrarlo al terminar. El harness
+actual usa la WebAPI existente, admite bearer efímero de entorno o crea un token propio con
+`expiresAt: null` y borra/verifica solo ese token al terminar; no inicia ni reconfigura el servicio y
+aborta antes de usar el modelo si no puede verificar que request-body/session/diagnostic capture ya
+están desactivados. Las pruebas focales de sus módulos pasan, pero el smoke live sigue sin ejecutarse
+y el caso actual de receta usa un ingrediente. Ningún token ha sido leído ni ninguna completion real se
+ha realizado en esta sesión. Esta subunidad reemplaza instrucciones anteriores incompatibles de iniciar
+otra WebAPI, cambiar privacidad o usar un token corto.
 
 **Contrato único para el smoke live:** modo manual independiente y opt-in contra la instancia ya
 existente. Nunca iniciar, parar o reconfigurar WebAPI; no cambiar sus settings de privacidad/logs,
@@ -1746,8 +1788,16 @@ latencias/uso/coste agregados, sin tienda, artículos, importes ni fechas person
       levantado; si no es verificable, no enviar tickets reales ni completar smoke live.
 - [ ] Ejecutar los ocho flujos reales opt-in con `gpt-5`, stop-on-first-failure y métricas agregadas; sin
       reintentos/manual retries, conservar DB/artifacts solo mientras se demuestra cleanup.
+- [ ] En el mismo presupuesto estricto, probar generación real con al menos 8 ingredientes sintéticos
+      variados y una preparación de varias fases; validar ingredientes presentes una sola vez en el JSON,
+      pasos utilizables y contenido `basic`/`intermediate`/`expert` no vacío. La receta múltiple recibe
+      ingredientes variados y devuelve 2 borradores distintos; la planificación transmite más de un
+      objetivo y texto custom cuando están seleccionados, sin reducirlos a una sola preferencia.
 - [ ] En unidad separada, procesar los seis tickets solicitados (PDF/JPEG, priorizar el marcado “mejor”),
-      validar tienda/fecha/edición UI/historial por archivo y no guardar ningún dato personal en Git.
+      solo después de verificar que captura de cuerpos/sesiones está apagada; validar resultado/edición/
+      historial desde UI aislada y no guardar datos personales, capturas, prompts ni respuestas.
+      Mantener presupuesto/concurrencia acotados, comenzar por el ticket señalado como mejor y abortar
+      si privacidad/redacción o cleanup no quedan verificados.
 
 **Rollback:** retirar este modo/fixture E2E y esta subunidad sin tocar el comportamiento de proveedor
 existente; las pruebas sintéticas y el smoke anterior opt-in deben seguir explícitos y separados.
@@ -1804,7 +1854,7 @@ quedan pendientes; no se hizo ninguna llamada real a proveedor.
 
 ## Unidad QA-LAYOUT.CONTENT-GUTTERS.1 · márgenes homogéneos en las vistas
 
-**Fuente revalidada (2026-10-03):** `app.routes.ts` monta las rutas privadas de producto bajo
+**Fuente inicial anterior a la implementación (2026-10-03):** `app.routes.ts` monta las rutas privadas de producto bajo
 `MainLayoutComponent`; Auth, invitación y onboarding tienen shells separados por diseño. El shell
 principal no posee un contenedor/gutter común de contenido y las features declaran máximos y padding
 propios (p. ej. Dashboard 800 px, Calendar 1280 px, Preferences 1360 px). `DESIGN-SYSTEM.md` ya fija
@@ -1813,13 +1863,21 @@ mide visibilidad, errores y overflow en 28 rutas; no compara bordes de contenido
 espera cada ruta. La intención explícita del usuario es homogeneizar los márgenes sin ensanchar
 formularios/columnas de lectura por encima de límites útiles.
 
-- [ ] Convertir los gutters de `DESIGN-SYSTEM.md` en un único contenedor/patrón compartido de página;
+**TDD rojo (2026-10-03):** la regresión `layout-gutters.spec.ts`, con el runner aislado, SQLite efímera,
+`E2E_RATE_LIMIT=on`, Chrome escritorio y Pixel 5, falló en ambos proyectos antes de cambiar producción:
+los shells esperados sí estaban, pero las seis rutas representativas no montaban ningún
+`app-page-container` en los 8 viewports (320, 393, 568 horizontal, 767/768, 1023/1024 y 1440 px). Un
+sondeo inicial que comparaba el `padding` de Dashboard/Calendar/Preferences halló discrepancias (Dashboard
+32 px desde 768 frente a 24 esperados; Calendar 24 px desde 768 frente a 32 desde 1024; Preferences 16 px
+en todos), pero se descartó como contrato insuficiente porque no mide el marco exterior ni el shell.
+
+- [x] Convertir los gutters de `DESIGN-SYSTEM.md` en un único contenedor/patrón compartido de página;
       eliminar paddings laterales literales divergentes en wrappers externos de features. Contenido
       interno más estrecho puede conservar `max-width` propio, centrado y legible.
-- [ ] Mantener shells intencionales: privada usa `MainLayout`; Auth, invitación y onboarding conservan
+- [x] Mantener shells intencionales: privada usa `MainLayout`; Auth, invitación y onboarding conservan
       su composición específica, pero aplican los gutters comunes. Ninguna ruta protegida puede perder
       el shell o renderizar un segundo shell.
-- [ ] Extender el manifiesto E2E a todas las rutas reales, parámetros/detalles y vistas por módulo;
+- [x] Extender el manifiesto E2E a todas las rutas reales, parámetros/detalles y vistas por módulo;
       afirmar shell esperado y medir en navegador el mismo gutter/borde exterior por viewport. Incluir
       cada breakpoint hallado en código y 320 px/orientación horizontal; no sustituir mediciones por
       `scrollWidth` solamente.
@@ -1830,70 +1888,94 @@ formularios/columnas de lectura por encima de límites útiles.
       Chromium escritorio y Pixel 5, build/typecheck/formato/diff checks y cobertura por archivo ≥70 %;
       no marcar como homogéneo un baseline que solo haya comprobado ausencia de overflow.
 
+### QA-LAYOUT.PREFERENCES-END-CONTROL.1 · acción final alcanzable sobre navegación fija
+
+**Fuente revalidada (2026-10-03):** `/preferences` usa la ruta autenticada bajo `MainLayoutComponent`.
+La vista termina en `.preferences__actions` con el botón accesible «Guardar preferencias»; en móvil,
+`.bottom-nav` es fija y `main.main` reserva 64 px más el inset inferior disponible. `preferences-width.spec.ts`
+ya cubre gutters/overflow y pestañas, pero no mide si la acción final se puede alcanzar y activar sobre
+esa navegación en una altura corta.
+
+- [ ] Añadir una E2E aislada en archivo nuevo, solo para Pixel 5, que mida 320×568, 393×851 y 568×320.
+- [ ] En cada viewport, desplazar hasta «Guardar preferencias», medir que su caja queda completamente
+      visible y fuera del rectángulo de `.bottom-nav`, comprobar hit-test/click y esperar confirmación.
+- [ ] Ejecutar la prueba con el runner aislado (SQLite/puertos/semilla propios); no usar la base normal.
+
+**Evidencia parcial (2026-10-03):** el archivo E2E está añadido y `pnpm run typecheck:e2e`, Prettier
+focal del test y `git diff --check` pasan. El intento de ejecución mediante el runner aislado terminó
+con `spawn EPERM` antes de iniciar Playwright; no hay resultado E2E ni se usó la base/servidor normal.
+Los criterios siguen abiertos hasta una ejecución real.
+
+**Rollback:** quitar el archivo E2E nuevo y este subapartado; no modifica producción ni datos normales.
+
 ### QA-LAYOUT.RECIPE-DETAIL.1 · medir la ficha real de receta desde su deep link
 
-**Fuente revalidada (2026-10-03):** `tests/e2e/helpers/recipe-fixtures.ts` ya crea y elimina recetas sintéticas; `/recipes?recipe=<id>` llama a `getRecipe()` y abre el diálogo real. Sin embargo, `route-layout-manifest.ts` solo prueba esa query con un ID inexistente y espera el fallback `/recipes`, por lo que la ficha real no entra en la matriz de gutters. La lista actual del manifiesto tiene 35 casos —4 públicos, onboarding, 23 autenticados y 7 poblados—, frente a los 31 de la evidencia de layout; además faltan las redirecciones `/`, `/auth` y `**` anotadas en los route files. La app mantiene un único gutter en el marco, pero todavía no se prueba esta superficie poblada con contenido real ni el ajuste interno del diálogo.
+**Fuente revalidada (2026-10-03):** `route-layout-manifest.ts` y `layout-gutters.spec.ts` ahora ejercitan 31 casos estáticos (5 públicos, 1 de onboarding y 25 autenticados) más 8 detalles poblados, para **39 casos**. El manifiesto comprueba `/` → `/dashboard`, `/auth` → `/auth/login` y el fallback de una ruta desconocida. `populatedDynamicRoutes()` incluye la receta persistida; el test comprueba la descripción real y elimina solo esa fixture en `finally`. `recipe-actions-mobile.spec.ts` abre el deep link real y recorre la ficha larga y los dos diálogos relevantes.
 
-**Hallazgo visual adicional (2026-10-03, captura sintética):** en el modal «Generar Receta con IA» a 320 px, el título parece entrar en el espacio del botón de cierre. El encabezado compartido `.modal__header` usa flex y `.modal__title` no fija un límite de ancho ni `min-width: 0`; medir los rectángulos del título y cierre en navegador antes de cambiar CSS.
+**Hallazgo visual adicional (2026-10-03, captura y geometría sintéticas):** la primera medición real a 320 px halló que el título «Generar Receta con IA» tocaba el botón de cierre (gap **0 px**). Se añadió primero la aserción geométrica y después se ajustó el CSS compartido del modal; el test actual usa además un título de receta deliberadamente largo.
 
-- [ ] Reconciliar el censo del manifiesto con `app.routes.ts` y rutas de features; probar las redirecciones raíz, `/auth` y fallback, y no fijar un total obsoleto.
-- [ ] Añadir la receta sintética guardada al manifiesto mediante `createSyntheticRecipe()`; abrir `/recipes?recipe=<id>`, comprobar diálogo/receta reales (no 404/fallback) y borrar solo esa fixture incluso ante fallo.
-- [ ] Recorrer la ficha real en Chromium y Pixel 5 por los viewports y límites de breakpoint ya medidos; confirmar shell único, contenedor/gutters 16/24/32 px, límites internos intencionales y ausencia de clipping/overflow.
-- [ ] Verificar el diálogo accesible desde el deep link: foco inicial/trampa, scroll del cuerpo, Escape/cierre y limpieza del query; incluir 320×568, 393×851 y 1440×900.
-- [ ] Confirmar que los títulos de modales largos no se solapan con el botón de cierre a 320, 393 y 1440 px; añadir primero una aserción geométrica real antes de cualquier ajuste visual.
-- [ ] Guardar e inspeccionar capturas sintéticas comparables de la ficha en PC y móvil; typecheck, E2E focal/full manifest, build, formato, diff checks y coverage focal ≥70 % sin bajar gates. Mantener abierta la validación de safe-area iOS/WebKit si el runtime continúa sin ese navegador.
+- [x] Reconciliar el censo del manifiesto con `app.routes.ts` y rutas de features; probar las redirecciones raíz, `/auth` y fallback, y no fijar un total obsoleto.
+- [x] Añadir la receta sintética guardada al manifiesto mediante `createSyntheticRecipe()`; abrir `/recipes?recipe=<id>`, comprobar diálogo/receta reales (no 404/fallback) y borrar solo esa fixture incluso ante fallo.
+- [x] Recorrer la ficha real en Chromium y Pixel 5 por los viewports y límites de breakpoint ya medidos; confirmar shell único, contenedor/gutters 16/24/32 px, límites internos intencionales y ausencia de clipping/overflow.
+- [x] Verificar el diálogo accesible desde el deep link: foco inicial/trampa, scroll del cuerpo, Escape/cierre y limpieza del query; incluir 320×568, 393×851 y 1440×900.
+- [x] Confirmar con geometría de navegador que los títulos largos no se solapan ni se recortan frente al botón de cierre a 320, 393 y 1440 px.
+- [x] Guardar e inspeccionar capturas sintéticas comparables de PC/móvil; ejecutar typecheck, E2E focal y matriz completa, build, formato, diff checks y coverage focal ≥70 % sin bajar gates. La validación de safe-area no nula en iOS/WebKit permanece explícitamente abierta porque falta el ejecutable requerido.
 
 **Rollback:** revertir solo la extensión de receta/redirect del manifiesto, sus E2E y este subapartado; no cambia el contrato ni los datos de producción.
 
-### QA-LAYOUT.SAFE-AREA.SYNTHETIC.1 · geometría del shell con inset inyectado
+**Implementación y evidencia (2026-10-03):** se añadió `app-page-container` como marco de página,
+con variantes bounded/unbounded y gutters compartidos de 16/24/32 px; el shell privado usa el ancho
+máximo común de 1280 px y conserva los máximos internos de cada vista. Los shells de Auth/invitación/
+onboarding conservan su composición sin duplicar padding horizontal exterior. `route-layout-manifest.ts`
+comparte su inventario con el baseline y define 31 casos estáticos; la ampliación posterior añade 8
+detalles dinámicos poblados. La primera implementación roja detectó ausencia del contenedor en las seis rutas de
+referencia; el barrido geométrico posterior detectó además overflow real en Dashboard a 480–482/559–561
+px y Compra a 361 px. El cambio mínimo de breakpoint (Dashboard 4 columnas desde 600 px, filtro compacto
+de Compra hasta 362 px) eliminó ambos defectos.
 
-**Fuente revalidada (2026-10-03):** `index.html` declara `viewport-fit=cover`, pero el header ocupa
-56 px desde el borde superior, `.main` solo reserva esos 56 px, y el drawer va de borde a borde sin
-padding de notch/home indicator. `.bottom-nav` declara 64 px totales y añade `padding-bottom` dentro de
-esa altura por `box-sizing:border-box`, reduciendo el área de sus controles; `.main` sí reserva el
-inset inferior. Playwright en Pixel 5 informa `env(safe-area-inset-*) = 0`, así que la matriz actual no
-prueba inset no nulo. WebKit/iPhone nativo sigue sin poder ejecutarse por la revisión de navegador
-ausente y no se atribuirá evidencia nativa a insets sintéticos.
+`layout-gutters.spec.ts`, runner aislado, rate limit activo: **2/2** proyectos (Chromium desktop y
+Pixel 5) pasan tras las comprobaciones finales de shells; cada proyecto recorre 31 casos estáticos en 49
+viewports (incluye 320 px, horizontal y cada breakpoint numérico CSS ±1), mide gutter efectivo,
+contenedor único, max-width privado, shell correcto y overflow horizontal. `main-layout-drawer.spec.ts`
+añade **2/2** Chromium/Pixel 5 para navegación fija, safe-area CSS disponible, targets táctiles,
+teclado/foco, Escape, scroll del drawer y bordes 1024/1025/1440. El navegador Pixel no aporta un inset
+safe-area no nulo; la verificación en Safari/WebKit quedó bloqueada porque falta el ejecutable de la
+versión Playwright requerida (no se instaló ni actualizó nada). En ese primer pase todavía faltaban
+detalles dinámicos y la interacción de ficha; la ampliación siguiente y la evidencia focal de esta
+subunidad los cubren. El cierre de la unidad padre sigue pendiente por safe-area no nula, cobertura por
+archivo del resto de componentes y auditoría visual/interactiva completa.
 
-Contrato esperado: con insets superior/inferior/laterales no nulos, el shell móvil mantiene visibles y
-tocables el header, drawer, contenido y navegación inferior; el alto útil de la barra inferior sigue
-siendo 64 px además del área segura. En cero inset y en escritorio la geometría existente permanece.
+**Ampliación de detalles poblados (2026-10-03):** las rutas dinámicas de categoría, producto, cola IA,
+inventario (ficha y edición), receta, lista de compra y ticket cuentan con contenido sintético real; la ruta de
+ticket se prepara antes de una config `.invalid` para evitar llamadas externas. Se añadieron fixtures
+para inventario, edición, lista y ticket, comprobando contenido y no solo el estado 404. Tras un TDD
+rojo con ID inexistente, `pnpm run test:e2e -- tests/e2e/layout-gutters.spec.ts --project=chromium --project=mobile-chrome --reporter=list`
+pasó **4/4** con `E2E_CHROME_BIN` apuntando al Brave instalado; usa el runner aislado, rate limit activo
+y limpia SQLite/artefactos al cerrar. `pnpm run typecheck:e2e` y
+`pnpm exec prettier --check tests/e2e/helpers/route-layout-manifest.ts tests/e2e/layout-gutters.spec.ts`
+también pasan. En ese pase inicial las capturas y la safe-area no nula seguían pendientes; las capturas
+comparables se generaron después en una carpeta ignorada por Git, y Pixel 5 no expone un inset no nulo.
 
-- [ ] Escribir primero una E2E aislada que inyecte tokens CSS app de safe-area no nulos y reproduzca
-      header/control bajo el notch, controles del drawer bajo notch/home indicator y barra inferior sin
-      64 px útiles; cubrir retrato y paisaje sin depender del valor `env()` del navegador.
-- [ ] Implementar tokens app derivados de `env(safe-area-inset-*, 0px)` y aplicarlos a header, gutter
-      compartido, drawer, barra inferior y reserva del contenido; conservar el shell desktop y el caso
-      inset cero.
-- [ ] Comprobar geometría, hit-test/teclado del drawer, objetivos inferiores ≥44×44, scroll corto y
-      ausencia de clipping/overflow en 393×851 y 568×320 con insets sintéticos declarados.
-- [ ] Ejecutar Playwright aislado en Chromium y Pixel 5, build/typecheck/formato, diff-check y cobertura
-      de cada archivo de producción tocado ≥70 % S/B/F/L; guardar e inspeccionar capturas sintéticas
-      comparables PC/móvil. Mantener los gates globales sin rebajarlos.
-- [ ] Ejecutar aparte `mobile-safari` y observar inset nativo superior/inferior no nulo antes de afirmar
-      validación real iOS; si falta WebKit o devuelve cero, registrar el bloqueo y dejar abierta esta casilla.
+Karma `page-container.component.spec.ts`: **2/2**; E2E y pruebas aisladas con SQLite/puertos/usuario
+sintéticos, nunca contra la base normal. También pasan `pnpm run typecheck:e2e`, Prettier focal y build
+de producción; el build conserva avisos de presupuesto/imports sin cambiar sus gates. Última matriz capturada
+y revisada: escritorio y móvil en `%TEMP%\hogaria-e2e-7CJKSx\artifacts\layout-gutters-todas-las-r-47ec2-lican-un-único-gutter-común-{chromium,mobile-chrome}\dashboard-{desktop,mobile}.png`.
 
-**Rollback:** revertir solo los tokens/reglas de safe-area, la E2E focal y este subapartado; no revertir
-el contenedor común ni otros cambios del layout.
+**Cierre focal QA-LAYOUT.RECIPE-DETAIL.1 (2026-10-03):** la matriz E2E completa se repitió con un
+worker, rate limit activo, Chrome local y stack/SQLite/puertos aislados:
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/layout-gutters.spec.ts --reporter=dot`
+pasó **4/4** en 1,7 min; cada proyecto recorrió 39 casos × 49 viewports. La prueba focal
+`recipe-actions-mobile.spec.ts` pasó **2/2** en escritorio y Pixel 5, con título sintético largo;
+comprobó deep link, foco inicial, scroll, acciones, Tab/Shift+Tab, Escape/cierre, query y gap geométrico
+≥8 px. También comprobó el modal IA en 320/393 px sin requests reales al endpoint IA.
 
-**Evidencia QA-LAYOUT.SAFE-AREA.SYNTHETIC.1 (2026-10-03):** TDD reprodujo primero el fallo en ambos
-proyectos: con inset superior sintético de 24 px, el header seguía midiendo 56 px frente a los 80 px
-esperados. Tras añadir tokens CSS para top/right/bottom/left, la primera corrida validó la geometría;
-la captura encontró una espera frágil (`boundingBox()` devolvía null para el drawer ya fuera de vista).
-Se cambió a sondeo de `getBoundingClientRect()` y se espera a que termine la transición de apertura
-antes de medir el cierre y sus controles. La corrida final con un worker pasó **2/2** en Chromium y
-Pixel 5; cubre 393×851 y 568×320, inset cero/no nulo, click de Recetas/Inicio, header, contenido, barra
-inferior, drawer, foco/Escape, scroll corto, hit targets y ausencia de overflow.
-
-Comando: `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
-tests/e2e/safe-area-layout.spec.ts --reporter=dot`, con `E2E_RATE_LIMIT=on`, Chrome local y DB/puertos/
-semilla/artefactos temporales; runner limpió tras detener su app. `pnpm run typecheck:e2e`,
-`pnpm --filter @hogaria/web run build:prod`, Prettier focal y `git diff --check` pasan. El build conserva
-warnings existentes de bundle, presupuesto e imports; no se rebajaron gates. Solo se modificó CSS de
-producción (`styles.scss`), sin archivo TS instrumentable para cobertura; cobertura S/B/F/L: N/A.
-Capturas sintéticas revisadas en `%TEMP%\hogaria-safe-area-final-b8dcc311afa94912afce3c827a458c7d\`
-(`safe-area-desktop-chromium.png`, `safe-area-mobile-mobile-chrome.png`). No se probó iOS nativo: la
-revisión WebKit requerida sigue ausente y Pixel 5 no expone inset nativo no nulo; la última casilla queda abierta.
+Capturas sintéticas revisadas: `.e2e-screenshots/qa-layout-recipe-current/recipe-actions-detail-1440.png`,
+`recipe-actions-detail-320.png`, `recipe-actions-detail-393.png`, `recipe-actions-ai-320.png` y
+`recipe-actions-ai-393.png`. `pnpm run typecheck:e2e`, Prettier focal y `git diff --check` pasan.
+`pnpm --filter @hogaria/web run build:prod` pasa con advertencias de bundle/styles/imports. Karma focal
+ejecutó **22/22** pruebas; `modal.component.ts` cubre **90,21/79,62/100/91,11 % S/B/F/L** y
+`page-container.component.ts` **100/100/100/100 %** (sin ramas en el archivo). El comando enfocado sale
+con código 1 únicamente porque el agregado parcial no alcanza el gate global 80 % (**53,26/28,27/46,96/57,53 %**); no se cambió ningún umbral y el gate global permanece abierto.
 
 ### QA-LAYOUT.MAIN-CONTENT-WIDTH.1 · mismo ancho útil en todas las vistas
 
@@ -1936,16 +2018,66 @@ pero el reporte agregado no supera el gate global configurado (coverage **77.43/
 rebajó. Prettier focal pasa en los demás archivos cambiados, pero señala `logs.component.ts` y `caducidades.component.ts`
 por formato histórico: se conservaron sin reformateo masivo. Por estos gates de cobertura/formato, la última casilla
 permanece abierta y el Draft PR no se marca listo.
+
+### QA-LAYOUT.SAFE-AREA.SYNTHETIC.1 · geometría del shell con inset inyectado
+
+**Fuente revalidada (2026-10-03):** `index.html` declara `viewport-fit=cover`, pero el header ocupa
+56 px desde el borde superior, `.main` solo reserva esos 56 px, y el drawer va de borde a borde sin
+padding de notch/home indicator. `.bottom-nav` declara 64 px totales y añade `padding-bottom` dentro de
+esa altura por `box-sizing:border-box`, reduciendo el área de sus controles; `.main` sí reserva el
+inset inferior. Playwright en Pixel 5 informa `env(safe-area-inset-*) = 0`, así que la matriz actual no
+prueba inset no nulo. WebKit/iPhone nativo sigue sin poder ejecutarse por la revisión de navegador
+ausente y no se atribuirá evidencia nativa a insets sintéticos.
+
+Contrato esperado: con insets superior/inferior/laterales no nulos, el shell móvil mantiene visibles y
+tocables el header, drawer, contenido y navegación inferior; el alto útil de la barra inferior sigue
+siendo 64 px además del área segura. En cero inset y en escritorio la geometría existente permanece.
+
+- [x] Escribir primero una E2E aislada que inyecte tokens CSS app de safe-area no nulos y reproduzca
+      header/control bajo el notch, controles del drawer bajo notch/home indicator y barra inferior sin
+      64 px útiles; cubrir retrato y paisaje sin depender del valor `env()` del navegador.
+- [x] Implementar tokens app derivados de `env(safe-area-inset-*, 0px)` y aplicarlos a header, gutter
+      compartido, drawer, barra inferior y reserva del contenido; conservar el shell desktop y el caso
+      inset cero.
+- [x] Comprobar geometría, hit-test/teclado del drawer, objetivos inferiores ≥44×44, scroll corto y
+      ausencia de clipping/overflow en 393×851 y 568×320 con insets sintéticos declarados.
+- [x] Ejecutar Playwright aislado en Chromium y Pixel 5, build/typecheck/formato, diff-check y cobertura
+      ≥70 % S/B/F/L para archivos de producción instrumentables; SCSS sin instrumentación queda N/A,
+      sin rebajar gates globales. Guardar e inspeccionar capturas sintéticas comparables PC/móvil.
+- [ ] Ejecutar aparte `mobile-safari` y observar inset nativo superior/inferior no nulo antes de afirmar
+      validación real iOS; si falta WebKit o devuelve cero, registrar el bloqueo y dejar abierta esta casilla.
+
+**Rollback:** revertir solo los tokens/reglas de safe-area, la E2E focal y este subapartado; no revertir
+el contenedor común ni otros cambios del layout.
+
+**Evidencia QA-LAYOUT.SAFE-AREA.SYNTHETIC.1 (2026-10-03):** TDD reprodujo primero el fallo en ambos
+proyectos: con inset superior sintético de 24 px, el header seguía midiendo 56 px frente a los 80 px
+esperados. Tras añadir tokens CSS para top/right/bottom/left, la primera corrida validó la geometría;
+la captura encontró una espera frágil (`boundingBox()` devolvía null para el drawer ya fuera de vista).
+Se cambió a sondeo de `getBoundingClientRect()` y se espera a que termine la transición de apertura
+antes de medir el cierre y sus controles. La corrida final con un worker pasó **2/2** en Chromium y
+Pixel 5; cubre 393×851 y 568×320, inset cero/no nulo, click de Recetas/Inicio, header, contenido, barra
+inferior, drawer, foco/Escape, scroll corto, hit targets y ausencia de overflow.
+
+Comando: `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/safe-area-layout.spec.ts --reporter=dot`, con `E2E_RATE_LIMIT=on`, Chrome local y DB/puertos/
+semilla/artefactos temporales; runner limpió tras detener su app. `pnpm run typecheck:e2e`,
+`pnpm --filter @hogaria/web run build:prod`, Prettier focal y `git diff --check` pasan. El build conserva
+warnings existentes de bundle, presupuesto e imports; no se rebajaron gates. Solo se modificó CSS de
+producción (`styles.scss`), sin archivo TS instrumentable para cobertura; cobertura S/B/F/L: N/A.
+Capturas sintéticas revisadas en `%TEMP%\hogaria-safe-area-final-b8dcc311afa94912afce3c827a458c7d\`
+(`safe-area-desktop-chromium.png`, `safe-area-mobile-mobile-chrome.png`). No se probó iOS nativo: la
+revisión WebKit requerida sigue ausente y Pixel 5 no expone inset nativo no nulo; la última casilla queda abierta.
+
 ### QA-LAYOUT.VISUAL-CONSISTENCY.1 · geometría uniforme en toda la interfaz
 
-**Fuente revalidada (2026-10-03):** `AGENTS.md` solo pide consistencia visual de forma general y la matriz
-global de `APP-QA-SPEC.md` valida responsive/accesibilidad sin comparar la geometría de componentes
-equivalentes entre rutas. `DESIGN-SYSTEM.md` define spacing base de 4 px y una clase `.btn` común, pero
-`calendar.component.ts` conserva clases propias: `.cal-btn` fija `min-height: 48px` y `padding: 6px 14px`,
-mientras `.cal-pill` usa `padding: 5px 11px`; la acción primaria «Planificar IA» y las acciones vecinas
-pueden diferir aunque convivan en la misma barra. La captura compartida por el usuario señala `/calendar`;
-la medida reproducible del navegador queda pendiente del baseline de esta unidad. `layout-gutters.spec.ts`
-solo compara el marco y la raíz de cada vista, no botones, campos, tarjetas ni el ritmo de espaciado interior.
+**Fuente inicial de esta unidad (2026-10-03):** `AGENTS.md` ya exige uniformidad geométrica de componentes
+equivalentes y comparación calculada con tolerancia de 1 CSS px; faltaba instrumentarlo en rutas/familias. La
+matriz global de `APP-QA-SPEC.md` valida responsive y gutters, pero no comparaba componentes interiores entre
+vistas. El baseline original de `/calendar` sí reprodujo la diferencia: `.cal-btn` medía 48 px frente a
+30 px de `.cal-pill`, con padding y tipografía también distintos. La subunidad CALENDAR de abajo corrigió
+esa barra y dejó la prioridad de «Planificar IA» solo en color. `layout-gutters.spec.ts` aún compara el marco
+y la raíz, no botones, campos, tarjetas ni el ritmo de espaciado interior.
 
 **Contrato esperado:** los controles/componentes equivalentes usan el mismo contrato geométrico y tokens
 en todas las vistas: dimensiones por familia, tipografía, alineación, padding, gaps, márgenes, radios y
@@ -2142,17 +2274,25 @@ distribuyen tamaños por pantalla/acción (p. ej. login/registro `lg`, acciones 
 de la unidad padre exige que el énfasis cambie por color/icono/estado; se conserva ancho fluido o `fullWidth`
 por su función de contenido/layout y se excluyen solo controles realmente de familia icon-only.
 
-- [ ] Añadir primero regresión roja para comparar la geometría renderizada de `sm/md/lg` (rectángulo,
-      padding, familia/tamaño/peso/interlineado tipográfico, radio y borde), además de comprobar que los estados
-      hover/disabled/loading no desplacen ni redimensionen el control.
-- [ ] Normalizar el botón de texto compartido para que sus tamaños nominales tengan un contrato geométrico
+- [x] Añadir primero regresión roja para comparar la geometría renderizada de `sm/md/lg` (caja,
+      padding, tipografía, radio y borde) y comprobar que hover no desplace ni redimensione el control.
+      Evidencia: el baseline aislado falló en Chromium y Pixel 5: alturas de 26/34/42 px según variante y
+      hover primary con traslación vertical de −1 px.
+- [x] Normalizar el botón de texto compartido para que sus tamaños nominales tengan un contrato geométrico
       idéntico en todas las variantes de color; la jerarquía se expresa visualmente y ningún CTA crece por ser
-      principal. Mantener explícitos ancho completo, control icon-only y target táctil funcional.
-- [ ] Medir los consumidores reales del manifiesto público/privado con fixtures sintéticos en escritorio y
-      móvil, incluidos botones de formularios, listados, navegación/acciones y diálogos representativos; guardar
-      e inspeccionar capturas PC/móvil, sin usar cuentas/datos personales.
-- [ ] Ejecutar regresiones unitarias, Playwright real aislado, typecheck, formato, `check:ui`, build y
-      `git diff --check`; registrar métricas y limitaciones sin cerrar el inventario visual global.
+      principal. `sm/md/lg` conservan compatibilidad de plantilla, pero comparten `min-height:44px`, padding
+      `var(--space-2) var(--space-4)`, `var(--text-sm)` y `var(--radius-lg)`; ancho fluido/`fullWidth` e
+      icon-only mantienen sus contratos funcionales.
+- [x] Medir consumidores reales con fixture sintético en login, recetas, logs y diálogo de configuración IA.
+      Playwright comprobó la misma geometría en siete viewports (320×568, 393×851, 568×320, 767×1024,
+      768×1024, 1024×768 y 1440×900), y en diálogo a 393×851/1440×900; se guardaron e inspeccionaron
+      capturas escritorio 1440×900 y Pixel 5 393×851. La captura de logs se limita a la barra de controles.
+- [x] Ejecutar regresiones unitarias (15/15), Playwright aislado real (2/2: Chromium y Pixel 5),
+      `pnpm run typecheck:e2e`, Prettier, `pnpm run check:ui` (188 ficheros/20 reglas), build de producción
+      frontend, build del servidor y `git diff --check`. `check:ui` no reportó incidencias. El runner de
+      desarrollo aislado no superó readiness en dos intentos; se cambió al runner aislado full-stack con DB
+      temporal y cleanup propio, que sí pasó. Limitación: disabled/loading no forman parte de esta subunidad;
+      el inventario visual global de rutas y familias sigue abierto.
 
 **Rollback focal:** restaurar únicamente las reglas de tamaño/estados de `app-button`, retirar las aserciones
 geométricas correspondientes y este subapartado; mantener abiertas las demás familias de la matriz global.
@@ -2213,12 +2353,12 @@ que cubre el formulario aunque `toBeVisible()` siga considerando visible el inpu
 el estado cerrado accesible del menú y que el campo queda dentro del viewport antes de guardar la captura;
 no debe cerrar el drawer a ciegas y ocultar un estado inicial incorrecto.
 
-- [ ] Añadir primero una regresión E2E aislada para Email de login, Nombre de Cuenta y título del diálogo
+- [x] Añadir primero una regresión E2E aislada para Email de login, Nombre de Cuenta y título del diálogo
       Evento; medir label-control, caja, padding, márgenes, fuente, interlineado, borde y radio calculados,
       documentar el baseline rojo y comprobar que un login inválido no hace POST.
-- [ ] Normalizar la geometría de los tres inputs al contrato compartido sin alterar su semántica, validación,
+- [x] Normalizar la geometría de los tres inputs al contrato compartido sin alterar su semántica, validación,
       focos accesibles ni anchura de formulario; mantener iguales medidas en estados normal/foco/error.
-- [ ] Verificar Chromium y Pixel 5 a 320×568, 393×851, 568×320, 767/768/769, 1023/1024/1025 y 1440×900;
+- [x] Verificar Chromium y Pixel 5 a 320×568, 393×851, 568×320, 767/768/769, 1023/1024/1025 y 1440×900;
       revisar teclado, label/nombre, foco, error aplicable, scroll y ausencia de overflow. Comparar propiedades con
       tolerancia ≤1 CSS px; a 393×851 confirmar que el drawer está cerrado, el campo de Cuenta está en viewport
       y las capturas sintéticas PC/móvil muestran los controles comparados.
