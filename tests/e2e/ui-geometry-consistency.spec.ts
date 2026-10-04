@@ -14,6 +14,13 @@ const VIEWPORTS = [
   { width: 1440, height: 900 }
 ];
 
+const BUTTON_PARITY_VIEWPORTS = [
+  ...VIEWPORTS,
+  { width: 769, height: 1024 },
+  { width: 1023, height: 768 },
+  { width: 1025, height: 768 }
+];
+
 const GEOMETRY_KEYS = [
   'paddingBlockStart',
   'paddingBlockEnd',
@@ -262,4 +269,106 @@ test('las acciones equivalentes de la cabecera del calendario comparten geometr�
   }
 
   expect(mismatches, JSON.stringify(observations, null, 2)).toEqual([]);
+});
+
+test('Planificar IA comparte la geometría del botón primario de Recetas', async ({ page }) => {
+  await registerAndGoto(page, '/calendar', 'UI button parity');
+  const calendarButton = page.locator('.cal-top .cal-btn--primary');
+  await expect(calendarButton).toHaveText('Planificar IA');
+  await page.evaluate(() => document.fonts.ready);
+
+  const measure = (locator: typeof calendarButton) =>
+    locator.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return {
+        height: Number(rect.height.toFixed(2)),
+        paddingBlockStart: style.paddingBlockStart,
+        paddingBlockEnd: style.paddingBlockEnd,
+        paddingInlineStart: style.paddingInlineStart,
+        paddingInlineEnd: style.paddingInlineEnd,
+        marginBlockStart: style.marginBlockStart,
+        marginBlockEnd: style.marginBlockEnd,
+        marginInlineStart: style.marginInlineStart,
+        marginInlineEnd: style.marginInlineEnd,
+        gap: style.gap,
+        fontFamily: style.fontFamily,
+        fontSize: style.fontSize,
+        fontWeight: style.fontWeight,
+        lineHeight: style.lineHeight,
+        borderStyle: style.borderTopStyle,
+        borderWidth: style.borderWidth,
+        borderRadius: style.borderTopLeftRadius
+      };
+    });
+  const calendarMeasurements: Array<{
+    viewport: (typeof BUTTON_PARITY_VIEWPORTS)[number];
+    geometry: Awaited<ReturnType<typeof measure>>;
+  }> = [];
+  const documentOverflow: string[] = [];
+  for (const viewport of BUTTON_PARITY_VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await expect(calendarButton).toBeVisible();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        )
+    );
+    calendarMeasurements.push({ viewport, geometry: await measure(calendarButton) });
+    const pageWidth = await page.evaluate(() => ({
+      client: document.documentElement.clientWidth,
+      scroll: document.documentElement.scrollWidth
+    }));
+    if (pageWidth.scroll > pageWidth.client + 1) {
+      documentOverflow.push(
+        `${viewport.width}×${viewport.height} document width: ${pageWidth.scroll}px > ${pageWidth.client}px`
+      );
+    }
+  }
+
+  const screenshotDirectory =
+    process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-calendar-cta-parity';
+  mkdirSync(screenshotDirectory, { recursive: true });
+  const mobile = test.info().project.name === 'mobile-chrome';
+  await page.setViewportSize(mobile ? { width: 393, height: 851 } : { width: 1440, height: 900 });
+  await page.screenshot({
+    path: join(screenshotDirectory, `calendar-cta-${mobile ? 'mobile' : 'desktop'}.png`)
+  });
+
+  await page.goto(new URL('/recipes', page.url()).toString());
+  const sharedButton = page.locator('.recipes__actions app-button button.btn--primary');
+  await expect(sharedButton).toBeVisible();
+  const sharedMeasurements: typeof calendarMeasurements = [];
+  for (const viewport of BUTTON_PARITY_VIEWPORTS) {
+    await page.setViewportSize(viewport);
+    await expect(sharedButton).toBeVisible();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+        )
+    );
+    sharedMeasurements.push({ viewport, geometry: await measure(sharedButton) });
+  }
+
+  const mismatches = calendarMeasurements.flatMap(({ viewport, geometry }, index) => {
+    const sharedGeometry = sharedMeasurements[index].geometry;
+    return Object.entries(geometry).flatMap(([key, value]) => {
+      const other = sharedGeometry[key as keyof typeof sharedGeometry];
+      if (typeof value === 'number' && typeof other === 'number') {
+        return Math.abs(value - other) > 1
+          ? [`${viewport.width}×${viewport.height} ${key}: ${value}px vs ${other}px`]
+          : [];
+      }
+      return value === other
+        ? []
+        : [`${viewport.width}×${viewport.height} ${key}: ${value} vs ${other}`];
+    });
+  });
+
+  expect(
+    [...mismatches, ...documentOverflow],
+    JSON.stringify({ calendarMeasurements, sharedMeasurements, documentOverflow }, null, 2)
+  ).toEqual([]);
 });

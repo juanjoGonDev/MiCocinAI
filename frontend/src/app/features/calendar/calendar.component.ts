@@ -976,7 +976,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
     /* ── Cabecera ── */
     .cal-top {
-      --cal-control-size: 48px;
+      --cal-control-size: 44px;
       --cal-control-pad-block: var(--space-2);
       --cal-control-pad-inline: var(--space-4);
       --cal-control-font-size: var(--text-sm);
@@ -1129,7 +1129,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       height: var(--cal-control-size);
       background: var(--bg-tertiary);
       box-shadow: inset 0 0 0 1px var(--cal-line);
-      border-radius: var(--radius-full);
+      border-radius: var(--radius-lg);
     }
 
     .cal-segment__btn {
@@ -1196,7 +1196,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       font-size: var(--cal-control-font-size);
       font-weight: var(--font-medium);
       line-height: var(--leading-none);
-      border-radius: var(--radius-full);
+      border-radius: var(--radius-lg);
       border-width: 1px;
       border-style: solid;
     }
