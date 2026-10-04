@@ -2176,13 +2176,29 @@ quedan vacíos y editables. La persona puede completar ambos, guardar, recargar 
 detalle/historial. Los nombres accesibles deben estar traducidos ES/EN. En `queued`/`analyzing` siguen
 sin edición para evitar competir con el worker activo.
 
-- [ ] Ampliar la E2E de loopback para responder `store: null` y `purchaseDate: null` en un idioma,
+- [x] Ampliar la E2E de loopback para responder `store: null` y `purchaseDate: null` en ES y EN,
       usar nombres accesibles para tienda/fecha en ES y EN, y rellenar/corregir ambos desde `review`.
-- [ ] Comprobar guardado por UI, detalle API, recarga y fila del historial para ambos idiomas; conservar
+- [x] Comprobar guardado por UI, detalle API, recarga y fila del historial para ambos idiomas; conservar
       los checks existentes de ausencia de overflow, fecha civil y proveedor exclusivamente loopback.
-- [ ] Ejecutar primero la E2E aislada en Chromium y Pixel 5; luego unitarias focales, coverage por
+- [x] Ejecutar primero la E2E aislada en Chromium y Pixel 5; luego unitarias focales, coverage por
       archivo ≥70 % S/B/F/L si cambia producción, `typecheck:e2e`, build, checks de formato/diff y revisar
       capturas sintéticas comparables. No contactar WebAPI ni enviar tickets reales en esta unidad.
+
+**Evidencia QA-RECEIPT.REVIEW-METADATA.1 (2026-10-04):** `node scripts/run-isolated-playwright.mjs
+--workers=1 --project=chromium --project=mobile-chrome tests/e2e/receipts.spec.ts --grep
+"la extracción IA conserva tienda y fecha civil|recorre el historial completo de más de cien recibos"
+--reporter=line` pasó **6/6** con Chrome local + Pixel 5 emulado: ambos idiomas parten sin tienda/fecha,
+permiten completar y guardar, verifican PATCH/GET/reload/historial y ausencia de overflow; la fixture
+del proveedor es loopback. El mismo run editó un registro `stopped` desde historial sin cambiar estado
+ni inventario. Se confirmó cleanup de app, puertos y SQLite temporal. `pnpm --filter @hogaria/web exec
+ng test --no-watch --include src/app/core/time.spec.ts --include
+src/app/features/receipts/receipts.component.spec.ts --browsers=ChromeHeadless` pasó **24/24**;
+`time.ts` alcanza **95.83/86.67/100/95.83 % S/B/F/L** y `receipts.component.ts` **100 %** en las
+cuatro métricas. `typecheck:e2e`, Prettier focal, `check:ui` (**189 archivos, 20 reglas**) y build de
+producción pasan; `git diff --check` pasó. Capturas sintéticas de escritorio/móvil en ES/EN,
+inspeccionadas. Al repetir Karma con `--code-coverage` en esta selección, el comando retorna código 1
+porque el agregado parcial no alcanza el gate global de 80 % (**55.20/46.03/35.76/54.98 %**); el
+gate no se cambió y la cobertura por archivo sí supera 70 %. Sin WebAPI ni datos reales.
 
 **Rollback:** retirar solo la ampliación E2E y esta subunidad; cambiar código de producción únicamente
 si la regresión demuestra un defecto.
@@ -2202,17 +2218,25 @@ activo, sin convertirla a otro día por zona horaria. La fecha de subida es un i
 con el idioma activo y la zona local del dispositivo. Un valor de compra nulo conserva el texto
 «Sin fecha / No date»; después de editarlo, el historial muestra el dato corregido.
 
-- [ ] Añadir primero pruebas unitarias para formatear fechas civiles cortas en `es-ES` y `en-GB`,
-      incluido valor nulo/ilegible y estabilidad del día frente a zona horaria; la E2E actual es roja
-      en español y pasa el caso de formato estadounidense en inglés.
-- [ ] Sustituir en el historial de tickets el `DatePipe` estático por formateadores compartidos de
+- [x] Añadir primero pruebas unitarias para formatear fechas civiles cortas en `es-ES` y `en-GB`,
+      incluido valor nulo/ilegible y estabilidad del día frente a zona horaria; la regresión original
+      reproducía `3/1/24` en español frente al `1/3/24` esperado.
+- [x] Sustituir en el historial de tickets el `DatePipe` estático por formateadores compartidos de
       `core/time.ts` para fecha civil y fecha/hora de subida; conservar etiqueta, fecha API y orden.
-- [ ] Ejecutar la E2E loopback en Chromium y Pixel 5: tienda/fecha iniciales nulas editables en ambos
+- [x] Ejecutar la E2E loopback en Chromium y Pixel 5: tienda/fecha iniciales nulas editables en ambos
       idiomas, fecha localizada tras guardar/recargar, valor visible correcto en historial, diferencia
       entre compra/subida, accesibilidad y breakpoints sin overflow. Revisar capturas solo sintéticas.
-- [ ] Ejecutar unitarias, typecheck, formato, `check:ui`, build, `git diff --check` y cobertura de
+- [x] Ejecutar unitarias, typecheck, formato, `check:ui`, build, `git diff --check` y cobertura de
       archivos instrumentables modificados ≥70 % S/B/F/L; no llamar WebAPI/proveedor ni usar tickets
       reales en esta unidad.
+
+**Evidencia QA-RECEIPT.HISTORY.DATE-LOCALE.1 (2026-10-04):** las cuatro E2E combinan idioma ES/EN
+con escritorio/Pixel 5 emulado y prueban `YYYY-MM-DD` civil en `es-ES`/`en-GB` bajo `Pacific/Kiritimati`,
+fecha/subida como valores distintos, teclado entre campos, guardado y persistencia. Las capturas
+`receipt-history-{chromium,mobile-chrome}-{es,en}.png` muestran `1/3/24` en español y `02/03/2024`
+en inglés con metadatos corregidos; son sintéticas e inspeccionadas. Cobertura focal, typecheck,
+Prettier, `check:ui`, build y limitación del gate global están documentados en la evidencia de
+`QA-RECEIPT.REVIEW-METADATA.1` de esta fecha; no hubo llamadas externas ni archivos de Descargas.
 
 **Rollback:** revertir solo los formateadores/uso de fecha del historial, sus pruebas y este subapartado;
 conservar la edición de metadatos y el resto del historial.

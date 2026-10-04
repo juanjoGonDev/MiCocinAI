@@ -124,7 +124,12 @@ function clock(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTi
 export function formatTime(value: TimeInput, timeZone?: string): string {
   const date = parseInstant(value);
   return date
-    ? clock(dateLocale(), { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timeZone ?? clientTimeZone() }).format(date)
+    ? clock(dateLocale(), {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+        timeZone: timeZone ?? clientTimeZone()
+      }).format(date)
     : '';
 }
 
@@ -148,7 +153,42 @@ export function formatDay(value: TimeInput, timeZone?: string): string {
   // Un dia suelto se lee como dia; con un `Date` o un instante hay que mirar la zona.
   const text = typeof value === 'string' ? value : null;
   const date = text && DAY_ONLY.test(text) ? parseDay(text) : parseInstant(value);
-  return date ? clock(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric', timeZone: timeZone ?? clientTimeZone() }).format(date) : '';
+  return date
+    ? clock(dateLocale(), {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        timeZone: timeZone ?? clientTimeZone()
+      }).format(date)
+    : '';
+}
+
+/**
+ * Una fecha civil corta (`YYYY-MM-DD`), sin convertirla en instante ni desplazarla de día por zona.
+ * La subida de un ticket sí usa `formatDateTime`; la fecha impresa del recibo no tiene hora.
+ */
+export function formatShortDay(value: TimeInput): string {
+  if (typeof value !== 'string') return '';
+  const match = DAY_ONLY.exec(value.trim());
+  if (!match) return '';
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (year < 1) return '';
+
+  const date = new Date(0);
+  date.setUTCHours(12, 0, 0, 0);
+  date.setUTCFullYear(year, month - 1, day);
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return '';
+  }
+
+  return clock(dateLocale(), { dateStyle: 'short', timeZone: 'UTC' }).format(date);
 }
 
 /**
@@ -186,7 +226,12 @@ export function toDayKey(value: TimeInput, timeZone?: string): string {
 
 function dayParts(date: Date, timeZone: string): { year: string; month: string; day: string } {
   try {
-    const parts = clock('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone }).formatToParts(date);
+    const parts = clock('en-CA', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      timeZone
+    }).formatToParts(date);
     const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
     const result = { year: get('year'), month: get('month'), day: get('day') };
     if (result.year && result.month && result.day) return result;
@@ -236,19 +281,31 @@ export function relativeTimeParts(value: TimeInput, now: Date = new Date()): Rel
   if (Math.abs(signed) < 60_000) return { kind: 'now' };
   const amount = Math.round(Math.abs(signed) / 60_000);
   if (amount < 60) return { kind: signed < 0 ? 'in' : 'ago', amount, unit: 'min' };
-  if (amount < 60 * 24) return { kind: signed < 0 ? 'in' : 'ago', amount: Math.round(amount / 60), unit: 'h' };
-  if (amount < 60 * 24 * 7) return { kind: signed < 0 ? 'in' : 'ago', amount: Math.floor(amount / (60 * 24)), unit: 'd' };
-  const day = clock(dateLocale(), { day: 'numeric', month: 'short', timeZone: clientTimeZone() }).format(date);
-  const year = date.getFullYear() === now.getFullYear() ? null : String(date.getFullYear()).slice(2);
+  if (amount < 60 * 24)
+    return { kind: signed < 0 ? 'in' : 'ago', amount: Math.round(amount / 60), unit: 'h' };
+  if (amount < 60 * 24 * 7)
+    return { kind: signed < 0 ? 'in' : 'ago', amount: Math.floor(amount / (60 * 24)), unit: 'd' };
+  const day = clock(dateLocale(), {
+    day: 'numeric',
+    month: 'short',
+    timeZone: clientTimeZone()
+  }).format(date);
+  const year =
+    date.getFullYear() === now.getFullYear() ? null : String(date.getFullYear()).slice(2);
   return { kind: 'date', day, year };
 }
 
-
 /** La fecha con la hora detras, para cuando «ayer» ya no aclara nada. */
-export function formatDateTimeWithYear(value: TimeInput, now: Date = new Date(), timeZone?: string): string {
+export function formatDateTimeWithYear(
+  value: TimeInput,
+  now: Date = new Date(),
+  timeZone?: string
+): string {
   const date = parseInstant(value);
   if (!date) return '';
   const day = formatDay(date, timeZone);
   const withClock = `${day}, ${formatTime(date, timeZone)}`;
-  return date.getFullYear() === now.getFullYear() ? withClock : `${withClock}, ${date.getFullYear()}`;
+  return date.getFullYear() === now.getFullYear()
+    ? withClock
+    : `${withClock}, ${date.getFullYear()}`;
 }

@@ -1,14 +1,18 @@
 import {
   clientTimeZone,
+  dateLocale,
   daysUntil,
   formatDateTime,
+  formatDateTimeWithYear,
   formatDay,
+  formatShortDay,
   relativeTimeParts,
   formatTime,
   formatTimePrecise,
   parseDay,
   parseInstant,
   resetClientTimeZone,
+  setDateLocale,
   toDayKey,
   timeZoneLabel
 } from './time';
@@ -36,6 +40,21 @@ describe('core/time — leer lo que manda la API', () => {
     expect(parseInstant('2026-05-04T08:12:30Z')?.getTime()).toBe(parsed?.getTime());
   });
 
+  it('acepta instantes tipados y rechaza fechas inválidas sin perder el día local', () => {
+    const instant = new Date('2026-05-04T08:12:30.000Z');
+    expect(parseInstant(instant)).toBe(instant);
+    expect(parseInstant(new Date(Number.NaN))).toBeNull();
+    expect(parseInstant(0)?.getTime()).toBe(0);
+    expect(parseInstant('2026-05-04')?.getTime()).toBe(new Date(2026, 4, 4).getTime());
+    expect(parseInstant('fecha rota')).toBeNull();
+
+    expect(parseDay(new Date(2026, 4, 4, 23, 59))).toEqual(new Date(2026, 4, 4));
+    expect(parseDay(new Date(Number.NaN))).toBeNull();
+    expect(parseDay(new Date(2026, 4, 4).getTime())).toEqual(new Date(2026, 4, 4));
+    expect(parseDay('2026-05-04T23:30:00Z')).not.toBeNull();
+    expect(parseDay('fecha rota')).toBeNull();
+  });
+
   it('con `Z` o sin ella, la hora se ve en la zona de quien mira', () => {
     expect(formatTime('2026-05-04T08:12:30Z', MADRID)).toBe('10:12');
     expect(formatTime('2026-05-04T08:12:30', MADRID)).toBe('10:12');
@@ -43,7 +62,9 @@ describe('core/time — leer lo que manda la API', () => {
     expect(formatTime('2026-05-04T08:12:30Z', TOKYO)).toBe('17:12');
     // Y por defecto, la detectada: si algun dia se pudiese elegir zona en la app, este seria
     // el unico sitio que habria que tocar.
-    expect(formatTime('2026-05-04T08:12:30Z')).toBe(formatTime('2026-05-04T08:12:30Z', clientTimeZone()));
+    expect(formatTime('2026-05-04T08:12:30Z')).toBe(
+      formatTime('2026-05-04T08:12:30Z', clientTimeZone())
+    );
   });
 
   it('la fecha lleva la hora detras, y el dia rueda con la zona', () => {
@@ -62,6 +83,43 @@ describe('core/time — leer lo que manda la API', () => {
     expect(toDayKey('2026-05-04', 'UTC')).toBe('2026-05-04');
     expect(parseDay('2026-05-04')?.getDate()).toBe(4);
     expect(parseDay('2026-05-04')?.getHours()).toBe(0);
+    expect(formatDay('2026-05-04', TOKYO)).toContain('4 de mayo');
+  });
+
+  it('formatea fechas civiles cortas en el idioma de la app sin desplazarlas', () => {
+    const previousLocale = dateLocale();
+    try {
+      setDateLocale('es-ES');
+      expect(formatShortDay('2024-03-01')).toBe('1/3/24');
+      expect(formatDateTime('2024-03-01T12:00:00Z', 'Pacific/Kiritimati')).toBe('2 mar, 02:00');
+
+      setDateLocale('en-GB');
+      expect(formatShortDay('2024-03-01')).toBe('01/03/2024');
+      expect(formatDateTime('2024-03-01T12:00:00Z', 'Pacific/Kiritimati')).toBe('2 Mar, 02:00');
+      expect(formatShortDay(null)).toBe('');
+      expect(formatShortDay('not-a-day')).toBe('');
+      expect(formatShortDay('2024-02-30')).toBe('');
+    } finally {
+      setDateLocale(previousLocale);
+    }
+  });
+
+  it('usa español por defecto y deja vacíos los valores que no son fechas', () => {
+    const previousLocale = dateLocale();
+    try {
+      setDateLocale(null);
+      expect(dateLocale()).toBe('es-ES');
+      expect(formatShortDay(0)).toBe('');
+      expect(formatTime(null)).toBe('');
+      expect(formatDateTime('fecha rota')).toBe('');
+      expect(formatDay('')).toBe('');
+      expect(formatDateTimeWithYear(null)).toBe('');
+      expect(toDayKey('fecha rota')).toBe('');
+      expect(daysUntil('fecha rota')).toBeNull();
+      expect(formatTimePrecise(null)).toBe('');
+    } finally {
+      setDateLocale(previousLocale);
+    }
   });
 
   it('un instante SI pertenece al dia de quien lo mira', () => {
@@ -69,6 +127,10 @@ describe('core/time — leer lo que manda la API', () => {
     expect(toDayKey('2026-05-04T22:30:00Z', MADRID)).toBe('2026-05-05');
     expect(toDayKey('2026-05-04T22:30:00Z', 'UTC')).toBe('2026-05-04');
     expect(formatDay('2026-05-04T22:30:00Z', TOKYO)).toContain('5 de mayo');
+  });
+
+  it('mantiene el día local si el motor rechaza el identificador de zona', () => {
+    expect(toDayKey('2026-05-04T08:12:30Z', 'Zona/Invalida')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
   it('el visor de logs ve los milisegundos en la hora local', () => {
@@ -92,7 +154,9 @@ describe('core/time — leer lo que manda la API', () => {
     const now = new Date(2026, 4, 4, 12, 0, 0);
     // Aqui se prueba el reparto en partes; la frase («hace 5 min» / «5 min ago») la compone el idioma, en
     // `I18nService.relativeTime`, y se ve en los e2e de la lista de la compra.
-    expect(relativeTimeParts(new Date(now.getTime() - 30_000).toISOString(), now)).toEqual({ kind: 'now' });
+    expect(relativeTimeParts(new Date(now.getTime() - 30_000).toISOString(), now)).toEqual({
+      kind: 'now'
+    });
     expect(relativeTimeParts(new Date(now.getTime() - 5 * 60_000).toISOString(), now)).toEqual({
       kind: 'ago',
       amount: 5,
@@ -119,6 +183,23 @@ describe('core/time — leer lo que manda la API', () => {
     if (lejano.kind === 'date') expect(lejano.day.toLowerCase()).toContain('mar');
     expect(relativeTimeParts('', now)).toEqual({ kind: 'none' });
     expect(relativeTimeParts(null, now)).toEqual({ kind: 'none' });
+  });
+
+  it('clasifica futuros cortos y muestra el año cuando una fecha queda lejos', () => {
+    const now = new Date(2026, 4, 4, 12, 0, 0);
+    expect(relativeTimeParts(new Date(now.getTime() + 5 * 60_000), now)).toEqual({
+      kind: 'in',
+      amount: 5,
+      unit: 'min'
+    });
+    expect(relativeTimeParts(new Date(now.getTime() + 3 * 86_400_000), now)).toEqual({
+      kind: 'in',
+      amount: 3,
+      unit: 'd'
+    });
+    const distant = relativeTimeParts('2025-03-01T12:00:00Z', now);
+    expect(distant.kind).toBe('date');
+    if (distant.kind === 'date') expect(distant.year).toBe('25');
   });
 
   it('la zona se detecta: un nombre IANA, y en el encabezado se dice en cristiano', () => {

@@ -1,8 +1,9 @@
+import { mkdirSync } from 'node:fs';
 import { Page, TestInfo, expect } from '@playwright/test';
 import Database from 'better-sqlite3';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 
@@ -257,6 +258,42 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)
     ).toBe(false);
+
+    const stoppedId = `${profile.data.id}-history-003`;
+    const stoppedLink = history.locator(`a[href="/receipts/${stoppedId}"]`);
+    await expect(stoppedLink).toHaveCount(1);
+    await stoppedLink.click();
+    await expect(page).toHaveURL(new RegExp(`/receipts/${stoppedId}$`));
+    await expect(page.getByText('Parado', { exact: true })).toBeVisible();
+    const storeField = page.getByLabel('Tienda');
+    const purchaseDateField = page.getByLabel('Fecha de compra');
+    await storeField.fill('Tienda parada editada');
+    await purchaseDateField.fill('2024-02-29');
+    await page.getByRole('button', { name: 'Guardar cambios' }).click();
+    await expect(page.locator('.ficha__metadatos-estado')).toContainText('Cambios guardados');
+
+    const stoppedDetail = await page.request.get(`/api/receipts/${stoppedId}`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect(stoppedDetail.ok()).toBeTruthy();
+    expect((await stoppedDetail.json()).data).toMatchObject({
+      status: 'stopped',
+      store: 'Tienda parada editada',
+      purchaseDate: '2024-02-29'
+    });
+    await page.reload();
+    await expect(page.getByLabel('Tienda')).toHaveValue('Tienda parada editada');
+    await expect(page.getByLabel('Fecha de compra')).toHaveValue('2024-02-29');
+    await expect(page.getByText('Parado', { exact: true })).toBeVisible();
+    await page.getByRole('link', { name: 'Volver a tickets' }).click();
+    const reopenedHistory = page.locator('[data-test="receipt-history"]');
+    const reopenedRows = reopenedHistory.locator('[data-test="ticket-history-item"]');
+    await expect(reopenedRows).toHaveCount(50);
+    await reopenedHistory.getByRole('button', { name: 'Cargar más' }).click();
+    await expect(reopenedRows).toHaveCount(100);
+    await reopenedHistory.getByRole('button', { name: 'Cargar más' }).click();
+    await expect(reopenedRows).toHaveCount(105);
+    await expect(reopenedRows.filter({ hasText: 'Tienda parada editada' })).toContainText('Parado');
 
     await rows.last().locator('a').click();
     await expect(page).toHaveURL(new RegExp(`/receipts/${profile.data.id}-history-000$`));
@@ -551,21 +588,44 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
     }
     await expect(panel).toBeVisible();
   });
+});
+
+test.describe('metadatos e historial con zona horaria extrema', () => {
+  test.use({ timezoneId: 'Pacific/Kiritimati' });
 
   for (const scenario of [
     {
       language: 'es',
-      purchaseDate: '2024-02-29',
+      store: null,
+      purchaseDate: null,
+      storeLabel: 'Tienda',
       dateLabel: 'Fecha de compra',
-      uploadLabel: 'Subido'
+      emptyDateLabel: 'Sin fecha',
+      uploadLabel: 'Subido',
+      correctedStore: 'Mercado corregido QA',
+      correctedDate: '2024-03-01',
+      historyPurchaseDate: '1/3/24',
+      savedLabel: 'Cambios guardados'
     },
-    { language: 'en', purchaseDate: null, dateLabel: 'Purchase date', uploadLabel: 'Uploaded' }
+    {
+      language: 'en',
+      store: null,
+      purchaseDate: null,
+      storeLabel: 'Store',
+      dateLabel: 'Purchase date',
+      emptyDateLabel: 'No date',
+      uploadLabel: 'Uploaded',
+      correctedStore: 'Edited QA store',
+      correctedDate: '2024-03-02',
+      historyPurchaseDate: '02/03/2024',
+      savedLabel: 'Changes saved'
+    }
   ] as const) {
     test(`la extracción IA conserva tienda y fecha civil (${scenario.language})`, async ({
       page
     }, testInfo) => {
       const respuesta = {
-        store: 'Supermercado QA',
+        store: scenario.store,
         purchaseDate: scenario.purchaseDate,
         lines: [
           {
@@ -642,15 +702,24 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
         const history = page.locator('[data-test="receipt-history"]');
         const historyRow = history.locator('[data-test="ticket-history-item"]');
         await expect(historyRow).toHaveCount(1, { timeout: 20_000 });
-        await expect(historyRow).toContainText('Supermercado QA');
+        if (scenario.store) await expect(historyRow).toContainText(scenario.store);
+        if (!scenario.purchaseDate) {
+          await expect(historyRow.locator('.ticket__meta')).toContainText(
+            `${scenario.dateLabel}: ${scenario.emptyDateLabel}`
+          );
+        }
         await historyRow.locator('a').click();
 
-        const storeField = page.locator('#ticket-tienda');
-        const purchaseDateField = page.locator('#ticket-fecha-compra');
-        await expect(storeField).toHaveValue('Supermercado QA');
+        const storeField = page.getByLabel(scenario.storeLabel);
+        const purchaseDateField = page.getByLabel(scenario.dateLabel);
+        await expect(storeField).toHaveValue(scenario.store ?? '');
         await expect(storeField).toBeEnabled();
         await expect(purchaseDateField).toHaveValue(scenario.purchaseDate ?? '');
         await expect(purchaseDateField).toBeEnabled();
+        await storeField.focus();
+        await expect(storeField).toBeFocused();
+        await page.keyboard.press('Tab');
+        await expect(purchaseDateField).toBeFocused();
 
         const receiptId = new URL(page.url()).pathname.split('/').at(-1);
         expect(receiptId).toBeTruthy();
@@ -659,17 +728,43 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
         });
         expect(detailResponse.ok()).toBeTruthy();
         const detail = (await detailResponse.json()) as {
-          data: { status: string; store: string; purchaseDate: string | null };
+          data: {
+            status: string;
+            store: string | null;
+            purchaseDate: string | null;
+            createdAt: string;
+          };
         };
         expect(detail.data).toMatchObject({
           status: 'review',
-          store: 'Supermercado QA',
+          store: scenario.store,
           purchaseDate: scenario.purchaseDate
         });
 
+        await storeField.fill(scenario.correctedStore);
+        await purchaseDateField.fill(scenario.correctedDate);
+        const metadataSaved = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === `/api/receipts/${receiptId}` &&
+            response.request().method() === 'PATCH'
+        );
+        await page.locator('[data-test="save-receipt-metadata"]').click();
+        expect((await metadataSaved).ok()).toBeTruthy();
+        await expect(page.locator('.ficha__metadatos-estado')).toContainText(scenario.savedLabel);
+
+        const updatedDetailResponse = await page.request.get(`/api/receipts/${receiptId}`, {
+          headers: { authorization: `Bearer ${token}` }
+        });
+        expect(updatedDetailResponse.ok()).toBeTruthy();
+        expect((await updatedDetailResponse.json()).data).toMatchObject({
+          status: 'review',
+          store: scenario.correctedStore,
+          purchaseDate: scenario.correctedDate
+        });
+
         await page.reload();
-        await expect(storeField).toHaveValue('Supermercado QA');
-        await expect(purchaseDateField).toHaveValue(scenario.purchaseDate ?? '');
+        await expect(storeField).toHaveValue(scenario.correctedStore);
+        await expect(purchaseDateField).toHaveValue(scenario.correctedDate);
 
         const originalViewport = page.viewportSize() ?? { width: 1280, height: 720 };
         for (const viewport of [
@@ -711,19 +806,34 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
         await expect(historyRow).toHaveCount(1);
         const metadata = await historyRow.locator('.ticket__meta').innerText();
         const segments = metadata.split('·').map((segment) => segment.trim());
-        expect(segments[0]).toContain(`${scenario.dateLabel}:`);
-        expect(segments[1]).toContain(`${scenario.uploadLabel}:`);
+        const expectedUploadDate = await page.evaluate(
+          ({ createdAt, language }) =>
+            new Intl.DateTimeFormat(language === 'es' ? 'es-ES' : 'en-GB', {
+              day: 'numeric',
+              month: 'short',
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            }).format(new Date(createdAt)),
+          { createdAt: detail.data.createdAt, language: scenario.language }
+        );
+        expect(segments[0]).toContain(`${scenario.dateLabel}: ${scenario.historyPurchaseDate}`);
+        expect(segments[1]).toBe(`${scenario.uploadLabel}: ${expectedUploadDate}`);
+        await expect(historyRow).toContainText(scenario.correctedStore);
+        expect(segments[0]).not.toContain(scenario.language === 'es' ? 'Sin fecha' : 'No date');
         expect(segments[0].slice(segments[0].indexOf(':') + 1).trim()).not.toBe(
           segments[1].slice(segments[1].indexOf(':') + 1).trim()
         );
-        if (scenario.purchaseDate === null) {
-          expect(segments[0]).toContain('No date');
-        }
-
         await cerrarAvisos(page);
         await terminarTransiciones(page);
+        const screenshotDirectory =
+          process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-receipt-history-date-locale-1';
+        mkdirSync(screenshotDirectory, { recursive: true });
         await page.screenshot({
-          path: testInfo.outputPath(`receipt-loopback-${scenario.language}.png`),
+          path: join(
+            screenshotDirectory,
+            `receipt-history-${testInfo.project.name}-${scenario.language}.png`
+          ),
           fullPage: true
         });
         expect(erroresPagina).toEqual([]);

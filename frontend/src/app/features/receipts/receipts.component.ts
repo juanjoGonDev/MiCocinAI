@@ -1,6 +1,7 @@
 import { Component, effect, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule, DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { formatDateTime, formatShortDay } from '../../core/time';
 import { ReceiptsService } from '../../core/services/receipts.service';
 import { I18nService } from '../../core/services/i18n.service';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
@@ -171,10 +172,10 @@ const ESTADO_VARIANTE: Record<
                       {{ 'receipts.fecha_compra' | t }}:
                       {{
                         ticket.purchaseDate
-                          ? (ticket.purchaseDate | date: 'shortDate')
+                          ? formatPurchaseDate(ticket.purchaseDate)
                           : ('receipts.fecha_no_detectada' | t)
                       }}
-                      · {{ 'receipts.subido' | t }}: {{ ticket.createdAt | date: 'short' }} ·
+                      · {{ 'receipts.subido' | t }}: {{ formatUploadDate(ticket.createdAt) }} ·
                       {{
                         ticket.items === 1
                           ? ('receipts.una_linea' | t)
@@ -447,6 +448,14 @@ const ESTADO_VARIANTE: Record<
 })
 export class ReceiptsComponent implements OnInit, OnDestroy {
   readonly service = inject(ReceiptsService);
+
+  formatPurchaseDate(value: string | null): string {
+    return formatShortDay(value);
+  }
+
+  formatUploadDate(value: string): string {
+    return formatDateTime(value);
+  }
 
   /**
    * La bandeja se repinta sola cuando la cola se mueve: al fallar o terminar una lectura, el
