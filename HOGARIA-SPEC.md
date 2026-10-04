@@ -4856,6 +4856,20 @@ visible/reintentable; un ticket confirmado no repite el efecto de confirmación 
 - [ ] E2E Playwright aislado con dos hogares y membresías compartidas: selector/refresh, calendario, inventario, compra, recibos, IA/configuración y colas; escritorio y móvil, capturas con datos sintéticos solamente. Verificar teclado, foco, nombre accesible y bordes de breakpoints.
 - [ ] Ejecutar migraciones y tests con DB temporal y fixtures sintéticos; proveedores repetibles se simulan, smoke real opt-in solo contra loopback. Registrar comandos/resultados; typecheck, build, check-ui, E2E y coverage por archivo ≥70 % S/B/F/L sin rebajar gates existentes.
 
+**Validación enfocada del runner de IA (actualizado 2026-10-05):** las suites locales de seguridad,
+control del runner, preflight de WebAPI, supervisor aislado y coordinación pasan **45/45** (`node
+<archivo>.test.mjs`, sin usar la base normal ni llamar al modelo). El E2E sintético de
+`ai-real-smoke.spec.ts` pasa **1/1** en Chrome con SQLite temporal y ejercita ocho tipos de trabajo IA,
+incluido un borrador de receta compleja con once ingredientes. El último smoke real anterior contestó
+HTTP 200 en las tres primeras llamadas y HTTP 502 en la cuarta, durante la generación múltiple de
+recetas; los metadatos de la sesión WebAPI identificaron `HttpConnectionAbortedError` en espera de
+respuesta. No se leyó ni guardó contenido del log ni se atribuye el fallo a la app. El usuario reinició
+WebAPI; la comprobación de solo lectura volvió a confirmar disponibilidad y captura de cuerpos/sesiones
+apagada. Un nuevo smoke con el recibo real no llegó a iniciarse: el control de ejecución lo bloqueó
+porque la WebAPI podría transmitir el ticket a un proveedor externo sin que esté confirmado su
+tratamiento. No se intentará rodear el bloqueo ni enviar el recibo hasta confirmar ese destino. La
+ejecución previa limpió su credencial temporal y DB aislada; el smoke real y el ticket siguen pendientes.
+
 ### QA-HOUSEHOLD.MULTI-MEMBERSHIP.SELECTOR-API.1 — completada
 
 - [x] Agregar listado seguro de membresías propias y selección persistente del hogar activo; rechazar ID vacío o hogar ajeno sin alterar la selección.
@@ -4885,6 +4899,15 @@ Estas mejoras se desarrollan en subunidades separadas después de estabilizar el
 - [ ] La ficha permite cambiar el nivel de detalle después de generar y conserva la selección al reabrir la receta según el alcance definido por la UI existente.
 - [ ] Al crear/ver receta, intentar buscar imagen y/o vídeo relacionado en Internet si la integración disponible lo permite. Resultados opcionales muestran fuente; ausencia/fallo de búsqueda no bloquea la receta ni produce una imagen/video inventados como resultado de búsqueda.
 - [ ] TDD de schema/parser para los tres niveles, persistencia, alternancia sin duplicados, búsqueda con resultados/vacío/error/timeout y acceso seguro a URL. UI desktop/móvil con fuentes accesibles.
+
+### QA-RECIPE.FULL-DETAIL-VIEW.1
+
+- [ ] Abrir una receta muestra una vista completa y adaptable (sin limitarse a la tarjeta o a un diálogo estrecho), conservando deep link, cierre/retorno, teclado y foco.
+- [ ] Antes de generar se muestran las raciones —2 por defecto— y el usuario puede confirmarlas o cambiarlas; en el detalle puede ajustar las raciones y escalar solo las cantidades visibles, sin alterar la receta guardada.
+- [ ] La generación única devuelve y persiste los datos comunes una sola vez: preparación/cocción/reposo y tiempo total, kcal aproximadas por ración, ingredientes con preparación/opcionalidad/alternativas/notas, electrodomésticos disponibles y utensilios.
+- [ ] La vista presenta pasos cronológicos para cada nivel acordado; el primero indica qué debe lavarse cuando aplique, e incluye temporizadores, tareas paralelas, consejos/variaciones de sabor-textura-presentación y conservación con frigorífico/congelador, duración, recipiente y recalentado cuando proceda.
+- [ ] Ilustraciones de paso son opcionales: solo mostrar medios reales/generados que tengan URL HTTPS segura y texto alternativo; no inventar enlaces ni dejar que la falta de imágenes bloquee receta o pasos. Mantener búsqueda/generación de medios como integración separada si no está disponible en el proveedor actual.
+- [ ] TDD de prompt/schema, persistencia compatible con recetas antiguas, raciones/escalado, selector sin llamada adicional ni duplicados, y E2E aislado con datos sintéticos en PC/móvil, teclado/foco y capturas comparables.
 
 ### QA-PRODUCT.IMAGES.1
 
@@ -4943,9 +4966,12 @@ La repetición ofrecerá: no repetir, diaria, días laborables, semanal en el d�
 
 - [x] El selector accesible contiene Día, 4 días, Semana, Mes, Año y Agenda. La vista elegida y la fecha/rango se enlazan en URL y sobreviven a recarga; elegir un número en la vista Mes abre esa fecha en Día. Evidencia: `tests/e2e/calendar.spec.ts`, `tests/e2e/calendar-google-like-ui.spec.ts`.
 - [x] Las utilidades calculan rangos y navegación natural para las seis vistas, incluyendo día bisiesto. Evidencia: `frontend/src/app/features/calendar/calendar-view.util.spec.ts`.
-- [ ] Falta probar en navegador atrás/adelante, salto a fecha desde todos los controles y la interacción del mini-calendario (cambio de mes, día seleccionado y Hoy).
+- [x] Atrás/adelante del navegador restaura vista y fecha/rango juntos. Evidencia: prueba `atrás y adelante del navegador restauran la vista y el periodo del calendario` en `calendar-google-like-ui.spec.ts`; E2E Chrome escritorio/móvil, 2/2.
+- [x] El selector de fecha superior salta en Día, 4 días, Semana, Mes, Año y Agenda; URL, vista y mes de la mini agenda siguen sincronizados. Evidencia: E2E «el salto de fecha sincroniza el encabezado…», 2/2 proyectos.
+- [x] El E2E del mini-calendario verifica cambio de mes, selección de día, botón Hoy y conservación de selección/URL tras recarga, en Chrome escritorio y móvil. Evidencia: `calendar-google-like-ui.spec.ts`, prueba «la mini agenda cambia de mes y fecha…» (1/1 en cada proyecto).
 - [x] Día, 4 días y Semana conservan las 24 horas y desplazamiento; Mes presenta rejilla semanal y Año 12 rejillas mensuales. Agenda cubre 12 meses desde la fecha ancla. Evidencia: E2E de calendario y pruebas unitarias de rangos.
-- [ ] Falta demostrar en E2E que los filtros/capas se conservan en cada vista y que mini-calendario y navegación sincronizan día/mes/año.
+- [x] Las capas/filtros sobreviven el cambio entre las seis vistas y la recarga; sus botones exponen el estado accesible correcto. Evidencia: E2E «las capas seleccionadas se conservan…», 2/2 proyectos.
+- [x] Seleccionar un día en la rejilla Mes abre ese día; el título de un mes en Año abre Mes; seleccionar un día desde Año abre ese día. En todos los casos vista, fecha del selector superior, URL y mini agenda quedan sincronizados y sobreviven a recarga. E2E `calendar-google-like-ui.spec.ts`, Chromium + Chrome móvil, 2/2.
 - [x] El editor compacto de evento incluye título, fecha/hora, todo el día y repetición de un paso; «Más opciones» expande datos propios de HogarIA. Escape/cierre y persistencia básica se ejercitan, con capturas sintéticas inspeccionadas en escritorio y móvil.
 - [ ] Pendiente completar la matriz de foco/teclado, validación, re-edición con todos los campos, cancelación sin cambios e invitados/borrado en este editor.
 - [x] El selector presenta las cadencias acordadas y «Personalizar» permite intervalo, unidad y fin; se probó persistencia de un intervalo con fin por número. La expansión conserva una fila por serie y las excepciones. Evidencia: `tests/e2e/calendar.spec.ts`, `server/src/utils/calendar-recurrence.spec.ts`, `server/src/routes/calendar.routes.spec.ts`.
@@ -4960,19 +4986,61 @@ La repetición ofrecerá: no repetir, diaria, días laborables, semanal en el d�
 - `pnpm run typecheck:e2e`: PASS.
 - `pnpm run check:ui`: PASS, 193 ficheros / 20 reglas.
 - `pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/core/calendar-grid.spec.ts --include=src/app/features/calendar/calendar-timeline.component.spec.ts --include=src/app/features/calendar/calendar-view.util.spec.ts --include=src/app/features/calendar/calendar.util.spec.ts --include=src/app/features/calendar/calendar.component.spec.ts --browsers=ChromeHeadless`: 35/35 PASS.
+- `pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/features/calendar/calendar.component.spec.ts --browsers=ChromeHeadless`: 4/4 PASS; incluye prueba de restauración reactiva de vista/ancla desde los query params.
+- `pnpm run typecheck:e2e`: PASS. Se corrigieron dos callbacks de `requestAnimationFrame` incompatibles con TS y la llamada a `Document.getAnimations()` en la prueba del libro.
+- `node scripts/run-isolated-playwright.mjs tests/e2e/calendar-google-like-ui.spec.ts --project=chromium --project=mobile-chrome`: 12/12 PASS con Chrome real, SQLite temporal; incluye saltos de fecha en las seis vistas, capas con reload, mini-agenda y Atrás/Adelante.
+- `node scripts/run-isolated-playwright.mjs tests/e2e/calendar-google-like-ui.spec.ts --project=chromium --project=mobile-chrome --grep "los días y meses de las rejillas"`: 2/2 PASS con Chrome instalado y SQLite temporal. Verifica día desde Mes, mes y día desde Año, sincronización URL/selector/mini-calendario y persistencia tras recarga; datos sintéticos.
 - `pnpm test:e2e -- tests/e2e/calendar.spec.ts tests/e2e/calendar-google-like-ui.spec.ts --project=chromium --project=mobile-chrome`: 46/46 PASS con Chrome real, DB aislada y fixtures sintéticas.
 - `pnpm test:e2e -- tests/e2e/calendar-google-like-ui.spec.ts --project=chromium --project=mobile-chrome --grep 'ancho mínimo ni en horizontal'`: 2/2 PASS (320 px y 812×375); mismo estado de la página sin overflow horizontal.
 - `pnpm --filter @hogaria/server exec vitest run src/routes/calendar.routes.spec.ts src/config/database.spec.ts src/utils/calendar-recurrence.spec.ts`: 66 tests PASS (validación previa a esta actualización de la evidencia).
 - Una primera ejecución de E2E falló en el caso «No se repite» porque el menú abierto interceptaba el botón Guardar. Se ajustó el propio test para elegir/cerrar la opción predeterminada antes de guardar; el caso pasó en escritorio y móvil y la ejecución completa siguiente pasó 46/46.
 - El filtro de cobertura Angular se ejecutó pero el gate global existente (80 %) falló por el conjunto intencionalmente filtrado; no representa una ejecución completa de cobertura ni satisface el 70 % exigido por archivo.
 
-**Estado:** implementación funcional parcial, con vistas, modal, selector, recurrencia y validación Chrome desktop/móvil entregados. La unidad sigue abierta por los checks `[ ]`, especialmente cobertura por archivo, accesibilidad/teclado y navegación del mini-calendario. Las capturas de referencia inspiran la UI de HogarIA; no se afirma paridad píxel a píxel ni se simulan funciones externas de Google.
+**Estado:** implementación funcional parcial, con vistas, modal, selector, recurrencia y validación Chrome desktop/móvil entregados. La unidad sigue abierta por los checks `[ ]` de cobertura por archivo, accesibilidad/teclado, re-edición/cancelación/invitados y repetición personalizada. La sincronización al escoger días/meses en las rejillas de Mes/Año queda validada por el E2E añadido. Las capturas inspiran la UI de HogarIA; no se afirma paridad píxel a píxel ni se simulan funciones externas de Google.
 
 **Plan TDD:** primero reglas puras de recurrencia y sus pruebas; luego persistencia/expansión API; después las reglas puras de rangos/URL de las seis vistas; finalmente el editor, el contenedor visual y Playwright. Antes de cada unidad, revalidar el contrato y los cambios sin commit existentes en los archivos de calendario. Los artefactos de prueba usarán servidor y SQLite temporales, seed sintética y cleanup propio; nunca la base de uso normal.
 
 **Estado:** implementación funcional parcial con pruebas focales en desktop/móvil; quedan abiertos los
 checks de navegación del mini-calendario, accesibilidad/teclado, cobertura por archivo y revalidación
 completa del alcance. La nueva unidad del libro se especifica antes de su implementación.
+
+### QA-CALENDAR.USER-REPORTED-FIXES.1 · medianoche, repetición y tema HogarIA
+
+**Hallazgo revalidado (2026-10-04):** el ajuste vertical común de etiquetas (`translateY(-5px)`) también
+movía fuera del borde superior a `00:00` cuando un rango futuro comienza en medianoche; la primera
+etiqueta queda sin ese desplazamiento. El auto-scroll a las 02:08 de hoy es deliberado (muestra el entorno
+de la hora actual), por lo que `00:00` no debe exigirse simultáneamente visible en esa condición: se
+verifica completo al abrir un día/semana que no contiene hoy. La serie semanal se verifica en API y UI en
+su siguiente semana, sin crear filas duplicadas. El editor de eventos usa superficies y CTA del tema
+HogarIA, no las superficies azules de la referencia; la prueba captura el estado activo tras esperar las
+animaciones.
+
+- [x] Etiqueta `00:00` completa en el inicio de Día/Semana futura y visible bajo la cabecera fija, en
+      escritorio y móvil. Mantener la prueba separada de la hora actual a las 02:08.
+- [x] Crear una serie diaria y comprobar el día siguiente/anterior; crear una semanal con hora y navegar
+      a la semana siguiente: API devuelve la ocurrencia en la fecha debida y la UI la renderiza en su
+      columna, conservando una sola serie.
+- [x] El modal usa el fondo `--bg-secondary` y la acción `--primary` de HogarIA. Validación real de
+      estado activo y capturas sintéticas estables en ambas resoluciones.
+
+**Evidencia (2026-10-04):** `node scripts/run-isolated-playwright.mjs tests/e2e/calendar-early-hours.spec.ts
+--project=chromium` y `--project=mobile-chrome`: 1/1 cada uno; fija el reloj a 02:08 de Europe/Madrid,
+comprueba la línea actual y completa la etiqueta a medianoche en el día siguiente. El E2E de `calendar.spec.ts`
+para «una serie diaria se repite también el día siguiente», «una serie semanal también se carga al abrir
+la semana siguiente» y «el editor de eventos usa superficies, título y color de HogarIA» pasó en Chrome
+escritorio y móvil con DB/servidor aislados (daily: 2/2; semanal + modal: 4/4). Capturas revisadas:
+`.e2e-screenshots/calendar-week-midnight/{chromium,mobile-chrome}-recurring-next-week.png`
+y `.e2e-screenshots/calendar-app-modal/{chromium,mobile-chrome}-event-modal.png`.
+
+**Límite:** esto cierra solo las tres regresiones reportadas; no completa los checks de accesibilidad,
+cobertura por archivo, navegación del mini-calendario ni la matriz global del calendario de §12at.
+
+**Mantenimiento verificado:** los estilos del calendario están ahora en `styles.scss` bajo el scope
+`app-calendar`; el foco visible de controles conserva una regla local compartida para cumplir la guarda
+de UI. `ng build --output-path <temp>` compila (se elimina el error de presupuesto de 24.09 KB del
+componente; quedan advertencias de presupuesto inicial y de otros componentes). `node scripts/check-ui.mjs`
+termina sin incidencias. Tras mover estilos, el E2E de repetición semanal/medianoche y tema HogarIA pasó
+4/4 en escritorio y móvil.
 
 ## 12au — Libro de recetas y catálogo tradicional por país
 
@@ -5011,18 +5079,60 @@ otra copia de las mismas filas ni una librería desconectada.
 
 ### QA-RECIPES.BOOK.CATALOG.1
 
-- [ ] Contrato de país separado de cocina, tipos de comida combinables y migración/seed idempotente
+- [x] Contrato de país separado de cocina, tipos de comida combinables y migración/seed idempotente
       probados con DB temporal y sin reemplazar recetas existentes.
-- [ ] Búsqueda y filtros combinados (país ES/SV, tipo de comida y cocina), URL/recarga/paginación,
-      vacíos, limpieza, resultados y aislamiento del hogar cubiertos por API y pruebas unitarias.
-- [ ] Libro muestra las semillas españolas y salvadoreñas con portada/atribución o fallback; ninguna
+- [x] Búsqueda y filtros combinados (país ES/SV, tipo de comida y cocina), URL/recarga/paginación,
+      vacíos, limpieza y resultados cubiertos por API y E2E sintético de escritorio/móvil.
+- [x] API cubre catálogo sin recetas privadas, estado de favoritos/notas por usuario y favoritos sin
+      mutar la fila global del catálogo.
+- [ ] Probar el estado de favoritos de la misma cuenta al cambiar de hogar activo, según el alcance
+      personal/doméstico que se confirme en la integración completa de §12ap.
+- [x] Libro muestra las semillas españolas y salvadoreñas con portada/atribución o fallback; ninguna
       receta de usuario se pierde ni sus favoritos/notas se escriben en el catálogo global.
-- [ ] Al menos 6 recetas por país, verificadas con fuentes fiables, texto original, país/tipo correctos y
-      las tres instrucciones detalladas con ingredientes almacenados una sola vez.
-- [ ] Playwright real, aislado y sintético demuestra búsqueda, filtros combinados, abrir/cerrar detalle,
-      portada con y sin imagen, favoritos aislados, teclado/foco y layout sin overflow en desktop y móvil.
-- [ ] Archivos de alcance ≥70 % statement/branch/function/line coverage; ejecutar tests API/UI, build,
-      check-ui, Playwright y gates pertinentes. Registrar comandos, resultados y límites; no marcar esta
-      unidad completa con checks simulados ni solo por compilar.
+- [x] Al menos 6 recetas por país, verificadas con fuentes institucionales, texto propio, país/tipo
+      correctos y las tres instrucciones detalladas con ingredientes almacenados una sola vez. Se revisó
+      Spain.info para los seis platos españoles, El Salvador Travel para cinco platos salvadoreños y el
+      material del Ministerio de Educación para las riguas; se reemplazó el PDF ministerial anterior
+      (404) por el enlace oficial vigente.
+- [x] Playwright real, aislado y sintético demuestra búsqueda/filtros, paginación, resultados vacíos,
+      URL/recarga/limpieza, abrir/cerrar detalle, fallback de portada, atribución, teclado y layout sin
+      overflow en desktop, móvil mínimo y móvil horizontal.
+- [ ] Falta una portada con imagen servida desde fixture local (el E2E solo prueba fallback); además,
+      favoritos al cambiar de hogar activo con la misma cuenta requieren resolver el alcance personal vs.
+      doméstico en §12ap. Los favoritos por usuario y sin mutación global sí se prueban en API.
+- [x] Ejecutados tests API, UI y E2E reales; typecheck E2E, build del servidor y `check-ui` pasan.
+- [ ] Alcanzar ≥70 % statement/branch/function/line coverage por archivo y correr build/gates
+      completos del cliente; registrar comandos, resultados y límites sin rebajar umbrales.
 
-**Estado:** especificación añadida a petición del usuario; implementación pendiente.
+**Hallazgo revalidado durante la implementación:** cuando el usuario escribía una búsqueda y aplicaba
+país/tipo de comida de inmediato, podían terminar llegando primero las respuestas nuevas y después la
+respuesta anterior (solo búsqueda), reemplazando las tarjetas filtradas. `RecipeService` ya descarta las
+respuestas de lista obsoletas; una prueba unitaria reproduce el orden inverso y comprueba resultados,
+total y estado de carga. El E2E espera que la transición visual finalice antes de capturar, para que la
+evidencia no muestre simultáneamente el fotograma anterior.
+
+**Evidencia actualizada (2026-10-05):** `pnpm --filter @hogaria/server exec vitest run
+src/routes/recipes.routes.spec.ts src/utils/recipe-book-seed.spec.ts --reporter=dot`: **18/18** con
+SQLite `:memory:`. TDD del origen de las riguas: primero falla al detectar el PDF anterior (404); tras
+actualizar la atribución al PDF oficial vigente, la suite completa pasa. El E2E de
+`recipe-book.spec.ts` tiene cuatro escenarios verificados en Chromium y Chrome móvil: búsqueda/filtros
+combinados, URL/recarga/limpieza, paginación/vacío, teclado/foco y anchos 320 px y 812×375; **8/8
+ejecuciones de escenario** contando corridas focales aisladas, con servidor/SQLite temporales y datos
+sintéticos. Las capturas comparables se guardan e inspeccionaron en
+`.e2e-screenshots/recipe-book/{chromium,mobile-chrome}-filtered-book.png`. Además, el servicio Angular
+`recipe.service.spec.ts` pasa **14/14**; `pnpm run typecheck:e2e`, `pnpm run check:ui` (193 archivos,
+20 reglas), `pnpm --filter @hogaria/server run build` y `git diff --check` pasan. Coverage por archivo
+y build completo del cliente siguen abiertos; no se bajó el gate.
+
+**Revisión editorial (2026-10-05):** [Spain.info](https://www.spain.info/es/descubrir-espana/platos-gastronomia-tradicional-espana/)
+respalda la tradición de gazpacho, tortilla, cocido, pulpo y tarta de Santiago, y
+[la ficha de la paella](https://www.spain.info/es/top/conoce-el-origen-de-algunos-platos-espanoles-tipicos/)
+confirma su origen valenciano. [El Salvador Travel](https://elsalvador.travel/preforocimap/gastronomia-salvadorena/)
+documenta pupusas, tamales, empanadas, yuca y pastelitos; el
+[libro oficial de Estudios Sociales del Ministerio de Educación](https://www.mined.gob.sv/descarga/programas-estudio/libro_4_sociales_0_.pdf)
+menciona preparar riguas durante la cosecha del maíz. El buscador institucional confirmó el pasaje;
+la descarga del PDF (17 MB) excede el límite de lectura directa del navegador.
+
+**Estado:** catálogo, filtros, fuentes iniciales y E2E base completados; la unidad permanece abierta por
+fixture de portada con imagen, favoritos en el cambio multi-hogar, cobertura por archivo (≥70 % en las
+cuatro métricas), gates completos y revalidación de la especificación global.
