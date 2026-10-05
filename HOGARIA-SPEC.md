@@ -4909,6 +4909,20 @@ Estas mejoras se desarrollan en subunidades separadas después de estabilizar el
 - [ ] Ilustraciones de paso son opcionales: solo mostrar medios reales/generados que tengan URL HTTPS segura y texto alternativo; no inventar enlaces ni dejar que la falta de imágenes bloquee receta o pasos. Mantener búsqueda/generación de medios como integración separada si no está disponible en el proveedor actual.
 - [ ] TDD de prompt/schema, persistencia compatible con recetas antiguas, raciones/escalado, selector sin llamada adicional ni duplicados, y E2E aislado con datos sintéticos en PC/móvil, teclado/foco y capturas comparables.
 
+### QA-RECIPE.STEP-PHOTO-SEARCH.1 — fotografía real con autoría y licencia
+
+**Decisión de producto (2026-10-05):** no volver a mostrar los diagramas SVG genéricos como ilustración principal de los pasos. Buscar fotografías reales en Wikimedia Commons, que ofrece metadatos de autoría y licencia; enseñar la foto solo si la respuesta contiene URL HTTPS de `upload.wikimedia.org`, un autor identificable y licencia explícita. La tarjeta enlaza a la página original y a la licencia. La falta de resultados, mala conexión, timeout o imagen rota nunca oculta instrucciones ni impide guardar/leer la receta; en esos casos no se sustituye por otro dibujo esquemático.
+
+**Privacidad y carga:** las consultas se forman exclusivamente con una lista cerrada de escenas de cocina (lavar, cortar, mezclar, cocinar, hornear, reposar, servir/preparar). No enviar a Wikimedia nombres de recetas, ingredientes, pasos literales, hogar ni datos del usuario. Buscar al entrar en una ficha/borrador, de forma asíncrona y bajo demanda/lazy, limitar y cachear por escena; no persistir imágenes ni resultados en DB. El proxy autenticado del servidor solo acepta escenas enumeradas, mantiene el User-Agent identificable exigido por Wikimedia y no expone URLs arbitrarias.
+
+- [ ] TDD del catálogo de escenas, parser de `imageinfo/extmetadata`, crédito seguro, licencia/source links y filtro de HTTPS/host/MIME; rechazar resultados sin autor/licencia, URL insegura, SVG/dibujo y metadata malformada sin filtrar HTML.
+- [ ] Endpoint autenticado restringe escenas y argumentos, consulta Commons con límite de resultados, timeout, caché y respuestas de error normalizadas; comprobar resultado, vacío, error HTTP/429, timeout, respuesta malformada y repetición sin enviar texto del usuario ni guardar nada.
+- [ ] Borrador y ficha guardada muestran fotos reales disponibles con `alt`, autoría/licencia legibles y enlaces accesibles; eliminan SVG esquemáticos como fallback; cargando/sin resultado/error/reintento permanecen utilizables por teclado, no bloquean el texto y no desbordan.
+- [ ] E2E aislado simula Commons en PC/móvil (incluido 320 px y horizontal), verifica metadatos/atribución, cambio de nivel, carga diferida, fallo/recuperación y que el request solo contiene la escena permitida. Prueba de integración real opt-in hace consultas genéricas, no sube recetas/tickets y nunca captura cuerpos; guardar e inspeccionar capturas sintéticas.
+- [ ] Medir cobertura focal de statements, ramas, funciones y líneas (≥70 %, sin bajar gates existentes), typechecks, build, accesibilidad, i18n y check de UI; revalidar que los SVG ya no aparecen como solución por defecto.
+
+**Fuente técnica vigente (2026-10-05):** la documentación de MediaWiki permite buscar archivos mediante `generator=search` y obtener URL/MIME y `extmetadata` (autor/licencia) con `prop=imageinfo`; recomienda pedir pocos metadatos porque el campo es costoso. La API exige un User-Agent identificable y atribuir el contenido conforme a su licencia. Se conserva la identidad de Wikimedia Commons en la UI; el API no forma parte de la configuración/token de IA de HogarIA.
+
 ### QA-PRODUCT.IMAGES.1
 
 - [ ] Al agregar un producto al inventario, iniciar búsqueda de imagen en background sin bloquear la operación del usuario y respetando la cola/concurrencia del proveedor ya configurado.
