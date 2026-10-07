@@ -3,6 +3,11 @@ import { formDefault, formField, formPartial } from './form.js';
 
 const difficultyEnum = z.enum(['easy', 'medium', 'hard']);
 const mealTypeEnum = z.enum(['breakfast', 'brunch', 'lunch', 'snack', 'dinner', 'dessert']);
+const countryCodeSchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z]{2}$/, 'Country code must use ISO 3166-1 alpha-2')
+  .transform((value) => value.toUpperCase());
 const measurementUnitEnum = z.enum([
   'g',
   'kg',
@@ -33,6 +38,32 @@ const temperatureSchema = z.object({
   unit: z.enum(['C', 'F'])
 });
 
+const httpsMediaUrlSchema = z
+  .string()
+  .url()
+  .refine((value) => {
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' && !url.username && !url.password;
+    } catch {
+      return false;
+    }
+  }, 'Media URLs must use HTTPS and must not contain credentials');
+
+const recipeImageReferenceSchema = z.union([
+  httpsMediaUrlSchema,
+  z.string().regex(/^\/api\/recipe-images\/[a-f0-9]{24}$/, 'Invalid local recipe image reference')
+]);
+
+export const recipeStepIllustrationSchema = z
+  .object({
+    url: httpsMediaUrlSchema,
+    altText: z.string().trim().min(1).max(250),
+    sourceLabel: formField(z.string().trim().max(150)),
+    sourceUrl: formField(httpsMediaUrlSchema)
+  })
+  .strict();
+
 const recipeStepSchema = z.object({
   stepNumber: z.number().int().positive(),
   instruction: z.string().min(1),
@@ -42,7 +73,18 @@ const recipeStepSchema = z.object({
   timerDuration: formField(z.number().int().positive()),
   tips: formField(z.string()),
   warning: formField(z.string()),
-  image: formField(z.string().url())
+  image: formField(recipeImageReferenceSchema),
+  /** Candidate returned by the bounded photo search; the route replaces it with a local asset path. */
+  imagePhotoId: formField(z.string().regex(/^[a-f0-9]{24}$/)),
+  illustration: formField(recipeStepIllustrationSchema)
+}).superRefine((step, context) => {
+  if (step.imagePhotoId && step.image !== undefined) {
+    context.addIssue({
+      code: 'custom',
+      path: ['imagePhotoId'],
+      message: 'Choose a searched step photo or provide an image URL, not both'
+    });
+  }
 });
 
 const nutritionInfoSchema = z.object({
@@ -64,6 +106,14 @@ const storageInfoSchema = z.object({
   freezingDuration: formField(z.string())
 });
 
+const recipeGuidanceSchema = z
+  .object({
+    appliances: z.array(z.string().trim().min(1)).max(10),
+    parallelTasks: z.array(z.string().trim().min(1)).max(10),
+    tipsAndVariations: z.array(z.string().trim().min(1)).max(10)
+  })
+  .strict();
+
 const instructionsByLevelSchema = z
   .object({
     basic: z.array(recipeStepSchema).min(1),
@@ -77,20 +127,22 @@ const createRecipeFieldsSchema = z.object({
   description: formField(z.string().max(1000)),
   difficulty: formDefault(difficultyEnum, 'medium'),
   cuisine: formField(z.string().max(50)),
+  countryCode: formField(countryCodeSchema),
   mealType: formDefault(z.array(mealTypeEnum), []),
   totalTime: formField(z.number().int().positive()),
   prepTime: formField(z.number().int().positive()),
-  cookTime: formField(z.number().int().positive()),
-  restTime: formField(z.number().int().positive()),
-  servings: formDefault(z.number().int().positive(), 4),
+  cookTime: formField(z.number().int().nonnegative()),
+  restTime: formField(z.number().int().nonnegative()),
+  servings: formDefault(z.number().int().positive(), 2),
   calories: formField(z.number().positive()),
-  image: formField(z.string().url()),
+  image: formField(recipeImageReferenceSchema),
   ingredients: z.array(recipeIngredientSchema).min(1, 'At least one ingredient is required'),
   utensils: formDefault(z.array(z.string()), []),
   steps: formField(z.array(recipeStepSchema).min(1, 'At least one step is required')),
   instructionsByLevel: formField(instructionsByLevelSchema),
   nutrition: formField(nutritionInfoSchema),
   storage: formField(storageInfoSchema),
+  guidance: formField(recipeGuidanceSchema),
   tags: formDefault(z.array(z.string()), []),
   isPublic: formDefault(z.boolean(), false)
 });
@@ -110,9 +162,44 @@ export const createRecipeSchema = createRecipeFieldsSchema.superRefine((recipe, 
 });
 
 // Update recipe schema
-export const updateRecipeSchema = formPartial(createRecipeFieldsSchema).extend({
-  isFavorite: formField(z.boolean())
-});
+export const updateRecipeSchema = formPartial(createRecipeFieldsSchema)
+  .extend({
+    isFavorite: formField(z.boolean()),
+    /** A short-lived candidate id; the server resolves, validates and stores the raster bytes. */
+    imagePhotoId: formField(z.string().regex(/^[a-f0-9]{24}$/))
+  })
+  .superRefine((recipe, context) => {
+    if (recipe.imagePhotoId && recipe.image !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['imagePhotoId'],
+        message: 'Choose a searched image or provide a URL, not both'
+      });
+    }
+    if (recipe.ingredients === null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['ingredients'],
+        message: 'A recipe must keep at least one ingredient'
+      });
+    }
+
+    if (recipe.steps === null || recipe.instructionsByLevel === null) {
+      context.addIssue({
+        code: 'custom',
+        path: ['steps'],
+        message: 'A recipe must keep one instruction representation'
+      });
+    }
+
+    if (recipe.steps !== undefined && recipe.instructionsByLevel !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['steps'],
+        message: 'Provide either legacy steps or all detail-level instructions, but not both'
+      });
+    }
+  });
 
 // Recipe filter schema
 export const recipeFilterSchema = z.object({
@@ -121,9 +208,13 @@ export const recipeFilterSchema = z.object({
   mealType: formField(mealTypeEnum),
   maxTime: formField(z.number().int().positive()),
   cuisine: formField(z.string()),
+  countryCode: formField(countryCodeSchema),
+  // `mealType` remains as a backwards-compatible single-value filter.
+  mealTypes: formField(z.array(mealTypeEnum).min(1)),
   tags: formField(z.array(z.string())),
   isFavorite: formField(z.boolean()),
   author: formField(z.enum(['ai', 'user'])),
+  catalogOnly: formField(z.boolean()),
   page: formDefault(z.number().int().positive(), 1),
   pageSize: formDefault(z.number().int().positive().max(100), 20),
   sortBy: formDefault(
@@ -135,7 +226,7 @@ export const recipeFilterSchema = z.object({
 
 // Adjust servings schema
 export const adjustServingsSchema = z.object({
-  servings: z.number().int().positive().max(20)
+  servings: z.number().int().positive().safe()
 });
 
 export type CreateRecipeInput = z.infer<typeof createRecipeSchema>;

@@ -58,7 +58,7 @@ export type PickerRow =
   standalone: true,
   imports: [TranslatePipe, CommonModule, FormsModule, IconComponent],
   template: `
-    <div class="picker" #root [class.picker--up]="flipped()">
+    <div class="picker" #root [class.picker--up]="flipped() && !floatingPanel">
       <button
         type="button"
         class="picker__trigger"
@@ -90,6 +90,12 @@ export type PickerRow =
         <div
           class="picker__panel"
           [id]="listId()"
+          [class.picker__panel--floating]="floatingPanel"
+          [style.left.px]="floatingPanel ? floatingPosition().left : null"
+          [style.width.px]="floatingPanel ? floatingPosition().width : null"
+          [style.top.px]="floatingPanel ? floatingPosition().top : null"
+          [style.bottom.px]="floatingPanel ? floatingPosition().bottom : null"
+          [style.--picker-floating-list-max-height]="floatingPanel ? floatingPosition().listMaxHeight + 'px' : null"
           role="listbox"
           [attr.aria-label]="labelText"
           (keydown)="onListKeys($event, false)"
@@ -239,6 +245,14 @@ export type PickerRow =
         padding: var(--space-1);
         animation: picker-in 0.14s ease-out;
       }
+      .picker__panel--floating {
+        position: fixed;
+        z-index: 1100;
+        right: auto;
+        top: auto;
+        bottom: auto;
+        max-width: calc(100vw - 16px);
+      }
       /* Y si no cabe debajo del dedo, se abre HACIA ARRIBA: dentro de una hoja con
          overflow-y auto, un panel que asoma por abajo queda recortado y la opcion mas
          baja de la lista es literalmente inalcanzable. */
@@ -283,6 +297,9 @@ export type PickerRow =
         max-height: 268px;
         overflow-y: auto;
         overscroll-behavior: contain;
+      }
+      .picker__panel--floating .picker__list {
+        max-height: var(--picker-floating-list-max-height, 320px);
       }
       .picker__group {
         padding: var(--space-2) var(--space-3) var(--space-1);
@@ -383,6 +400,10 @@ export class PickerComponent implements OnInit, OnDestroy {
   @Input() leadingIcon: IconName | null = null;
   @Input() allowCustom = false;
   @Input() disabled = false;
+  /** Escape parent scroll clipping for short menus nested inside dialogs or sheets. */
+  @Input() floatingPanel = false;
+  /** Optional wider menu for long labels; clamped to viewport width by the positioning logic. */
+  @Input() floatingPanelMinWidth = 280;
   /** Por debajo de este numero de opciones el buscador es ruido, no ayuda. */
   @Input() filterFrom = 8;
   @Input() id = `picker-${Math.random().toString(36).slice(2, 8)}`;
@@ -399,8 +420,10 @@ export class PickerComponent implements OnInit, OnDestroy {
   readonly active = signal(0);
   readonly query = signal('');
   readonly listId = computed(() => `${this.id}-list`);
+  readonly floatingPosition = signal({ left: 8, top: 8 as number | null, bottom: null as number | null, width: 280, listMaxHeight: 268 });
 
   private onOutside = (event: MouseEvent) => this.closeOnOutside(event);
+  private onViewportChange = () => this.positionFloatingPanel();
 
   get selectedLabel(): string {
     const found = this.options.find((option) => option.value === this.value);
@@ -477,10 +500,14 @@ export class PickerComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     document.addEventListener('click', this.onOutside, true);
+    window.addEventListener('resize', this.onViewportChange);
+    window.addEventListener('scroll', this.onViewportChange, true);
   }
 
   ngOnDestroy(): void {
     document.removeEventListener('click', this.onOutside, true);
+    window.removeEventListener('resize', this.onViewportChange);
+    window.removeEventListener('scroll', this.onViewportChange, true);
   }
 
   toggle(): void {
@@ -493,6 +520,7 @@ export class PickerComponent implements OnInit, OnDestroy {
       setTimeout(() => {
         this.searchRef?.nativeElement.focus();
         this.flipForRoom();
+        this.positionFloatingPanel();
       });
     }
     this.openChange.emit(this.open());
@@ -509,6 +537,32 @@ export class PickerComponent implements OnInit, OnDestroy {
     const box = root.getBoundingClientRect();
     const roomBelow = window.innerHeight - box.bottom;
     this.flipped.set(roomBelow < 200 && box.top > roomBelow);
+  }
+
+  /** Fixed placement keeps the menu visible when an ancestor (such as modal body) scrolls. */
+  private positionFloatingPanel(): void {
+    if (!this.floatingPanel || !this.open()) return;
+    const root = this.rootRef?.nativeElement;
+    if (!root) return;
+
+    const box = root.getBoundingClientRect();
+    const hasSearch = this.options.length > this.filterFrom;
+    const estimatedHeight = Math.min(360, this.options.length * 40 + (hasSearch ? 60 : 16));
+    const below = Math.max(0, window.innerHeight - box.bottom - 8);
+    const above = Math.max(0, box.top - 8);
+    const openBelow = below >= estimatedHeight || below >= above;
+    const available = openBelow ? below : above;
+    const listMaxHeight = Math.max(80, Math.min(320, available - (hasSearch ? 60 : 16)));
+    const width = Math.min(Math.max(box.width, this.floatingPanelMinWidth, 280), window.innerWidth - 16);
+    const left = Math.max(8, Math.min(box.left, window.innerWidth - width - 8));
+
+    this.floatingPosition.set({
+      left,
+      width,
+      top: openBelow ? box.bottom + 4 : null,
+      bottom: openBelow ? null : window.innerHeight - box.top + 4,
+      listMaxHeight
+    });
   }
 
   close(): void {

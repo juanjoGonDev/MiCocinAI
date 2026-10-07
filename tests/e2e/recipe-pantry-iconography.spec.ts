@@ -77,8 +77,8 @@ test('Recipe and Pantry decorative icons are SVG while food and recipe content s
     expect(DECORATIVE_EMOJI.test(await page.locator('.recipes__quick-filters').innerText())).toBe(
       false
     );
-    await expect(page.locator('.empty-state__icon app-icon')).toHaveCount(1);
-    await expect(page.getByRole('button', { name: 'Generar con IA' })).toBeVisible();
+    await expect(page.locator('.recipes__grid .recipe-card').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Generar IA' })).toBeVisible();
 
     const ingredientResponse = await page.request.post('/api/pantry/ingredients', {
       headers: { authorization: `Bearer ${token}` },
@@ -117,8 +117,8 @@ test('Recipe and Pantry decorative icons are SVG while food and recipe content s
     await expect(favorite).toHaveAttribute('aria-label', 'Favorito');
 
     await card.locator('.recipe-card__name').click();
-    await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.locator('.modal__close app-icon svg')).toBeVisible();
+    await expect(page.locator('[data-test="recipe-detail-page"]')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
     const tip = page.locator('.step-card__tip');
     const warning = page.locator('.step-card__warning');
     await expect(tip).toContainText('Consejo QA: remueve suavemente.');
@@ -127,7 +127,7 @@ test('Recipe and Pantry decorative icons are SVG while food and recipe content s
     await expect(warning.locator('app-icon[name="error_outline"]')).toHaveCount(1);
     expect(DECORATIVE_EMOJI.test(await tip.innerText())).toBe(false);
     expect(DECORATIVE_EMOJI.test(await warning.innerText())).toBe(false);
-    await page.locator('.modal__close').click();
+    await page.getByRole('button', { name: 'Volver a recetas' }).click();
 
     for (const viewport of [
       { width: 320, height: 568 },

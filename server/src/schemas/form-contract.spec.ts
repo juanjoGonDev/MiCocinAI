@@ -9,6 +9,7 @@ import {
   calendarFilterSchema,
   createCalendarEventSchema,
   createCalendarSchema,
+  replaceSelectedMealsSchema,
   updateCalendarEventSchema,
   updateGoalsSchema,
   updateMealSchema
@@ -42,6 +43,8 @@ import {
   productFilterSchema,
   catalogAddSchema,
   catalogFilterSchema,
+  selectProductImageSchema,
+  uploadProductImageSchema,
   updateIngredientSchema,
   updatePantryCategorySchema,
   updateProductSchema,
@@ -66,14 +69,19 @@ import {
   updateItemSchema,
   updateListSchema
 } from './shopping.schema.js';
-import { createReceiptItemSchema, updateReceiptItemSchema, updateReceiptSchema } from './receipts.schema.js';
+import {
+  createReceiptItemSchema,
+  updateReceiptItemSchema,
+  updateReceiptSchema
+} from './receipts.schema.js';
 import {
   createAiConfigSchema,
   generateRecipeSchema,
   generateWeeklyPlanSchema,
   getRecommendationsSchema,
   testConnectionSchema,
-  updateAiConfigSchema
+  updateAiConfigSchema,
+  replaceMealSchema
 } from './ai.schema.js';
 
 /**
@@ -119,7 +127,11 @@ type Row = {
 };
 
 /** Filtros de lectura: todo opcional, y el contrato es que `?vacio` no puede dar 400. */
-const query = (name: string, schema: z.ZodTypeAny, required: Record<string, unknown> = {}): Row => ({
+const query = (
+  name: string,
+  schema: z.ZodTypeAny,
+  required: Record<string, unknown> = {}
+): Row => ({
   name,
   schema,
   kind: 'query',
@@ -139,14 +151,34 @@ const ROWS: Row[] = [
     schema: updateCalendarEventSchema,
     required: { title: 'Carpinteria' },
     note: 'El refine exige al menos un campo.',
-    except: { title: 'Quitar el titulo dejaria el payload vacio, y ahi el refine dice «nada que actualizar» a proposito' }
+    except: {
+      title:
+        'Quitar el titulo dejaria el payload vacio, y ahi el refine dice «nada que actualizar» a proposito'
+    }
   },
-  { name: 'addMealSchema', schema: addMealSchema, required: { date: '2026-03-11', mealType: 'lunch' } },
+  {
+    name: 'addMealSchema',
+    schema: addMealSchema,
+    required: { date: '2026-03-11', mealType: 'lunch' }
+  },
   { name: 'updateMealSchema', schema: updateMealSchema },
   { name: 'updateGoalsSchema', schema: updateGoalsSchema },
-  { name: 'createCalendarSchema', schema: createCalendarSchema, required: { weekStart: '2026-03-09' } },
+  {
+    name: 'createCalendarSchema',
+    schema: createCalendarSchema,
+    required: { weekStart: '2026-03-09' }
+  },
   query('calendarFilterSchema', calendarFilterSchema),
-  query('calendarEventFilterSchema', calendarEventFilterSchema, { from: '2026-03-01', to: '2026-03-31' }),
+  query('calendarEventFilterSchema', calendarEventFilterSchema, {
+    from: '2026-03-01',
+    to: '2026-03-31'
+  }),
+  {
+    name: 'replaceSelectedMealsSchema',
+    schema: replaceSelectedMealsSchema,
+    required: { replacements: [{ id: 'meal-id', customMeal: 'Lentejas' }] },
+    note: 'La sustitución requiere al menos un plato y un nombre nuevo; dieta e invitados permanecen opcionales.'
+  },
 
   // ── el gestor del inventario (## 12x) ──
   {
@@ -179,21 +211,65 @@ const ROWS: Row[] = [
     required: { ids: ['dairy:0'] },
     note: 'Igual que el lote de borrado: entre 1 y 100 ids. Un lote vacio no escribe en la casa, y uno de mil tampoco.'
   },
+  {
+    name: 'selectProductImageSchema',
+    schema: selectProductImageSchema,
+    required: { photoId: '0123456789abcdef01234567' },
+    note: 'La selección necesita la identidad estable del candidato, no una URL arbitraria del cliente.'
+  },
+  {
+    name: 'uploadProductImageSchema',
+    schema: uploadProductImageSchema,
+    required: { dataUrl: 'data:image/png;base64,iVBORw0KGgo=' },
+    note: 'La carga requiere contenido; tipo, firma y tamaño real se validan antes de almacenarla.'
+  },
 
   // ── casa y perfil ──
-  { name: 'createHouseholdSchema', schema: createHouseholdSchema, required: { name: 'Los del 3B' } },
+  {
+    name: 'createHouseholdSchema',
+    schema: createHouseholdSchema,
+    required: { name: 'Los del 3B' }
+  },
   { name: 'updateHouseholdSchema', schema: updateHouseholdSchema },
   { name: 'joinHouseholdSchema', schema: joinHouseholdSchema, required: { inviteCode: 'ABC123' } },
-  { name: 'inviteMemberSchema', schema: inviteMemberSchema, required: { email: 'ana@hogaria.test' } },
+  {
+    name: 'inviteMemberSchema',
+    schema: inviteMemberSchema,
+    required: { email: 'ana@hogaria.test' }
+  },
   { name: 'updateMemberSchema', schema: updateMemberSchema },
-  { name: 'registerSchema', schema: registerSchema, required: { name: 'Ana', email: 'ana@hogaria.test', password: 'Clave1234' } },
-  { name: 'loginSchema', schema: loginSchema, required: { email: 'ana@hogaria.test', password: 'Clave1234' } },
-  { name: 'forgotPasswordSchema', schema: forgotPasswordSchema, required: { email: 'ana@hogaria.test' } },
-  { name: 'resetPasswordSchema', schema: resetPasswordSchema, required: { token: 't', newPassword: 'Clave1234' } },
-  { name: 'changePasswordSchema', schema: changePasswordSchema, required: { oldPassword: 'vieja', newPassword: 'Clave1234' } },
+  {
+    name: 'registerSchema',
+    schema: registerSchema,
+    required: { name: 'Ana', email: 'ana@hogaria.test', password: 'Clave1234' }
+  },
+  {
+    name: 'loginSchema',
+    schema: loginSchema,
+    required: { email: 'ana@hogaria.test', password: 'Clave1234' }
+  },
+  {
+    name: 'forgotPasswordSchema',
+    schema: forgotPasswordSchema,
+    required: { email: 'ana@hogaria.test' }
+  },
+  {
+    name: 'resetPasswordSchema',
+    schema: resetPasswordSchema,
+    required: { token: 't', newPassword: 'Clave1234' }
+  },
+  {
+    name: 'changePasswordSchema',
+    schema: changePasswordSchema,
+    required: { oldPassword: 'vieja', newPassword: 'Clave1234' }
+  },
   { name: 'refreshTokenSchema', schema: refreshTokenSchema, required: { refreshToken: 'r' } },
   { name: 'updateProfileSchema', schema: updateProfileSchema },
-  { name: 'avatarImageSchema', schema: avatarImageSchema, required: { image: 'data:image/jpeg;base64,AAAA' } },
+  {
+    name: 'avatarImageSchema',
+    schema: avatarImageSchema,
+    required: { image: 'data:image/jpeg;base64,AAAA' }
+  },
   // El onboarding guarda el perfil por partes y «saltarselo» es un PATCH con un solo campo: aqui un
   // hueco tiene que significar «no tocar», que es justo lo que antes no significaba.
   { name: 'updateTasteSchema', schema: updateTasteSchema },
@@ -205,7 +281,11 @@ const ROWS: Row[] = [
     required: { name: 'Tomate', category: 'vegetables', quantity: 4, unit: 'unit' }
   },
   { name: 'updateIngredientSchema', schema: updateIngredientSchema },
-  { name: 'createUtensilSchema', schema: createUtensilSchema, required: { name: 'Horno', category: 'oven' } },
+  {
+    name: 'createUtensilSchema',
+    schema: createUtensilSchema,
+    required: { name: 'Horno', category: 'oven' }
+  },
   { name: 'updateUtensilSchema', schema: updateUtensilSchema },
   query('ingredientFilterSchema', ingredientFilterSchema),
   query('utensilFilterSchema', utensilFilterSchema),
@@ -239,20 +319,63 @@ const ROWS: Row[] = [
       servings: 2,
       calories: 180,
       ingredients: [
-        { name: 'Zanahoria', quantity: 2, unit: 'unit', preparation: null, isOptional: false, notes: null }
+        {
+          name: 'Zanahoria',
+          quantity: 2,
+          unit: 'unit',
+          preparation: null,
+          isOptional: false,
+          notes: null
+        }
       ],
       utensils: [],
+      guidance: { appliances: [], parallelTasks: [], tipsAndVariations: [] },
       instructionsByLevel: {
-        basic: [{ stepNumber: 1, instruction: 'Cocer.', duration: null, tips: null, warning: null }],
-        intermediate: [{ stepNumber: 1, instruction: 'Cortar y cocer.', duration: null, tips: null, warning: null }],
-        expert: [{ stepNumber: 1, instruction: 'Cortar en dados y cocer a hervor suave.', duration: null, tips: null, warning: null }]
+        basic: [
+          {
+            stepNumber: 1,
+            instruction: 'Cocer.',
+            duration: null,
+            tips: null,
+            warning: null,
+            illustration: null
+          }
+        ],
+        intermediate: [
+          {
+            stepNumber: 1,
+            instruction: 'Cortar y cocer.',
+            duration: null,
+            tips: null,
+            warning: null,
+            illustration: null
+          }
+        ],
+        expert: [
+          {
+            stepNumber: 1,
+            instruction: 'Cortar en dados y cocer a hervor suave.',
+            duration: null,
+            tips: null,
+            warning: null,
+            illustration: null
+          }
+        ]
       },
       nutrition: { calories: 180, protein: 2, carbs: 20, fat: 5, fiber: 4 },
       storage: null,
       tags: []
     }
   },
-  { name: 'updateRecipeSchema', schema: updateRecipeSchema },
+  {
+    name: 'updateRecipeSchema',
+    schema: updateRecipeSchema,
+    except: {
+      ingredients: 'Una receta no puede quedarse sin ingredientes.',
+      steps: 'Una receta debe conservar al menos una representación de instrucciones.',
+      instructionsByLevel: 'Una receta debe conservar al menos una representación de instrucciones.'
+    }
+  },
   query('recipeFilterSchema', recipeFilterSchema),
 
   // ── compra ──
@@ -267,7 +390,9 @@ const ROWS: Row[] = [
     name: 'updateListSchema',
     schema: updateListSchema,
     required: { name: 'Semana', version: 1 },
-    except: { name: 'NothingToUpdate: sin nombre, sin tienda y sin estado no hay PATCH que aplicar' }
+    except: {
+      name: 'NothingToUpdate: sin nombre, sin tienda y sin estado no hay PATCH que aplicar'
+    }
   },
   { name: 'createItemSchema', schema: createItemSchema, required: { name: 'Pan' } },
   {
@@ -308,14 +433,30 @@ const ROWS: Row[] = [
     schema: testConnectionSchema,
     required: { baseUrl: 'http://localhost:1234/v1', apiKey: 'sk-x', model: 'qwen' },
     except: {
-      baseUrl: 'Sin configId, el trio del formulario es todo o nada: un baseUrl hueco es un 400 a proposito (el refine exige configId O baseUrl+apiKey+model).',
-      apiKey: 'El trio del formulario no admite mitades: sin configId ni apiKey no hay prueba que hacer.',
-      model: 'El trio del formulario no admite mitades: sin configId ni model no hay prueba que hacer.'
+      baseUrl:
+        'Sin configId, el trio del formulario es todo o nada: un baseUrl hueco es un 400 a proposito (el refine exige configId O baseUrl+apiKey+model).',
+      apiKey:
+        'El trio del formulario no admite mitades: sin configId ni apiKey no hay prueba que hacer.',
+      model:
+        'El trio del formulario no admite mitades: sin configId ni model no hay prueba que hacer.'
     },
     note: 'La prueba admite dos formas: configId guardado o los datos del formulario (baseUrl+apiKey+model); el refine exige una de las dos, y quien trae configId puede traer el resto hueco.'
   },
-  { name: 'generateRecipeSchema', schema: generateRecipeSchema, required: { ingredients: [{ id: 'i', name: 'Tomate', quantity: 1, unit: 'g' }] } },
-  { name: 'generateWeeklyPlanSchema', schema: generateWeeklyPlanSchema, required: { startDate: '2026-03-09', endDate: '2026-03-15', goals: { type: 'balanced' } } },
+  {
+    name: 'generateRecipeSchema',
+    schema: generateRecipeSchema,
+    required: { ingredients: [{ id: 'i', name: 'Tomate', quantity: 1, unit: 'g' }] }
+  },
+  {
+    name: 'replaceMealSchema',
+    schema: replaceMealSchema,
+    required: { mealId: 'meal-1', guests: [] }
+  },
+  {
+    name: 'generateWeeklyPlanSchema',
+    schema: generateWeeklyPlanSchema,
+    required: { startDate: '2026-03-09', endDate: '2026-03-15', goals: { type: 'balanced' } }
+  },
   { name: 'getRecommendationsSchema', schema: getRecommendationsSchema },
 
   // ── La lectura de tickets por IA (## 12aj) ──
@@ -332,10 +473,16 @@ const ROWS: Row[] = [
 /** Los demas: se listan con el motivo, y la regla del final no deja esconder un formulario aqui. */
 const EXEMPT: Record<string, string> = {
   productIndexSchema: 'parametros de busqueda del indice de productos, sin cuerpo de formulario',
-  photoAnalyzeSchema: 'una subida de OCR manda SIEMPRE la imagen: sin imagen no hay peticion que procesar',
-  adjustServingsSchema: 'el ajuste de raciones es un numero o nada, y «nada» se resuelve en el frontend',
-  createPriceSchema: 'alta de precios desde el cierre de lista: los cuatro campos son obligatorios por contrato de negocio',
-  shelfAnswerSchema: 'la respuesta del modelo al pedirle vidas utiles (## 12ak): la escribe la IA, no un formulario de la interfaz'
+  photoAnalyzeSchema:
+    'una subida de OCR manda SIEMPRE la imagen: sin imagen no hay peticion que procesar',
+  adjustServingsSchema:
+    'el ajuste de raciones es un numero o nada, y «nada» se resuelve en el frontend',
+  createPriceSchema:
+    'alta de precios desde el cierre de lista: los cuatro campos son obligatorios por contrato de negocio',
+  shelfAnswerSchema:
+    'la respuesta del modelo al pedirle vidas utiles (## 12ak): la escribe la IA, no un formulario de la interfaz',
+  mealReplacementCandidateSchema:
+    'respuesta estructurada temporal del proveedor de IA, no es un formulario de usuario'
 };
 
 function shapeOf(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | null {
@@ -384,7 +531,10 @@ describe('contrato de formularios: lo opcional puede no llegar', () => {
 
     it(`${row.name}: solo los campos obligatorios se acepta`, () => {
       const parsed = row.schema.safeParse(minimal);
-      expect(parsed.success, JSON.stringify((parsed as { error?: z.ZodError }).error?.issues ?? [])).toBe(true);
+      expect(
+        parsed.success,
+        JSON.stringify((parsed as { error?: z.ZodError }).error?.issues ?? [])
+      ).toBe(true);
     });
 
     it(`${row.name}: cada opcional admite las formas del hueco`, () => {
@@ -408,14 +558,20 @@ describe('contrato de formularios: lo opcional puede no llegar', () => {
           }
         }
       }
-      expect(failures, `el formulario manda estas formas y la API las rechaza:\n  ${failures.join('\n  ')}`).toEqual([]);
+      expect(
+        failures,
+        `el formulario manda estas formas y la API las rechaza:\n  ${failures.join('\n  ')}`
+      ).toEqual([]);
     });
 
     it(`${row.name}: las excepciones del contrato estan justificadas`, () => {
       // Una excepcion sin motivo escrito es una puerta; con motivo, una decision.
       for (const key of Object.keys(row.except ?? {})) {
         expect(row.except![key].length, `${row.name}.${key} sin motivo`).toBeGreaterThan(12);
-        expect(optionalKeys(row), `${row.name}.${key} no es opcional: fuera la excepcion`).toContain(key);
+        expect(
+          optionalKeys(row),
+          `${row.name}.${key} no es opcional: fuera la excepcion`
+        ).toContain(key);
       }
     });
 
@@ -429,8 +585,13 @@ describe('contrato de formularios: lo opcional puede no llegar', () => {
       const parsed = row.schema.safeParse(sample);
       if (!parsed.success) return; // schemas sin helpers propios (filters, legacies) no prometen esto
       const data = parsed.data as Record<string, unknown>;
-      const leftovers = Object.keys(sample).filter((key) => data[key] === '' || (typeof data[key] === 'string' && !data[key]));
-      expect(leftovers, `estos campos se guardarian en blanco en vez de NULL: ${leftovers.join(', ')}`).toEqual([]);
+      const leftovers = Object.keys(sample).filter(
+        (key) => data[key] === '' || (typeof data[key] === 'string' && !data[key])
+      );
+      expect(
+        leftovers,
+        `estos campos se guardarian en blanco en vez de NULL: ${leftovers.join(', ')}`
+      ).toEqual([]);
     });
 
     it(`${row.name}: y los obligatorios siguen siendo obligatorios`, () => {
@@ -438,7 +599,9 @@ describe('contrato de formularios: lo opcional puede no llegar', () => {
       for (const key of missing) {
         const payload = { ...minimal };
         delete payload[key];
-        expect(row.schema.safeParse(payload).success, `${key} no deberia poder omitirse`).toBe(false);
+        expect(row.schema.safeParse(payload).success, `${key} no deberia poder omitirse`).toBe(
+          false
+        );
       }
     });
   }
@@ -449,7 +612,9 @@ describe('contrato de formularios: lo opcional puede no llegar', () => {
     expect((text.parse({ v: null }) as { v: unknown }).v).toBeNull();
     expect((text.parse({ v: '   ' }) as { v: unknown }).v).toBeNull();
     expect((text.parse({ v: '  hola  ' }) as { v: string }).v).toBe('hola');
-    expect((text.safeParse({ v: 'x'.repeat(11) }) as { error: z.ZodError }).error.issues[0].message).toContain('maximo 10');
+    expect(
+      (text.safeParse({ v: 'x'.repeat(11) }) as { error: z.ZodError }).error.issues[0].message
+    ).toContain('maximo 10');
 
     const time = z.object({ v: formTime('Hora') });
     expect(time.safeParse({ v: '25:00' }).success).toBe(false);
@@ -476,7 +641,9 @@ describe('contrato de formularios: lo opcional puede no llegar', () => {
     const report = describeIssues((parsed as { error: z.ZodError }).error);
     expect(report.message).toMatch(/titulo|title/i);
     expect(report.issues.length).toBeGreaterThan(0);
-    expect(report.issues.every((issue) => !/^(invalid|too |expected)/i.test(issue.message))).toBe(true);
+    expect(report.issues.every((issue) => !/^(invalid|too |expected)/i.test(issue.message))).toBe(
+      true
+    );
   });
 });
 
@@ -491,16 +658,16 @@ describe('ningun schema de ruta se queda sin contrato', () => {
   const parsed = new Set<string>();
   for (const file of readdirSync(routesDir).filter((name) => name.endsWith('.routes.ts'))) {
     const source = readFileSync(join(routesDir, file), 'utf8');
-    for (const match of source.matchAll(/([A-Za-z0-9_]+Schema)\.(?:safe)?[Pp]arse\(/g)) parsed.add(match[1]);
-    for (const match of source.matchAll(/readForm\(c,\s*([A-Za-z0-9_]+Schema)\b/g)) parsed.add(match[1]);
+    for (const match of source.matchAll(/([A-Za-z0-9_]+Schema)\.(?:safe)?[Pp]arse\(/g))
+      parsed.add(match[1]);
+    for (const match of source.matchAll(/readForm\(c,\s*([A-Za-z0-9_]+Schema)\b/g))
+      parsed.add(match[1]);
   }
 
   const rows = new Map(ROWS.map((row) => [row.name, row]));
 
   it('todo schema que parsea una ruta tiene su fila o su motivo', () => {
-    const missing = [...parsed]
-      .filter((name) => !rows.has(name) && !EXEMPT[name])
-      .sort();
+    const missing = [...parsed].filter((name) => !rows.has(name) && !EXEMPT[name]).sort();
     expect(
       missing,
       `faltan las filas de: ${missing.join(', ')}. Anade la suya en ROWS con su payload minimo —es el` +
@@ -511,7 +678,8 @@ describe('ningun schema de ruta se queda sin contrato', () => {
   it('las filas existen en el codigo, y los exentos no esconden opcionales', () => {
     const hidden: string[] = [];
     for (const name of Object.keys(EXEMPT)) {
-      if (!parsed.has(name) && !rows.has(name)) hidden.push(`${name}: no lo parsea ninguna ruta (fuera la excepcion)`);
+      if (!parsed.has(name) && !rows.has(name))
+        hidden.push(`${name}: no lo parsea ninguna ruta (fuera la excepcion)`);
     }
     expect(hidden).toEqual([]);
   });

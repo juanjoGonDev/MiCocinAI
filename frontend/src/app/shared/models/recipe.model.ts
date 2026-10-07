@@ -1,4 +1,8 @@
-import type { RecipeInstructionStep, RecipeInstructionsByLevel } from './recipe-instructions';
+import type {
+  RecipeInstructionStep,
+  RecipeInstructionsByLevel,
+  RecipeStepImageAttribution
+} from './recipe-instructions';
 
 export interface Recipe {
   id: string;
@@ -6,6 +10,10 @@ export interface Recipe {
   description: string;
   difficulty: Difficulty;
   cuisine: string | null;
+  countryCode?: string | null;
+  catalogKey?: string | null;
+  sourceAttribution?: RecipeSourceAttribution | null;
+  imageAttribution?: RecipeImageAttribution | null;
   mealType: MealType[];
   totalTime: number;
   prepTime: number;
@@ -16,6 +24,7 @@ export interface Recipe {
   image?: string;
   ingredients: RecipeIngredient[];
   utensils: string[];
+  guidance?: RecipeGuidance | null;
   /** Legacy recipes keep their one historical list; new AI recipes use instructionsByLevel. */
   steps?: RecipeStep[];
   instructionsByLevel?: RecipeInstructionsByLevel;
@@ -32,6 +41,54 @@ export interface Recipe {
   updatedAt: Date;
 }
 
+type RecipeEditableKey =
+  | 'name'
+  | 'description'
+  | 'difficulty'
+  | 'cuisine'
+  | 'countryCode'
+  | 'mealType'
+  | 'totalTime'
+  | 'prepTime'
+  | 'cookTime'
+  | 'restTime'
+  | 'servings'
+  | 'calories'
+  | 'image'
+  | 'ingredients'
+  | 'utensils'
+  | 'steps'
+  | 'instructionsByLevel'
+  | 'guidance'
+  | 'nutrition'
+  | 'storage'
+  | 'tags';
+
+type NullableRecipeEditableKey =
+  | 'description'
+  | 'cuisine'
+  | 'countryCode'
+  | 'totalTime'
+  | 'prepTime'
+  | 'cookTime'
+  | 'restTime'
+  | 'calories'
+  | 'image'
+  | 'steps'
+  | 'instructionsByLevel'
+  | 'guidance'
+  | 'nutrition'
+  | 'storage';
+
+export type RecipeUpdateInput = Partial<
+  Omit<Pick<Recipe, RecipeEditableKey>, NullableRecipeEditableKey>
+> & {
+  [Key in NullableRecipeEditableKey]?: Recipe[Key] | null;
+} & {
+  /** A short-lived Wikimedia search result; the server stores and replaces it with a local asset URL. */
+  imagePhotoId?: string;
+};
+
 export interface RecipeIngredient {
   ingredientId?: string;
   name: string;
@@ -41,6 +98,12 @@ export interface RecipeIngredient {
   isOptional: boolean;
   substitutes?: string[];
   notes?: string | null;
+}
+
+export interface RecipeGuidance {
+  appliances: string[];
+  parallelTasks: string[];
+  tipsAndVariations: string[];
 }
 
 export interface RecipeStep extends RecipeInstructionStep {
@@ -76,7 +139,16 @@ export type Difficulty = 'easy' | 'medium' | 'hard';
 
 export type MealType = 'breakfast' | 'brunch' | 'lunch' | 'snack' | 'dinner' | 'dessert';
 
-export type AuthorType = 'ai' | 'user';
+export type AuthorType = 'ai' | 'user' | 'catalog';
+
+export interface RecipeSourceAttribution {
+  publisher: string;
+  title: string;
+  url: string;
+  note: string;
+}
+
+export type RecipeImageAttribution = RecipeStepImageAttribution;
 
 export type MeasurementUnit =
   'g' | 'kg' | 'ml' | 'l' | 'cup' | 'tbsp' | 'tsp' | 'unit' | 'bunch' | 'slice' | 'piece';
@@ -85,11 +157,18 @@ export interface RecipeFilter {
   search?: string;
   difficulty?: Difficulty;
   mealType?: MealType;
+  mealTypes?: MealType[];
   maxTime?: number;
   cuisine?: string;
+  countryCode?: string;
   tags?: string[];
   isFavorite?: boolean;
   author?: AuthorType;
+  catalogOnly?: boolean;
+  page?: number;
+  pageSize?: number;
+  sortBy?: 'name' | 'difficulty' | 'totalTime' | 'rating' | 'createdAt';
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface RecipeListResponse {

@@ -13,6 +13,45 @@ export interface SyntheticRecipeOptions {
   name?: string;
   tips?: string;
   warning?: string;
+  servings?: number;
+  calories?: number;
+  restTime?: number | null;
+  ingredients?: Array<{
+    name: string;
+    quantity: number;
+    unit: string;
+    preparation?: string | null;
+    isOptional?: boolean;
+    substitutes?: string[];
+    notes?: string | null;
+  }>;
+  guidance?: {
+    appliances: string[];
+    parallelTasks: string[];
+    tipsAndVariations: string[];
+  };
+  instructionsByLevel?: {
+    basic: Array<Record<string, unknown>>;
+    intermediate: Array<Record<string, unknown>>;
+    expert: Array<Record<string, unknown>>;
+  };
+  nutrition?: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    fiber?: number | null;
+    sugar?: number;
+    sodium?: number;
+  };
+  storage?: {
+    method: string;
+    container?: string | null;
+    duration: string;
+    reheatingInstructions?: string | null;
+    freezingPossible: boolean;
+    freezingDuration?: string | null;
+  };
 }
 
 export async function createSyntheticRecipe(
@@ -32,16 +71,25 @@ export async function createSyntheticRecipe(
       totalTime: 15,
       prepTime: 5,
       cookTime: 10,
-      servings: 2,
-      ingredients: [{ name: 'Tomate QA', quantity: 2, unit: 'unit' }],
-      steps: [
-        {
-          stepNumber: 1,
-          instruction: 'Cortar el tomate.',
-          ...(options.tips ? { tips: options.tips } : {}),
-          ...(options.warning ? { warning: options.warning } : {})
-        }
-      ]
+      servings: options.servings ?? 2,
+      calories: options.calories,
+      restTime: options.restTime,
+      ingredients: options.ingredients ?? [{ name: 'Tomate QA', quantity: 2, unit: 'unit' }],
+      ...(options.guidance ? { guidance: options.guidance } : {}),
+      ...(options.instructionsByLevel
+        ? { instructionsByLevel: options.instructionsByLevel }
+        : {
+            steps: [
+              {
+                stepNumber: 1,
+                instruction: 'Cortar el tomate.',
+                ...(options.tips ? { tips: options.tips } : {}),
+                ...(options.warning ? { warning: options.warning } : {})
+              }
+            ]
+          }),
+      ...(options.nutrition ? { nutrition: options.nutrition } : {}),
+      ...(options.storage ? { storage: options.storage } : {})
     }
   });
   expect(

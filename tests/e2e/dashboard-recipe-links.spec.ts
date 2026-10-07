@@ -8,7 +8,7 @@ import {
   waitForStableView
 } from './helpers/recipe-fixtures';
 
-test('la tarjeta sugerida abre el detalle existente y conserva el deep link', async ({ page }) => {
+test('la tarjeta sugerida abre la página de detalle y conserva el deep link', async ({ page }) => {
   await registerAndGoto(page, '/dashboard', 'dashboard-recipes');
   const recipe = await createSyntheticRecipe(page);
   try {
@@ -19,8 +19,9 @@ test('la tarjeta sugerida abre el detalle existente y conserva el deep link', as
 
     await expect(page).toHaveURL(new RegExp(`/recipes\\?recipe=${recipe.id}$`));
     await expect(page.locator('.recipe-detail')).toBeVisible();
-    await expect(page.getByRole('dialog', { name: recipe.name })).toBeVisible();
-    await expect(page.locator('.modal__title')).toHaveText(recipe.name);
+    await expect(page.locator('[data-test="recipe-detail-page"]')).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('[data-test="recipe-detail-title"]')).toHaveText(recipe.name);
     await expect(page.locator('.recipe-detail__description')).toContainText('Fixture sintético');
     await expect(page.locator('.recipe-detail')).toContainText('Tomate QA');
     await expect(page.locator('.recipe-detail')).toContainText('Cortar el tomate.');
@@ -36,10 +37,10 @@ test('la tarjeta sugerida abre el detalle existente y conserva el deep link', as
     }
 
     await page.reload();
-    await expect(page.getByRole('dialog', { name: recipe.name })).toBeVisible();
-    await expect(page.locator('.modal__title')).toHaveText(recipe.name);
+    await expect(page.locator('[data-test="recipe-detail-page"]')).toBeVisible();
+    await expect(page.locator('[data-test="recipe-detail-title"]')).toHaveText(recipe.name);
     await expect(page.locator('.recipe-detail')).toBeVisible();
-    await page.locator('.modal__close').click();
+    await page.getByRole('button', { name: 'Volver a recetas' }).click();
     await expect(page).toHaveURL(/\/recipes$/);
   } finally {
     await deleteSyntheticRecipe(page, recipe);
@@ -49,6 +50,23 @@ test('la tarjeta sugerida abre el detalle existente y conserva el deep link', as
 test('los enlaces Dashboard y el fragmento directo abren el modal IA sin invocarla', async ({
   page
 }) => {
+  // The catalog is seeded for every isolated app run, so return an empty library here to
+  // exercise the dashboard's empty-state route deterministically.
+  await page.route('**/api/recipes*', async (route) => {
+    const requestUrl = new URL(route.request().url());
+    if (route.request().method() === 'GET' && requestUrl.pathname.endsWith('/api/recipes')) {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: { recipes: [], total: 0, page: 1, pageSize: 24 }
+        })
+      });
+      return;
+    }
+    await route.continue();
+  });
   await registerAndGoto(page, '/dashboard', 'dashboard-recipes-ai');
   const aiRequests: string[] = [];
   page.on('request', (request) => {
