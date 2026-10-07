@@ -62,7 +62,7 @@ export function findButtonGeometryViolations({ globalStyles, buttonStyles }) {
 
   const sharedTokens = [
     ['--button-control-padding-block', 'var(--space-2)'],
-    ['--button-control-padding-inline', 'var(--space-3)'],
+    ['--button-control-padding-inline', 'var(--space-4)'],
     ['--button-control-font-size', 'var(--text-sm)']
   ];
   for (const [property, value] of sharedTokens) {

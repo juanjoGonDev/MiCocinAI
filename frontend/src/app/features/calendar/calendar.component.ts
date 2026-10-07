@@ -475,13 +475,11 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       >
         <div class="meal-form">
           <div class="meal-form__field meal-form__field--text cal-event-title-field">
-            <label class="cal-visually-hidden" for="event-title">{{
-              'calendar.event_title_placeholder' | t
-            }}</label>
+            <label for="event-title">{{ 'calendar.event_title_label' | t }}</label>
             <input
               id="event-title"
               name="eventTitle"
-              class="cal-input cal-input--event-title"
+              class="cal-input cal-input--text cal-input--event-title"
               maxlength="120"
               [(ngModel)]="eventDraft.title"
               data-test="event-title"

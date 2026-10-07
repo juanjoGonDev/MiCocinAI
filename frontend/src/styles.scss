@@ -158,7 +158,7 @@
   /* Geometría compartida para botones de acción de texto. */
   --button-control-height: 44px;
   --button-control-padding-block: var(--space-2);
-  --button-control-padding-inline: var(--space-3);
+  --button-control-padding-inline: var(--space-4);
   --button-control-font-size: var(--text-sm);
   --calendar-action-width: 96px;
 
@@ -1093,21 +1093,6 @@ app-calendar {
   .cal-event-title-field {
     margin: 0 0 var(--space-2);
   }
-  .cal-event-title-field .cal-input--event-title {
-    min-height: 48px;
-    padding: 4px 0;
-    border: 0;
-    border-bottom: 1px solid var(--border-strong);
-    border-radius: 0;
-    background: transparent;
-    font-family: var(--font-display);
-    font-size: 22px;
-    font-weight: var(--font-normal);
-    box-shadow: none;
-  }
-  .cal-event-title-field .cal-input--event-title:focus {
-    border-bottom: 2px solid var(--primary);
-  }
   .cal-event-when,
   .cal-event-repeat-row {
     display: grid;
@@ -1652,7 +1637,7 @@ app-calendar {
     gap: var(--space-2);
   }
 
-  @media (max-width: 600px) {
+  @media (max-width: 920px) {
     .cal-top__right {
       flex: 1 1 100%;
       flex-wrap: wrap;

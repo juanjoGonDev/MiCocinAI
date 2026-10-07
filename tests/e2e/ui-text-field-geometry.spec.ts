@@ -417,6 +417,17 @@ test('los campos de texto equivalentes comparten geometría entre vistas', async
   const calendarGeometry = new Map<string, Geometry>();
   for (const viewport of VIEWPORTS) {
     await page.setViewportSize(viewport);
+    if (testInfo.project.name === 'mobile-chrome' && viewport.width < 1024) {
+      await expect(page.locator('.header__menu')).toHaveAttribute('aria-expanded', 'false');
+      await expect(page.locator('.sidebar-overlay')).toHaveCount(0);
+      await expect
+        .poll(() =>
+          page
+            .locator('#primary-sidebar')
+            .evaluate((sidebar) => sidebar.getBoundingClientRect().right)
+        )
+        .toBeLessThanOrEqual(1);
+    }
     const measured = await geometry(page, {
       control: '#event-title',
       label: 'label[for="event-title"]',

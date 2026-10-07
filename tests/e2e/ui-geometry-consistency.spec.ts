@@ -57,6 +57,15 @@ test('las acciones equivalentes de la cabecera del calendario comparten geometr√
   const observations: Array<{
     viewport: { width: number; height: number };
     controls: ButtonGeometry[];
+    viewPicker: {
+      width: number;
+      height: number;
+      paddingBlockStart: string;
+      paddingBlockEnd: string;
+      paddingInlineStart: string;
+      paddingInlineEnd: string;
+      borderRadius: string;
+    };
     datePicker: { width: number; height: number };
     groupGaps: string[];
     dayHeaders: Array<{
@@ -75,35 +84,52 @@ test('las acciones equivalentes de la cabecera del calendario comparten geometr√
         )
     );
 
-    const controls = await page.locator('.cal-top button').evaluateAll((buttons) =>
-      buttons.map((button) => {
-        const element = button as HTMLButtonElement;
+    const controls = await page
+      .locator('.cal-top button:not(.picker__trigger)')
+      .evaluateAll((buttons) =>
+        buttons.map((button) => {
+          const element = button as HTMLButtonElement;
+          const style = getComputedStyle(element);
+          const rect = element.getBoundingClientRect();
+          return {
+            label: element.innerText.replace(/\s+/g, ' ').trim(),
+            className: String(element.className),
+            width: Number(rect.width.toFixed(2)),
+            height: Number(rect.height.toFixed(2)),
+            paddingBlockStart: style.paddingBlockStart,
+            paddingBlockEnd: style.paddingBlockEnd,
+            paddingInlineStart: style.paddingInlineStart,
+            paddingInlineEnd: style.paddingInlineEnd,
+            marginBlockStart: style.marginBlockStart,
+            marginBlockEnd: style.marginBlockEnd,
+            marginInlineStart: style.marginInlineStart,
+            marginInlineEnd: style.marginInlineEnd,
+            gap: style.gap,
+            fontFamily: style.fontFamily,
+            fontSize: style.fontSize,
+            fontWeight: style.fontWeight,
+            lineHeight: style.lineHeight,
+            borderStyle: style.borderTopStyle,
+            borderWidth: style.borderWidth,
+            borderRadius: style.borderTopLeftRadius
+          };
+        })
+      );
+    const viewPicker = await page
+      .locator('.cal-view-picker .picker__trigger')
+      .evaluate((element) => {
         const style = getComputedStyle(element);
         const rect = element.getBoundingClientRect();
         return {
-          label: element.innerText.replace(/\s+/g, ' ').trim(),
-          className: String(element.className),
           width: Number(rect.width.toFixed(2)),
           height: Number(rect.height.toFixed(2)),
           paddingBlockStart: style.paddingBlockStart,
           paddingBlockEnd: style.paddingBlockEnd,
           paddingInlineStart: style.paddingInlineStart,
           paddingInlineEnd: style.paddingInlineEnd,
-          marginBlockStart: style.marginBlockStart,
-          marginBlockEnd: style.marginBlockEnd,
-          marginInlineStart: style.marginInlineStart,
-          marginInlineEnd: style.marginInlineEnd,
-          gap: style.gap,
-          fontFamily: style.fontFamily,
-          fontSize: style.fontSize,
-          fontWeight: style.fontWeight,
-          lineHeight: style.lineHeight,
-          borderStyle: style.borderTopStyle,
-          borderWidth: style.borderWidth,
           borderRadius: style.borderTopLeftRadius
         };
-      })
-    );
+      });
     const datePicker = await page.locator('.cal-top .cal-jump').evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return { width: Number(rect.width.toFixed(2)), height: Number(rect.height.toFixed(2)) };
@@ -143,8 +169,15 @@ test('las acciones equivalentes de la cabecera del calendario comparten geometr√
       })
     );
 
-    expect(controls, `controles presentes a ${viewport.width}√ó${viewport.height}`).toHaveLength(9);
-    observations.push({ viewport, controls, datePicker, groupGaps, dayHeaders });
+    expect(controls, `controles de acci√≥n a ${viewport.width}√ó${viewport.height}`).toHaveLength(7);
+    expect(viewPicker.width).toBe(144);
+    expect(viewPicker.height).toBe(44);
+    expect(viewPicker.paddingBlockStart).toBe('8px');
+    expect(viewPicker.paddingBlockEnd).toBe('8px');
+    expect(viewPicker.paddingInlineStart).toBe('12px');
+    expect(viewPicker.paddingInlineEnd).toBe('12px');
+    expect(viewPicker.borderRadius).toBe('8px');
+    observations.push({ viewport, controls, viewPicker, datePicker, groupGaps, dayHeaders });
   }
 
   const mismatches = observations.flatMap(

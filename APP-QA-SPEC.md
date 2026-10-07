@@ -1665,8 +1665,8 @@ compleja ni salida live, por lo que esa evidencia sigue pendiente.
 | `AiJobKind`        | Ruta de la aplicación                        | Aserción real mínima con fixture sintética                                                                        |
 | ------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `connection_test`  | `POST /api/ai/test-connection`               | Veredicto válido del esquema JSON estricto.                                                                       |
-| `recipe`           | `POST /api/ai/generate-recipe`               | Receta compleja con varios ingredientes y tres niveles de instrucciones válidos, mostrada en la UI.              |
-| `multiple_recipes` | `POST /api/ai/generate-multiple-recipes`     | Dos borradores distintos/validables (`count: 2`) con despensa de varios ingredientes, ambos devueltos.           |
+| `recipe`           | `POST /api/ai/generate-recipe`               | Receta compleja con varios ingredientes y tres niveles de instrucciones válidos, mostrada en la UI.               |
+| `multiple_recipes` | `POST /api/ai/generate-multiple-recipes`     | Dos borradores distintos/validables (`count: 2`) con despensa de varios ingredientes, ambos devueltos.            |
 | `recommendations`  | `POST /api/ai/recommendations`               | Lista JSON de recomendaciones; admite inventario sintético vacío.                                                 |
 | `weekly_plan`      | `POST /api/ai/plan-week`                     | Plan JSON con objetivos múltiples/custom, persistido en calendario/planificador.                                  |
 | `expiry_estimate`  | `POST /api/pantry/expiry/estimate`           | Ingrediente sintético no catalogado recibe días estimados persistidos.                                            |
@@ -2148,6 +2148,16 @@ Capturas sintéticas inspeccionadas: `.e2e-screenshots/calendar-geometry-final/u
 `ui-geometry-mobile.png`. La matriz global sigue abierta: estos resultados solo cierran el primer grupo
 visual de `/calendar`; aún faltan familias/rutas públicas y privadas.
 
+**Revalidación por CI (2026-10-08):** la cabecera tenía una regresión en el reflujo del grupo derecho a
+768 px; ahora este pasa a línea propia hasta 920 px. El selector de vista es un control de selección
+distinto de los siete botones de acción y se mide por separado. La tanda `node scripts/run-isolated-playwright.mjs
+--workers=1 --project=chromium --project=mobile-chrome tests/e2e/auth-onboarding-icons.spec.ts
+tests/e2e/calendar-all-day-gutter.spec.ts tests/e2e/calendar-mobile-header-layout.spec.ts
+tests/e2e/calendar-number-locale.spec.ts tests/e2e/ui-geometry-consistency.spec.ts
+tests/e2e/ui-text-field-geometry.spec.ts tests/e2e/shopping-primary-geometry.spec.ts --reporter=dot`
+pasó **20/20**; `pnpm run typecheck:e2e`, `pnpm run check:ui` (207 ficheros/21 reglas) y
+`git diff --check` también pasan. La matriz visual global continúa abierta.
+
 **Rollback focal:** revertir solo los estilos de barra, mínimo de columnas/scroll local, las dos pruebas de
 geometría y este subapartado; no revertir `AGENTS.md` ni la matriz global.
 
@@ -2297,6 +2307,13 @@ por su función de contenido/layout y se excluyen solo controles realmente de fa
 **Rollback focal:** restaurar únicamente las reglas de tamaño/estados de `app-button`, retirar las aserciones
 geométricas correspondientes y este subapartado; mantener abiertas las demás familias de la matriz global.
 
+**Revalidación por CI (2026-10-08):** el token compartido `--button-control-padding-inline` había
+derivado de `--space-4` a `--space-3`; se restauró el contrato existente y el gate estático ahora detecta
+esa regresión. `node --test scripts/check-ui-button-geometry.test.mjs` pasa **6/6**; `pnpm run check:ui`
+reporta **207 ficheros, 21 reglas, 0 incidencias**. Los E2E de Compra verifican además caja/foco del CTA
+sin imponer un ancho de outline dependiente del navegador. No cambia el contrato de ancho ni la familia
+icon-only; el censo visual global sigue abierto.
+
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.SHOPPING-PRIMARY.1 · CTA primario de Compra
 
 **Fuente revalidada antes del cambio (2026-10-03):** `shopping-lists.component.ts` declaraba `.tray__primary` con alto mínimo
@@ -2326,6 +2343,11 @@ expresado por color y sin imponer igual anchura a etiquetas de longitudes distin
 
 **Rollback focal:** revertir únicamente la migración de los CTA primarios de Compra a `app-button`, esta
 regresión E2E y este subapartado; no revertir la unidad `app-button` ni otros cambios de Compra.
+
+**Revalidación por CI (2026-10-08):** Chromium y Pixel 5 vuelven a medir las acciones de lista/detalle y
+el foco visible; las capturas sintéticas de Compra a 1440×900 y 393×851 se inspeccionaron. El test no fija
+el grosor exacto del outline (el navegador calcula 3 px), pero exige estilo sólido y al menos 2 px; no
+reduce los requisitos de caja ni de objetivo táctil.
 
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.TEXT-FIELDS.1 · campos de texto de una línea
 
@@ -2366,10 +2388,15 @@ no debe cerrar el drawer a ciegas y ocultar un estado inicial incorrecto.
       estáticas HTML/CSS se validan geométricamente por E2E, sin reducir los gates globales. Ejecutar `typecheck:e2e`,
       Prettier focal, `check:ui`, build de producción y `git diff --check`.
 
-
 **TDD rojo→verde y evidencia (2026-10-04):** en un checkout temporal de `HEAD`, con solo el harness E2E aislado actual y el arreglo de compilación de `MainLayout` (ajeno a inputs), la misma prueba falló **2/2** (Chromium y Pixel 5): Cuenta medía 35 px/14 px/radio 8 px, etiqueta 600 y gaps 8 px frente a contrato 42 px/16 px/radio 12 px, etiqueta 500 y gap 4 px; el título de Calendario medía 35 px/14 px/radio 8 px, etiqueta 12 px y gaps 8 px. Login ya cumplía el contrato. Con la normalización, la E2E aislada volvió a ejecutarse contra app/API/SQLite propios y pasó **2/2**; comparó controles, labels, gap, padding, márgenes, fuente, interlineado, borde/radio y ancho en 10 viewports en Chromium y Pixel 5; comprueba teclado/foco, nombre accesible, error de login sin POST, error de nombre, CTA deshabilitado, drawer cerrado, hit-test y overflow. Capturas sintéticas comparables inspeccionadas en `.e2e-screenshots/qa-text-fields-recheck-20261004-1010/`.
 
 Karma frontend completo: **929/929** tests; el gate global configurado en 80 % sigue abierto (**78.11/65.50/76.18/79.56 % S/B/F/L**), sin rebajar umbrales. `input.component.ts` queda en **100/100/94.12/100 %**; los cambios en Account/Calendar son declaraciones de geometría dentro de templates/estilos estáticos, no lógica ejecutable, y quedan cubiertos por la medición E2E. `typecheck:e2e`, Prettier del spec E2E, `check:ui` (**189 archivos, 20 reglas, 0 incidencias**), build frontend producción y `git diff --check` pasan. El build mantiene avisos existentes de budget inicial (715.52 kB frente a 500 kB) y estilos grandes; no se modificaron los budgets.
+
+**Revalidación por CI (2026-10-08):** el título del evento vuelve al componente compartido `.cal-input--text`
+y expone una etiqueta visible localizada («Título»/«Title»); se quitó su override tipográfico y de 48 px,
+que contradecía el contrato de esta sección. La regresión de campos pasó en Chromium y Pixel 5; la
+captura móvil confirma drawer cerrado y campo visible. `typecheck:e2e` y `check:ui` pasan. La cobertura
+global permanece bajo el gate de 80 % anotado arriba; no se cambia el umbral.
 **Rollback focal:** retirar únicamente los tokens/reglas de geometría de inputs de texto estándar, esta
 regresión E2E y esta subunidad; conservar el contrato global, el marco común y estilos de otras familias.
 
@@ -2393,8 +2420,7 @@ que no contienen hoy se conserva el recorte y auto-scroll por eventos actuales.
 - [x] Implementar el mínimo ajuste de geometría/auto-scroll: cuando hoy está en el rango, incluir la hora
       actual en la ventana y enfocar «ahora» aunque haya eventos posteriores; preservar esos eventos. Fuera
       de hoy se conserva el recorte por eventos/ventana predeterminada.
-- [x] Validar Día/Semana con Playwright real aislado y reloj fijo a las 02:08 de Madrid: Chromium escritorio
-      + Pixel 5, agenda vacía y evento sintético a las 10:00, línea ahora visible, sin línea mañana ni errores,
+- [x] Validar Día/Semana con Playwright real aislado y reloj fijo a las 02:08 de Madrid: Chromium escritorio + Pixel 5, agenda vacía y evento sintético a las 10:00, línea ahora visible, sin línea mañana ni errores,
       y sin overflow en 320, 393, 568×320, 767/768/769, 1023/1024/1025 y 1440 px. Teclado/foco probado al
       cambiar de vista y guardar el evento. E2E final **2/2**; DB, seed y puertos temporales propios limpiados.
       Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-calendar-early-hours-1/`

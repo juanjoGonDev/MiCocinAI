@@ -26,6 +26,18 @@ test('falla si el token estándar se aumenta y genera acciones sobredimensionada
   );
 });
 
+test('falla si el padding inline compartido se reduce por debajo del contrato', () => {
+  const compact = globalStyles.replace(
+    '--button-control-padding-inline: var(--space-4);',
+    '--button-control-padding-inline: var(--space-3);'
+  );
+  assert(
+    findButtonGeometryViolations({ globalStyles: compact, buttonStyles }).some((violation) =>
+      violation.detail.includes('--button-control-padding-inline: var(--space-4)')
+    )
+  );
+});
+
 test('falla si un variant añade dimensiones propias', () => {
   const divergent = buttonStyles.replace(/(\.btn--primary\s*\{)/, '$1\n      min-height: 64px;');
   assert(

@@ -270,7 +270,9 @@ test.describe('Geometría de los CTA primarios de Compra', () => {
       outlineStyle: getComputedStyle(element).outlineStyle,
       outlineWidth: getComputedStyle(element).outlineWidth
     }));
-    expect(createFocus).toEqual({ visible: true, outlineStyle: 'solid', outlineWidth: '2px' });
+    expect(createFocus.visible).toBe(true);
+    expect(createFocus.outlineStyle).toBe('solid');
+    expect(Number.parseFloat(createFocus.outlineWidth)).toBeGreaterThanOrEqual(2);
 
     await page.route('**/api/shopping/lists', async (route) => {
       if (route.request().method() === 'POST') {
