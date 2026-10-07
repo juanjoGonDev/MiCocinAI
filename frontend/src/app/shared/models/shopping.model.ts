@@ -253,7 +253,8 @@ export const LIST_CATEGORIES = [
  * respeta el orden manual (`position`), que es lo que sostiene el arrastrar.
  */
 export function groupItemsByCategory(
-  items: ShoppingListItem[]
+  items: ShoppingListItem[],
+  options: { frozenLast?: boolean } = {}
 ): { category: string; items: ShoppingListItem[] }[] {
   const buckets = new Map<string, ShoppingListItem[]>();
   for (const item of items) {
@@ -269,8 +270,82 @@ export function groupItemsByCategory(
   };
 
   return [...buckets.entries()]
-    .sort(([a], [b]) => order(a) - order(b) || a.localeCompare(b, 'es'))
+    .sort(([a], [b]) => {
+      if (options.frozenLast) {
+        const frozenDifference = Number(isFrozenCategory(a)) - Number(isFrozenCategory(b));
+        if (frozenDifference) return frozenDifference;
+      }
+      return order(a) - order(b) || a.localeCompare(b, 'es');
+    })
     .map(([category, groupItems]) => ({ category, items: groupItems }));
+}
+
+export interface ShoppingViewOrder {
+  weightFirst: boolean;
+  frozenLast: boolean;
+}
+
+/** Reorders a display-only copy; `position` and server order are never mutated. */
+export function orderShoppingItems(
+  items: ShoppingListItem[],
+  options: ShoppingViewOrder
+): ShoppingListItem[] {
+  return items
+    .map((item, index) => ({ item, index, grams: weightInGrams(item) }))
+    .sort((left, right) => {
+      if (options.frozenLast) {
+        const frozenDifference =
+          Number(isFrozenCategory(left.item.category)) -
+          Number(isFrozenCategory(right.item.category));
+        if (frozenDifference) return frozenDifference;
+      }
+      if (options.weightFirst) {
+        if (left.grams !== null && right.grams === null) return -1;
+        if (left.grams === null && right.grams !== null) return 1;
+        if (left.grams !== null && right.grams !== null && left.grams !== right.grams) {
+          return right.grams - left.grams;
+        }
+      }
+      return left.index - right.index;
+    })
+    .map(({ item }) => item);
+}
+
+function isFrozenCategory(category: string | null | undefined): boolean {
+  const normalized = String(category ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('es');
+  return normalized === 'congelados';
+}
+
+/** Only explicit mass units are comparable. Volume, pieces and unknown units stay together. */
+function weightInGrams(item: Pick<ShoppingListItem, 'quantity' | 'unit'>): number | null {
+  const quantity = Number(item.quantity);
+  if (!Number.isFinite(quantity) || quantity < 0) return null;
+  const unit = String(item.unit ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLocaleLowerCase('es')
+    .replace(/[.\s]/g, '');
+  const factors: Record<string, number> = {
+    mg: 0.001,
+    miligramo: 0.001,
+    miligramos: 0.001,
+    g: 1,
+    gr: 1,
+    gramo: 1,
+    gramos: 1,
+    kg: 1000,
+    kilo: 1000,
+    kilos: 1000,
+    kilogramo: 1000,
+    kilogramos: 1000
+  };
+  const factor = factors[unit];
+  return factor === undefined ? null : quantity * factor;
 }
 
 /** `85 -> "0,85 €"`, `null -> "—"` (la raya dice «sin dato», el 0 diria «gratis»). */

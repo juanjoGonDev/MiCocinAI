@@ -1,4 +1,4 @@
-import { Injectable, DestroyRef, inject, signal } from '@angular/core';
+import { Injectable, DestroyRef, effect, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse, HttpContext, HttpParams } from '@angular/common/http';
 import { Observable, fromEvent, of, firstValueFrom } from 'rxjs';
 import { catchError, finalize, map, tap } from 'rxjs/operators';
@@ -7,6 +7,7 @@ import { openResilientStream } from '../../core/sse';
 import { ToastService } from './toast.service';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import { AuthService } from './auth.service';
+import { HouseholdService } from './household.service';
 import { originalHttpError } from './shopping-http-error';
 import { photoAnalysisHttpContext } from './shopping-photo-http-context';
 import type { ShoppingStreamPath } from './shopping-stream-path';
@@ -40,6 +41,7 @@ import { I18nService } from '../../core/services/i18n.service';
 /** Operacion de escritura en espera: la misma observable, reintentable tal cual. */
 interface QueuedWrite {
   key: string;
+  householdId: string | null;
   send: () => Observable<unknown>;
 }
 
@@ -63,12 +65,14 @@ export class ShoppingService {
   private readonly toast = inject(ToastService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly auth = inject(AuthService);
+  private readonly household = inject(HouseholdService);
   private readonly apiUrl = '/api/shopping';
+  private lastContextRevision = this.household.contextRevision();
+  private lastActiveHouseholdId = this.household.activeHouseholdId();
 
   private readonly queue: QueuedWrite[] = [];
   private onlineEventVersion = 0;
   private pausedAfterNetworkError = false;
-
   readonly lists = signal<ShoppingList[]>([]);
   readonly list = signal<ShoppingList | null>(null);
   readonly items = signal<ShoppingListItem[]>([]);
@@ -91,6 +95,19 @@ export class ShoppingService {
   readonly pendingWrites = signal(0);
 
   constructor() {
+    effect(() => {
+      const revision = this.household.contextRevision();
+      const activeHouseholdId = this.household.activeHouseholdId();
+      const switchingHousehold = this.household.switchingHousehold();
+      const revisionChanged = revision !== this.lastContextRevision;
+      const activeHouseholdChanged = activeHouseholdId !== this.lastActiveHouseholdId;
+      this.lastContextRevision = revision;
+      this.lastActiveHouseholdId = activeHouseholdId;
+      if (activeHouseholdChanged || (revisionChanged && switchingHousehold)) {
+        this.clearHouseholdScopedState();
+      }
+    });
+
     // Al volver la conexion, la cola sale en orden. Sin reintentos agresivos:
     // un 4xx es un error de datos, no de red, y reintentarlo solo gastaria bateria.
     fromEvent(window, 'online')
@@ -110,6 +127,7 @@ export class ShoppingService {
    * leer 400 listas para ensenar 25, y la bandeja se abre justo cuando hay prisa.
    */
   loadLists(query: ListsQuery | ShoppingListStatus = {}): void {
+    const contextRevision = this.household.contextRevision();
     const normalized: ListsQuery = typeof query === 'string' ? { status: query } : query;
     this.listsQuery = normalized;
     this.loadingLists.set(true);
@@ -130,11 +148,14 @@ export class ShoppingService {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
+          if (!this.isCurrentContext(contextRevision)) return;
           this.lists.set(response.data);
           if (response.meta) this.listsMeta.set(response.meta);
           this.loadingLists.set(false);
         },
-        error: () => this.loadingLists.set(false)
+        error: () => {
+          if (this.isCurrentContext(contextRevision)) this.loadingLists.set(false);
+        }
       });
   }
 
@@ -148,16 +169,20 @@ export class ShoppingService {
    * plan de la semana, SIN IA). Es una lectura: no escribe nada hasta que se pide.
    */
   cargarSugerencia(): void {
+    const contextRevision = this.household.contextRevision();
     this.cargandoSugerencia.set(true);
     this.http
       .get<{ data: SugerenciaDeCompra }>(`${this.apiUrl}/suggested`)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
+          if (!this.isCurrentContext(contextRevision)) return;
           this.sugerencia.set(response.data);
           this.cargandoSugerencia.set(false);
         },
-        error: () => this.cargandoSugerencia.set(false)
+        error: () => {
+          if (this.isCurrentContext(contextRevision)) this.cargandoSugerencia.set(false);
+        }
       });
   }
 
@@ -184,6 +209,7 @@ export class ShoppingService {
   }
 
   loadStores(): void {
+    const contextRevision = this.household.contextRevision();
     this.http
       .get<{ data: StoreCount[] }>(`${this.apiUrl}/stores`)
       .pipe(
@@ -191,7 +217,9 @@ export class ShoppingService {
         catchError(() => of([] as StoreCount[])),
         takeUntilDestroyed(this.destroyRef)
       )
-      .subscribe((data) => this.stores.set(data));
+      .subscribe((data) => {
+        if (this.isCurrentContext(contextRevision)) this.stores.set(data);
+      });
   }
 
   // ------------------------------------------------------- secciones / catalogo
@@ -199,6 +227,7 @@ export class ShoppingService {
   /** El catalogo es dato (HOGARIA-SPEC 8f): el prompt de la foto y la pantalla lo comparten. */
   loadCategories(force = false): void {
     if (this.categoriesLoaded && !force) return;
+    const contextRevision = this.household.contextRevision();
     this.http
       .get<{ data: ShoppingCategory[] }>(`${this.apiUrl}/categories`)
       .pipe(
@@ -208,6 +237,7 @@ export class ShoppingService {
       )
       .subscribe({
         next: (categories) => {
+          if (!this.isCurrentContext(contextRevision)) return;
           this.categoriesLoaded = true;
           // Catalogo vacio (sin red o seed pendiente): la pantalla conserva
           // LIST_CATEGORIES como fallback y no se queda sin agrupar.
@@ -256,6 +286,7 @@ export class ShoppingService {
   // ------------------------------------------------------------- auditoria / en vivo
 
   loadEvents(listId: string, limit = 60): void {
+    const contextRevision = this.household.contextRevision();
     const params = new HttpParams().set('limit', String(limit));
     this.http
       .get<{ data: ListEvent[] }>(`${this.apiUrl}/lists/${listId}/events`, { params })
@@ -264,7 +295,9 @@ export class ShoppingService {
         catchError(() => of([] as ListEvent[])),
         takeUntilDestroyed(this.destroyRef)
       )
-      .subscribe((events) => this.events.set(events));
+      .subscribe((events) => {
+        if (this.isCurrentContext(contextRevision)) this.events.set(events);
+      });
   }
 
   /**
@@ -273,6 +306,7 @@ export class ShoppingService {
    * Devuelve la funcion de cierre: quien suscribe es quien la llama en `ngOnDestroy`.
    */
   openStream(path: ShoppingStreamPath, onEvent: (payload: unknown) => void): () => void {
+    const contextRevision = this.household.contextRevision();
     const token = this.auth.getToken();
     // El `access_token` por query sigue siendo la unica via del EventSource, pero el
     // reconnect now is ours: un token caducado produce un 401 tras el 401, y una tanda
@@ -284,6 +318,7 @@ export class ShoppingService {
         events: ['change', 'ready'],
         maxRetries: 6,
         onMessage: (data) => {
+          if (!this.isCurrentContext(contextRevision)) return;
           try {
             onEvent(JSON.parse(data) as unknown);
           } catch {
@@ -476,16 +511,18 @@ export class ShoppingService {
    * que ya se puso precio, y saber si los 0,85 € eran de Mercadona o de hace un ano.
    */
   async loadKnownProducts(query = ''): Promise<KnownProduct[]> {
+    const contextRevision = this.household.contextRevision();
     try {
       let params = new HttpParams().set('limit', '60');
       if (query.trim()) params = params.set('q', query.trim());
       const response = await firstValue(
         this.http.get<{ data: KnownProduct[] }>(`${this.apiUrl}/prices/products`, { params })
       );
+      if (!this.isCurrentContext(contextRevision)) return [];
       this.knownProducts.set(response.data);
       return response.data;
     } catch {
-      this.knownProducts.set([]);
+      if (this.isCurrentContext(contextRevision)) this.knownProducts.set([]);
       return [];
     }
   }
@@ -499,12 +536,14 @@ export class ShoppingService {
   // ----------------------------------------------------------------- lineas
 
   loadList(id: string): void {
+    const contextRevision = this.household.contextRevision();
     this.loadingList.set(true);
     this.http
       .get<{ data: ShoppingList & { items?: ShoppingListItem[] } }>(`${this.apiUrl}/lists/${id}`)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
+          if (!this.isCurrentContext(contextRevision)) return;
           // El server devuelve la lista CON las lineas dentro: una sola ida por abrir.
           const { items, ...list } = response.data;
           this.list.set(list);
@@ -512,7 +551,9 @@ export class ShoppingService {
           this.loadingList.set(false);
           void this.loadEstimate(id);
         },
-        error: () => this.loadingList.set(false)
+        error: () => {
+          if (this.isCurrentContext(contextRevision)) this.loadingList.set(false);
+        }
       });
   }
 
@@ -612,6 +653,7 @@ export class ShoppingService {
   }
 
   updateItem(listId: string, item: ShoppingListItem, patch: Partial<CreateItemInput>): void {
+    const householdId = this.household.activeHouseholdId();
     this.replaceItem({ ...item, ...this.fromPatch(patch, item) } as ShoppingListItem);
     this.enqueue(`item:${item.id}:patch`, () =>
       this.http
@@ -619,10 +661,12 @@ export class ShoppingService {
         .pipe(
           map((response) => response.data),
           tap((next) => {
+            if (this.household.activeHouseholdId() !== householdId) return;
             this.replaceItem(next);
             void this.loadEstimate(listId);
           })
-        )
+        ),
+      householdId
     );
   }
 
@@ -661,6 +705,7 @@ export class ShoppingService {
 
   /** Optimista: la casilla se marca al tocar, no cuando conteste el servidor. */
   toggleItem(listId: string, item: ShoppingListItem): void {
+    const householdId = this.household.activeHouseholdId();
     const checked = item.checked ? 0 : 1;
     this.replaceItem({ ...item, checked });
     this.enqueue(`item:${item.id}:checked`, () =>
@@ -673,12 +718,16 @@ export class ShoppingService {
         })
         .pipe(
           map((response) => response.data),
-          tap((next) => this.replaceItem(next))
-        )
+          tap((next) => {
+            if (this.household.activeHouseholdId() === householdId) this.replaceItem(next);
+          })
+        ),
+      householdId
     );
   }
 
   bumpItem(listId: string, item: ShoppingListItem): void {
+    const householdId = this.household.activeHouseholdId();
     const quantity = item.quantity + 1;
     this.replaceItem({ ...item, quantity });
     this.enqueue(`item:${item.id}:qty`, () =>
@@ -689,10 +738,12 @@ export class ShoppingService {
         .pipe(
           map((response) => response.data),
           tap((next) => {
+            if (this.household.activeHouseholdId() !== householdId) return;
             this.replaceItem(next);
             void this.loadEstimate(listId);
           })
-        )
+        ),
+      householdId
     );
   }
 
@@ -756,10 +807,13 @@ export class ShoppingService {
   // ------------------------------------------------------------ estimacion
 
   loadEstimate(listId: string): Promise<ListEstimate | null> {
+    const contextRevision = this.household.contextRevision();
     return this.request<ListEstimate>(() =>
       this.http.get<{ data: ListEstimate }>(`${this.apiUrl}/lists/${listId}/estimate`).pipe(
         map((response) => response.data),
-        tap((estimate) => this.estimate.set(estimate))
+        tap((estimate) => {
+          if (this.isCurrentContext(contextRevision)) this.estimate.set(estimate);
+        })
       )
     );
   }
@@ -767,12 +821,17 @@ export class ShoppingService {
   // --------------------------------------------------------------- precios
 
   loadPrices(): void {
+    const contextRevision = this.household.contextRevision();
     this.http
       .get<{ data: PriceObservation[] }>(`${this.apiUrl}/prices`)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (response) => this.prices.set(response.data),
-        error: () => this.prices.set([])
+        next: (response) => {
+          if (this.isCurrentContext(contextRevision)) this.prices.set(response.data);
+        },
+        error: () => {
+          if (this.isCurrentContext(contextRevision)) this.prices.set([]);
+        }
       });
   }
 
@@ -783,6 +842,7 @@ export class ShoppingService {
    * con el mismo techo de rigor que el visor de la despensa.
    */
   async preciosDeProducto(productKey: string): Promise<PriceObservation[]> {
+    const contextRevision = this.household.contextRevision();
     const todas: PriceObservation[] = [];
     const limit = 200;
     for (let pagina = 0; pagina < 10; pagina++) {
@@ -795,6 +855,7 @@ export class ShoppingService {
           .get<{ data: PriceObservation[] }>(`${this.apiUrl}/prices`, { params })
           .pipe(catchError(() => of(null)))
       );
+      if (!this.isCurrentContext(contextRevision)) return [];
       const lote = response?.data ?? [];
       todas.push(...lote);
       if (lote.length < limit) break;
@@ -839,13 +900,42 @@ export class ShoppingService {
     );
   }
 
+  private clearHouseholdScopedState(): void {
+    this.lists.set([]);
+    this.list.set(null);
+    this.items.set([]);
+    this.estimate.set(null);
+    this.prices.set([]);
+    this.knownProducts.set([]);
+    this.loadingLists.set(false);
+    this.loadingList.set(false);
+    this.saving.set(false);
+    this.pendingWrites.set(0);
+    this.listsMeta.set({ total: 0, limit: 25, offset: 0 });
+    this.stores.set([]);
+    this.sugerencia.set(null);
+    this.cargandoSugerencia.set(false);
+    this.categories.set([]);
+    this.categoriesLoaded = false;
+    this.events.set([]);
+  }
+
+  private isCurrentContext(revision: number): boolean {
+    return revision === this.household.contextRevision();
+  }
+
   /**
    * Encola en vez de perder la escritura. La clave evita el acoso: tocar cuatro
    * veces la casilla de una linea es una intencion, no cuatro peticiones.
    */
-  private enqueue(key: string, send: () => Observable<unknown>): void {
-    const existing = this.queue.findIndex((entry) => entry.key === key);
-    const entry: QueuedWrite = { key, send: () => this.track(send()) };
+  private enqueue(
+    key: string,
+    send: () => Observable<unknown>,
+    householdId = this.household.activeHouseholdId()
+  ): void {
+    const scopedKey = `${householdId ?? 'personal'}:${key}`;
+    const existing = this.queue.findIndex((entry) => entry.key === scopedKey);
+    const entry: QueuedWrite = { key: scopedKey, householdId, send: () => this.track(send()) };
     if (existing === -1) this.queue.push(entry);
     else this.queue[existing] = entry;
     void this.flush();
@@ -859,14 +949,25 @@ export class ShoppingService {
     let observedOnlineEvent = this.onlineEventVersion;
     try {
       while (this.queue.length > 0) {
-        const entry = this.queue[0];
+        const activeHouseholdId = this.household.activeHouseholdId();
+        const queueIndex = this.queue.findIndex((entry) => entry.householdId === activeHouseholdId);
+        if (queueIndex === -1) break;
+        const entry = this.queue[queueIndex];
+        const attemptRevision = this.household.contextRevision();
+        const discardEntry = (): void => {
+          const currentIndex = this.queue.indexOf(entry);
+          if (currentIndex !== -1) this.queue.splice(currentIndex, 1);
+        };
         try {
           await firstValue(entry.send());
-          this.queue.shift();
+          discardEntry();
         } catch (error) {
+          // Si la selección cambió mientras el envío estaba en vuelo, su resultado no prueba
+          // que la escritura se aceptara en el hogar de origen. Se conserva para reintentar allí.
+          if (this.household.contextRevision() !== attemptRevision) continue;
           // Error de negocio (4xx): reintentar no lo arregla, se descarta y se avisa.
           if (isConflict(error)) {
-            this.queue.shift();
+            discardEntry();
             this.toast.warning(
               this.i18n.t('ui.la_lista_cambio_en'),
               this.i18n.t('ui.se_han_vuelto_a')
@@ -887,7 +988,7 @@ export class ShoppingService {
             this.pausedAfterNetworkError = true;
             break;
           }
-          this.queue.shift();
+          discardEntry();
         }
       }
     } finally {

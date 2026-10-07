@@ -24,6 +24,12 @@ async function makeUser(email: string, householdId: string | null = null) {
   db.prepare(
     'INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)'
   ).run(id, email, 'Comprador', 'hash', householdId);
+  if (householdId && db.prepare('SELECT 1 FROM households WHERE id = ?').get(householdId)) {
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run(`member-${id}`, householdId, id);
+  }
   const config = await import('../config/app.config.js');
   const token = jwt.sign({ sub: id, email }, config.config.auth.jwtSecret, { expiresIn: '1h' });
   return { id, token };
@@ -31,12 +37,13 @@ async function makeUser(email: string, householdId: string | null = null) {
 
 type User = { id: string; token: string };
 
-function call(user: User, method: string, path: string, body?: unknown) {
+function call(user: User, method: string, path: string, body?: unknown, language = 'es') {
   return app.request(`/api/shopping${path}`, {
     method,
     headers: {
       authorization: `Bearer ${user.token}`,
-      'content-type': 'application/json'
+      'content-type': 'application/json',
+      'x-app-language': language
     },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
@@ -107,6 +114,42 @@ describe('/lists', () => {
     expect((await call(bob, 'DELETE', `/lists/${list.id}`)).status).toBe(404);
     const visible = await data(await call(bob, 'GET', '/lists'));
     expect(visible).toEqual([]);
+  });
+
+  it('al cambiar de hogar no filtra listas domésticas previas por ser su creador', async () => {
+    const firstHouseholdId = `h-shopping-first-${Math.random().toString(36).slice(2)}`;
+    const secondHouseholdId = `h-shopping-second-${Math.random().toString(36).slice(2)}`;
+    const insertHousehold = db.prepare(
+      'INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)'
+    );
+    insertHousehold.run(firstHouseholdId, 'Casa compra uno', `${firstHouseholdId}-code`);
+    insertHousehold.run(secondHouseholdId, 'Casa compra dos', `${secondHouseholdId}-code`);
+
+    alice = await makeUser(
+      `alice-context-${Math.random().toString(36).slice(2)}@test.local`,
+      firstHouseholdId
+    );
+    const firstHouseList = await createList(alice, 'Lista privada de casa uno');
+
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run(`member-${alice.id}-${secondHouseholdId}`, secondHouseholdId, alice.id);
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(secondHouseholdId, alice.id);
+    const secondHouseList = await createList(alice, 'Lista compartida de casa dos');
+
+    const visibleAfterSwitch = await data(await call(alice, 'GET', '/lists'));
+    expect(visibleAfterSwitch.map((list: any) => list.name)).toEqual([
+      'Lista compartida de casa dos'
+    ]);
+    expect((await call(alice, 'GET', `/lists/${firstHouseList.id}`)).status).toBe(404);
+    expect((await call(alice, 'GET', `/lists/${secondHouseList.id}`)).status).toBe(200);
+
+    db.prepare('UPDATE users SET household_id = NULL WHERE id = ?').run(alice.id);
+    const unselectedLists = await call(alice, 'GET', '/lists');
+    expect(unselectedLists.status).toBe(409);
+    expect(await json(unselectedLists)).toMatchObject({ code: 'HOUSEHOLD_SELECTION_REQUIRED' });
+    expect((await call(alice, 'GET', `/lists/${secondHouseList.id}`)).status).toBe(409);
   });
 
   it('filtra por estado y por busqueda, y paginacion acotada', async () => {
@@ -1031,16 +1074,24 @@ describe('entrada por foto (§8f)', () => {
       });
     });
     const list = await createList(alice);
-    await call(alice, 'POST', `/lists/${list.id}/photo/analyze`, {
-      image: IMAGE,
-      mode: 'ticket',
-      note: 'es del chino'
-    });
+    await call(
+      alice,
+      'POST',
+      `/lists/${list.id}/photo/analyze`,
+      {
+        image: IMAGE,
+        mode: 'ticket',
+        note: 'es del chino'
+      },
+      'en'
+    );
 
     expect(sent).toContain('Frutas y verduras');
     expect(sent).toContain('priceMinor');
     expect(sent).toContain('image_url');
     expect(sent).toContain('es del chino');
+    expect(sent).toContain('English (United Kingdom)');
+    expect(sent).toContain('warnings');
     // El modo cambia la instruccion: un ticket y una estanteria no se leen igual.
     expect(sent).toContain('TICKET');
   });
@@ -1633,6 +1684,24 @@ describe('cerrar una compra deja el precio por establecimiento (§12g)', () => {
       }
     ]);
     expect(filas.some((fila) => fila.name === 'Aceitunas')).toBe(false);
+
+    const photoJobs = db
+      .prepare(
+        `SELECT i.name, s.status, j.kind FROM product_image_searches s
+         JOIN ingredients i ON i.id = s.ingredient_id
+         JOIN ai_jobs j ON j.id = s.job_id
+        ORDER BY i.name`
+      )
+      .all() as { name: string; status: string; kind: string }[];
+    expect(photoJobs.map((job) => job.name)).toEqual([
+      'Mineral',
+      'Pan de pueblo',
+      'leche semidesnatada'
+    ]);
+    expect(photoJobs.every((job) => ['queued', 'running', 'complete'].includes(job.status))).toBe(
+      true
+    );
+    expect(photoJobs.every((job) => job.kind === 'product_image_search')).toBe(true);
   });
 });
 

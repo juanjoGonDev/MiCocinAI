@@ -1,7 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { signal } from '@angular/core';
 import { AuthService } from './auth.service';
+import { HouseholdService } from './household.service';
 import { I18nService } from '../../core/services/i18n.service';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import { ShoppingService } from './shopping.service';
@@ -113,12 +115,16 @@ describe('ShoppingService', () => {
   let i18n: { t: jasmine.Spy };
   let auth: { getToken: jasmine.Spy };
   let restoreEventSource: (() => void) | null;
+  let activeHouseholdId: ReturnType<typeof signal<string | null>>;
+  let householdContextRevision: ReturnType<typeof signal<number>>;
 
   beforeEach(() => {
     toast = jasmine.createSpyObj<ToastService>('ToastService', ['warning', 'error']);
     i18n = { t: jasmine.createSpy('t').and.callFake((key: string) => key) };
     auth = { getToken: jasmine.createSpy('getToken').and.returnValue('fake token&value') };
     restoreEventSource = null;
+    activeHouseholdId = signal<string | null>(null);
+    householdContextRevision = signal(0);
 
     TestBed.configureTestingModule({
       providers: [
@@ -126,6 +132,14 @@ describe('ShoppingService', () => {
         provideHttpClientTesting(),
         { provide: I18nService, useValue: i18n },
         { provide: ToastService, useValue: toast },
+        {
+          provide: HouseholdService,
+          useValue: {
+            activeHouseholdId,
+            contextRevision: householdContextRevision,
+            switchingHousehold: signal(false)
+          }
+        },
         { provide: AuthService, useValue: auth }
       ]
     });
@@ -917,6 +931,123 @@ describe('ShoppingService', () => {
   });
 
   describe('write queue and error handling', () => {
+    it('clears cached detail data and ignores a late response when the household changes', async () => {
+      const homeAListId = 'list-home-a';
+      const homeAItem = makeItem({ list_id: homeAListId });
+      activeHouseholdId.set('home-a');
+      service.list.set(makeList({ id: homeAListId }));
+      service.items.set([homeAItem]);
+      service.estimate.set(makeEstimate({ listId: homeAListId }));
+
+      service.loadList(homeAListId);
+      const responseFromA = http.expectOne(`${API}/lists/${homeAListId}`);
+      activeHouseholdId.set('home-b');
+      householdContextRevision.set(1);
+      await settleTimers();
+
+      expect(service.list()).toBeNull();
+      expect(service.items()).toEqual([]);
+      expect(service.estimate()).toBeNull();
+      responseFromA.flush({
+        data: { ...makeList({ id: homeAListId }), items: [homeAItem] }
+      });
+      await settleTimers();
+
+      expect(service.list()).toBeNull();
+      expect(service.items()).toEqual([]);
+      expect(service.estimate()).toBeNull();
+    });
+
+    it('does not let an older household list read replace the current household results', async () => {
+      activeHouseholdId.set('home-a');
+      service.loadLists();
+      const responseFromA = http.expectOne(`${API}/lists?status=active&limit=25&offset=0`);
+
+      activeHouseholdId.set('home-b');
+      householdContextRevision.set(1);
+      await settleTimers();
+      service.loadLists();
+      const responseFromB = http.expectOne(`${API}/lists?status=active&limit=25&offset=0`);
+      const homeBList = makeList({ id: 'list-home-b', name: 'Compra de casa dos' });
+      responseFromB.flush({ data: [homeBList] });
+      responseFromA.flush({ data: [makeList({ id: 'list-home-a', name: 'Compra de casa uno' })] });
+      await settleTimers();
+
+      expect(service.lists()).toEqual([homeBList]);
+    });
+
+    it('keeps an offline write attached to its source household until that home is active again', async () => {
+      const homeAListId = 'list-home-a';
+      const item = makeItem({ list_id: homeAListId });
+      activeHouseholdId.set('home-a');
+      service.toggleItem(homeAListId, item);
+      http
+        .expectOne(`${API}/lists/${homeAListId}/items/${ITEM_ID}`)
+        .error(new ProgressEvent('error'));
+      await settleTimers();
+      // Repeated intent for the same source item coalesces; a different A item stays after it.
+      service.toggleItem(homeAListId, item);
+      const homeASecondItem = makeItem({ id: 'item-home-a-second', list_id: homeAListId });
+      service.toggleItem(homeAListId, homeASecondItem);
+      http.expectNone(`${API}/lists/${homeAListId}/items/${homeASecondItem.id}`);
+
+      activeHouseholdId.set('home-b');
+      householdContextRevision.set(1);
+      window.dispatchEvent(new Event('online'));
+      await settleTimers();
+      http.expectNone(`${API}/lists/${homeAListId}/items/${ITEM_ID}`);
+      http.expectNone(`${API}/lists/${homeAListId}/items/${homeASecondItem.id}`);
+
+      const homeBListId = 'list-home-b';
+      const homeBItem = makeItem({ id: 'item-home-b', list_id: homeBListId, checked: 0 });
+      service.toggleItem(homeBListId, homeBItem);
+      const homeBWrite = http.expectOne(`${API}/lists/${homeBListId}/items/${homeBItem.id}`);
+      expect(homeBWrite.request.body).toEqual({ checked: true });
+      homeBWrite.flush({ data: makeItem({ ...homeBItem, checked: 1 }) });
+      await settleTimers();
+      http.expectNone(`${API}/lists/${homeAListId}/items/${ITEM_ID}`);
+      http.expectNone(`${API}/lists/${homeAListId}/items/${homeASecondItem.id}`);
+
+      activeHouseholdId.set('home-a');
+      householdContextRevision.set(2);
+      window.dispatchEvent(new Event('online'));
+      const resumed = http.expectOne(`${API}/lists/${homeAListId}/items/${ITEM_ID}`);
+      expect(resumed.request.body).toEqual({ checked: true });
+      resumed.flush({ data: makeItem({ list_id: homeAListId, checked: 1 }) });
+      await settleTimers();
+      const resumedSecond = http.expectOne(
+        `${API}/lists/${homeAListId}/items/${homeASecondItem.id}`
+      );
+      expect(resumedSecond.request.body).toEqual({ checked: true });
+      resumedSecond.flush({ data: makeItem({ ...homeASecondItem, checked: 1 }) });
+      await settleTimers();
+      http.expectNone(`${API}/lists/${homeAListId}/items/${ITEM_ID}`);
+      http.expectNone(`${API}/lists/${homeAListId}/items/${homeASecondItem.id}`);
+      expect(service.pendingWrites()).toBe(0);
+    });
+
+    it('does not let a late response from one home replace another home’s visible item', async () => {
+      const homeAListId = 'list-home-a';
+      const homeBListId = 'list-home-b';
+      const homeAItem = makeItem({ list_id: homeAListId, checked: 0 });
+      const homeBItem = makeItem({ id: 'item-home-b', list_id: homeBListId, name: 'Arroz' });
+      activeHouseholdId.set('home-a');
+      service.items.set([homeAItem]);
+
+      service.toggleItem(homeAListId, homeAItem);
+      const homeAWrite = http.expectOne(`${API}/lists/${homeAListId}/items/${homeAItem.id}`);
+
+      activeHouseholdId.set('home-b');
+      householdContextRevision.set(1);
+      await settleTimers();
+      service.items.set([homeBItem]);
+      homeAWrite.flush({ data: makeItem({ ...homeAItem, checked: 1 }) });
+      await settleTimers();
+
+      expect(service.items()).toEqual([homeBItem]);
+      expect(service.pendingWrites()).toBe(0);
+    });
+
     it('preserves one failed network write, pauses immediate draining, and resumes only online', async () => {
       const item = makeItem();
       service.items.set([item]);

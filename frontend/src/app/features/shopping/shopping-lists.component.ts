@@ -1,8 +1,9 @@
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ShoppingService } from '../../core/services/shopping.service';
+import { HouseholdService } from '../../core/services/household.service';
 import { shoppingStreamPath } from '../../core/services/shopping-stream-path';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ToastService } from '../../core/services/toast.service';
@@ -983,7 +984,7 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
           opacity: 1;
         }
       }
-      @media (max-width: 360px) {
+      @media (max-width: 362px) {
         .tray__tabs {
           gap: 0;
           min-width: 0;
@@ -1014,6 +1015,11 @@ export class ShoppingListsComponent {
   private readonly toast = inject(ToastService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly household = inject(HouseholdService);
+  private lastContextRevision = this.household.contextRevision();
+  private lastActiveHouseholdId = this.household.activeHouseholdId();
+  private contextSwitchPending = false;
+  private cancelStream: (() => void) | null = null;
 
   readonly statusOptions: { value: StatusFilter; labelKey: TranslationKey }[] = [
     { value: 'active', labelKey: 'shopping_lists.estado_activas' },
@@ -1083,14 +1089,79 @@ export class ShoppingListsComponent {
     this.readUrl();
     this.reload();
     this.shopping.loadStores();
-    // La bandeja es la pantalla que se queda abierta mientras otra persona compra: sin
-    // SSE habria que adivinar cuando volver a mirar.
-    const close = this.shopping.openStream(shoppingStreamPath(null), () => {
+    this.startStream();
+    this.destroyRef.onDestroy(() => this.stopStream());
+
+    effect(() => {
+      const revision = this.household.contextRevision();
+      const activeHouseholdId = this.household.activeHouseholdId();
+      const selectedHouseholdId = this.household.household()?.id ?? null;
+      const switchingHousehold = this.household.switchingHousehold();
+      const revisionChanged = revision !== this.lastContextRevision;
+      const activeHouseholdChanged = activeHouseholdId !== this.lastActiveHouseholdId;
+
+      if (revisionChanged || activeHouseholdChanged) {
+        this.lastContextRevision = revision;
+        this.lastActiveHouseholdId = activeHouseholdId;
+        this.contextSwitchPending = true;
+        this.stopStream();
+      }
+
+      if (
+        !this.contextSwitchPending ||
+        switchingHousehold ||
+        (activeHouseholdId && selectedHouseholdId !== activeHouseholdId)
+      ) {
+        return;
+      }
+
+      this.contextSwitchPending = false;
+      this.reload();
+      this.shopping.loadStores();
+      this.startStream();
+    });
+
+    // Si se elimina la última fila de una página, el total del servidor puede dejar
+    // el offset actual fuera de rango. Volvemos a la última página válida y corregimos
+    // también la URL para no mostrar una bandeja vacía sin paginador.
+    effect(() => {
+      const page = this.page();
+      const size = this.size();
+      const total = this.total();
+      const offset = this.shopping.listsMeta().offset;
+
+      if (page === 0 || this.loading() || offset !== page * size || offset < total) return;
+
+      const lastPage = Math.max(0, Math.ceil(total / size) - 1);
+      if (lastPage >= page) return;
+
+      this.page.set(lastPage);
+      this.writeUrl();
+      this.reload();
+    });
+  }
+
+  private startStream(): void {
+    this.stopStream();
+    const contextRevision = this.household.contextRevision();
+    const activeHouseholdId = this.household.activeHouseholdId();
+    // La bandeja sigue en vivo, pero el listener y la SSE nacen en el contexto actual.
+    this.cancelStream = this.shopping.openStream(shoppingStreamPath(null), () => {
+      if (
+        contextRevision !== this.household.contextRevision() ||
+        activeHouseholdId !== this.household.activeHouseholdId()
+      ) {
+        return;
+      }
       this.reload();
       this.liveNote.set(this.i18n.t('shopping_lists.alguien_del_hogar_ha'));
       setTimeout(() => this.liveNote.set(null), 6000);
     });
-    this.destroyRef.onDestroy(close);
+  }
+
+  private stopStream(): void {
+    this.cancelStream?.();
+    this.cancelStream = null;
   }
 
   // ------------------------------------------------------------- estado / URL
@@ -1290,7 +1361,7 @@ export class ShoppingListsComponent {
 
   rangeLabel(): string {
     const total = this.total();
-    if (!total) return '0';
+    if (!total || !this.lists().length) return '0';
     const first = this.page() * this.size() + 1;
     const last = Math.min(total, first + this.lists().length - 1);
     return `${first}-${last}`;

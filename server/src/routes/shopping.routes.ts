@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { getDatabase } from '../config/database.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
 import { productKeyOf } from '../utils/product-key.js';
+import { queueProductImageSearch } from '../utils/product-image-search.js';
 import {
   PROTECTED_PANTRY_KEY,
   ensureDefaultCategories as ensurePantryCategories
@@ -35,6 +36,7 @@ import {
 } from '../utils/shopping-categories.js';
 import { buildPhotoPrompt } from '../utils/photo-prompt.js';
 import { AiCallError, callAI, extractJsonObject } from '../utils/ai-client.js';
+import { SHOPPING_PHOTO_RESPONSE_FORMAT } from '../schemas/ai-generated-output.schema.js';
 import { describeEvent, readEvents, recordEvent } from '../utils/shopping-events.js';
 import {
   channelForList,
@@ -94,12 +96,19 @@ function getScope(userId: string): Scope {
 
   if (user?.hid) {
     return {
-      clause: '(user_id = ? OR household_id = ?)',
+      // Una fila ligada a un hogar solo se comparte dentro de ese hogar. No basta
+      // con ser su creador: al cambiar de casa (o quedarse sin hogar activo) no
+      // debemos filtrar datos domésticos anteriores por `user_id`.
+      clause: '((user_id = ? AND household_id IS NULL) OR household_id = ?)',
       params: [userId, user.hid],
       householdId: user.hid
     };
   }
-  return { clause: 'user_id = ?', params: [userId], householdId: null };
+  return {
+    clause: '(user_id = ? AND household_id IS NULL)',
+    params: [userId],
+    householdId: null
+  };
 }
 
 /** 404 con el mismo envoltorio que el resto del server. */
@@ -1364,6 +1373,7 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
   // stock (merged). Lo lee la respuesta y lo pinta el recibo del toast.
   let pantryMoved = 0;
   let pantryMerged = 0;
+  const productosParaBuscarImagen = new Set<string>();
   db.transaction(() => {
     // Lo escrito en esta llamada acaba primero en la linea: si el cierre se rechaza por
     // cualquier otra comprobacion no habremos llegado aqui, y si se acepta, la lista
@@ -1466,10 +1476,12 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
           reponeStock.run(qty, ficha.id);
           pantryMoved += 1;
         }
+        productosParaBuscarImagen.add(ficha.id);
         continue;
       }
+      const ingredientId = nanoid();
       meteFicha.run(
-        nanoid(),
+        ingredientId,
         userId,
         casa.householdId,
         item.name,
@@ -1477,9 +1489,18 @@ shoppingRoutes.post('/lists/:id/complete', async (c) => {
         qty,
         item.unit ?? 'unit'
       );
+      productosParaBuscarImagen.add(ingredientId);
       pantryMoved += 1;
     }
   })();
+
+  for (const ingredientId of productosParaBuscarImagen) {
+    try {
+      queueProductImageSearch(db, userId, ingredientId);
+    } catch {
+      // La búsqueda de imagen es auxiliar; la compra ya quedó registrada.
+    }
+  }
 
   announce(db, list, userId, 'list.complete', `${recorded} precios`);
   return c.json({
@@ -1566,7 +1587,8 @@ shoppingRoutes.post('/lists/:id/photo/analyze', async (c) => {
   const { system, user } = buildPhotoPrompt({
     categoriesJson: catalogueForPrompt(categories),
     mode: parsed.data.mode,
-    note: parsed.data.note ?? null
+    note: parsed.data.note ?? null,
+    language: c.get('appLanguage')
   });
 
   let answer: string;
@@ -1584,6 +1606,7 @@ shoppingRoutes.post('/lists/:id/photo/analyze', async (c) => {
         }
       ],
       db,
+      SHOPPING_PHOTO_RESPONSE_FORMAT,
       'shopping_photo'
     );
   } catch (error) {
@@ -1969,9 +1992,8 @@ shoppingRoutes.get('/stream/tray', async (c) => {
 function cuerpoDeSugerencia(db: ReturnType<typeof getDatabase>, userId: string) {
   const caducidades = caducidadesDe(db, userId);
   // La despensa a cero tambien cuenta: aqui es justo lo que falta.
-  const casa = db
-    .prepare('SELECT household_id AS hid FROM users WHERE id = ?')
-    .get(userId) as { hid: string | null } | undefined;
+  const casa = db.prepare('SELECT household_id AS hid FROM users WHERE id = ?').get(userId) as
+    { hid: string | null } | undefined;
   const sinStock = db
     .prepare(
       `SELECT name, category, unit FROM ingredients
@@ -2003,12 +2025,14 @@ shoppingRoutes.get('/suggested', async (c) => {
   const scope = getScope(userId);
   const lista = listaSugeridaActiva(db, scope);
   const itemsPendientes = lista
-    ? (db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM shopping_list_items
+    ? (
+        db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM shopping_list_items
            WHERE list_id = ? AND deleted_at IS NULL AND checked = 0`
-        )
-        .get(lista.id) as { n: number }).n
+          )
+          .get(lista.id) as { n: number }
+      ).n
     : 0;
   return c.json({
     success: true,

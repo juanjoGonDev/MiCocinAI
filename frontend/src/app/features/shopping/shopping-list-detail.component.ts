@@ -1,4 +1,4 @@
-import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -15,6 +15,7 @@ import {
   type ListEvent
 } from '../../shared/models/shopping.model';
 import { ShoppingService } from '../../core/services/shopping.service';
+import { HouseholdService } from '../../core/services/household.service';
 import { shoppingStreamPath } from '../../core/services/shopping-stream-path';
 import { PantryService } from '../../core/services/pantry.service';
 import type { PantryCatalogProduct } from '../../shared/models/pantry.model';
@@ -30,6 +31,7 @@ import {
   formatMoney,
   formatQuantity,
   groupItemsByCategory,
+  orderShoppingItems,
   parseMoneyToMinor,
   describeOffer,
   productKeyOf,
@@ -42,6 +44,7 @@ import {
 } from '../../shared/models/shopping.model';
 import { LongPressDirective, SwipeRowDirective } from '../../shared/directives/swipe-row.directive';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
+import { CheckboxComponent } from '../../shared/components/ui/checkbox/checkbox.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon-button.component';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
@@ -68,6 +71,7 @@ interface PhotoReview {
 /** Autoguardado: 400 ms despues del ultimo tecleo, ni antes ni despues. */
 const AUTOSAVE_MS = 400;
 const UNDO_MS = 6000;
+const UNGROUPED_CATEGORY = '__ungrouped__';
 
 /**
  * La lista, en pantalla.
@@ -114,6 +118,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
     SwipeRowDirective,
     LongPressDirective,
     ButtonComponent,
+    CheckboxComponent,
     IconComponent,
     IconButtonComponent,
     PickerComponent,
@@ -358,6 +363,28 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
           }}
         </p>
       } @else {
+        <div class="detail__display-options" data-test="shopping-display-options">
+          <app-picker
+            class="detail__display-picker"
+            id="shopping-display-order"
+            [options]="displayOrderOptions()"
+            [value]="displayOrder()"
+            [label]="'shopping_list_detail.ordenar_por' | t"
+            (valueChange)="setDisplayOrder($event)"
+          />
+          <app-checkbox
+            data-test="shopping-group-category"
+            [checked]="groupByCategory()"
+            [label]="'shopping_list_detail.agrupar_por_categoria' | t"
+            (checkedChange)="groupByCategory.set($event)"
+          />
+          <app-checkbox
+            data-test="shopping-frozen-last"
+            [checked]="frozenLast()"
+            [label]="'shopping_list_detail.dejar_congelados_al_final' | t"
+            (checkedChange)="frozenLast.set($event)"
+          />
+        </div>
         <ul class="detail__groups">
           @for (group of groups(); track group.category) {
             <li class="detail__group">
@@ -367,7 +394,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                   [style.background]="colorOf(group.category)"
                   aria-hidden="true"
                 ></span>
-                {{ etiquetaCategoria(group.category) }}
+                {{ groupLabel(group.category) }}
               </h2>
               <ul class="detail__rows">
                 @for (item of group.items; track item.id) {
@@ -1588,6 +1615,28 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
   `,
   styles: [
     `
+      .detail__display-options {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-3);
+        padding: 0 0 var(--space-2);
+        border-bottom: 1px solid var(--border-default);
+      }
+      .detail__display-picker {
+        min-width: 190px;
+      }
+      @media (max-width: 600px) {
+        .detail__display-options {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr);
+          gap: var(--space-1) var(--space-3);
+        }
+        .detail__display-picker {
+          min-width: 0;
+          width: 100%;
+        }
+      }
       .detail__group-title {
         display: flex;
         align-items: center;
@@ -2775,6 +2824,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
   /** Solo para el historial: las filas propias se pintan con la sesion viva. */
   private readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly household = inject(HouseholdService);
+  private openedHouseholdId = this.household.activeHouseholdId();
+  private lastContextRevision = this.household.contextRevision();
+  private contextSwitchPending = false;
 
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Banderin de un solo uso: el proximo `click` es residual de un gesto. */
@@ -2782,6 +2835,9 @@ export class ShoppingListDetailComponent implements OnDestroy {
   private gestureAt = 0;
 
   readonly tab = signal<'todo' | 'checked'>('todo');
+  readonly displayOrder = signal<'manual' | 'weight'>('manual');
+  readonly groupByCategory = signal(true);
+  readonly frozenLast = signal(false);
   readonly selection = signal<string[]>([]);
   readonly editing = signal<ShoppingListItem | null>(null);
   readonly renaming = signal(false);
@@ -2809,6 +2865,19 @@ export class ShoppingListDetailComponent implements OnDestroy {
   };
 
   readonly categories = LIST_CATEGORIES;
+  readonly displayOrderOptions = computed<PickerOption[]>(() => {
+    this.i18n.changeTick();
+    return [
+      {
+        value: 'manual',
+        label: this.i18n.t('shopping_list_detail.orden_manual')
+      },
+      {
+        value: 'weight',
+        label: this.i18n.t('shopping_list_detail.peso_mas_pesado_primero')
+      }
+    ];
+  });
   readonly money = formatMoney;
   readonly offerPresets = OFFER_PRESETS;
   readonly describeOffer = describeOffer;
@@ -2844,17 +2913,69 @@ export class ShoppingListDetailComponent implements OnDestroy {
     return clave ? this.i18n.t(clave) : categoria;
   }
 
-  readonly groups = computed(() =>
-    this.tab() === 'checked'
-      ? [{ category: 'En el carro', items: this.visibleItems() }]
-      : groupItemsByCategory(this.visibleItems())
-  );
+  protected groupLabel(category: string): string {
+    return category === UNGROUPED_CATEGORY
+      ? this.i18n.t('shopping_list_detail.todos_los_productos')
+      : this.etiquetaCategoria(category);
+  }
+
+  readonly groups = computed(() => {
+    const items = orderShoppingItems(this.visibleItems(), {
+      weightFirst: this.displayOrder() === 'weight',
+      frozenLast: this.frozenLast()
+    });
+    if (this.tab() === 'checked' && this.groupByCategory()) {
+      return [{ category: 'En el carro', items }];
+    }
+    if (this.groupByCategory()) {
+      return groupItemsByCategory(items, { frozenLast: this.frozenLast() });
+    }
+    return [{ category: UNGROUPED_CATEGORY, items }];
+  });
   readonly pendingCount = computed(() => this.items().filter((item) => item.checked === 0).length);
   readonly checkedCount = computed(() => this.items().filter((item) => item.checked === 1).length);
   readonly totalCount = computed(() => this.items().length);
   readonly unpricedCount = computed(() => this.estimate()?.unpriced.length ?? 0);
 
   constructor() {
+    effect(() => {
+      const revision = this.household.contextRevision();
+      const activeHouseholdId = this.household.activeHouseholdId();
+      const selectedHouseholdId = this.household.household()?.id ?? null;
+      const switchingHousehold = this.household.switchingHousehold();
+      const revisionChanged = revision !== this.lastContextRevision;
+      const activeHouseholdChanged = activeHouseholdId !== this.openedHouseholdId;
+
+      if (revisionChanged || activeHouseholdChanged) {
+        this.lastContextRevision = revision;
+        if (switchingHousehold || activeHouseholdChanged) {
+          this.contextSwitchPending = true;
+          this.stopStream();
+        }
+      }
+
+      if (
+        !this.contextSwitchPending ||
+        switchingHousehold ||
+        (activeHouseholdId && selectedHouseholdId !== activeHouseholdId)
+      ) {
+        return;
+      }
+
+      this.contextSwitchPending = false;
+      if (this.openedHouseholdId && activeHouseholdId !== this.openedHouseholdId) {
+        this.stopStream();
+        void this.router.navigate(['/shopping'], { replaceUrl: true });
+        return;
+      }
+
+      // La carga inicial puede resolver el hogar después de montar esta ruta. En ese
+      // primer caso se adopta el contexto; un cambio posterior sí cierra el detalle.
+      this.openedHouseholdId = activeHouseholdId;
+      if (this.listId) this.shopping.loadList(this.listId);
+      this.startStream();
+    });
+
     // Una sola carga inicial: el resto de la pantalla se actualiza con lo que
     // confirma el servidor, y el autoguardado ya se ocupa del resto.
     if (this.listId) {
@@ -2863,12 +2984,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
     }
     // En vivo: si otra persona de la casa toca la lista, se vuelve a leer (nunca se pinta
     // el payload del aviso, que es una pista de refresco, no el estado).
-    this.cancelStream = this.shopping.openStream(shoppingStreamPath(this.listId), (payload) => {
-      this.shopping.loadList(this.listId);
-      if (this.auditOpen()) this.shopping.loadEvents(this.listId);
-      const event = payload as { byName?: string | null; action?: string } | null;
-      if (event?.byName) this.liveBy.set(event.byName);
-    });
+    this.startStream();
   }
 
   readonly liveBy = signal<string | null>(null);
@@ -2877,6 +2993,22 @@ export class ShoppingListDetailComponent implements OnDestroy {
   ngOnDestroy(): void {
     this.timers.forEach((timer) => clearTimeout(timer));
     this.timers.clear();
+    this.stopStream();
+  }
+
+  private startStream(): void {
+    this.stopStream();
+    const contextRevision = this.household.contextRevision();
+    this.cancelStream = this.shopping.openStream(shoppingStreamPath(this.listId), (payload) => {
+      if (contextRevision !== this.household.contextRevision()) return;
+      this.shopping.loadList(this.listId);
+      if (this.auditOpen()) this.shopping.loadEvents(this.listId);
+      const event = payload as { byName?: string | null; action?: string } | null;
+      if (event?.byName) this.liveBy.set(event.byName);
+    });
+  }
+
+  private stopStream(): void {
     this.cancelStream?.();
     this.cancelStream = null;
   }
@@ -2884,6 +3016,10 @@ export class ShoppingListDetailComponent implements OnDestroy {
   selectTab(tab: 'todo' | 'checked'): void {
     this.tab.set(tab);
     this.selection.set([]);
+  }
+
+  setDisplayOrder(value: string | null): void {
+    if (value === 'manual' || value === 'weight') this.displayOrder.set(value);
   }
 
   qtyOf(item: ShoppingListItem): string {
