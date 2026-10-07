@@ -77,3 +77,16 @@ server/tmp-frontend*
 server/.vitest/
 server/tmp-frontend.vitest.config.ts
 server/tmp-frontend-stubs/
+
+# Temporary local QA workspaces and generated reports; keep artifacts on disk but out of Git.
+/.tmp-ai-smoke-browser-*/
+/.tmp-ai-wizard-check/
+/.tmp-button-geometry-build-*/
+/.playwright-mcp/
+/.atl/
+/server/.coverage-spec-*/
+/frontend/.coverage-spec-*/
+/server/.e2e-isolation-coverage/
+/frontend/.qa-karma-*.conf.js
+/%PWROOT%/
+/m\[1\]\).join\(`
