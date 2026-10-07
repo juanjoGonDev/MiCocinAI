@@ -12,9 +12,18 @@ import { timestampMiddleware } from './middleware/timestamp.middleware.js';
 import { authRoutes } from './routes/auth.routes.js';
 import { readUpload } from './utils/uploads.js';
 import { pantryRoutes } from './routes/pantry.routes.js';
+import {
+  createPantryProductImageRoutes,
+  createProductImagePreviewRoutes
+} from './routes/pantry-product-images.routes.js';
 import { shoppingRoutes } from './routes/shopping.routes.js';
 import { receiptsRoutes } from './routes/receipts.routes.js';
 import { recipeRoutes } from './routes/recipes.routes.js';
+import { recipeImageRoutes } from './routes/recipe-images.routes.js';
+import {
+  recipePhotoPreviewRoutes,
+  recipeStepPhotoRoutes
+} from './routes/recipe-step-photos.routes.js';
 import { householdRoutes } from './routes/household.routes.js';
 import { calendarRoutes } from './routes/calendar.routes.js';
 import { aiRoutes } from './routes/ai.routes.js';
@@ -367,8 +376,13 @@ export function createApp(options: AppOptions = {}): Hono {
     });
   });
   app.route('/api/pantry', pantryRoutes);
+  app.route('/api/pantry', createPantryProductImageRoutes());
+  app.route('/api/product-image-previews', createProductImagePreviewRoutes());
   app.route('/api/shopping', shoppingRoutes);
   app.route('/api/receipts', receiptsRoutes);
+  app.route('/api/recipes/step-photos', recipeStepPhotoRoutes);
+  app.route('/api/recipe-photo-previews', recipePhotoPreviewRoutes);
+  app.route('/api/recipe-images', recipeImageRoutes);
   app.route('/api/recipes', recipeRoutes);
   app.route('/api/household', householdRoutes);
   app.route('/api/calendar', calendarRoutes);

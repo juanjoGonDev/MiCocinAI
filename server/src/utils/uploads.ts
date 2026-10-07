@@ -43,7 +43,7 @@ export function assertWritten(file: string, bytes: number): void {
 export const MAX_AVATAR_BYTES = 512 * 1024;
 export const AVATAR_URL_PREFIX = '/api/uploads/avatars/';
 
-const KINDS = ['avatars', 'receipts'] as const;
+const KINDS = ['avatars', 'receipts', 'product-images'] as const;
 export type UploadKind = (typeof KINDS)[number];
 
 const MIME_BY_EXT: Record<string, string> = {
