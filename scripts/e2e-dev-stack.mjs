@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
+import { AI_LIVE_SMOKE_ENV } from './ai-live-smoke-safety.mjs';
+
 import { validateIsolatedEnvironment } from '../server/tests/support/e2e-isolation.mjs';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
@@ -26,6 +28,10 @@ const sharedEnv = {
   E2E_BASE_URL: isolation.baseUrl,
   DISABLE_RATE_LIMIT: process.env.E2E_RATE_LIMIT === 'on' ? '0' : '1'
 };
+const serverEnv = { ...sharedEnv };
+const clientEnv = { ...sharedEnv };
+delete clientEnv[AI_LIVE_SMOKE_ENV.providerToken];
+delete clientEnv[AI_LIVE_SMOKE_ENV.proxyToken];
 const serverDir = join(root, 'server');
 const clientDir = join(root, 'frontend');
 const children = [];
@@ -78,7 +84,7 @@ async function startStack() {
     {
       cwd: serverDir,
       env: {
-        ...sharedEnv,
+        ...serverEnv,
         PORT: String(isolation.apiPort),
         HOST: '127.0.0.1',
         CORS_ORIGIN: isolation.baseUrl,
@@ -103,7 +109,7 @@ async function startStack() {
       '--proxy-config',
       proxyPath
     ],
-    { cwd: clientDir, env: sharedEnv, stdio: 'inherit', windowsHide: true }
+    { cwd: clientDir, env: clientEnv, stdio: 'inherit', windowsHide: true }
   );
   children.push(client);
 }

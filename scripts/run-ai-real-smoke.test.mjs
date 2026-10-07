@@ -1,0 +1,351 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import { runAiLiveSmoke } from './run-ai-real-smoke.mjs';
+import { AI_LIVE_SMOKE_ENV } from './ai-live-smoke-safety.mjs';
+import { AI_LIVE_SMOKE_DEADLINES } from './ai-live-smoke-contract.mjs';
+
+function createGuardedDependencies(calls) {
+  const untouched = (name) => async () => {
+    calls.push(name);
+    throw new Error(`Unexpected live dependency call: ${name}`);
+  };
+
+  return {
+    prepareExistingAiLiveSmokeSession: untouched('existing-session'),
+    startIsolatedWebApi: untouched('webapi'),
+    prepareAiLiveSmokeSession: untouched('session'),
+    createAiLiveProxy: untouched('proxy'),
+    createAiLiveSmokeRunnerEnvironment: untouched('runner-environment'),
+    runAiLiveSmokeRunner: untouched('playwright')
+  };
+}
+
+test('coordinator rejects missing opt-in before any live setup', async () => {
+  const calls = [];
+  await assert.rejects(
+    runAiLiveSmoke({ env: {}, dependencies: createGuardedDependencies(calls) }),
+    /explicit opt-in/
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('coordinator rejects CI before any live setup', async () => {
+  const calls = [];
+  await assert.rejects(
+    runAiLiveSmoke({
+      env: { [AI_LIVE_SMOKE_ENV.optIn]: '1', CI: 'true' },
+      dependencies: createGuardedDependencies(calls)
+    }),
+    /forbidden in CI/
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('coordinator marks a failed runner red and cleans only its existing-WebAPI resources', async () => {
+  const calls = [];
+  const errors = [];
+  const secretSentinel = 'synthetic-webapi-token-not-for-logs';
+  const result = await runAiLiveSmoke({
+    env: { [AI_LIVE_SMOKE_ENV.optIn]: '1' },
+    dependencies: {
+      prepareExistingAiLiveSmokeSession: async () => {
+        calls.push('existing:prepare');
+        return {
+          origin: 'http://127.0.0.1:3001',
+          token: secretSentinel,
+          model: 'gpt-5',
+          cleanup: async () => calls.push('existing:cleanup')
+        };
+      },
+      startIsolatedWebApi: async () => {
+        calls.push('legacy:webapi');
+        throw new Error('The live coordinator must not start WebAPI.');
+      },
+      prepareAiLiveSmokeSession: async () => {
+        calls.push('legacy:settings');
+        throw new Error('The live coordinator must not mutate WebAPI settings.');
+      },
+      createAiLiveProxy: async () => {
+        calls.push('proxy:start');
+        return {
+          clientToken: 'synthetic-proxy-credential',
+          baseUrl: 'http://127.0.0.1:43210/v1',
+          metrics: { calls: [] },
+          close: async () => calls.push('proxy:close')
+        };
+      },
+      createAiLiveSmokeRunnerEnvironment: () => {
+        calls.push('runner-environment');
+        return { synthetic: 'runner-env' };
+      },
+      runAiLiveSmokeRunner: async () => {
+        calls.push('playwright');
+        return { code: 1, timedOut: false, runnerCleaned: true };
+      },
+      isSuccessfulAiLiveSmokeResult: () => false
+    },
+    writeError: (message) => errors.push(message),
+    writeSuccess: () => assert.fail('A failed runner must not report success.')
+  });
+
+  assert.equal(result, 1);
+  assert.deepEqual(calls, [
+    'existing:prepare',
+    'proxy:start',
+    'runner-environment',
+    'playwright',
+    'proxy:close',
+    'existing:cleanup'
+  ]);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].includes(secretSentinel), false);
+});
+
+test('live coordinator uses the existing WebAPI and never starts the legacy supervisor', async () => {
+  const calls = [];
+  const secretSentinel = 'synthetic-existing-webapi-bearer';
+  const successMessages = [];
+  const errors = [];
+  const completionCalls = Array.from({ length: 9 }, () => ({
+    status: 200,
+    elapsedMs: 10,
+    usage: { promptTokens: 3, completionTokens: 2, totalTokens: 5, costUsd: 0.01 }
+  }));
+  const progressMessages = [];
+
+  const result = await runAiLiveSmoke({
+    env: { [AI_LIVE_SMOKE_ENV.optIn]: '1' },
+    dependencies: {
+      prepareExistingAiLiveSmokeSession: async () => {
+        calls.push('existing:prepare');
+        return {
+          origin: 'http://127.0.0.1:3001',
+          token: secretSentinel,
+          model: 'gpt-5',
+          cleanup: async () => calls.push('existing:cleanup')
+        };
+      },
+      startIsolatedWebApi: async () => {
+        calls.push('legacy:start');
+        throw new Error('The live coordinator must not start WebAPI.');
+      },
+      prepareAiLiveSmokeSession: async () => {
+        calls.push('legacy:prepare');
+        throw new Error('The live coordinator must not mutate WebAPI settings.');
+      },
+      createAiLiveProxy: async ({
+        token,
+        model,
+        targetOrigin,
+        maxCalls,
+        timeoutMs,
+        onRequest,
+        onCompletion
+      }) => {
+        calls.push('proxy:create');
+        assert.equal(token, secretSentinel);
+        assert.equal(model, 'gpt-5');
+        assert.equal(targetOrigin, 'http://127.0.0.1:3001');
+        assert.equal(maxCalls, 10);
+        assert.equal(timeoutMs, AI_LIVE_SMOKE_DEADLINES.proxyMs);
+        onRequest({ ordinal: 1 });
+        onCompletion({
+          ordinal: 1,
+          status: 200,
+          elapsedMs: 10,
+          responseFormat: {
+            messageContentType: 'text',
+            isJsonObject: false,
+            finishReason: 'stop',
+            secret: secretSentinel
+          }
+        });
+        return {
+          clientToken: 'synthetic-proxy-credential',
+          baseUrl: 'http://127.0.0.1:43210/v1',
+          metrics: { calls: completionCalls },
+          close: async () => calls.push('proxy:close')
+        };
+      },
+      createAiLiveSmokeRunnerEnvironment: (_parentEnv, { proxyToken, model, deadlines }) => {
+        calls.push('runner:environment');
+        assert.equal(proxyToken, 'synthetic-proxy-credential');
+        assert.equal(model, 'gpt-5');
+        assert.strictEqual(deadlines, AI_LIVE_SMOKE_DEADLINES);
+        const runnerEnv = { runnerOnly: 'synthetic' };
+        assert.equal(Object.values(runnerEnv).includes(secretSentinel), false);
+        return runnerEnv;
+      },
+      runAiLiveSmokeRunner: async ({ env }) => {
+        calls.push('runner:start');
+        assert.deepEqual(env, { runnerOnly: 'synthetic' });
+        return { code: 0, cancelled: false, timedOut: false, runnerCleaned: true };
+      },
+      isSuccessfulAiLiveSmokeResult: ({ runnerExit, cleanupFailed, calls: actualCalls }) =>
+        runnerExit.code === 0 &&
+        runnerExit.runnerCleaned === true &&
+        cleanupFailed === false &&
+        actualCalls.length === 9 &&
+        actualCalls.every((call) => call.status === 200)
+    },
+    writeError: (message) => errors.push(message),
+    writeProgress: (message) => progressMessages.push(message),
+    writeSuccess: (message) => successMessages.push(message)
+  });
+
+  assert.equal(result, 0);
+  assert.deepEqual(calls, [
+    'existing:prepare',
+    'proxy:create',
+    'runner:environment',
+    'runner:start',
+    'proxy:close',
+    'existing:cleanup'
+  ]);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(progressMessages, [
+    'Validando el servicio IA local y sus controles de privacidad.',
+    'Servicio IA local validado; preparando la prueba aislada.',
+    'Solicitud IA 1/10 enviada al servicio local.',
+    'Respuesta IA 1/10 completada (HTTP 200; texto no JSON; cierre stop).',
+    'Iniciando los escenarios contra la aplicación aislada.',
+    'Escenarios aislados terminados; verificando limpieza.'
+  ]);
+  assert.equal(successMessages.length, 1);
+  assert.equal(successMessages[0].includes(secretSentinel), false);
+  assert.match(successMessages[0], /"model":"gpt-5"/);
+  assert.match(
+    successMessages[0],
+    /"usage":\{"promptTokens":27,"completionTokens":18,"totalTokens":45,"costUsd":0\.09\}/
+  );
+});
+
+test('coordinator fails without creating proxy or runner when existing-WebAPI preflight fails', async () => {
+  const calls = [];
+  const errors = [];
+  const result = await runAiLiveSmoke({
+    env: { [AI_LIVE_SMOKE_ENV.optIn]: '1' },
+    dependencies: {
+      ...createGuardedDependencies(calls),
+      prepareExistingAiLiveSmokeSession: async () => {
+        calls.push('existing:prepare');
+        throw new Error('synthetic preflight failure');
+      },
+      isSuccessfulAiLiveSmokeResult: () => false
+    },
+    writeError: (message) => errors.push(message),
+    writeSuccess: () => assert.fail('Failed preflight must not report success.')
+  });
+
+  assert.equal(result, 1);
+  assert.deepEqual(calls, ['existing:prepare']);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /llamadas=0\/10/);
+});
+
+test('coordinator reports cleanup failures and does not hide them as success', async () => {
+  const calls = [];
+  const errors = [];
+  const secretSentinel = 'synthetic-cleanup-bearer';
+  const result = await runAiLiveSmoke({
+    env: { [AI_LIVE_SMOKE_ENV.optIn]: '1' },
+    dependencies: {
+      prepareExistingAiLiveSmokeSession: async () => ({
+        origin: 'http://127.0.0.1:3001',
+        token: secretSentinel,
+        model: 'gpt-5',
+        cleanup: async () => {
+          calls.push('token:cleanup');
+          throw new Error(secretSentinel);
+        }
+      }),
+      createAiLiveProxy: async () => ({
+        clientToken: 'synthetic-proxy-token',
+        baseUrl: 'http://127.0.0.1:43210/v1',
+        metrics: { calls: [] },
+        close: async () => {
+          calls.push('proxy:close');
+          throw new Error('synthetic close failure');
+        }
+      }),
+      createAiLiveSmokeRunnerEnvironment: () => ({ runnerOnly: true }),
+      runAiLiveSmokeRunner: async () => ({ code: 0, timedOut: false, runnerCleaned: true }),
+      isSuccessfulAiLiveSmokeResult: ({ cleanupFailed }) => !cleanupFailed
+    },
+    writeError: (message) => errors.push(message),
+    writeSuccess: () => assert.fail('Cleanup failure must not report success.')
+  });
+
+  assert.equal(result, 1);
+  assert.deepEqual(calls, ['proxy:close', 'token:cleanup']);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /limpieza del token propio/);
+  assert.equal(errors[0].includes(secretSentinel), false);
+});
+
+test('coordinator labels cancellation and still cleans proxy before the owned token', async () => {
+  const calls = [];
+  const errors = [];
+  const controller = new AbortController();
+  const result = await runAiLiveSmoke({
+    env: { [AI_LIVE_SMOKE_ENV.optIn]: '1' },
+    signal: controller.signal,
+    dependencies: {
+      prepareExistingAiLiveSmokeSession: async () => ({
+        origin: 'http://127.0.0.1:3001',
+        token: 'synthetic-bearer',
+        model: 'gpt-5',
+        cleanup: async () => calls.push('token:cleanup')
+      }),
+      createAiLiveProxy: async () => ({
+        clientToken: 'synthetic-proxy-token',
+        baseUrl: 'http://127.0.0.1:43210/v1',
+        metrics: { calls: [] },
+        close: async () => calls.push('proxy:close')
+      }),
+      createAiLiveSmokeRunnerEnvironment: () => ({ runnerOnly: true }),
+      runAiLiveSmokeRunner: async () => {
+        calls.push('runner');
+        controller.abort();
+        throw new Error('synthetic cancellation');
+      },
+      isSuccessfulAiLiveSmokeResult: () => false
+    },
+    writeError: (message) => errors.push(message),
+    writeSuccess: () => assert.fail('A cancelled run must not report success.')
+  });
+
+  assert.equal(result, 1);
+  assert.deepEqual(calls, ['runner', 'proxy:close', 'token:cleanup']);
+  assert.match(errors[0], /Smoke real cancelado/);
+});
+
+test('coordinator labels a timed-out live runner separately', async () => {
+  const errors = [];
+  const result = await runAiLiveSmoke({
+    env: { [AI_LIVE_SMOKE_ENV.optIn]: '1' },
+    dependencies: {
+      prepareExistingAiLiveSmokeSession: async () => ({
+        origin: 'http://127.0.0.1:3001',
+        token: 'synthetic-bearer',
+        model: 'gpt-5',
+        cleanup: async () => undefined
+      }),
+      createAiLiveProxy: async () => ({
+        clientToken: 'synthetic-proxy-token',
+        baseUrl: 'http://127.0.0.1:43210/v1',
+        metrics: { calls: [] },
+        close: async () => undefined
+      }),
+      createAiLiveSmokeRunnerEnvironment: () => ({ runnerOnly: true }),
+      runAiLiveSmokeRunner: async () => ({ code: 1, timedOut: true }),
+      isSuccessfulAiLiveSmokeResult: () => false
+    },
+    writeError: (message) => errors.push(message),
+    writeSuccess: () => assert.fail('A timed-out run must not report success.')
+  });
+
+  assert.equal(result, 1);
+  assert.match(errors[0], /agotó el límite de tiempo/);
+});
