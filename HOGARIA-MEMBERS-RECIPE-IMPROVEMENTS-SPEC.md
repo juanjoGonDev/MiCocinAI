@@ -229,6 +229,8 @@ Playwright con Chrome, dos proyectos (escritorio y móvil), usuarios/SQLite sint
 - Capturas sintéticas revisadas: `.e2e-screenshots/qa-button-geometry/chromium-event-actions.png` y `.e2e-screenshots/qa-button-geometry/mobile-chrome-event-actions.png`.
 - `pnpm run lint:client` ejecuta y supera `check:ui`, pero Angular ESLint no puede arrancar en este entorno porque falta el paquete local `@angular-eslint/builder`; no se instaló ni cambió ninguna dependencia.
 
+**Reintento opt-in del smoke tras cambios de WebAPI (2026-10-07):** dos ejecuciones de `pnpm smoke:ai:real` con `HOGARIA_AI_REAL_SMOKE=1` terminaron en preflight, con **0/10** llamadas al proveedor. La consulta de solo lectura confirmó HTTP 200 en los controles locales; `requestLogging.settings.enabled=true` y `captureDetails=true`, mientras `session-recording` y `diagnostic-html` están desactivados. El preflight seguro rechaza continuar; no se modificó la configuración ni se eludió el control. La casilla de smoke real sigue abierta hasta que el servicio use ajustes compatibles con privacidad.
+
 ## Evidencia requerida antes de cerrar
 
 - Revalidar el spec y código vigente antes de cada unidad; TDD (prueba roja antes del cambio), tests de servidor/UI y Playwright real contra app/API aisladas con SQLite temporal. No usar la DB normal ni el proveedor de uso normal.
