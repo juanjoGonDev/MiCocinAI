@@ -7,6 +7,7 @@ import {
 
 export const AI_LIVE_SMOKE_ENV = Object.freeze({
   optIn: 'HOGARIA_AI_REAL_SMOKE',
+  allowRedactedRequestLogs: 'HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS',
   runner: 'HOGARIA_AI_REAL_SMOKE_RUNNER',
   providerToken: 'HOGARIA_AI_REAL_SMOKE_PROVIDER_TOKEN',
   proxyToken: 'HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN',
@@ -540,6 +541,27 @@ export function createAiLiveSmokeRunnerEnvironment(
 }
 
 export function isSuccessfulAiLiveSmokeResult({ runnerExit, cleanupFailed, calls }) {
+  const unsuccessfulIndexes = Array.isArray(calls)
+    ? calls.reduce((indexes, call, index) => {
+        if (!Number.isInteger(call?.status) || call.status < 200 || call.status >= 300) {
+          indexes.push(index);
+        }
+        return indexes;
+      }, [])
+    : [];
+  const failedReceiptStreamIndex = unsuccessfulIndexes[0];
+  const failedReceiptStream = calls?.[failedReceiptStreamIndex];
+  const receiptFallback = calls?.[failedReceiptStreamIndex + 1];
+  const onlySuccessfulReceiptFallbackFailed =
+    unsuccessfulIndexes.length === 1 &&
+    failedReceiptStream?.status === 400 &&
+    failedReceiptStream?.stream === true &&
+    failedReceiptStream?.schemaName === 'receipt' &&
+    receiptFallback?.status >= 200 &&
+    receiptFallback?.status < 300 &&
+    receiptFallback?.stream === false &&
+    receiptFallback?.schemaName === 'receipt';
+
   return (
     runnerExit?.code === 0 &&
     runnerExit.cancelled !== true &&
@@ -549,7 +571,7 @@ export function isSuccessfulAiLiveSmokeResult({ runnerExit, cleanupFailed, calls
     Array.isArray(calls) &&
     calls.length >= AI_LIVE_SMOKE_MIN_COMPLETIONS &&
     calls.length <= AI_LIVE_SMOKE_COMPLETION_BUDGET &&
-    calls.every((call) => Number.isInteger(call?.status) && call.status >= 200 && call.status < 300)
+    (unsuccessfulIndexes.length === 0 || onlySuccessfulReceiptFallbackFailed)
   );
 }
 
@@ -775,6 +797,8 @@ async function handleProxyRequest(request, response, state) {
     sendJson(response, 400, 'Live AI smoke requires a strict JSON Schema response format.');
     return;
   }
+  const requestStream = payload.stream === true;
+  const requestSchemaName = payload.response_format.json_schema.name;
   if (state.acceptedCalls >= state.maxCalls) {
     sendJson(response, 429, 'Live AI smoke completion budget exhausted.');
     return;
@@ -794,6 +818,8 @@ async function handleProxyRequest(request, response, state) {
     state.metrics.calls.push({
       model: state.model,
       status,
+      stream: requestStream,
+      schemaName: requestSchemaName,
       elapsedMs,
       usage,
       responseFormat

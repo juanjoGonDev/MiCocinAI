@@ -4,14 +4,17 @@ import { throwError } from 'rxjs';
 import { I18nService } from '../services/i18n.service';
 import { STORAGE_KEYS } from '../services/storage.service';
 import { ToastService } from '../services/toast.service';
+import { dateLocale, setDateLocale } from '../time';
 import { errorInterceptor, SILENT_TOAST } from './error.interceptor';
 
 describe('errorInterceptor', () => {
   let toastService: jasmine.SpyObj<ToastService>;
   let i18n: I18nService;
   let clockOffset = 0;
+  let previousLocale: string;
 
   beforeEach(() => {
+    previousLocale = dateLocale();
     jasmine.clock().install();
     jasmine.clock().mockDate(new Date(1_800_000_000_000 + clockOffset));
     // The interceptor keeps its throttle map at module scope. Separate specs by
@@ -30,6 +33,7 @@ describe('errorInterceptor', () => {
   afterEach(() => {
     localStorage.removeItem(STORAGE_KEYS.language);
     TestBed.resetTestingModule();
+    setDateLocale(previousLocale);
     jasmine.clock().uninstall();
   });
 

@@ -4,7 +4,8 @@ import { AI_LIVE_SMOKE_ENV, WEB_API_ORIGIN } from './ai-live-smoke-safety.mjs';
 
 const REQUEST_TIMEOUT_MS = 8_000;
 const MAX_JSON_RESPONSE_BYTES = 128 * 1024;
-const TOKEN_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TOKEN_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REQUEST_LOGGING_SAFE_SETTINGS = Object.freeze({
   captureDetails: false,
   enabled: false,
@@ -30,8 +31,7 @@ export async function prepareExistingAiLiveSmokeSession({
       throw new Error('The existing WebAPI smoke was cancelled.');
     }
     const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-    const requestSignal =
-      signal && !cleanup ? AbortSignal.any([signal, timeout]) : timeout;
+    const requestSignal = signal && !cleanup ? AbortSignal.any([signal, timeout]) : timeout;
     try {
       return await fetchImpl(new URL(path, WEB_API_ORIGIN), {
         ...options,
@@ -97,7 +97,9 @@ export async function prepareExistingAiLiveSmokeSession({
 
   try {
     // Run only read-only health/privacy checks before acquiring a credential or querying models.
-    await verifyExistingWebApi(json);
+    await verifyExistingWebApi(json, {
+      allowRedactedRequestLogs: env?.[AI_LIVE_SMOKE_ENV.allowRedactedRequestLogs] === '1'
+    });
 
     if (!token) {
       tokenCreationAttempted = true;
@@ -141,9 +143,7 @@ export async function prepareExistingAiLiveSmokeSession({
       try {
         await cleanup();
       } catch {
-        throw new Error(
-          'Existing WebAPI setup failed; owned token cleanup could not be verified.'
-        );
+        throw new Error('Existing WebAPI setup failed; owned token cleanup could not be verified.');
       }
     }
     if (signal?.aborted) throw new Error('The existing WebAPI smoke was cancelled.');
@@ -152,7 +152,7 @@ export async function prepareExistingAiLiveSmokeSession({
   }
 }
 
-async function verifyExistingWebApi(json) {
+async function verifyExistingWebApi(json, { allowRedactedRequestLogs = false } = {}) {
   const [ready, identity, controls, sessionRecording, diagnosticHtml] = await Promise.all([
     json('/health/ready'),
     json('/'),
@@ -171,13 +171,58 @@ async function verifyExistingWebApi(json) {
   }
 
   const logging = controls?.requestLogging?.settings;
+  const acceptedLoggingSettings =
+    sameSettings(logging, REQUEST_LOGGING_SAFE_SETTINGS) ||
+    (allowRedactedRequestLogs && hasBoundedRequestLoggingSettings(controls?.requestLogging));
   if (
-    !sameSettings(logging, REQUEST_LOGGING_SAFE_SETTINGS) ||
+    !acceptedLoggingSettings ||
     sessionRecording?.enabled !== false ||
     diagnosticHtml?.enabled !== false
   ) {
     throw new Error('The existing WebAPI privacy settings are unsafe for the smoke.');
   }
+}
+
+function hasBoundedRequestLoggingSettings(requestLogging) {
+  const settings = requestLogging?.settings;
+  const bounds = requestLogging?.bounds;
+  if (
+    typeof settings !== 'object' ||
+    settings === null ||
+    Array.isArray(settings) ||
+    typeof bounds !== 'object' ||
+    bounds === null ||
+    Array.isArray(bounds)
+  ) {
+    return false;
+  }
+
+  const expectedBooleanKeys = ['captureDetails', 'enabled'];
+  const expectedLimitKeys = ['maxBodyChars', 'maxHeaderValueChars', 'maxHeaders'];
+  const expectedKeys = [...expectedBooleanKeys, ...expectedLimitKeys].sort();
+  if (
+    Object.keys(settings).sort().join('|') !== expectedKeys.join('|') ||
+    Object.keys(bounds).sort().join('|') !== expectedLimitKeys.sort().join('|') ||
+    expectedBooleanKeys.some((key) => typeof settings[key] !== 'boolean')
+  ) {
+    return false;
+  }
+
+  return expectedLimitKeys.every((key) => {
+    const value = settings[key];
+    const limit = bounds[key];
+    return (
+      Number.isSafeInteger(value) &&
+      typeof limit === 'object' &&
+      limit !== null &&
+      Number.isSafeInteger(limit.min) &&
+      Number.isSafeInteger(limit.max) &&
+      limit.min >= 0 &&
+      limit.max >= limit.min &&
+      value >= limit.min &&
+      value <= limit.max
+    );
+  });
 }
 
 function sameSettings(actual, expected) {

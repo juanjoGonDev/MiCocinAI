@@ -1,7 +1,24 @@
 import { AiParticipantsComponent } from './ai-participants.component';
 import { TestBed } from '@angular/core/testing';
 import { I18nService } from '../../core/services/i18n.service';
+import { STORAGE_KEYS } from '../../core/services/storage.service';
+import { dateLocale, setDateLocale } from '../../core/time';
 import type { HouseholdMember } from '../models/household.model';
+
+let previousLocale: string;
+let previousStoredLanguage: string | null;
+
+beforeEach(() => {
+  previousLocale = dateLocale();
+  previousStoredLanguage = localStorage.getItem(STORAGE_KEYS.language);
+});
+
+afterEach(() => {
+  TestBed.resetTestingModule();
+  setDateLocale(previousLocale);
+  if (previousStoredLanguage === null) localStorage.removeItem(STORAGE_KEYS.language);
+  else localStorage.setItem(STORAGE_KEYS.language, previousStoredLanguage);
+});
 
 const member = (id: string, isActive = true): HouseholdMember => ({
   id,

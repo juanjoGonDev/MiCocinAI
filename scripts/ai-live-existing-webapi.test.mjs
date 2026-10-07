@@ -54,7 +54,16 @@ function createWebApi({
       });
     }
     if (method === 'GET' && url.pathname === '/admin/api/runtime-controls') {
-      return jsonResponse({ requestLogging: { settings: requestLogging } });
+      return jsonResponse({
+        requestLogging: {
+          bounds: {
+            maxBodyChars: { min: 0, max: 10_000_000 },
+            maxHeaderValueChars: { min: 0, max: 32_768 },
+            maxHeaders: { min: 0, max: 256 }
+          },
+          settings: requestLogging
+        }
+      });
     }
     if (method === 'GET' && url.pathname === '/admin/api/settings/session-recording') {
       return jsonResponse({ enabled: sessionRecording });
@@ -116,8 +125,105 @@ test('fails before token creation or model calls when capture settings are unsaf
     prepareExistingAiLiveSmokeSession({ env: {}, fetchImpl }),
     /privacy settings/
   );
-  assert.equal(calls.some((call) => call.method === 'POST' || call.method === 'DELETE'), false);
-  assert.equal(calls.some((call) => new URL(call.url).pathname === '/v1/models'), false);
+  assert.equal(
+    calls.some((call) => call.method === 'POST' || call.method === 'DELETE'),
+    false
+  );
+  assert.equal(
+    calls.some((call) => new URL(call.url).pathname === '/v1/models'),
+    false
+  );
+});
+
+test('allows sanitized local request logging only with the explicit diagnostic opt-in', async () => {
+  const { calls, fetchImpl } = createWebApi({
+    requestLogging: {
+      captureDetails: true,
+      enabled: true,
+      maxBodyChars: 4096,
+      maxHeaderValueChars: 128,
+      maxHeaders: 20
+    }
+  });
+
+  const session = await prepareExistingAiLiveSmokeSession({
+    env: { HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS: '1' },
+    fetchImpl
+  });
+
+  assert.equal(session.model, 'gpt-5');
+  await session.cleanup();
+  assert.equal(calls.filter((call) => new URL(call.url).pathname === '/v1/models').length, 1);
+  assert.equal(
+    calls.some((call) => call.method === 'PATCH'),
+    false
+  );
+});
+
+test('does not let the diagnostic opt-in enable session or HTML recording', async () => {
+  for (const settings of [{ sessionRecording: true }, { diagnosticHtml: true }]) {
+    const { calls, fetchImpl } = createWebApi(settings);
+    await assert.rejects(
+      prepareExistingAiLiveSmokeSession({
+        env: { HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS: '1' },
+        fetchImpl
+      }),
+      /privacy settings are unsafe/
+    );
+    assert.equal(
+      calls.some((call) => call.method === 'POST' || call.method === 'DELETE'),
+      false
+    );
+    assert.equal(
+      calls.some((call) => new URL(call.url).pathname === '/v1/models'),
+      false
+    );
+  }
+});
+
+test('requires the exact diagnostic opt-in value and valid bounded logging settings', async () => {
+  const invalidConfigs = [
+    { optIn: 'true', settings: { enabled: true, captureDetails: true } },
+    {
+      optIn: '1',
+      settings: {
+        captureDetails: true,
+        enabled: true,
+        maxBodyChars: -1,
+        maxHeaderValueChars: 128,
+        maxHeaders: 20
+      }
+    },
+    {
+      optIn: '1',
+      settings: {
+        captureDetails: true,
+        enabled: true,
+        maxBodyChars: 4096,
+        maxHeaderValueChars: 128,
+        maxHeaders: 'unlimited'
+      }
+    }
+  ];
+
+  for (const { optIn, settings } of invalidConfigs) {
+    const { calls, fetchImpl } = createWebApi({ requestLogging: settings });
+    await assert.rejects(
+      prepareExistingAiLiveSmokeSession({
+        env: { HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS: optIn },
+        fetchImpl
+      }),
+      /privacy settings are unsafe/
+    );
+    assert.equal(
+      calls.some((call) => call.method === 'POST' || call.method === 'DELETE'),
+      false
+    );
+    assert.equal(
+      calls.some((call) => new URL(call.url).pathname === '/v1/models'),
+      false
+    );
+  }
 });
 
 test('rejects an invalid bearer without making any WebAPI request', async () => {
@@ -139,7 +245,8 @@ test('rejects a different service identity before any token or model request', a
   const { calls, fetchImpl: baseFetch } = createWebApi();
   const fetchImpl = async (input, options = {}) => {
     const url = new URL(input);
-    if (url.pathname === '/') return jsonResponse({ name: 'other-service', routes: ['/v1/models'] });
+    if (url.pathname === '/')
+      return jsonResponse({ name: 'other-service', routes: ['/v1/models'] });
     return baseFetch(input, options);
   };
 
@@ -147,8 +254,14 @@ test('rejects a different service identity before any token or model request', a
     prepareExistingAiLiveSmokeSession({ env: {}, fetchImpl }),
     /service identity or readiness/
   );
-  assert.equal(calls.some((call) => call.method === 'POST' || call.method === 'DELETE'), false);
-  assert.equal(calls.some((call) => new URL(call.url).pathname === '/v1/models'), false);
+  assert.equal(
+    calls.some((call) => call.method === 'POST' || call.method === 'DELETE'),
+    false
+  );
+  assert.equal(
+    calls.some((call) => new URL(call.url).pathname === '/v1/models'),
+    false
+  );
 });
 
 test('fails closed for enabled session recording or diagnostic HTML capture', async () => {
@@ -158,8 +271,14 @@ test('fails closed for enabled session recording or diagnostic HTML capture', as
       prepareExistingAiLiveSmokeSession({ env: {}, fetchImpl }),
       /privacy settings are unsafe/
     );
-    assert.equal(calls.some((call) => call.method === 'POST' || call.method === 'DELETE'), false);
-    assert.equal(calls.some((call) => new URL(call.url).pathname === '/v1/models'), false);
+    assert.equal(
+      calls.some((call) => call.method === 'POST' || call.method === 'DELETE'),
+      false
+    );
+    assert.equal(
+      calls.some((call) => new URL(call.url).pathname === '/v1/models'),
+      false
+    );
   }
 });
 
@@ -193,12 +312,15 @@ test('uses a securely supplied bearer only for strict gpt-5 model validation', a
   assert.equal(session.token, BEARER_SENTINEL);
   await session.cleanup();
 
-  assert.equal(calls.some((call) => call.method === 'POST' || call.method === 'DELETE'), false);
   assert.equal(
-    calls.filter((call) => new URL(call.url).pathname === '/v1/models').length,
-    1
+    calls.some((call) => call.method === 'POST' || call.method === 'DELETE'),
+    false
   );
-  assert.equal(calls.some((call) => call.headers.get('authorization') === `Bearer ${BEARER_SENTINEL}`), true);
+  assert.equal(calls.filter((call) => new URL(call.url).pathname === '/v1/models').length, 1);
+  assert.equal(
+    calls.some((call) => call.headers.get('authorization') === `Bearer ${BEARER_SENTINEL}`),
+    true
+  );
 });
 
 test('creates and deletes only its own never-expiring token when no secure bearer exists', async () => {
@@ -211,7 +333,9 @@ test('creates and deletes only its own never-expiring token when no secure beare
   await session.cleanup();
 
   assert.equal(
-    calls.filter((call) => call.method === 'POST' && new URL(call.url).pathname === '/admin/api/tokens').length,
+    calls.filter(
+      (call) => call.method === 'POST' && new URL(call.url).pathname === '/admin/api/tokens'
+    ).length,
     1
   );
   assert.deepEqual(
@@ -219,10 +343,15 @@ test('creates and deletes only its own never-expiring token when no secure beare
     [`/admin/api/tokens/${OWNED_TOKEN_ID}`]
   );
   assert.equal(
-    calls.filter((call) => call.method === 'GET' && new URL(call.url).pathname === '/admin/api/tokens').length,
+    calls.filter(
+      (call) => call.method === 'GET' && new URL(call.url).pathname === '/admin/api/tokens'
+    ).length,
     1
   );
-  assert.equal(calls.some((call) => call.method === 'PATCH'), false);
+  assert.equal(
+    calls.some((call) => call.method === 'PATCH'),
+    false
+  );
 });
 
 test('fails closed when token creation was attempted but ownership cannot be established', async () => {
@@ -252,8 +381,14 @@ test('fails closed when token creation was attempted but ownership cannot be est
     prepareExistingAiLiveSmokeSession({ env: {}, fetchImpl, tokenName }),
     /owned token cleanup could not be verified/
   );
-  assert.equal(calls.some((call) => new URL(call.url).pathname === '/v1/models'), false);
-  assert.equal(calls.some((call) => call.method === 'DELETE'), false);
+  assert.equal(
+    calls.some((call) => new URL(call.url).pathname === '/v1/models'),
+    false
+  );
+  assert.equal(
+    calls.some((call) => call.method === 'DELETE'),
+    false
+  );
   assert.equal(
     calls.filter((call) => new URL(call.url).pathname === '/admin/api/tokens').length,
     2
@@ -278,7 +413,10 @@ test('rejects an unauthorized catalog request without provisioning another crede
     }),
     /preflight failed/
   );
-  assert.equal(calls.filter((call) => call.method === 'POST' || call.method === 'DELETE').length, 0);
+  assert.equal(
+    calls.filter((call) => call.method === 'POST' || call.method === 'DELETE').length,
+    0
+  );
   assert.equal(
     calls.some((call) => call.headers.get('authorization') === `Bearer ${BEARER_SENTINEL}`),
     true
@@ -311,8 +449,14 @@ test('rejects malformed, non-JSON, empty, or oversized preflight responses witho
       return baseFetch(input, options);
     };
     await assert.rejects(prepareExistingAiLiveSmokeSession({ env: {}, fetchImpl }));
-    assert.equal(calls.some((call) => call.method === 'POST' || call.method === 'DELETE'), false);
-    assert.equal(calls.some((call) => new URL(call.url).pathname === '/v1/models'), false);
+    assert.equal(
+      calls.some((call) => call.method === 'POST' || call.method === 'DELETE'),
+      false
+    );
+    assert.equal(
+      calls.some((call) => new URL(call.url).pathname === '/v1/models'),
+      false
+    );
   }
 });
 
@@ -336,7 +480,10 @@ test('rejects missing or incompatible gpt-5 without falling back to a different 
     prepareExistingAiLiveSmokeSession({ env: {}, fetchImpl }),
     /gpt-5.*text and image/
   );
-  assert.equal(calls.some((call) => call.method === 'PATCH'), false);
+  assert.equal(
+    calls.some((call) => call.method === 'PATCH'),
+    false
+  );
   assert.deepEqual(
     calls.filter((call) => call.method === 'DELETE').map((call) => new URL(call.url).pathname),
     [`/admin/api/tokens/${OWNED_TOKEN_ID}`]

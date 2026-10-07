@@ -162,6 +162,17 @@ export async function runAiLiveSmoke({
   }
 
   const usage = safeMetrics(calls);
+  const failedReceiptStreamIndex = calls.findIndex(
+    (call) => call.status === 400 && call.stream === true && call.schemaName === 'receipt'
+  );
+  const receiptFallback =
+    failedReceiptStreamIndex >= 0
+      ? {
+          schema: 'receipt',
+          streamingStatus: calls[failedReceiptStreamIndex].status,
+          nonStreamingStatus: calls[failedReceiptStreamIndex + 1]?.status ?? null
+        }
+      : undefined;
   writeSuccess(
     JSON.stringify({
       result: 'passed',
@@ -169,6 +180,7 @@ export async function runAiLiveSmoke({
       model: session.model,
       completions: calls.length,
       elapsedMs: calls.map((call) => call.elapsedMs),
+      ...(receiptFallback ? { recoveredFallback: receiptFallback } : {}),
       ...(usage ? { usage } : {})
     })
   );

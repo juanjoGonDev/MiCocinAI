@@ -14,12 +14,23 @@ import {
 } from './shopping.model';
 import { dateLocale, setDateLocale } from '../../core/time';
 
+function isolateSpanishLocale(): void {
+  let previousLocale: string;
+  beforeEach(() => {
+    previousLocale = dateLocale();
+    setDateLocale('es-ES');
+  });
+  afterEach(() => setDateLocale(previousLocale));
+}
+
 /**
  * Las dos unicas funciones de dinero de la pantalla. Se prueban aqui y no en el
  * backend porque el backend solo sabe sumar centimts: quien traduce lo que teclea
  * una persona con coma decimal es la app, y ahi es donde se pierden los centimos.
  */
 describe('shopping.model — dinero', () => {
+  isolateSpanishLocale();
+
   it('lee la coma como separador decimal, como un teclado español', () => {
     expect(parseMoneyToMinor('12,40')).toBe(1240);
     expect(parseMoneyToMinor('1,20')).toBe(120);
@@ -67,6 +78,8 @@ describe('shopping.model — dinero', () => {
 });
 
 describe('shopping.model — cantidades y secciones', () => {
+  isolateSpanishLocale();
+
   it('una unidad suelta no se pinta: el 1 de «1 Leche» es ruido', () => {
     const previousLocale = dateLocale();
     try {
@@ -161,6 +174,8 @@ describe('shopping.model — cantidades y secciones', () => {
 });
 
 describe('shopping.model — descuentos de línea y ofertas', () => {
+  isolateSpanishLocale();
+
   const labels = { unidad: 'unidad', unidades: 'unidades' };
 
   it('normaliza campos ausentes y conserva los ceros de descuentos reconocidos', () => {

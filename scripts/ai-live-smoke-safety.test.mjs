@@ -430,6 +430,7 @@ test('builds a minimal live-runner environment without inherited provider creden
       PLAYWRIGHT_BROWSERS_PATH: 'C:/pw-browsers',
       E2E_CHROME_BIN: 'C:/Chrome/chrome.exe',
       HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH: 'C:/Downloads/private-ticket.jpeg',
+      HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS: '1',
       CI: 'true',
       OPENAI_API_KEY: 'sentinel-openai-secret',
       HOGARIA_AI_REAL_SMOKE_PROVIDER_TOKEN: 'sentinel-webapi-bearer',
@@ -456,6 +457,7 @@ test('builds a minimal live-runner environment without inherited provider creden
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_GLOBAL_TIMEOUT_MS, '1260000');
   assert.equal('OPENAI_API_KEY' in env, false);
   assert.equal('HOGARIA_AI_REAL_SMOKE_PROVIDER_TOKEN' in env, false);
+  assert.equal('HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS' in env, false);
   assert.equal('NODE_OPTIONS' in env, false);
   assert.equal(
     validateAiLiveSmokeRunner(env, [
@@ -520,6 +522,49 @@ test('accepts only a fully successful run with nine or ten live completions', ()
   );
   assert.equal(
     isSuccessfulAiLiveSmokeResult({ runnerExit, cleanupFailed: true, calls: calls(9) }),
+    false
+  );
+});
+
+test('accepts only the failed streaming receipt attempt when its strict non-stream fallback succeeds', () => {
+  const runnerExit = { code: 0, timedOut: false, cancelled: false, runnerCleaned: true };
+  const calls = Array.from({ length: 8 }, () => ({ status: 200 }));
+  calls.splice(
+    7,
+    0,
+    { status: 400, stream: true, schemaName: 'receipt' },
+    { status: 200, stream: false, schemaName: 'receipt' }
+  );
+
+  assert.equal(isSuccessfulAiLiveSmokeResult({ runnerExit, cleanupFailed: false, calls }), true);
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: calls.map((call) =>
+        call.status === 400 ? { ...call, schemaName: 'shopping_photo' } : call
+      )
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: calls.map((call) => (call.status === 400 ? { ...call, status: 500 } : call))
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: calls.map((call, index) =>
+        call.schemaName === 'receipt' && call.status === 200 && index > 7
+          ? { ...call, schemaName: 'recipe' }
+          : call
+      )
+    }),
     false
   );
 });
@@ -616,14 +661,16 @@ test('proxy authenticates its isolated app credential, forwards the WebAPI beare
     assert.equal(actualBearer.status, 401);
     assert.equal(upstreamRequests.length, 0);
 
-    const request = () =>
+    const promptSentinel = 'private smoke prompt sentinel';
+    const request = (stream = false) =>
       postJson(`${proxy.baseUrl}/chat/completions`, proxy.clientToken, {
         model: 'gpt-5',
-        messages: [{ role: 'user', content: 'synthetic' }],
+        messages: [{ role: 'user', content: promptSentinel }],
+        stream,
         response_format: SYNTHETIC_STRICT_RESPONSE_FORMAT
       });
 
-    const first = await request();
+    const first = await request(true);
     assert.equal(first.status, 200);
     assert.equal(first.text.includes(bearer), false);
     assert.equal(first.text.includes(proxy.clientToken), false);
@@ -640,6 +687,11 @@ test('proxy authenticates its isolated app credential, forwards the WebAPI beare
       finishReason: 'stop'
     });
     assert.equal(JSON.stringify(proxy.metrics.calls[0].responseFormat).includes(bearer), false);
+    assert.deepEqual(
+      { stream: proxy.metrics.calls[0].stream, schemaName: proxy.metrics.calls[0].schemaName },
+      { stream: true, schemaName: 'synthetic_answer' }
+    );
+    assert.equal(JSON.stringify(proxy.metrics.calls[0]).includes(promptSentinel), false);
     assert.deepEqual(started, [{ ordinal: 1 }]);
     assert.equal(completed.length, 1);
     assert.deepEqual(
