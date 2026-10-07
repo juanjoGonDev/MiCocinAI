@@ -14,23 +14,31 @@ import { defineConfig } from 'vitest/config';
  *
  * Hoy quedan fuera, con su prueba atada a la fase que les corresponde:
  *   - src/routes/** (salvo shopping.routes.ts, household.routes.ts,
- *     forgot-password.routes.ts y receipts.routes.ts, con spec propia;
- *     pantry.routes.ts conserva cobertura parcial de sus filtros pero no entra
- *     hasta probar el alta/utensilios, porque el umbral es por fichero) y src/index.ts
+ *     calendar.routes.ts, forgot-password.routes.ts, receipts.routes.ts, recipes.routes.ts,
+ *     recipe-images.routes.ts y pantry.routes.ts,
+ *     con spec propia) y src/index.ts
  *                             → el resto se prueba de momento con la suite e2e
  *   - src/middleware/** (salvo timestamp, que entro el dia que se escribio),
- *     src/schemas/** (salvo receipts.schema.ts), src/utils/log-store.ts,
+ *     src/schemas/** (salvo receipts.schema.ts y recipe.schema.ts), src/utils/log-store.ts,
  *     src/utils/logger.ts      → unidades puras; entran con P1/P2, que es cuando se
  *     escriben sus tests de contrato
  */
 const COVERED = [
   'src/routes/shopping.routes.ts',
   'src/routes/household.routes.ts',
+  'src/routes/calendar.routes.ts',
   'src/routes/forgot-password.routes.ts',
   'src/routes/ai-queue.routes.ts',
+  'src/routes/ai.routes.ts',
+  'src/routes/recipes.routes.ts',
+  'src/routes/pantry-product-images.routes.ts',
   'src/schemas/shopping.schema.ts',
   'src/schemas/receipts.schema.ts',
+  'src/schemas/recipe.schema.ts',
+  'src/schemas/ai.schema.ts',
+  'src/schemas/generated-recipe.schema.ts',
   'src/utils/product-key.ts',
+  'src/utils/pantry-categories.ts',
   'src/utils/shopping-categories.ts',
   'src/utils/list-discount.ts',
   'src/utils/shopping-events.ts',
@@ -38,6 +46,7 @@ const COVERED = [
   'src/utils/photo-prompt.ts',
   'src/utils/live-hub.ts',
   'src/utils/ai-client.ts',
+  'src/utils/ai-output-language.ts',
   'src/utils/ticket-queue.ts',
   'src/utils/ticket-prompt.ts',
   'src/routes/receipts.routes.ts',
@@ -45,8 +54,16 @@ const COVERED = [
   'src/utils/memory-monitor.ts',
   'src/utils/seed-data.ts',
   'src/utils/taste-profile.ts',
+  'src/utils/recipe-book-seed.ts',
+  'src/utils/recipe-step-photos.ts',
+  'src/utils/recipe-replacement.ts',
+  'src/utils/product-image-search.ts',
+  'src/routes/recipe-images.routes.ts',
+  'src/routes/recipe-step-photos.routes.ts',
+  'src/routes/pantry.routes.ts',
   'src/utils/week-calendar.ts',
   'src/utils/weekly-plan.ts',
+  'src/utils/caducidades.ts',
   'src/schemas/bcrypt-password.schema.ts',
   'src/models/schema.ts',
   'src/config/app.config.ts',

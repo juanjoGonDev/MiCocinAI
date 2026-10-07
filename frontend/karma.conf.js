@@ -1,5 +1,10 @@
 // Karma configuration file
 module.exports = function (config) {
+  const path = require('path');
+  const coverageDirectory = process.env.KARMA_COVERAGE_DIR
+    ? path.resolve(process.env.KARMA_COVERAGE_DIR)
+    : path.join(__dirname, './coverage');
+
   config.set({
     basePath: '',
     frameworks: ['jasmine', '@angular-devkit/build-angular'],
@@ -18,7 +23,7 @@ module.exports = function (config) {
       suppressAll: true
     },
     coverageReporter: {
-      dir: require('path').join(__dirname, './coverage'),
+      dir: coverageDirectory,
       subdir: '.',
       reporters: [
         { type: 'html' },
