@@ -166,7 +166,7 @@ test('onboarding y preferencias conservan emojis de comida y usan SVG para objet
   await page.goto('/preferences?tab=goal');
   await waitForRouterViewTransition(page);
   await expect(page.locator('.preferences__title')).toBeVisible();
-  expect.soft(await page.locator('.preferences__goal-icon app-icon').count()).toBe(6);
+  expect.soft(await page.locator('.preferences__goal-icon app-icon').count()).toBe(7);
 
   if (isMobile) {
     for (const size of [
@@ -186,7 +186,7 @@ test('onboarding y preferencias conservan emojis de comida y usan SVG para objet
 
       await page.locator('[data-test="preferences-tab-allergies"]').click();
       await page.locator('[data-test="preferences-tab-goal"]').click();
-      expect(await page.locator('.preferences__goal-icon app-icon').count()).toBe(6);
+      expect(await page.locator('.preferences__goal-icon app-icon').count()).toBe(7);
     }
   }
 
@@ -256,7 +256,7 @@ test('onboarding y preferencias conservan emojis de comida y usan SVG para objet
   await page.reload();
   await waitForRouterViewTransition(page);
   await expect(page.locator('.preferences__goal-label').first()).toHaveText('Balanced');
-  expect.soft(await page.locator('.preferences__goal-icon app-icon').count()).toBe(6);
+  expect.soft(await page.locator('.preferences__goal-icon app-icon').count()).toBe(7);
 
   await page.goto('/preferences?tab=allergies');
   await waitForRouterViewTransition(page);

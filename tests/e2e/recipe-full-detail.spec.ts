@@ -233,7 +233,7 @@ test('la ficha completa presenta detalle, ajusta raciones solo en pantalla y no 
     );
     const detailLevel = page.locator('[data-test="recipe-detail-level"]');
     const finalStep = detail.locator('.step-card[data-step-number="3"]');
-    await finalStep.scrollIntoViewIfNeeded();
+    await finalStep.evaluate((element) => element.scrollIntoView({ block: 'start' }));
     const finalStepBox = await finalStep.boundingBox();
     const appHeaderBox = await page.locator('.header').boundingBox();
     expect(finalStepBox).not.toBeNull();

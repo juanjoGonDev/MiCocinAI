@@ -1002,6 +1002,13 @@ Evidencia de la suite frontend completa (2026-10-01): Karma **614/614** tests pa
 
 **Evidencia reproducible (2026-10-01):** TDD añadió expectativa antes del fix: Karma `AiService` rojo 1/11 (fallo HTTP borraba la receta/lista previa) y E2E Chromium 1440×900 rojo al segundo intento (API 500 eliminaba las tres candidatas). Verde: `AiService` **11/11**; `server/src/routes/ai.routes.spec.ts` **13/13**; build/typecheck servidor y typecheck E2E pasan; `ng build --configuration production` pasa con warnings previos de budgets/imports no usados. Playwright real: `node scripts/run-isolated-playwright.mjs tests/e2e/recipes-ai-generation.spec.ts --project=chromium --project=mobile-chrome`, **18/18**; además prueba standalone múltiple 1440×900 **1/1** para confirmar arranque cold de ruta lazy. App/API usan DB única temporal y proveedor stub loopback; `E2E_RATE_LIMIT=off` permite 18 registros sintéticos, sin llamar proveedor LAN ni usar `localhost:4200` para escrituras. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-recipes-ai-final-verify2/` (1440×900, 393×851, 320×568 y 568×320). Primer intento sin `E2E_CHROME_BIN` no lanzó navegador (binario Playwright ausente); repetido con Chrome del sistema pasó. El gate global de coverage frontend sigue abierto en QA-04c. Rollback: revertir juntos el flujo de borradores en `server/src/routes/ai.routes.ts`, el contrato de `AiService` y UI en `frontend/src/app/core/services/ai.service.ts`/`recipes.component.ts`/`dict/recipes.ts`, sus pruebas `*.spec.ts` y el E2E `tests/e2e/recipes-ai-generation.spec.ts`.
 
+**Revalidación de E2E por CI (2026-10-08):** el catálogo vigente trae recetas semilla y el diálogo de IA
+tiene tres pasos; se quitaron aserciones que esperaban catálogo vacío o buscaban controles del paso 3
+antes de llegar a él. Las regresiones de catálogo, favoritos, ficha y pantry/iconografía pasaron **11/11**
+en Chromium; la tanda ampliada Chromium + Pixel 5 pasó todos los casos al corregir el helper de scroll
+documentado en QA-LAYOUT.RECIPE-DETAIL.1. Los fixtures siguieron siendo sintéticos y no se llamó a la IA
+real. El gate de cobertura global de esta unidad sigue abierto y no se marca aquí.
+
 ## QA-AUTH.FORGOT.1 · resultado honesto y no enumeración en recuperación (spec-first)
 
 **Fuente revalidada (2026-10-01):** `POST /api/auth/forgot-password` valida formato en API y responde 200 indistinguible para cuenta existente/inexistente, pero solo consulta la cuenta; no hay servicio/configuración de email ni generación de enlaces en el repo. La pantalla, su CTA y la respuesta API afirman falsamente que se envió un enlace. `ForgotPasswordComponent.onSubmit()` valida vacío pero no formato; el input es un `ControlValueAccessor` y el `ngSubmit` permite enviar `type=email` inválido. Playwright aislado reprodujo que `not-an-email` hace POST/400. La solicitud tampoco tiene contexto `SILENT_TOAST`, por lo que un error 5xx genera el toast global genérico además del mensaje local; actualmente la rama `error` también llama `toastService.success()`. El mismo E2E midió un CTA de 42 px, por debajo del objetivo táctil de 44 px. Mantener no enumeración, copy honesto en formulario/CTA/API/aviso de que recuperación por correo aún no está disponible, validación local de email y error contextual recuperable sin duplicar toast; botón accesible ≥44 px. El endpoint se aislará en un módulo pequeño para aplicar el gate de cobertura por fichero sin cambiar los gates; no se implementa proveedor de correo sin credenciales/decisión de producto.
@@ -1477,6 +1484,12 @@ Playwright aislado en Chromium escritorio y Pixel 5: **2/2**. La misma sesión c
 **Fuente revalidada antes de implementar (2026-10-02):** `HOGARIA-SPEC.md` §12aj exige que el panel del icono permita parar todo, detener un trabajo queued/running y reintentar uno failed/stopped; el retry debe borrar sus líneas parciales antes de procesar de nuevo. `ReceiptQueueComponent` llamaba a `ReceiptsService` para esas acciones y actualizaba la vista con un refresh, pero no tenía prueba unitaria. `tests/e2e/receipts.spec.ts` solo comprobaba que aparecía el botón de retry sin pulsarlo; su prueba de «Parar todo» usaba una subida sin proveedor y condicionaba el click a que el botón existiera, por lo que no acreditaba transición ni aborto reales. Las E2E del gestor IA por proveedor verificaban su propio dispatcher, no los controles del icono de tickets. Se conserva el panel global ya presente; esta unidad verifica sus acciones y su ciclo de datos, no reabre la geometría cerrada en QA-UI.1.
 
 **Evidencia QA-RECEIPT-QUEUE.ACTIONS.1 (2026-10-02):** una primera E2E reprodujo que «Abrir» cerraba sin navegar porque el panel se desmontaba antes del click de `RouterLink`; también midió «Parar» con solo 22 px de alto. Se movió el cierre a `NavigationEnd` y se habilitó el `touchTarget` de los controles del panel. La E2E aislada intercepta Google Fonts (sin acceso externo), configura un proveedor sintético loopback y consulta los estados persistidos por API. Las capturas contienen solo fixture sintética.
+
+**Revalidación CI (2026-10-08):** las fixtures E2E de streaming y respuesta sintética se alinearon con el
+buffer de redacción y el esquema estricto vigente (incluidos `purchaseDate`, campos nullable y
+`warnings`). La lectura del panel se sincroniza con el snapshot asíncrono y se usa el selector actual de
+historial. Las suites de acciones y panel volvieron a pasar en Chromium y Pixel 5 con SQLite/puertos
+temporales; el proveedor siguió siendo loopback, sin llamadas a servicios externos.
 
 - [x] Unitarias de `watch/unwatch`, stop-all, stop por id en queued/running, retry por id en failed/stopped y job sin `receipt_id`; cada mutación refresca incluso al resolver el servicio con `null`. `frontend`: `node ./node_modules/@angular/cli/bin/ng.js test --no-watch --include=src/app/shared/components/receipts/receipt-queue.component.spec.ts --karma-config=karma.conf.js --browsers=ChromeHeadlessLocal --progress=false` — **9/9**.
 - [x] Baseline Playwright aislado sin click condicional: `E2E_RATE_LIMIT=on`, `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/receipt-queue-actions.spec.ts`; el botón debe estar visible para hacer click. Proveedor solo `127.0.0.1` con hold/failure/success y oráculo de estados por API.
@@ -1976,6 +1989,12 @@ Capturas sintéticas revisadas: `.e2e-screenshots/qa-layout-recipe-current/recip
 ejecutó **22/22** pruebas; `modal.component.ts` cubre **90,21/79,62/100/91,11 % S/B/F/L** y
 `page-container.component.ts` **100/100/100/100 %** (sin ramas en el archivo). El comando enfocado sale
 con código 1 únicamente porque el agregado parcial no alcanza el gate global 80 % (**53,26/28,27/46,96/57,53 %**); no se cambió ningún umbral y el gate global permanece abierto.
+
+**Revalidación por CI (2026-10-08):** la E2E móvil había usado `Locator.scrollIntoViewIfNeeded()`, que
+dejó el paso final en `y=5.9 px` bajo la cabecera fija de 56 px. Se cambió la prueba a
+`Element.scrollIntoView({ block: 'start' })` para ejercitar el `scroll-margin-block` CSS existente. La
+repetición Chromium + Pixel 5 de `recipe-full-detail.spec.ts` pasó **2/2**; no hubo cambio de producción.
+La verificación WebKit/safe-area no nula sigue abierta como ya se documenta en esta unidad.
 
 ### QA-LAYOUT.MAIN-CONTENT-WIDTH.1 · mismo ancho útil en todas las vistas
 

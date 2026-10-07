@@ -189,7 +189,9 @@ test('la cabecera del calendario refluye y permanece accesible en móviles y esc
   await previousPeriod.focus();
   await expect(previousPeriod).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Hoy', exact: true })).toBeFocused();
+  await expect(
+    page.locator('.cal-top__nav').getByRole('button', { name: 'Hoy', exact: true })
+  ).toBeFocused();
   await previousPeriod.focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('h1.calendar__title')).not.toHaveText(dateBeforeKeyboardNavigation);

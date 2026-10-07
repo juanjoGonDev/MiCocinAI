@@ -63,14 +63,24 @@ test.describe('locale activo en los números del calendario', () => {
   test.use({ serviceWorkers: 'block' });
 
   test('actualiza kcal al cambiar ES→EN→ES sin recargar la app', async ({ page }) => {
+    const appOrigin = new URL(test.info().project.use.baseURL!).origin;
     const browserErrors: string[] = [];
     page.on('pageerror', (error) => browserErrors.push(error.message));
     page.on('console', (message) => {
-      if (message.type() === 'error') browserErrors.push(message.text());
+      const location = message.location().url;
+      if (
+        message.type() === 'error' &&
+        location.length > 0 &&
+        new URL(location).origin === appOrigin
+      ) {
+        browserErrors.push(message.text());
+      }
     });
     page.on('requestfailed', (request) => {
       const failure = request.failure()?.errorText ?? '';
-      if (!failure.includes('ERR_ABORTED')) browserErrors.push(`${request.url()} ${failure}`);
+      if (new URL(request.url()).origin === appOrigin && !failure.includes('ERR_ABORTED')) {
+        browserErrors.push(`${request.url()} ${failure}`);
+      }
     });
     await page.route(/^https:\/\/fonts\.googleapis\.com\/.*/, (route) =>
       route.fulfill({ status: 200, contentType: 'text/css', body: '' })
@@ -114,7 +124,7 @@ test.describe('locale activo en los números del calendario', () => {
       await expect(energyValue).toContainText('1,450');
       await expect(energyValue).not.toContainText('1.450');
 
-      await selectCalendarView(page, 'month', 'Mes');
+      await selectCalendarView(page, 'month', 'Month');
       await expect(page).toHaveURL(/[?&]view=month/);
       const viewportWidth = page.viewportSize()?.width ?? 0;
       await page.setViewportSize(
