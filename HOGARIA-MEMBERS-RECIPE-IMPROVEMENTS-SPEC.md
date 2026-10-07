@@ -1,6 +1,6 @@
 # HogarIA — miembros activos y mejoras de recetas
 
-**Estado (2026-10-07):** implementación en curso; edición dedicada y búsqueda/selección de fotos verificadas. Queda un criterio: completar el smoke IA real de profundidad de receta. La unidad de formato JSON estricto pasa sus contratos y pruebas sintéticas; se conserva evidencia de la respuesta 502 intermitente durante smoke y de que los reintentos actuales están bloqueados por el preflight de privacidad. La cobertura semántica exhaustiva de alergias queda explícitamente fuera de la garantía del producto; se adopta el límite seguro aprobado por el usuario y documentado abajo. La generación fotográfica sigue desactivada mientras el catálogo no anuncie salida raster; el usuario autoriza llamadas de IA sin límite e indica que el problema de formato JSON debería estar resuelto.
+**Estado (2026-10-07):** implementación en curso; edición dedicada y búsqueda/selección de fotos verificadas. Quedan por cerrar el smoke IA real de profundidad de receta y la nueva unidad de hooks Lefthook solicitada para el repositorio. La unidad de formato JSON estricto pasa sus contratos y pruebas sintéticas; se conserva evidencia de la respuesta 502 intermitente durante smoke y de que los reintentos actuales están bloqueados por el preflight de privacidad. La cobertura semántica exhaustiva de alergias queda explícitamente fuera de la garantía del producto; se adopta el límite seguro aprobado por el usuario y documentado abajo. La generación fotográfica sigue desactivada mientras el catálogo no anuncie salida raster; el usuario autoriza llamadas de IA sin límite e indica que el problema de formato JSON debería estar resuelto.
 
 **Rama/PR:** `arena/01a0a6c2-micocinai` / Draft PR #41.
 **Fuente vigente:** `HOGARIA-SPEC.md` §12aq, `QA-RECIPE.DETAIL-LEVELS-AND-MEDIA.1`, `QA-RECIPE.FULL-DETAIL-VIEW.1`, `QA-RECIPE.EDIT-DEDICATED-VIEW.1` y `QA-HOUSEHOLD.MULTI-AI.1`.
@@ -228,6 +228,15 @@ Playwright con Chrome, dos proyectos (escritorio y móvil), usuarios/SQLite sint
 - E2E real aislado, SQLite temporal, Chrome instalado: 2/2 (`chromium` y `mobile-chrome`, 320 px); rectángulos de acciones 96 × 44 px, texto íntegro y sin overflow.
 - Capturas sintéticas revisadas: `.e2e-screenshots/qa-button-geometry/chromium-event-actions.png` y `.e2e-screenshots/qa-button-geometry/mobile-chrome-event-actions.png`.
 - `pnpm run lint:client` ejecuta y supera `check:ui`, pero Angular ESLint no puede arrancar en este entorno porque falta el paquete local `@angular-eslint/builder`; no se instaló ni cambió ninguna dependencia.
+
+### `QA-REPOSITORY.LEFTHOOK.1`
+
+- [ ] Añadir Lefthook fijado a la misma versión que WebAPI (`2.1.8`) e incluirlo en las allowlists de build scripts de pnpm necesarias para que una instalación estándar instale los hooks; no copiar scripts de instalación específicos de WebAPI ni añadir un mecanismo para saltarlos.
+- [ ] Configurar `pre-commit` serial: formatear los archivos staged compatibles con Prettier y volver a stagear las correcciones (`stage_fixed`), después ejecutar el lint real del repositorio (`pnpm run lint`). No copiar verificaciones de entorno que este proyecto no ofrece.
+- [ ] Configurar `pre-push` serial: chequeo de formato, lint, `pnpm run typecheck:e2e`, `pnpm run knip` y la suite `pnpm run test`; la suite debe permanecer aislada de la base de datos normal y no invocar proveedores reales. El smoke IA real sigue siendo opt-in y fuera de hooks automáticos.
+- [ ] Verificar en Git for Windows que la instalación deja hooks Lefthook activos, que Prettier corrige/stagea un fixture temporal y que un fallo de pre-push bloquea un push de prueba local; registrar evidencia y comprobar un commit/push real con los hooks pasando.
+
+**Adaptación pendiente:** WebAPI usa `lefthook.yml`, `.lefthookrc` y Lefthook `2.1.8`; este repositorio debe mantener la serialización, formato y bloqueo de push, pero sustituir los comandos por sus scripts pnpm y omitir env-check/test reporters que no existen aquí. La revisión actual encontró únicamente hooks Git de muestra instalados, sin `core.hooksPath` ni hooks activos.
 
 **Reintento opt-in del smoke tras cambios de WebAPI (2026-10-07):** dos ejecuciones de `pnpm smoke:ai:real` con `HOGARIA_AI_REAL_SMOKE=1` terminaron en preflight, con **0/10** llamadas al proveedor. La consulta de solo lectura confirmó HTTP 200 en los controles locales; `requestLogging.settings.enabled=true` y `captureDetails=true`, mientras `session-recording` y `diagnostic-html` están desactivados. El preflight seguro rechaza continuar; no se modificó la configuración ni se eludió el control. La casilla de smoke real sigue abierta hasta que el servicio use ajustes compatibles con privacidad.
 
