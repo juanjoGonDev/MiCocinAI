@@ -8,6 +8,15 @@ const PREFERENCE_ICON_ARRAYS = new Map([
   ]
 ]);
 
+// Recipe guest multi-select: only the `emoji` values inside this named preset
+// table are approved. Labels, notes, and arbitrary UI copy remain emoji-free.
+const NESTED_PREFERENCE_ICON_MAPS = new Map([
+  [
+    'frontend/src/app/shared/components/ai-participants.component.ts',
+    { name: 'PREFERENCE_PRESETS', keys: ['emoji'], depth: 2 }
+  ]
+]);
+
 const FOOD_CATEGORY_MAPS = new Map([
   [
     'frontend/src/app/features/recipes/recipe-category-emoji.ts',
@@ -214,6 +223,17 @@ function semanticPreferenceRanges(file, code, tokens) {
   );
 }
 
+function nestedPreferenceRanges(file, code, tokens) {
+  const policy = NESTED_PREFERENCE_ICON_MAPS.get(file);
+  if (!policy) return [];
+  return propertyStringRanges(
+    tokens,
+    matchingBlock(code, policy.name, '{', '}'),
+    new Map(policy.keys.map((key) => [key, true])),
+    policy.depth
+  );
+}
+
 function foodCategoryRanges(file, code, tokens) {
   const policy = FOOD_CATEGORY_MAPS.get(file);
   if (!policy) return [];
@@ -235,6 +255,7 @@ export function findEmojiViolations(file, text) {
   const tokens = tokenize(code);
   const allowedRanges = [
     ...semanticPreferenceRanges(normalized, code, tokens),
+    ...nestedPreferenceRanges(normalized, code, tokens),
     ...foodCategoryRanges(normalized, code, tokens),
     ...exactTextRanges(normalized, code, tokens)
   ];

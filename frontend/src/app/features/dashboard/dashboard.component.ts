@@ -228,7 +228,7 @@ interface SuggestedRecipe {
         margin-bottom: var(--space-6);
       }
 
-      @media (min-width: 480px) {
+      @media (min-width: 600px) {
         .dashboard__stats {
           grid-template-columns: repeat(4, 1fr);
         }

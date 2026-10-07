@@ -53,10 +53,11 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
     .btn--md,
     .btn--lg {
       box-sizing: border-box;
-      min-height: 44px;
-      padding: var(--space-2) var(--space-4);
-      font-size: var(--text-sm);
+      height: var(--button-control-height);
+      padding: var(--button-control-padding-block) var(--button-control-padding-inline);
+      font-size: var(--button-control-font-size);
       border-radius: var(--radius-lg);
+      white-space: nowrap;
     }
 
     .btn--icon {

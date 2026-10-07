@@ -14,6 +14,10 @@ export const COMMON_DISLIKES = [{ value: 'Aceitunas', icon: '🫒' }];
 `
   ],
   [
+    'frontend/src/app/shared/components/ai-participants.component.ts',
+    `const PREFERENCE_PRESETS = { allergies: [{ value: 'egg', emoji: '🥚', labelKey: 'egg' }] };`
+  ],
+  [
     'frontend/src/app/features/recipes/recipe-category-emoji.ts',
     "const FOOD_CATEGORY_EMOJI: Record<string, string> = { vegetables: '🥬', frozen: '❄️' };"
   ],
@@ -30,7 +34,7 @@ export const onboardingEn = { 'onboarding.me_gusta': 'I like it 👍', 'onboardi
   ]
 ];
 
-test('allows only the approved allergy, taste, ingredient, and food-category icons', () => {
+test('allows only approved allergy, taste, recipe-preference, and category icons', () => {
   for (const [file, source] of semanticSources) {
     assert.deepEqual(findEmojiViolations(file, source), [], file);
   }
@@ -39,6 +43,7 @@ test('allows only the approved allergy, taste, ingredient, and food-category ico
 test('recognizes the currently approved source records without widening the file scope', () => {
   const files = [
     'frontend/src/app/shared/models/taste-profile.ts',
+    'frontend/src/app/shared/components/ai-participants.component.ts',
     'frontend/src/app/features/recipes/recipe-category-emoji.ts',
     'frontend/src/app/core/i18n/dict/pantry.ts',
     'frontend/src/app/core/i18n/dict/onboarding.ts'
@@ -56,6 +61,17 @@ test('detects generic emoji and decorative emoji adjacent to approved content', 
       (violation) => violation.emoji
     ),
     ['✨', '🧨', '💡', '🎉', '🪄']
+  );
+});
+
+test('allows only emoji values in recipe preference presets', () => {
+  const source = `const PREFERENCE_PRESETS = { allergies: [{ value: 'egg', emoji: '🥚', labelKey: 'egg' }] };\nconst other = '🎉';`;
+  assert.deepEqual(
+    findEmojiViolations(
+      'frontend/src/app/shared/components/ai-participants.component.ts',
+      source
+    ).map((violation) => violation.emoji),
+    ['🎉']
   );
 });
 

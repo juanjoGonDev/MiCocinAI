@@ -15,6 +15,8 @@
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
 import { join, posix } from 'node:path';
 import { findEmojiViolations } from './check-ui-emoji.mjs';
+import { findButtonGeometryViolations } from './check-ui-button-geometry.mjs';
+import { isExcludedI18nCatalogPath, isExcludedUiTestSupportPath } from './check-ui-paths.mjs';
 
 const FRONTEND = 'frontend/src';
 const UI_DIR = 'frontend/src/app/shared/components/ui';
@@ -23,7 +25,7 @@ const E2E_DIR = 'tests/e2e';
 // Cuantas reglas hay dentro. Se cuenta aqui y no a mano porque la ultima vez que se anadio una (la de
 // los selectores huerfanos) el mensaje de «sin incidencias» seguia diciendo siete, que es exactamente
 // el tipo de mentira que este fichero existe para evitar.
-const RULES = 20;
+const RULES = 21;
 
 // ---------------------------------------------------------------------------
 // Deuda heredada, declarada en voz alta.
@@ -87,7 +89,7 @@ function walk(dir, filter) {
 }
 
 const isFrontendSource = (path) =>
-  !path.endsWith('.spec.ts') &&
+  !isExcludedUiTestSupportPath(path) &&
   (path.endsWith('.ts') || path.endsWith('.html') || path.endsWith('.css'));
 const sourceFiles = walk(FRONTEND, isFrontendSource);
 // El mismo texto, entero, para las reglas que preguntan «existe esta cadena en la interfaz».
@@ -544,6 +546,16 @@ for (const file of sourceFiles) {
 // sin estado y la regla no lo ve (solo mira botones). Es mas facil de leer aqui que de descubrir en un
 // movil.
 const GLOBAL_STYLES = readFileSync('frontend/src/styles.scss', 'utf8');
+const SHARED_BUTTON_STYLES = readFileSync(
+  'frontend/src/app/shared/components/ui/button/button.component.ts',
+  'utf8'
+);
+for (const violation of findButtonGeometryViolations({
+  globalStyles: GLOBAL_STYLES,
+  buttonStyles: SHARED_BUTTON_STYLES
+})) {
+  fail('frontend/src/styles.scss', 1, violation.rule, violation.detail);
+}
 for (const [what, re] of [
   ['`button { cursor: pointer }`', /button\s*\{[^}]*cursor:\s*pointer/s],
   ['`a:hover` global', /a\s*\{[^}]*&:hover/s],
@@ -1206,7 +1218,7 @@ function literalesDe(texto, ini, fin, saltarTraducidas = true) {
     return isProse(s);
   };
   for (const file of sourceFiles) {
-    if (file.endsWith('.spec.ts') || file.includes('core/i18n')) continue;
+    if (file.endsWith('.spec.ts') || isExcludedI18nCatalogPath(file)) continue;
     const text = readFileSync(file, 'utf8');
     if (!/toast|confirm|snackbar|notification|Error/.test(text)) continue;
     for (const match of text.matchAll(SINK_CALL)) {
@@ -1355,7 +1367,8 @@ const looksDisplayText = (v) =>
   };
 
   for (const file of sourceFiles) {
-    if (!file.endsWith('.ts') || file.endsWith('.spec.ts') || file.includes('core/i18n')) continue;
+    if (!file.endsWith('.ts') || file.endsWith('.spec.ts') || isExcludedI18nCatalogPath(file))
+      continue;
     const text = textoDesnudo(readFileSync(file, 'utf8'));
 
     // 19a) El campo de presentacion de un catalogo, escrito con la frase dentro.

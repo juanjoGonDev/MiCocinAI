@@ -110,14 +110,19 @@ const FOCUSABLE_SELECTOR =
       }
 
       .modal__title {
+        flex: 1 1 auto;
+        min-width: 0;
+        margin: 0 var(--space-3) 0 0;
         font-family: var(--font-display);
         font-size: var(--text-lg);
         font-weight: var(--font-semibold);
         color: var(--text-primary);
+        overflow-wrap: anywhere;
       }
 
       .modal__close {
         display: flex;
+        flex: 0 0 44px;
         align-items: center;
         justify-content: center;
         width: 44px;
