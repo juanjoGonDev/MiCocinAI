@@ -42,6 +42,7 @@ Thumbs.db
 coverage/
 test-results/
 .e2e-screenshots/
+/.tmp/
 
 # Angular
 .angular/

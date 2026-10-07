@@ -32,6 +32,8 @@ const MADRID = 'Europe/Madrid';
 const TOKYO = 'Asia/Tokyo';
 
 describe('core/time — leer lo que manda la API', () => {
+  beforeEach(() => setDateLocale('es-ES'));
+
   it('un timestamp sin zona es UTC, no la hora del movil', () => {
     const parsed = parseInstant('2026-05-04 08:12:30');
     expect(parsed?.getTime()).toBe(Date.UTC(2026, 4, 4, 8, 12, 30));

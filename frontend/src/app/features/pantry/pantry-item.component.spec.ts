@@ -7,6 +7,7 @@ import { PantryService } from '../../core/services/pantry.service';
 import { ShoppingService } from '../../core/services/shopping.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { ToastService } from '../../core/services/toast.service';
+import { dateLocale, setDateLocale } from '../../core/time';
 import { I18nService } from '../../core/services/i18n.service';
 import type { PantryProduct } from '../../shared/models/pantry.model';
 import type { PriceObservation } from '../../shared/models/shopping.model';
@@ -47,8 +48,11 @@ describe('PantryItemComponent', () => {
   let shopping: jasmine.SpyObj<ShoppingService>;
   let confirm: jasmine.SpyObj<ConfirmService>;
   let toast: jasmine.SpyObj<ToastService>;
+  let previousLocale: string;
 
   beforeEach(async () => {
+    previousLocale = dateLocale();
+    setDateLocale('es-ES');
     const categories = [
       { key: 'vegetables', color: '#12AB34', name: 'Verduras' },
       { key: 'invalid-color', color: 'transparent', name: 'Personalizada' }
@@ -95,6 +99,8 @@ describe('PantryItemComponent', () => {
     fixture = TestBed.createComponent(PantryItemComponent);
     component = fixture.componentInstance;
   });
+
+  afterEach(() => setDateLocale(previousLocale));
 
   it('loads categories and product, exposes image changes, and records a missing product', async () => {
     fixture.detectChanges();

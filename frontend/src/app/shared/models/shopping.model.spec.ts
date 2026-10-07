@@ -12,6 +12,7 @@ import {
   parseMoneyToMinor,
   ShoppingListItem
 } from './shopping.model';
+import { dateLocale, setDateLocale } from '../../core/time';
 
 /**
  * Las dos unicas funciones de dinero de la pantalla. Se prueban aqui y no en el
@@ -67,10 +68,16 @@ describe('shopping.model — dinero', () => {
 
 describe('shopping.model — cantidades y secciones', () => {
   it('una unidad suelta no se pinta: el 1 de «1 Leche» es ruido', () => {
-    expect(formatQuantity(1, null)).toBe('');
-    expect(formatQuantity(2, null)).toBe('2×');
-    expect(formatQuantity(2, 'kg')).toBe('2 kg');
-    expect(formatQuantity(0.5, 'kg')).toBe('0,5 kg');
+    const previousLocale = dateLocale();
+    try {
+      setDateLocale('es-ES');
+      expect(formatQuantity(1, null)).toBe('');
+      expect(formatQuantity(2, null)).toBe('2×');
+      expect(formatQuantity(2, 'kg')).toBe('2 kg');
+      expect(formatQuantity(0.5, 'kg')).toBe('0,5 kg');
+    } finally {
+      setDateLocale(previousLocale);
+    }
   });
 
   function item(name: string, category: string | null, position = 0): ShoppingListItem {

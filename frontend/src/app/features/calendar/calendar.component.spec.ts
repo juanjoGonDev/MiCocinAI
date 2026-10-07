@@ -15,6 +15,7 @@ import { PantryService } from '../../core/services/pantry.service';
 import { RecipeService } from '../../core/services/recipe.service';
 import { TasteProfileService } from '../../core/services/taste-profile.service';
 import { ToastService } from '../../core/services/toast.service';
+import { dateLocale, setDateLocale } from '../../core/time';
 import type { CalendarMeal, HouseholdEvent } from '../../shared/models/calendar.model';
 import type { TasteGoal } from '../../shared/models/taste-profile';
 import { CalendarComponent } from './calendar.component';
@@ -45,12 +46,15 @@ describe('CalendarComponent meal deletion feedback', () => {
   let tasteLoad: jasmine.Spy;
   let mealsByDate: Map<string, CalendarMeal[]>;
   let routerNavigate: jasmine.Spy;
+  let previousLocale: string;
   let pantryService: {
     loadCaducidades: jasmine.Spy;
     caducidades: WritableSignal<{ name: string; daysLeft: number | null }[]>;
   };
 
   beforeEach(async () => {
+    previousLocale = dateLocale();
+    setDateLocale('es-ES');
     calendar = jasmine.createSpyObj<CalendarService>('CalendarService', [
       'loadRange',
       'loadHouseholdEvents',
@@ -197,6 +201,8 @@ describe('CalendarComponent meal deletion feedback', () => {
     fixture = TestBed.createComponent(CalendarComponent);
     component = fixture.componentInstance;
   });
+
+  afterEach(() => setDateLocale(previousLocale));
 
   it('restores the selected calendar view and anchor when route query parameters change', () => {
     routeParams.next(convertToParamMap({ view: 'month', date: '2026-11-15' }));

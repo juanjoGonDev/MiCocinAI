@@ -482,7 +482,9 @@ const EXEMPT: Record<string, string> = {
   shelfAnswerSchema:
     'la respuesta del modelo al pedirle vidas utiles (## 12ak): la escribe la IA, no un formulario de la interfaz',
   mealReplacementCandidateSchema:
-    'respuesta estructurada temporal del proveedor de IA, no es un formulario de usuario'
+    'respuesta estructurada temporal del proveedor de IA, no es un formulario de usuario',
+  mealReplacementResponseSchema:
+    'contrato estricto de salida del modelo para sustituciones, no es un formulario de usuario'
 };
 
 function shapeOf(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | null {
