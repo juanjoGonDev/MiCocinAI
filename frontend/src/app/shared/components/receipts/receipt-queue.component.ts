@@ -1,6 +1,7 @@
 import {
   Component,
   computed,
+  DestroyRef,
   HostListener,
   inject,
   OnDestroy,
@@ -8,8 +9,9 @@ import {
   signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router, RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
+import { NavigationEnd, Router, RouterLink } from '@angular/router';
+import { filter, firstValueFrom } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ReceiptsService } from '../../../core/services/receipts.service';
 import { IconComponent } from '../ui/icon/icon.component';
 import { ButtonComponent } from '../ui/button/button.component';
@@ -90,6 +92,7 @@ import {
                 variant="ghost"
                 size="sm"
                 type="button"
+                [touchTarget]="true"
                 [loading]="service.queueBusy()"
                 (onClick)="pararTodo()"
               >
@@ -119,11 +122,7 @@ import {
                     aria-hidden="true"
                   ></span>
                   <div class="rq__job-main">
-                    <a
-                      class="rq__job-name"
-                      [routerLink]="['/receipts', trabajo.receipt_id]"
-                      (click)="closePanel()"
-                    >
+                    <a class="rq__job-name" [routerLink]="['/receipts', trabajo.receipt_id]">
                       {{ trabajo.store || trabajo.file_name || ('receipts.titulo' | t) }}
                     </a>
                     <span class="rq__job-meta">
@@ -156,6 +155,7 @@ import {
                         variant="ghost"
                         size="sm"
                         type="button"
+                        [touchTarget]="true"
                         (onClick)="pararUno(trabajo)"
                       >
                         {{ 'receipts.parar' | t }}
@@ -165,6 +165,7 @@ import {
                         variant="outline"
                         size="sm"
                         type="button"
+                        [touchTarget]="true"
                         (onClick)="reintentarUno(trabajo)"
                       >
                         {{ 'receipts.reintentar' | t }}
@@ -174,8 +175,8 @@ import {
                       variant="ghost"
                       size="sm"
                       type="button"
+                      [touchTarget]="true"
                       [routerLink]="['/receipts', trabajo.receipt_id]"
-                      (onClick)="closePanel()"
                     >
                       {{ 'receipts.abrir' | t }}
                     </app-button>
@@ -410,6 +411,7 @@ import {
 export class ReceiptQueueComponent implements OnInit, OnDestroy {
   readonly service = inject(ReceiptsService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly panelOpen = signal(false);
   readonly panelPosition = signal<ReceiptQueuePanelPosition | null>(null);
@@ -430,6 +432,12 @@ export class ReceiptQueueComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.service.watch();
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe(() => this.closePanel());
   }
 
   ngOnDestroy(): void {

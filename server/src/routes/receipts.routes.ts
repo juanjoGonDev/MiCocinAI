@@ -11,13 +11,9 @@ import {
 import { storeTicket, detectarKindTicket } from '../utils/uploads.js';
 import { ensureDefaultCategories as ensurePantryCategories } from '../utils/pantry-categories.js';
 import { productKeyOf } from '../utils/product-key.js';
-import {
-  encolarTicket,
-  pararTrabajo,
-  pararTodo,
-  reencolar,
-  registrarTienda
-} from '../utils/ticket-queue.js';
+import { activeHouseholdId } from '../utils/household-context.js';
+import { queueProductImageSearch } from '../utils/product-image-search.js';
+import { encolarTicket, pararTrabajo, reencolar, registrarTienda } from '../utils/ticket-queue.js';
 
 /**
  * La lectura de tickets por IA (HOGARIA-SPEC ## 12aj).
@@ -37,11 +33,13 @@ receiptsRoutes.use('*', authMiddleware);
 const MAX_TICKET_BYTES = 10 * 1024 * 1024;
 
 function filaDeRecibo(db: ReturnType<typeof getDatabase>, userId: string, id: string) {
-  const hogar = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
-    { household_id: string | null } | undefined;
+  const householdId = activeHouseholdId(db, userId);
   return db
-    .prepare('SELECT * FROM receipts WHERE id = ? AND (user_id = ? OR household_id = ?)')
-    .get(id, userId, hogar?.household_id ?? null) as Record<string, unknown> | undefined;
+    .prepare(
+      `SELECT * FROM receipts WHERE id = ?
+       AND (household_id = ? OR (household_id IS NULL AND user_id = ?))`
+    )
+    .get(id, householdId, userId) as Record<string, unknown> | undefined;
 }
 
 function pintar(recibo: Record<string, any>, items: number) {
@@ -103,19 +101,20 @@ receiptsRoutes.post('/', async (c) => {
 
   const url = storeTicket(userId, bytes, kind);
   const id = nanoid();
-  const hogar = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
-    { household_id: string | null } | undefined;
+  const householdId = activeHouseholdId(db, userId);
   db.prepare(
-    `INSERT INTO receipts (id, user_id, household_id, status, file_url, file_kind, file_name, file_bytes)
-     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)`
+    `INSERT INTO receipts
+       (id, user_id, household_id, status, file_url, file_kind, file_name, file_bytes, ai_output_language)
+     VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?)`
   ).run(
     id,
     userId,
-    hogar?.household_id ?? null,
+    householdId,
     url,
     kind,
     (fichero.name || '').slice(0, 120),
-    bytes.byteLength
+    bytes.byteLength,
+    c.get('appLanguage')
   );
   encolarTicket(db, userId, id);
 
@@ -126,16 +125,19 @@ receiptsRoutes.post('/', async (c) => {
 receiptsRoutes.get('/queue', async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();
+  const householdId = activeHouseholdId(db, userId);
   const trabajos = db
     .prepare(
       `SELECT j.id, j.status, j.attempts, j.max_attempts, j.error_code, j.created_at,
               r.id AS receipt_id, r.store, r.file_name, r.status AS receipt_status,
               (SELECT COUNT(*) FROM receipt_items WHERE receipt_id = r.id) AS items
        FROM ai_jobs j LEFT JOIN receipts r ON r.id = j.receipt_id
-       WHERE j.user_id = ? AND j.status IN ('queued', 'running', 'failed', 'stopped')
+       WHERE j.user_id = ? AND j.kind = 'receipt'
+       AND (r.household_id = ? OR (r.household_id IS NULL AND r.user_id = ?))
+       AND j.status IN ('queued', 'running', 'failed', 'stopped')
        ORDER BY j.created_at DESC LIMIT 50`
     )
-    .all(userId) as any[];
+    .all(userId, householdId, userId) as any[];
   return c.json({
     success: true,
     data: {
@@ -150,7 +152,23 @@ receiptsRoutes.get('/queue', async (c) => {
 });
 
 receiptsRoutes.post('/queue/stop', async (c) => {
-  const resultado = pararTodo(c.get('userId'));
+  const userId = c.get('userId');
+  const db = getDatabase();
+  const householdId = activeHouseholdId(db, userId);
+  const jobs = db
+    .prepare(
+      `SELECT j.id, j.status FROM ai_jobs j JOIN receipts r ON r.id = j.receipt_id
+       WHERE j.user_id = ? AND j.kind = 'receipt'
+         AND (r.household_id = ? OR (r.household_id IS NULL AND r.user_id = ?))
+         AND j.status IN ('queued', 'running')`
+    )
+    .all(userId, householdId, userId) as { id: string; status: string }[];
+  const resultado = { cancelados: 0, detenidos: 0 };
+  for (const job of jobs) {
+    if (!pararTrabajo(job.id)) continue;
+    if (job.status === 'running') resultado.cancelados += 1;
+    else resultado.detenidos += 1;
+  }
   return c.json({ success: true, data: resultado });
 });
 
@@ -165,8 +183,7 @@ receiptsRoutes.get('/', async (c) => {
       400
     );
   }
-  const hogar = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
-    { household_id: string | null } | undefined;
+  const householdId = activeHouseholdId(db, userId);
   const scoped = scope !== 'all';
   const parsedLimit = Number(c.req.query('limit'));
   const limit = Number.isInteger(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 50;
@@ -187,10 +204,10 @@ receiptsRoutes.get('/', async (c) => {
   const recibos = db
     .prepare(
       `SELECT r.*, (SELECT COUNT(*) FROM receipt_items i WHERE i.receipt_id = r.id) AS items
-       FROM receipts r WHERE (r.user_id = ? OR r.household_id = ?) ${statusFilter}
+       FROM receipts r WHERE (r.household_id = ? OR (r.household_id IS NULL AND r.user_id = ?)) ${statusFilter}
        ${order} LIMIT ? OFFSET ?`
     )
-    .all(userId, hogar?.household_id ?? null, pageSize, scoped ? offset : 0) as any[];
+    .all(householdId, userId, pageSize, scoped ? offset : 0) as any[];
   const hasMore = scope === 'history' && recibos.length > limit;
   const pagina = scope === 'history' ? recibos.slice(0, limit) : recibos;
   return c.json({
@@ -459,16 +476,14 @@ receiptsRoutes.post('/:id/confirm', async (c) => {
     );
   }
 
-  const hogar = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
-    { household_id: string | null } | undefined;
-  const householdId = hogar?.household_id ?? null;
   const tienda = String(recibo.store ?? '').trim() || null;
-  if (tienda) registrarTienda(db, userId, tienda);
-
+  const householdId = typeof recibo.household_id === 'string' ? recibo.household_id : null;
+  if (tienda) registrarTienda(db, userId, tienda, householdId);
   let precios = 0;
   let pantryMoved = 0;
   let pantryMerged = 0;
   let categoriasValidas = new Set<string>();
+  const productosParaBuscarImagen = new Set<string>();
 
   db.transaction(() => {
     ensurePantryCategories(db, userId, householdId);
@@ -478,9 +493,10 @@ receiptsRoutes.post('/:id/confirm', async (c) => {
       (
         db
           .prepare(
-            'SELECT key FROM pantry_categories WHERE user_id = ? OR (household_id IS NOT NULL AND household_id = ?)'
+            `SELECT key FROM pantry_categories
+             WHERE household_id = ? OR (household_id IS NULL AND user_id = ?)`
           )
-          .all(userId, householdId) as { key: string }[]
+          .all(householdId, userId) as { key: string }[]
       ).map((fila) => fila.key)
     );
     const apuntaPrecio = db.prepare(
@@ -490,7 +506,8 @@ receiptsRoutes.post('/:id/confirm', async (c) => {
     );
     const buscaFicha = db.prepare(
       `SELECT id, name, quantity FROM ingredients
-       WHERE (user_id = ? OR household_id = ?) AND lower(trim(name)) = lower(trim(?))`
+       WHERE (household_id = ? OR (household_id IS NULL AND user_id = ?))
+         AND lower(trim(name)) = lower(trim(?))`
     );
     const sumaStock = db.prepare(
       'UPDATE ingredients SET quantity = quantity + ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
@@ -522,7 +539,7 @@ receiptsRoutes.post('/:id/confirm', async (c) => {
       // ——— al inventario, con la categoria revisada: la regla de duplicados es la del vuelco de
       // la compra (## 12ag): misma ficha con stock SUMA; ficha a cero REPONE; sin ficha CREA —
       // pero aqui la categoria la decide la revision, no la reserva.
-      const candidatos = buscaFicha.all(userId, householdId, linea.name) as {
+      const candidatos = buscaFicha.all(householdId, userId, linea.name) as {
         id: string;
         name: string;
         quantity: number;
@@ -537,13 +554,15 @@ receiptsRoutes.post('/:id/confirm', async (c) => {
           reponeStock.run(cantidad, ficha.id);
           pantryMoved += 1;
         }
+        productosParaBuscarImagen.add(ficha.id);
         continue;
       }
       const categoria = categoriasValidas.has(String(linea.category))
         ? String(linea.category)
         : 'other';
+      const ingredientId = nanoid();
       meteFicha.run(
-        nanoid(),
+        ingredientId,
         userId,
         householdId,
         linea.name,
@@ -551,6 +570,7 @@ receiptsRoutes.post('/:id/confirm', async (c) => {
         cantidad,
         linea.unit ?? 'unit'
       );
+      productosParaBuscarImagen.add(ingredientId);
       pantryMoved += 1;
     }
 
@@ -558,6 +578,14 @@ receiptsRoutes.post('/:id/confirm', async (c) => {
       `UPDATE receipts SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).run(recibo.id);
   })();
+
+  for (const ingredientId of productosParaBuscarImagen) {
+    try {
+      queueProductImageSearch(db, userId, ingredientId);
+    } catch {
+      // La búsqueda de imagen no invalida la confirmación del ticket.
+    }
+  }
 
   return c.json({
     success: true,

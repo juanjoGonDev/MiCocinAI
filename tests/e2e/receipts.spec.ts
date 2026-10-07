@@ -882,6 +882,138 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
   }
 });
 
+test.describe('metadatos manuales en reintentos de tickets', () => {
+  test('conserva metadatos manuales tras fallo y reintento', async ({ page }) => {
+    const respuestaDeReintento = {
+      lines: [],
+      store: 'Tienda que detecta el reintento',
+      purchaseDate: '2020-01-02',
+      currency: 'EUR',
+      totalMinor: 0,
+      warnings: []
+    };
+    const proveedor = await iniciarProveedorDeTickets(
+      respuestaDeReintento,
+      async (_request, index) => {
+        // The worker makes a non-streaming fallback after a provider fails before sending any delta.
+        if (index < 2) throw new Error('synthetic first-attempt failure');
+      }
+    );
+    const erroresPagina: string[] = [];
+    page.on('pageerror', (error) => erroresPagina.push(`${error.name}: ${error.message}`));
+
+    try {
+      await registerAndGoto(page, '/receipts');
+      const token = await tokenOf(page);
+      const configuration = await page.request.post('/api/ai/configs', {
+        headers: { authorization: `Bearer ${token}` },
+        data: {
+          name: 'Proveedor sintético de reintento de tickets',
+          provider: 'custom',
+          baseUrl: proveedor.baseUrl,
+          apiKey: 'synthetic-e2e-only',
+          model: 'synthetic-ticket-retry-model',
+          timeout: 10_000,
+          retryAttempts: 0
+        }
+      });
+      expect(configuration.status()).toBe(201);
+
+      const uploadResponse = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === '/api/receipts' &&
+          response.request().method() === 'POST'
+      );
+      await page.setInputFiles('input[name="ticketFile"]', {
+        name: 'ticket-reintento-sintetico.png',
+        mimeType: 'image/png',
+        buffer: pngDeMentira()
+      });
+      const uploadedResponse = await uploadResponse;
+      expect(uploadedResponse.status()).toBe(201);
+      const uploadBody = (await uploadedResponse.json()) as { data: { id: string } };
+      const receiptId = uploadBody.data.id;
+      expect(receiptId).toBeTruthy();
+
+      const detailPath = `/api/receipts/${receiptId}`;
+      const detailHeaders = { authorization: `Bearer ${token}` };
+      const receiptStatus = async () => {
+        const response = await page.request.get(detailPath, { headers: detailHeaders });
+        return ((await response.json()) as { data: { status: string } }).data.status;
+      };
+
+      await expect.poll(() => proveedor.solicitudes.length, { timeout: 20_000 }).toBe(2);
+      await expect.poll(receiptStatus, { timeout: 20_000 }).toBe('failed');
+      expect(proveedor.solicitudes[0].stream).toBe(true);
+      expect(proveedor.solicitudes[1].stream).toBeUndefined();
+      expect(trabajosDeTicket(receiptId)).toBe(1);
+
+      await page.goto(`/receipts/${receiptId}`);
+      const storeField = page.getByLabel('Tienda');
+      const purchaseDateField = page.getByLabel('Fecha de compra');
+      const manualStore = 'Tienda corregida antes del reintento';
+      const manualPurchaseDate = '2024-02-29';
+      await expect(storeField).toHaveValue('');
+      await expect(purchaseDateField).toHaveValue('');
+      await storeField.fill(manualStore);
+      await purchaseDateField.fill(manualPurchaseDate);
+
+      const metadataSaved = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === detailPath && response.request().method() === 'PATCH'
+      );
+      await page.locator('[data-test="save-receipt-metadata"]').click();
+      expect((await metadataSaved).status()).toBe(200);
+      await expect(page.locator('.ficha__metadatos-estado')).toContainText('Cambios guardados');
+      expect(await receiptStatus()).toBe('failed');
+      expect(
+        (await (await page.request.get(detailPath, { headers: detailHeaders })).json()).data
+      ).toMatchObject({
+        store: manualStore,
+        purchaseDate: manualPurchaseDate
+      });
+
+      const retryResponse = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === `${detailPath}/retry` &&
+          response.request().method() === 'POST'
+      );
+      await page.getByRole('button', { name: 'Volver a leer', exact: true }).click();
+      expect((await retryResponse).status()).toBe(200);
+      await expect.poll(() => proveedor.solicitudes.length, { timeout: 20_000 }).toBe(3);
+      await expect.poll(receiptStatus, { timeout: 20_000 }).toBe('review');
+
+      const retriedDetail = await page.request.get(detailPath, { headers: detailHeaders });
+      expect((await retriedDetail.json()).data).toMatchObject({
+        status: 'review',
+        store: manualStore,
+        purchaseDate: manualPurchaseDate
+      });
+      expect(
+        proveedor.solicitudes[2].messages?.find((message) => message.role === 'user')?.content
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'text' }),
+          expect.objectContaining({ type: 'image_url' })
+        ])
+      );
+      expect(trabajosDeTicket(receiptId)).toBe(1);
+      await expect(storeField).toHaveValue(manualStore);
+      await expect(purchaseDateField).toHaveValue(manualPurchaseDate);
+
+      await page.goto('/receipts');
+      const historyRow = page
+        .locator('[data-test="receipt-history"] [data-test="ticket-history-item"]')
+        .filter({ hasText: manualStore });
+      await expect(historyRow).toHaveCount(1);
+      await expect(historyRow.locator('.ticket__meta')).toContainText('Fecha de compra');
+      expect(erroresPagina).toEqual([]);
+    } finally {
+      await proveedor.close();
+    }
+  });
+});
+
 test.describe('metadatos editables mientras la IA trabaja', () => {
   for (const scenario of [
     {

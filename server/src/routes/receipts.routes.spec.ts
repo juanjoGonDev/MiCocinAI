@@ -28,6 +28,12 @@ async function makeUser(email: string, householdId: string | null = null) {
   db.prepare(
     'INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)'
   ).run(id, email, 'Cocinera', 'hash', householdId);
+  if (householdId && db.prepare('SELECT 1 FROM households WHERE id = ?').get(householdId)) {
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run(`member-${id}`, householdId, id);
+  }
   const config = await import('../config/app.config.js');
   return {
     id,
@@ -62,12 +68,17 @@ function archivosDeTickets(): string[] {
   return existsSync(dir) ? readdirSync(dir).sort() : [];
 }
 
-async function subirTicket(nombre = 'ticket.png', bytes: Buffer = PNG_FIRMA, tipo = 'image/png') {
+async function subirTicket(
+  nombre = 'ticket.png',
+  bytes: Buffer = PNG_FIRMA,
+  tipo = 'image/png',
+  language = 'es'
+) {
   const formulario = new FormData();
   formulario.append('file', new File([new Uint8Array(bytes)], nombre, { type: tipo }));
   const response = await app.request('/api/receipts', {
     method: 'POST',
-    headers: { authorization: `Bearer ${alice.token}` },
+    headers: { authorization: `Bearer ${alice.token}`, 'x-app-language': language },
     body: formulario
   });
   return { status: response.status, payload: (await response.json()) as any };
@@ -102,12 +113,22 @@ afterEach(() => vi.unstubAllGlobals());
 
 beforeEach(async () => {
   db.exec(
-    'DELETE FROM receipt_items; DELETE FROM ai_jobs; DELETE FROM receipts; DELETE FROM stores; DELETE FROM price_observations; DELETE FROM ingredients; DELETE FROM pantry_categories; DELETE FROM ai_configs; DELETE FROM users;'
+    'DELETE FROM receipt_items; DELETE FROM ai_jobs; DELETE FROM receipts; DELETE FROM stores; DELETE FROM price_observations; DELETE FROM ingredients; DELETE FROM pantry_categories; DELETE FROM ai_configs; DELETE FROM household_members; DELETE FROM users;'
   );
   alice = await makeUser(`alice-${Math.random().toString(36).slice(2)}@test.local`);
 });
 
 describe('POST / (subir)', () => {
+  it('fija el idioma activo como metadato del ticket antes de encolarlo', async () => {
+    const subida = await subirTicket('ticket.png', PNG_FIRMA, 'image/png', 'en');
+    const recibo = db
+      .prepare('SELECT ai_output_language FROM receipts WHERE id = ?')
+      .get(subida.payload.data.id) as { ai_output_language: string };
+
+    expect(subida.status).toBe(201);
+    expect(recibo.ai_output_language).toBe('en');
+  });
+
   it('un PNG valido entra en la cola con su trabajo, y la cola sin configuracion falla con NO_CONFIG', async () => {
     const subida = await subirTicket();
     expect(subida.status).toBe(201);
@@ -311,6 +332,100 @@ describe('la cola', () => {
 });
 
 describe('historial completo', () => {
+  it('no filtra ni abre los tickets del hogar anterior tras cambiar el hogar activo', async () => {
+    const oldHousehold = 'house-receipts-old-home';
+    const activeHousehold = 'house-receipts-active-home';
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      oldHousehold,
+      'Casa anterior',
+      'invite-receipts-old-home'
+    );
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      activeHousehold,
+      'Casa activa',
+      'invite-receipts-active-home'
+    );
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'admin', '{}')`
+    ).run('old-home-alice', oldHousehold, alice.id);
+    const oldReceiptId = 'receipt-from-old-home';
+    db.prepare(
+      `INSERT INTO receipts (id, user_id, household_id, status, file_url, file_kind, file_name)
+       VALUES (?, ?, ?, 'review', '/api/uploads/receipts/synthetic.png', 'png', 'synthetic.png')`
+    ).run(oldReceiptId, alice.id, oldHousehold);
+    db.prepare(
+      `INSERT INTO receipt_items (id, receipt_id, name, quantity, unit, category, price_minor)
+       VALUES ('old-home-item', ?, 'Leche', 2, 'l', 'dairy', 250)`
+    ).run(oldReceiptId);
+    db.prepare(
+      `INSERT INTO ai_jobs (id, user_id, kind, receipt_id, status)
+       VALUES ('old-home-job', ?, 'receipt', ?, 'running')`
+    ).run(alice.id, oldReceiptId);
+
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'admin', '{}')`
+    ).run('active-home-alice', activeHousehold, alice.id);
+    db.prepare(
+      `INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit)
+       VALUES ('active-home-milk', ?, ?, 'Leche', 'dairy', 10, 'l')`
+    ).run(alice.id, activeHousehold);
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(activeHousehold, alice.id);
+
+    const list = await call('GET', '?scope=history');
+    const detail = await call('GET', `/${oldReceiptId}`);
+    const update = await call('PATCH', `/${oldReceiptId}`, { store: 'Otra tienda' });
+    const confirm = await call('POST', `/${oldReceiptId}/confirm`);
+    const remove = await call('DELETE', `/${oldReceiptId}`);
+    const queue = await call('GET', '/queue');
+    const stopQueue = await call('POST', '/queue/stop');
+
+    expect(list.status).toBe(200);
+    expect(list.payload.data.map((receipt: any) => receipt.id)).not.toContain(oldReceiptId);
+    expect(detail.status).toBe(404);
+    expect(detail.payload.error).toBe('RECEIPT_NOT_FOUND');
+    expect(update.status).toBe(404);
+    expect(confirm.status).toBe(404);
+    expect(remove.status).toBe(404);
+    expect(queue.payload.data.jobs.map((job: any) => job.receipt_id)).not.toContain(oldReceiptId);
+    expect(stopQueue.payload.data).toEqual({ cancelados: 0, detenidos: 0 });
+    expect(db.prepare('SELECT status FROM ai_jobs WHERE id = ?').get('old-home-job')).toEqual({
+      status: 'running'
+    });
+    expect(db.prepare('SELECT status FROM receipts WHERE id = ?').get(oldReceiptId)).toEqual({
+      status: 'review'
+    });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM ingredients').get()).toEqual({ n: 1 });
+    expect(db.prepare('SELECT COUNT(*) AS n FROM price_observations').get()).toEqual({ n: 0 });
+    expect(
+      db.prepare('SELECT quantity FROM ingredients WHERE id = ?').get('active-home-milk')
+    ).toEqual({
+      quantity: 10
+    });
+
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(oldHousehold, alice.id);
+    expect((await call('GET', `/${oldReceiptId}`)).status).toBe(200);
+    expect((await call('POST', `/${oldReceiptId}/confirm`)).status).toBe(200);
+    expect(
+      db.prepare('SELECT quantity FROM ingredients WHERE id = ?').get('active-home-milk')
+    ).toEqual({
+      quantity: 10
+    });
+    expect(
+      db
+        .prepare(
+          'SELECT household_id, quantity FROM ingredients WHERE name = ? AND household_id = ?'
+        )
+        .get('Leche', oldHousehold)
+    ).toEqual({ household_id: oldHousehold, quantity: 2 });
+    expect(
+      db.prepare('SELECT household_id FROM price_observations WHERE source = ?').get('receipt')
+    ).toEqual({
+      household_id: oldHousehold
+    });
+  });
+
   it('pagina más de cien recibos terminados, ordena por compra y excluye trabajos en curso', async () => {
     const insert = db.prepare(
       `INSERT INTO receipts (id, user_id, status, store, purchase_date, file_url, file_kind, created_at)
@@ -508,9 +623,47 @@ describe('la revision y el confirm', () => {
     const pan = db.prepare('SELECT * FROM ingredients WHERE name = ?').get('Pan de pueblo') as any;
     expect(pan.category).toBe('other');
 
+    const photoJobs = db
+      .prepare(
+        `SELECT i.name, s.status, j.kind FROM product_image_searches s
+         JOIN ingredients i ON i.id = s.ingredient_id
+         JOIN ai_jobs j ON j.id = s.job_id
+        ORDER BY i.name`
+      )
+      .all() as { name: string; status: string; kind: string }[];
+    expect(photoJobs.map((job) => job.name)).toEqual(['Leche entera', 'Pan de pueblo']);
+    expect(photoJobs.every((job) => ['queued', 'running', 'complete'].includes(job.status))).toBe(
+      true
+    );
+    expect(photoJobs.every((job) => job.kind === 'product_image_search')).toBe(true);
+
     // Confirmado no se puede confirmar otra vez; sus metadatos pueden corregirse sin repetir efectos.
     expect((await call('POST', `/${id}/confirm`)).status).toBe(409);
     expect((await call('PATCH', `/${id}`, { store: 'Lidl' })).status).toBe(200);
+  });
+
+  it('reanuda la búsqueda asíncrona para una ficha ya conocida sin imagen', async () => {
+    db.prepare(
+      `INSERT INTO ingredients (id, user_id, name, category, quantity, unit, location, image)
+       VALUES ('legacy-bread', ?, 'Pan de pueblo', 'other', 0, 'ud', 'pantry', NULL)`
+    ).run(alice.id);
+    const id = await ticketEnRevision();
+
+    expect((await call('POST', `/${id}/confirm`)).status).toBe(200);
+
+    const photoJobs = db
+      .prepare(
+        `SELECT i.name, s.status, j.kind FROM product_image_searches s
+         JOIN ingredients i ON i.id = s.ingredient_id
+         JOIN ai_jobs j ON j.id = s.job_id
+        ORDER BY i.name`
+      )
+      .all() as { name: string; status: string; kind: string }[];
+    expect(photoJobs.map((job) => job.name)).toEqual(['Leche entera', 'Pan de pueblo']);
+    expect(photoJobs.every((job) => ['queued', 'running', 'complete'].includes(job.status))).toBe(
+      true
+    );
+    expect(photoJobs.every((job) => job.kind === 'product_image_search')).toBe(true);
   });
 
   it('corrige tienda y fecha tras confirmar sin duplicar stock ni observaciones', async () => {
@@ -584,6 +737,10 @@ describe('la revision y el confirm', () => {
       'invite-receipts-metadata'
     );
     db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(householdId, alice.id);
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'admin', '{}')`
+    ).run(`member-${alice.id}`, householdId, alice.id);
     const id = await ticketEnRevision();
     const member = await makeUser(
       `member-${Math.random().toString(36).slice(2)}@test.local`,
