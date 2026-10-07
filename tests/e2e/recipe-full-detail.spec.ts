@@ -264,9 +264,9 @@ test('la ficha completa presenta detalle, ajusta raciones solo en pantalla y no 
       'https://commons.wikimedia.org/wiki/File:synthetic-wash.jpg'
     );
     expect(
-      photoRequests.filter((request) => request.path.endsWith('/step-photos')).every(
-        (request) => Object.keys(request.params).length === 1 && 'scene' in request.params
-      ),
+      photoRequests
+        .filter((request) => request.path.endsWith('/step-photos'))
+        .every((request) => Object.keys(request.params).length === 1 && 'scene' in request.params),
       'las consultas solo envían una escena genérica, nunca el texto del paso'
     ).toBeTruthy();
 
@@ -360,7 +360,10 @@ test('la ficha completa presenta detalle, ajusta raciones solo en pantalla y no 
     await page.goto('/recipes#ai');
     const aiDialog = page.getByRole('dialog', { name: 'Generar Receta con IA' });
     await expect(aiDialog).toBeVisible();
-    const generationServings = page.getByLabel('Porciones', { exact: true });
+    await aiDialog.locator('[data-test="recipe-ai-next"]').click();
+    await aiDialog.locator('[data-test="recipe-ai-next"]').click();
+    await expect(aiDialog.locator('[data-test="recipe-ai-step-3"]')).toBeVisible();
+    const generationServings = aiDialog.getByLabel('Porciones', { exact: true });
     await expect(generationServings).toHaveValue('2');
     await generationServings.fill('3');
     await expect(generationServings).toHaveValue('3');

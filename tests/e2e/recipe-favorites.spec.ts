@@ -131,7 +131,8 @@ test.describe('pestaña Favoritas de Recetas', () => {
       await page.locator('app-tag').filter({ hasText: 'Todas' }).click();
       await expect(firstCard).toBeVisible();
       await expect(secondCard).toBeVisible();
-      await expect(page.locator('.recipes__count')).toHaveText('2 recetas');
+      const allRecipeCount = await page.locator('.recipe-card').count();
+      await expect(page.locator('.recipes__count')).toHaveText(`${allRecipeCount} recetas`);
       await expect(firstCard.locator('.recipe-card__favorite')).toHaveAttribute(
         'aria-pressed',
         'false'

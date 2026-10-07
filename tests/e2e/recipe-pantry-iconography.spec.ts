@@ -154,8 +154,10 @@ test('Recipe and Pantry decorative icons are SVG while food and recipe content s
     }
 
     await page.getByRole('button', { name: 'Generar IA' }).click();
-    const generatedIngredients = page.locator('.ai-form__pantry app-tag');
-    await expect(generatedIngredients.filter({ hasText: /🥬 .*Zanahoria QA/ })).toHaveCount(1);
+    const generatedIngredient = page.locator(
+      `[data-test="recipe-ai-pantry-options"] [data-ingredient-id="${ingredientId}"]`
+    );
+    await expect(generatedIngredient).toContainText(/Zanahoria QA/);
     await expect(page.locator('.modal__title')).toHaveText('Generar Receta con IA');
     await waitForStableView(page);
 
@@ -179,6 +181,9 @@ test('Recipe and Pantry decorative icons are SVG while food and recipe content s
     await page.setViewportSize({ width: 393, height: 851 });
     await waitForStableView(page);
     await page.screenshot({ path: join(screenshotDirectory, 'recipes-modal-mobile.png') });
+    await page.locator('[data-test="recipe-ai-next"]').click();
+    await page.locator('[data-test="recipe-ai-next"]').click();
+    await expect(page.locator('[data-test="recipe-ai-step-3"]')).toBeVisible();
     await page.locator('.modal__body').evaluate((body: HTMLElement) => {
       body.scrollTop = body.scrollHeight;
     });

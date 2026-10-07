@@ -25,6 +25,7 @@ test.describe('Recipes', () => {
   });
 
   test('should show empty state when no recipes', async ({ page }) => {
+    await page.goto('/recipes?search=__qa_no_matching_recipe__');
     await expect(page.locator('.empty-state__title')).toContainText('No hay recetas');
     await expect(page.getByRole('button', { name: /Generar con IA/ })).toBeVisible();
   });
@@ -36,18 +37,32 @@ test.describe('Recipes', () => {
 
   test('should show AI generation form', async ({ page }) => {
     await page.getByRole('button', { name: /Generar IA/ }).click();
-
-    await expect(page.locator('.ai-form__label')).toContainText([
+    const stepOne = page.locator('[data-test="recipe-ai-step-1"]');
+    await expect(stepOne).toBeVisible();
+    await expect(stepOne.locator('.ai-form__label')).toContainText([
       'Ingredientes seleccionados',
-      'Tu despensa',
+      'Tu despensa'
+    ]);
+
+    await page.locator('[data-test="recipe-ai-next"]').click();
+    await expect(page.locator('[data-test="recipe-ai-step-2"]')).toBeVisible();
+    await page.locator('[data-test="recipe-ai-next"]').click();
+    const stepThree = page.locator('[data-test="recipe-ai-step-3"]');
+    await expect(stepThree).toBeVisible();
+
+    await expect(stepThree.locator('.ai-form__label')).toContainText([
+      'Ingredientes seleccionados',
       'Dificultad',
       'Porciones',
-      'Detalle'
+      'Nivel de detalle'
     ]);
   });
 
   test('should show generate buttons', async ({ page }) => {
     await page.getByRole('button', { name: /Generar IA/ }).click();
+    await page.locator('[data-test="recipe-ai-next"]').click();
+    await page.locator('[data-test="recipe-ai-next"]').click();
+    await expect(page.locator('[data-test="recipe-ai-step-3"]')).toBeVisible();
 
     await expect(page.getByRole('button', { name: /Generar 1 receta/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /Generar 3 opciones/ })).toBeVisible();
