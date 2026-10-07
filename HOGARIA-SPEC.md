@@ -4825,7 +4825,9 @@ visible/reintentable; un ticket confirmado no repite el efecto de confirmación 
 
 ## 12ap — Hogares múltiples y configuración de IA propia de cada hogar
 
-**Fuente revalidada (2026-10-04):** household_members ya permite varias membresías por usuario (UNIQUE(household_id, user_id)), pero users.household_id y las rutas/UI todavía tratan una sola casa como contexto. POST /api/household/join elimina la membresía anterior y adopta datos personales; muchas rutas vuelven a leer el puntero singular. No hay selector ni invalidación central de cachés al cambiar de hogar. ai_configs sigue siendo personal (user_id), el permiso settings se guarda por membresía pero no existe una comprobación común del servidor, y la pantalla de IA expone acciones sin filtrar por permiso. ai_jobs conserva actor y config_id, pero no el hogar; el worker puede volver a resolver datos usando el hogar actual del actor después de un cambio de contexto.
+**Hallazgo inicial (2026-10-04):** household_members permitía varias membresías, pero users.household_id y las rutas/UI trataban una sola casa como contexto; crear/unirse podía sustituir la membresía anterior. ai_configs era personal, no había ACL común para la configuración IA y ai_jobs no guardaba el hogar.
+
+**Revalidación vigente (2026-10-06):** las subunidades de selector, salida, pantry y tickets ya verifican partes del contrato multi-hogar. `ai_configs.household_id` y `ai_jobs.household_id` ya existen; la configuración se resuelve dentro de la casa activa, la pantalla/las rutas de proveedor exigen `settings`, la falta de selección no cae a una configuración personal y el worker conserva el scope del job. Ver `QA-HOUSEHOLD.AI.HOME-CONFIG-AND-PINNED-JOBS.1`. Sigue sin estar certificada la integración de todas las rutas, caches, respuestas tardías, colas offline y servicios en una sola sesión.
 
 **Decisiones confirmadas por el usuario:** un usuario puede pertenecer a varios hogares y este soporte se incluye ahora. La IA queda asociada directamente a cada hogar. Reutilizar el permiso existente settings para ver y administrar su configuración. Para hogares nuevos, inicializar desde la configuración activa del creador; para hogares existentes, usar la configuración activa del admin de mayor antigüedad (joined_at ASC, user_id ASC). Conservar las configuraciones personales originales y las demás configuraciones; ningún hogar ni usuario sirve de fallback silencioso. La app está en desarrollo y se elige una migración idempotente sencilla, sin pedir decisiones adicionales por cada caso de datos.
 
@@ -4846,6 +4848,14 @@ visible/reintentable; un ticket confirmado no repite el efecto de confirmación 
 
 ### Checklist QA-HOUSEHOLD.MULTI-AI.1
 
+**Corte TDD actual — salir del hogar activo sin escoger otro implícitamente (2026-10-05):** el código de `DELETE /api/household/leave` elige hoy la membresía más reciente aunque queden varias. El contrato permite autoselección cuando queda una sola, pero exige una selección válida explícita si quedan varias.
+
+- [x] Al abandonar el hogar activo, se elimina solo esa membresía; si quedan dos o más, `users.household_id` queda `NULL`, ninguna casa aparece activa y `GET /api/household` no entrega datos de otra.
+- [x] La lista de membresías restantes sigue disponible con `activeHouseholdId: null`; `POST /api/household/active` solo permite elegir una membresía existente y a partir de entonces el hogar elegido se sirve como activo.
+- [x] Si al salir queda exactamente una membresía, la resolución vigente puede autoseleccionarla; no borrar datos ni cambiar los comportamientos de limpieza del último admin.
+
+**Evidencia TDD (2026-10-05):** la prueba de salida con varias casas falló primero al demostrar que `DELETE /leave` activaba implícitamente `target-house`; tras cambiar el puntero a `NULL`, la suite focal `household.routes.spec.ts` pasa **20/20** y su cobertura focal es **98,94 % statements / 88,34 % ramas / 100 % funciones / 100 % líneas**. `DATABASE_PATH=:memory:`; los informes se escribieron a una ruta temporal única, sin tocar artefactos previos. Se conserva la autoselección existente al quedar una sola membresía. Esta subunidad no certifica todavía el resto de multi-hogar (selector UI y aislamiento de todas las rutas siguen pendientes).
+
 - [ ] Pruebas rojas de contexto activo, alta/selección de segunda casa, membresía inválida, login con selección obsoleta y pertenencia cruzada; crear/unirse no elimina membresías o datos anteriores.
 - [ ] Cambiar rutas de crear/unirse/salir para membresías múltiples y selección activa; cubrir admin, permisos por hogar, transacciones/rollback y eliminación acotada al hogar correspondiente.
 - [ ] Proteger en servidor todas las rutas household-scoped con membresía del hogar activo; cubrir pantry, recetas, calendario, compra, tickets, categorías, caducidades, recomendaciones y SSE. Incluir operaciones personales sin hogar y casos de usuario de otra casa.
@@ -4855,6 +4865,90 @@ visible/reintentable; un ticket confirmado no repite el efecto de confirmación 
 - [ ] Resolver proveedor por hogar en cada ruta, prueba, dispatcher y worker; no hay fallback personal ni entre hogares. Probar admin/permisos settings de miembros, denegación API directa, miembro sin settings que usa IA sin ver la sección, keys ausentes y jobs aislados por casa/actor.
 - [ ] E2E Playwright aislado con dos hogares y membresías compartidas: selector/refresh, calendario, inventario, compra, recibos, IA/configuración y colas; escritorio y móvil, capturas con datos sintéticos solamente. Verificar teclado, foco, nombre accesible y bordes de breakpoints.
 - [ ] Ejecutar migraciones y tests con DB temporal y fixtures sintéticos; proveedores repetibles se simulan, smoke real opt-in solo contra loopback. Registrar comandos/resultados; typecheck, build, check-ui, E2E y coverage por archivo ≥70 % S/B/F/L sin rebajar gates existentes.
+
+### QA-HOUSEHOLD.RECEIPTS.ACTIVE-SCOPE.1 — tickets vinculados al hogar activo
+
+- [x] Lista, historial, ficha y mutaciones autorizan por la membresía/hogar activo validado; ser la persona que subió un ticket de otra casa no conserva acceso. Los tickets personales (`household_id IS NULL`) siguen siendo solo del dueño.
+- [x] La subida captura el contexto activo. La confirmación mantiene el hogar fijado en el propio recibo; no adopta categorías, stock ni precios de otra casa. La lectura de contexto de IA del recibo y el registro de tienda quedan fijados al hogar del recibo, aunque el miembro cambie después.
+- [x] La cola y “detener cola” solo exponen/alteran trabajos de ticket del actor en su hogar activo o los propios personales; trabajos genéricos y trabajos de otros hogares quedan fuera.
+- [x] TDD reproducible con dos hogares demuestra que el ticket del hogar anterior no aparece ni acepta GET/PATCH/confirm/delete, no modifica inventario/precios y vuelve a estar accesible al reactivar su hogar. La suite de categorías también prueba que el catálogo activo/personal excluye categorías del otro hogar.
+- [x] E2E Playwright real con SQLite temporal, ticket PNG sintético y dos hogares: subir, verificar en el hogar de origen, cambiar de hogar y obtener lista limpia/404, volver y recuperarlo. Chrome escritorio y móvil, **2/2**; capturas sintéticas comparables revisadas.
+- [x] Coverage full-server, sin alterar gate: `receipts.routes.ts` **84,04/73,91/85,18/85,94 %**, `ticket-queue.ts` **86,63/79,48/92,06/91,84 %**, `pantry-categories.ts` **92,22/85,95/95,45/97,88 %** S/B/F/L; total server **90,60/82,24/94,53/93,37 %**. `build` del server, `typecheck:e2e` y suite completa de cobertura pasan.
+
+**Límite de alcance:** esta unidad no añade `household_id` a cada fila `ai_jobs` ni migra la configuración/proveedor de IA al hogar. Los trabajos de ticket se acotan mediante su recibo duradero y conservan actor/config actuales; la propiedad IA por hogar, trabajos genéricos, pantry/calendario/recetas y el E2E conjunto de §12ap siguen pendientes. No se marca terminado el contrato amplio de multi-hogar.
+
+### QA-HOUSEHOLD.PANTRY.ACTIVE-SCOPE.1 — despensa bajo el hogar activo
+
+- [x] Inventario compartido incluye filas del hogar activo y filas personales del usuario; no incluye
+      filas del hogar anterior solo porque el usuario las creó. Hogar privado conserva el filtro por
+      propietario. Las rutas de ficha, edición y borrado de utensilios también comprueban el scope.
+- [x] Caducidades/lista/estadísticas usan la misma casa activa que la lista de inventario. La creación
+      de producto y utensilio captura el hogar activo y las rutas cerradas devuelven 404 sin mutar datos.
+- [x] Los contadores de impacto de producto solo agregan líneas de listas/observaciones de precio del
+      hogar activo y filas personales del usuario; nunca cuentan actividad de otro hogar.
+- [x] Con varias membresías y sin hogar activo, rutas privadas de despensa/listas fallan con 409
+      `HOUSEHOLD_SELECTION_REQUIRED`; ni leen datos ni crean filas personales por accidente.
+- [x] E2E aislado con dos hogares sintéticos comprueba cambiar, refrescar y volver: inventario y tickets
+      solo aparecen en la casa de origen. Chrome desktop y móvil, 2/2; capturas sintéticas inspeccionadas.
+- [x] Suite servidor completa y build pasan con DB de pruebas; no se usó la DB local habitual ni un
+      proveedor externo.
+- [x] `caducidades.ts` supera el gate por archivo y se añade al conjunto cubierto del servidor:
+      96,70/86,58/100/100 % S/B/F/L con sus pruebas de contrato y el test de aislamiento.
+- [x] `pantry.routes.ts` supera ≥70 % por archivo y se añade al conjunto cubierto del servidor;
+      la medición focal con `pantry.routes.spec.ts` da 91,20/76,01/95,71/93,41 % S/B/F/L.
+
+**Evidencia TDD (2026-10-06):** se añadió el escenario de dos casas al test de pantry; la primera corrida
+falló porque la consulta de ingredientes incluía el producto de la casa anterior. Después de acotar
+inventario, fichas, mutations, utensilios y caducidades al hogar activo más datos personales, la suite
+focal pasa **7/7**. E2E aislado `multi-household-switcher.spec.ts` pasa **2/2** (Chrome escritorio y
+móvil) y verifica también ticket sintético e inventario al cambiar y volver de casa. `pnpm run
+typecheck:e2e`, build servidor y `pnpm run check:ui` pasan; `pnpm run test:config` pasó entonces
+**8/8**. La suite completa con SQLite `:memory:` pasó entonces **1.132/1.132 + 1 omitida**, cobertura
+global del servidor 90,72/82,31/94,69/93,50 %; el reporte se guardó en una ruta temporal.
+`caducidades.ts` supera su gate por archivo (96,70/86,58/100/100 % S/B/F/L) y se añadió al coverage
+config. Esta subunidad mejora el aislamiento real pero no cierra el requisito de cobertura de
+`pantry.routes.ts` ni el contrato mayor §12ap.
+
+**Revalidación aislada (2026-10-06):** una prueba sintética detectó que los contadores de impacto de un
+producto agregaban líneas/precios de todas las casas; la primera corrida contó 3 en vez de las 2 filas
+del hogar activo + espacio personal. Tras unir las líneas a `shopping_lists` y aplicar el mismo scope a
+ambos agregados, `pantry.routes.spec.ts` pasa **7/7**. La prueba de hogar/listas exige ahora `409
+HOUSEHOLD_SELECTION_REQUIRED` si hay varias membresías y ninguna selección, en vez de tratarlo como
+lista personal vacía. Hogares + pantry pasan **32/32**, build del servidor pasa y la suite completa pasa
+**1.132/1.132 + 1 omitida** con cobertura global **90,72/82,34/94,69/93,50 % S/B/F/L**. SQLite fue
+memoria/temporal y el informe se escribió en una ruta temporal nueva; no se usó la base local habitual ni
+proveedor externo. Se repetirá el E2E aislado de cambio de hogar tras el cambio de middleware, sin
+sobrescribir las capturas anteriores. Revalidación posterior: E2E `multi-household-switcher.spec.ts`
+**2/2** (Chrome escritorio y móvil), cleanup del runner aislado confirmado; capturas sintéticas nuevas
+inspeccionadas en `.e2e-screenshots/2026-10-06-pantry-revalidation/multi-household-switcher/`.
+
+**Suite global revalidada (2026-10-06):** `DATABASE_PATH=:memory: pnpm --filter
+@hogaria/server run test:coverage` pasa **1.138/1.138 + 1 omitida**; cobertura agregada del servidor
+**90,63/82,25/94,72/93,42 % S/B/F/L**. `pantry.routes.ts` continúa fuera del gate por archivo
+porque su cobertura focal medida es **25,33/12,77/20,58/27,27 %**; queda abierto ampliar pruebas de
+esa ruta hasta ≥70 % en cada métrica. El cliente pasa **1.039/1.039** pruebas unitarias, pero su gate
+global conserva 80 % y sigue rojo en **78,43/66,15/77,37/79,95 %**. No se relajan umbrales. `pnpm run
+typecheck:e2e`, `pnpm run check:ui` (205/21), `pnpm run test:config` (9/9) y `git diff --check`
+pasan. El build de producción del frontend pasa con warnings de tamaño ya existentes.
+
+**Revalidación frontend (2026-10-06):** tras ampliar la cobertura de compra, la suite completa de Chrome
+Headless pasa **1.074/1.074**. Cobertura global: **80,73 % statements / 68,59 % ramas / 79,47 % funciones /
+82,16 % líneas**. S/L ya superan el gate existente de 80 %, pero ramas y funciones no; el proceso conserva
+código de salida 1 por esos dos umbrales. Informe preservado en
+`%TEMP%\hogaria-client-full-coverage-020a3994e50542a7b9bb50e987132e5a`. No se rebajó el gate ni se
+declara completa la cobertura global; quedan además las rutas/archivos individuales abiertos.
+
+**Nueva medición de cliente (2026-10-06):** tras añadir la cobertura de calendario, Chrome Headless
+pasa **1.086/1.086** pruebas. La cobertura sube a **81,79/69,34/81,61/83,19 % S/B/F/L**; statements,
+funciones y líneas pasan 80 %, ramas sigue fallando el gate global 80 %. Informe preservado en
+`%TEMP%\hogaria-client-full-coverage-1df834b3cb2e4f348ed2e3074331d95f`; ningún umbral se redujo.
+
+**Router de inventario (2026-10-06):** se añadieron pruebas de contrato para CRUD/filtros de categorías,
+productos y utensilios, borrado por lotes, catálogo pre-registrado y caducidades. `pantry.routes.spec.ts`
+pasa **18/18** con SQLite en memoria; cobertura focal **91,20/76,01/95,71/93,41 % S/B/F/L**. El router
+se añadió a `server/vitest.config.ts`; la suite completa del servidor pasa y reporta global
+**91,55/82,80/95,58/94,12 %**, con `pantry.routes.ts` en **93,64/81,93/98,57/95,55 %**. El reporte
+se escribió en `%TEMP%\hogaria-server-coverage-037a6c628d7c4ab6a2157b9987073d5b`.
 
 **Validación enfocada del runner de IA (actualizado 2026-10-05):** las suites locales de seguridad,
 control del runner, preflight de WebAPI, supervisor aislado y coordinación pasan **45/45** (`node
@@ -4870,11 +4964,130 @@ porque la WebAPI podría transmitir el ticket a un proveedor externo sin que est
 tratamiento. No se intentará rodear el bloqueo ni enviar el recibo hasta confirmar ese destino. La
 ejecución previa limpió su credencial temporal y DB aislada; el smoke real y el ticket siguen pendientes.
 
+**Nuevos smokes opt-in (2026-10-05):** todas las corridas usaron ingredientes y recibos sintéticos,
+credencial/DB temporales y dejaron la captura de cuerpos apagada; no se adjuntó ningún ticket personal.
+Con límite de configuración 90 s falló la receta compleja (1/10, HTTP 502); con 120 s falló igual
+(1/10). Tras elevarlo a 240 s —por debajo del lease actual de 300 s—, la receta detallada solicitada
+con 11 ingredientes de entrada pasó todas las comprobaciones reales, también la conexión y dos recetas alternativas
+diversas (3/10 completions HTTP 200); la siguiente llamada, de recomendaciones, devolvió HTTP 502
+(4/10), por lo que el smoke total no pasó y el resto de casos IA reales queda pendiente. La WebAPI
+local está configurada para reenviar a `chatgpt.com`; por tanto «local» describe solo el gateway, no
+el proveedor final. No hubo reintentos automáticos ni se alteró la app normal.
+
+### QA-AI.LIVE-SMOKE-DEADLINES.1
+
+- [x] La receta completa utiliza hasta 4096 tokens y timeout de configuración máximo de `240000` ms,
+      menor que el lease vigente de 300 s; no confundir WebAPI local con proveedor local/privado.
+- [x] Los límites del proxy, la petición Playwright y el timeout global tienen márgenes crecientes y
+      cubren el timeout de la configuración; nunca se reintentan automáticamente llamadas reales ni se
+      excede el máximo fijo de diez completions.
+- [x] Tests automáticos verifican la relación entre deadlines, el límite de esquema, el presupuesto de
+      completions y la limpieza tras timeout; la suite repetible sigue usando proveedor sintético.
+- [x] Repetir una vez el smoke real opt-in solo con datos sintéticos, con WebAPI local, captura de
+      cuerpos desactivada y credencial/DB temporal propias; documentar el resultado por completion sin
+      almacenar prompts, contenido de tickets ni credenciales. No adjuntar tickets personales mientras
+      el destino final sea externo sin consentimiento informado explícito.
+- [x] Si el proceso E2E aislado no puede arrancar, informar solo un estado seguro y no filtrar el
+      error bruto del sistema, el bearer ni los datos de la petición.
+
+**Evidencia (2026-10-05):** suites del runner/preflight/supervisor **51/51**; la nueva prueba Vitest
+de schema **2/2** verifica el máximo de 240 s y el default de 4096 tokens; `typecheck:e2e`, build del
+servidor/cliente, `check:ui` (196 ficheros, 20 reglas), Playwright sintético de los ocho tipos de job
+**1/1** y Prettier pasan. El smoke real no es verde: sus tres primeras respuestas fueron 200 y la
+cuarta 502 en recomendaciones; la limpieza temporal concluyó. Los gates documentados cubren el
+contrato, no convierten el HTTP 502 en éxito.
+
+**Reintento de verificación (2026-10-05):** el preflight de WebAPI volvió a confirmar el servicio y
+los controles de privacidad, pero el runner terminó con código 1 antes de iniciar Chrome; hubo **0/10**
+completions y no se envió una petición al proveedor ni ticket alguno. La comprobación posterior ya no
+encontró WebAPI disponible en `localhost:3001`; no se atribuye la parada al smoke porque no hay evidencia
+causal. Queda pendiente repetirlo cuando el servicio vuelva a estar activo. Se añadió y probó un aviso
+sanitizado para futuros errores de arranque del proceso aislado.
+
+**Revalidación de esta continuación (2026-10-05):** aunque el usuario indicó que había levantado de
+nuevo la WebAPI, `GET /health/ready` no fue accesible desde este ejecutor ni en `127.0.0.1:3001` ni
+en `localhost:3001`. No se consultó ningún endpoint autenticado, no se creó/leyó token y no se hizo
+ninguna completion real. Reintentar el preflight cuando el servicio sea alcanzable desde el ejecutor.
+
+**Revalidación (2026-10-06):** preflight de solo lectura a `http://127.0.0.1:3001/health/ready` vuelve
+a fallar por conexión no disponible desde este ejecutor; no existen variables `HOGARIA_AI_REAL_SMOKE_*`
+en el entorno de esta sesión. No se leyó/creó ningún token ni se envió una petición al proveedor. El
+smoke permanece abierto; la disponibilidad del navegador/local de desarrollo del usuario no demuestra
+que el gateway sea alcanzable desde este proceso.
+
+### QA-HOUSEHOLD.SHOPPING.OFFLINE-QUEUE-SCOPE.1 — cola ligada a su hogar de origen
+
+- [x] Cada escritura optimista que entra en la cola captura el hogar activo de origen; la clave de deduplicación también incluye ese ámbito.
+- [x] Al volver la conexión solo se envían escrituras del hogar actualmente seleccionado. Las de otras casas permanecen pendientes, en orden y sin bloquear la cola de la casa activa; volver al origen las reintenta una sola vez.
+- [x] Un cambio A → B nunca reenvía la edición de A bajo B ni aplica una respuesta tardía de A a la vista de B. La invalidación global de lecturas/SSE sigue dentro del contrato mayor §12ap.
+- [x] TDD unitario con A fallando por red, online en B sin petición, luego online de vuelta en A y persistencia única; conservar deduplicación, orden por casa, conflictos y reintentos existentes.
+- [x] E2E aislado con dos hogares prueba una lista abierta, cambio de contexto montado y retorno a la casa original en escritorio/móvil, sin 404 de reintento, mutación cruzada ni estado obsoleto.
+- [x] Alcanzar ≥70 % en statements/branches/functions/lines por cada fichero frontend modificado en esta unidad, sin rebajar el gate global: `shopping.service.ts` **97,23/87,86/100/99,46 %** y `shopping-lists.component.ts` **95,08/86,80/90,16/97,14 %** S/B/F/L (revalidación posterior; para el dato histórico del service, ver la medición anterior).
+
+**Discrepancia revalidada (2026-10-06):** `ShoppingService` guardaba `{key, send}` sin ámbito. `flush()` reintentaba siempre `queue[0]` con el hogar que estuviera seleccionado al reconectar; la cola A podía enviarse bajo B y descartarse como error de negocio. El contrato principal §12ap exige fijar la escritura al hogar que la originó.
+
+**Conducta UI precisada (2026-10-06):** si se cambia el hogar mientras está abierta una lista perteneciente a la casa anterior, la URL de detalle deja de ser válida para el nuevo contexto. Al confirmarse el cambio, el detalle debe cerrarse, limpiar la vista anterior y llevar a `/shopping`; no se vuelve a pedir el ID anterior bajo la nueva casa ni se deja una SSE abierta a esa lista.
+
+**Evidencia focal (2026-10-06):** `ShoppingService` guarda el ID de hogar en cada operación y en su clave de deduplicación; al cambiar contexto vacía estado/cache de Compra, ignora respuestas tardías de detalle/listados y reabre las lecturas/SSE bajo el nuevo hogar. Karma focal pasó **36/36** en Chrome local. Cobertura de `shopping.service.ts` en el informe focal: **97,23 % statements / 87,86 % ramas / 100 % funciones / 99,46 % líneas**; el global del corte focal no es comparable (solo incluye este archivo y dependencias cargadas), no se modificó el gate 80 % existente. Incluye A fallando, intención repetida coalescida, escrituras B sin drenar A, reintento A en orden, caché limpia, dos listados fuera de orden y una respuesta A tardía que no reemplaza el estado de B. El E2E aislado `node scripts/run-isolated-playwright.mjs --project=chromium --project=mobile-chrome tests/e2e/shopping-view-order.spec.ts --grep "switching homes"` pasó **2/2** en escritorio y móvil: con el detalle A montado, el selector cambia a B, cierra el detalle, muestra su lista sin pedir de nuevo el ID A y permite volver a A. Capturas sintéticas: `.e2e-screenshots/shopping-household-context-20261006/{chromium,mobile-chrome}.png`. El resto de servicios/cachés/colas/SSE del contrato global §12ap sigue pendiente; este cierre es específico de Compra.
+
+**Revalidación de bandeja (2026-10-06):** `shopping-lists-stream.spec.ts` pasa **2/2** en Chrome Headless. Se verificó el efecto de contexto en ambas fases reales del cambio: cierra la SSE al comenzar el cambio y vuelve a cargar listas/tiendas y abrir una SSE solo cuando el hogar B queda confirmado; al destruir la vista también cierra el stream vigente. El test inicialmente falló porque el efecto Angular aún no se había procesado; al ejecutar detección de cambios explícita, pasa sin alterar lógica de producción.
+
+**Coverage focal (2026-10-06):** service + bandeja ejecutaron **38/38** tests. El informe temporal mide `shopping.service.ts` **97,23/87,86/100/99,46 %** S/B/F/L; `shopping-lists.component.ts` **38,23/25/15/43,58 %**, por debajo del mínimo de proyecto. El gate global de Karma quedó intacto y el run parcial no alcanza el 80 % global; la cobertura de la bandeja queda pendiente.
+
+**Cierre de cobertura de la bandeja (2026-10-06):** se añadieron pruebas de estado inicial/URL, filtros y
+búsqueda retrasada, orden/paginación, estados vacíos, creación, renombrado, archivo/deshacer, borrado con
+confirmación, navegación y operaciones de la cola. El nuevo caso de página vacía encontró en rojo un rango
+imposible (`26-25`) cuando el contador global seguía teniendo filas; `rangeLabel()` ahora devuelve `0` si la
+página actual no tiene resultados y la UI mantiene su estado vacío sin presentar paginación inconsistente.
+Karma focal en Chrome Headless ejecutó **12/12** (`shopping-lists.component.spec.ts`
+y `shopping-lists-stream.spec.ts`). Cobertura actual de `shopping-lists.component.ts`: **95,22/86,96/90/97,01 %**
+S/B/F/L (259/272 statements, 120/138 branches, 54/60 functions, 227/234 lines). El comando filtrado deja rojo
+el gate global existente con **18,45/11,39/10,29/18,95 %**; es el denominador parcial, no una regresión del set
+completo, y no se cambió ningún umbral. Playwright aislado con respuesta de lista sintética pasa **2/2**
+en Chrome escritorio/móvil; al recibir 0 filas con total antiguo, muestra estado vacío y oculta el paginador,
+sin rango invertido. Capturas inspeccionadas en `.e2e-screenshots/shopping-empty-page-range/{chromium,mobile-chrome}.png`.
+Informe preservado en `%TEMP%\hogaria-shopping-lists-coverage-6352817507dd46b9877829cd895cb92a`.
+
+**Revalidación de paginación tras borrado (2026-10-06):** la revisión de la UI detectó un caso distinto: al
+eliminar la única fila de la última página, el servidor puede devolver `total=25` para un offset de 25; dejar
+el estado vacío ocultando el paginador obligaba a recargar manualmente. La nueva prueba unitaria y el E2E
+fallaron primero en Chrome con el efecto reproducible (`page` seguía en 1 y no se volvía a pedir offset 0).
+Ahora la bandeja compara la respuesta terminada con el offset vigente y, si el total ya no contiene esa
+página, vuelve a la última página válida, actualiza la URL y recarga. Karma focal de `shopping-lists.component.spec.ts`
+pasó **11/11**; el conjunto de bandeja + stream pasó **13/13**. Cobertura del archivo actual medida con
+ambos specs: **95,08 % statements / 86,80 % ramas / 90,16 % funciones / 97,14 % líneas**. El comando filtrado
+de coverage sale con 1 por el denominador global parcial (18,92/11,79/10,45/19,45 %); no se rebajó ningún gate.
+Playwright aislado `--project=chromium --project=mobile-chrome ... --grep "final row"` pasó **2/2**.
+Capturas sintéticas PC/móvil, inspeccionadas: `.e2e-screenshots/shopping-empty-page-range/{chromium,mobile-chrome}.png`.
+El rango vacío (`0`) sigue siendo defensivo para filtros o respuestas vacías; no sustituye el reanclaje cuando
+el total confirma que la página actual quedó fuera de rango.
+
+### QA-SHOPPING.PAGINATION-LAST-PAGE-DELETION.1 — reanclar cuando desaparece la última página
+
+- [x] Si la respuesta confirmada del servidor reduce el total por debajo del offset actual, volver a la última
+      página todavía válida, reemplazar el parámetro de página de la URL y recargar sin dejar un estado vacío.
+- [x] Mantener el rango `0` y el estado vacío como defensa para resultados realmente vacíos; no reiniciar una
+      página mientras su petición sigue cargando ni antes de recibir metadatos de su propio offset.
+- [x] TDD unitario primero en rojo y después verde para total reducido; Playwright aislado con lista sintética,
+      viewport de escritorio y móvil, confirma la fila/rango recuperado, el fin del paginador y la segunda
+      petición al offset 0. Capturas PC/móvil inspeccionadas.
+- [x] Archivo frontend sobre 70 % en statements, branches, functions y lines; `typecheck:e2e`, `check:ui`,
+      build cliente, formato y `git diff --check` pasan.
+
+**Evidencia (2026-10-06):** el test de componente falló primero porque quedaba en página 1; el mismo caso
+E2E falló en Chrome escritorio y móvil porque desaparecía el paginador. Tras reanclar únicamente cuando la
+lectura termina y sus metadatos coinciden con el offset visible, pasan Karma **13/13** (componente y stream)
+y Playwright **2/2** con DB temporal. El build de producción cliente termina correctamente con advertencias
+de presupuestos/imports ya existentes. La corrida completa del cliente ejecutó **1.075/1.075** tests; su
+gate global sigue pendiente: **80,74 % statements / 68,61 % ramas / 79,48 % funciones / 82,19 % líneas**,
+frente al 80 % configurado. Solo fallan ramas y funciones; se conservaron los umbrales.
+
 ### QA-HOUSEHOLD.MULTI-MEMBERSHIP.SELECTOR-API.1 — completada
 
 - [x] Agregar listado seguro de membresías propias y selección persistente del hogar activo; rechazar ID vacío o hogar ajeno sin alterar la selección.
 - [x] Crear/unirse a un segundo hogar conserva membresías previas y no traslada filas de otra casa; salir elimina solo la membresía activa y selecciona una restante.
 - [x] Una selección guardada inválida se corrige automáticamente solo cuando queda una membresía; con varias, GET del hogar no revela datos ni elige una casa implícitamente.
+- [x] Si hay varias membresías activas y el hogar activo es NULL/inválido, las rutas privadas fallan con `409 HOUSEHOLD_SELECTION_REQUIRED`; solo siguen permitidas las rutas explícitas para listar o seleccionar hogar.
 
 **Evidencia TDD (2026-10-04):** antes de la implementación, el nuevo test de membresías falló porque `GET /memberships` devolvía 404; tras añadir la API, ampliar create/join/leave y vincular `users.household_id` a selección validada, `npm test -- --reporter=dot src/routes/household.routes.spec.ts` pasa **19/19** con `DATABASE_PATH=:memory:`. `npm run build` pasa. Coverage focal del archivo `household.routes.ts`: **98.95/88.57/100/100 %** S/B/F/L. La corrida de coverage sin filtro también se intentó; falló únicamente porque no ejecuta las suites de los demás archivos del gate, sin cambiar umbrales. `git diff --check` y Prettier focal pasan. Harness runtime: Hono real de las rutas, SQLite en memoria; no UI, DB persistente ni proveedor externo.
 
@@ -4882,44 +5095,215 @@ ejecución previa limpió su credencial temporal y DB aislada; el smoke real y e
 
 **Rollback:** cada subunidad queda en commit atómico. La selección activa se puede restablecer al hogar válido anterior sin borrar membresías/datos. Desasociar IA revierte solo filas/claves nuevas creadas por la migración; no elimina las configuraciones personales originales, ai_jobs ni datos de otros hogares. No se borra ai_owner_user_id durante este cambio.
 
+### QA-HOUSEHOLD.MULTI-HOME-SWITCHER.UI.1 — subunidad verificada
+
+- [x] Con más de una membresía aparece un selector accesible basado en `app-picker`; con una sola casa no añade controles redundantes. La selección pide validación al servidor y un fallo revierte el valor visual con error accesible.
+- [x] Crear/unirse refresca las membresías y deja activa la nueva; el selector espera opciones asíncronas, cambia de casa y conserva la selección después de recargar. La barra lateral móvil deja llegar al selector.
+- [ ] No se marca el contrato mayor de §12ap: sigue faltando probar en la misma sesión el refresco
+      conjunto/aislamiento de calendario, despensa, compra, tickets y cargas tardías/colas offline.
+      La configuración IA por hogar y su job fijado tienen ahora una subunidad verificada aparte;
+      esta pantalla no certifica la integración completa.
+
+**Evidencia (2026-10-05):** test focal del selector **3/3**; `pnpm run check:ui` **204 ficheros/21 reglas**; `pnpm run typecheck:e2e` pasa. Playwright aislado con Chrome y SQLite temporal, Chromium desktop + mobile-chrome: **2/2** para crear dos hogares sintéticos, unirse, seleccionar otro, persistir tras refresh y recuperar el selector accesible; capturas inspeccionadas en `.e2e-screenshots/multi-household-switcher/{chromium,mobile-chrome}.png`. No se usaron datos reales ni se considera esto una prueba de aislamiento de todos los servicios.
+
+### QA-HOUSEHOLD.AI.HOME-CONFIG-AND-PINNED-JOBS.1 — configuración y trabajos IA fijados al hogar
+
+- [x] La configuración activa/listada se resuelve por hogar activo; las filas personales siguen disponibles solo fuera de hogares; no hay fallback entre hogar/cuenta ni al perder la selección. API de proveedor deniega contexto sin selección y comprueba `settings` en llamadas directas.
+- [x] La ruta y el enlace de configuración IA siguen el permiso `settings`: miembro sin permiso no accede ni por URL directa; si un admin lo concede, puede entrar tras refrescar membresías.
+- [x] Cada job genérico y de ticket conserva actor, `household_id` y `config_id`; el worker/claim/retry usa el scope fijado, no el hogar seleccionado después. Un ticket deriva el hogar durable del recibo; la cola de otra casa queda invisible.
+- [x] TDD con dos hogares demuestra cambio A→B antes del claim sin cambiar proveedor ni scope, cola de ticket fijada al hogar del recibo, selección faltante sin fallback personal y permiso de configuración. No se invoca proveedor real.
+- [x] Playwright aislado prueba bloqueo/concesión de `settings` y visibilidad de navegación en Chrome de escritorio y móvil con cuentas/hogar sintéticos; guardar capturas comparables sin datos personales.
+
+**Evidencia (2026-10-06):** `pnpm --filter @hogaria/server run build` pasa; suites focales `ai-queue.spec.ts`, `ai-queue.routes.spec.ts` y `ai.routes.spec.ts`: **72/72** con DB de test temporal. Karma con Chrome Headless para el guard y el menú: **13/13**. `tests/e2e/ai-household-settings-permission.spec.ts` pasa **2/2** en Chrome escritorio/móvil, incluyendo enlace oculto, redirección directa y entrada después de conceder el permiso; capturas sintéticas en `.e2e-screenshots/ai-household-settings/`. `pnpm run typecheck:e2e`, `pnpm run check:ui` (**205 ficheros/21 reglas**) y `pnpm run test:config` (**9/9**) pasan. Todas las llamadas IA del corte usan fixtures/proveedores sintéticos; no se accede al token ni al servicio WebAPI.
+
+**Límite:** esta subunidad no cierra §12ap: aislamiento de todas las rutas, invalidación conjunta de caches/respuestas tardías, colas offline y E2E multi-servicio siguen abiertos; tampoco sustituye el gate global de coverage ni la cobertura pendiente de `pantry.routes.ts`.
+
+### QA-HOUSEHOLD.CALENDAR.ACTIVE-CONTEXT.1 — invalidación del calendario al cambiar de hogar
+
+- [x] Al cambiar la revisión o selección de hogar, vaciar comidas, objetivos, eventos y errores del
+      contexto anterior e invalidar sus lecturas pendientes; conservar el rango visible como estado
+      de navegación, no como dato del hogar.
+- [x] Cuando termine el cambio, pedir de nuevo comidas/objetivos/eventos para el mismo rango bajo el
+      hogar activo. Ninguna respuesta tardía del hogar anterior puede restaurar datos antiguos.
+- [x] TDD unitario reproduce respuesta tardía de `/calendar/range` y `/calendar/events`, estado
+      limpio durante el cambio y recarga del rango visible.
+- [x] E2E con dos hogares y comidas sintéticas cambia de hogar desde el selector del shell sin salir
+      de `/calendar`; valida además una respuesta de rango antigua retenida hasta después de mostrar el
+      hogar nuevo. Chrome escritorio y móvil; capturas sintéticas inspeccionadas.
+- [x] Cobertura ≥70 % statements/branches/functions/lines de los archivos modificados en esta
+      subunidad; el gate global de Karma se revalidó sin modificar umbrales.
+
+**Evidencia (2026-10-06):** `calendar.service.spec.ts` reproduce y corrige el caso rojo en el que
+persistían los datos y las lecturas en vuelo al cambiar el hogar; la prueba focal pasa **26/26** en
+Chrome Headless. También cubre filtros/eventos y fallos de borrar/saltar/abandonar sin falsos éxitos;
+`createCalendar` devuelve el objeto del contrato y no el envelope HTTP. `calendar.service.ts` alcanza
+**95,96/80,95/92,13/95,96 % S/B/F/L** en reporte focal. `tests/e2e/calendar-household-context.spec.ts`
+usa el runner con SQLite temporal y
+dos hogares sintéticos, intercepta una respuesta real de A, cambia a B en la misma vista y libera la
+respuesta anterior después; pasa **2/2** en Chromium escritorio y Mobile Chrome. Capturas revisadas:
+`.e2e-screenshots/calendar-household-context/{chromium,mobile-chrome}.png`. `pnpm run typecheck:e2e`
+pasa. El gate global de Karma se revalidó sin alterar sus umbrales. El contrato mayor §12ap permanece
+abierto para los demás servicios/rutas y su recorrido integrado.
+
 ## 12aq — Mejoras solicitadas: planificación, objetivos y contenido multimedia
 
 Estas mejoras se desarrollan en subunidades separadas después de estabilizar el contexto multi-hogar; los detalles de proveedor se resuelven inspeccionando las integraciones existentes antes de cada subunidad, sin inventar capacidades ni guardar secretos en fixtures.
 
 ### QA-PLANNER.GOALS-AND-PARTIAL-REPLAN.1
 
-- [ ] Permitir regenerar el día completo, un plato/slot concreto o solo los platos seleccionados; lo no seleccionado mantiene identidad, horario y datos salvo una dependencia explícita aprobada.
-- [ ] Aceptar varios objetivos de planificación en una sola petición y un objetivo de texto libre; la configuración de objetivos también permite varias opciones y texto custom, no una sola opción.
-- [ ] Mantener selección y objetivos visibles/editables antes de confirmar; los errores/cancelación no dejan un plan parcialmente sobrescrito. Persistir únicamente los cambios confirmados del hogar activo.
-- [ ] TDD para validación/round-trip, objetivos vacíos o mezclados, replan parcial, cancelación, repetición/idempotencia, error IA y aislamiento entre dos hogares; validar UI real desktop/móvil.
+- [x] Permitir regenerar el día completo, un plato/slot concreto o solo los platos seleccionados; lo no seleccionado mantiene identidad, horario y datos salvo una dependencia explícita aprobada.
+- [x] Configuración y planificación aceptan varios objetivos junto a instrucciones libres; enviar, recargar y mostrar los valores plurales/custom sin degradarlos a un solo objetivo.
+- [x] Mantener selección y objetivos visibles/editables antes de confirmar; los errores/cancelación no dejan un plan parcialmente sobrescrito. Persistir únicamente los cambios confirmados del hogar activo.
+- [x] TDD para validación/round-trip, objetivos vacíos o mezclados, replan parcial, cancelación, repetición/idempotencia, error IA y aislamiento entre dos hogares; validar UI real desktop/móvil.
+
+**Fuente revalidada (2026-10-06):** preferencias, formularios del calendario, esquema, prompt y persistencia semanal admiten objetivos plurales/custom. Se agregó el flujo de replanificación selectiva con vista previa/confirmación. Al reproducir dos hogares con la misma semana, el API devolvía mezcladas las comidas por buscar solo `(user_id, week_start)`; el calendario semanal, objetivos y operaciones de comida ahora se resuelven por `(user_id, hogar activo, semana)`, y `/api/ai/replace-meal` no puede usar el proveedor del hogar activo para leer la comida de otra casa. Esto cierra el aislamiento de esta subunidad, no el contrato multi-hogar de todas las rutas de §12ap.
+
+**Subunidad en curso — objetivos plural/custom:**
+
+- [x] E2E aislado en Chrome escritorio/móvil verifica que Preferencias guarda más de un objetivo y el texto custom, recarga el estado y que Planificar envía todos los valores en `goals.types` y `goals.customInstructions`.
+- [x] Al cancelar antes de generar no se envía la petición ni se persisten comidas; el escenario sintético confirma que el flujo plural no necesita proveedor real.
+- [x] Tras reproducir y corregir discrepancias visuales, correr las pruebas focales API/UI y capturar estados sintéticos en desktop y móvil.
+
+**Evidencia (2026-10-05):** se reprodujo primero que el E2E antiguo usaba un selector `<select>` singular ya retirado; se sustituyó por cobertura de chips plurales y round-trip real de Preferencias. El E2E focal de Chrome desktop/móvil pasa **10/10**, incluye siete opciones, validación de selección vacía/custom, envío plural, cancelación sin petición, persistencia al recargar y medición sin solapamiento a 320 px. La primera aserción visual falló con **0/7 SVG**: la pantalla imprimía nombres internos de icono y los fieldsets conservaban el borde HTML por defecto. Tras reutilizar `app-icon`, un grid responsive uniforme y resetear el fieldset, pasan las diez pruebas. Las rutas AI/calendario y persistencia semanal pasan **76/76** con DB en memoria; `typecheck:e2e`, `check:ui` (196 ficheros/20 reglas) y `build:client` pasan. Capturas inspeccionadas: `.e2e-screenshots/qa-multi-goals/planner-multiple-goals-{chromium,mobile-chrome}.png`.
+
+**Subunidad pendiente — fallo al guardar objetivos:**
+
+- [x] No mostrar éxito ni cerrar el modal hasta que el PATCH de objetivos confirme el guardado.
+- [x] Ante error, conservar borrador/objetivos anteriores, mantener abierta la edición y mostrar un error accesible con opción de reintentar.
+- [x] TDD con respuesta pendiente/éxito/error y E2E sintético en escritorio/móvil; el reintento persiste en el hogar activo aislado de la prueba.
+
+Evidencia: la prueba de componente se ejecutó primero en rojo por cierre prematuro del modal; después, las pruebas focalizadas de calendario dieron 20/20. `pnpm run typecheck:e2e` pasó. El E2E real `tests/e2e/calendar-goals-save.spec.ts` pasó en Chromium y Mobile Chrome (2/2): intercepta el primer PATCH para simular un 503, comprueba estado pendiente/error accesible y borrador intacto, deja pasar el reintento al API local aislado y verifica persistencia tras recargar. La infraestructura de esta prueba crea un hogar sintético activo; no alterna entre dos hogares ni pretende certificar ese escenario. Capturas sintéticas: `.e2e-screenshots/qa-planner-goals-save/{chromium,mobile-chrome}-save-{error,confirmed}.png` (y variantes de acciones/detalle móvil).
+
+Limitación del gate global: la suite frontend completa ejecutó 968/968 pruebas, pero salió con código 1 porque la cobertura actual queda en 77.26% statements, 63.84% branches, 75.85% functions y 78.60% lines frente al umbral existente de 80%; no se rebajó el umbral. La cobertura focalizada solo con los dos specs es insuficiente para evaluar esa métrica global.
+
+**Subunidad completada — replanificación parcial, confirmación e aislamiento del hogar activo:**
+
+- [x] Selección por día, por plato y de toda la semana; comidas terminadas quedan bloqueadas. La propuesta es editable y la confirmación hace una sustitución atómica que conserva horarios, raciones y notas; un plato no seleccionado no cambia.
+- [x] Objetivos plurales/custom, miembros activos e invitados se envían a cada propuesta; cambiar cualquiera de esos datos invalida la vista previa anterior.
+- [x] Cancelar solicitudes en vuelo o fallar cualquier candidato no persiste propuestas parciales; la UI solo escribe después de confirmar el conjunto completo.
+- [x] El calendario y los objetivos del mismo usuario quedan separados entre hogares activos; lectura, edición, borrado y sustitución cruzada se deniegan. La ruta de sustitución IA tampoco revela comidas de otro hogar.
+- [x] Pruebas repetibles de repetición/idempotencia, error de proveedor, objetivo inválido, hogar sin selección, cambio entre dos hogares, API y UI real en escritorio/móvil.
+
+**Evidencia (2026-10-06):** primero falló la prueba de dos hogares porque la segunda comida caía en el calendario de la primera casa y `/range` devolvía ambas; `ensureWeekCalendar` ahora usa el hogar activo y las consultas/actualizaciones de `/api/calendar`, además del lookup IA, filtran el mismo ámbito. Servidor: `DATABASE_PATH=:memory: pnpm --filter @hogaria/server exec vitest run src/routes/calendar.routes.spec.ts src/routes/ai.routes.spec.ts src/utils/weekly-plan.spec.ts --reporter=dot` **101/101** (y luego prueba focal del test de selección activa **2/2** tras corregir la barra final de la ruta raíz); `tsc --noEmit` servidor pasa. Angular focal de replan/servicios **34/34** y typecheck app pasan. La cobertura del componente `calendar-replan.component.ts`, en directorio temporal fuera del repo, es **80,12/71,18/73,58/81,37 %** (S/B/F/L): cumple el mínimo por archivo de 70 %. El comando focal mantiene intacto y no satisface el umbral global de 80 % al medir solo seis tests; no se rebajó el gate. Playwright aislado contra app/SQLite temporales pasa **6/6** en Chromium de escritorio y Mobile Chrome; cubre selección de día/plato, objetivos plurales/custom, edición antes de guardar, error IA sin escritura parcial, recarga y conservación de platos no seleccionados. Capturas sintéticas comparables revisadas: `.e2e-screenshots/calendar-replan-57676/chromium-preview.png` y `.e2e-screenshots/calendar-replan-29712/mobile-chrome-preview.png`. `pnpm run check:ui` pasa (206 ficheros/21 reglas), `typecheck:e2e`, `git diff --check` y ambos typechecks pasan.
+
+**Revalidación TDD de contexto abierto (2026-10-06):** un cambio de hogar mientras el diálogo de replanificación permanece montado dejaba visibles platos, miembros, invitados y propuestas del hogar anterior. La prueba de componente reprodujo ese estado en rojo antes del fix. Ahora el cambio de ID o revisión invalida y limpia el borrador, cancela lectura/generación/aplicación en curso e ignora sus respuestas tardías; tampoco permite enviar ni aplicar propuestas con el contexto obsoleto. La suite focal `calendar-replan.component.spec.ts` pasa **8/8** en Chrome Headless; coverage de `calendar-replan.component.ts`: **81,15 % statements / 71,21 % ramas / 76,36 % funciones / 83,33 % líneas**. El E2E aislado `node scripts/run-isolated-playwright.mjs --project=chromium --project=mobile-chrome tests/e2e/calendar-replan.spec.ts`, con `E2E_CHROME_BIN` apuntando al Chrome instalado, pasa **6/6** usando SQLite temporal; una ejecución inicial sin esa variable falló porque Playwright no tiene su Chromium descargado. Capturas sintéticas desktop/móvil inspeccionadas: `.e2e-screenshots/calendar-replan-42876/chromium-preview.png` y `.e2e-screenshots/calendar-replan-39508/mobile-chrome-preview.png`; cubren el flujo de replanificación, no una selección de hogar desde el diálogo abierto, que no es alcanzable con interacción normal mientras el modal bloquea el fondo. `typecheck:e2e`, `check:ui` (207 ficheros/21 reglas), `build:server` y `build:client` pasan. El build cliente conserva advertencias de presupuesto de bundle/estilos y de imports/optional chaining; no se modificó ningún umbral.
 
 ### QA-RECIPE.DETAIL-LEVELS-AND-MEDIA.1
 
-- [ ] Una generación devuelve en un JSON toda la receta: metadatos e ingredientes una sola vez, con instrucciones completas para nivel básico, intermedio y experto. Cambiar nivel solo cambia la presentación; no hace otra llamada ni guarda otra receta/ingredientes duplicados.
-- [ ] La ficha permite cambiar el nivel de detalle después de generar y conserva la selección al reabrir la receta según el alcance definido por la UI existente.
-- [ ] Al crear/ver receta, intentar buscar imagen y/o vídeo relacionado en Internet si la integración disponible lo permite. Resultados opcionales muestran fuente; ausencia/fallo de búsqueda no bloquea la receta ni produce una imagen/video inventados como resultado de búsqueda.
-- [ ] TDD de schema/parser para los tres niveles, persistencia, alternancia sin duplicados, búsqueda con resultados/vacío/error/timeout y acceso seguro a URL. UI desktop/móvil con fuentes accesibles.
+- [x] Una generación devuelve en un JSON toda la receta: metadatos e ingredientes una sola vez, con instrucciones completas para nivel básico, intermedio y experto. Cambiar nivel solo cambia la presentación; no hace otra llamada ni guarda otra receta/ingredientes duplicados.
+- [x] La ficha permite cambiar el nivel de detalle después de generar y conserva la selección por receta al cerrar y reabrir su ficha durante la misma visita; es una preferencia de presentación y no duplica ni reescribe instrucciones.
+- [x] Al crear/ver receta, intentar buscar imagen y/o vídeo relacionado en Internet si la integración disponible lo permite. Resultados opcionales muestran fuente; ausencia/fallo de búsqueda no bloquea la receta ni produce una imagen/video inventados como resultado de búsqueda.
+- [x] TDD de schema/parser para los tres niveles, persistencia, alternancia sin duplicados y acceso seguro a URL; E2E de ficha en escritorio/móvil con atribución accesible.
+- [x] Pruebas de búsqueda de fotos con resultados/vacío/error/timeout y visualización accesible de la fuente, incluida búsqueda real opt-in en Commons; la ausencia de búsqueda de vídeo no bloquea la receta.
+
+**Evidencia (2026-10-06):** además de la búsqueda explícita de portada/pasos en el editor, al abrir una receta se intenta una foto real según la escena del paso y se muestra atribución, licencia y fuente mediante proxy del mismo origen. El smoke opt-in `tests/e2e/recipe-step-photos-real.spec.ts`, con receta y consulta sintéticas, pasa **2/2** en Chromium y Mobile Chrome; valida imagen real (>200 px), enlaces de crédito, búsqueda portada en vivo (hasta 10 resultados), y que solo salen del navegador los endpoints propios y la consulta explícita `tortilla`. Las pruebas repetibles servidor/Angular cubren licencia/autoria, host y MIME permitidos, límite de resultados, vacío, error/timeout, autorización, retry y rechazo de URL/bytes inseguros. No se encontró capacidad de vídeo en las integraciones activas; no se inventan resultados.
+
+**Evidencia (2026-10-05):** `generated-recipe.schema.spec.ts` comprueba los tres niveles obligatorios, el orden, listas vacías y URLs HTTPS/alt text; `ai.routes.spec.ts` comprueba que una generación retorna los tres niveles completos en una llamada, sin persistir un borrador; `recipes.routes.spec.ts` comprueba guardar/recargar instrucciones sin duplicar ingredientes. E2E aislado de ficha **2/2** (Chrome escritorio/móvil) verifica alternar niveles sin llamadas IA ni cambios a datos base y que el nivel elegido se conserva al cerrar/reabrir. Regresión aislada de libro/enlaces/acciones **16/16** en escritorio/móvil; incluye selección de estado vacío sintético porque el catálogo sembrado garantiza recetas en la base E2E. `recipe-detail.util.spec.ts` **5/5** cubre preferencia de nivel independiente por receta e inmutabilidad. `typecheck:e2e` y `build:client` pasan; el build conserva avisos de tamaño existentes, incluido `recipes.component.ts` (13,04 kB frente a 10 kB).
+
+**Pendiente explícito:** la integración actual es un endpoint de chat de texto, no genera imágenes ni busca vídeos. El prompt no inventa enlaces y deja las ilustraciones a `null`; las fotos reales se obtienen desde Commons, con atribución/licencia. Una futura capacidad de generación de imagen/vídeo requiere proveedor compatible y revisión de su contrato.
+
+### QA-RECIPE.FULL-DETAIL.OUTPUT-BUDGET.1 — completada
+
+- [x] Las configuraciones IA nuevas parten de un presupuesto de 4096 tokens para no truncar los datos
+      comunes y los tres niveles de una receta detallada; formulario y valor por defecto de API coinciden.
+- [x] Se respeta el valor explícito de configuraciones existentes; no se reescriben credenciales ni
+      preferencias guardadas al cambiar el valor por defecto para altas nuevas.
+- [x] Tests de schema y formulario comprueban el valor inicial, el límite válido y el guardado; la
+      generación completa sintética mantiene metadatos/ingredientes únicos y tres niveles.
+
+**Evidencia (2026-10-05):** las configuraciones nuevas parten de 4096 tokens en formulario/API;
+los valores explícitos de configs existentes siguen intactos. Vitest schema **2/2**, Chrome/Karma
+`ai-config.component.spec.ts` **15/15**, Playwright sintético real Chrome `ai-real-smoke.spec.ts`
+**1/1** y smoke IA real confirmó una receta solicitada con 11 ingredientes de entrada y tres niveles, ingredientes sin
+duplicar, utensilios, electrodomésticos, tareas paralelas, consejos, nutrición y conservación antes
+de fallar más adelante en la solicitud independiente de recomendaciones. No se elevó la cota de
+tokens superior a la soportada por el contrato.
 
 ### QA-RECIPE.FULL-DETAIL-VIEW.1
 
-- [ ] Abrir una receta muestra una vista completa y adaptable (sin limitarse a la tarjeta o a un diálogo estrecho), conservando deep link, cierre/retorno, teclado y foco.
-- [ ] Antes de generar se muestran las raciones —2 por defecto— y el usuario puede confirmarlas o cambiarlas; en el detalle puede ajustar las raciones y escalar solo las cantidades visibles, sin alterar la receta guardada.
-- [ ] La generación única devuelve y persiste los datos comunes una sola vez: preparación/cocción/reposo y tiempo total, kcal aproximadas por ración, ingredientes con preparación/opcionalidad/alternativas/notas, electrodomésticos disponibles y utensilios.
-- [ ] La vista presenta pasos cronológicos para cada nivel acordado; el primero indica qué debe lavarse cuando aplique, e incluye temporizadores, tareas paralelas, consejos/variaciones de sabor-textura-presentación y conservación con frigorífico/congelador, duración, recipiente y recalentado cuando proceda.
-- [ ] Ilustraciones de paso son opcionales: solo mostrar medios reales/generados que tengan URL HTTPS segura y texto alternativo; no inventar enlaces ni dejar que la falta de imágenes bloquee receta o pasos. Mantener búsqueda/generación de medios como integración separada si no está disponible en el proveedor actual.
-- [ ] TDD de prompt/schema, persistencia compatible con recetas antiguas, raciones/escalado, selector sin llamada adicional ni duplicados, y E2E aislado con datos sintéticos en PC/móvil, teclado/foco y capturas comparables.
+- [x] Abrir una receta muestra una vista completa y adaptable (sin limitarse a la tarjeta o a un diálogo estrecho), conservando deep link, cierre/retorno, teclado y foco.
+- [x] Antes de generar se muestran las raciones —2 por defecto— y el usuario puede confirmarlas o cambiarlas; en el detalle puede ajustar las raciones y escalar solo las cantidades visibles, sin alterar la receta guardada.
+- [x] La generación única devuelve y persiste los datos comunes una sola vez: preparación/cocción/reposo y tiempo total, kcal aproximadas por ración, ingredientes con preparación/opcionalidad/alternativas/notas, electrodomésticos disponibles y utensilios.
+- [x] La vista presenta pasos cronológicos para cada nivel acordado; el primero indica qué debe lavarse cuando aplique, e incluye temporizadores, tareas paralelas, consejos/variaciones de sabor-textura-presentación y conservación con frigorífico/congelador, duración, recipiente y recalentado cuando proceda.
+- [x] Ilustraciones de paso son opcionales: solo mostrar medios reales/generados que tengan URL HTTPS segura y texto alternativo; no inventar enlaces ni dejar que la falta de imágenes bloquee receta o pasos. Mantener búsqueda/generación de medios como integración separada si no está disponible en el proveedor actual.
+- [x] TDD de prompt/schema, persistencia compatible con recetas antiguas, raciones/escalado, selector sin llamada adicional ni duplicados, y E2E aislado con datos sintéticos en PC/móvil, teclado/foco y capturas comparables.
+
+**Evidencia (2026-10-05):** la suite completa del servidor con cobertura pasa **1.054/1.054** pruebas; scope cubierto **92,40 % statements / 83,96 % ramas / 95,38 % funciones / 94,49 % líneas**. Los esquemas `generated-recipe`, `ai` y `recipe` quedan por encima de 70 % en las cuatro métricas. La prueba Angular focal de escalado pasa **3/3**. E2E real de navegador con Chrome, API y SQLite temporales, datos sintéticos e ilustración interceptada, pasa **2/2** (Chrome escritorio + móvil); verifica 320 px sin overflow, URL/cierre, valores por ración, niveles, imagen/atribución, raciones escaladas solo en pantalla y cero llamadas a `/api/ai`. Capturas comparables e inspeccionadas: `.e2e-screenshots/recipe-full-detail/{chromium,mobile-chrome}-full-detail.png`. `pnpm run build:server`, `pnpm run build:client`, `pnpm run typecheck:e2e`, `pnpm run check:ui` (194 ficheros, 20 reglas), `git diff --check` y Prettier focal pasan. Angular mantiene avisos existentes de bundles/imports sin uso y aviso presupuestario de tamaño de estilos de `recipes.component.ts` (13,04 kB frente a 10 kB); el build no falla.
+
+**Límite explícito:** el proveedor configurado aquí solo genera texto y la respuesta de receta fija `illustration: null`; por tanto no se inventan fotos ni se afirma que haya búsqueda/generación de imágenes operativa. La vista y el contrato ya aceptan ilustraciones con HTTPS, texto alternativo y atribución cuando una integración real las aporte. La prueba IA E2E es sintética; no llama al proveedor.
+
+### QA-RECIPE.FULL-PAGE.VIEW.1
+
+**Decisión de producto (2026-10-05):** «vista entera» significa una página propia de detalle para la receta guardada, no una tarjeta ni un modal superpuesto. Se conserva el contrato culinario de `QA-RECIPE.FULL-DETAIL-VIEW.1` y el prompt facilitado por el usuario: instrucciones en español de España, para principiantes, con cantidades escalables en pantalla, alternativas, aparatos disponibles, pasos visuales, tareas paralelas, consejos y conservación. Los SVG locales esquemáticos siguen siendo el respaldo honesto hasta disponer de imágenes/vídeos reales con fuente.
+
+- [x] Abrir desde una tarjeta o URL directa muestra una página de detalle a ancho completo del contenido principal, sin diálogo/modal y sin dejar la lista visible debajo; el enlace de la receta sigue siendo compartible.
+- [x] Volver y la navegación del navegador restauran el listado, sus filtros/paginación y el foco; la página de detalle ofrece una acción accesible para volver y sus controles son utilizables por teclado.
+- [x] La vista conserva todos los apartados y el orden acordados en el prompt, permite cambiar nivel y raciones sin llamar a IA ni reescribir/duplicar datos, y presenta ilustraciones paso a paso locales o medios seguros con atribución.
+- [x] TDD primero: E2E aislado que falla si el detalle es un diálogo, confirma URL/deep link, retorno/teclado/foco, orden completo y ausencia de overflow en Chrome desktop/móvil (incluido 320 px); guardar e inspeccionar capturas sintéticas comparables.
+
+**Evidencia (2026-10-05):** TDD primero confirmó que la URL con `recipe=id` aún no mostraba página propia; el E2E pasó tras eliminar el modal y conservar el detalle como ruta consultable. Chrome escritorio y móvil, con seis specs de receta/enlaces y proveedor de IA sintético, pasan **44/44** pruebas. Cubren tarjeta y deep link, ausencia de diálogo/lista debajo, URL compartible, retorno por botón y navegador con filtros/página/foco, teclado, apartados en orden, nivel/raciones sin llamadas IA ni cambios persistidos, atribución y overflow en 320 px. `pnpm run typecheck:e2e`, `pnpm run check:ui` (196 ficheros/20 reglas), `pnpm run build:client` y `git diff --check` pasan. Capturas PC y móvil revisadas: `.e2e-screenshots/recipe-full-detail/chromium-full-detail.png` y `.e2e-screenshots/recipe-full-detail/mobile-chrome-full-detail.png`; los SVG por paso se identifican como «Ilustración esquemática» (no son fotos ni generación fotográfica). El build mantiene avisos de presupuesto global (758,31 kB frente a 500 kB) y estilos de recetas (13,73 kB frente a 10 kB), además de avisos Angular existentes.
+
+### QA-RECIPE.DETAIL-ORDER.1
+
+**Decisión revalidada (2026-10-05):** tanto el borrador generado como la receta guardada deben presentar la explicación completa en el orden del prompt del usuario: tiempo total (con preparación/cocción/reposo), kcal estimadas por ración, ingredientes, electrodomésticos/utensilios, pasos, tareas paralelas, consejos/variaciones y conservación. El selector de nivel no debe esconder los datos comunes ni cambiar ese orden. La ficha guardada conserva el diseño adaptable de detalle amplio y el borrador permite revisar la misma información antes de guardar.
+
+- [x] En las dos vistas, las secciones se leen y se muestran en el orden acordado; la información ampliada de macros queda junto a las kcal estimadas, conservación aparece después de instrucciones/tareas/consejos y el tiempo total no se duplica entre resumen y desglose.
+- [x] La portada y el resumen no se solapan: en escritorio sus cajas quedan separadas y en móvil se apilan en orden, con geometría medida en navegador y tolerancia máxima de 1 CSS px.
+- [x] TDD/E2E con fixture completo verifica el orden de pantalla, sección ausente opcional, selector de nivel y raciones; repetir en Chrome escritorio y móvil estrecho, revisar capturas sintéticas comparables y no persistir ni invocar IA al alternar.
+- [x] El prompt de receta mantiene español de España, texto claro para principiantes, lista cerrada de electrodomésticos, primera indicación de lavado (o que no hace falta), tareas paralelas seguras, variaciones y conservación prudente; validar el contrato con una prueba de prompt.
+
+**Evidencia (2026-10-05):** TDD reprodujo primero tanto el orden incorrecto como el solapamiento portada/resumen. Tras corregir las dos vistas, E2E aislado con datos sintéticos pasa **6/6** pruebas para ficha completa y **8/8** para las tres candidatas múltiples, en Chrome desktop/móvil (incluidos 1440×900, 393×851, 320×568 y 568×320); mide orden y geometría, niveles/raciones y ausencia de nuevas llamadas al alternar. Los tests unitarios enfocados de detalle/ilustraciones pasan **23/23**. La prueba del contrato del prompt del servidor pasa **25/25**. El `lcov` de `recipe-detail.util.ts`, `recipe-step-illustration.util.ts` y `recipe-step-illustration.component.ts` informa cobertura completa de líneas, funciones y ramas de esos módulos. `pnpm run check:ui` pasa (196 ficheros, 20 reglas), `pnpm run typecheck:e2e`, `pnpm run build:client` y `git diff --check` también pasan. Capturas sintéticas inspeccionadas: `.e2e-screenshots/recipe-full-detail/{chromium-full-detail,mobile-chrome-full-detail}.png` y `.e2e-screenshots/recipe-generated-preview/{chromium,mobile-chrome}-generated-recipe-detail-level-*`.
+
+**Gate global pendiente ajeno a esta unidad:** `pnpm run test:client` completa **963/964** pruebas, pero falla `CalendarComponent meal deletion feedback keeps plural goal edits open and makes no success claim when saving fails`; además la cobertura global queda por debajo del umbral local existente del 80% (77,19% statements, 63,76% branches, 75,73% functions y 78,55% lines). No se modificó el calendario en esta unidad. El build de producción compila, con advertencias Angular/tamaño ya visibles en el proyecto.
+
+### QA-RECIPE.GENERATED-DRAFT.FULL-PREVIEW.1
+
+**Fuente revalidada (2026-10-05):** la ficha guardada ya presenta el detalle completo, pero el borrador que aparece tras generar una receta omite tiempos desglosados, macronutrientes, conservación y avisos de pasos. Una persona debe poder revisar la misma información útil antes de guardar; no se debe persistir una receta para poder leerla ni duplicar ingredientes por nivel.
+
+- [x] El formulario conserva un diálogo compacto antes de generar; al recibir un borrador completo oculta el formulario y lo presenta en una vista amplia adaptable, con el detalle inmediatamente visible al inicio. El usuario puede volver a editar ingredientes/opciones sin perder el borrador; al descartarlo o cerrar/reabrir el diálogo vuelve al formulario compacto. La ficha guardada continúa usando la vista completa.
+- [x] Cada una de las tres opciones múltiples ofrece una vista completa propia antes de guardarla y retorno a la lista, conservando su nivel de detalle; abrirla no genera otra llamada ni la persiste.
+- [x] El borrador muestra preparación, cocción, reposo y total; porciones con su número; kcal/macros estimados por ración; ingredientes con cantidades, unidades y separación legible de preparación/notas/opcionalidad/alternativas; electrodomésticos/utensilios; pasos con tiempos, consejos y advertencias; tareas paralelas, variaciones y conservación (frigorífico, recipiente, congelación y recalentado cuando proceda). Los tres borradores múltiples muestran también el número de porciones.
+- [x] Los niveles básico/intermedio/experto conservan los mismos datos comunes y la selección solo cambia los pasos visibles. Cambiar nivel/raciones no provoca llamada IA ni modifica el borrador o receta guardada.
+- [x] Ilustraciones y atribuciones opcionales solo se muestran si URL/alt-text pasan la validación segura existente; vacío o proveedor de texto no bloquean ni inventan contenido.
+- [x] TDD con un borrador sintético completo, confirmación de secciones antes de guardar y regresión E2E Chrome desktop/móvil, teclado/foco y sin desbordamiento.
+
+**Evidencia (2026-10-05):** TDD reprodujo primero que las candidatas múltiples no ofrecían ficha completa; tras implementar el selector a ficha compartida, la suite E2E aislada con proveedor sintético y SQLite temporal pasa **12/12** en Chrome desktop y emulación móvil, incluidas 1440×900, 393×851, 320×568 y 568×320. Verifica diálogo compacto→completo, edición sin perder el borrador, ficha completa de las tres candidatas, retorno a lista, raciones, ingredientes, macros, tiempos, electrodomésticos, tareas paralelas, avisos, conservación, selector local sin nueva llamada, guardado explícito de una opción, persistencia de niveles y reapertura compacta. Capturas comparables generadas e inspeccionadas: `.e2e-screenshots/recipe-generated-preview/{chromium,mobile-chrome}-generated-recipe-detail-level-*` y `*-generated-option-full-detail-*`. También pasan `pnpm run typecheck:e2e`, `pnpm run check:ui` (194 ficheros, 20 reglas) y `pnpm run build:client`. El build conserva avisos de tamaño inicial (757,52 kB frente a 500 kB), estilos de `recipes.component.ts` (13,14 kB frente a 10 kB) y avisos Angular de imports/nullability sin uso; compila correctamente.
+
+**Limitación multimedia:** el proveedor actual es de texto; las recetas no inventan ilustraciones. El control de URL HTTPS/alt-text queda cubierto por la ficha guardada previa, y los borradores sin imagen siguen completos. La búsqueda/generación de ilustraciones continúa pendiente de una integración real de medios.
+
+### QA-RECIPE.STEP-ILLUSTRATIONS.LOCAL.1
+
+El usuario aporta como guía que cada receta sea una explicación completa para cocinar desde cero: tiempos, kcal por ración, ingredientes y alternativas, electrodomésticos disponibles, pasos cronológicos (incluido lavado al principio cuando corresponda), tareas paralelas, consejos de sabor/textura/presentación y conservación. Ese contrato ya está cubierto por `QA-RECIPE.FULL-DETAIL-VIEW.1`; esta unidad añade una ayuda visual inmediata sin fingir que el proveedor de texto puede generar o buscar imágenes.
+
+**Revisión de producto (2026-10-05):** aunque la solución esquemática se implementó y probó, el usuario la considera poco elaborada y prefiere fotos reales. Esta unidad queda como evidencia histórica, no como criterio visual vigente; `QA-RECIPE.STEP-PHOTO-SEARCH.1` la reemplaza en la interfaz.
+
+- [x] En borradores y recetas guardadas, cada paso tiene una ilustración esquemática local según la acción (lavar, cortar, mezclar, cocinar, hornear, reposar, servir o preparación general) cuando no hay una imagen remota validada.
+- [x] Una ilustración externa con URL HTTPS y texto alternativo válidos tiene prioridad; la ilustración local no incluye URL/fuente inventada y se identifica como esquemática, no como foto o resultado de búsqueda.
+- [x] Las ilustraciones son descriptivas y accesibles, no sustituyen el texto ni los avisos; se renderizan sin servicio externo, mantienen texto alternativo semántico y funcionan con los tres niveles y en móvil estrecho.
+- [x] Cambiar nivel/raciones no genera llamadas IA ni modifica receta/ingredientes persistidos o duplica datos. Fallos o ausencia de ilustraciones nunca bloquean la lectura.
+- [x] TDD del clasificador y E2E real aislado en Chrome de vista guardada y borrador en PC/móvil, incluido 320 px; capturas sintéticas comparables revisadas y verificación de build, cobertura y accesibilidad.
+
+**Evidencia (2026-10-05):** `CHROME_BIN=... ng test --no-watch --code-coverage --include=src/app/features/recipes/recipe-step-illustration.*.spec.ts` ejecuta 18/18; ambos archivos nuevos muestran 100 % de statements/branches/functions/lines en sus reportes individuales. El comando filtrado termina con el gate global 80 % en rojo (31,14/4,69/13,46/32,95 %), porque esa selección no corre el resto de pruebas; no se rebajó ningún gate. `pnpm run typecheck:e2e`, `pnpm run check:ui` (196 ficheros/20 reglas), `ngc -p tsconfig.app.json --noEmit`, `pnpm run build:client` y `git diff --check` pasan. `E2E_CHROME_BIN=... pnpm run test:e2e -- --grep 'la ficha completa presenta detalle|cambia el nivel solo en pantalla y conserva|la generación individual informa error y permite reintentar' --project=chromium --project=mobile-chrome`: 14/14, con SQLite y app temporales aislados; cubre borrador/guardada, selector de tres niveles, imágenes válidas/rotas/ausentes, fallback accesible, cambio de raciones/nivel y ancho de 320 px. Capturas revisadas en `.e2e-screenshots/recipe-step-illustrations/` (escritorio y móvil).
+
+**Límite:** estas ilustraciones son vectores esquemáticos propios de la aplicación. La búsqueda web de fotos/vídeos o generación fotográfica por IA sigue siendo la integración separada pendiente de `QA-RECIPE.DETAIL-LEVELS-AND-MEDIA.1`.
 
 ### QA-RECIPE.STEP-PHOTO-SEARCH.1 — fotografía real con autoría y licencia
 
 **Decisión de producto (2026-10-05):** no volver a mostrar los diagramas SVG genéricos como ilustración principal de los pasos. Buscar fotografías reales en Wikimedia Commons, que ofrece metadatos de autoría y licencia; enseñar la foto solo si la respuesta contiene URL HTTPS de `thumb.wikimedia.org` o `upload.wikimedia.org`, un autor identificable y licencia explícita. La tarjeta enlaza a la página original y a la licencia. La falta de resultados, mala conexión, timeout o imagen rota nunca oculta instrucciones ni impide guardar/leer la receta; en esos casos no se sustituye por otro dibujo esquemático.
 
-**Privacidad y carga:** las consultas se forman exclusivamente con una lista cerrada de escenas de cocina (lavar, cortar, mezclar, cocinar, hornear, reposar, servir/preparar). No enviar a Wikimedia nombres de recetas, ingredientes, pasos literales, hogar ni datos del usuario. Buscar al entrar en una ficha/borrador, de forma asíncrona y bajo demanda/lazy, limitar y cachear por escena; no persistir imágenes ni resultados en DB. El servidor solo admite escenas enumeradas, valida la URL original `thumb.wikimedia.org` o `upload.wikimedia.org` y sirve sus bytes mediante un proxy autenticado de mismo origen para que el navegador no contacte Wikimedia ni comparta allí su IP. El proxy nunca acepta URLs del cliente y mantiene el User-Agent identificable exigido por Wikimedia.
+**Privacidad y carga:** las consultas se forman exclusivamente con una lista cerrada de escenas de cocina (lavar, cortar, mezclar, cocinar, hornear, reposar, servir/preparar). No enviar a Wikimedia nombres de recetas, ingredientes, pasos literales, hogar ni datos del usuario. Buscar al entrar en una ficha/borrador, de forma asíncrona y bajo demanda/lazy, limitar y cachear por escena; no persistir imágenes ni resultados en DB. El servidor solo admite escenas enumeradas, valida URL de miniatura en `thumb.wikimedia.org` o `upload.wikimedia.org` y sirve sus bytes mediante un proxy autenticado de mismo origen para que el navegador no contacte Wikimedia ni comparta allí su IP. El proxy nunca acepta URLs del cliente y mantiene el User-Agent identificable exigido por Wikimedia.
 
-- [ ] TDD del catálogo de escenas, parser de `imageinfo/extmetadata`, crédito seguro, licencia/source links y filtro de HTTPS/host/MIME; rechazar resultados sin autor/licencia, URL insegura, SVG/dibujo y metadata malformada sin filtrar HTML.
-- [ ] Endpoints autenticados restringen escenas/identificadores, consultan Commons con límite de resultados, timeout, caché y respuestas de error normalizadas, y transmiten imágenes raster de tamaño acotado desde el proxy de mismo origen; comprobar resultado, vacío, error HTTP/429, timeout, respuesta malformada, identificador inexistente y repetición sin enviar texto del usuario ni guardar nada.
-- [ ] Borrador y ficha guardada muestran fotos reales disponibles con `alt`, autoría/licencia legibles y enlaces accesibles; eliminan SVG esquemáticos como fallback; cargando/sin resultado/error/reintento permanecen utilizables por teclado, no bloquean el texto y no desbordan.
-- [ ] E2E aislado simula Commons en PC/móvil (incluido 320 px y horizontal), verifica metadatos/atribución, cambio de nivel, carga diferida, fallo/recuperación y que el request solo contiene la escena permitida. Prueba de integración real opt-in hace consultas genéricas, no sube recetas/tickets y nunca captura cuerpos; guardar e inspeccionar capturas sintéticas.
-- [ ] Medir cobertura focal de statements, ramas, funciones y líneas (≥70 %, sin bajar gates existentes), typechecks, build, accesibilidad, i18n y check de UI; revalidar que los SVG ya no aparecen como solución por defecto.
+- [x] TDD del catálogo de escenas, parser de `imageinfo/extmetadata`, crédito seguro, licencia/source links y filtro de HTTPS/host/MIME; rechazar resultados sin autor/licencia, URL insegura, SVG/dibujo y metadata malformada sin filtrar HTML.
+- [x] Endpoints autenticados restringen escenas/identificadores, consultan Commons con límite de resultados, timeout, caché y respuestas de error normalizadas, y transmiten imágenes raster de tamaño acotado desde el proxy de mismo origen; comprobar resultado, vacío, error HTTP/429, timeout, respuesta malformada, identificador inexistente y repetición sin enviar texto del usuario ni guardar nada.
+- [x] Borrador y ficha guardada muestran fotos reales disponibles con `alt`, autoría/licencia legibles y enlaces accesibles; eliminan SVG esquemáticos como fallback; cargando/sin resultado/error/reintento permanecen utilizables por teclado, no bloquean el texto y no desbordan.
+- [x] E2E aislado simula Commons en PC/móvil (incluido 320 px y horizontal), verifica metadatos/atribución, cambio de nivel, carga diferida, fallo/recuperación y que el request solo contiene la escena permitida. Prueba de integración real opt-in hace consultas genéricas, no sube recetas/tickets y nunca captura cuerpos; guardar e inspeccionar capturas sintéticas.
+- [x] Medir cobertura focal de statements, ramas, funciones y líneas (≥70 %, sin bajar gates existentes), typechecks, build, accesibilidad, i18n y check de UI; revalidar que los SVG ya no aparecen como solución por defecto.
+
+**Evidencia de verificación (2026-10-05):** `pnpm --filter @hogaria/server exec vitest run src/utils/recipe-step-photos.spec.ts src/routes/recipe-step-photos.routes.spec.ts src/utils/recipe-step-photos.integration.spec.ts` ejecutó 19 pruebas (1 opt-in omitida); `DATABASE_PATH=:memory: pnpm run test:server:coverage` ejecutó 1.078 pruebas/1 omitida con 91,84/83,33/95,4/94,17 % globales. Cobertura focal servidor: router 91,66/90,9/100/91,3 % y proveedor 82,41/70,86/95,23/88,82 % (statements/branches/functions/lines). Suite cliente: 965/965 pruebas correctas; la cobertura global existente permanece en rojo en 77,30/63,87/75,89/78,67 % frente al gate 80 %; no se bajó. `recipe-step-photo.component.ts`, el clasificador y modelo: 100 % en las cuatro métricas; el servicio de recetas: 90,91/81,58/91,11/90,91 %.
+
+`pnpm run typecheck:e2e`, `pnpm run check:ui` (197 ficheros/20 reglas), `pnpm run build:server`, `pnpm run build:client` y `git diff --check` pasan; el build cliente mantiene advertencias de presupuesto global/componente que ya deben tratarse aparte. E2E aislado con Chrome: ficha completa 2/2 (PC/móvil, 320 px y horizontal), borrador generado→guardar→reabrir 4/4, error/reintento 2/2; humo real opt-in 2/2 contra Commons, usando receta sintética y solo `scene=cut`, verificando que el navegador no contacta Wikimedia. Base SQLite temporal y artefactos del runner aislado se limpiaron. Capturas reales inspeccionadas: `.e2e-screenshots/recipe-step-photos-real/chromium-real-commons-photo.png` y `.e2e-screenshots/recipe-step-photos-real/mobile-chrome-real-commons-photo.png`; capturas mock PC/móvil: `.e2e-screenshots/recipe-full-detail/`.
+
+**Revalidación de redirecciones (2026-10-06):** la validación inicial de host no bastaba si `fetch` seguía una redirección emitida por el upstream. El proxy ahora solicita `redirect: 'error'` tanto para la API de Commons como para la miniatura; la prueba de regresión primero falló con la opción ausente y pasa tras el arreglo. `pnpm --filter @hogaria/server exec vitest run src/utils/recipe-step-photos.spec.ts`: **18/18**. No se accedió a la red externa durante este test.
 
 **Fuente técnica vigente (2026-10-05):** la documentación de MediaWiki permite buscar archivos mediante `generator=search` y obtener URL/MIME y `extmetadata` (autor/licencia) con `prop=imageinfo`; recomienda pedir pocos metadatos porque el campo es costoso. La API exige un User-Agent identificable y atribuir el contenido conforme a su licencia. La imagen se sirve por proxy de mismo origen; el enlace de atribución sí lleva a Wikimedia Commons. El API no forma parte de la configuración/token de IA de HogarIA.
 
@@ -4929,24 +5313,40 @@ Estas mejoras se desarrollan en subunidades separadas después de estabilizar el
 
 La edición permite corregir los datos existentes completos sin regenerar ni duplicar la receta: datos generales (nombre, descripción, dificultad, país/cocina, comidas, etiquetas, imagen de portada segura, duración y raciones), ingredientes con cantidad/unidad/preparación/opcional/sustituciones/notas, utensilios, guía (electrodomésticos, tareas paralelas, consejos), nutrición, conservación y pasos. Para recetas nuevas conserva por separado las instrucciones `basic`, `intermediate` y `expert`; no convierte una variante en todas ni las aplana a `steps`. Recetas históricas de nivel único permanecen editables sin inventar variantes. Editar, cambiar nivel o raciones no invoca IA; las fotos de pasos siguen derivándose de la acción y su carga no persiste datos de usuario.
 
-- [ ] Desde la ficha propia se puede entrar en `/recipes/:id/edit`, editar y volver a la ficha/listado; la ruta funciona tras recargar/abrirse directamente, y recetas ajenas/de catálogo no exponen acción ni aceptan guardado en el servidor.
-- [ ] Vista de edición precarga toda la receta sin pérdida y ofrece formularios accesibles para metadatos, ingredientes, utensilios, los tres niveles de pasos cuando existan, nutrición, conservación y guía; añadir/quitar/reordenar ingredientes y pasos conserva las relaciones y la secuencia, y recetas heredadas con pasos planos siguen funcionando.
-- [ ] Guardar persiste el conjunto completo de campos editables en una operación consistente, mantiene autoría/propietario, favoritos/uso y campos no enviados, vuelve a la ficha con datos actualizados y no crea una receta duplicada; cancelación conserva lo guardado y descartar cambios sin guardar requiere confirmación explícita. Sin conexión/validación/403/404, mantiene el borrador visible, explica el error y permite reintentar.
-- [ ] Pruebas primero: esquema/UI para límites de campos, datos vacíos y nested arrays; integración PATCH para round-trip de todos los niveles y metadatos, autorización propia/ajena/catálogo, payload inválido y fallo de persistencia sin cambios parciales; E2E aislado cubre ruta directa, validación, guardado, reabrir, cancelar/descartar, error recuperable, teclado/foco y ausencia de llamadas IA.
-- [ ] Playwright real en escritorio y móvil: anchos 320, 393 y escritorio, horizontal, scroll/teclado y modales de confirmación; capturas sintéticas revisadas. Cobertura focal mínima 70 % en statements/branches/functions/lines sin rebajar el gate global, check UI, i18n, accesibilidad, typechecks y builds; fixtures/BD temporales aisladas.
+- [x] Desde la ficha propia se puede entrar en `/recipes/:id/edit`, editar y volver a la ficha/listado; la ruta funciona tras recargar/abrirse directamente, y recetas ajenas/de catálogo no exponen acción ni aceptan guardado en el servidor.
+- [x] Vista de edición precarga toda la receta sin pérdida y ofrece formularios accesibles para metadatos, ingredientes, utensilios, los tres niveles de pasos cuando existan, nutrición, conservación y guía; añadir/quitar/reordenar ingredientes y pasos conserva las relaciones y la secuencia, y recetas heredadas con pasos planos siguen funcionando.
+- [x] Guardar persiste el conjunto completo de campos editables en una operación consistente, mantiene autoría/propietario, favoritos/uso y campos no enviados, vuelve a la ficha con datos actualizados y no crea una receta duplicada; cancelación conserva lo guardado y descartar cambios sin guardar requiere confirmación explícita. Sin conexión/validación/403/404, mantiene el borrador visible, explica el error y permite reintentar.
+- [x] Pruebas primero: esquema/UI para límites de campos, datos vacíos y nested arrays; integración PATCH para round-trip de todos los niveles y metadatos, autorización propia/ajena/catálogo, payload inválido y fallo de persistencia sin cambios parciales; E2E aislado cubre ruta directa, validación, guardado, reabrir, cancelar/descartar, error recuperable, teclado/foco y ausencia de llamadas IA.
+- [x] Playwright real en escritorio y móvil: anchos 320, 393 y escritorio, horizontal, scroll/teclado y modales de confirmación; capturas sintéticas revisadas. Cobertura focal frontend ≥70 % en statements/branches/functions/lines sin rebajar el gate global, check UI, i18n, accesibilidad, typechecks y builds; fixtures/BD temporales aisladas.
+
+**Evidencia verificada (2026-10-05):** tests Angular focales **23/23**, E2E aislado Chrome escritorio/móvil **8/8**, suite servidor con coverage **1.118 passed / 1 skipped** y builds/typecheck/UI checks verdes. Detalle de comandos, porcentajes por fichero y capturas en [HOGARIA-MEMBERS-RECIPE-IMPROVEMENTS-SPEC.md](HOGARIA-MEMBERS-RECIPE-IMPROVEMENTS-SPEC.md#evidencia-de-avance--editor-dedicado-y-gestor-de-imágenes-2026-10-05).
+
+**Cierre focal (2026-10-06):** cobertura `recipe-edit.component.ts` **93,99/85,71/91,67/100 %** y `recipe-edit.util.ts` **88,52/82,67/100/100 %** S/B/F/L, con sus **21/21** pruebas Angular; Playwright aislado `recipe-edit.spec.ts` pasa **10/10** (Chromium escritorio y Mobile Chrome). La matriz comprueba 320, 393 px y horizontal, navegación directa, edición round-trip, guardado/reapertura, validación, cancelación, teclado/foco y que editar no llama a IA; los datos son sintéticos y la base es temporal. Capturas comparables revisadas: `.e2e-screenshots/recipe-editor/desktop.png` y `.e2e-screenshots/recipe-editor/mobile.png`. Los builds, `typecheck:e2e`, `check:ui` y `git diff --check` pasan. El comando de cobertura focal conserva el gate global del 80 % intacto y por ello sale con código 1 al medir el subconjunto; ambas unidades cubiertas exceden el mínimo focal del 70 % en las cuatro métricas. No afirma que el gate global frontend esté completo.
 
 ### QA-PRODUCT.IMAGES.1
 
-- [ ] Al agregar un producto al inventario, iniciar búsqueda de imagen en background sin bloquear la operación del usuario y respetando la cola/concurrencia del proveedor ya configurado.
-- [ ] Usuario con permiso existente de edición del inventario puede reintentar una búsqueda fallida, revisar hasta diez imágenes encontradas y elegir una; puede solicitar además tres/cuatro candidatos generados por IA o subir imagen propia.
-- [ ] Estado queued/running/complete/failed, retry idempotente, cancelación/repetición pertinente y límites de tamaño/tipo se modelan explícitamente; solo hogar activo y permisos adecuados acceden al producto/medios. Fallos externos no revierten alta ni escriben en otro hogar.
-- [ ] TDD con proveedor falso y concurrencia controlada; E2E real de cola UI aislado. No incluir imágenes personales ni secretos en capturas/fixtures.
+- [x] Al agregar un producto al inventario (alta directa, catálogo, confirmación de ticket y completar compra), iniciar búsqueda de imagen en segundo plano sin bloquear la operación y respetando la cola/concurrencia del proveedor compartido.
+- [x] Usuario con permiso existente de edición del inventario puede reintentar una búsqueda fallida, revisar hasta diez imágenes con atribución/licencia y elegir una; puede subir una imagen propia validada. **Candidatos generados por IA (3–4)** requieren una capacidad de generación de imágenes realmente soportada/configurada; no simular generación mediante búsqueda ni mandar prompts a un endpoint de chat.
+- [x] Estado queued/running/complete/failed/cancelled, retry idempotente, cancelación/repetición y límites de tamaño/tipo se modelan explícitamente. El hogar activo y los permisos de despensa protegen producto y medios; fallos externos nunca revierten el alta ni escriben en otro hogar.
+- [x] Los resultados/miniaturas no quedan rotos tras recarga o reinicio del servidor: selección licenciada se conserva localmente; resultados de búsqueda caducados se identifican y permiten nueva búsqueda sin exponer el producto de otra casa.
+- [x] TDD con proveedor sintético que verifica concurrencia, cancelación, fallo, tipo/tamaño, atribución, permisos y scopes. Playwright aislado contra app+API+SQLite temporal valida cola UI en escritorio/móvil; capturas sintéticas inspeccionadas, sin fotos personales ni secretos.
+- [x] Cobertura de cada archivo nuevo/modificado del flujo ≥70 % en statements/branches/functions/lines, sin rebajar gates; check-ui, typechecks y builds requeridos pasan.
+
+**Revalidación y pruebas TDD (2026-10-06):** se corrigieron dos hallazgos. El E2E ahora usa una imagen de tomate de fixture sintético visible (80 × 60), no píxeles blancos; el recorte de móvil muestra dos tarjetas completas por fila antes del menú fijo y la prueba recorre 320 × 568, 393 × 851, 568 × 320 y 1440 × 900 sin overflow, mide 12 acciones de 44 px con geometría uniforme y verifica foco/Enter. Las capturas revisadas son `.e2e-screenshots/2026-10-06-pantry-image-editor-refactor/{chromium,mobile-chrome}.png`. La segunda regresión fue roja antes del arreglo: tras simular reinicio (sin `getPhoto` en RAM) el proxy de miniatura daba 404 aunque SQLite retenía candidatos. Ahora resuelve solo IDs persistidos como candidatos Commons públicos, recupera los bytes desde el `thumbnailUrl` validado si expiró la caché, mantiene MIME/tamaño limitado y no devuelve nombre/producto/hogar; volver a seleccionar una imagen también tolera esa expiración. API: `pantry-product-images.routes.spec.ts` **11/11**; suite completa de servidor en base en memoria **1.178 aprobadas / 1 omitida**. E2E real aislado, SQLite temporal y proveedor sintético: **2/2** (Chrome escritorio/móvil), persiste selección al recargar y sube foto validada. `check:ui` (207 archivos/21 reglas), `typecheck:e2e` y build de producción pasan; build conserva avisos Angular/presupuesto existentes. No se contactó Wikimedia ni se fingió generación de imagen por IA: la integración presente no soporta raster. El primer E2E sin `E2E_CHROME_BIN` no encontró el Chromium descargado; la pasada verde usó Chrome instalado. No se cambió ningún umbral.
+
+**Cierre del gate por archivo (2026-10-06):** reejecutada la suite completa de servidor con `DATABASE_PATH=:memory:` y coverage en directorio temporal: **1.188 pasaron / 1 omitida**, **91,56/82,83/95,59/94,13 % S/B/F/L** agregado; `pantry.routes.ts` mide **93,64/81,93/98,57/95,55 %**, `pantry-product-images.routes.ts` **88,74/79,81/88,88/93,84 %**, `product-image-search.ts` **96/90,32/100/97,33 %** y `recipe-images.routes.ts` **100 %** en las cuatro métricas. Las pruebas focales posteriores al tipado del helper `pantry.routes.spec.ts` + `recipe-images.routes.spec.ts` pasan **20/20**. En el informe completo del cliente, `PantryService` **100/84,82/100/100 %**, `PantryItemComponent` **98,59/92,85/95,65/100 %**, y `pantry-product-image-editor.component.ts` **88,33/87,50/84,61/90,38 %**; la suite frontend pasa **1.144/1.144** y su gate global intacto supera 80 % en las cuatro métricas. El cierre por archivo es ahora verificable; la cobertura y pruebas aquí usan fixtures/datos temporales, no el inventario normal.
 
 ### QA-SHOPPING.GROUP-AND-WEIGHT-ORDER.1
 
-- [ ] La lista puede agruparse por categoría y/o ordenarse por peso; las opciones se pueden combinar o desactivar sin cambiar cantidades, checks, productos ni orden persistido original.
-- [ ] Incluir orden pesado-primero y una opción para dejar congelados al final. Peso desconocido o unidades incompatibles se mantienen en una zona estable, sin conversiones inventadas.
-- [ ] TDD para mezcla de categorías, unidades comparables/no comparables, peso ausente, productos congelados, empate, checks/manual order y cambio de hogar; UI responsive y accesible.
+- [x] La lista puede agruparse por categoría y/o ordenarse por peso; las opciones se pueden combinar o desactivar sin cambiar cantidades, checks, productos ni orden persistido original.
+- [x] Incluir orden pesado-primero y una opción para dejar congelados al final. Peso desconocido o unidades incompatibles se mantienen en una zona estable, sin conversiones inventadas.
+- [x] TDD para mezcla de categorías, unidades comparables/no comparables, peso ausente, productos congelados, empate, checks/manual order y cambio de hogar; UI responsive y accesible.
+
+**Evidencia base (2026-10-06):** `orderShoppingItems` trabaja sobre una copia de presentación: convierte explícitamente mg/g/kg y alias de masa; unidades de volumen/desconocidas quedan en una zona estable. Congelados al final funciona agrupado y sin agrupar, sin modificar `position` ni persistir preferencias. La primera iteración de pruebas cubría la interacción con ratón; el cierre amplía cobertura a teclado, cambio de hogar y métricas por archivo (ver evidencia siguiente).
+
+**Cierre QA (2026-10-06):** cobertura real de `shopping.model.ts`, ejecutando sus 27 tests con Chrome Headless y `QA_COVERAGE_DIR` temporal (sin modificar `frontend/coverage`): statements **94,21 %**, branches **87,16 %**, functions **100 %**, lines **100 %**. El comando filtrado termina en código 1 porque el gate global intacto exige 80 % sobre la selección parcial (48,86/49,61/48,93/52,27); no se rebajó el gate. E2E aislado de Playwright, SQLite temporal, Chrome escritorio y móvil: **4/4**; cubre selector/checkbox con teclado y cambio real entre dos casas, comprueba 404 para la lista doméstica ajena y su restauración al reactivar la casa original. API en memoria `shopping.routes.spec.ts`: **95/95**. La prueba nueva fue roja antes del fix. Capturas sintéticas desktop/móvil inspeccionadas.
+
+El fix descubierto cierra también la exposición concreta de esta subunidad: `getScope` solo incluye las listas del hogar activo y datos personales sin `household_id`; ser el autor de una lista asociada a otra casa ya no permite verla al cambiar de hogar o quedar sin selección. Esto no prueba el aislamiento de las demás rutas; el contrato general de §12ap sigue pendiente.
 
 ## 12ar — Error de login por proxy local
 
@@ -4972,7 +5372,7 @@ La edición permite corregir los datos existentes completos sin regenerar ni dup
 - [x] Cambiar de rango montado recalcula el inicio; actualizar datos del mismo rango y otros cambios de cocina no pisan el scroll manual.
 - [x] TDD: pruebas unitarias y Playwright real con datos sintéticos validan Día/Semana, creación de evento para la semana siguiente y scroll en escritorio/móvil. Se guardaron e inspeccionaron capturas sin datos personales.
 - [x] El código de geometría afectado supera 70 % en todas las métricas del scope; build, typecheck, `check-ui`, E2E aislado y límites responsive validados sin bajar gates.
-- [ ] Gate global de cobertura del frontend (80 % existente): el run completo pasa sus 929 pruebas, pero arroja statements 78.49 %, branches 65.59 %, functions 76.72 % y lines 79.88 %. Se conserva el umbral; ampliar cobertura global queda pendiente y la PR sigue Draft.
+- [x] Gate global de cobertura del frontend (80 % existente): revalidado en 2026-10-06 con 1.127/1.127 pruebas; statements 88,83 %, branches 80,04 %, functions 88,34 % y lines 90,20 %. Los cuatro valores superan el 80 % sin cambiar ningún umbral. La ejecución anterior por debajo del gate queda como evidencia histórica.
 
 **Evidencia (2026-10-04):** `pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/core/calendar-grid.spec.ts --include=src/app/features/calendar/calendar-timeline.component.spec.ts --browsers=ChromeHeadless` pasa 20/20. `pnpm test:e2e --project=chromium --project=mobile-chrome --grep "arranca en la vista de semana|la semana siguiente empieza"` pasa 4/4 con servidor y SQLite temporales; `pnpm test:e2e --project=chromium --project=mobile-chrome --grep "muestra y enfoca las horas de madrugada"` pasa 2/2 a las 02:08 en Europe/Madrid. Capturas inspeccionadas: `.e2e-screenshots/qa-calendar-full-day-1/{chromium,mobile-chrome}-next-week-{midnight,last-hours}.png`.
 
@@ -4999,13 +5399,14 @@ La repetición ofrecerá: no repetir, diaria, días laborables, semanal en el d�
 - [x] Las capas/filtros sobreviven el cambio entre las seis vistas y la recarga; sus botones exponen el estado accesible correcto. Evidencia: E2E «las capas seleccionadas se conservan…», 2/2 proyectos.
 - [x] Seleccionar un día en la rejilla Mes abre ese día; el título de un mes en Año abre Mes; seleccionar un día desde Año abre ese día. En todos los casos vista, fecha del selector superior, URL y mini agenda quedan sincronizados y sobreviven a recarga. E2E `calendar-google-like-ui.spec.ts`, Chromium + Chrome móvil, 2/2.
 - [x] El editor compacto de evento incluye título, fecha/hora, todo el día y repetición de un paso; «Más opciones» expande datos propios de HogarIA. Escape/cierre y persistencia básica se ejercitan, con capturas sintéticas inspeccionadas en escritorio y móvil.
-- [ ] Pendiente completar la matriz de foco/teclado, validación, re-edición con todos los campos, cancelación sin cambios e invitados/borrado en este editor.
+- [x] Matriz del editor: foco/teclado, validación, re-edición de todos los campos, cancelación sin cambios e invitados/borrado.
 - [x] El selector presenta las cadencias acordadas y «Personalizar» permite intervalo, unidad y fin; se probó persistencia de un intervalo con fin por número. La expansión conserva una fila por serie y las excepciones. Evidencia: `tests/e2e/calendar.spec.ts`, `server/src/utils/calendar-recurrence.spec.ts`, `server/src/routes/calendar.routes.spec.ts`.
-- [ ] Falta E2E del selector personalizado para selección de varios días semanales, fin por fecha, edición/reapertura y cancelación del borrador.
+- [x] Repetición semanal personalizada con varios días y fin por fecha persiste y proyecta las ocurrencias correctas sin duplicar la fila; reabrir restaura días/fecha, cancelar descarta el borrador y editar el título mantiene la regla. Playwright real en Chrome escritorio/móvil, 2/2.
 - [x] API/base de datos validan y persisten la regla estructurada sin convertir destructivamente reglas antiguas; el set enfocado cubre límites, exclusiones, fechas inválidas, años bisiestos, fin de mes, intervalos y conteo inclusivo.
+- [x] Los días seleccionables anuncian el nombre completo del día y se pueden alternar con teclado (Space), manteniendo `aria-pressed`; se valida en Playwright desktop/móvil.
 - [x] Playwright real con Chrome y servicios/SQLite aislados ejecutó 46 escenarios de calendario en escritorio y móvil; otra ejecución añadió anchos de 320 px y horizontal (812×375), 2/2 pasaron. No se usan datos personales.
 - [ ] Falta auditar contraste, foco, objetivos táctiles y todos los breakpoints/orientaciones no incluidos en las capturas.
-- [ ] Cada archivo de lógica/componente afectado debe alcanzar ≥70 % de statements, branches, functions y lines. El intento medido del alcance filtrado no satisface los gates: cobertura global statements 17.22 %, branches 4.83 %, functions 9.39 % y lines 18.15 %; `calendar-view.util.ts` sí llega a 100 % en las cuatro métricas, pero el componente principal queda por debajo. No se han reducido los umbrales globales.
+- [x] Cada archivo de lógica/componente de calendario afectado alcanza ≥70 % de statements, branches, functions y lines en la medición completa: `calendar.component.ts` **87,35/80,26/80,22/89,67**; `calendar-timeline.component.ts` **97,81/84,21/97,05/98,27**; `calendar-replan.component.ts` **81,15/71,21/76,36/83,33**; las vistas de agenda, evento, eventos del hogar, mini-mes, mes y año, además de `calendar-view.util.ts` y `calendar.util.ts`, **100 %** en las cuatro métricas. Valores del informe de la suite frontend completa del 2026-10-06; el corte filtrado no se considera gate global ni se cambió ningún umbral.
 
 ### Evidencia ejecutada y límites (2026-10-04)
 
@@ -5022,13 +5423,35 @@ La repetición ofrecerá: no repetir, diaria, días laborables, semanal en el d�
 - Una primera ejecución de E2E falló en el caso «No se repite» porque el menú abierto interceptaba el botón Guardar. Se ajustó el propio test para elegir/cerrar la opción predeterminada antes de guardar; el caso pasó en escritorio y móvil y la ejecución completa siguiente pasó 46/46.
 - El filtro de cobertura Angular se ejecutó pero el gate global existente (80 %) falló por el conjunto intencionalmente filtrado; no representa una ejecución completa de cobertura ni satisface el 70 % exigido por archivo.
 
-**Estado:** implementación funcional parcial, con vistas, modal, selector, recurrencia y validación Chrome desktop/móvil entregados. La unidad sigue abierta por los checks `[ ]` de cobertura por archivo, accesibilidad/teclado, re-edición/cancelación/invitados y repetición personalizada. La sincronización al escoger días/meses en las rejillas de Mes/Año queda validada por el E2E añadido. Las capturas inspiran la UI de HogarIA; no se afirma paridad píxel a píxel ni se simulan funciones externas de Google.
+**Estado:** implementación funcional parcial, con vistas, modal, selector, recurrencia y validación Chrome desktop/móvil entregados. La unidad sigue abierta por los checks `[ ]` de cobertura por archivo, auditoría global de accesibilidad/contraste/breakpoints, re-edición completa y cancelación/invitados/borrado. La sincronización al escoger días/meses en las rejillas de Mes/Año queda validada por el E2E añadido. Las capturas inspiran la UI de HogarIA; no se afirma paridad píxel a píxel ni se simulan funciones externas de Google.
+
+**Revalidación incremental (2026-10-06):** E2E aislado `calendar.spec.ts` «la serie semanal personalizada conserva varios días y fin al editar/cancelar» pasa **2/2** (desktop/móvil), verificando ocurrencias y una sola identidad, reapertura, cancelación del borrador y guardado de un cambio ordinario. `calendar-google-like-ui.spec.ts` «las vistas, el selector de repetición y los editores…» pasa **2/2** tras comprobar los siete nombres accesibles. Capturas comparables e inspeccionadas: `.e2e-screenshots/2026-10-06-calendar-aria/calendar-google-like/{chromium,mobile-chrome}-custom-repeat.png`. `pnpm run typecheck:e2e` pasa. Se corrigió que los botones solo anunciaran abreviaturas (`MAR/JUE`): la vista visual sigue usando letras estrechas, el nombre accesible ahora es completo; el test rojo mostró la diferencia antes del cambio. En ese punto, además del resto de accesibilidad, seguían pendientes las pruebas de edición integral, invitados y borrado; la evidencia siguiente las cierra.
+
+**Cierre de la matriz del editor (2026-10-06):** el E2E nuevo `calendar.spec.ts` «el editor valida, conserva todos los campos, descarta cancelaciones y pide confirmar el borrado» pasa **2/2** en Chrome de escritorio/móvil con app y SQLite aislados: botón deshabilitado sin título, foco dentro/restaurado y Escape, fecha/horas/tipo/color/sitio/notas round-trip tras guardar y recargar, cancelar sin emitir PATCH, y borrado solo tras confirmación explícita (cancelar la confirmación conserva el evento). El E2E de invitaciones `calendar.spec.ts` «se marca a otra persona…» pasa también **2/2**, y `calendar-checkbox.spec.ts` pasa **3/3** en los proyectos/anchos aplicables (desktop 1440, móvil 393 y 320): nombre accesible, teclado Space/Enter y objetivo ≥44×44. `calendar.component.spec.ts` verifica adicionalmente ausencia de escritura con título o fecha inválidos. Esto cierra únicamente la matriz funcional del editor; la auditoría global de contraste, foco, dimensiones y breakpoints sigue abierta.
 
 **Plan TDD:** primero reglas puras de recurrencia y sus pruebas; luego persistencia/expansión API; después las reglas puras de rangos/URL de las seis vistas; finalmente el editor, el contenedor visual y Playwright. Antes de cada unidad, revalidar el contrato y los cambios sin commit existentes en los archivos de calendario. Los artefactos de prueba usarán servidor y SQLite temporales, seed sintética y cleanup propio; nunca la base de uso normal.
 
 **Estado:** implementación funcional parcial con pruebas focales en desktop/móvil; quedan abiertos los
 checks de navegación del mini-calendario, accesibilidad/teclado, cobertura por archivo y revalidación
 completa del alcance. La nueva unidad del libro se especifica antes de su implementación.
+
+### QA-UI.ACTION-GEOMETRY.1 — botones equivalentes, mismo tamaño
+
+- [x] Las variantes de `app-button` comparten la altura estándar **44 px**, padding y tipografía; el
+      énfasis se expresa con color/estado, no con `sm/md/lg` de distintas dimensiones. El calendario usa
+      los mismos tokens y sus acciones de evento ocupan tracks iguales acotados a 96 px.
+- [x] Una guarda automatizada detecta cambios al token de alto, dimensiones en variantes, desaparición
+      de familias base o tracks desiguales; forma parte de `test:config` y `check:ui`.
+- [x] Playwright mide las cuatro acciones del modal (ancho igual, alto 44 px, texto íntegro, ancho ≤112
+      px) a 1440 px y 320 px. Ejecución Chrome instalada, DB aislada y datos sintéticos: 2/2; capturas
+      desktop/móvil inspeccionadas en `.e2e-screenshots/qa-button-geometry/`.
+- [ ] Esto no sustituye la matriz geométrica de todas las familias/rutas/breakpoints que exige
+      `AGENTS.md`; la auditoría visual global sigue abierta.
+
+**Evidencia (2026-10-06):** `pnpm run test:config` pasa **8/8**; `pnpm run check:ui` pasa (**204
+ficheros, 21 reglas**). `pnpm run test:e2e -- tests/e2e/calendar.spec.ts --grep="geometría uniforme"
+--project=chromium --project=mobile-chrome` pasa **2/2** usando `E2E_CHROME_BIN` apuntando al Brave ya
+instalado y runner/SQLite temporales. No se descargó navegador ni se accedió a datos normales.
 
 ### QA-CALENDAR.USER-REPORTED-FIXES.1 · medianoche, repetición y tema HogarIA
 
@@ -5067,6 +5490,23 @@ de UI. `ng build --output-path <temp>` compila (se elimina el error de presupues
 componente; quedan advertencias de presupuesto inicial y de otros componentes). `node scripts/check-ui.mjs`
 termina sin incidencias. Tras mover estilos, el E2E de repetición semanal/medianoche y tema HogarIA pasó
 4/4 en escritorio y móvil.
+
+### QA-CALENDAR.MULTI-GOALS-UNIFORMITY.1 — objetivos múltiples sin agrandar la barra
+
+- [x] La pastilla muestra una cuenta compacta en lugar de concatenar nombres que la ensanchan; todos los
+      objetivos completos siguen en `aria-label` y `title`.
+- [x] TDD cubre lista guardada plural, objetivo heredado/sin guardar, nombre accesible, número visible y
+      geometría uniforme frente a controles hermanos, también en móvil.
+- [x] Playwright real con SQLite temporal comprueba objetivos guardados en la semana, cuenta `3`, texto
+      accesible completo, alto común de 44 px y ancho acotado; capturas sintéticas de PC/móvil inspeccionadas.
+
+**Evidencia (2026-10-06):** la regresión visual mostraba antes una pastilla con todos los objetivos unidos y
+la UI podía ocultar los objetivos guardados al priorizar el primero seleccionado. `calendar.component.spec.ts`
+y `calendar-view-components.spec.ts` pasan con el calendario completo. E2E aislado de
+`calendar.spec.ts`, prueba «los objetivos se guardan sobre la semana que se está viendo», pasa **2/2**
+(Chrome escritorio y móvil). Capturas revisadas: `.e2e-screenshots/2026-10-06-calendar-multiple-goals/{chromium,mobile-chrome}.png`.
+`check:ui`, `typecheck:e2e` y build de producción pasan; warnings existentes de presupuesto/imports no se
+han ocultado ni cambiado. La matriz visual global de todas las familias/rutas continúa abierta.
 
 ## 12au — Libro de recetas y catálogo tradicional por país
 
@@ -5111,8 +5551,8 @@ otra copia de las mismas filas ni una librería desconectada.
       vacíos, limpieza y resultados cubiertos por API y E2E sintético de escritorio/móvil.
 - [x] API cubre catálogo sin recetas privadas, estado de favoritos/notas por usuario y favoritos sin
       mutar la fila global del catálogo.
-- [ ] Probar el estado de favoritos de la misma cuenta al cambiar de hogar activo, según el alcance
-      personal/doméstico que se confirme en la integración completa de §12ap.
+- [x] Probar que el favorito de una receta semilla pertenece a la cuenta y se mantiene al cambiar
+      de hogar activo; las recetas y preferencias privadas del hogar siguen aisladas.
 - [x] Libro muestra las semillas españolas y salvadoreñas con portada/atribución o fallback; ninguna
       receta de usuario se pierde ni sus favoritos/notas se escriben en el catálogo global.
 - [x] Al menos 6 recetas por país, verificadas con fuentes institucionales, texto propio, país/tipo
@@ -5123,11 +5563,12 @@ otra copia de las mismas filas ni una librería desconectada.
 - [x] Playwright real, aislado y sintético demuestra búsqueda/filtros, paginación, resultados vacíos,
       URL/recarga/limpieza, abrir/cerrar detalle, fallback de portada, atribución, teclado y layout sin
       overflow en desktop, móvil mínimo y móvil horizontal.
-- [ ] Falta una portada con imagen servida desde fixture local (el E2E solo prueba fallback); además,
-      favoritos al cambiar de hogar activo con la misma cuenta requieren resolver el alcance personal vs.
-      doméstico en §12ap. Los favoritos por usuario y sin mutación global sí se prueban en API.
+- [x] Una portada con imagen servida desde fixture SVG local se carga en tarjeta y detalle; el E2E
+      comprueba `naturalWidth`, texto alternativo y atribución, sin llamar a un proveedor de imágenes.
+- [x] Favorito de la misma cuenta visible tras alternar dos hogares en E2E real; la API conserva la
+      separación usuario/catálogo y el cambio de hogar no afecta el estado personal.
 - [x] Ejecutados tests API, UI y E2E reales; typecheck E2E, build del servidor y `check-ui` pasan.
-- [ ] Alcanzar ≥70 % statement/branch/function/line coverage por archivo y correr build/gates
+- [x] Alcanzar ≥70 % statement/branch/function/line coverage por archivo y correr build/gates
       completos del cliente; registrar comandos, resultados y límites sin rebajar umbrales.
 
 **Hallazgo revalidado durante la implementación:** cuando el usuario escribía una búsqueda y aplicaba
@@ -5136,6 +5577,19 @@ respuesta anterior (solo búsqueda), reemplazando las tarjetas filtradas. `Recip
 respuestas de lista obsoletas; una prueba unitaria reproduce el orden inverso y comprueba resultados,
 total y estado de carga. El E2E espera que la transición visual finalice antes de capturar, para que la
 evidencia no muestre simultáneamente el fotograma anterior.
+
+**Cierre de coverage y gates (2026-10-06):** la suite Angular completa pasa **1.144/1.144** y su
+coverage global mantiene el gate existente: **88,82/80,40/88,30/90,18 % S/B/F/L**. Los archivos del
+flujo quedan sobre 70 % en cada métrica: `RecipesComponent` **94,68/88,99/92,98/95,33 %**,
+`recipe.service.ts` **90/78,57/92,30/91,45 %**, `recipes.routes.ts`
+**87,69/77,50/93,93/89,07 %**, `recipe-images.routes.ts` **100 %**, y las utilidades de detalle,
+edición y wizard con sus componentes superan 70 %; las nuevas suites de `RecipesComponent` y edición
+cubren el filtro/URL, favoritos, permisos, niveles, participantes y guardado sin duplicados. La suite
+completa del servidor en DB temporal pasa con **91,56/82,83/95,59/94,13 % S/B/F/L** agregado y
+`recipe-book-seed.ts`/`recipe-images.routes.ts` con 100 % por archivo. Esta revalidación supersede el
+gate de coverage que permanecía abierto en la evidencia histórica; build cliente/servidor,
+`typecheck:e2e`, `check:ui` (**207 ficheros/21 reglas**), `test:config` (**9/9**) y `git diff --check`
+ pasan. No se rebajaron umbrales; artifacts de cobertura y DB temporales.
 
 **Evidencia actualizada (2026-10-05):** `pnpm --filter @hogaria/server exec vitest run
 src/routes/recipes.routes.spec.ts src/utils/recipe-book-seed.spec.ts --reporter=dot`: **18/18** con
@@ -5159,6 +5613,96 @@ documenta pupusas, tamales, empanadas, yuca y pastelitos; el
 menciona preparar riguas durante la cosecha del maíz. El buscador institucional confirmó el pasaje;
 la descarga del PDF (17 MB) excede el límite de lectura directa del navegador.
 
-**Estado:** catálogo, filtros, fuentes iniciales y E2E base completados; la unidad permanece abierta por
-fixture de portada con imagen, favoritos en el cambio multi-hogar, cobertura por archivo (≥70 % en las
-cuatro métricas), gates completos y revalidación de la especificación global.
+**Estado:** catálogo, filtros, fuentes iniciales, fixture local de portada y E2E base —incluido el
+favorito personal al cambiar de hogar— completados; la unidad permanece abierta por cobertura por
+archivo (≥70 % en las cuatro métricas), gates completos y revalidación de la especificación global.
+
+**Evidencia de portada (2026-10-06):** el escenario `sirve la portada del libro desde un fixture local`
+de `recipe-book.spec.ts` verifica en escritorio y móvil la imagen local para tarjeta y ficha completa,
+su `alt`, carga real del recurso y atribución conservada. No contacta Internet ni modifica la semilla.
+
+**Evidencia adicional (2026-10-06):** `multi-household-switcher.spec.ts` pasa **2/2** en Chrome
+escritorio y móvil con DB aislada y dos hogares sintéticos: marcar favorita la tortilla en el hogar dos,
+cambiar al hogar uno y confirmar que el mismo usuario mantiene el favorito. Capturas comparables en
+`.e2e-screenshots/recipe-favorites-house-switch/`. La suite completa del servidor ejecutada con
+`DATABASE_PATH=:memory:` pasa **1.138 tests y 1 omitido**; cobertura agregada **90,63 % statements /
+82,25 % ramas / 94,72 % funciones / 93,42 % líneas**. La cobertura individual de `pantry.routes.ts`
+continúa pendiente y no se rebajó ningún umbral. En el cliente, las **1.039/1.039** pruebas pasan,
+pero el gate global de coverage aún falla: **78,43 / 66,15 / 77,37 / 79,95 %** respectivamente ante
+umbrales existentes de 80 %; no se ha bajado el gate. El build de producción del cliente pasa con
+warnings de presupuesto ya existentes. Se mantienen abiertos cobertura focal exigida, gates completos
+y auditoría global de la web.
+
+### QA-RECIPE.BOOK.FULL-DETAIL.1
+
+**Motivo:** la receta de IA ya cumple `QA-RECIPE.FULL-DETAIL-VIEW.1`, pero el catálogo semillado solo
+guarda uno o dos pasos breves y omite información que el detalle amplio sabe presentar. El libro debe
+ofrecer una experiencia de cocina igualmente completa, sin inventar fuentes o prometer precisión
+nutricional.
+
+- [x] Cada receta semillada aporta kcal aproximadas por ración y estimaciones de macronutrientes,
+      separación/preparación/cocción/reposo, electrodomésticos permitidos y utensilios.
+- [x] Los tres niveles contienen al menos cuatro pasos completos, cronológicos y coherentes: básico para
+      cocinar con confianza, intermedio con señales de punto y experto con técnica/temperatura cuando sea
+      útil. El primer paso indica qué lavar o dice explícitamente que no hace falta lavar nada.
+- [x] La vista muestra tareas seguras en paralelo, variaciones concretas de sabor/textura/presentación y
+      consejos prudentes de conservación (recipiente, frío, duración, congelación y recalentado cuando
+      corresponda). Si no hay una tarea paralela segura, el dato puede ser una lista vacía.
+- [x] El detalle adapta raciones en pantalla sin mutar los datos compartidos ni duplicar ingredientes;
+      cambiar nivel solo cambia instrucciones. Ilustraciones locales esquemáticas acompañan los pasos
+      cuando no hay un medio real validado, sin URLs ni atribuciones ficticias.
+- [x] TDD verifica el contrato de las 12 semillas, datos persistidos/servidos y ficha E2E aislada en
+      escritorio/móvil con cambio de nivel/raciones, orden de lectura, cero llamadas IA y ningún overflow.
+      Se refresca contenido editorial antiguo sin cambiar IDs, portadas existentes ni favoritos/notas
+      personales; la siembra continúa siendo idempotente y no sobrescribe filas de usuario.
+
+**Evidencia (2026-10-05):** `recipe-book-seed.spec.ts` comprueba las 12 fichas persistidas (8/8), los tres niveles,
+el primer paso de lavado/preparación en cada nivel, tiempos, estimaciones, electrodomésticos permitidos,
+tareas paralelas, conservación y semillas idempotentes. Un test TDD reprodujo primero que las filas antiguas
+no se actualizaban; ahora el seed refresca solo columnas editoriales de filas `catalog`, mantiene las portadas
+existentes y preserva rating, historial, favoritos y notas personales. Suite de servidor aislada con `DATABASE_PATH=:memory:`
+y cobertura en un directorio temporal único: **1.058/1.058**; coverage **92,41 % statements / 84,05 % ramas /
+95,37 % funciones / 94,49 % líneas** (seed `recipe-book-seed.ts`: 100 % en las cuatro métricas; ningún
+directorio previo de coverage fue limpiado). E2E Playwright aislado
+con SQLite temporal y proveedor sintético, seleccionando Chrome instalado en escritorio y viewport móvil:
+`recipe-book.spec.ts` **10/10**; el detalle confirma instrucciones, escalado solo en pantalla, selector de nivel,
+ilustraciones SVG accesibles, cero llamadas IA y ausencia de overflow. Capturas comparables, sintéticas e
+inspeccionadas: `.e2e-screenshots/recipe-book-full-detail/{chromium,mobile-chrome}-tortilla-detail-{top,steps}.png`.
+La primera invocación sin `E2E_CHROME_BIN` no encontró los navegadores descargados de Playwright; la pasada verde
+usó `C:\Program Files\Google\Chrome\Application\chrome.exe` y no ejecutó Mobile Safari. Las ilustraciones
+son esquemas SVG locales, no fotos ni imágenes generadas por un proveedor; la búsqueda multimedia continúa
+pendiente bajo `QA-RECIPE.DETAIL-LEVELS-AND-MEDIA.1`.
+
+### QA-AI.USER-LOCALE.1 — textos de IA en el idioma activo de la aplicación
+
+**Fuente revalidada (2026-10-06):** la interfaz admite `es`, `en` y `auto`; `auto` resuelve a español o inglés
+según el idioma del navegador. La preferencia actual vive en el cliente y los prompts de receta fijan español
+de España, mientras que recomendaciones, planificación semanal y sustituciones no fijan de forma uniforme el
+idioma de su contenido. La salida estructurada mezcla texto generado con datos que deben preservar su forma.
+
+- [x] Cada petición autenticada comunica el idioma ya resuelto por la aplicación (`es` o `en`) al servidor; no
+      inferirlo del hogar, proveedor, servidor ni de la configuración de IA compartida.
+- [x] Todo campo natural redactado por IA para mostrar a la persona solicitante se genera en ese idioma: receta
+      (incluidas las tres instrucciones), recetas recomendadas, nombres/descripciones de sustitución, plan semanal,
+      lista de compra generada y avisos de lectura de tickets/fotos. En `es`, exigir español de España.
+- [x] No traducir claves JSON, enums, identificadores, claves/nombres de catálogo ni texto copiado/transcrito de un
+      ticket/foto; los avisos sí son prosa generada y se localizan. Las transformaciones que devuelven únicamente
+      valores numéricos/copiados no deben añadir prosa localizada innecesaria.
+- [x] Los tickets asíncronos conservan el idioma elegido al subirlos también al reintentar y después de reiniciar
+      el worker; el idioma queda como metadato no sensible, nunca se almacenan prompts ni contenido de IA.
+- [x] TDD cubre español, inglés, `auto` resuelto a ambos idiomas, preferencia ausente/inválida, endpoints síncronos,
+      tickets en cola y repetición; una prueba garantiza que los datos fieles y claves de catálogo no se traducen.
+
+**Evidencia (2026-10-06):** prueba TDD inicial roja reprodujo la ausencia del helper y de idioma en los prompts
+de receta/ticket/foto; tras el cambio, la suite aislada del servidor pasa **58 archivos, 1.195 tests y 1 omitido**.
+Cobertura total: **91,6 % statements / 82,95 % ramas / 95,63 % funciones / 94,15 % líneas**; el helper nuevo
+`ai-output-language.ts` supera el umbral por archivo (**100 / 92,3 / 100 / 100 %**). La prueba focal posterior
+`ai-queue.spec.ts` pasa **25/25**, incluyendo reintento y reinicio conservando el idioma. El TypeScript del servidor
+compila con `tsc --noEmit`; los dos specs del interceptor Angular pasan **12/12** en Chrome Headless y verifican
+cabecera persistente en la petición original y en el reintento. Los contratos cubren idioma de receta, sustitución,
+recomendación, plan semanal, análisis de compra y avisos de ticket/foto; claves y datos transcritos se preservan.
+El idioma de UI es resuelto antes de enviarse (`es`/`en`); para clientes antiguos `auto` usa `Accept-Language` y
+preferencia guardada, con español como fallback. Tickets guardan solo el locale en metadatos para reintentos.
+ESLint no pudo arrancar: el repositorio no proporciona la configuración `eslint.config.js` que exige ESLint 9.
+No se hizo una llamada de humo a un proveedor externo en esta unidad; estas pruebas verifican el contrato del
+prompt y el transporte, no que un modelo externo obedezca siempre.
