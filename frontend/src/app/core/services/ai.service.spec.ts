@@ -128,6 +128,72 @@ describe('AiService', () => {
     expect(service.configsError()).toBeFalse();
   });
 
+  it('requests a meal replacement with only guest food preferences and propagates the candidate', () => {
+    const guests = [
+      {
+        allergies: ['cacahuete'],
+        intolerances: ['lactosa'],
+        diets: ['vegetariana'],
+        likes: ['calabacín'],
+        dislikes: ['cilantro'],
+        notes: 'Sin picante'
+      }
+    ];
+    let candidate: unknown;
+    service.replaceMeal({ mealId: 'meal-1', guests }).subscribe((value) => (candidate = value));
+
+    const request = http.expectOne('/api/ai/replace-meal');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.context.get(SILENT_TOAST)).toBeTrue();
+    expect(request.request.body).toEqual({ mealId: 'meal-1', guests });
+    const expected = {
+      name: 'Arroz de verduras',
+      description: 'Alternativa sintética.',
+      ingredients: ['arroz', 'verduras'],
+      estimatedTime: 25,
+      servings: 3
+    };
+    request.flush({ data: expected });
+
+    expect(candidate).toEqual(expected);
+  });
+
+  it('sends selected household members and plural planning goals with a replacement request', () => {
+    const requestBody = {
+      mealId: 'meal-2',
+      householdMemberIds: ['membership-a', 'membership-b'],
+      guests: [],
+      goals: {
+        types: ['weight-loss', 'custom'],
+        caloriesTarget: 1700,
+        customInstructions: 'Prioriza legumbres.'
+      }
+    };
+
+    service.replaceMeal(requestBody).subscribe();
+
+    const request = http.expectOne('/api/ai/replace-meal');
+    expect(request.request.body).toEqual(requestBody);
+    request.flush({
+      data: {
+        name: 'Lentejas',
+        description: 'Plato completo.',
+        ingredients: ['lentejas'],
+        estimatedTime: 30,
+        servings: 2
+      }
+    });
+  });
+
+  it('cancels the replacement HTTP request when its subscriber unsubscribes', () => {
+    const subscription = service.replaceMeal({ mealId: 'meal-cancelled' }).subscribe();
+    const request = http.expectOne('/api/ai/replace-meal');
+
+    subscription.unsubscribe();
+
+    expect(request.cancelled).toBeTrue();
+  });
+
   it('does not hide a prior load error when deleting a cached config', () => {
     service.createConfig(CONFIG).subscribe();
     http.expectOne('/api/ai/configs').flush({ data: CONFIG });
@@ -277,7 +343,7 @@ describe('AiService', () => {
     expect(result).toBeNull();
   });
 
-  it('generates one or many recipes and always clears the generating state', () => {
+  it('preserves usable drafts after a failed retry and clears the opposite result on success', () => {
     const request = {
       ingredients: [],
       utensils: [],
@@ -298,29 +364,42 @@ describe('AiService', () => {
       servings: 2,
       ingredients: [],
       utensils: [],
-      steps: []
+      guidance: { appliances: [], parallelTasks: [], tipsAndVariations: [] },
+      instructionsByLevel: {
+        basic: [{ stepNumber: 1, instruction: 'Cocer.' }],
+        intermediate: [{ stepNumber: 1, instruction: 'Cortar y cocer.' }],
+        expert: [{ stepNumber: 1, instruction: 'Cocer a hervor suave.' }]
+      }
     };
 
     service.generateRecipe(request).subscribe();
     expect(service.isGenerating()).toBeTrue();
-    http.expectOne('/api/ai/generate-recipe').flush({ data: recipe });
+    const generatedRequest = http.expectOne('/api/ai/generate-recipe');
+    expect(generatedRequest.request.context.get(SILENT_TOAST)).toBeTrue();
+    generatedRequest.flush({ data: recipe });
     expect(service.generatedRecipe()).toEqual(recipe);
     expect(service.isGenerating()).toBeFalse();
 
     service.generateRecipe(request).subscribe((result) => expect(result).toBeNull());
-    http
-      .expectOne('/api/ai/generate-recipe')
-      .flush({}, { status: 500, statusText: 'Server error' });
+    const failedGenerationRequest = http.expectOne('/api/ai/generate-recipe');
+    expect(failedGenerationRequest.request.context.get(SILENT_TOAST)).toBeTrue();
+    failedGenerationRequest.flush({}, { status: 500, statusText: 'Server error' });
+    expect(service.generatedRecipe()).toEqual(recipe);
+    expect(service.generatedRecipes()).toEqual([]);
     expect(service.isGenerating()).toBeFalse();
 
     service.generateMultipleRecipes(request).subscribe();
-    http.expectOne('/api/ai/generate-multiple-recipes').flush({ data: [recipe] });
+    const generatedMultipleRequest = http.expectOne('/api/ai/generate-multiple-recipes');
+    expect(generatedMultipleRequest.request.context.get(SILENT_TOAST)).toBeTrue();
+    generatedMultipleRequest.flush({ data: [recipe] });
+    expect(service.generatedRecipe()).toBeNull();
     expect(service.generatedRecipes()).toEqual([recipe]);
 
     service.generateMultipleRecipes(request).subscribe((result) => expect(result).toBeNull());
-    http
-      .expectOne('/api/ai/generate-multiple-recipes')
-      .flush({}, { status: 500, statusText: 'Server error' });
+    const failedMultipleRequest = http.expectOne('/api/ai/generate-multiple-recipes');
+    expect(failedMultipleRequest.request.context.get(SILENT_TOAST)).toBeTrue();
+    failedMultipleRequest.flush({}, { status: 500, statusText: 'Server error' });
+    expect(service.generatedRecipes()).toEqual([recipe]);
     expect(service.isGenerating()).toBeFalse();
 
     service.clearGenerated();

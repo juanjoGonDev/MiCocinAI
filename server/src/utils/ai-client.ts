@@ -10,6 +10,9 @@
  */
 
 import { z } from 'zod';
+import { isIP } from 'node:net';
+import { activeHouseholdId, hasActiveHouseholdMemberships } from './household-context.js';
+import type { AiResponseFormat } from '../schemas/ai-response-format.js';
 
 export type AiMessagePart =
   | { type: 'text'; text: string }
@@ -31,6 +34,8 @@ export type AiJobKind =
 
 export interface AiConfigRow {
   id: string;
+  user_id?: string;
+  household_id?: string | null;
   name: string;
   provider: string;
   base_url: string;
@@ -48,6 +53,11 @@ export interface AiConfigRow {
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+const REAL_SMOKE_PROVIDER_KEY_MARKER = '__HOGARIA_AI_REAL_SMOKE_PROVIDER_KEY__';
+const REAL_SMOKE_ENABLED_ENV = 'HOGARIA_AI_REAL_SMOKE';
+const REAL_SMOKE_PROXY_URL_ENV = 'HOGARIA_AI_REAL_SMOKE_PROXY_URL';
+const REAL_SMOKE_PROXY_TOKEN_ENV = 'HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN';
+const CONFIGURATION_UNAVAILABLE = 'AI provider configuration is not available';
 
 /** Se tipa con el tipo real y no con un estructural: el `prepare` de better-sqlite3
  *  tiene firmas que un `get(...p: unknown[])` suelto no satisfacen. */
@@ -68,9 +78,22 @@ export class AiCallError extends Error {
 
 /** La fila activa de `ai_config`: se lee siempre desde la BD, no se guarda en memoria. */
 export function activeAiConfig(db: SqlDb, userId: string) {
+  const householdId = activeHouseholdId(db, userId);
+  if (!householdId && hasActiveHouseholdMemberships(db, userId)) return undefined;
+  return activeAiConfigForScope(db, userId, householdId);
+}
+
+export function activeAiConfigForScope(db: SqlDb, userId: string, householdId: string | null) {
+  if (householdId) {
+    return db
+      .prepare(
+        'SELECT * FROM ai_configs WHERE household_id = ? AND is_active = 1 ORDER BY updated_at DESC, id ASC LIMIT 1'
+      )
+      .get(householdId) as AiConfigRow | undefined;
+  }
   return db
     .prepare(
-      'SELECT * FROM ai_configs WHERE user_id = ? AND is_active = 1 ORDER BY updated_at DESC LIMIT 1'
+      'SELECT * FROM ai_configs WHERE user_id = ? AND household_id IS NULL AND is_active = 1 ORDER BY updated_at DESC, id ASC LIMIT 1'
     )
     .get(userId) as AiConfigRow | undefined;
 }
@@ -87,6 +110,67 @@ export function endpoint(baseUrl: string): string {
   if (/\/chat\/completions$/.test(base)) return base;
   if (/\/v\d+[a-z]*$/i.test(base)) return `${base}/chat/completions`;
   return `${base}/v1/chat/completions`;
+}
+
+/**
+ * El bearer de WebAPI permanece en el coordinador del smoke. El server E2E solo recibe
+ * una credencial efímera del proxy local; el marcador nunca se persiste como secreto.
+ */
+function resolveProviderApiKey(baseUrl: string, apiKey: string): string {
+  assertE2EProviderTarget(baseUrl);
+  if (apiKey !== REAL_SMOKE_PROVIDER_KEY_MARKER) return apiKey;
+
+  const proxyUrl = process.env[REAL_SMOKE_PROXY_URL_ENV];
+  const proxyToken = process.env[REAL_SMOKE_PROXY_TOKEN_ENV];
+  if (
+    process.env[REAL_SMOKE_ENABLED_ENV] !== '1' ||
+    !proxyUrl ||
+    baseUrl !== proxyUrl ||
+    !esUrlLoopback(proxyUrl) ||
+    !proxyToken?.trim() ||
+    proxyToken === REAL_SMOKE_PROVIDER_KEY_MARKER
+  ) {
+    throw new AiCallError('PROVIDER', CONFIGURATION_UNAVAILABLE, 'CONFIGURATION_ERROR');
+  }
+
+  return proxyToken;
+}
+
+function assertE2EProviderTarget(baseUrl: string): void {
+  if (process.env.E2E_EXTERNAL_STACK !== '1') return;
+
+  const proxyUrl = process.env[REAL_SMOKE_PROXY_URL_ENV];
+  if (process.env[REAL_SMOKE_ENABLED_ENV] === '1') {
+    if (!proxyUrl || baseUrl !== proxyUrl || !esUrlLoopback(proxyUrl)) {
+      throw new AiCallError('PROVIDER', CONFIGURATION_UNAVAILABLE, 'CONFIGURATION_ERROR');
+    }
+    return;
+  }
+
+  if (!esUrlLoopback(baseUrl)) {
+    throw new AiCallError('PROVIDER', CONFIGURATION_UNAVAILABLE, 'CONFIGURATION_ERROR');
+  }
+}
+
+function esUrlLoopback(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+    ) {
+      return false;
+    }
+
+    const hostname = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    if (hostname === 'localhost' || hostname === '::1') return true;
+    return isIP(hostname) === 4 && Number(hostname.split('.')[0]) === 127;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -116,27 +200,30 @@ export async function callAI(
   userId: string,
   messages: AiMessage[],
   db: SqlDb,
+  responseFormat: AiResponseFormat,
   kind: AiJobKind = 'recipe'
 ): Promise<string> {
   const { dispatchAI } = await import('./ticket-queue.js');
-  return dispatchAI(userId, messages, db, kind);
+  return dispatchAI(userId, messages, db, responseFormat, kind);
 }
 
 /** Transporte de una configuración ya fijada por el dispatcher. */
 export async function callAIWithConfig(
   active: AiConfigRow,
   messages: AiMessage[],
+  responseFormat: AiResponseFormat,
   signal?: AbortSignal
 ): Promise<string> {
+  const apiKey = resolveProviderApiKey(active.base_url, active.api_key);
   let response: Response;
   try {
     response = await fetch(endpoint(active.base_url), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${active.api_key}`
+        Authorization: `Bearer ${apiKey}`
       },
-      body: JSON.stringify(chatBody(active, { messages })),
+      body: JSON.stringify(chatBody(active, { messages, response_format: responseFormat })),
       signal: señalConTimeout(signal, active.timeout ?? DEFAULT_TIMEOUT_MS)
     });
   } catch (error) {
@@ -166,7 +253,7 @@ export async function callAIWithConfig(
   if (typeof content !== 'string') {
     throw new AiCallError('BAD_JSON', 'Invalid AI response format');
   }
-  return redactarSecreto(content, active.api_key);
+  return redactarSecreto(content, apiKey);
 }
 
 /**
@@ -184,10 +271,11 @@ export async function callAIStreaming(
   messages: AiMessage[],
   db: SqlDb,
   onDelta: (texto: string) => void,
+  responseFormat: AiResponseFormat,
   senal: AbortSignal
 ): Promise<string> {
   const { dispatchAIStreaming } = await import('./ticket-queue.js');
-  return dispatchAIStreaming(userId, messages, db, onDelta, senal);
+  return dispatchAIStreaming(userId, messages, db, onDelta, responseFormat, senal);
 }
 
 /** Transporte en streaming de una configuración ya fijada por el dispatcher. */
@@ -195,8 +283,10 @@ export async function callAIStreamingWithConfig(
   active: AiConfigRow,
   messages: AiMessage[],
   onDelta: (texto: string) => void,
+  responseFormat: AiResponseFormat,
   senal: AbortSignal
 ): Promise<string> {
+  const apiKey = resolveProviderApiKey(active.base_url, active.api_key);
   const signal = señalConTimeout(senal, active.timeout ?? DEFAULT_TIMEOUT_MS);
   let response: Response;
   try {
@@ -204,18 +294,11 @@ export async function callAIStreamingWithConfig(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${active.api_key}`
+        Authorization: `Bearer ${apiKey}`
       },
-      body: JSON.stringify({
-        model: active.model,
-        messages,
-        temperature: active.temperature,
-        max_tokens: active.max_tokens,
-        top_p: active.top_p,
-        frequency_penalty: active.frequency_penalty,
-        presence_penalty: active.presence_penalty,
-        stream: true
-      }),
+      body: JSON.stringify(
+        chatBody(active, { messages, response_format: responseFormat, stream: true })
+      ),
       signal
     });
   } catch (error) {
@@ -256,9 +339,9 @@ export async function callAIStreamingWithConfig(
           if (typeof delta === 'string' && delta) {
             entero += delta;
             pendienteDeRedaccion += delta;
-            const seguroHasta = prefijoSeguroHasta(pendienteDeRedaccion, active.api_key);
+            const seguroHasta = prefijoSeguroHasta(pendienteDeRedaccion, apiKey);
             if (seguroHasta > 0) {
-              onDelta(redactarSecreto(pendienteDeRedaccion.slice(0, seguroHasta), active.api_key));
+              onDelta(redactarSecreto(pendienteDeRedaccion.slice(0, seguroHasta), apiKey));
               pendienteDeRedaccion = pendienteDeRedaccion.slice(seguroHasta);
             }
           }
@@ -276,8 +359,8 @@ export async function callAIStreamingWithConfig(
   if (!entero) {
     throw new AiCallError('BAD_JSON', 'El stream no trajo nada de texto', '');
   }
-  if (pendienteDeRedaccion) onDelta(redactarSecreto(pendienteDeRedaccion, active.api_key));
-  return redactarSecreto(entero, active.api_key);
+  if (pendienteDeRedaccion) onDelta(redactarSecreto(pendienteDeRedaccion, apiKey));
+  return redactarSecreto(entero, apiKey);
 }
 
 /**
@@ -354,11 +437,12 @@ export async function pingDeConexionTransport(config: {
 > {
   const startTime = Date.now();
   try {
+    const apiKey = resolveProviderApiKey(config.base_url, config.api_key);
     const response = await fetch(endpoint(config.base_url), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.api_key}`
+        Authorization: `Bearer ${apiKey}`
       },
       // El cuerpo es el minimo del contrato del proveedor: modelo, mensajes y el formato. Nada
       // de `max_tokens` ni `temperature`, que los modelos de razonamiento rechazan y no aportan
@@ -421,7 +505,7 @@ export async function pingDeConexionTransport(config: {
     return {
       ok: true,
       latency,
-      message: redactarSecreto(contestacion.data.message, config.api_key)
+      message: redactarSecreto(contestacion.data.message, apiKey)
     };
   } catch (error) {
     const latency = Date.now() - startTime;

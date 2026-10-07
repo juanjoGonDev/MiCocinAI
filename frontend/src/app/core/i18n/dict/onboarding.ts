@@ -22,7 +22,7 @@ export const onboardingEs = {
   'onboarding.utensilios_en_despensa':
     'La disponibilidad de los utensilios se configura en Despensa. Allí puedes marcar qué tienes y editarlo cuando quieras.',
   'onboarding.marca_el_plato_no':
-    'Marca el plato, no la dieta. Se lo pasamos al planificador de la semana.',
+    'Elige uno o varios objetivos; puedes combinarlos y añadir un objetivo personalizado.',
   'onboarding.gestionar_utensilios': 'Gestionar utensilios →',
   'onboarding.me_gusta': 'Me gusta 👍',
   'onboarding.mejor_no': 'Mejor no 👎',
@@ -74,7 +74,7 @@ export const onboardingEn: Record<keyof typeof onboardingEs, string> = {
     'HogarIA is your day to day: tell us how much you cook and what you want out of the app.',
   'onboarding.utensilios_en_despensa':
     'Utensil availability is managed in Pantry. Mark what you have there and update it whenever you need.',
-  'onboarding.marca_el_plato_no': "Tick the dish, not the diet. We pass it to the week's planner.",
+  'onboarding.marca_el_plato_no': 'Choose one or more goals; you can combine them and add a custom objective.',
   'onboarding.gestionar_utensilios': 'Manage utensils →',
   'onboarding.me_gusta': 'I like it 👍',
   'onboarding.mejor_no': 'Better not 👎',

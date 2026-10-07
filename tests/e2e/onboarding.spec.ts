@@ -86,8 +86,12 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
 
     // ── Paso 3 · objetivo
     await expect(page.locator('.onboarding__step-label')).toContainText('Paso 4 de 6 · Objetivo');
-    await page.locator('.onboarding__goal', { hasText: 'Perder peso' }).click();
-    await expect(page.locator('.onboarding__goal--on')).toContainText('Perder peso');
+    const loseWeight = page.locator('.onboarding__goal', { hasText: 'Perder peso' });
+    const gainMuscle = page.locator('.onboarding__goal', { hasText: 'Ganar músculo' });
+    await loseWeight.click();
+    await gainMuscle.click();
+    await expect(loseWeight).toHaveAttribute('aria-pressed', 'true');
+    await expect(gainMuscle).toHaveAttribute('aria-pressed', 'true');
     await page.fill('textarea#goalNotes', 'Poco frito y nada de bollería.');
 
     await page.getByRole('button', { name: 'Siguiente →' }).click();

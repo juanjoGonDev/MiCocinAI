@@ -122,10 +122,10 @@ test('onboarding y preferencias conservan emojis de comida y usan SVG para objet
 
   await page.getByRole('button', { name: 'Siguiente →' }).click();
   await expect(page.locator('.onboarding__step-label')).toContainText('Objetivo');
-  expect.soft(await page.locator('.onboarding__goal-icon app-icon').count()).toBe(6);
-  expect.soft(await page.locator('.onboarding__goal-icon svg[aria-hidden="true"]').count()).toBe(6);
+  expect.soft(await page.locator('.onboarding__goal-icon app-icon').count()).toBe(7);
+  expect.soft(await page.locator('.onboarding__goal-icon svg[aria-hidden="true"]').count()).toBe(7);
   const goalLabels = await page.locator('.onboarding__goal-label').allTextContents();
-  expect.soft(goalLabels).toHaveLength(6);
+  expect.soft(goalLabels).toHaveLength(7);
   expect.soft(goalLabels.join('')).not.toMatch(/\p{Extended_Pictographic}/u);
 
   for (const size of sizes) {

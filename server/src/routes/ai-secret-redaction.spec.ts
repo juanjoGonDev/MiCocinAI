@@ -105,7 +105,66 @@ describe('redacción de secretos en la configuración IA', () => {
   });
 
   it('redacta una clave que el modelo repita en una receta antes de responder al navegador', async () => {
-    const responseContent = JSON.stringify({ name: `Receta ${SECRET}`, description: 'Sintética' });
+    const responseContent = JSON.stringify({
+      name: `Receta ${SECRET}`,
+      description: 'Sintética',
+      difficulty: 'easy',
+      cuisine: null,
+      totalTime: 10,
+      prepTime: 5,
+      cookTime: 5,
+      restTime: null,
+      servings: 2,
+      calories: 100,
+      ingredients: [
+        {
+          name: 'Tomate',
+          quantity: 1,
+          unit: 'unit',
+          preparation: null,
+          isOptional: false,
+          substitutes: [],
+          notes: null
+        }
+      ],
+      utensils: [],
+      guidance: { appliances: [], parallelTasks: [], tipsAndVariations: [] },
+      instructionsByLevel: {
+        basic: [
+          {
+            stepNumber: 1,
+            instruction: 'Lava el tomate.',
+            duration: null,
+            tips: null,
+            warning: null,
+            illustration: null
+          }
+        ],
+        intermediate: [
+          {
+            stepNumber: 1,
+            instruction: 'Lava y corta el tomate.',
+            duration: null,
+            tips: null,
+            warning: null,
+            illustration: null
+          }
+        ],
+        expert: [
+          {
+            stepNumber: 1,
+            instruction: 'Lava y corta el tomate en dados regulares.',
+            duration: null,
+            tips: null,
+            warning: null,
+            illustration: null
+          }
+        ]
+      },
+      nutrition: null,
+      storage: null,
+      tags: []
+    });
     vi.stubGlobal(
       'fetch',
       async () =>

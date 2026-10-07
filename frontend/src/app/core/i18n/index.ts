@@ -36,6 +36,7 @@ import { profileEs, profileEn } from './dict/profile';
 import { recipesEs, recipesEn } from './dict/recipes';
 import { settingsEs, settingsEn } from './dict/settings';
 import { tasteEs, tasteEn } from './dict/taste';
+import { aiParticipantsEs, aiParticipantsEn } from './dict/ai_participants';
 
 const es = {
   ...homeProfilePickerEs,
@@ -61,6 +62,7 @@ const es = {
   ...recipesEs,
   ...settingsEs,
   ...tasteEs,
+  ...aiParticipantsEs,
   ...uiEs,
 };
 
@@ -88,6 +90,7 @@ const en: Record<keyof typeof es, string> = {
   ...recipesEn,
   ...settingsEn,
   ...tasteEn,
+  ...aiParticipantsEn,
   ...uiEn,
 };
 

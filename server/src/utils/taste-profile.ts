@@ -111,7 +111,9 @@ export function plannedMealTypes(plan: MealPlan): MealTypeKey[] {
 
 /** Lo que la IA necesita saber para no proponer una cena a las 13:00. */
 export function mealTimesPromptLines(times: MealTimes): string {
-  const list = MEAL_TYPE_KEYS.map((key) => `${MEAL_TYPE_LABELS[key].toLowerCase()} a las ${times[key]}`);
+  const list = MEAL_TYPE_KEYS.map(
+    (key) => `${MEAL_TYPE_LABELS[key].toLowerCase()} a las ${times[key]}`
+  );
   return `Horarios de la casa: ${list.join(', ')}. Usa esas horas para situar cada comida.`;
 }
 
@@ -120,15 +122,20 @@ export const tasteGoalEnum = z.enum([
   'weight-loss',
   'weight-gain',
   'muscle-gain',
+  'maintenance',
   'variety',
   'custom'
 ]);
+export type TasteGoal = z.infer<typeof tasteGoalEnum>;
+
+const DEFAULT_TASTE_GOALS: TasteGoal[] = ['balanced'];
 
 export const GOAL_LABELS: Record<string, string> = {
   balanced: 'Equilibrada',
   'weight-loss': 'Perder peso',
   'weight-gain': 'Ganar peso',
   'muscle-gain': 'Ganar músculo',
+  maintenance: 'Mantener peso',
   variety: 'Variada',
   custom: 'Personalizada'
 };
@@ -164,10 +171,7 @@ export function detailLevelForCookingLevel(level: unknown): 'basic' | 'intermedi
 }
 
 /** Defensivo al leer: JSON antiguos o escritos a mano no pueden colar valores desconocidos. */
-export function toHomeProfile(
-  stored: unknown,
-  cookingLevel: unknown
-): HomeProfileView {
+export function toHomeProfile(stored: unknown, cookingLevel: unknown): HomeProfileView {
   const raw = readPreferences(stored);
   const modules: HomeModule[] = [];
   if (Array.isArray(raw.modules)) {
@@ -187,6 +191,11 @@ export function toHomeProfile(
 const stringList = z.array(z.string().trim().min(1).max(60)).max(60).optional();
 
 export const tasteProfileSchema = z.object({
+  /**
+   * Preferencias simultáneas; `goal` se conserva solo para aceptar formularios legacy durante el
+   * cambio de cliente. En almacenamiento y respuestas se usa siempre la forma plural.
+   */
+  goals: z.array(tasteGoalEnum).max(7).optional(),
   goal: tasteGoalEnum.optional(),
   goalNotes: z.string().trim().max(500).optional(),
   allergies: stringList,
@@ -219,7 +228,7 @@ export type TasteProfileInput = z.infer<typeof tasteProfileSchema>;
 export type UpdateTasteInput = z.infer<typeof updateTasteSchema>;
 
 export interface TasteProfile {
-  goal: string;
+  goals: TasteGoal[];
   goalNotes: string;
   allergies: string[];
   likes: string[];
@@ -243,7 +252,7 @@ export interface TasteResponse {
 }
 
 export const emptyTasteProfile = (): TasteProfile => ({
-  goal: 'balanced',
+  goals: [...DEFAULT_TASTE_GOALS],
   goalNotes: '',
   allergies: [],
   likes: [],
@@ -290,10 +299,19 @@ function normalizeText(value: unknown, max: number): string {
 /** Une el perfil guardado con los valores por defecto (nunca undefined). */
 export function toTasteProfile(stored: unknown): TasteProfile {
   const raw = readPreferences(stored);
-  const goal = typeof raw.goal === 'string' && GOAL_LABELS[raw.goal] ? raw.goal : 'balanced';
+  const rawGoals = Array.isArray(raw.goals)
+    ? raw.goals
+    : typeof raw.goal === 'string'
+      ? [raw.goal]
+      : DEFAULT_TASTE_GOALS;
+  const goals: TasteGoal[] = [];
+  for (const value of rawGoals) {
+    const parsed = tasteGoalEnum.safeParse(value);
+    if (parsed.success && !goals.includes(parsed.data)) goals.push(parsed.data);
+  }
 
   return {
-    goal,
+    goals: rawGoals.length > 0 && goals.length === 0 ? [...DEFAULT_TASTE_GOALS] : goals,
     goalNotes: normalizeText(raw.goalNotes, 500),
     allergies: normalizeList(raw.allergies),
     likes: normalizeList(raw.likes),
@@ -317,9 +335,8 @@ interface UserPreferenceRow {
 }
 
 function selectUserRow(db: Database.Database, userId: string): UserPreferenceRow | undefined {
-  return db
-    .prepare('SELECT preferences, cooking_level FROM users WHERE id = ?')
-    .get(userId) as UserPreferenceRow | undefined;
+  return db.prepare('SELECT preferences, cooking_level FROM users WHERE id = ?').get(userId) as
+    UserPreferenceRow | undefined;
 }
 
 export function readTasteResponse(db: Database.Database, userId: string): TasteResponse {
@@ -357,8 +374,14 @@ export function saveTasteProfile(
   if (patch.taste) {
     const previous = toTasteProfile(prefs.taste);
     const next = patch.taste;
+    const goals =
+      next.goals !== undefined
+        ? [...new Set(next.goals)]
+        : next.goal !== undefined
+          ? [next.goal]
+          : previous.goals;
     prefs.taste = {
-      goal: next.goal ?? previous.goal,
+      goals,
       goalNotes:
         next.goalNotes !== undefined ? normalizeText(next.goalNotes, 500) : previous.goalNotes,
       allergies: next.allergies !== undefined ? normalizeList(next.allergies) : previous.allergies,
@@ -469,13 +492,14 @@ export function tastePromptLines(taste: TasteProfile): string {
     lines.push(`Prefiere evitar (no lo propongas si no hace falta): ${taste.dislikes.join(', ')}`);
   }
 
-  const goalLabel = GOAL_LABELS[taste.goal] ?? taste.goal;
-  if (taste.goal === 'custom' && taste.goalNotes) {
-    lines.push(`Objetivo del comensal: ${taste.goalNotes}`);
-  } else if (taste.goal && taste.goal !== 'balanced') {
-    lines.push(
-      taste.goalNotes ? `Objetivo: ${goalLabel} — ${taste.goalNotes}` : `Objetivo: ${goalLabel}`
-    );
+  const selectedGoals = taste.goals.filter((goal) => goal !== 'custom');
+  const hasOnlyDefaultGoal = selectedGoals.length === 1 && selectedGoals[0] === 'balanced';
+  const labels = selectedGoals.map((goal) => GOAL_LABELS[goal] ?? goal);
+  if (labels.length > 0 && !hasOnlyDefaultGoal) {
+    lines.push(`Objetivos del comensal: ${labels.join(', ')}`);
+  }
+  if (taste.goalNotes && labels.length > 0 && !hasOnlyDefaultGoal) {
+    lines.push(`Indicaciones del objetivo: ${taste.goalNotes}`);
   } else if (taste.goalNotes) {
     lines.push(`Objetivo del comensal: ${taste.goalNotes}`);
   }
@@ -495,6 +519,6 @@ export function hasTasteProfile(taste: TasteProfile): boolean {
     taste.dislikes.length > 0 ||
     taste.notes.length > 0 ||
     taste.goalNotes.length > 0 ||
-    (taste.goal !== '' && taste.goal !== 'balanced')
+    taste.goals.some((goal) => goal !== 'balanced' && goal !== 'custom')
   );
 }

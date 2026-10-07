@@ -88,6 +88,27 @@ describe('AiConfigComponent', () => {
     );
   });
 
+  it('starts new provider configs with enough output budget for all recipe detail levels', () => {
+    component.openAddModal();
+    fixture.detectChanges();
+
+    expect(component.formData.maxTokens).toBe(4096);
+    const input = fixture.nativeElement.querySelector('input#maxTokens') as HTMLInputElement | null;
+    expect(input?.value).toBe('4096');
+
+    component.formData = {
+      ...component.formData,
+      name: 'New provider',
+      baseUrl: CONFIG.baseUrl,
+      apiKey: 'synthetic-key',
+      model: 'gpt-5'
+    };
+    component.saveConfig();
+    expect(service.createConfig).toHaveBeenCalledWith(
+      jasmine.objectContaining({ maxTokens: 4096 })
+    );
+  });
+
   it('keeps queue panels out of the provider list and links only positive caps to their own view', () => {
     service.configs.set([
       CONFIG,

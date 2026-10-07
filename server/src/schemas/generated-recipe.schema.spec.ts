@@ -19,6 +19,7 @@ const validCandidate = {
       unit: 'unit',
       preparation: null,
       isOptional: false,
+      substitutes: ['calabacín'],
       notes: null
     }
   ],
@@ -30,7 +31,8 @@ const validCandidate = {
         instruction: 'Cocer la zanahoria.',
         duration: null,
         tips: null,
-        warning: null
+        warning: null,
+        illustration: null
       }
     ],
     intermediate: [
@@ -39,7 +41,8 @@ const validCandidate = {
         instruction: 'Cortar la zanahoria y cocerla hasta que esté tierna.',
         duration: null,
         tips: null,
-        warning: null
+        warning: null,
+        illustration: null
       }
     ],
     expert: [
@@ -48,9 +51,15 @@ const validCandidate = {
         instruction: 'Cortar dados uniformes y cocer a hervor suave hasta textura tierna.',
         duration: null,
         tips: null,
-        warning: null
+        warning: null,
+        illustration: null
       }
     ]
+  },
+  guidance: {
+    appliances: ['Cocina de gas'],
+    parallelTasks: ['Mientras hierve el agua, lava y corta las verduras.'],
+    tipsAndVariations: ['Añade limón al final para realzar el sabor.']
   },
   nutrition: { calories: 180, protein: 2, carbs: 20, fat: 5, fiber: 4 },
   storage: {
@@ -67,6 +76,72 @@ const validCandidate = {
 describe('generatedRecipeCandidateSchema', () => {
   it('acepta una receta completa con los tres niveles de instrucciones', () => {
     expect(generatedRecipeCandidateSchema.parse(validCandidate)).toMatchObject(validCandidate);
+  });
+
+  it('exige orientación de cocina con aparatos, tareas paralelas y variaciones', () => {
+    expect(
+      generatedRecipeCandidateSchema.safeParse({ ...validCandidate, guidance: undefined }).success
+    ).toBe(false);
+    expect(
+      generatedRecipeCandidateSchema.safeParse({
+        ...validCandidate,
+        guidance: { ...validCandidate.guidance, appliances: ['freidora de aceite'] }
+      }).success
+    ).toBe(true);
+  });
+
+  it('exige illustration null y rechaza recursos visuales devueltos por el modelo', () => {
+    const withImageUrl = {
+      ...validCandidate,
+      instructionsByLevel: {
+        ...validCandidate.instructionsByLevel,
+        basic: [
+          {
+            ...validCandidate.instructionsByLevel.basic[0],
+            illustration: {
+              url: 'https://images.example.test/step.svg',
+              altText: 'Verduras recién lavadas sobre una tabla.',
+              sourceLabel: 'Ilustración generada',
+              sourceUrl: null
+            }
+          }
+        ]
+      }
+    };
+
+    expect(generatedRecipeCandidateSchema.safeParse(validCandidate).success).toBe(true);
+    expect(generatedRecipeCandidateSchema.safeParse(withImageUrl).success).toBe(false);
+    expect(
+      generatedRecipeCandidateSchema.safeParse({
+        ...validCandidate,
+        instructionsByLevel: {
+          ...validCandidate.instructionsByLevel,
+          basic: [
+            {
+              ...validCandidate.instructionsByLevel.basic[0],
+              illustration: 'https://images.example.test/step.svg'
+            }
+          ]
+        }
+      }).success
+    ).toBe(false);
+    expect(
+      generatedRecipeCandidateSchema.safeParse({
+        ...validCandidate,
+        instructionsByLevel: {
+          ...validCandidate.instructionsByLevel,
+          basic: [
+            {
+              stepNumber: 1,
+              instruction: 'Cocer la zanahoria.',
+              duration: null,
+              tips: null,
+              warning: null
+            }
+          ]
+        }
+      }).success
+    ).toBe(false);
   });
 
   it('rechaza niveles ausentes, listas vacías y pasos desordenados', () => {
@@ -96,14 +171,16 @@ describe('generatedRecipeCandidateSchema', () => {
               instruction: 'Segundo paso.',
               duration: null,
               tips: null,
-              warning: null
+              warning: null,
+              illustration: null
             },
             {
               stepNumber: 1,
               instruction: 'Primer paso.',
               duration: null,
               tips: null,
-              warning: null
+              warning: null,
+              illustration: null
             }
           ]
         }

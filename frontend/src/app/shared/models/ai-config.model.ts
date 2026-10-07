@@ -3,6 +3,7 @@ import type {
   RecipeInstructionStep,
   RecipeInstructionsByLevel
 } from './recipe-instructions';
+import type { RecipeGuidance } from './recipe.model';
 
 export interface AIProviderConfig {
   id: string;
@@ -66,6 +67,8 @@ export interface AIRecipeRequest {
   ingredients: AIIngredient[];
   utensils: AIUtensil[];
   servings: number;
+  householdMemberIds?: string[];
+  guests?: AIGuestPreferences[];
   difficulty: string;
   detailLevel: DetailLevel;
   dietaryRestrictions: string[];
@@ -75,6 +78,27 @@ export interface AIRecipeRequest {
     min: number;
     max: number;
   };
+}
+
+/** Ephemeral food preferences for a guest; deliberately contains no name or account identifier. */
+export interface AIGuestPreferences {
+  allergies: string[];
+  intolerances: string[];
+  diets: string[];
+  likes: string[];
+  dislikes: string[];
+  notes: string;
+}
+
+/** Backwards-compatible alias for the meal-replacement request contract. */
+export type AIReplacementGuest = AIGuestPreferences;
+
+export interface AIReplacementCandidate {
+  name: string;
+  description: string;
+  ingredients: string[];
+  estimatedTime: number;
+  servings: number;
 }
 
 export interface AIIngredient {
@@ -102,6 +126,7 @@ export interface AIRecipeResponse {
   calories?: number | null;
   ingredients: AIRecipeIngredient[];
   utensils: string[];
+  guidance: RecipeGuidance;
   /** Canonical output: all detail variants in one provider response. */
   instructionsByLevel?: RecipeInstructionsByLevel;
   /** Initial view selection returned by the API; changing it is local-only. */
@@ -121,6 +146,7 @@ export interface AIRecipeIngredient {
   unit: string;
   preparation?: string | null;
   isOptional?: boolean;
+  substitutes?: string[];
   notes?: string | null;
 }
 
@@ -151,7 +177,9 @@ export interface AIWeeklyPlanRequest {
   endDate: string;
   goals: AIGoals;
   availableIngredients: string[];
-  householdPreferences: AIHouseholdPreferences;
+  householdPreferences?: AIHouseholdPreferences;
+  householdMemberIds?: string[];
+  guests?: AIGuestPreferences[];
 }
 
 export interface AIGoals {

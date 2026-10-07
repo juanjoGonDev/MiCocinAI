@@ -6,7 +6,8 @@ const recipeInstructionStepSchema = z
     instruction: z.string().trim().min(1),
     duration: z.number().int().positive().nullable(),
     tips: z.string().nullable(),
-    warning: z.string().nullable()
+    warning: z.string().nullable(),
+    illustration: z.null()
   })
   .strict();
 
@@ -40,6 +41,7 @@ const generatedIngredientSchema = z
     unit: z.enum(['g', 'kg', 'ml', 'l', 'cup', 'tbsp', 'tsp', 'unit', 'bunch', 'slice', 'piece']),
     preparation: z.string().nullable(),
     isOptional: z.boolean(),
+    substitutes: z.array(z.string().trim().min(1)).default([]),
     notes: z.string().nullable()
   })
   .strict();
@@ -58,6 +60,13 @@ export const generatedRecipeCandidateSchema = z
     calories: z.number().positive().nullable(),
     ingredients: z.array(generatedIngredientSchema).min(1),
     utensils: z.array(z.string()),
+    guidance: z
+      .object({
+        appliances: z.array(z.string().trim().min(1)).max(10),
+        parallelTasks: z.array(z.string().trim().min(1)).max(10),
+        tipsAndVariations: z.array(z.string().trim().min(1)).max(10)
+      })
+      .strict(),
     instructionsByLevel: recipeInstructionsByLevelSchema,
     nutrition: z
       .object({

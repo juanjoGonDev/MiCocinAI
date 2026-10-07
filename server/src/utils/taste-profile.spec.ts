@@ -51,7 +51,7 @@ describe('saveTasteProfile', () => {
     const response = taste.readTasteResponse(db, user);
 
     expect(response.taste).toEqual({
-      goal: 'balanced',
+      goals: ['balanced'],
       goalNotes: '',
       allergies: [],
       likes: [],
@@ -98,7 +98,7 @@ describe('saveTasteProfile', () => {
     const response = taste.readTasteResponse(db, user);
     expect(response.taste.allergies).toEqual(['Gluten']);
     expect(response.taste.likes).toEqual(['Pollo']);
-    expect(response.taste.goal).toBe('muscle-gain');
+    expect(response.taste.goals).toEqual(['muscle-gain']);
   });
 
   it('limpia duplicados, vacíos y objetivos desconocidos', () => {
@@ -114,7 +114,44 @@ describe('saveTasteProfile', () => {
     const response = taste.readTasteResponse(db, user);
     expect(response.taste.allergies).toEqual(['Lactosa', 'Huevo']);
     // Un valor que no está en el enum no se guarda: vuelve al por defecto
-    expect(response.taste.goal).toBe('balanced');
+    expect(response.taste.goals).toEqual(['balanced']);
+  });
+
+  it('lee el objetivo singular antiguo como una lista, y al guardar migra al campo plural', () => {
+    const user = createUser(
+      JSON.stringify({ taste: { goal: 'weight-loss', goalNotes: 'Cenas ligeras' } })
+    );
+
+    expect(taste.readTasteResponse(db, user).taste.goals).toEqual(['weight-loss']);
+
+    taste.saveTasteProfile(db, user, { taste: { goalNotes: 'Cena antes de las ocho' } });
+
+    const stored = readPreferencesColumn(user).taste;
+    expect(stored.goals).toEqual(['weight-loss']);
+    expect(stored.goal).toBeUndefined();
+    expect(taste.readTasteResponse(db, user).taste.goalNotes).toBe('Cena antes de las ocho');
+  });
+
+  it('guarda y lee varios objetivos sin duplicados y conserva el texto personalizado', () => {
+    const user = createUser();
+
+    const response = taste.saveTasteProfile(db, user, {
+      taste: {
+        goals: ['weight-loss', 'variety', 'weight-loss'],
+        goalNotes: 'Más legumbres y cenas rápidas'
+      }
+    });
+
+    expect(response.taste.goals).toEqual(['weight-loss', 'variety']);
+    expect(taste.readTasteResponse(db, user).taste).toMatchObject({
+      goals: ['weight-loss', 'variety'],
+      goalNotes: 'Más legumbres y cenas rápidas'
+    });
+    expect(readPreferencesColumn(user).taste).toMatchObject({
+      goals: ['weight-loss', 'variety'],
+      goalNotes: 'Más legumbres y cenas rápidas'
+    });
+    expect(readPreferencesColumn(user).taste.goal).toBeUndefined();
   });
 
   it('una preferencia con JSON roto no rompe la lectura', () => {
@@ -264,7 +301,12 @@ describe('horarios de las comidas', () => {
     const user = createUser();
 
     expect(taste.readTasteResponse(db, user).mealPlan).toEqual(taste.MEAL_PLAN_DEFAULTS);
-    expect(taste.plannedMealTypes(taste.MEAL_PLAN_DEFAULTS)).toEqual(['breakfast', 'lunch', 'snack', 'dinner']);
+    expect(taste.plannedMealTypes(taste.MEAL_PLAN_DEFAULTS)).toEqual([
+      'breakfast',
+      'lunch',
+      'snack',
+      'dinner'
+    ]);
   });
 
   it('bloquear la merienda deja las otras tres como estaban', () => {
@@ -273,7 +315,11 @@ describe('horarios de las comidas', () => {
     const response = taste.saveTasteProfile(db, user, { mealPlan: { snack: false } });
 
     expect(response.mealPlan).toEqual({ breakfast: true, lunch: true, snack: false, dinner: true });
-    expect(taste.plannedMealTypes(taste.readMealPlan(db, user))).toEqual(['breakfast', 'lunch', 'dinner']);
+    expect(taste.plannedMealTypes(taste.readMealPlan(db, user))).toEqual([
+      'breakfast',
+      'lunch',
+      'dinner'
+    ]);
     // Persistido de verdad, y sin que el bloqueo se cuele en las horas (son dos claves del mismo JSON).
     expect(readPreferencesColumn(user).mealPlan).toEqual({ snack: false });
     expect(readPreferencesColumn(user).mealTimes).toBeUndefined();
@@ -312,9 +358,16 @@ describe('horarios de las comidas', () => {
   });
 
   it('un permiso imposible en el JSON no rompe la lectura', () => {
-    const user = createUser(JSON.stringify({ mealPlan: { lunch: 'a comer', dinner: 0, snack: false } }));
+    const user = createUser(
+      JSON.stringify({ mealPlan: { lunch: 'a comer', dinner: 0, snack: false } })
+    );
 
-    expect(taste.readMealPlan(db, user)).toEqual({ breakfast: true, lunch: true, snack: false, dinner: true });
+    expect(taste.readMealPlan(db, user)).toEqual({
+      breakfast: true,
+      lunch: true,
+      snack: false,
+      dinner: true
+    });
   });
 
   it('el prompt lleva las cuatro horas de la casa', () => {
@@ -343,7 +396,7 @@ describe('tastePromptLines', () => {
   it('prioriza las alergias y arrastra el objetivo y las notas', () => {
     const lines = taste
       .tastePromptLines({
-        goal: 'weight-loss',
+        goals: ['weight-loss'],
         goalNotes: 'sin fritos',
         allergies: ['Lactosa'],
         likes: ['Verduras'],
@@ -364,11 +417,23 @@ describe('tastePromptLines', () => {
   it('con objetivo personalizado usa el texto libre como objetivo', () => {
     const block = taste.tastePromptLines({
       ...taste.emptyTasteProfile(),
-      goal: 'custom',
+      goals: ['custom'],
       goalNotes: 'Sin carne los lunes y cenas de una olla'
     });
 
     expect(block).toContain('Objetivo del comensal: Sin carne los lunes');
+    expect(block).not.toContain('Personalizada');
+  });
+
+  it('redacta a la IA varios objetivos guardados y sus instrucciones una sola vez', () => {
+    const block = taste.tastePromptLines({
+      ...taste.emptyTasteProfile(),
+      goals: ['weight-loss', 'muscle-gain', 'custom'],
+      goalNotes: 'Evitar fritos, priorizar legumbres'
+    });
+
+    expect(block).toContain('Objetivos del comensal: Perder peso, Ganar músculo');
+    expect(block).toContain('Evitar fritos, priorizar legumbres');
     expect(block).not.toContain('Personalizada');
   });
 });

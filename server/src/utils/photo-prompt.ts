@@ -5,6 +5,8 @@
  * inventes») sin montar un proveedor de IA.
  */
 
+import { aiLocalizedFieldsInstruction, type AiOutputLanguage } from './ai-output-language.js';
+
 export const EXPECTED_SHAPE = `{
   "lines": [
     {
@@ -19,7 +21,7 @@ export const EXPECTED_SHAPE = `{
     }
   ],
   "currency": "EUR",
-  "warnings": ["No se ve el precio del pan"]
+  "warnings": []
 }`;
 
 const MODE_INSTRUCTIONS: Record<string, string> = {
@@ -34,7 +36,13 @@ export function buildPhotoPrompt(input: {
   categoriesJson: string;
   mode: 'auto' | 'ticket' | 'shelf';
   note?: string | null;
+  language?: AiOutputLanguage;
 }): { system: string; user: string } {
+  const language = input.language ?? 'es';
+  const newCategoryLanguage =
+    language === 'es'
+      ? 'Si createCategory es true, redacta el nombre de la categoría nueva en español de España; si reutilizas una existente, copia exactamente su nombre del catálogo.'
+      : 'If createCategory is true, write the new category name in English (United Kingdom); if reusing an existing category, copy its catalogue name exactly.';
   const system = [
     'Eres el clasificador de la lista de la compra de una casa. Tu salida es UN objeto JSON y nada mas: sin markdown, sin prosa antes ni despues, sin comentarios.',
     'Reglas que no se pueden romper:',
@@ -43,7 +51,9 @@ export function buildPhotoPrompt(input: {
     '3. `quantity` es cuantas unidades se llevan (1 o mas). `unit` es la unidad corta: kg, g, l, ml, ud, pack, botella, lata, caja.',
     '4. `category` es UNO de los nombres del catalogo. Si ninguna encaja y la seccion tiene sentido para la casa, usa un nombre nuevo con `createCategory: true`.',
     '5. `confidence` entre 0 y 1: lo que has leido claro vale 0.9, lo que has deducido de una letra borrosa vale 0.3. No redondees todo a 0.8.',
-    '6. Si algo no se lee, no lo metas: es mejor una linea menos que un producto que nadie pidio.'
+    '6. Si algo no se lee, no lo metas: es mejor una linea menos que un producto que nadie pidio.',
+    aiLocalizedFieldsInstruction(language, ['warnings']),
+    newCategoryLanguage
   ].join('\n');
 
   const user = [

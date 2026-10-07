@@ -23,8 +23,15 @@ import { randomUUID } from 'node:crypto';
 import type { Database as SqlDb } from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 import { getDatabase } from '../config/database.js';
+import { activeHouseholdId } from './household-context.js';
+import {
+  aiConfigByIdInScope,
+  aiConfigForPinnedJob,
+  aiConfigScopeForUser
+} from './ai-config-scope.js';
 import {
   activeAiConfig,
+  activeAiConfigForScope,
   AiCallError,
   callAIWithConfig,
   callAIStreamingWithConfig,
@@ -32,6 +39,7 @@ import {
   pingDeConexionTransport
 } from './ai-client.js';
 import type { AiConfigRow, AiJobKind, AiMessage } from './ai-client.js';
+import type { AiResponseFormat } from '../schemas/ai-response-format.js';
 import {
   buildInventarioJson,
   buildTicketPrompt,
@@ -39,6 +47,7 @@ import {
 } from './ticket-prompt.js';
 import { lineasNuevas } from './ticket-lines-stream.js';
 import { ticketAnswerSchema } from '../schemas/receipts.schema.js';
+import { RECEIPT_RESPONSE_FORMAT } from '../schemas/ai-generated-output.schema.js';
 import { leerTicket } from './ticket-files.js';
 
 const TICK_MS = 100;
@@ -52,6 +61,7 @@ type Trabajador = {
 
 type AiRuntime<T = unknown> = {
   userId: string;
+  householdId: string | null;
   configId: string | null;
   config: AiConfigRow | null;
   run: (config: AiConfigRow | null, signal: AbortSignal) => Promise<T>;
@@ -72,6 +82,10 @@ export type AiJobHandle<T> = { id: string; result: Promise<T> };
 type SubmitAiTask<T> = {
   db: SqlDb;
   userId: string;
+  /** Optional stable id shared with a domain row created before the worker can claim the job. */
+  id?: string;
+  /** Explicit scope for durable work such as receipts; otherwise captured at admission. */
+  householdId?: string | null;
   config: AiConfigRow | null;
   /** Null for an unsaved connection check: metadata is queued, credentials remain volatile. */
   configId?: string | null;
@@ -132,6 +146,8 @@ function siguienteOrden(db: SqlDb, configId: string | null): number {
  */
 export function submitAiTask<T>(input: SubmitAiTask<T>): AiJobHandle<T> {
   const db = input.db;
+  const householdId =
+    input.householdId === undefined ? activeHouseholdId(db, input.userId) : input.householdId;
   const payloadBytes = Math.max(0, Math.trunc(input.payloadBytes ?? 0));
   const vivos = [...trabajosEnMemoria.values()].filter((job) => job.userId === input.userId);
   const bytesVivos = vivos.reduce((total, job) => total + job.payloadBytes, 0);
@@ -147,7 +163,7 @@ export function submitAiTask<T>(input: SubmitAiTask<T>): AiJobHandle<T> {
   }
 
   ensureWorker();
-  const id = nanoid();
+  const id = input.id ?? nanoid();
   const configId = input.configId === undefined ? (input.config?.id ?? null) : input.configId;
   const resolveRef: { current: (value: T) => void } = { current: () => undefined };
   const rejectRef: { current: (reason: unknown) => void } = { current: () => undefined };
@@ -157,6 +173,7 @@ export function submitAiTask<T>(input: SubmitAiTask<T>): AiJobHandle<T> {
   });
   const runtime: AiRuntime<T> = {
     userId: input.userId,
+    householdId,
     configId,
     config: input.config ? { ...input.config } : null,
     run: input.run,
@@ -167,11 +184,12 @@ export function submitAiTask<T>(input: SubmitAiTask<T>): AiJobHandle<T> {
     settled: false
   };
   db.prepare(
-    `INSERT INTO ai_jobs (id, user_id, config_id, kind, status, max_attempts, queue_order)
-     VALUES (?, ?, ?, ?, 'queued', ?, ?)`
+    `INSERT INTO ai_jobs (id, user_id, household_id, config_id, kind, status, max_attempts, queue_order)
+     VALUES (?, ?, ?, ?, ?, 'queued', ?, ?)`
   ).run(
     id,
     input.userId,
+    householdId,
     configId,
     input.kind.slice(0, 64),
     maxIntentos(input.config),
@@ -195,19 +213,23 @@ export function dispatchAI(
   userId: string,
   messages: AiMessage[],
   db: SqlDb,
+  responseFormat: AiResponseFormat,
   kind: AiJobKind = 'recipe'
 ): Promise<string> {
   const config = activeAiConfig(db, userId);
   if (!config)
     return Promise.reject(new AiCallError('NO_CONFIG', 'No active AI configuration found'));
-  const payloadBytes = Buffer.byteLength(JSON.stringify(messages), 'utf8');
+  const payloadBytes = Buffer.byteLength(
+    JSON.stringify({ messages, response_format: responseFormat }),
+    'utf8'
+  );
   return submitAiTask({
     db,
     userId,
     config,
     kind,
     payloadBytes,
-    run: (_fixedConfig, signal) => callAIWithConfig(config, messages, signal)
+    run: (_fixedConfig, signal) => callAIWithConfig(config, messages, responseFormat, signal)
   }).result;
 }
 
@@ -216,6 +238,7 @@ export function dispatchAIStreaming(
   messages: AiMessage[],
   db: SqlDb,
   onDelta: (text: string) => void,
+  responseFormat: AiResponseFormat,
   externalSignal: AbortSignal
 ): Promise<string> {
   const config = activeAiConfig(db, userId);
@@ -226,9 +249,13 @@ export function dispatchAIStreaming(
     userId,
     config,
     kind: 'receipt',
-    payloadBytes: Buffer.byteLength(JSON.stringify(messages), 'utf8'),
+    payloadBytes: Buffer.byteLength(
+      JSON.stringify({ messages, response_format: responseFormat }),
+      'utf8'
+    ),
     externalSignal,
-    run: (_fixedConfig, signal) => callAIStreamingWithConfig(config, messages, onDelta, signal)
+    run: (_fixedConfig, signal) =>
+      callAIStreamingWithConfig(config, messages, onDelta, responseFormat, signal)
   }).result;
 }
 
@@ -251,13 +278,27 @@ export function dispatchPingDeConexion(
 
 /** Tickets keep their durable file/receipt reference while sharing the same provider scheduler. */
 export function encolarTicket(db: SqlDb, userId: string, receiptId: string): string {
-  const config = activeAiConfig(db, userId) ?? null;
+  const receipt = db
+    .prepare('SELECT household_id FROM receipts WHERE id = ? AND user_id = ?')
+    .get(receiptId, userId) as { household_id: string | null } | undefined;
+  if (!receipt) throw new AiCallError('PROVIDER', 'Receipt not found', 'RECEIPT_NOT_FOUND');
+  const householdId = receipt.household_id;
+  const config = activeAiConfigForScope(db, userId, householdId) ?? null;
   const id = nanoid();
   const configId = config?.id ?? null;
   db.prepare(
-    `INSERT INTO ai_jobs (id, user_id, config_id, kind, receipt_id, status, max_attempts, queue_order)
-     VALUES (?, ?, ?, 'receipt', ?, 'queued', ?, ?)`
-  ).run(id, userId, configId, receiptId, maxIntentos(config), siguienteOrden(db, configId));
+    `INSERT INTO ai_jobs
+      (id, user_id, household_id, config_id, kind, receipt_id, status, max_attempts, queue_order)
+     VALUES (?, ?, ?, ?, 'receipt', ?, 'queued', ?, ?)`
+  ).run(
+    id,
+    userId,
+    householdId,
+    configId,
+    receiptId,
+    maxIntentos(config),
+    siguienteOrden(db, configId)
+  );
   ensureWorker();
   return id;
 }
@@ -380,14 +421,12 @@ function paso(): void {
       continue;
     }
 
-    const maximo = config ? limiteDe(config.concurrency) : Number.POSITIVE_INFINITY;
-    const enMarcha = configId
-      ? (
-          db
-            .prepare("SELECT COUNT(*) AS n FROM ai_jobs WHERE config_id = ? AND status = 'running'")
-            .get(configId) as { n: number }
-        ).n
-      : 0;
+    const maximo = config ? limiteDe(config.concurrency) : configId ? 0 : 1;
+    const enMarcha = (
+      db
+        .prepare("SELECT COUNT(*) AS n FROM ai_jobs WHERE config_id IS ? AND status = 'running'")
+        .get(configId) as { n: number }
+    ).n;
     const disponibles = maximo === Number.POSITIVE_INFINITY ? 100 : Math.max(0, maximo - enMarcha);
     if (disponibles === 0) continue;
     const enCola = db
@@ -443,9 +482,8 @@ function esperarReintentoManual(
   fallback?: unknown
 ): boolean {
   const config = runtime.configId
-    ? (db
-        .prepare('SELECT concurrency FROM ai_configs WHERE id = ? AND user_id = ?')
-        .get(runtime.configId, runtime.userId) as { concurrency: number | null } | undefined)
+    ? (aiConfigForPinnedJob(db, runtime.configId, runtime.userId, runtime.householdId) as
+        { concurrency: number | null } | undefined)
     : undefined;
   if (!config || limiteDe(config.concurrency) === Number.POSITIVE_INFINITY) return false;
   clearTimeout(runtime.retryWindowTimer);
@@ -471,22 +509,21 @@ function reclamarTrabajo(db: SqlDb, jobId: string): number | null {
     .transaction(() => {
       const fila = db
         .prepare(
-          "SELECT id, config_id, user_id, kind, claim_generation FROM ai_jobs WHERE id = ? AND status = 'queued'"
+          "SELECT id, config_id, user_id, household_id, kind, claim_generation FROM ai_jobs WHERE id = ? AND status = 'queued'"
         )
         .get(jobId) as
         | {
             id: string;
             config_id: string | null;
             user_id: string;
+            household_id: string | null;
             kind: string;
             claim_generation: number;
           }
         | undefined;
       if (!fila) return null;
       if (fila.config_id) {
-        const config = db
-          .prepare('SELECT concurrency, is_active FROM ai_configs WHERE id = ? AND user_id = ?')
-          .get(fila.config_id, fila.user_id) as
+        const config = aiConfigForPinnedJob(db, fila.config_id, fila.user_id, fila.household_id) as
           { concurrency: number | null; is_active: number } | undefined;
         if (!config) {
           db.prepare(
@@ -545,12 +582,13 @@ async function correr(
   const db = getDatabase();
   const metadata = db
     .prepare(
-      'SELECT kind, config_id, receipt_id, status, claim_generation FROM ai_jobs WHERE id = ?'
+      'SELECT kind, config_id, household_id, receipt_id, status, claim_generation FROM ai_jobs WHERE id = ?'
     )
     .get(jobId) as
     | {
         kind: string;
         config_id: string | null;
+        household_id: string | null;
         receipt_id: string | null;
         status: string;
         claim_generation: number;
@@ -558,14 +596,31 @@ async function correr(
     | undefined;
   if (metadata?.status !== 'running' || metadata.claim_generation !== claimGeneration) return;
   if (metadata.kind !== 'receipt' || !metadata.receipt_id) {
-    await correrTrabajoGenerico(db, jobId, metadata.config_id, señal.signal, claimGeneration);
+    await correrTrabajoGenerico(
+      db,
+      jobId,
+      metadata.config_id,
+      metadata.household_id,
+      señal.signal,
+      claimGeneration
+    );
     return;
   }
 
   const recibo = db
-    .prepare(`SELECT r.* FROM receipts r JOIN ai_jobs j ON j.receipt_id = r.id WHERE j.id = ?`)
+    .prepare(
+      `SELECT r.* FROM receipts r JOIN ai_jobs j ON j.receipt_id = r.id
+       WHERE j.id = ? AND r.household_id IS j.household_id`
+    )
     .get(jobId) as
-    | { id: string; file_url: string; file_kind: 'png' | 'jpeg' | 'webp' | 'pdf'; status: string }
+    | {
+        id: string;
+        household_id: string | null;
+        file_url: string;
+        file_kind: 'png' | 'jpeg' | 'webp' | 'pdf';
+        ai_output_language: 'es' | 'en';
+        status: string;
+      }
     | undefined;
   if (!recibo) {
     db.prepare(
@@ -590,9 +645,8 @@ async function correr(
 
   try {
     const configuracion = metadata.config_id
-      ? (db
-          .prepare('SELECT * FROM ai_configs WHERE id = ? AND user_id = ?')
-          .get(metadata.config_id, userId) as AiConfigRow | undefined)
+      ? (aiConfigForPinnedJob(db, metadata.config_id, userId, metadata.household_id) as
+          AiConfigRow | undefined)
       : undefined;
     if (!configuracion)
       throw new AiCallError('NO_CONFIG', 'No AI configuration was pinned to this job');
@@ -606,8 +660,9 @@ async function correr(
       );
 
     const { system, user } = buildTicketPrompt({
-      inventarioJson: buildInventarioJson(inventarioDeLaCasa(db, userId)),
-      esPdf: recibo.file_kind === 'pdf'
+      inventarioJson: buildInventarioJson(inventarioDeLaCasa(db, userId, recibo.household_id)),
+      esPdf: recibo.file_kind === 'pdf',
+      language: recibo.ai_output_language === 'en' ? 'en' : 'es'
     });
     const contenido =
       recibo.file_kind === 'pdf'
@@ -658,11 +713,12 @@ async function correr(
           entregadas += 1;
         }
       },
+      RECEIPT_RESPONSE_FORMAT,
       señal.signal
     ).catch(async (error) => {
       // Sin stream en este proveedor (o error antes del primer trozo): caer a la llamada entera.
       if (entregadas > 0 || acumulado.length > 0) throw error;
-      return callAIWithConfig(configuracion, mensajes, señal.signal);
+      return callAIWithConfig(configuracion, mensajes, RECEIPT_RESPONSE_FORMAT, señal.signal);
     });
 
     const validado = ticketAnswerSchema.safeParse(extractJsonObject(respuesta));
@@ -708,7 +764,7 @@ async function correr(
       );
       const tiendaFinal = db.prepare('SELECT store FROM receipts WHERE id = ?').get(recibo.id) as
         { store: string | null } | undefined;
-      if (tiendaFinal?.store) registrarTienda(db, userId, tiendaFinal.store);
+      if (tiendaFinal?.store) registrarTienda(db, userId, tiendaFinal.store, recibo.household_id);
       db.prepare(
         `UPDATE ai_jobs SET status = 'done', finished_at = CURRENT_TIMESTAMP, lease_until = NULL
          WHERE id = ? AND status = 'running' AND claim_generation = ?`
@@ -771,6 +827,7 @@ async function correrTrabajoGenerico(
   db: SqlDb,
   jobId: string,
   configId: string | null,
+  householdId: string | null,
   signal: AbortSignal,
   claimGeneration: number
 ): Promise<void> {
@@ -781,6 +838,16 @@ async function correrTrabajoGenerico(
          finished_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
        WHERE id = ? AND status = 'running' AND claim_generation = ?`
     ).run(jobId, claimGeneration);
+    return;
+  }
+  if (runtime.configId !== configId || runtime.householdId !== householdId) {
+    db.prepare(
+      `UPDATE ai_jobs SET status = 'failed', error_code = 'JOB_SCOPE_MISMATCH', error_detail = NULL,
+         finished_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status = 'running' AND claim_generation = ?`
+    ).run(jobId, claimGeneration);
+    rechazar(runtime, new AiCallError('PROVIDER', 'AI job scope changed', 'JOB_SCOPE_MISMATCH'));
+    liberarRuntime(jobId, true);
     return;
   }
   const row = db
@@ -904,59 +971,67 @@ function insertarLinea(
 }
 
 /** El «inventario.json» de la casa: tiendas, categorias de la despensa y sus productos. */
-export function inventarioDeLaCasa(db: SqlDb, userId: string): InventarioParaPrompt {
-  const hogar = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
-    { household_id: string | null } | undefined;
-  const householdId = hogar?.household_id ?? null;
-
+export function inventarioDeLaCasa(
+  db: SqlDb,
+  userId: string,
+  householdId = activeHouseholdId(db, userId)
+): InventarioParaPrompt {
   const tiendas = (
     db
       .prepare(
-        `SELECT DISTINCT name FROM stores WHERE user_id = ? OR (household_id IS NOT NULL AND household_id = ?)
+        `SELECT DISTINCT name FROM stores
+           WHERE household_id = ? OR (household_id IS NULL AND user_id = ?)
          UNION SELECT DISTINCT store AS name FROM shopping_lists
-           WHERE (user_id = ? OR (household_id IS NOT NULL AND household_id = ?)) AND store IS NOT NULL AND TRIM(store) <> ''
+           WHERE (household_id = ? OR (household_id IS NULL AND user_id = ?))
+             AND store IS NOT NULL AND TRIM(store) <> ''
          ORDER BY name LIMIT 200`
       )
-      .all(userId, householdId, userId, householdId) as { name: string }[]
+      .all(householdId, userId, householdId, userId) as { name: string }[]
   ).map((fila) => fila.name);
 
   const categorias = (
     db
       .prepare(
-        `SELECT key, name FROM pantry_categories WHERE user_id = ? OR (household_id IS NOT NULL AND household_id = ?)
+        `SELECT key, name FROM pantry_categories
+         WHERE household_id = ? OR (household_id IS NULL AND user_id = ?)
          ORDER BY position LIMIT 300`
       )
-      .all(userId, householdId) as { key: string; name: string }[]
+      .all(householdId, userId) as { key: string; name: string }[]
   ).map((fila) => ({ clave: fila.key, nombre: fila.name }));
 
   const productos = (
     db
       .prepare(
-        `SELECT name, category, unit FROM ingredients WHERE (user_id = ? OR (household_id IS NOT NULL AND household_id = ?))
+        `SELECT name, category, unit FROM ingredients
+         WHERE household_id = ? OR (household_id IS NULL AND user_id = ?)
          ORDER BY name LIMIT 2000`
       )
-      .all(userId, householdId) as { name: string; category: string; unit: string }[]
+      .all(householdId, userId) as { name: string; category: string; unit: string }[]
   ).map((fila) => ({ categoria: fila.category, nombre: fila.name, unidad: fila.unit }));
 
   return { tiendas, categorias, productos };
 }
 
 /** Registrar una tienda que no existe: la deteccion de un ticket la deja escrita. */
-export function registrarTienda(db: SqlDb, userId: string, nombre: string): void {
-  const hogar = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
-    { household_id: string | null } | undefined;
+export function registrarTienda(
+  db: SqlDb,
+  userId: string,
+  nombre: string,
+  householdId = activeHouseholdId(db, userId)
+): void {
   const limpia = nombre.trim();
   if (!limpia) return;
   const ya = db
     .prepare(
-      `SELECT id FROM stores WHERE name = ? AND (user_id = ? OR (household_id IS NOT NULL AND household_id = ?))`
+      `SELECT id FROM stores WHERE name = ?
+       AND (household_id = ? OR (household_id IS NULL AND user_id = ?))`
     )
-    .get(limpia, userId, hogar?.household_id ?? null);
+    .get(limpia, householdId, userId);
   if (ya) return;
   db.prepare('INSERT INTO stores (id, user_id, household_id, name) VALUES (?, ?, ?, ?)').run(
     randomUUID(),
     userId,
-    hogar?.household_id ?? null,
+    householdId,
     limpia
   );
 }
@@ -976,9 +1051,10 @@ export type AiQueueJobDto = {
 
 /** DTO whitelist: no key, prompts, attachments, result, or provider error body. */
 export function queueForConfig(db: SqlDb, userId: string, configId: string): AiQueueJobDto[] {
-  const config = db
-    .prepare('SELECT is_active, concurrency FROM ai_configs WHERE id = ? AND user_id = ?')
-    .get(configId, userId) as { is_active: number; concurrency: number | null } | undefined;
+  const scope = aiConfigScopeForUser(db, userId);
+  const config = aiConfigByIdInScope(db, configId, scope) as
+    { is_active: number; concurrency: number | null } | undefined;
+  if (!config) return [];
   const managerEnabled =
     config?.is_active === 1 &&
     limiteDe(config.concurrency) !== Number.POSITIVE_INFINITY &&
@@ -987,12 +1063,12 @@ export function queueForConfig(db: SqlDb, userId: string, configId: string): AiQ
     db
       .prepare(
         `SELECT id, config_id, kind, status, attempts, max_attempts, error_code, created_at, queue_order
-         FROM ai_jobs WHERE user_id = ? AND config_id = ?
+         FROM ai_jobs WHERE user_id = ? AND household_id IS ? AND config_id = ?
            AND status IN ('queued', 'running', 'failed')
          ORDER BY CASE status WHEN 'queued' THEN 0 WHEN 'running' THEN 1 ELSE 2 END,
            queue_order, created_at, id`
       )
-      .all(userId, configId) as Array<Record<string, unknown>>
+      .all(userId, scope.householdId, configId) as Array<Record<string, unknown>>
   ).map((row) => {
     const jobId = String(row.id);
     const kind = String(row.kind);
@@ -1023,22 +1099,24 @@ export function reordenarCola(
   configId: string,
   jobIds: string[]
 ): boolean {
+  const scope = aiConfigScopeForUser(db, userId);
   return db
     .transaction(() => {
       const queued = db
         .prepare(
-          `SELECT id FROM ai_jobs WHERE user_id = ? AND config_id = ? AND status = 'queued'
+          `SELECT id FROM ai_jobs WHERE user_id = ? AND household_id IS ?
+           AND config_id = ? AND status = 'queued'
          ORDER BY queue_order, created_at, id`
         )
-        .all(userId, configId) as { id: string }[];
+        .all(userId, scope.householdId, configId) as { id: string }[];
       if (new Set(jobIds).size !== jobIds.length || jobIds.length !== queued.length) return false;
       const expected = new Set(queued.map(({ id }) => id));
       if (jobIds.some((id) => !expected.has(id))) return false;
       const update = db.prepare(
         `UPDATE ai_jobs SET queue_order = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND user_id = ? AND config_id = ? AND status = 'queued'`
+       WHERE id = ? AND user_id = ? AND household_id IS ? AND config_id = ? AND status = 'queued'`
       );
-      jobIds.forEach((id, index) => update.run(index, id, userId, configId));
+      jobIds.forEach((id, index) => update.run(index, id, userId, scope.householdId, configId));
       return true;
     })
     .immediate();
@@ -1051,22 +1129,24 @@ export function cancelarTrabajo(
   configId: string,
   jobId: string
 ): boolean {
+  const pinnedConfigId = configId || null;
   const row = db
     .transaction(() => {
       const job = db
         .prepare(
-          `SELECT receipt_id, status FROM ai_jobs WHERE id = ? AND user_id = ? AND config_id = ?
+          `SELECT receipt_id, status FROM ai_jobs WHERE id = ? AND user_id = ? AND config_id IS ?
            AND status IN ('queued', 'running')`
         )
-        .get(jobId, userId, configId) as { receipt_id: string | null; status: string } | undefined;
+        .get(jobId, userId, pinnedConfigId) as
+        { receipt_id: string | null; status: string } | undefined;
       if (!job) return null;
       const changed = db
         .prepare(
           `UPDATE ai_jobs SET status = 'stopped', claim_generation = claim_generation + 1, error_code = 'CANCELLED', error_detail = NULL,
            finished_at = CURRENT_TIMESTAMP, lease_until = NULL, updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND user_id = ? AND config_id = ? AND status IN ('queued', 'running')`
+         WHERE id = ? AND user_id = ? AND config_id IS ? AND status IN ('queued', 'running')`
         )
-        .run(jobId, userId, configId).changes;
+        .run(jobId, userId, pinnedConfigId).changes;
       if (!changed) return null;
       if (job.receipt_id) {
         db.prepare(
@@ -1141,22 +1221,26 @@ export function reintentarTrabajo(
   configId: string,
   jobId: string
 ): RetryAiJobResult {
+  const scope = aiConfigScopeForUser(db, userId);
+  if (!aiConfigByIdInScope(db, configId, scope)) return 'not-found';
   const row = db
     .prepare(
-      `SELECT kind, receipt_id, status FROM ai_jobs
-       WHERE id = ? AND user_id = ? AND config_id = ?`
+      `SELECT kind, receipt_id, household_id, status FROM ai_jobs
+       WHERE id = ? AND user_id = ? AND household_id IS ? AND config_id = ?`
     )
-    .get(jobId, userId, configId) as
-    { kind: string; receipt_id: string | null; status: string } | undefined;
+    .get(jobId, userId, scope.householdId, configId) as
+    | {
+        kind: string;
+        receipt_id: string | null;
+        household_id: string | null;
+        status: string;
+      }
+    | undefined;
   if (!row) return 'not-found';
   if (row.status !== 'failed') return 'not-failed';
   const runtime = trabajosEnMemoria.get(jobId);
   if (row.kind !== 'receipt' && (!runtime || !runtime.retryWindowTimer)) return 'input-expired';
-  const config = db
-    .prepare(
-      'SELECT retry_attempts, concurrency, is_active FROM ai_configs WHERE id = ? AND user_id = ?'
-    )
-    .get(configId, userId) as
+  const config = aiConfigByIdInScope(db, configId, scope) as
     { retry_attempts: number | null; concurrency: number | null; is_active: number } | undefined;
   if (!config || config.is_active !== 1 || Number(config.concurrency ?? 0) <= 0)
     return 'config-unavailable';
@@ -1167,13 +1251,14 @@ export function reintentarTrabajo(
           `UPDATE ai_jobs SET status = 'queued', attempts = 0, max_attempts = ?, error_code = NULL,
            error_detail = NULL, finished_at = NULL, lease_until = NULL, queue_order = ?,
            updated_at = CURRENT_TIMESTAMP
-         WHERE id = ? AND user_id = ? AND config_id = ? AND status = 'failed'`
+         WHERE id = ? AND user_id = ? AND household_id IS ? AND config_id = ? AND status = 'failed'`
         )
         .run(
           maxIntentos({ retry_attempts: config.retry_attempts } as AiConfigRow),
           siguienteOrden(db, configId),
           jobId,
           userId,
+          scope.householdId,
           configId
         );
       if (!changed.changes) return false;
@@ -1202,10 +1287,13 @@ export function reintentarTrabajo(
 export function reencolar(jobId: string): boolean {
   const db = getDatabase();
   const row = db
-    .prepare('SELECT user_id, config_id, status, kind, receipt_id FROM ai_jobs WHERE id = ?')
+    .prepare(
+      'SELECT user_id, household_id, config_id, status, kind, receipt_id FROM ai_jobs WHERE id = ?'
+    )
     .get(jobId) as
     | {
         user_id: string;
+        household_id: string | null;
         config_id: string | null;
         status: string;
         kind: string;
@@ -1213,11 +1301,11 @@ export function reencolar(jobId: string): boolean {
       }
     | undefined;
   if (!row || !['failed', 'stopped', 'done'].includes(row.status)) return false;
+  if (activeHouseholdId(db, row.user_id) !== row.household_id) return false;
   if (row.kind !== 'receipt' && !trabajosEnMemoria.has(jobId)) return false;
   const config = row.config_id
-    ? (db
-        .prepare('SELECT retry_attempts FROM ai_configs WHERE id = ? AND user_id = ?')
-        .get(row.config_id, row.user_id) as { retry_attempts: number | null } | undefined)
+    ? (aiConfigForPinnedJob(db, row.config_id, row.user_id, row.household_id) as
+        { retry_attempts: number | null } | undefined)
     : undefined;
   const changed = db
     .prepare(
@@ -1244,9 +1332,12 @@ export function reencolar(jobId: string): boolean {
 /** Legacy ticket-stop compatibility, now backed by persisted cancellation and fetch abort. */
 export function pararTrabajo(jobId: string): boolean {
   const db = getDatabase();
-  const row = db.prepare('SELECT user_id, config_id FROM ai_jobs WHERE id = ?').get(jobId) as
-    { user_id: string; config_id: string | null } | undefined;
+  const row = db
+    .prepare('SELECT user_id, household_id, config_id FROM ai_jobs WHERE id = ?')
+    .get(jobId) as
+    { user_id: string; household_id: string | null; config_id: string | null } | undefined;
   if (!row) return false;
+  if (activeHouseholdId(db, row.user_id) !== row.household_id) return false;
   if (!row.config_id) {
     const changed = db
       .prepare(
@@ -1270,12 +1361,19 @@ export function pararTrabajo(jobId: string): boolean {
 /** Stop every queued/running job belonging to a user, including generic model requests. */
 export function pararTodo(userId: string): { cancelados: number; detenidos: number } {
   const db = getDatabase();
+  const householdId = activeHouseholdId(db, userId);
   const jobs = db
     .prepare(
-      `SELECT id, config_id, status FROM ai_jobs WHERE user_id = ?
+      `SELECT id, config_id, household_id, status FROM ai_jobs WHERE user_id = ?
+         AND (household_id IS ? OR household_id IS NULL)
          AND status IN ('queued', 'running')`
     )
-    .all(userId) as { id: string; config_id: string | null; status: string }[];
+    .all(userId, householdId) as {
+    id: string;
+    config_id: string | null;
+    household_id: string | null;
+    status: string;
+  }[];
   let cancelados = 0;
   let detenidos = 0;
   for (const job of jobs) {

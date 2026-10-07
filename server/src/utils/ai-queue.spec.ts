@@ -3,6 +3,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ReadableStream } from 'node:stream/web';
+import {
+  RECEIPT_RESPONSE_FORMAT,
+  RECIPE_RESPONSE_FORMAT
+} from '../schemas/ai-generated-output.schema.js';
 
 process.env.DATABASE_PATH = ':memory:';
 process.env.NODE_ENV = 'test';
@@ -48,7 +52,9 @@ afterAll(async () => {
 beforeEach(async () => {
   const { stopWorker } = await import('./ticket-queue.js');
   stopWorker();
-  db.exec('DELETE FROM ai_jobs; DELETE FROM ai_configs; DELETE FROM users;');
+  db.exec(
+    'DELETE FROM household_members; DELETE FROM ai_jobs; DELETE FROM ai_configs; UPDATE users SET household_id = NULL; DELETE FROM households; DELETE FROM users;'
+  );
   db.prepare('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)').run(
     userId,
     'queue@test.local',
@@ -75,6 +81,154 @@ beforeEach(async () => {
 });
 
 describe('AI provider queue dispatcher', () => {
+  it('keeps a household job pinned to its home when another member changes homes before claim', async () => {
+    const { submitAiTask } = await import('./ticket-queue.js');
+    const configOwnerId = 'household-config-owner';
+    db.prepare('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)').run(
+      configOwnerId,
+      'owner@test.local',
+      'Config owner',
+      'hash'
+    );
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'home-a',
+      'Home A',
+      'invite-a'
+    );
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'home-b',
+      'Home B',
+      'invite-b'
+    );
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}'), (?, ?, ?, 'admin', '{}'), (?, ?, ?, 'member', '{}')`
+    ).run(
+      'membership-actor-a',
+      'home-a',
+      userId,
+      'membership-owner-a',
+      'home-a',
+      configOwnerId,
+      'membership-actor-b',
+      'home-b',
+      userId
+    );
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run('home-a', userId);
+    db.prepare(
+      `INSERT INTO ai_configs
+        (id, user_id, household_id, name, provider, base_url, api_key, model, concurrency, is_active)
+       VALUES ('home-a-config', ?, 'home-a', 'Home A', 'custom', 'http://provider.test/v1',
+         'synthetic-key', 'model-a', 1, 1)`
+    ).run(configOwnerId);
+    db.prepare(
+      `INSERT INTO ai_configs
+        (id, user_id, household_id, name, provider, base_url, api_key, model, concurrency, is_active)
+       VALUES ('home-b-config', ?, 'home-b', 'Home B', 'custom', 'http://provider.test/v1',
+         'synthetic-key-b', 'model-b', 1, 1)`
+    ).run(configOwnerId);
+    const sharedConfig = db
+      .prepare('SELECT * FROM ai_configs WHERE id = ?')
+      .get('home-a-config') as AiConfig;
+    const started = deferred<string>();
+    const release = deferred<string>();
+
+    const job = submitAiTask({
+      db,
+      userId,
+      config: sharedConfig,
+      kind: 'recipe.generate',
+      run: async (fixedConfig) => {
+        started.resolve(fixedConfig?.id ?? 'missing-config');
+        return release.promise;
+      }
+    });
+    const settledResult = job.result.then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error })
+    );
+    expect(jobRow(job.id)).toMatchObject({
+      user_id: userId,
+      household_id: 'home-a',
+      config_id: 'home-a-config'
+    });
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run('home-b', userId);
+
+    await expect(started.promise).resolves.toBe('home-a-config');
+    const { queueForConfig } = await import('./ticket-queue.js');
+    expect(queueForConfig(db, userId, 'home-a-config').some((entry) => entry.id === job.id)).toBe(
+      false
+    );
+    expect(queueForConfig(db, userId, 'home-b-config').some((entry) => entry.id === job.id)).toBe(
+      false
+    );
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run('home-a', userId);
+    expect(queueForConfig(db, userId, 'home-a-config').some((entry) => entry.id === job.id)).toBe(
+      true
+    );
+    release.resolve('home-a-config');
+    await expect(settledResult).resolves.toEqual({ value: 'home-a-config' });
+    expect(jobRow(job.id)).toMatchObject({ household_id: 'home-a', status: 'done' });
+  });
+
+  it('pins a receipt job and its provider from the receipt home, not the current selection', async () => {
+    const { encolarTicket, stopWorker } = await import('./ticket-queue.js');
+    const configOwnerId = 'receipt-config-owner';
+    db.prepare('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)').run(
+      configOwnerId,
+      'receipt-owner@test.local',
+      'Receipt config owner',
+      'hash'
+    );
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'receipt-home-a',
+      'Receipt home A',
+      'receipt-invite-a'
+    );
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'receipt-home-b',
+      'Receipt home B',
+      'receipt-invite-b'
+    );
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}'), (?, ?, ?, 'admin', '{}'), (?, ?, ?, 'member', '{}')`
+    ).run(
+      'receipt-actor-a',
+      'receipt-home-a',
+      userId,
+      'receipt-owner-a',
+      'receipt-home-a',
+      configOwnerId,
+      'receipt-actor-b',
+      'receipt-home-b',
+      userId
+    );
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run('receipt-home-b', userId);
+    db.prepare(
+      `INSERT INTO ai_configs
+        (id, user_id, household_id, name, provider, base_url, api_key, model, concurrency, is_active)
+       VALUES ('receipt-home-a-config', ?, 'receipt-home-a', 'Receipt Home A', 'custom',
+         'http://provider.test/v1', 'synthetic-receipt-key', 'model-a', 1, 1)`
+    ).run(configOwnerId);
+    db.prepare(
+      `INSERT INTO receipts (id, user_id, household_id, status, file_url, file_kind)
+       VALUES ('receipt-home-a-ticket', ?, 'receipt-home-a', 'queued', '/synthetic/ticket.png', 'png')`
+    ).run(userId);
+
+    try {
+      const jobId = encolarTicket(db, userId, 'receipt-home-a-ticket');
+      expect(jobRow(jobId)).toMatchObject({
+        user_id: userId,
+        household_id: 'receipt-home-a',
+        config_id: 'receipt-home-a-config',
+        receipt_id: 'receipt-home-a-ticket'
+      });
+    } finally {
+      stopWorker();
+    }
+  });
+
   it('pins each call to the selected configuration and never persists prompt or API key in ai_jobs', async () => {
     const { submitAiTask } = await import('./ticket-queue.js');
     const prompt = 'private allergy and household details';
@@ -345,8 +499,17 @@ describe('AI provider queue dispatcher', () => {
 
     fakeFetch.mockResolvedValueOnce(json('recipe result'));
     await expect(
-      dispatchAI(userId, [{ role: 'user', content: 'synthetic recipe prompt' }], db, 'recipe')
+      dispatchAI(
+        userId,
+        [{ role: 'user', content: 'synthetic recipe prompt' }],
+        db,
+        RECIPE_RESPONSE_FORMAT,
+        'recipe'
+      )
     ).resolves.toBe('recipe result');
+    expect(JSON.parse(String(fakeFetch.mock.calls[0][1]?.body)).response_format).toEqual(
+      RECIPE_RESPONSE_FORMAT
+    );
     expect(
       db.prepare('SELECT kind, status FROM ai_jobs ORDER BY created_at DESC LIMIT 1').get()
     ).toMatchObject({ kind: 'recipe', status: 'done' });
@@ -373,6 +536,7 @@ describe('AI provider queue dispatcher', () => {
         [{ role: 'user', content: 'synthetic receipt prompt' }],
         db,
         (chunk) => deltas.push(chunk),
+        RECEIPT_RESPONSE_FORMAT,
         new AbortController().signal
       )
     ).resolves.toBe('chunk');
@@ -395,9 +559,18 @@ describe('AI provider queue dispatcher', () => {
     db.prepare('UPDATE ai_configs SET is_active = 0 WHERE id = ?').run(config.id);
     const messages = [{ role: 'user' as const, content: 'synthetic request' }];
 
-    await expect(dispatchAI(userId, messages, db)).rejects.toMatchObject({ code: 'NO_CONFIG' });
+    await expect(dispatchAI(userId, messages, db, RECIPE_RESPONSE_FORMAT)).rejects.toMatchObject({
+      code: 'NO_CONFIG'
+    });
     await expect(
-      dispatchAIStreaming(userId, messages, db, () => undefined, new AbortController().signal)
+      dispatchAIStreaming(
+        userId,
+        messages,
+        db,
+        () => undefined,
+        RECEIPT_RESPONSE_FORMAT,
+        new AbortController().signal
+      )
     ).rejects.toMatchObject({ code: 'NO_CONFIG' });
     expect(db.prepare('SELECT COUNT(*) AS n FROM ai_jobs').get()).toMatchObject({ n: 0 });
   });
@@ -482,12 +655,16 @@ describe('AI provider queue dispatcher', () => {
         )
       );
       db.prepare(
-        `INSERT INTO receipts (id, user_id, status, file_url, file_kind)
-         VALUES (?, ?, 'queued', ?, 'png')`
+        `INSERT INTO receipts (id, user_id, status, file_url, file_kind, ai_output_language)
+         VALUES (?, ?, 'queued', ?, 'png', 'en')`
       ).run(receiptId, userId, fileUrl);
 
       const jobId = encolarTicket(db, userId, receiptId);
       await waitFor(() => jobRow(jobId).status === 'done');
+      const providerMessages = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))
+        .messages as { role: string; content: string }[];
+      expect(providerMessages[0]?.content).toContain('English (United Kingdom)');
+      expect(providerMessages[0]?.content).toContain('warnings');
       expect(jobRow(jobId)).toMatchObject({
         kind: 'receipt',
         status: 'done',
@@ -626,6 +803,20 @@ describe('AI provider queue dispatcher', () => {
       );
       releaseProvider.resolve();
       await waitFor(() => jobRow(jobId).status === 'done');
+
+      const requestBodies = vi
+        .mocked(fetch)
+        .mock.calls.map(([, init]) => JSON.parse(String(init?.body)));
+      expect(requestBodies.slice(0, 3).map(({ response_format }) => response_format)).toEqual([
+        RECEIPT_RESPONSE_FORMAT,
+        RECEIPT_RESPONSE_FORMAT,
+        RECEIPT_RESPONSE_FORMAT
+      ]);
+      expect(requestBodies.slice(0, 3).map(({ stream }) => stream)).toEqual([
+        true,
+        undefined,
+        true
+      ]);
 
       expect(
         db.prepare('SELECT status, store, purchase_date FROM receipts WHERE id = ?').get(receiptId)
@@ -768,8 +959,8 @@ describe('AI provider queue dispatcher', () => {
   it('keeps legacy receipt retries and individual stop backed by the shared job state', async () => {
     const { pararTrabajo, reencolar, stopWorker, submitAiTask } = await import('./ticket-queue.js');
     db.prepare(
-      `INSERT INTO receipts (id, user_id, status, file_url, file_kind, error_code)
-       VALUES ('legacy-retry', ?, 'failed', '/uploads/legacy.png', 'png', 'PROVIDER')`
+      `INSERT INTO receipts (id, user_id, status, file_url, file_kind, error_code, ai_output_language)
+       VALUES ('legacy-retry', ?, 'failed', '/uploads/legacy.png', 'png', 'PROVIDER', 'en')`
     ).run(userId);
     db.prepare(
       `INSERT INTO ai_jobs (id, user_id, config_id, kind, receipt_id, status, attempts, max_attempts, error_code)
@@ -777,6 +968,9 @@ describe('AI provider queue dispatcher', () => {
     ).run(userId, config.id);
 
     expect(reencolar('legacy-retry-job')).toBe(true);
+    expect(
+      db.prepare('SELECT ai_output_language FROM receipts WHERE id = ?').get('legacy-retry')
+    ).toEqual({ ai_output_language: 'en' });
     stopWorker();
     expect(jobRow('legacy-retry-job')).toMatchObject({
       status: 'queued',
@@ -916,8 +1110,8 @@ describe('AI provider queue dispatcher', () => {
   it('requeues a running receipt after a single-process restart even when its lease is still future', async () => {
     const { barrerArranque } = await import('./ticket-queue.js');
     db.prepare(
-      `INSERT INTO receipts (id, user_id, status, file_url, file_kind)
-       VALUES ('receipt-restart', ?, 'analyzing', '/uploads/receipt-restart.png', 'png')`
+      `INSERT INTO receipts (id, user_id, status, file_url, file_kind, ai_output_language)
+       VALUES ('receipt-restart', ?, 'analyzing', '/uploads/receipt-restart.png', 'png', 'en')`
     ).run(userId);
     db.prepare(
       `INSERT INTO ai_jobs (id, user_id, config_id, kind, receipt_id, status, lease_until, claim_generation)
@@ -928,8 +1122,10 @@ describe('AI provider queue dispatcher', () => {
     expect(barrerArranque(db)).toBe(1);
     expect(jobRow('receipt-job-restart')).toMatchObject({ status: 'queued', claim_generation: 5 });
     expect(
-      db.prepare('SELECT status FROM receipts WHERE id = ?').get('receipt-restart')
-    ).toMatchObject({ status: 'queued' });
+      db
+        .prepare('SELECT status, ai_output_language FROM receipts WHERE id = ?')
+        .get('receipt-restart')
+    ).toMatchObject({ status: 'queued', ai_output_language: 'en' });
   });
 
   it('ignores a late provider result after cancel and a new claim of the same job id', async () => {

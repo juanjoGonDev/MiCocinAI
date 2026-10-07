@@ -1,16 +1,18 @@
 import { ReadableStream } from 'node:stream/web';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AiCallError,
   activeAiConfig,
   callAI as queuedCallAI,
-  callAIWithConfig as callAITransport,
+  callAIWithConfig as callAITransportRaw,
   callAIStreaming as queuedCallAIStreaming,
-  callAIStreamingWithConfig as callAIStreamingTransport,
+  callAIStreamingWithConfig as callAIStreamingTransportRaw,
   endpoint,
   extractJsonObject,
   pingDeConexionTransport
 } from './ai-client.js';
+import type { AiResponseFormat } from '../schemas/ai-response-format.js';
+import type { AiConfigRow } from './ai-client.js';
 
 /**
  * El unico sitio que habla con un proveedor de IA tiene que fallar con nombres y
@@ -59,8 +61,54 @@ const CONFIG = {
   concurrency: 0
 };
 
+const REAL_SMOKE_PROVIDER_KEY_MARKER = '__HOGARIA_AI_REAL_SMOKE_PROVIDER_KEY__';
+const REAL_SMOKE_PROXY_URL = 'http://127.0.0.1:3001/v1';
+const REAL_SMOKE_PROXY_TOKEN = 'synthetic-real-smoke-proxy-token';
+const TEST_RESPONSE_FORMAT: AiResponseFormat = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'synthetic_test',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: { answer: { type: 'string' } },
+      required: ['answer'],
+      additionalProperties: false
+    }
+  }
+};
+
+function callAITransport(active: AiConfigRow, messages: any[], signal?: AbortSignal) {
+  return callAITransportRaw(active, messages, TEST_RESPONSE_FORMAT, signal);
+}
+
+function callAIStreamingTransport(
+  active: AiConfigRow,
+  messages: any[],
+  onDelta: (text: string) => void,
+  signal: AbortSignal
+) {
+  return callAIStreamingTransportRaw(active, messages, onDelta, TEST_RESPONSE_FORMAT, signal);
+}
+
+function enableRealSmoke(proxyUrl = REAL_SMOKE_PROXY_URL, proxyToken = REAL_SMOKE_PROXY_TOKEN) {
+  vi.stubEnv('HOGARIA_AI_REAL_SMOKE', '1');
+  vi.stubEnv('HOGARIA_AI_REAL_SMOKE_PROXY_URL', proxyUrl);
+  vi.stubEnv('HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN', proxyToken);
+}
+
+beforeEach(() => {
+  // Aisla las pruebas de cualquier configuración local de smoke sin inspeccionar sus valores.
+  vi.stubEnv('E2E_EXTERNAL_STACK', '');
+  vi.stubEnv('HOGARIA_AI_REAL_SMOKE', '');
+  vi.stubEnv('HOGARIA_AI_REAL_SMOKE_PROXY_URL', '');
+  vi.stubEnv('HOGARIA_AI_REAL_SMOKE_PROVIDER_TOKEN', '');
+  vi.stubEnv('HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN', '');
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('activeAiConfig', () => {
@@ -72,6 +120,132 @@ describe('activeAiConfig', () => {
 });
 
 describe('callAI', () => {
+  it('rechaza el marcador genérico antes de fetch si el smoke no está habilitado', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await callAITransport(
+      {
+        ...CONFIG,
+        base_url: REAL_SMOKE_PROXY_URL,
+        api_key: REAL_SMOKE_PROVIDER_KEY_MARKER
+      },
+      []
+    ).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(error.code).toBe('PROVIDER');
+    expect(error.message).toBe('AI provider configuration is not available');
+    expect(error.message).not.toContain(REAL_SMOKE_PROVIDER_KEY_MARKER);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('requiere el valor exacto 1 en el opt-in y no una verdad aproximada', async () => {
+    vi.stubEnv('HOGARIA_AI_REAL_SMOKE', 'true');
+    vi.stubEnv('HOGARIA_AI_REAL_SMOKE_PROXY_URL', REAL_SMOKE_PROXY_URL);
+    vi.stubEnv('HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN', REAL_SMOKE_PROXY_TOKEN);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await callAITransport(
+      {
+        ...CONFIG,
+        base_url: REAL_SMOKE_PROXY_URL,
+        api_key: REAL_SMOKE_PROVIDER_KEY_MARKER
+      },
+      []
+    ).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(error.message).toBe('AI provider configuration is not available');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rechaza el marcador antes de fetch si la URL no coincide exactamente', async () => {
+    enableRealSmoke(`${REAL_SMOKE_PROXY_URL}/`, REAL_SMOKE_PROXY_TOKEN);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await callAITransport(
+      {
+        ...CONFIG,
+        base_url: REAL_SMOKE_PROXY_URL,
+        api_key: REAL_SMOKE_PROVIDER_KEY_MARKER
+      },
+      []
+    ).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(error.message).toBe('AI provider configuration is not available');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rechaza un proxy coincidente que no es loopback antes de fetch', async () => {
+    const nonLoopback = 'https://provider.example.invalid/v1';
+    enableRealSmoke(nonLoopback, REAL_SMOKE_PROXY_TOKEN);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await callAITransport(
+      { ...CONFIG, base_url: nonLoopback, api_key: REAL_SMOKE_PROVIDER_KEY_MARKER },
+      []
+    ).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(error.message).toBe('AI provider configuration is not available');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rechaza el marcador si falta la credencial local del proxy, antes de fetch', async () => {
+    enableRealSmoke(REAL_SMOKE_PROXY_URL, '');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const error = await callAITransport(
+      {
+        ...CONFIG,
+        base_url: REAL_SMOKE_PROXY_URL,
+        api_key: REAL_SMOKE_PROVIDER_KEY_MARKER
+      },
+      []
+    ).catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(AiCallError);
+    expect(error.message).toBe('AI provider configuration is not available');
+    expect(JSON.stringify(error)).not.toContain(REAL_SMOKE_PROVIDER_KEY_MARKER);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('resuelve el marcador solo con opt-in, proxy loopback exacto y token, y redacta el eco', async () => {
+    enableRealSmoke();
+    const webApiBearer = 'webapi-bearer-must-stay-out-of-the-e2e-server';
+    vi.stubEnv('HOGARIA_AI_REAL_SMOKE_PROVIDER_TOKEN', webApiBearer);
+    let authorization: string | undefined;
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      authorization = (init.headers as Record<string, string>).Authorization;
+      return new Response(
+        JSON.stringify({
+          choices: [{ message: { content: `El proxy repitió ${REAL_SMOKE_PROXY_TOKEN}` } }]
+        }),
+        { status: 200 }
+      );
+    });
+
+    const content = await callAITransport(
+      {
+        ...CONFIG,
+        base_url: REAL_SMOKE_PROXY_URL,
+        api_key: REAL_SMOKE_PROVIDER_KEY_MARKER
+      },
+      []
+    );
+
+    expect(authorization).toBe(`Bearer ${REAL_SMOKE_PROXY_TOKEN}`);
+    expect(authorization).not.toContain(webApiBearer);
+    expect(content).not.toContain(REAL_SMOKE_PROXY_TOKEN);
+    expect(content).toContain('[redactado]');
+  });
+
   it('manda la config de la UI en el body, con la barra final normalizada', async () => {
     const seen: { url: string; init: any }[] = [];
     vi.stubGlobal('fetch', async (url: string, init: any) => {
@@ -88,14 +262,19 @@ describe('callAI', () => {
     // `base_url` acabado en `/` no debe producir `//chat/completions`
     expect(seen[0].url).toBe('https://ai.local/v1/chat/completions');
     const body = JSON.parse(seen[0].init.body);
-    expect(body).toMatchObject({ model: 'gpt-vision', temperature: 0.2, max_tokens: 900 });
+    expect(body).toMatchObject({
+      model: 'gpt-vision',
+      temperature: 0.2,
+      max_tokens: 900,
+      response_format: TEST_RESPONSE_FORMAT
+    });
     expect(seen[0].init.headers.Authorization).toBe('Bearer clave');
   });
 
   it('sin configuracion activa NO es un error del proveedor', async () => {
-    await expect(queuedCallAI('u-x', [], dbWith({ ai_configs: [] }))).rejects.toMatchObject({
-      code: 'NO_CONFIG'
-    });
+    await expect(
+      queuedCallAI('u-x', [], dbWith({ ai_configs: [] }), TEST_RESPONSE_FORMAT)
+    ).rejects.toMatchObject({ code: 'NO_CONFIG' });
   });
 
   it('un 500 conserva el estado HTTP pero no expone el cuerpo arbitrario del proveedor', async () => {
@@ -263,6 +442,130 @@ function sse(chunks: string[]): ReadableStream<Uint8Array> {
   });
 }
 
+type SmokeTransportConfig = Omit<typeof CONFIG, 'base_url' | 'api_key'> & {
+  base_url: string;
+  api_key: string;
+};
+
+const externalStackTransports: Array<{
+  name: string;
+  call: (config: SmokeTransportConfig) => Promise<unknown>;
+  providerResponse: () => Response;
+  connectionProbe?: true;
+}> = [
+  {
+    name: 'completion',
+    call: (config) => callAITransport(config, []),
+    providerResponse: () =>
+      new Response(JSON.stringify({ choices: [{ message: { content: 'respuesta' } }] }), {
+        status: 200
+      })
+  },
+  {
+    name: 'stream',
+    call: (config) =>
+      callAIStreamingTransport(config, [], () => undefined, new AbortController().signal),
+    providerResponse: () =>
+      new Response(
+        sse([
+          `data: ${JSON.stringify({ choices: [{ delta: { content: 'respuesta' } }] })}\n`,
+          'data: [DONE]\n'
+        ]),
+        { status: 200 }
+      )
+  },
+  {
+    name: 'connection test',
+    call: (config) => pingDeConexionTransport(config),
+    providerResponse: () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: '{"status":"ok","message":"conectado"}' } }]
+        }),
+        { status: 200 }
+      ),
+    connectionProbe: true
+  }
+];
+
+describe('guard E2E_EXTERNAL_STACK', () => {
+  for (const transport of externalStackTransports) {
+    it(`${transport.name}: bloquea destinos no-loopback antes de fetch sin live smoke`, async () => {
+      vi.stubEnv('E2E_EXTERNAL_STACK', '1');
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await transport
+        .call({
+          ...CONFIG,
+          base_url: 'https://provider.example.invalid/v1',
+          api_key: 'synthetic-e2e-config-key'
+        })
+        .catch((reason) => reason);
+
+      if (transport.connectionProbe) {
+        expect(result).toMatchObject({
+          ok: false,
+          error: 'No se pudo conectar con el proveedor'
+        });
+      } else {
+        expect(result).toBeInstanceOf(AiCallError);
+        expect((result as AiCallError).message).toBe('AI provider configuration is not available');
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it(`${transport.name}: en live solo permite el proxy loopback exacto autorizado`, async () => {
+      vi.stubEnv('E2E_EXTERNAL_STACK', '1');
+      enableRealSmoke();
+      let authorization: string | undefined;
+      vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+        authorization = (init.headers as Record<string, string>).Authorization;
+        return transport.providerResponse();
+      });
+
+      const result = await transport.call({
+        ...CONFIG,
+        base_url: REAL_SMOKE_PROXY_URL,
+        api_key: REAL_SMOKE_PROVIDER_KEY_MARKER
+      });
+
+      expect(authorization).toBe(`Bearer ${REAL_SMOKE_PROXY_TOKEN}`);
+      if (transport.connectionProbe) {
+        expect(result).toMatchObject({ ok: true });
+      } else {
+        expect(result).toBe('respuesta');
+      }
+    });
+
+    it(`${transport.name}: live rechaza antes de fetch una URL distinta del proxy`, async () => {
+      vi.stubEnv('E2E_EXTERNAL_STACK', '1');
+      enableRealSmoke();
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+
+      const result = await transport
+        .call({
+          ...CONFIG,
+          base_url: `${REAL_SMOKE_PROXY_URL}/`,
+          api_key: 'synthetic-e2e-config-key'
+        })
+        .catch((reason) => reason);
+
+      if (transport.connectionProbe) {
+        expect(result).toMatchObject({
+          ok: false,
+          error: 'No se pudo conectar con el proveedor'
+        });
+      } else {
+        expect(result).toBeInstanceOf(AiCallError);
+        expect((result as AiCallError).message).toBe('AI provider configuration is not available');
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  }
+});
+
 describe('callAIStreaming', () => {
   it('va entregando cada delta y devuelve el texto entero, con [DONE] y ruido de por medio', async () => {
     const deltas: string[] = [];
@@ -294,6 +597,7 @@ describe('callAIStreaming', () => {
     expect(deltas.join('')).toBe(texto);
     // El stream va de verdad en el body, y la senal de abort viaja con el fetch.
     expect(seen[0].body.stream).toBe(true);
+    expect(seen[0].body.response_format).toEqual(TEST_RESPONSE_FORMAT);
   });
 
   it('sin configuracion activa, NO_CONFIG (la cola lo traduce por «configura la IA»)', async () => {
@@ -303,9 +607,47 @@ describe('callAIStreaming', () => {
         [],
         dbWith({ ai_configs: [] }),
         () => undefined,
+        TEST_RESPONSE_FORMAT,
         new AbortController().signal
       )
     ).rejects.toMatchObject({ code: 'NO_CONFIG' });
+  });
+
+  it('usa el token resuelto en Authorization y lo redacta aunque cruce deltas', async () => {
+    enableRealSmoke();
+    const deltas: string[] = [];
+    let authorization: string | undefined;
+    const providerDeltas = [
+      `inicio ${REAL_SMOKE_PROXY_TOKEN.slice(0, 12)}`,
+      `${REAL_SMOKE_PROXY_TOKEN.slice(12)} final`
+    ];
+    const chunks = [
+      ...providerDeltas.map(
+        (content) => `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n`
+      ),
+      'data: [DONE]\n'
+    ];
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      authorization = (init.headers as Record<string, string>).Authorization;
+      return new Response(sse(chunks), { status: 200 });
+    });
+
+    const content = await callAIStreamingTransport(
+      {
+        ...CONFIG,
+        base_url: REAL_SMOKE_PROXY_URL,
+        api_key: REAL_SMOKE_PROVIDER_KEY_MARKER
+      },
+      [],
+      (delta) => deltas.push(delta),
+      new AbortController().signal
+    );
+
+    expect(authorization).toBe(`Bearer ${REAL_SMOKE_PROXY_TOKEN}`);
+    expect(content).not.toContain(REAL_SMOKE_PROXY_TOKEN);
+    expect(deltas.join('')).not.toContain(REAL_SMOKE_PROXY_TOKEN);
+    expect(content).toContain('[redactado]');
+    expect(deltas.join('')).toBe(content);
   });
 
   it('un 4xx/5xx del proveedor es PROVIDER y conserva solo el status', async () => {
@@ -453,6 +795,36 @@ describe('endpoint', () => {
 });
 
 describe('callAI: el cuerpo lleva solo lo configurado', () => {
+  it('incluye el response_format JSON Schema estricto solicitado por la tarea', async () => {
+    const responseFormat = {
+      type: 'json_schema' as const,
+      json_schema: {
+        name: 'synthetic_answer',
+        strict: true as const,
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['answer'],
+          properties: { answer: { type: 'string' } }
+        }
+      }
+    };
+    let body: any;
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: '{"answer":"ok"}' } }] }),
+        {
+          status: 200
+        }
+      );
+    });
+
+    await callAITransportRaw(CONFIG, [{ role: 'user', content: 'JSON' }], responseFormat);
+
+    expect(body.response_format).toEqual(responseFormat);
+  });
+
   it('los parametros en null no viajan: un proveedor estricto no recibe basura', async () => {
     let cuerpo: any;
     vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
@@ -473,7 +845,11 @@ describe('callAI: el cuerpo lleva solo lo configurado', () => {
       [{ role: 'user', content: 'hola' }]
     );
     vi.unstubAllGlobals();
-    expect(cuerpo).toEqual({ model: CONFIG.model, messages: [{ role: 'user', content: 'hola' }] });
+    expect(cuerpo).toEqual({
+      model: CONFIG.model,
+      messages: [{ role: 'user', content: 'hola' }],
+      response_format: TEST_RESPONSE_FORMAT
+    });
   });
 
   it('los parametros con valor si viajan', async () => {
@@ -518,6 +894,46 @@ describe('pingDeConexion', () => {
     // Y nada de max_tokens ni temperature en una prueba de un segundo.
     expect(cuerpo.max_tokens).toBeUndefined();
     expect(cuerpo.temperature).toBeUndefined();
+  });
+
+  it('usa el token resuelto y lo redacta en el mensaje de conexión', async () => {
+    enableRealSmoke();
+    let authorization: string | undefined;
+    vi.stubGlobal('fetch', async (_url: string, init: RequestInit) => {
+      authorization = (init.headers as Record<string, string>).Authorization;
+      return respuesta(JSON.stringify({ status: 'ok', message: `eco ${REAL_SMOKE_PROXY_TOKEN}` }));
+    });
+
+    const veredicto = await pingDeConexionTransport({
+      base_url: REAL_SMOKE_PROXY_URL,
+      api_key: REAL_SMOKE_PROVIDER_KEY_MARKER,
+      model: 'm'
+    });
+
+    expect(authorization).toBe(`Bearer ${REAL_SMOKE_PROXY_TOKEN}`);
+    expect(veredicto.ok).toBe(true);
+    if (veredicto.ok) {
+      expect(veredicto.message).not.toContain(REAL_SMOKE_PROXY_TOKEN);
+      expect(veredicto.message).toContain('[redactado]');
+    }
+  });
+
+  it('un marcador sin opt-in falla genérico sin iniciar fetch', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const veredicto = await pingDeConexionTransport({
+      base_url: REAL_SMOKE_PROXY_URL,
+      api_key: REAL_SMOKE_PROVIDER_KEY_MARKER,
+      model: 'm'
+    });
+
+    expect(veredicto).toMatchObject({
+      ok: false,
+      error: 'No se pudo conectar con el proveedor'
+    });
+    expect(JSON.stringify(veredicto)).not.toContain(REAL_SMOKE_PROVIDER_KEY_MARKER);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('un 200 con cuerpo que no es JSON (el proxy con su pagina HTML) es veredicto de error, no un vuelco', async () => {

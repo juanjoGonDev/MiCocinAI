@@ -288,7 +288,7 @@ import { RouterLink } from '@angular/router';
               name="maxTokens"
               type="number"
               [label]="'ai_config.max_tokens' | t"
-              placeholder="2000"
+              placeholder="4096"
               [(ngModel)]="formData.maxTokens"
             ></app-input>
           </div>
@@ -745,7 +745,7 @@ export class AiConfigComponent implements OnInit {
     apiKey: '',
     model: '',
     temperature: 0.7,
-    maxTokens: 2000,
+    maxTokens: 4096,
     timeout: 30000,
     retryAttempts: 3,
     concurrency: 0
@@ -986,7 +986,7 @@ export class AiConfigComponent implements OnInit {
       apiKey: '',
       model: '',
       temperature: 0.7,
-      maxTokens: 2000,
+      maxTokens: 4096,
       timeout: 30000,
       retryAttempts: 3,
       concurrency: 0

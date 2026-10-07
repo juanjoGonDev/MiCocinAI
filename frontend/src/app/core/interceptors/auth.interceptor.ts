@@ -10,6 +10,7 @@ import {
   throwError
 } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { I18nService } from '../services/i18n.service';
 
 type RefreshState = { kind: 'success'; token: string } | { kind: 'failure' } | null;
 
@@ -32,13 +33,18 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
     return next(req);
   }
 
+  const appLanguage = inject(I18nService).resolved();
+
   // Add token to request if available
   if (token) {
     req = req.clone({
       setHeaders: {
-        Authorization: `Bearer ${token}`
+        Authorization: `Bearer ${token}`,
+        'X-App-Language': appLanguage
       }
     });
+  } else {
+    req = req.clone({ setHeaders: { 'X-App-Language': appLanguage } });
   }
 
   return next(req).pipe(

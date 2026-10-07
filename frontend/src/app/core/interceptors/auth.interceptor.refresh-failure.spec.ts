@@ -4,6 +4,7 @@ import { Observable, Subject, Subscription, of, throwError } from 'rxjs';
 import { authResponse } from './auth.interceptor.test-fixtures';
 import { AuthService } from '../services/auth.service';
 import { authInterceptor } from './auth.interceptor';
+import { I18nService } from '../services/i18n.service';
 
 describe('authInterceptor refresh failure regression', () => {
   let authService: jasmine.SpyObj<AuthService>;
@@ -16,7 +17,10 @@ describe('authInterceptor refresh failure regression', () => {
     ]);
     authService.getToken.and.returnValue('expired-access-token');
     TestBed.configureTestingModule({
-      providers: [{ provide: AuthService, useValue: authService }]
+      providers: [
+        { provide: AuthService, useValue: authService },
+        { provide: I18nService, useValue: { resolved: () => 'en' } }
+      ]
     });
   });
 
@@ -51,6 +55,7 @@ describe('authInterceptor refresh failure regression', () => {
     const recovered = collect('/api/shopping', (request) => {
       if (attempt++ === 0) return throwError(() => new HttpErrorResponse({ status: 401 }));
       expect(request.headers.get('Authorization')).toBe('Bearer recovered-access-token');
+      expect(request.headers.get('X-App-Language')).toBe('en');
       return of(new HttpResponse({ status: 200 }));
     });
 

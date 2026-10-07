@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { productKeyOf } from './product-key.js';
+import { activeHouseholdId } from './household-context.js';
 
 /**
  * Las caducidades de la casa (HOGARIA-SPEC ## 12ak): cuanto dura cada producto y cuando toca
@@ -175,11 +176,38 @@ function sumarDias(dia: string, dias: number): string {
 }
 
 /** La casa de un usuario (su household, si comparte despensa). */
-function casaDe(db: SqlDb, userId: string): { userId: string; householdId: string | null } {
-  const fila = db.prepare('SELECT household_id AS hid FROM users WHERE id = ?').get(userId) as
-    | { hid: string | null }
+function casaDe(db: SqlDb, userId: string): {
+  userId: string;
+  householdId: string | null;
+  clause: string;
+  params: unknown[];
+} {
+  const householdId = activeHouseholdId(db, userId);
+  if (!householdId) {
+    return {
+      userId,
+      householdId: null,
+      clause: '(household_id IS NULL AND user_id = ?)',
+      params: [userId]
+    };
+  }
+  const household = db.prepare('SELECT shared_pantry FROM households WHERE id = ?').get(householdId) as
+    | { shared_pantry: number }
     | undefined;
-  return { userId, householdId: fila?.hid ?? null };
+  return household?.shared_pantry
+    ? {
+        userId,
+        householdId,
+        clause: '(household_id = ? OR (household_id IS NULL AND user_id = ?))',
+        params: [householdId, userId]
+      }
+    : {
+        userId,
+        householdId,
+        clause:
+          '((household_id = ? AND user_id = ?) OR (household_id IS NULL AND user_id = ?))',
+        params: [householdId, userId, userId]
+      };
 }
 
 /**
@@ -196,11 +224,11 @@ export function comprasDeLaCasa(
     .prepare(
       `SELECT product_key, substr(observed_at, 1, 10) AS dia, SUM(quantity) AS cantidad
        FROM price_observations
-       WHERE user_id = ? OR (household_id IS NOT NULL AND household_id = ?)
+       WHERE ${casa.clause}
        GROUP BY product_key, dia
        ORDER BY dia ASC`
     )
-    .all(casa.userId, casa.householdId) as { product_key: string; dia: string; cantidad: number }[];
+    .all(...casa.params) as { product_key: string; dia: string; cantidad: number }[];
   const porClave = new Map<string, Compra[]>();
   for (const fila of filas) {
     const lista = porClave.get(fila.product_key) ?? [];
@@ -253,10 +281,10 @@ export function caducidadesDe(db: SqlDb, userId: string): CaducidadRow[] {
     .prepare(
       `SELECT id, name, category, quantity, unit, expiration_date, estimated_shelf_days, created_at
        FROM ingredients
-       WHERE (user_id = ? OR (household_id IS NOT NULL AND household_id = ?)) AND quantity > 0
+       WHERE ${casa.clause} AND quantity > 0
        ORDER BY name ASC`
     )
-    .all(casa.userId, casa.householdId) as {
+    .all(...casa.params) as {
     id: string;
     name: string;
     category: string;

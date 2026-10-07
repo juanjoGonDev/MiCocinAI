@@ -98,12 +98,43 @@ afterAll(async () => {
 beforeEach(async () => {
   const { stopWorker } = await import('../utils/ticket-queue.js');
   stopWorker();
-  db.exec('DELETE FROM ai_jobs; DELETE FROM ai_configs; DELETE FROM users;');
+  db.exec(
+    'DELETE FROM household_members; DELETE FROM ai_jobs; DELETE FROM ai_configs; UPDATE users SET household_id = NULL; DELETE FROM households; DELETE FROM users;'
+  );
   alice = await makeUser('alice');
   bob = await makeUser('bob');
 });
 
 describe('AI queue API', () => {
+  it('requires an active home before exposing personal configs or queues to a multi-home member', async () => {
+    const personalConfig = createConfig(alice.id);
+    for (const [id, inviteCode] of [
+      ['queue-home-a', 'queue-invite-a'],
+      ['queue-home-b', 'queue-invite-b']
+    ]) {
+      db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+        id,
+        id,
+        inviteCode
+      );
+      db.prepare(
+        `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+         VALUES (?, ?, ?, 'admin', '{"settings":true}')`
+      ).run(`membership-${id}`, id, alice.id);
+    }
+
+    const configs = await call(alice, 'GET', `/configs/${personalConfig}/queue`);
+    const retry = await call(alice, 'POST', `/configs/${personalConfig}/queue/job/cancel`);
+
+    expect(configs.status).toBe(409);
+    expect(configs.payload).toMatchObject({
+      success: false,
+      code: 'HOUSEHOLD_SELECTION_REQUIRED'
+    });
+    expect(retry.status).toBe(409);
+    expect(retry.payload.code).toBe('HOUSEHOLD_SELECTION_REQUIRED');
+  });
+
   it('isolates configs by owner and returns only safe queue metadata', async () => {
     const configId = createConfig(alice.id);
     createJob({

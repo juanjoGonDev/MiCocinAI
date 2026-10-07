@@ -2,11 +2,13 @@ import { HttpErrorResponse, HttpHandlerFn, HttpRequest, HttpResponse } from '@an
 import { TestBed } from '@angular/core/testing';
 import { Observable, Subject, Subscription, of, throwError } from 'rxjs';
 import { AuthService } from '../services/auth.service';
+import { I18nService } from '../services/i18n.service';
 import { authInterceptor } from './auth.interceptor';
 import { authResponse } from './auth.interceptor.test-fixtures';
 
 describe('authInterceptor', () => {
   let authService: jasmine.SpyObj<AuthService>;
+  let resolvedLanguage: 'es' | 'en';
 
   beforeEach(() => {
     authService = jasmine.createSpyObj<AuthService>('AuthService', [
@@ -16,8 +18,12 @@ describe('authInterceptor', () => {
     ]);
     authService.getToken.and.returnValue('old-access-token');
     authService.refreshToken.and.returnValue(of(authResponse('fresh-access-token')));
+    resolvedLanguage = 'es';
     TestBed.configureTestingModule({
-      providers: [{ provide: AuthService, useValue: authService }]
+      providers: [
+        { provide: AuthService, useValue: authService },
+        { provide: I18nService, useValue: { resolved: () => resolvedLanguage } }
+      ]
     });
   });
 
@@ -48,6 +54,18 @@ describe('authInterceptor', () => {
     });
 
     expect(sent?.headers.get('Authorization')).toBe('Bearer old-access-token');
+    expect(sent?.headers.get('X-App-Language')).toBe('es');
+  });
+
+  it('sends the resolved English app locale rather than the auto selector value', () => {
+    resolvedLanguage = 'en';
+    let sent: HttpRequest<unknown> | undefined;
+    collect('/api/ai/generate-recipe', (request) => {
+      sent = request;
+      return of(new HttpResponse({ status: 200 }));
+    });
+
+    expect(sent?.headers.get('X-App-Language')).toBe('en');
   });
 
   it('does not attempt a refresh when no access token exists', () => {

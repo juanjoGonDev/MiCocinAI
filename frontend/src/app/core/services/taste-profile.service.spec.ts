@@ -76,7 +76,7 @@ describe('TasteProfileService', () => {
         taste: {
           goal: 'variety',
           likes: ['Pollo']
-        } as TasteResponse['taste'],
+        } as unknown as TasteResponse['taste'],
         onboarding: { status: 'done', completedAt: '2026-01-02T10:00:00.000Z' },
         profile: {
           cookingLevel: 'expert',
@@ -97,7 +97,7 @@ describe('TasteProfileService', () => {
 
     expect(service.taste()).toEqual({
       ...emptyTasteProfile(),
-      goal: 'variety',
+      goals: ['variety'],
       likes: ['Pollo']
     });
     expect(service.hasProfile()).toBeTrue();
@@ -217,7 +217,7 @@ describe('TasteProfileService', () => {
 
   it('includes every supplied optional field in a complete PATCH', () => {
     const patch = {
-      taste: { goal: 'muscle-gain' as const, allergies: ['Gluten'] },
+      taste: { goals: ['muscle-gain' as const], allergies: ['Gluten'] },
       onboardingStatus: 'done' as const,
       profile: { cookingLevel: 'expert' as const, modules: [] },
       mealTimes: { breakfast: '06:30', dinner: null },
@@ -250,7 +250,7 @@ describe('TasteProfileService', () => {
     );
 
     expect(service.isLoading()).toBeFalse();
-    expect(service.taste().goal).toBe('muscle-gain');
+    expect(service.taste().goals).toEqual(['muscle-gain']);
     expect(service.profile()).toEqual({ cookingLevel: 'expert', modules: [] });
     expect(service.mealTimes().breakfast).toBe('06:30');
     expect(service.mealTimes().dinner).toBe('20:30');

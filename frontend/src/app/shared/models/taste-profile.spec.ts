@@ -4,7 +4,9 @@ import {
   COMMON_LIKES,
   emptyTasteProfile,
   GOAL_OPTIONS,
-  hasTasteProfile
+  hasTasteProfile,
+  normalizeTasteProfile,
+  toggleTasteGoal
 } from './taste-profile';
 import { hasIcon } from '../components/ui/icon/icon-paths';
 
@@ -15,6 +17,7 @@ describe('taste profile icon metadata', () => {
       'remove_circle',
       'add_circle',
       'favorite',
+      'scale',
       'star',
       'edit'
     ]);
@@ -45,6 +48,18 @@ describe('taste profile presence', () => {
     expect(
       hasTasteProfile({ ...emptyTasteProfile(), goalNotes: 'Sin carne los lunes' })
     ).toBeTrue();
-    expect(hasTasteProfile({ ...emptyTasteProfile(), goal: 'variety' })).toBeTrue();
+    expect(hasTasteProfile({ ...emptyTasteProfile(), goals: ['variety'] })).toBeTrue();
+  });
+
+  it('supports combined goals, exclusive balanced mode, and legacy reads', () => {
+    expect(toggleTasteGoal(['balanced'], 'weight-loss')).toEqual(['weight-loss']);
+    expect(toggleTasteGoal(['weight-loss'], 'muscle-gain')).toEqual(['weight-loss', 'muscle-gain']);
+    expect(toggleTasteGoal(['weight-loss', 'muscle-gain'], 'balanced')).toEqual(['balanced']);
+    expect(normalizeTasteProfile({ goal: 'variety' }).goals).toEqual(['variety']);
+  });
+
+  it('normalizes an absent server profile to safe defaults', () => {
+    expect(normalizeTasteProfile(undefined)).toEqual(emptyTasteProfile());
+    expect(normalizeTasteProfile(null)).toEqual(emptyTasteProfile());
   });
 });

@@ -9,27 +9,43 @@ import {
   reordenarCola,
   reintentarTrabajo
 } from '../utils/ticket-queue.js';
+import { aiConfigByIdInScope, aiConfigScopeForUser } from '../utils/ai-config-scope.js';
+import { needsActiveHouseholdSelection } from '../utils/household-context.js';
 
 const aiQueueRoutes = new Hono<AppEnv>();
 aiQueueRoutes.use('*', authMiddleware);
+aiQueueRoutes.use('*', async (c, next) => {
+  if (needsActiveHouseholdSelection(getDatabase(), c.get('userId'))) {
+    return c.json(
+      {
+        success: false,
+        code: 'HOUSEHOLD_SELECTION_REQUIRED',
+        message: 'Selecciona primero el hogar para consultar su cola de IA.'
+      },
+      409
+    );
+  }
+  return next();
+});
 
 const orderSchema = z.object({
   jobIds: z.array(z.string().min(1).max(64)).max(5000)
 });
 
 function ownsConfig(userId: string, configId: string): boolean {
-  return Boolean(
-    getDatabase()
-      .prepare('SELECT 1 FROM ai_configs WHERE id = ? AND user_id = ?')
-      .get(configId, userId)
-  );
+  const db = getDatabase();
+  return Boolean(aiConfigByIdInScope(db, configId, aiConfigScopeForUser(db, userId)));
 }
 
 function ownsJob(userId: string, configId: string, jobId: string): boolean {
+  const db = getDatabase();
+  const scope = aiConfigScopeForUser(db, userId);
   return Boolean(
-    getDatabase()
-      .prepare('SELECT 1 FROM ai_jobs WHERE id = ? AND user_id = ? AND config_id = ?')
-      .get(jobId, userId, configId)
+    db
+      .prepare(
+        'SELECT 1 FROM ai_jobs WHERE id = ? AND user_id = ? AND household_id IS ? AND config_id = ?'
+      )
+      .get(jobId, userId, scope.householdId, configId)
   );
 }
 

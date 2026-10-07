@@ -5,6 +5,7 @@ import { environment } from '../../../environments/environment';
 import {
   emptyTasteProfile,
   hasTasteProfile,
+  normalizeTasteProfile,
   OnboardingState,
   OnboardingStatus,
   TasteProfile,
@@ -108,7 +109,7 @@ export class TasteProfileService {
   private apply(data: TasteResponse): void {
     if (!data) return;
 
-    this.taste.set({ ...emptyTasteProfile(), ...data.taste });
+    this.taste.set(normalizeTasteProfile(data.taste));
     this.onboarding.set(data.onboarding ?? { status: 'pending', completedAt: null });
     this.profile.set(toHomeProfile(data.profile));
     // Se reemplaza, no se fusiona: la respuesta ya trae las cuatro (las que la casa no ha tocado salen

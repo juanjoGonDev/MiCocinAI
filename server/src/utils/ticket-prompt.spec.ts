@@ -68,6 +68,18 @@ describe('buildTicketPrompt (## 12aj)', () => {
     expect(system).toContain('Nunca uses la fecha de subida ni `created_at` como fecha de compra');
   });
 
+  it('localiza los avisos del análisis, sin traducir lo transcrito ni el catálogo', () => {
+    const { system } = buildTicketPrompt({
+      inventarioJson: buildInventarioJson(inventario),
+      esPdf: false,
+      language: 'en'
+    });
+
+    expect(system).toContain('English (United Kingdom)');
+    expect(system).toContain('warnings');
+    expect(system).toContain('Do not translate');
+  });
+
   it('el PDF se anuncia como PDF y la imagen como imagen', () => {
     const pdf = buildTicketPrompt({ inventarioJson: '{}', esPdf: true });
     const imagen = buildTicketPrompt({ inventarioJson: '{}', esPdf: false });

@@ -7,7 +7,9 @@ import {
   AIProviderConfig,
   AIRecipeRequest,
   AIRecipeResponse,
-  AITestConnectionResponse
+  AITestConnectionResponse,
+  AIReplacementCandidate,
+  AIReplacementGuest
 } from '../../shared/models/ai-config.model';
 
 @Injectable({
@@ -136,31 +138,43 @@ export class AiService {
   generateRecipe(request: AIRecipeRequest): Observable<AIRecipeResponse | null> {
     this.isGeneratingSignal.set(true);
 
-    return this.http.post<any>(`${this.apiUrl}/generate-recipe`, request).pipe(
-      tap((response) => {
-        this.generatedRecipeSignal.set(response.data);
-        this.isGeneratingSignal.set(false);
-      }),
-      catchError(() => {
-        this.isGeneratingSignal.set(false);
-        return of(null);
+    return this.http
+      .post<{ data?: AIRecipeResponse | null }>(`${this.apiUrl}/generate-recipe`, request, {
+        context: this.silentContext()
       })
-    );
+      .pipe(
+        map((response) => response?.data ?? null),
+        tap((recipe) => {
+          if (recipe) {
+            this.generatedRecipeSignal.set(recipe);
+            this.generatedRecipesSignal.set([]);
+          }
+        }),
+        catchError(() => of(null)),
+        finalize(() => this.isGeneratingSignal.set(false))
+      );
   }
 
   generateMultipleRecipes(request: AIRecipeRequest): Observable<AIRecipeResponse[] | null> {
     this.isGeneratingSignal.set(true);
 
-    return this.http.post<any>(`${this.apiUrl}/generate-multiple-recipes`, request).pipe(
-      tap((response) => {
-        this.generatedRecipesSignal.set(response.data);
-        this.isGeneratingSignal.set(false);
-      }),
-      catchError(() => {
-        this.isGeneratingSignal.set(false);
-        return of(null);
-      })
-    );
+    return this.http
+      .post<{ data?: AIRecipeResponse[] | null }>(
+        `${this.apiUrl}/generate-multiple-recipes`,
+        request,
+        { context: this.silentContext() }
+      )
+      .pipe(
+        map((response) => (Array.isArray(response?.data) ? response.data : [])),
+        tap((recipes) => {
+          if (recipes.length > 0) {
+            this.generatedRecipeSignal.set(null);
+            this.generatedRecipesSignal.set(recipes);
+          }
+        }),
+        catchError(() => of(null)),
+        finalize(() => this.isGeneratingSignal.set(false))
+      );
   }
 
   getRecommendations(params: any): Observable<any> {
@@ -169,6 +183,22 @@ export class AiService {
 
   generateWeeklyPlan(params: any): Observable<any> {
     return this.http.post<any>(`${this.apiUrl}/plan-week`, params);
+  }
+
+  replaceMeal(request: {
+    mealId: string;
+    guests?: AIReplacementGuest[];
+    householdMemberIds?: string[];
+    goals?: { types: string[]; caloriesTarget?: number; customInstructions?: string };
+  }): Observable<AIReplacementCandidate | null> {
+    return this.http
+      .post<{ data?: AIReplacementCandidate }>(`${this.apiUrl}/replace-meal`, request, {
+        context: this.silentContext()
+      })
+      .pipe(
+        map((response) => response?.data ?? null),
+        catchError(() => of(null))
+      );
   }
 
   clearGenerated(): void {

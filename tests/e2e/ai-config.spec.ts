@@ -228,6 +228,7 @@ test.describe('AI Config', () => {
     const modal = page.locator('.modal-overlay');
     await expect(modal).toBeVisible();
     await expect(modal.locator('.modal__title')).toContainText('Nueva Configuración');
+    await expect(page.locator('input#maxTokens')).toHaveValue('4096');
     await expect(page.locator('input#name')).toBeVisible();
     await expect(page.locator('input#model')).toBeVisible();
     await expect(page.locator('input#baseUrl')).toBeVisible();

@@ -10,10 +10,10 @@ import type { IconName } from '../components/ui/icon/icon-paths';
  */
 
 export type TasteGoal =
-  'balanced' | 'weight-loss' | 'weight-gain' | 'muscle-gain' | 'variety' | 'custom';
+  'balanced' | 'weight-loss' | 'weight-gain' | 'muscle-gain' | 'maintenance' | 'variety' | 'custom';
 
 export interface TasteProfile {
-  goal: TasteGoal;
+  goals: TasteGoal[];
   goalNotes: string;
   /** Alergias e intolerancias: la IA no puede colar ni una variante. */
   allergies: string[];
@@ -57,7 +57,7 @@ export interface ChipOption {
 
 export function emptyTasteProfile(): TasteProfile {
   return {
-    goal: 'balanced',
+    goals: ['balanced'],
     goalNotes: '',
     allergies: [],
     likes: [],
@@ -75,8 +75,36 @@ export function hasTasteProfile(taste: TasteProfile | null): boolean {
     taste.dislikes.length > 0 ||
     taste.notes.trim().length > 0 ||
     taste.goalNotes.trim().length > 0 ||
-    taste.goal !== 'balanced'
+    taste.goals.some((goal) => goal !== 'balanced')
   );
+}
+
+/** Mantiene el objetivo neutro como opción exclusiva y permite combinar el resto, incluida Personalizada. */
+export function toggleTasteGoal(goals: TasteGoal[], goal: TasteGoal): TasteGoal[] {
+  if (goal === 'balanced') return goals.includes(goal) ? [] : [goal];
+  const withoutBalanced = goals.filter((selected) => selected !== 'balanced');
+  return withoutBalanced.includes(goal)
+    ? withoutBalanced.filter((selected) => selected !== goal)
+    : [...withoutBalanced, goal];
+}
+
+/** Normaliza respuestas nuevas y conserva la lectura de perfiles guardados antes de los objetivos múltiples. */
+export function normalizeTasteProfile(
+  input: (Partial<TasteProfile> & { goal?: TasteGoal }) | null | undefined
+): TasteProfile {
+  const value = input ?? {};
+  const legacyGoals = value.goals ?? (value.goal ? [value.goal] : undefined);
+  const { goal: _legacyGoal, ...current } = value;
+  return {
+    ...emptyTasteProfile(),
+    ...current,
+    goals: Array.isArray(legacyGoals) ? [...new Set(legacyGoals)] : ['balanced'],
+    goalNotes: value.goalNotes ?? '',
+    allergies: value.allergies ?? [],
+    likes: value.likes ?? [],
+    dislikes: value.dislikes ?? [],
+    notes: value.notes ?? ''
+  };
 }
 
 /**
@@ -112,6 +140,12 @@ export const GOAL_OPTIONS: {
     labelKey: 'taste.goal.muscle-gain',
     icon: 'favorite',
     hintKey: 'taste.goalHint.muscle-gain'
+  },
+  {
+    value: 'maintenance',
+    labelKey: 'calendar.goal.maintenance',
+    icon: 'scale',
+    hintKey: 'taste.goalHint.maintenance'
   },
   {
     value: 'variety',

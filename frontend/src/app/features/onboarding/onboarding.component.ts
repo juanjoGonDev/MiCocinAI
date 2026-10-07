@@ -16,7 +16,9 @@ import {
   GOAL_OPTIONS,
   TasteGoal,
   TasteProfile,
-  emptyTasteProfile
+  emptyTasteProfile,
+  normalizeTasteProfile,
+  toggleTasteGoal
 } from '../../shared/models/taste-profile';
 import { MealTimes, mealTimesPatch, resolveMealTimes } from '../../core/meal-times';
 import { MealHoursComponent } from '../../shared/components/ui/meal-hours/meal-hours.component';
@@ -162,8 +164,8 @@ import { PageContainerComponent } from '../../shared/components/page-container/p
                   *ngFor="let goal of goalOptions"
                   type="button"
                   class="onboarding__goal"
-                  [class.onboarding__goal--on]="taste.goal === goal.value"
-                  [attr.aria-pressed]="taste.goal === goal.value"
+                  [class.onboarding__goal--on]="taste.goals.includes(goal.value)"
+                  [attr.aria-pressed]="taste.goals.includes(goal.value)"
                   (click)="selectGoal(goal.value)"
                 >
                   <span class="onboarding__goal-icon">
@@ -177,7 +179,7 @@ import { PageContainerComponent } from '../../shared/components/page-container/p
               <div class="onboarding__field">
                 <label class="onboarding__field-title" for="goalNotes">
                   {{
-                    taste.goal === 'custom'
+                    taste.goals.includes('custom')
                       ? ('calendar.describe_tu_objetivo' | t)
                       : ('onboarding.mas_sobre_el_objetivo' | t)
                   }}
@@ -189,7 +191,7 @@ import { PageContainerComponent } from '../../shared/components/page-container/p
                   rows="3"
                   maxlength="500"
                   [placeholder]="
-                    taste.goal === 'custom'
+                    taste.goals.includes('custom')
                       ? ('onboarding.ej_sin_carne_los_lunes' | t)
                       : ('onboarding.ej_prioriza_proteina_en_la_cena' | t)
                   "
@@ -572,7 +574,7 @@ export class OnboardingComponent implements OnInit {
     // Si ya lo hizo (o lo saltó), no se le vuelve a preguntar: entra y edita.
     this.tasteService.load().subscribe({
       next: (data) => {
-        this.taste = { ...emptyTasteProfile(), ...data.taste };
+        this.taste = normalizeTasteProfile(data.taste);
         this.profile = toHomeProfile(data.profile);
         this.applyMealTimes(this.tasteService.mealTimes());
         this.loaded = true;
@@ -594,7 +596,7 @@ export class OnboardingComponent implements OnInit {
   }
 
   selectGoal(goal: TasteGoal): void {
-    this.taste.goal = goal;
+    this.taste.goals = toggleTasteGoal(this.taste.goals, goal);
   }
 
   /**

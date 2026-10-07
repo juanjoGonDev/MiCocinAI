@@ -10,6 +10,8 @@
  * sabe como proponerlos en vez de inventar.
  */
 
+import { aiLocalizedFieldsInstruction, type AiOutputLanguage } from './ai-output-language.js';
+
 export const TICKET_SHAPE = `{
   "store": "Mercadona",
   "purchaseDate": "2024-05-10",
@@ -28,7 +30,7 @@ export const TICKET_SHAPE = `{
   ],
   "currency": "EUR",
   "totalMinor": 390,
-  "warnings": ["No se lee la linea del final"]
+  "warnings": []
 }`;
 
 /** La forma del «inventario.json» que viaja con cada ticket. */
@@ -44,7 +46,11 @@ export function buildInventarioJson(inventario: InventarioParaPrompt): string {
   return JSON.stringify(inventario);
 }
 
-export function buildTicketPrompt(input: { inventarioJson: string; esPdf: boolean }): {
+export function buildTicketPrompt(input: {
+  inventarioJson: string;
+  esPdf: boolean;
+  language?: AiOutputLanguage;
+}): {
   system: string;
   user: string;
 } {
@@ -60,7 +66,8 @@ export function buildTicketPrompt(input: { inventarioJson: string; esPdf: boolea
     '7. `quantity` es cuantas unidades se llevan; `unit` la unidad corta (ud, kg, g, l, ml, pack, lata, botella, caja). Las ofertas tipo «3x2» van en `offer`, no en el precio.',
     '8. `confidence` entre 0 y 1: lo que se lee claro vale 0.95, lo deducido de una letra borrosa vale 0.3.',
     '9. `totalMinor` es el total final del ticket. Si no cuadra con la suma de tus lineas, dilo en `warnings` en vez de cuadrarlo tu.',
-    '10. Si una linea no se lee, no la metas: es mejor una linea menos que un producto que nadie compro.'
+    '10. Si una linea no se lee, no la metas: es mejor una linea menos que un producto que nadie compro.',
+    aiLocalizedFieldsInstruction(input.language ?? 'es', ['warnings'])
   ].join('\n');
 
   const user = [

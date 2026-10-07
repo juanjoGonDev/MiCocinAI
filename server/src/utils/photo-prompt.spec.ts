@@ -34,8 +34,19 @@ describe('buildPhotoPrompt', () => {
   });
 
   it('la nota de quien fotografio llega al modelo', () => {
-    const { user } = buildPhotoPrompt({ ...base, mode: 'auto', note: 'es la oferta de la esquina' });
+    const { user } = buildPhotoPrompt({
+      ...base,
+      mode: 'auto',
+      note: 'es la oferta de la esquina'
+    });
     expect(user).toContain('es la oferta de la esquina');
+  });
+
+  it('localiza solo los avisos y conserva nombres transcritos y categorías del catálogo', () => {
+    const { system } = buildPhotoPrompt({ ...base, mode: 'auto', language: 'en' });
+    expect(system).toContain('English (United Kingdom)');
+    expect(system).toContain('warnings');
+    expect(system).toContain('Do not translate');
   });
 
   it('la forma que se le muestra al modelo es JSON de verdad', () => {
