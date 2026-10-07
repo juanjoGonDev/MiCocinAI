@@ -51,7 +51,9 @@ test.describe('presupuesto de peticiones en el stack de produccion', () => {
     };
 
     for (const label of ['Periodo siguiente', 'Periodo anterior', 'Periodo siguiente', 'Hoy']) {
-      await assertRangeSettles(() => page.getByRole('button', { name: label }).click());
+      await assertRangeSettles(() =>
+        page.locator('.cal-top__nav').getByRole('button', { name: label }).click()
+      );
     }
 
     const tabs = page.getByRole('tab');
