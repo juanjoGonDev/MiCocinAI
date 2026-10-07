@@ -23,13 +23,9 @@ let closeDatabase: () => void;
 
 async function makeUser(id: string, householdId: string | null, name = 'Alguien') {
   const email = `${id}@hogaria.test`;
-  db.prepare('INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)').run(
-    id,
-    email,
-    name,
-    'hash',
-    householdId
-  );
+  db.prepare(
+    'INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(id, email, name, 'hash', householdId);
   const config = await import('../config/app.config.js');
   const token = jwt.sign({ sub: id, email }, config.config.auth.jwtSecret, { expiresIn: '1h' });
   return { id, email, token };
@@ -87,7 +83,11 @@ describe('calendario de la casa (§8f)', () => {
     ]) {
       db.prepare(sql).run();
     }
-    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(householdId, 'La casa', 'CALTEST1');
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      householdId,
+      'La casa',
+      'CALTEST1'
+    );
   });
 
   const event = {
@@ -100,7 +100,9 @@ describe('calendario de la casa (§8f)', () => {
 
   it('crea, lee y borra una suelta', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
-    const created = (await data(await call(alice, 'POST', '/events', { ...event, sharedWithHousehold: true }))) as any;
+    const created = (await data(
+      await call(alice, 'POST', '/events', { ...event, sharedWithHousehold: true })
+    )) as any;
     expect(created.id).toBeTruthy();
     expect(created.allDay).toBe(false);
     expect(created.editable).toBe(true);
@@ -113,18 +115,32 @@ describe('calendario de la casa (§8f)', () => {
     // Y su foto junto a el, para que el «de quien» sea el mismo icono en toda la app.
     expect(list[0].authorAvatar).toBeNull();
     db.prepare(`UPDATE users SET avatar = '/uploads/alice.png' WHERE id = ?`).run(alice.id);
-    const conFoto = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+    const conFoto = (await data(
+      await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')
+    )) as any[];
     expect(conFoto[0].authorAvatar).toBe('/uploads/alice.png');
 
     expect((await call(alice, 'DELETE', `/events/${created.id}`)).status).toBe(200);
-    expect(await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);
+    expect(await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual(
+      []
+    );
   });
 
   it('la casa ve la suelta compartida, y la que no se compartio no', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     const bob = await makeUser('cal-bob', householdId, 'Bob');
+    for (const [id, userId, role] of [
+      ['hm-share-alice', alice.id, 'admin'],
+      ['hm-share-bob', bob.id, 'member']
+    ]) {
+      db.prepare(
+        'INSERT INTO household_members (id, household_id, user_id, role, permissions) VALUES (?, ?, ?, ?, ?)'
+      ).run(id, householdId, userId, role, '{}');
+    }
     await call(alice, 'POST', '/events', { ...event, sharedWithHousehold: true });
-    const privateOne = (await data(await call(alice, 'POST', '/events', { ...event, title: 'Mi dentista' }))) as any;
+    const privateOne = (await data(
+      await call(alice, 'POST', '/events', { ...event, title: 'Mi dentista' })
+    )) as any;
     // Al crear no se devuelve el nombre de quien escribe: quien llama ya lo sabe, y la
     // lectura es el sitio donde el nombre interesa (es de otra persona).
     expect(privateOne.authorName).toBeNull();
@@ -132,30 +148,45 @@ describe('calendario de la casa (§8f)', () => {
     const seen = await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'));
     expect(seen.map((e: any) => e.title)).toEqual([event.title]);
     expect(seen[0].editable).toBe(false);
-    expect(await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toHaveLength(2);
+    expect(
+      await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))
+    ).toHaveLength(2);
   });
 
   it('ver el evento de otra persona no es poder reescribirlo', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     const bob = await makeUser('cal-bob', householdId, 'Bob');
-    const created = (await data(await call(alice, 'POST', '/events', { ...event, sharedWithHousehold: true }))) as any;
+    const created = (await data(
+      await call(alice, 'POST', '/events', { ...event, sharedWithHousehold: true })
+    )) as any;
 
     const patch = await call(bob, 'PATCH', `/events/${created.id}`, { title: 'Ya no vengo' });
     expect(patch.status).toBe(403);
     expect(((await patch.json()) as any).message).toBe('FORBIDDEN');
     expect((await call(bob, 'DELETE', `/events/${created.id}`)).status).toBe(403);
-    expect(((await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')))[0].title)).toBe(event.title);
+    expect(
+      (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')))[0].title
+    ).toBe(event.title);
   });
 
   it('el filtro de tipos deja pintar solo lo que interesa', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     await call(alice, 'POST', '/events', { ...event, sharedWithHousehold: true });
-    await call(alice, 'POST', '/events', { title: 'Comprar velas', kind: 'shopping', date: '2026-03-12', allDay: 1 });
+    await call(alice, 'POST', '/events', {
+      title: 'Comprar velas',
+      kind: 'shopping',
+      date: '2026-03-12',
+      allDay: 1
+    });
     await call(alice, 'POST', '/events', { title: 'Cumple', kind: 'personal', date: '2026-03-13' });
 
-    const home = await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31&kinds=home'));
+    const home = await data(
+      await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31&kinds=home')
+    );
     expect(home.map((e: any) => e.title)).toEqual([event.title]);
-    const two = await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31&kinds=home,shopping'));
+    const two = await data(
+      await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31&kinds=home,shopping')
+    );
     expect(two).toHaveLength(2);
     // Las de todo el día van delante: en el día se pintan como franja completa y si no,
     // quedan debajo de las horas, que es lo que hace legible la columna.
@@ -164,7 +195,11 @@ describe('calendario de la casa (§8f)', () => {
 
   it('una comida no se cuela por aqui: la manda el plan', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
-    const response = await call(alice, 'POST', '/events', { title: 'Cena', kind: 'meal', date: '2026-03-11' });
+    const response = await call(alice, 'POST', '/events', {
+      title: 'Cena',
+      kind: 'meal',
+      date: '2026-03-11'
+    });
     expect(response.status).toBe(400);
     expect(((await response.json()) as any).message).toBe('MEAL_COMES_FROM_THE_PLAN');
   });
@@ -172,8 +207,12 @@ describe('calendario de la casa (§8f)', () => {
   it('rechaza horas absurdas y fechas sin formato', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     expect((await call(alice, 'POST', '/events', { ...event, endTime: '17:00' })).status).toBe(400);
-    expect((await call(alice, 'POST', '/events', { ...event, startTime: '25:00' })).status).toBe(400);
-    expect((await call(alice, 'POST', '/events', { ...event, date: '11/03/2026' })).status).toBe(400);
+    expect((await call(alice, 'POST', '/events', { ...event, startTime: '25:00' })).status).toBe(
+      400
+    );
+    expect((await call(alice, 'POST', '/events', { ...event, date: '11/03/2026' })).status).toBe(
+      400
+    );
     expect((await call(alice, 'POST', '/events', { ...event, title: '   ' })).status).toBe(400);
     expect((await call(alice, 'POST', '/events', { ...event, color: 'rojo' })).status).toBe(400);
     // `to` falta: sin ventana no hay forma razonable de responder, y devolver todo
@@ -186,7 +225,9 @@ describe('calendario de la casa (§8f)', () => {
     const created = (await data(await call(alice, 'POST', '/events', event))) as any;
     expect(created.startTime).toBe('17:30');
 
-    const updated = (await data(await call(alice, 'PATCH', `/events/${created.id}`, { allDay: true }))) as any;
+    const updated = (await data(
+      await call(alice, 'PATCH', `/events/${created.id}`, { allDay: true })
+    )) as any;
     expect(updated.allDay).toBe(true);
     expect(updated.startTime).toBeNull();
     expect(updated.endTime).toBeNull();
@@ -197,7 +238,9 @@ describe('calendario de la casa (§8f)', () => {
   it('fuera de la ventana no se devuelve nada, aunque el evento exista', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     await call(alice, 'POST', '/events', event);
-    expect(await data(await call(alice, 'GET', '/events?from=2026-04-01&to=2026-04-30'))).toEqual([]);
+    expect(await data(await call(alice, 'GET', '/events?from=2026-04-01&to=2026-04-30'))).toEqual(
+      []
+    );
   });
 
   it('sin token no hay calendario de la casa', async () => {
@@ -211,7 +254,9 @@ describe('calendario de la casa (§8f)', () => {
     // El repro del usuario: «da error si no mandas todos los campos», siendo campos que el propio
     // dialog marca como opcionales. Aquí no se manda ninguno de esos.
     const alice = await makeUser('cal-alice', householdId, 'Alice');
-    const created = (await data(await call(alice, 'POST', '/events', { title: 'Carpinteria', date: '2026-03-11' }))) as any;
+    const created = (await data(
+      await call(alice, 'POST', '/events', { title: 'Carpinteria', date: '2026-03-11' })
+    )) as any;
     expect(created.title).toBe('Carpinteria');
     expect(created.kind).toBe('other');
     expect(created.allDay).toBe(true); // sin hora, «todo el dia»: no un evento a medianoche
@@ -219,7 +264,9 @@ describe('calendario de la casa (§8f)', () => {
       expect(created[field], `${field} deberia estar vacio`).toBeNull();
     }
     // Y se lee por la ventana, que es lo que hace que exista en la rejilla.
-    const list = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+    const list = (await data(
+      await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')
+    )) as any[];
     expect(list.map((row) => row.id)).toContain(created.id);
   });
 
@@ -231,10 +278,16 @@ describe('calendario de la casa (§8f)', () => {
       { startTime: '', endTime: '', allDay: null, sharedWithHousehold: null }
     ];
     for (const [index, shape] of shapes.entries()) {
-      const response = await call(alice, 'POST', '/events', { title: `Forma ${index}`, date: '2026-03-12', ...shape });
+      const response = await call(alice, 'POST', '/events', {
+        title: `Forma ${index}`,
+        date: '2026-03-12',
+        ...shape
+      });
       expect(response.status, JSON.stringify(await response.clone().json())).toBe(201);
     }
-    const rows = (await data(await call(alice, 'GET', '/events?from=2026-03-12&to=2026-03-12'))) as any[];
+    const rows = (await data(
+      await call(alice, 'GET', '/events?from=2026-03-12&to=2026-03-12')
+    )) as any[];
     expect(rows).toHaveLength(3);
     // Un hueco no se guarda como cadena en blanco: se guarda como «sin valor», que es lo que
     // permite volver a dejarlo vacio después.
@@ -254,11 +307,17 @@ describe('calendario de la casa (§8f)', () => {
   it('quitar la nota con null si la quita (y no es un «guardado» que no toca nada)', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     const created = (await data(
-      await call(alice, 'POST', '/events', { title: 'Carpinteria', date: '2026-03-11', notes: 'Medir 90 cm' })
+      await call(alice, 'POST', '/events', {
+        title: 'Carpinteria',
+        date: '2026-03-11',
+        notes: 'Medir 90 cm'
+      })
     )) as any;
     expect(created.notes).toBe('Medir 90 cm');
 
-    const cleared = (await data(await call(alice, 'PATCH', `/events/${created.id}`, { notes: null }))) as any;
+    const cleared = (await data(
+      await call(alice, 'PATCH', `/events/${created.id}`, { notes: null })
+    )) as any;
     expect(cleared.notes).toBeNull();
     // Y el resto sigue donde estaba.
     expect(cleared.title).toBe('Carpinteria');
@@ -269,41 +328,359 @@ describe('calendario de la casa (§8f)', () => {
     // nada) y con `.optional()` a secas vaciar el campo devolvfa un 400.
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     const created = (await data(
-      await call(alice, 'POST', '/meals', { date: '2026-03-11', mealType: 'lunch', customMeal: 'Gazpacho', time: '14:00' })
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'lunch',
+        customMeal: 'Gazpacho',
+        time: '14:00'
+      })
     )) as any;
     expect(created.time).toBe('14:00');
 
-    const moved = (await data(await call(alice, 'PATCH', `/meals/${created.id}`, { time: '15:30' }))) as any;
+    const moved = (await data(
+      await call(alice, 'PATCH', `/meals/${created.id}`, { time: '15:30' })
+    )) as any;
     expect(moved.time).toBe('15:30');
 
-    const cleared = (await data(await call(alice, 'PATCH', `/meals/${created.id}`, { time: null }))) as any;
+    const cleared = (await data(
+      await call(alice, 'PATCH', `/meals/${created.id}`, { time: null })
+    )) as any;
     expect(cleared.time).toBeNull();
+  });
+
+  it('sustituye varios platos seleccionados juntos y conserva sus horarios y raciones', async () => {
+    const alice = await makeUser('cal-replan-alice', householdId, 'Alice');
+    const breakfast = (await data(
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'breakfast',
+        customMeal: 'Tostadas',
+        time: '08:00',
+        servings: 2,
+        notes: 'Sin prisa'
+      })
+    )) as any;
+    const dinner = (await data(
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'dinner',
+        customMeal: 'Pasta',
+        time: '20:30',
+        servings: 4,
+        notes: 'Con ensalada'
+      })
+    )) as any;
+
+    const response = await call(alice, 'PATCH', '/meals/bulk/replace-selected', {
+      replacements: [
+        { id: breakfast.id, customMeal: 'Avena con fruta' },
+        { id: dinner.id, customMeal: 'Merluza al horno' }
+      ]
+    });
+
+    expect(response.status).toBe(200);
+    const replaced = (await data(response)) as any[];
+    expect(replaced.map((meal) => meal.id)).toEqual([breakfast.id, dinner.id]);
+    expect(replaced.map((meal) => meal.custom_meal)).toEqual([
+      'Avena con fruta',
+      'Merluza al horno'
+    ]);
+    expect(replaced.map((meal) => [meal.time, meal.servings, meal.notes])).toEqual([
+      ['08:00', 2, 'Sin prisa'],
+      ['20:30', 4, 'Con ensalada']
+    ]);
+  });
+
+  it('no aplica sustituciones parciales cuando un plato seleccionado ya no existe', async () => {
+    const alice = await makeUser('cal-replan-stale-alice', householdId, 'Alice');
+    const existing = (await data(
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'lunch',
+        customMeal: 'Lentejas',
+        time: '14:00'
+      })
+    )) as any;
+
+    const response = await call(alice, 'PATCH', '/meals/bulk/replace-selected', {
+      replacements: [
+        { id: existing.id, customMeal: 'Arroz con verduras' },
+        { id: 'missing-meal-id', customMeal: 'Tortilla' }
+      ]
+    });
+
+    expect(response.status).toBe(404);
+    const unchanged = (await data(
+      await call(alice, 'GET', `/range?startDate=2026-03-11&endDate=2026-03-11`)
+    )) as any;
+    expect(unchanged.meals).toHaveLength(1);
+    expect(unchanged.meals[0]).toMatchObject({
+      id: existing.id,
+      custom_meal: 'Lentejas',
+      time: '14:00'
+    });
+  });
+
+  it('repetir la misma confirmación no crea comidas duplicadas ni cambia los demás campos', async () => {
+    const alice = await makeUser('cal-replan-idempotent', householdId, 'Alice');
+    const meal = (await data(
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'lunch',
+        customMeal: 'Sopa',
+        time: '13:30',
+        servings: 3,
+        notes: 'Sin cilantro'
+      })
+    )) as any;
+    const replacements = [{ id: meal.id, customMeal: 'Crema de calabaza' }];
+
+    const first = await call(alice, 'PATCH', '/meals/bulk/replace-selected', { replacements });
+    const second = await call(alice, 'PATCH', '/meals/bulk/replace-selected', { replacements });
+    const range = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-03-11&endDate=2026-03-11')
+    )) as any;
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(range.meals).toHaveLength(1);
+    expect(range.meals[0]).toMatchObject({
+      id: meal.id,
+      custom_meal: 'Crema de calabaza',
+      time: '13:30',
+      servings: 3,
+      notes: 'Sin cilantro'
+    });
+  });
+
+  it('separa calendario, objetivos y sustituciones por hogar activo del mismo usuario', async () => {
+    const alice = await makeUser('cal-two-homes', householdId, 'Alice');
+    db.prepare(
+      'INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)'
+    ).run('hm-cal-home-a', householdId, alice.id, 'admin');
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'hh-cal-other',
+      'Otra casa',
+      'CALTEST2'
+    );
+    db.prepare(
+      'INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)'
+    ).run('hm-cal-home-b', 'hh-cal-other', alice.id, 'admin');
+
+    const mealA = (await data(
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'lunch',
+        customMeal: 'Plato casa A',
+        time: '14:00'
+      })
+    )) as any;
+    await call(alice, 'PATCH', '/goals', {
+      weekStart: '2026-03-09',
+      types: ['weight-loss'],
+      customInstructions: 'Objetivos casa A'
+    });
+
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run('hh-cal-other', alice.id);
+    const mealB = (await data(
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'dinner',
+        customMeal: 'Plato casa B',
+        time: '20:00'
+      })
+    )) as any;
+    await call(alice, 'PATCH', '/goals', {
+      weekStart: '2026-03-09',
+      types: ['muscle-gain'],
+      customInstructions: 'Objetivos casa B'
+    });
+
+    const rangeB = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-03-09&endDate=2026-03-15')
+    )) as any;
+    expect(rangeB.meals.map((meal: any) => meal.id)).toEqual([mealB.id]);
+    expect(rangeB.goals).toMatchObject({
+      types: ['muscle-gain'],
+      customInstructions: 'Objetivos casa B'
+    });
+    expect((await data(await call(alice, 'GET', ''))).meals.map((meal: any) => meal.id)).toEqual([
+      mealB.id
+    ]);
+
+    const cannotReplaceOtherHouse = await call(alice, 'PATCH', '/meals/bulk/replace-selected', {
+      replacements: [{ id: mealA.id, customMeal: 'No tocar casa A' }]
+    });
+    expect(cannotReplaceOtherHouse.status).toBe(404);
+    expect(
+      (await call(alice, 'PATCH', `/meals/${mealA.id}`, { customMeal: 'No tocar casa A' })).status
+    ).toBe(404);
+    expect((await call(alice, 'DELETE', `/meals/${mealA.id}`)).status).toBe(404);
+    expect(
+      (
+        db.prepare('SELECT custom_meal FROM meals WHERE id = ?').get(mealA.id) as {
+          custom_meal: string;
+        }
+      ).custom_meal
+    ).toBe('Plato casa A');
+
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(householdId, alice.id);
+    const rangeA = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-03-09&endDate=2026-03-15')
+    )) as any;
+    expect(rangeA.meals.map((meal: any) => meal.id)).toEqual([mealA.id]);
+    expect(rangeA.goals).toMatchObject({
+      types: ['weight-loss'],
+      customInstructions: 'Objetivos casa A'
+    });
+  });
+
+  it('requiere hogar activo cuando hay varias membresías en vez de mezclar calendarios', async () => {
+    const alice = await makeUser('cal-no-active-home', householdId, 'Alice');
+    db.prepare(
+      'INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)'
+    ).run('hm-cal-no-active-a', householdId, alice.id, 'admin');
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'hh-cal-no-active-b',
+      'Otra casa',
+      'CALTEST3'
+    );
+    db.prepare(
+      'INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)'
+    ).run('hm-cal-no-active-b', 'hh-cal-no-active-b', alice.id, 'admin');
+    db.prepare('UPDATE users SET household_id = NULL WHERE id = ?').run(alice.id);
+
+    const read = await call(alice, 'GET', '/range?startDate=2026-03-09&endDate=2026-03-15');
+    const write = await call(alice, 'POST', '/meals', {
+      date: '2026-03-11',
+      mealType: 'lunch',
+      customMeal: 'No guardar sin contexto'
+    });
+    expect(read.status).toBe(409);
+    expect(write.status).toBe(409);
+    expect(
+      (db.prepare('SELECT COUNT(*) AS count FROM meals').get() as { count: number }).count
+    ).toBe(0);
+  });
+
+  it('rechaza platos ajenos o ya completados antes de aplicar cualquier cambio', async () => {
+    const alice = await makeUser('cal-replan-owner', householdId, 'Alice');
+    const bob = await makeUser('cal-replan-other', householdId, 'Bob');
+    const aliceMeal = (await data(
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'lunch',
+        customMeal: 'Sopa',
+        time: '14:00'
+      })
+    )) as any;
+    const bobMeal = (await data(
+      await call(bob, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'dinner',
+        customMeal: 'Pupusas',
+        time: '20:30'
+      })
+    )) as any;
+
+    const foreign = await call(alice, 'PATCH', '/meals/bulk/replace-selected', {
+      replacements: [
+        { id: aliceMeal.id, customMeal: 'Crema de verduras' },
+        { id: bobMeal.id, customMeal: 'Yuca frita' }
+      ]
+    });
+    expect(foreign.status).toBe(404);
+    expect(
+      (await data(await call(alice, 'GET', '/range?startDate=2026-03-11&endDate=2026-03-11')))
+        .meals[0]
+    ).toMatchObject({ id: aliceMeal.id, custom_meal: 'Sopa' });
+
+    await call(alice, 'PATCH', `/meals/${aliceMeal.id}`, { completed: true });
+    const completed = await call(alice, 'PATCH', '/meals/bulk/replace-selected', {
+      replacements: [{ id: aliceMeal.id, customMeal: 'Arroz' }]
+    });
+    expect(completed.status).toBe(409);
+    expect(
+      (await data(await call(alice, 'GET', '/range?startDate=2026-03-11&endDate=2026-03-11')))
+        .meals[0]
+    ).toMatchObject({ id: aliceMeal.id, custom_meal: 'Sopa', completed: 1 });
+  });
+
+  it('usa los miembros activos del hogar como raciones por defecto y respeta el cambio explícito', async () => {
+    const alice = await makeUser('cal-servings-alice', householdId, 'Alice');
+    const members = [
+      { id: alice.id, active: 1 },
+      { id: 'cal-servings-bob', active: 1 },
+      { id: 'cal-servings-child', active: 1 },
+      { id: 'cal-servings-away', active: 0 }
+    ];
+    for (const [index, member] of members.entries()) {
+      if (member.id !== alice.id) {
+        db.prepare(
+          'INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)'
+        ).run(member.id, `${member.id}@hogaria.test`, member.id, 'hash', householdId);
+      }
+      db.prepare(
+        `INSERT INTO household_members (id, household_id, user_id, role, permissions, is_active)
+         VALUES (?, ?, ?, ?, '{}', ?)`
+      ).run(
+        `cal-servings-membership-${index}`,
+        householdId,
+        member.id,
+        member.id === alice.id ? 'admin' : 'member',
+        member.active
+      );
+    }
+
+    const defaultMeal = (await data(
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'lunch',
+        customMeal: 'Lentejas'
+      })
+    )) as any;
+    const overrideMeal = (await data(
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: 'dinner',
+        customMeal: 'Tortilla',
+        servings: 5
+      })
+    )) as any;
+
+    expect(defaultMeal.servings).toBe(3);
+    expect(overrideMeal.servings).toBe(5);
   });
 
   it('las comidas se ordenan por el dia, y la merienda va antes que la cena', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     for (const type of ['dinner', 'snack', 'lunch', 'breakfast']) {
-      await call(alice, 'POST', '/meals', { date: '2026-03-11', mealType: type, customMeal: `Plato ${type}` });
+      await call(alice, 'POST', '/meals', {
+        date: '2026-03-11',
+        mealType: type,
+        customMeal: `Plato ${type}`
+      });
     }
-    const range = (await data(await call(alice, 'GET', '/range?startDate=2026-03-11&endDate=2026-03-11'))) as any;
-    expect(range.meals.map((meal: any) => meal.meal_type)).toEqual(['breakfast', 'lunch', 'snack', 'dinner']);
+    const range = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-03-11&endDate=2026-03-11')
+    )) as any;
+    expect(range.meals.map((meal: any) => meal.meal_type)).toEqual([
+      'breakfast',
+      'lunch',
+      'snack',
+      'dinner'
+    ]);
   });
 
   it('invitar a alguien de la casa le abre el evento, y salirse de el no es borrarlo', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     const bob = await makeUser('cal-bob', householdId, 'Bob');
-    db.prepare('INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)').run(
-      'hm-a',
-      householdId,
-      alice.id,
-      'admin'
-    );
-    db.prepare('INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)').run(
-      'hm-b',
-      householdId,
-      bob.id,
-      'member'
-    );
+    db.prepare(
+      'INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)'
+    ).run('hm-a', householdId, alice.id, 'admin');
+    db.prepare(
+      'INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)'
+    ).run('hm-b', householdId, bob.id, 'member');
 
     // Un evento NO compartido con la casa, pero si con Bob: solo lo ve Bob, no «toda la casa».
     const created = (await data(
@@ -317,7 +694,9 @@ describe('calendario de la casa (§8f)', () => {
     )) as any;
     expect(created.attendeeIds).toEqual([bob.id]);
 
-    const seen = (await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+    const seen = (await data(
+      await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31')
+    )) as any[];
     expect(seen.map((row) => row.id)).toContain(created.id);
     expect(seen[0].editable).toBe(false);
     expect(seen[0].attendees[0].name).toBe('Bob');
@@ -327,11 +706,15 @@ describe('calendario de la casa (§8f)', () => {
     expect(seen[0].attendeeIds).toEqual([bob.id]);
 
     // Bob no puede reescribirlo...
-    expect((await call(bob, 'PATCH', `/events/${created.id}`, { title: 'Otra cosa' })).status).toBe(403);
+    expect((await call(bob, 'PATCH', `/events/${created.id}`, { title: 'Otra cosa' })).status).toBe(
+      403
+    );
     // ...pero si puede salirse de el, y eso lo quita de SU calendario sin borrar el de Alice.
     expect((await call(bob, 'DELETE', `/events/${created.id}/attendees/me`)).status).toBe(200);
     expect(await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);
-    const stillThere = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+    const stillThere = (await data(
+      await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')
+    )) as any[];
     expect(stillThere.map((row) => row.id)).toContain(created.id);
 
     // Y Alice no «se sale» de lo suyo: eso se borra.
@@ -354,22 +737,32 @@ describe('calendario de la casa (§8f)', () => {
   it('quitar a todos los invitados con una lista vacia funciona', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
     const bob = await makeUser('cal-bob', householdId, 'Bob');
-    db.prepare('INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)').run(
-      'hm-b',
-      householdId,
-      bob.id,
-      'member'
-    );
+    db.prepare(
+      'INSERT INTO household_members (id, household_id, user_id, role, permissions) VALUES (?, ?, ?, ?, ?)'
+    ).run('hm-a-empty-attendees', householdId, alice.id, 'admin', '{}');
+    db.prepare(
+      'INSERT INTO household_members (id, household_id, user_id, role) VALUES (?, ?, ?, ?)'
+    ).run('hm-b', householdId, bob.id, 'member');
     const created = (await data(
-      await call(alice, 'POST', '/events', { title: 'Mudanza', date: '2026-03-14', attendeeIds: [bob.id] })
+      await call(alice, 'POST', '/events', {
+        title: 'Mudanza',
+        date: '2026-03-14',
+        attendeeIds: [bob.id]
+      })
     )) as any;
-    expect(await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toHaveLength(1);
+    expect(
+      await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))
+    ).toHaveLength(1);
 
-    const updated = (await data(await call(alice, 'PATCH', `/events/${created.id}`, { attendeeIds: [] }))) as any;
+    const updated = (await data(
+      await call(alice, 'PATCH', `/events/${created.id}`, { attendeeIds: [] })
+    )) as any;
     expect(updated.attendeeIds).toEqual([]);
     // ...y el proximo listado ya no la trae: una lectura que no refleja el vaciado es un guardado que
     // el usuario dara por perdido.
-    const after = (await data(await call(alice, 'GET', '/events?from=2026-03-09&to=2026-03-15'))) as any[];
+    const after = (await data(
+      await call(alice, 'GET', '/events?from=2026-03-09&to=2026-03-15')
+    )) as any[];
     expect(after.find((event) => event.id === created.id)?.attendeeIds).toEqual([]);
     expect(await data(await call(bob, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);
   });
@@ -383,19 +776,30 @@ describe('calendario de la casa (§8f)', () => {
     it('un «cada semana» son cuatro jueves y una sola fila', async () => {
       const alice = await makeUser('cal-alice', householdId, 'Alice');
       await call(alice, 'POST', '/events', { ...event, date: '2026-03-05', recurrence: 'weekly' });
-      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
-      expect(lista.map((e) => e.date)).toEqual(['2026-03-05', '2026-03-12', '2026-03-19', '2026-03-26']);
+      const lista = (await data(
+        await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')
+      )) as any[];
+      expect(lista.map((e) => e.date)).toEqual([
+        '2026-03-05',
+        '2026-03-12',
+        '2026-03-19',
+        '2026-03-26'
+      ]);
       // La misma fila en los cuatro dias: si el titulo cambia, cambian los jueves de verdad.
       expect(new Set(lista.map((e) => e.id)).size).toBe(1);
       expect(lista[0].seriesDate).toBe('2026-03-05');
       expect(lista[0].recurrence).toBe('weekly');
-      expect((db.prepare('SELECT COUNT(*) AS n FROM calendar_events').get() as { n: number }).n).toBe(1);
+      expect(
+        (db.prepare('SELECT COUNT(*) AS n FROM calendar_events').get() as { n: number }).n
+      ).toBe(1);
     });
 
     it('un «todos los dias» empieza el dia de la serie, no el primero de la ventana', async () => {
       const alice = await makeUser('cal-alice', householdId, 'Alice');
       await call(alice, 'POST', '/events', { ...event, date: '2026-03-09', recurrence: 'daily' });
-      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+      const lista = (await data(
+        await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')
+      )) as any[];
       expect(lista).toHaveLength(23);
       expect(lista[0].date).toBe('2026-03-09');
     });
@@ -403,7 +807,9 @@ describe('calendario de la casa (§8f)', () => {
     it('una serie de enero se sigue viendo en octubre: la ventana no la corta por delante', async () => {
       const alice = await makeUser('cal-alice', householdId, 'Alice');
       await call(alice, 'POST', '/events', { ...event, date: '2026-01-01', recurrence: 'weekly' });
-      const lista = (await data(await call(alice, 'GET', '/events?from=2026-10-01&to=2026-10-31'))) as any[];
+      const lista = (await data(
+        await call(alice, 'GET', '/events?from=2026-10-01&to=2026-10-31')
+      )) as any[];
       // 2026-01-01 era jueves, y octubre de 2026 tiene cinco jueves (1, 8, 15, 22, 29).
       expect(lista.map((e) => e.date)).toEqual([
         '2026-10-01',
@@ -418,20 +824,242 @@ describe('calendario de la casa (§8f)', () => {
     it('sin recurrencia no hay multiplicacion, y la cadencia viaja en la lectura', async () => {
       const alice = await makeUser('cal-alice', householdId, 'Alice');
       await call(alice, 'POST', '/events', { ...event, date: '2026-03-11' });
-      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+      const lista = (await data(
+        await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')
+      )) as any[];
       expect(lista).toHaveLength(1);
       expect(lista[0].recurrence).toBe('none');
+      expect(lista[0].recurrenceRule).toBeNull();
       expect(lista[0].seriesDate).toBe('2026-03-11');
     });
 
     it('el LIMIT cuenta sueltas escritas, no dias pintados', async () => {
       const alice = await makeUser('cal-alice', householdId, 'Alice');
       await call(alice, 'POST', '/events', { ...event, date: '2026-03-01', recurrence: 'daily' });
-      await call(alice, 'POST', '/events', { ...event, title: 'Otra', date: '2026-03-02', recurrence: 'daily' });
-      const cuerpo = (await (await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31&limit=1')).json()) as any;
+      await call(alice, 'POST', '/events', {
+        ...event,
+        title: 'Otra',
+        date: '2026-03-02',
+        recurrence: 'daily'
+      });
+      const cuerpo = (await (
+        await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31&limit=1')
+      ).json()) as any;
       // Paso una fila y se expande entera: el corte es de escritura, no de pantalla.
       expect(new Set(cuerpo.data.map((e: any) => e.id)).size).toBe(1);
       expect(cuerpo.data.length).toBeGreaterThan(1);
+    });
+  });
+
+  describe('reglas estructuradas de recurrencia (§12at)', () => {
+    const recurrenceRule = {
+      frequency: 'weekly',
+      interval: 2,
+      weekdays: [1, 3],
+      end: { type: 'count', count: 3 }
+    } as const;
+
+    it('persiste una regla semanal custom, la devuelve y proyecta sus fechas sin duplicar la serie', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const created = (await data(
+        await call(alice, 'POST', '/events', {
+          ...event,
+          date: '2026-03-04',
+          recurrenceRule
+        })
+      )) as any;
+      expect(created.recurrenceRule).toEqual(recurrenceRule);
+
+      const stored = db
+        .prepare('SELECT recurrence, recurrence_rule, exceptions FROM calendar_events WHERE id = ?')
+        .get(created.id) as { recurrence: string; recurrence_rule: string; exceptions: string };
+      expect(stored).toEqual({
+        recurrence: 'none',
+        recurrence_rule: JSON.stringify(recurrenceRule),
+        exceptions: '[]'
+      });
+
+      const listed = (await data(
+        await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')
+      )) as any[];
+      expect(listed.map((item) => item.date)).toEqual(['2026-03-04', '2026-03-16', '2026-03-18']);
+      expect(new Set(listed.map((item) => item.id)).size).toBe(1);
+      expect(listed.every((item) => item.recurrenceRule.frequency === 'weekly')).toBe(true);
+      const windowAfterSeriesStart = (await data(
+        await call(alice, 'GET', '/events?from=2026-03-15&to=2026-03-31')
+      )) as any[];
+      expect(windowAfterSeriesStart.map((item) => item.date)).toEqual(['2026-03-16', '2026-03-18']);
+      expect(
+        (db.prepare('SELECT COUNT(*) AS n FROM calendar_events').get() as { n: number }).n
+      ).toBe(1);
+    });
+
+    it('proyecta en una consulta futura reglas diaria y semanal guardadas antes de la ventana', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const daily = (await data(
+        await call(alice, 'POST', '/events', {
+          ...event,
+          title: 'Riego cada dos días',
+          date: '2026-03-01',
+          recurrenceRule: { frequency: 'daily', interval: 2, end: { type: 'never' } }
+        })
+      )) as any;
+      const weekly = (await data(
+        await call(alice, 'POST', '/events', {
+          ...event,
+          title: 'Turno lunes y miércoles alternos',
+          date: '2026-03-02',
+          recurrenceRule: {
+            frequency: 'weekly',
+            interval: 2,
+            weekdays: [1, 3],
+            end: { type: 'never' }
+          }
+        })
+      )) as any;
+
+      // Ambas consultas empiezan mucho después del ancla; no deben depender de que el rango
+      // incluya el primer día de la serie para que el SQL cargue y el motor expanda la regla.
+      const later = (await data(
+        await call(alice, 'GET', '/events?from=2026-04-01&to=2026-04-30')
+      )) as any[];
+      expect(later.filter((item) => item.id === daily.id).map((item) => item.date)).toEqual(
+        Array.from(
+          { length: 15 },
+          (_, index) => `2026-04-${String(index * 2 + 2).padStart(2, '0')}`
+        )
+      );
+      expect(later.filter((item) => item.id === weekly.id).map((item) => item.date)).toEqual([
+        '2026-04-01',
+        '2026-04-13',
+        '2026-04-15',
+        '2026-04-27',
+        '2026-04-29'
+      ]);
+      expect(
+        later
+          .filter((item) => item.id === daily.id)
+          .every((item) => item.seriesDate === '2026-03-01')
+      ).toBe(true);
+      expect(
+        later
+          .filter((item) => item.id === weekly.id)
+          .every((item) => item.seriesDate === '2026-03-02')
+      ).toBe(true);
+      expect(
+        (db.prepare('SELECT COUNT(*) AS n FROM calendar_events').get() as { n: number }).n
+      ).toBe(2);
+    });
+
+    it('actualiza y limpia recurrenceRule sin romper una serie legacy', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const created = (await data(
+        await call(alice, 'POST', '/events', {
+          ...event,
+          date: '2026-03-05',
+          recurrence: 'weekly'
+        })
+      )) as any;
+      const custom = { frequency: 'daily', interval: 2, end: { type: 'count', count: 2 } };
+
+      expect(
+        (
+          await call(alice, 'PATCH', `/events/${created.id}`, {
+            recurrenceRule: {
+              frequency: 'daily',
+              interval: 1,
+              end: { type: 'date', date: '2026-03-04' }
+            }
+          })
+        ).status
+      ).toBe(400);
+      expect(
+        (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).map(
+          (item: any) => item.date
+        )
+      ).toEqual(['2026-03-05', '2026-03-12', '2026-03-19', '2026-03-26']);
+
+      const updated = (await data(
+        await call(alice, 'PATCH', `/events/${created.id}`, { recurrenceRule: custom })
+      )) as any;
+      expect(updated.recurrenceRule).toEqual(custom);
+      expect(
+        (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).map(
+          (item: any) => item.date
+        )
+      ).toEqual(['2026-03-05', '2026-03-07']);
+
+      const cleared = (await data(
+        await call(alice, 'PATCH', `/events/${created.id}`, { recurrenceRule: null })
+      )) as any;
+      expect(cleared.recurrenceRule).toBeNull();
+      expect(
+        (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).map(
+          (item: any) => item.date
+        )
+      ).toEqual(['2026-03-05', '2026-03-12', '2026-03-19', '2026-03-26']);
+    });
+
+    it('rechaza frecuencias, intervalos, días o finales inválidos y no crea filas', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const invalidRules = [
+        { frequency: 'monthly', interval: 0, end: { type: 'never' } },
+        { frequency: 'yearly', interval: 100, end: { type: 'never' } },
+        { frequency: 'weekly', interval: 1, weekdays: [0], end: { type: 'never' } },
+        { frequency: 'weekly', interval: 1, weekdays: [2, 2], end: { type: 'never' } },
+        { frequency: 'daily', interval: 1, weekdays: [1], end: { type: 'never' } },
+        { frequency: 'daily', interval: 1, end: { type: 'count', count: 0 } },
+        { frequency: 'daily', interval: 1, end: { type: 'date', date: '2026-02-30' } },
+        { frequency: 'daily', interval: 1, end: { type: 'date', date: '2026-03-10' } }
+      ];
+
+      for (const invalidRule of invalidRules) {
+        const response = await call(alice, 'POST', '/events', {
+          ...event,
+          recurrenceRule: invalidRule
+        });
+        expect(response.status).toBe(400);
+      }
+      expect(
+        (db.prepare('SELECT COUNT(*) AS n FROM calendar_events').get() as { n: number }).n
+      ).toBe(0);
+    });
+
+    it('quita una ocurrencia custom, conserva la regla y aplica los mismos permisos que a una serie legacy', async () => {
+      const alice = await makeUser('cal-alice', householdId, 'Alice');
+      const bob = await makeUser('cal-bob', householdId, 'Bob');
+      const created = (await data(
+        await call(alice, 'POST', '/events', {
+          ...event,
+          date: '2026-03-01',
+          recurrenceRule: { frequency: 'daily', interval: 2, end: { type: 'count', count: 3 } }
+        })
+      )) as any;
+
+      expect(
+        (await call(bob, 'DELETE', `/events/${created.id}/occurrences/2026-03-03`)).status
+      ).toBe(403);
+      expect(
+        (await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-02`)).status
+      ).toBe(400);
+      expect(
+        (await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-03`)).status
+      ).toBe(200);
+      expect(
+        (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-10'))).map(
+          (item: any) => item.date
+        )
+      ).toEqual(['2026-03-01', '2026-03-05']);
+
+      const stored = db
+        .prepare('SELECT recurrence_rule, exceptions FROM calendar_events WHERE id = ?')
+        .get(created.id) as { recurrence_rule: string; exceptions: string };
+      expect(JSON.parse(stored.recurrence_rule)).toEqual({
+        frequency: 'daily',
+        interval: 2,
+        end: { type: 'count', count: 3 }
+      });
+      expect(JSON.parse(stored.exceptions)).toEqual(['2026-03-03']);
     });
   });
 
@@ -446,8 +1074,12 @@ describe('calendario de la casa (§8f)', () => {
 
     it('quita el jueves marcado y deja los otros tres', async () => {
       const { alice, created } = await serieSemanalDeMarzo();
-      expect((await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`)).status).toBe(200);
-      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))) as any[];
+      expect(
+        (await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`)).status
+      ).toBe(200);
+      const lista = (await data(
+        await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31')
+      )) as any[];
       expect(lista.map((e) => e.date)).toEqual(['2026-03-05', '2026-03-19', '2026-03-26']);
     });
 
@@ -455,22 +1087,30 @@ describe('calendario de la casa (§8f)', () => {
       const { alice, created } = await serieSemanalDeMarzo();
       await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`);
       // Doble clic, o reintento tras un pico de red: lo pedido ya esta, no hay nada que fallar.
-      expect((await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`)).status).toBe(200);
+      expect(
+        (await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`)).status
+      ).toBe(200);
       // `exceptions` no es un campo del formulario: el schema lo tira, y nadie puede nacer con dias
       // quitados que no pidio.
-      const otro = (await data(await call(alice, 'POST', '/events', {
-        ...event,
-        date: '2026-03-05',
-        recurrence: 'weekly',
-        exceptions: ['2026-03-12']
-      }))) as any;
-      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-12&to=2026-03-12'))) as any[];
+      const otro = (await data(
+        await call(alice, 'POST', '/events', {
+          ...event,
+          date: '2026-03-05',
+          recurrence: 'weekly',
+          exceptions: ['2026-03-12']
+        })
+      )) as any;
+      const lista = (await data(
+        await call(alice, 'GET', '/events?from=2026-03-12&to=2026-03-12')
+      )) as any[];
       expect(lista.filter((e) => e.id === otro.id)).toHaveLength(1);
     });
 
     it('un dia que no se repite se borra, no se quita', async () => {
       const alice = await makeUser('cal-alice', householdId, 'Alice');
-      const created = (await data(await call(alice, 'POST', '/events', { ...event, date: '2026-03-11' }))) as any;
+      const created = (await data(
+        await call(alice, 'POST', '/events', { ...event, date: '2026-03-11' })
+      )) as any;
       const respuesta = await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-11`);
       expect(respuesta.status).toBe(400);
       expect(((await respuesta.json()) as any).message).toBe('EVENTO_SIN_REPETICION');
@@ -478,18 +1118,29 @@ describe('calendario de la casa (§8f)', () => {
 
     it('rechaza una fecha con otra forma, un evento que no existe y el de otra persona', async () => {
       const { alice, created } = await serieSemanalDeMarzo();
-      expect((await call(alice, 'DELETE', `/events/${created.id}/occurrences/12-03-2026`)).status).toBe(400);
-      expect((await call(alice, 'DELETE', '/events/no-existe/occurrences/2026-03-12')).status).toBe(404);
+      expect(
+        (await call(alice, 'DELETE', `/events/${created.id}/occurrences/12-03-2026`)).status
+      ).toBe(400);
+      expect(
+        (await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-02-30`)).status
+      ).toBe(400);
+      expect((await call(alice, 'DELETE', '/events/no-existe/occurrences/2026-03-12')).status).toBe(
+        404
+      );
       const bob = await makeUser('cal-bob', householdId, 'Bob');
       // Que te inviten no te da potestad sobre la agenda de quien invita: lo mismo que en el PATCH.
-      expect((await call(bob, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`)).status).toBe(403);
+      expect(
+        (await call(bob, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`)).status
+      ).toBe(403);
     });
 
     it('borrar la serie se lleva todos los dias', async () => {
       const { alice, created } = await serieSemanalDeMarzo();
       await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-12`);
       expect((await call(alice, 'DELETE', `/events/${created.id}`)).status).toBe(200);
-      expect(await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual([]);
+      expect(await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))).toEqual(
+        []
+      );
     });
   });
 
@@ -500,11 +1151,15 @@ describe('calendario de la casa (§8f)', () => {
         await call(alice, 'POST', '/events', { ...event, date: '2026-03-05', recurrence: 'weekly' })
       )) as any;
       await call(alice, 'PATCH', `/events/${created.id}`, { recurrence: 'daily' });
-      const lista = (await data(await call(alice, 'GET', '/events?from=2026-03-05&to=2026-03-12'))) as any[];
+      const lista = (await data(
+        await call(alice, 'GET', '/events?from=2026-03-05&to=2026-03-12')
+      )) as any[];
       expect(lista).toHaveLength(8);
 
       await call(alice, 'PATCH', `/events/${created.id}`, { title: 'Carpinteria: cortar' });
-      const otra = (await data(await call(alice, 'GET', '/events?from=2026-03-05&to=2026-03-12'))) as any[];
+      const otra = (await data(
+        await call(alice, 'GET', '/events?from=2026-03-05&to=2026-03-12')
+      )) as any[];
       expect(otra[0].recurrence).toBe('daily');
       expect(otra[0].title).toBe('Carpinteria: cortar');
     });
@@ -517,7 +1172,9 @@ describe('calendario de la casa (§8f)', () => {
       await call(alice, 'DELETE', `/events/${created.id}/occurrences/2026-03-19`);
       await call(alice, 'PATCH', `/events/${created.id}`, { date: '2026-03-19' });
       // El dia que uno elige a mano no puede venir ya excluido de fabrica.
-      expect(await data(await call(alice, 'GET', '/events?from=2026-03-19&to=2026-03-19'))).toHaveLength(1);
+      expect(
+        await data(await call(alice, 'GET', '/events?from=2026-03-19&to=2026-03-19'))
+      ).toHaveLength(1);
 
       await call(alice, 'PATCH', `/events/${created.id}`, { recurrence: 'none' });
       const fila = db
@@ -535,6 +1192,41 @@ describe('calendario de la casa (§8f)', () => {
       const cuerpo = (await respuesta.json()) as any;
       expect(cuerpo.code).toBe('INVALID_FORM');
       expect(JSON.stringify(cuerpo)).toContain('recurrence');
+    });
+  });
+
+  describe('objetivos semanales múltiples', () => {
+    it('guarda varias opciones y texto personalizado sin volver a una sola opción', async () => {
+      const alice = await makeUser('cal-goals', householdId, 'Alice');
+      const result = await call(alice, 'PATCH', '/goals', {
+        weekStart: '2026-03-16',
+        types: ['weight-loss', 'muscle-gain', 'custom'],
+        customInstructions: 'Priorizar verdura y proteína en cada cena.',
+        dailyCalories: 2100
+      });
+
+      expect(result.status).toBe(200);
+      const range = (await data(
+        await call(alice, 'GET', '/range?startDate=2026-03-16&endDate=2026-03-22')
+      )) as { goals: Record<string, unknown> };
+      expect(range.goals).toMatchObject({
+        types: ['weight-loss', 'muscle-gain', 'custom'],
+        customInstructions: 'Priorizar verdura y proteína en cada cena.',
+        dailyCalories: 2100
+      });
+      expect(range.goals).not.toHaveProperty('type');
+    });
+
+    it('rechaza Personalizada sin texto antes de persistirla', async () => {
+      const alice = await makeUser('cal-goals-custom', householdId, 'Alice');
+      const result = await call(alice, 'PATCH', '/goals', {
+        weekStart: '2026-03-16',
+        types: ['custom']
+      });
+      expect(result.status).toBe(400);
+      expect(
+        await data(await call(alice, 'GET', '/range?startDate=2026-03-16&endDate=2026-03-22'))
+      ).toMatchObject({ goals: {} });
     });
   });
 });

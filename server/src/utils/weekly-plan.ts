@@ -28,7 +28,12 @@ const MEAL_TYPES = MEAL_TYPE_KEYS;
 export function resolveMealTypes(selected: readonly unknown[] | null | undefined): MealTypeKey[] {
   if (!Array.isArray(selected) || selected.length === 0) return [...MEAL_TYPES];
   const picked = new Set<string>();
-  for (const raw of selected) picked.add(String(raw ?? '').trim().toLowerCase());
+  for (const raw of selected)
+    picked.add(
+      String(raw ?? '')
+        .trim()
+        .toLowerCase()
+    );
   // Se devuelve en el orden del dia, no en el que llegaron: lo consume quien escribe el plan. Y si no
   // queda ninguna valida (cliente viejo, id renombrado) se pide el dia entero: un array vacio aqui se
   // leia «no planifiques nada», que es el peor modo de fallar en silencio.
@@ -48,8 +53,11 @@ export interface PersistWeeklyPlanInput {
   startDate: string;
   endDate: string;
   goals?: {
+    types?: string[];
+    /** Alias para las llamadas antiguas del planificador. */
     type?: string;
     caloriesTarget?: number | null;
+    customInstructions?: string | null;
     restrictions?: string[] | null;
   };
   /** Lo que devolvió el modelo: se valida aquí, nunca se da por bueno. */
@@ -58,6 +66,8 @@ export interface PersistWeeklyPlanInput {
   mealTypes?: readonly unknown[] | null;
   /** Las horas de la casa: una comida planificada sin hora escrita no tiene reloj. */
   mealTimes?: Record<string, unknown> | null;
+  /** Raciones activas del hogar; la ruta resuelve el fallback personal antes de persistir. */
+  servings?: number;
 }
 
 export interface PersistWeeklyPlanResult {
@@ -91,7 +101,7 @@ function mealNotes(value: unknown): string | null {
   const record = asRecord(value);
   const ingredients = record && Array.isArray(record.ingredients) ? record.ingredients : [];
   const names = ingredients
-    .map((item) => (typeof item === 'string' ? item : (asRecord(item)?.name as string) ?? ''))
+    .map((item) => (typeof item === 'string' ? item : ((asRecord(item)?.name as string) ?? '')))
     .map((item) => item.trim())
     .filter(Boolean);
   return names.length ? clamp(`Ingredientes: ${names.join(', ')}`, 500) : null;
@@ -116,10 +126,23 @@ export function persistWeeklyPlan(
   const days = asRecord(input.plan)?.days;
   if (!start || !end || !Array.isArray(days) || days.length === 0) return result;
 
+  const rawTypes = Array.isArray(input.goals?.types)
+    ? input.goals.types
+    : input.goals?.type
+      ? [input.goals.type]
+      : [];
+  const goalTypes = [...new Set(rawTypes.map((type) => String(type ?? '').trim()).filter(Boolean))];
+  const customInstructions = String(input.goals?.customInstructions ?? '')
+    .trim()
+    .slice(0, 2000);
+  const primaryType = goalTypes[0] ?? (customInstructions ? 'custom' : 'balanced');
+
   // Semana de la IA => calendario semanal, creando el que falte (misma regla que
   // POST /api/calendar/meals, ahora en un solo sitio).
   const calendar = ensureWeekCalendar(db, input.userId, result.weekStart, {
-    type: input.goals?.type ?? 'balanced',
+    type: primaryType,
+    types: goalTypes,
+    ...(customInstructions ? { customInstructions } : {}),
     dailyCalories: input.goals?.caloriesTarget,
     restrictions: input.goals?.restrictions ?? []
   });
@@ -128,10 +151,12 @@ export function persistWeeklyPlan(
   result.calendarId = calendar.id;
 
   const types = resolveMealTypes(input.mealTypes);
-  const existing = db.prepare('SELECT id FROM meals WHERE calendar_id = ? AND date = ? AND meal_type = ?');
+  const existing = db.prepare(
+    'SELECT id FROM meals WHERE calendar_id = ? AND date = ? AND meal_type = ?'
+  );
   const insert = db.prepare(
     `INSERT INTO meals (id, calendar_id, date, meal_type, recipe_id, custom_meal, time, servings, notes)
-     VALUES (?, ?, ?, ?, NULL, ?, ?, 1, ?)`
+     VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?)`
   );
 
   for (const rawDay of days) {
@@ -161,13 +186,16 @@ export function persistWeeklyPlan(
         type,
         name,
         clockTime(input.mealTimes?.[type]),
+        input.servings ?? 1,
         mealNotes(meals[type])
       );
       result.created++;
     }
   }
 
-  db.prepare('UPDATE weekly_calendars SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(calendar.id);
+  db.prepare('UPDATE weekly_calendars SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+    calendar.id
+  );
 
   return result;
 }

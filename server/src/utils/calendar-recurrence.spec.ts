@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_OCCURRENCES,
   dayFromISO,
   exceptionSet,
   expandOccurrences,
   isRecurrence,
+  isRecurrenceSchedule,
   occursOn,
   parseExceptionDates,
-  type RecurrenceRule
+  type RecurrenceRule,
+  type RecurrenceSchedule
 } from './calendar-recurrence.js';
 
 // Un mes de octubre de 2026 como ventana: 31 dias, y el 1 de octubre de 2026 es jueves (UTC).
@@ -17,6 +20,7 @@ const serie = (extra: Partial<RecurrenceRule> & { date: string; recurrence: Recu
 describe('calendario — fechas ISO', () => {
   it('lee una fecha real y rechaza la que no existe', () => {
     expect(dayFromISO('2026-10-01')).toBe(Date.UTC(2026, 9, 1));
+    expect(dayFromISO('0000-02-29')).not.toBeNull(); // El calendario UTC conserva los años ISO 00–99.
     expect(dayFromISO('2026-02-30')).toBeNull(); // febrero no tiene dia 30
     expect(dayFromISO('2026-2-1')).toBeNull(); // sin relleno no es ISO
     expect(dayFromISO(null)).toBeNull();
@@ -138,5 +142,156 @@ describe('calendario — occursOn', () => {
     expect(occursOn(rule, '2026-10-15')).toBe(false);
     expect(occursOn(rule, '2026-10-16')).toBe(false);
     expect(occursOn(serie({ date: '2026-10-08', recurrence: 'none' }), '2026-10-08')).toBe(true);
+  });
+});
+
+const personalizada = (extra: Partial<RecurrenceRule> & { date: string; schedule: RecurrenceSchedule }): RecurrenceRule => ({
+  recurrence: 'none',
+  ...extra
+});
+
+describe('calendario — reglas de repetición estructuradas', () => {
+  it('valida frecuencia, intervalo, días ISO y fin inclusivo', () => {
+    expect(isRecurrenceSchedule({ frequency: 'daily', interval: 1, end: { type: 'never' } })).toBe(true);
+    expect(isRecurrenceSchedule({ frequency: 'weekly', interval: 99, weekdays: [1, 3, 7], end: { type: 'count', count: 999 } })).toBe(true);
+    expect(isRecurrenceSchedule({ frequency: 'yearly', interval: 1, end: { type: 'date', date: '2028-02-29' } })).toBe(true);
+    expect(isRecurrenceSchedule({ frequency: 'daily', interval: 0, end: { type: 'never' } })).toBe(false);
+    expect(isRecurrenceSchedule({ frequency: 'monthly', interval: 100, end: { type: 'never' } })).toBe(false);
+    expect(isRecurrenceSchedule({ frequency: 'weekly', interval: 1, weekdays: [0, 8], end: { type: 'never' } })).toBe(false);
+    expect(isRecurrenceSchedule({ frequency: 'weekly', interval: 1, weekdays: [], end: { type: 'never' } })).toBe(false);
+    expect(isRecurrenceSchedule({ frequency: 'daily', interval: 1, weekdays: [1], end: { type: 'never' } })).toBe(false);
+    expect(isRecurrenceSchedule({ frequency: 'daily', interval: 1, end: { type: 'count', count: 1000 } })).toBe(false);
+    expect(isRecurrenceSchedule({ frequency: 'daily', interval: 1, end: { type: 'date', date: '2026-02-30' } })).toBe(false);
+    expect(isRecurrenceSchedule(null)).toBe(false);
+  });
+
+  it('repite cada N días y aplica el fin por cuenta incluyendo la primera ocurrencia', () => {
+    const rule = personalizada({
+      date: '2026-10-01',
+      schedule: { frequency: 'daily', interval: 2, end: { type: 'count', count: 4 } }
+    });
+    expect(expandOccurrences(rule, { from: '2026-10-03', to: '2026-10-20' }).dates).toEqual([
+      '2026-10-03',
+      '2026-10-05',
+      '2026-10-07'
+    ]);
+    expect(expandOccurrences({
+      ...rule,
+      schedule: { frequency: 'daily', interval: 2, end: { type: 'count', count: 1 } }
+    }).dates).toEqual([
+      '2026-10-01'
+    ]);
+  });
+
+  it('repite en días ISO elegidos en semanas alternas y mantiene el ancla como límite inferior', () => {
+    const rule = personalizada({
+      date: '2026-10-01', // jueves: no está seleccionado
+      schedule: { frequency: 'weekly', interval: 2, weekdays: [1, 3, 5], end: { type: 'never' } }
+    });
+    expect(expandOccurrences(rule, { from: '2026-10-01', to: '2026-10-31' }).dates).toEqual([
+      '2026-10-02',
+      '2026-10-12',
+      '2026-10-14',
+      '2026-10-16',
+      '2026-10-26',
+      '2026-10-28',
+      '2026-10-30'
+    ]);
+    expect(expandOccurrences({
+      ...rule,
+      schedule: { frequency: 'weekly', interval: 1, end: { type: 'never' } }
+    }, { from: '2026-10-01', to: '2026-10-08' }).dates).toEqual(['2026-10-01', '2026-10-08']);
+    expect(expandOccurrences({
+      ...rule,
+      schedule: { frequency: 'weekly', interval: 1, weekdays: [7], end: { type: 'never' } }
+    }, { from: '2026-10-01', to: '2026-10-11' }).dates).toEqual(['2026-10-04', '2026-10-11']);
+  });
+
+  it('incluye la fecha límite y combina una cuenta con varios días semanales', () => {
+    const rule = personalizada({
+      date: '2026-10-05',
+      exceptions: ['2026-10-07'],
+      schedule: { frequency: 'weekly', interval: 1, weekdays: [1, 3], end: { type: 'count', count: 4 } }
+    });
+    expect(expandOccurrences(rule, { from: '2026-10-01', to: '2026-10-20' }).dates).toEqual([
+      '2026-10-05',
+      '2026-10-12',
+      '2026-10-14'
+    ]);
+    expect(expandOccurrences({
+      ...rule,
+      exceptions: [],
+      schedule: { frequency: 'daily', interval: 2, end: { type: 'date', date: '2026-10-05' } }
+    }).dates).toEqual(['2026-10-05']);
+    expect(expandOccurrences({
+      ...rule,
+      date: '2026-10-01',
+      exceptions: [],
+      schedule: { frequency: 'daily', interval: 2, end: { type: 'date', date: '2026-10-05' } }
+    }).dates).toEqual(['2026-10-01', '2026-10-03', '2026-10-05']);
+  });
+
+  it('repite mensualmente el día inicial cuando existe, omite meses sin ese día y respeta intervalos', () => {
+    const monthly31 = personalizada({
+      date: '2026-01-31',
+      schedule: { frequency: 'monthly', interval: 1, end: { type: 'date', date: '2026-05-31' } }
+    });
+    expect(expandOccurrences(monthly31, { from: '2026-01-01', to: '2026-12-31' }).dates).toEqual([
+      '2026-01-31',
+      '2026-03-31',
+      '2026-05-31'
+    ]);
+    const everyOtherMonth = {
+      ...monthly31,
+      schedule: { frequency: 'monthly' as const, interval: 2, end: { type: 'never' as const } }
+    };
+    expect(expandOccurrences(everyOtherMonth, { from: '2026-01-01', to: '2026-07-31' }).dates).toEqual([
+      '2026-01-31',
+      '2026-03-31',
+      '2026-05-31',
+      '2026-07-31'
+    ]);
+  });
+
+  it('repite anualmente en una fecha bisiesta solo en años que la contienen', () => {
+    const leapDay = personalizada({
+      date: '2024-02-29',
+      schedule: { frequency: 'yearly', interval: 1, end: { type: 'count', count: 3 } }
+    });
+    expect(expandOccurrences(leapDay, { from: '2024-01-01', to: '2032-12-31' }).dates).toEqual([
+      '2024-02-29',
+      '2028-02-29',
+      '2032-02-29'
+    ]);
+  });
+
+  it('calcula días civiles sin depender del salto horario de primavera', () => {
+    const daily = personalizada({
+      date: '2026-03-28',
+      schedule: { frequency: 'daily', interval: 1, end: { type: 'date', date: '2026-03-31' } }
+    });
+    expect(expandOccurrences(daily, { from: '2026-03-28', to: '2026-03-31' }).dates).toEqual([
+      '2026-03-28',
+      '2026-03-29',
+      '2026-03-30',
+      '2026-03-31'
+    ]);
+  });
+
+  it('mantiene excepciones, fechas inválidas y el límite de expansión', () => {
+    const daily = personalizada({
+      date: '2026-10-01',
+      exceptions: '["2026-10-02"]',
+      schedule: { frequency: 'daily', interval: 1, end: { type: 'never' } }
+    });
+    expect(expandOccurrences(daily, { from: '2026-10-01', to: '2026-10-03' }).dates).toEqual([
+      '2026-10-01',
+      '2026-10-03'
+    ]);
+    expect(expandOccurrences({ ...daily, date: '2026-02-30' }).dates).toEqual([]);
+    const bounded = expandOccurrences(daily, { from: '2026-10-01' });
+    expect(bounded.dates).toHaveLength(MAX_OCCURRENCES - 1); // La excepción consume límite aunque no se muestre.
+    expect(bounded.truncated).toBe(true);
+    expect(expandOccurrences({ ...daily, exceptions: [] }, {}, MAX_OCCURRENCES + 1).dates).toHaveLength(MAX_OCCURRENCES);
   });
 });

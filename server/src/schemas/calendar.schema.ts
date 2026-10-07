@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { RECURRENCES } from '../utils/calendar-recurrence.js';
+import { dayFromISO, RECURRENCES, RECURRENCE_FREQUENCIES } from '../utils/calendar-recurrence.js';
 import { DATE_PATTERN, formArray, formBool, formColor, formDate, formDefault, formField, formList, formNumber, formPartial, formText, formTime, optionalDate, requiredText } from './form.js';
 
 /** Orden del dia en Espana: la merienda va antes que la cena (HOGARIA-SPEC 12o). */
@@ -16,15 +16,34 @@ const customGoalSchema = z.object({
   frequency: formDefault(goalFrequencyEnum, 'daily')
 });
 
-const nutritionalGoalsSchema = z.object({
-  type: formDefault(goalTypeEnum, 'balanced'),
+const nutritionalGoalsSchema = z
+  .object({
+  /** `types` is canonical; `type` accepts calendars saved by the previous single-choice UI. */
+  types: formArray(goalTypeEnum).optional(),
+  type: formField(goalTypeEnum),
+  customInstructions: formText(2000),
   dailyCalories: formNumber({ positive: true }),
   dailyProtein: formNumber({ positive: true }),
   dailyCarbs: formNumber({ positive: true }),
   dailyFat: formNumber({ positive: true }),
   restrictions: formArray(z.string()),
   customGoals: formArray(customGoalSchema)
-});
+  })
+  .superRefine((goals, context) => {
+    const selected = goals.types?.length ? goals.types : goals.type ? [goals.type] : ['balanced'];
+    if (selected.includes('custom') && !goals.customInstructions?.trim()) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['customInstructions'],
+        message: 'Describe el objetivo personalizado'
+      });
+    }
+  })
+  .transform(({ type: legacyType, types, customInstructions, ...rest }) => ({
+    ...rest,
+    types: [...new Set(types?.length ? types : legacyType ? [legacyType] : ['balanced'])],
+    customInstructions: customInstructions?.trim() ?? null
+  }));
 
 const mealSchema = z.object({
   date: formDate('Fecha'),
@@ -61,6 +80,20 @@ export const updateMealSchema = z.object({
   completed: formBool()
 });
 
+/** Sustituciones de comidas de una sola vez: el servidor aplica todas o ninguna. */
+export const replaceSelectedMealsSchema = z.object({
+  replacements: z
+    .array(
+      z.object({
+        id: z.string().trim().min(1, 'Comida'),
+        customMeal: requiredText(200, 'Plato nuevo')
+      }).strict()
+    )
+    .min(1, 'Selecciona al menos un plato')
+    .max(28, 'No se pueden sustituir más de 28 platos a la vez')
+    .refine((items) => new Set(items.map((item) => item.id)).size === items.length, 'No repitas platos')
+}).strict();
+
 export const completeMealSchema = z.object({
   completed: z.boolean({ error: 'completed: true o false' })
 });
@@ -91,6 +124,32 @@ const eventKindEnum = z.enum(CALENDAR_EVENT_KINDS);
 // Cada cuanto se repite una suelta (HOGARIA-SPEC 12t-R). La lista vive en el modulo que la expande,
 // para que «que cadencias existen» no pueda responder dos cosas distintas segun donde se pregunte.
 const recurrenceEnum = z.enum(RECURRENCES);
+const recurrenceRuleEndSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('never') }),
+  z.object({
+    type: z.literal('date'),
+    date: formDate('Fecha final').refine((date) => dayFromISO(date) !== null, 'Fecha final: el día no existe')
+  }),
+  z.object({ type: z.literal('count'), count: z.number().int().min(1).max(999) })
+]);
+const recurrenceRuleSchema = z
+  .object({
+    frequency: z.enum(RECURRENCE_FREQUENCIES),
+    interval: z.number().int().min(1).max(99),
+    weekdays: z
+      .array(z.number().int().min(1).max(7))
+      .min(1)
+      .max(7)
+      .refine((days) => new Set(days).size === days.length, 'No repitas días de la semana')
+      .optional(),
+    end: recurrenceRuleEndSchema
+  })
+  .superRefine((rule, ctx) => {
+    if (rule.frequency !== 'weekly' && rule.weekdays !== undefined) {
+      ctx.addIssue({ code: 'custom', message: 'Los días de la semana solo se aplican a una repetición semanal', path: ['weekdays'] });
+    }
+  });
+type StructuredRecurrenceRule = z.infer<typeof recurrenceRuleSchema>;
 const eventUserId = z.string().trim().min(1, 'Sin identificador').max(40);
 
 export const calendarEventFilterSchema = z.object({
@@ -126,6 +185,8 @@ const calendarEventFields = z.object({
    * otra persona a traicion.
    */
   recurrence: formDefault(recurrenceEnum, 'none'),
+  /** Regla avanzada opcional; al estar presente es la fuente efectiva de expansión. */
+  recurrenceRule: recurrenceRuleSchema.nullish(),
   date: formDate('Dia'),
   startTime: formTime('Desde'),
   endTime: formTime('Hasta'),
@@ -152,6 +213,9 @@ export const createCalendarEventSchema = calendarEventFields.superRefine((value,
   if (!compareEventTimes(value)) {
     ctx.addIssue({ code: 'custom', message: 'endTime no puede ser anterior a startTime', path: ['endTime'] });
   }
+  if (value.recurrenceRule?.end.type === 'date' && value.recurrenceRule.end.date < value.date) {
+    ctx.addIssue({ code: 'custom', message: 'La fecha final no puede ser anterior al inicio de la serie', path: ['recurrenceRule', 'end', 'date'] });
+  }
 });
 
 export const updateCalendarEventSchema = formPartial(calendarEventFields.omit({ sharedWithHousehold: true }))
@@ -161,6 +225,15 @@ export const updateCalendarEventSchema = formPartial(calendarEventFields.omit({ 
     }
     if (!compareEventTimes(value)) {
       ctx.addIssue({ code: 'custom', message: 'endTime no puede ser anterior a startTime', path: ['endTime'] });
+    }
+    const recurrenceRule = value.recurrenceRule as StructuredRecurrenceRule | null | undefined;
+    if (
+      recurrenceRule &&
+      recurrenceRule.end.type === 'date' &&
+      typeof value.date === 'string' &&
+      recurrenceRule.end.date < value.date
+    ) {
+      ctx.addIssue({ code: 'custom', message: 'La fecha final no puede ser anterior al inicio de la serie', path: ['recurrenceRule', 'end', 'date'] });
     }
   });
 

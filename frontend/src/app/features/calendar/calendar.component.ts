@@ -1,6 +1,7 @@
 import { Component, DestroyRef, computed, effect, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Subscription } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CalendarService } from '../../core/services/calendar.service';
@@ -8,10 +9,12 @@ import { RecipeService } from '../../core/services/recipe.service';
 import { ToastService } from '../../core/services/toast.service';
 import { ConfirmService } from '../../core/services/confirm.service';
 import { TasteProfileService } from '../../core/services/taste-profile.service';
-import { GOAL_OPTIONS } from '../../shared/models/taste-profile';
+import { GOAL_OPTIONS, TasteGoal, toggleTasteGoal } from '../../shared/models/taste-profile';
 import { ModalComponent } from '../../shared/components/ui/modal/modal.component';
 import {
   CalendarDayView,
+  CalendarRecurrenceFrequency,
+  CalendarRecurrenceRule,
   CalendarMeal,
   CalendarView,
   CALENDAR_DATE_PARAM,
@@ -25,28 +28,36 @@ import {
   MEAL_TYPE_META
 } from '../../shared/models/calendar.model';
 import { clearTabParam, readTabParam, writeTabParam } from '../../core/utils/tab-url';
-import { mealAnchors as anchorsFor, mealTimeOf, plannedMealTypes, selectedMealTypes } from '../../core/meal-times';
+import {
+  mealAnchors as anchorsFor,
+  mealTimeOf,
+  plannedMealTypes,
+  selectedMealTypes
+} from '../../core/meal-times';
 import {
   addDays,
   addMonths,
   formatNumber,
   labels,
-  monthGrid,
   parseISODate,
   startOfDay,
   startOfWeek,
-  toISODate,
-  weekDays
+  toISODate
 } from './calendar.util';
 import { CalendarMonthComponent } from './calendar-month.component';
 import { CalendarTimelineComponent } from './calendar-timeline.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
-import { attendeeIdsPayload, inviteCandidates, selectedInvitees } from '../../core/event-invitations';
+import {
+  attendeeIdsPayload,
+  inviteCandidates,
+  selectedInvitees
+} from '../../core/event-invitations';
 import { PickerComponent, PickerOption } from '../../shared/components/ui/picker/picker.component';
 import { CheckboxComponent } from '../../shared/components/ui/checkbox/checkbox.component';
 import { CalendarHouseholdEventsComponent } from './calendar-household-events.component';
 import { HouseholdService } from '../../core/services/household.service';
+import { AiService } from '../../core/services/ai.service';
 import { PantryService } from '../../core/services/pantry.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ModulesService } from '../../core/services/modules.service';
@@ -54,8 +65,6 @@ import {
   HOUSEHOLD_EVENT_COLORS,
   HOUSEHOLD_EVENT_KINDS,
   HOUSEHOLD_EVENT_META,
-  HOUSEHOLD_RECURRENCE_META,
-  HOUSEHOLD_RECURRENCES,
   HouseholdEvent,
   HouseholdRecurrence,
   HouseholdEventKind,
@@ -64,9 +73,17 @@ import {
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { I18nService } from '../../core/services/i18n.service';
 import { MEAL_LABEL_KEYS } from '../../core/i18n/labels';
-
-/** Días por fila de la vista de mes. */
-const WEEK_LENGTH = 7;
+import { dateLocale } from '../../core/time';
+import type {
+  AIGuestPreferences,
+  AIReplacementCandidate
+} from '../../shared/models/ai-config.model';
+import { calendarViewDates, calendarViewRange, shiftCalendarAnchor } from './calendar-view.util';
+import { CalendarMiniMonthComponent } from './calendar-mini-month.component';
+import { CalendarYearComponent } from './calendar-year.component';
+import { CalendarAgendaViewComponent } from './calendar-agenda-view.component';
+import { AiParticipantsComponent } from '../../shared/components/ai-participants.component';
+import { CalendarReplanComponent } from './calendar-replan.component';
 
 interface MealDraft {
   id: string | null;
@@ -78,6 +95,12 @@ interface MealDraft {
   servings: number;
   notes: string;
 }
+
+type EventRecurrencePreset =
+  'none' | 'daily' | 'weekdays' | 'weekly' | 'monthly' | 'yearly' | 'custom';
+type RecurrenceEndType = 'never' | 'date' | 'count';
+
+const WEEKDAYS = [1, 2, 3, 4, 5, 6, 7] as const;
 
 const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
   id: null,
@@ -91,9 +114,9 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 });
 
 /**
- * Calendario de comidas con tres vistas —día, semana y mes— al modo de Google
- * Calendar: cabecera con navegación, conmutador de vistas y una superficie con
- * líneas finas donde cada comida es un bloque de color por franja.
+ * Calendario de hogar con vistas de día, cuatro días, semana, mes, año y agenda
+ * inspirado en Google Calendar: navegación enlazable, mini-calendario, selector
+ * de vistas y superficies con líneas finas donde cada comida/evento se distingue.
  *
  * Tres cosas mandan en el diseño:
  *  - **Lo que se ve es lo que hay.** La rejilla se deriva de `GET /api/calendar/range`
@@ -110,24 +133,38 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
   standalone: true,
   imports: [
     TranslatePipe,
-    
+
     IconComponent,
     AvatarComponent,
     PickerComponent,
     CheckboxComponent,
     CalendarHouseholdEventsComponent,
-    
+
     CommonModule,
     FormsModule,
     ModalComponent,
     CalendarMonthComponent,
-    CalendarTimelineComponent
+    CalendarTimelineComponent,
+    CalendarMiniMonthComponent,
+    CalendarYearComponent,
+    CalendarAgendaViewComponent,
+    AiParticipantsComponent,
+    CalendarReplanComponent
   ],
   host: {
     '(window:keydown)': 'onKeydown($event)'
   },
   template: `
     <div class="calendar">
+      <aside class="calendar__sidebar">
+        <app-calendar-mini-month
+          [anchorDate]="anchor()"
+          [selectedDate]="anchorIso()"
+          (selectDate)="jumpTo($event)"
+          (shiftMonth)="shiftMiniMonth($event)"
+          (goToday)="goToToday()"
+        />
+      </aside>
       <section class="calendar__panel">
         <!-- ══ Cabecera ══ -->
         <header class="cal-top">
@@ -146,7 +183,14 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             >
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
             </button>
-            <button type="button" class="cal-pill" [attr.title]="'calendar.ir_a_hoy_t' | t" (click)="goToToday()">{{ 'calendar.hoy' | t }}</button>
+            <button
+              type="button"
+              class="cal-pill"
+              [attr.title]="'calendar.ir_a_hoy_t' | t"
+              (click)="goToToday()"
+            >
+              {{ 'calendar.hoy' | t }}
+            </button>
             <button
               type="button"
               class="cal-icon-btn"
@@ -159,7 +203,9 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
             <label class="cal-jump" [attr.title]="'calendar.ir_a_una_fecha_2' | t">
               <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M7 3v2M17 3v2M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z" />
+                <path
+                  d="M7 3v2M17 3v2M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"
+                />
               </svg>
               <input
                 type="date"
@@ -172,30 +218,48 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           </div>
 
           <div class="cal-top__right">
-            <div class="cal-segment" role="tablist" [attr.aria-label]="'calendar.vista_del_calendario' | t">
-              <button
-                *ngFor="let option of viewOptions"
-                type="button"
-                role="tab"
-                class="cal-segment__btn"
-                [id]="'cal-view-' + option"
-                [attr.aria-selected]="view() === option"
-                [class.is-active]="view() === option"
-                (click)="setView(option)"
-              >
-                {{ CALENDAR_VIEW_LABELS[option] | t }}
-              </button>
-            </div>
+            <app-picker
+              class="cal-view-picker"
+              [label]="'calendar.vista_del_calendario' | t"
+              [options]="viewPickerOptions()"
+              [value]="view()"
+              [attr.data-view]="view()"
+              [filterFrom]="99"
+              data-test="calendar-view-select"
+              (valueChange)="setViewFromPicker($event)"
+            />
 
             @if (kitchen()) {
-              <button type="button" class="cal-pill" (click)="openGoalsModal()">
-                {{ 'calendar.objetivo' | t }}<span *ngIf="goalLabel()"> · {{ goalLabel() }}</span>
+              <button
+                type="button"
+                class="cal-pill"
+                (click)="openGoalsModal()"
+                [attr.aria-label]="goalAriaLabel()"
+                [attr.title]="goalAriaLabel()"
+              >
+                {{ 'calendar.objetivo' | t }}
+                @if (goalCount() > 0) {
+                  <span class="cal-goal-count" aria-hidden="true">{{ goalCount() }}</span>
+                }
+              </button>
+              <button
+                type="button"
+                class="cal-btn"
+                data-test="calendar-replan-open"
+                (click)="openReplanModal()"
+              >
+                {{ 'calendar.replan_open' | t }}
               </button>
               <button type="button" class="cal-btn cal-btn--primary" (click)="openGenerateModal()">
                 {{ 'calendar.planificar_ia' | t }}
               </button>
             }
-            <button type="button" class="cal-pill cal-pill--add" data-test="event-add" (click)="openEventModal()">
+            <button
+              type="button"
+              class="cal-pill cal-pill--add"
+              data-test="event-add"
+              (click)="openEventModal()"
+            >
               <app-icon name="add" [size]="16" [label]="null" />
               <span>{{ 'calendar.evento' | t }}</span>
             </button>
@@ -203,7 +267,12 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         </header>
 
         <!-- ══ Capas: que se pinta hoy en la rejilla ══ -->
-        <div class="cal-layers" role="group" [attr.aria-label]="'calendar.que_se_muestra_en' | t" data-test="calendar-layers">
+        <div
+          class="cal-layers"
+          role="group"
+          [attr.aria-label]="'calendar.que_se_muestra_en' | t"
+          data-test="calendar-layers"
+        >
           @if (kitchen()) {
             <button
               type="button"
@@ -238,45 +307,58 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         <!-- ══ Resumen del periodo ══ -->
         <div class="cal-strip" [class.cal-strip--bare]="!kitchen()">
           @if (kitchen()) {
-          <div class="cal-strip__item">
-            <span class="cal-strip__label">{{ 'calendar.comidas' | t }}</span>
-            <span class="cal-strip__value">
-              {{ plannedCount() }}<small> / {{ expectedMeals() }}</small>
+            <div class="cal-strip__item">
+              <span class="cal-strip__label">{{ 'calendar.comidas' | t }}</span>
+              <span class="cal-strip__value">
+                {{ plannedCount() }}<small> / {{ expectedMeals() }}</small>
+              </span>
+            </div>
+            <div
+              class="cal-strip__track"
+              [title]="'calendar.planned_in' | t: { period: periodLabel() }"
+            >
+              <span class="cal-strip__fill" [style.width.%]="plannedPercent()"></span>
+            </div>
+
+            <div class="cal-strip__item" *ngIf="hasNutrition()">
+              <span class="cal-strip__label">{{ 'calendar.energia' | t }}</span>
+              <span class="cal-strip__value">
+                {{ fmt(calories())
+                }}<small>{{
+                  'calendar.kcal_of_target' | t: { target: fmt(calendarService.targetCalories()) }
+                }}</small>
+              </span>
+            </div>
+            <div class="cal-strip__track" *ngIf="hasNutrition()">
+              <span
+                class="cal-strip__fill cal-strip__fill--kcal"
+                [style.width.%]="caloriePercent()"
+              ></span>
+            </div>
+
+            <span class="cal-strip__done" *ngIf="doneCount() > 0">
+              {{ doneCount() }} {{ (doneCount() === 1 ? 'calendar.hecha' : 'calendar.hechas') | t }}
             </span>
-          </div>
-          <div class="cal-strip__track" [title]="'calendar.planned_in' | t:{period: periodLabel()}">
-            <span class="cal-strip__fill" [style.width.%]="plannedPercent()"></span>
-          </div>
 
-          <div class="cal-strip__item" *ngIf="hasNutrition()">
-            <span class="cal-strip__label">{{ 'calendar.energia' | t }}</span>
-            <span class="cal-strip__value">
-              {{ fmt(calories()) }}<small>{{ 'calendar.kcal_of_target' | t:{target: fmt(calendarService.targetCalories())} }}</small>
+            <span class="cal-strip__spacer"></span>
+
+            <span class="cal-strip__hint" *ngIf="plannedCount() === 0 && !isLoading()">
+              {{ 'calendar.nothing_planned' | t: { period: periodShortLabel() } }}
+              <button type="button" class="cal-link" (click)="openGenerateModal()">
+                {{ 'calendar.que_lo_haga_la' | t }}
+              </button>
+              <span aria-hidden="true">·</span>
+              <button type="button" class="cal-link" (click)="openAddModal(anchorIso(), 'lunch')">
+                {{ 'calendar.empezar_por_el_almuerzo' | t }}
+              </button>
             </span>
-          </div>
-          <div class="cal-strip__track" *ngIf="hasNutrition()">
-            <span class="cal-strip__fill cal-strip__fill--kcal" [style.width.%]="caloriePercent()"></span>
-          </div>
-
-          <span class="cal-strip__done" *ngIf="doneCount() > 0">
-            {{ doneCount() }} {{ (doneCount() === 1 ? 'calendar.hecha' : 'calendar.hechas') | t }}
-          </span>
-
-          <span class="cal-strip__spacer"></span>
-
-          <span class="cal-strip__hint" *ngIf="plannedCount() === 0 && !isLoading()">
-            {{ 'calendar.nothing_planned' | t:{period: periodShortLabel()} }}
-            <button type="button" class="cal-link" (click)="openGenerateModal()">{{ 'calendar.que_lo_haga_la' | t }}</button>
-            <span aria-hidden="true">·</span>
-            <button type="button" class="cal-link" (click)="openAddModal(anchorIso(), 'lunch')">
-              {{ 'calendar.empezar_por_el_almuerzo' | t }}
-            </button>
-          </span>
           }
 
           <span class="cal-strip__hint" *ngIf="calendarService.error()">
             {{ calendarService.error() }}
-            <button type="button" class="cal-link" (click)="reload()">{{ 'calendar.reintentar' | t }}</button>
+            <button type="button" class="cal-link" (click)="reload()">
+              {{ 'calendar.reintentar' | t }}
+            </button>
           </span>
         </div>
 
@@ -298,9 +380,24 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (editEvent)="openEventModal(undefined, $event)"
             ></app-calendar-month>
 
-            <!-- Semana y dia son LA MISMA rejilla de horas: lo unico que cambia es cuantas
-                 columnas hay. days() ya trae 7 o 1 segun la vista, asi que el componente no tiene
-                 que saber en que pestaña esta. -->
+            <app-calendar-year
+              *ngSwitchCase="'year'"
+              [days]="days()"
+              [year]="anchor().getFullYear()"
+              (openDay)="openDayFor($event)"
+              (openMonth)="openMonthFor($event)"
+            />
+
+            <app-calendar-agenda-view
+              *ngSwitchCase="'agenda'"
+              [days]="days()"
+              (openDay)="openDayFor($event)"
+              (openMeal)="openMealFromAgenda($event)"
+              (editEvent)="openEventModal(undefined, $event)"
+              (addEvent)="openEventModal({ iso: $event })"
+            />
+
+            <!-- Día, 4 días y semana comparten el timeline completo 00:00–24:00. -->
             <app-calendar-timeline
               *ngSwitchDefault
               [kitchen]="kitchen()"
@@ -324,17 +421,29 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
            «anadir» a seis lineas de distancia son dos formas de preguntar lo mismo, y la
            de abajo se comia el encabezado de una seccion que va de lista en lista.
            OJO: dentro de este literal no pueden aparecer backticks, cierran el string. -->
-        <section class="cal-agenda" data-test="agenda" [attr.aria-label]="'calendar.agenda_del_dia' | t">
+        <section
+          class="cal-agenda"
+          *ngIf="view() !== 'agenda' && view() !== 'year'"
+          data-test="agenda"
+          [attr.aria-label]="'calendar.agenda_del_dia' | t"
+        >
           <header class="cal-agenda__head">
             <div class="cal-agenda__who">
               <p class="cal-agenda__eyebrow">{{ 'calendar.agenda' | t }}</p>
               <h3 class="cal-agenda__title">{{ anchorLabel() }}</h3>
             </div>
             @if (agendaDay().isToday) {
-              <span class="cal-agenda__today" data-test="agenda-today">{{ 'calendar.hoy' | t }}</span>
+              <span class="cal-agenda__today" data-test="agenda-today">{{
+                'calendar.hoy' | t
+              }}</span>
             }
             @if (agendaDay().events.length) {
-              <span class="cal-agenda__count">{{ agendaDay().events.length }} {{ (agendaDay().events.length === 1 ? 'calendar.plan' : 'calendar.planes') | t }}</span>
+              <span class="cal-agenda__count"
+                >{{ agendaDay().events.length }}
+                {{
+                  (agendaDay().events.length === 1 ? 'calendar.plan' : 'calendar.planes') | t
+                }}</span
+              >
             }
           </header>
 
@@ -358,149 +467,251 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
       <!-- ══ Suelta de la casa ══ -->
       <app-modal
+        class="calendar-event-modal"
         [isOpen]="isEventModalOpen()"
         [title]="eventDraft.id ? ('calendar.edit_event' | t) : ('calendar.new_event' | t)"
         size="md"
         (onClose)="closeEventModal()"
       >
         <div class="meal-form">
-          <div class="meal-form__field meal-form__field--text">
-            <label for="event-title">{{ 'calendar.que_es' | t }}</label>
-            <input id="event-title" name="eventTitle" class="cal-input cal-input--text" maxlength="120" [(ngModel)]="eventDraft.title" data-test="event-title" [placeholder]="'calendar.carpinteria_medir_el_pasillo' | t" />
+          <div class="meal-form__field meal-form__field--text cal-event-title-field">
+            <label class="cal-visually-hidden" for="event-title">{{
+              'calendar.event_title_placeholder' | t
+            }}</label>
+            <input
+              id="event-title"
+              name="eventTitle"
+              class="cal-input cal-input--event-title"
+              maxlength="120"
+              [(ngModel)]="eventDraft.title"
+              data-test="event-title"
+              [placeholder]="'calendar.event_title_placeholder' | t"
+            />
           </div>
 
-          <div class="meal-form__row">
-            <div class="meal-form__field meal-form__field--sm">
-              <span class="cal-field-label">{{ 'calendar.tipo' | t }}</span>
-              <app-picker
-                [label]="'calendar.tipo_de_evento' | t"
-                [options]="kindOptions()"
-                [value]="eventDraft.kind"
-                [filterFrom]="99"
-                data-test="event-kind"
-                (valueChange)="setEventKind($event)"
-              />
-            </div>
-            <div class="meal-form__field meal-form__field--sm">
-              <label for="event-date">{{ 'calendar.dia' | t }}</label>
-              <input id="event-date" name="eventDate" type="date" class="cal-input" [(ngModel)]="eventDraft.date" />
+          <div class="cal-event-when">
+            <app-icon class="cal-event-row__icon" name="schedule" [size]="20" [label]="null" />
+            <div class="cal-event-when__fields">
+              <label class="cal-event-date-chip" for="event-date">
+                <span class="cal-event-date__full" data-test="event-date-label">{{
+                  eventDateLabel()
+                }}</span>
+                <span class="cal-event-date__compact" aria-hidden="true">{{
+                  eventDateCompactLabel()
+                }}</span>
+                <app-icon name="calendar_today" [size]="16" [label]="null" />
+                <input
+                  id="event-date"
+                  name="eventDate"
+                  type="date"
+                  [attr.aria-label]="('calendar.dia' | t) + ': ' + eventDateLabel()"
+                  [(ngModel)]="eventDraft.date"
+                />
+              </label>
+              @if (!eventDraft.allDay) {
+                <div class="meal-form__field meal-form__field--sm">
+                  <label class="cal-visually-hidden" for="event-start">{{
+                    'calendar.desde' | t
+                  }}</label>
+                  <input
+                    id="event-start"
+                    name="eventStart"
+                    type="time"
+                    class="cal-input"
+                    [(ngModel)]="eventDraft.startTime"
+                  />
+                </div>
+                <span class="cal-event-when__dash" aria-hidden="true">–</span>
+                <div class="meal-form__field meal-form__field--sm">
+                  <label class="cal-visually-hidden" for="event-end">{{
+                    'calendar.hasta' | t
+                  }}</label>
+                  <input
+                    id="event-end"
+                    name="eventEnd"
+                    type="time"
+                    class="cal-input"
+                    [(ngModel)]="eventDraft.endTime"
+                  />
+                </div>
+              }
             </div>
           </div>
 
-          <div class="meal-form__row">
-            <div class="meal-form__field meal-form__field--sm">
-              <span class="cal-field-label">{{ 'calendar.repetir' | t }}</span>
+          <app-checkbox
+            [label]="'calendar.todo_el_dia' | t"
+            name="eventAllDay"
+            [checked]="eventDraft.allDay"
+            (checkedChange)="setAllDay($event)"
+          />
+
+          <div class="cal-event-repeat-row">
+            <app-icon class="cal-event-row__icon" name="repeat" [size]="20" [label]="null" />
+            <div class="meal-form__field cal-event-repeat">
               <app-picker
                 [label]="'calendar.cada_cuanto' | t"
-                [options]="recurrenceOptions()"
-                [value]="eventDraft.recurrence"
+                [options]="eventRecurrenceOptions()"
+                [value]="eventDraft.repeatPreset"
                 [filterFrom]="99"
+                [floatingPanel]="true"
+                [floatingPanelMinWidth]="380"
                 data-test="event-recurrence"
                 (valueChange)="setRecurrence($event)"
               />
             </div>
-            @if (eventDraft.recurrence !== 'none') {
-              <p class="cal-note">
-                {{ (eventDraft.id ? 'calendar.los_cambios_afectan' : 'calendar.se_repite_desde') | t }}
-              </p>
-            }
           </div>
 
-          <div class="meal-form__row">
-            <app-checkbox
-              [label]="'calendar.todo_el_dia' | t"
-              name="eventAllDay"
-              [checked]="eventDraft.allDay"
-              (checkedChange)="setAllDay($event)"
-            />
-            @if (!eventDraft.allDay) {
-              <div class="meal-form__field meal-form__field--sm">
-                <label for="event-start">{{ 'calendar.desde' | t }}</label>
-                <input id="event-start" name="eventStart" type="time" class="cal-input" [(ngModel)]="eventDraft.startTime" />
+          <p class="cal-note" *ngIf="eventDraft.recurrence !== 'none'">
+            {{ (eventDraft.id ? 'calendar.los_cambios_afectan' : 'calendar.se_repite_desde') | t }}
+          </p>
+
+          <button
+            type="button"
+            class="cal-event-more"
+            [attr.aria-expanded]="eventMoreOptions()"
+            data-test="event-more-options"
+            (click)="toggleEventMoreOptions()"
+          >
+            {{ (eventMoreOptions() ? 'calendar.fewer_options' : 'calendar.more_options') | t }}
+          </button>
+
+          @if (eventMoreOptions()) {
+            <div class="cal-event-advanced">
+              <div class="meal-form__row">
+                <div class="meal-form__field meal-form__field--sm">
+                  <span class="cal-field-label">{{ 'calendar.tipo' | t }}</span>
+                  <app-picker
+                    [label]="'calendar.tipo_de_evento' | t"
+                    [options]="kindOptions()"
+                    [value]="eventDraft.kind"
+                    [filterFrom]="99"
+                    data-test="event-kind"
+                    (valueChange)="setEventKind($event)"
+                  />
+                </div>
               </div>
-              <div class="meal-form__field meal-form__field--sm">
-                <label for="event-end">{{ 'calendar.hasta' | t }}</label>
-                <input id="event-end" name="eventEnd" type="time" class="cal-input" [(ngModel)]="eventDraft.endTime" />
+
+              <div class="meal-form__field">
+                <label>{{ 'calendar.color' | t }}</label>
+                <div
+                  class="cal-swatches"
+                  role="group"
+                  [attr.aria-label]="'calendar.color_del_evento' | t"
+                >
+                  @for (color of eventColors; track color) {
+                    <button
+                      type="button"
+                      class="cal-swatch"
+                      [class.is-active]="
+                        (eventDraft.color ?? metaOf(eventDraft.kind).color) === color
+                      "
+                      [style.background]="color"
+                      [attr.aria-label]="'calendar.color_value' | t: { color: color }"
+                      (click)="eventDraft.color = color; eventDraft.colorTouched = true"
+                    ></button>
+                  }
+                </div>
               </div>
-            }
-          </div>
 
-          <div class="meal-form__field">
-            <label>{{ 'calendar.color' | t }}</label>
-            <div class="cal-swatches" role="group" [attr.aria-label]="'calendar.color_del_evento' | t">
-              @for (color of eventColors; track color) {
-                <button
-                  type="button"
-                  class="cal-swatch"
-                  [class.is-active]="(eventDraft.color ?? metaOf(eventDraft.kind).color) === color"
-                  [style.background]="color"
-                  [attr.aria-label]="'calendar.color_value' | t:{color: color}"
-                  (click)="eventDraft.color = color; eventDraft.colorTouched = true"
-                ></button>
-              }
-            </div>
-          </div>
+              <div class="meal-form__field">
+                <label for="event-place">{{ 'calendar.sitio_opcional' | t }}</label>
+                <input
+                  id="event-place"
+                  name="eventPlace"
+                  class="cal-input"
+                  maxlength="120"
+                  [(ngModel)]="eventDraft.location"
+                  [placeholder]="'calendar.tienda_de_la_calle' | t"
+                />
+              </div>
 
-          <div class="meal-form__field">
-            <label for="event-place">{{ 'calendar.sitio_opcional' | t }}</label>
-            <input id="event-place" name="eventPlace" class="cal-input" maxlength="120" [(ngModel)]="eventDraft.location" [placeholder]="'calendar.tienda_de_la_calle' | t" />
-          </div>
+              <div class="meal-form__field">
+                <label for="event-notes">{{ 'calendar.notas_opcional' | t }}</label>
+                <textarea
+                  id="event-notes"
+                  name="eventNotes"
+                  class="cal-input"
+                  rows="2"
+                  maxlength="500"
+                  [(ngModel)]="eventDraft.notes"
+                ></textarea>
+              </div>
 
-          <div class="meal-form__field">
-            <label for="event-notes">{{ 'calendar.notas_opcional' | t }}</label>
-            <textarea id="event-notes" name="eventNotes" class="cal-input" rows="2" maxlength="500" [(ngModel)]="eventDraft.notes"></textarea>
-          </div>
+              @if (hasHousehold()) {
+                <app-checkbox
+                  [label]="'calendar.que_lo_vea_mi' | t"
+                  name="eventShared"
+                  [checked]="eventDraft.sharedWithHousehold"
+                  (checkedChange)="eventDraft.sharedWithHousehold = $event"
+                />
 
-          @if (hasHousehold()) {
-            <app-checkbox
-              [label]="'calendar.que_lo_vea_mi' | t"
-              name="eventShared"
-              [checked]="eventDraft.sharedWithHousehold"
-              (checkedChange)="eventDraft.sharedWithHousehold = $event"
-            />
-
-            <div class="meal-form__field">
-              <label id="event-people-label">{{ 'calendar.quien_viene_opcional' | t }}</label>
-              <div class="cal-people" role="group" aria-labelledby="event-people-label" data-test="event-attendees">
-                @for (person of householdPeople(); track person.userId) {
-                  <button
-                    type="button"
-                    class="cal-person"
-                    [class.is-on]="eventDraft.attendeeIds.includes(person.userId)"
-                    [attr.aria-pressed]="eventDraft.attendeeIds.includes(person.userId)"
-                    (click)="toggleAttendee(person.userId)"
+                <div class="meal-form__field">
+                  <label id="event-people-label">{{ 'calendar.quien_viene_opcional' | t }}</label>
+                  <div
+                    class="cal-people"
+                    role="group"
+                    aria-labelledby="event-people-label"
+                    data-test="event-attendees"
                   >
-                    <app-avatar [name]="person.name" [src]="person.avatar" size="xs" />
-                    <span>{{ person.name }}</span>
-                    @if (eventDraft.attendeeIds.includes(person.userId)) {
-                      <app-icon name="check" class="cal-person__check" />
+                    @for (person of householdPeople(); track person.userId) {
+                      <button
+                        type="button"
+                        class="cal-person"
+                        [class.is-on]="eventDraft.attendeeIds.includes(person.userId)"
+                        [attr.aria-pressed]="eventDraft.attendeeIds.includes(person.userId)"
+                        (click)="toggleAttendee(person.userId)"
+                      >
+                        <app-avatar [name]="person.name" [src]="person.avatar" size="xs" />
+                        <span>{{ person.name }}</span>
+                        @if (eventDraft.attendeeIds.includes(person.userId)) {
+                          <app-icon name="check" class="cal-person__check" />
+                        }
+                      </button>
                     }
-                  </button>
-                }
-              </div>
-              @if (!householdPeople().length) {
-                <p class="cal-note" data-test="event-no-people">
-                  {{ 'calendar.eres_la_unica_persona' | t }}
-                  <button type="button" class="cal-link" (click)="openHouseholdPage()">{{ 'calendar.invitar_a_alguien' | t }}</button>
-                </p>
-              } @else {
-                <p class="cal-note">{{ 'calendar.solo_cambia_tu_visibilidad' | t }}</p>
+                  </div>
+                  @if (!householdPeople().length) {
+                    <p class="cal-note" data-test="event-no-people">
+                      {{ 'calendar.eres_la_unica_persona' | t }}
+                      <button type="button" class="cal-link" (click)="openHouseholdPage()">
+                        {{ 'calendar.invitar_a_alguien' | t }}
+                      </button>
+                    </p>
+                  } @else {
+                    <p class="cal-note">{{ 'calendar.solo_cambia_tu_visibilidad' | t }}</p>
+                  }
+                </div>
               }
             </div>
           }
-          <p class="cal-note" *ngIf="calendarService.eventsError()" role="alert">{{ calendarService.eventsError() }}</p>
+          <p class="cal-note" *ngIf="calendarService.eventsError()" role="alert">
+            {{ calendarService.eventsError() }}
+          </p>
 
-          <div class="meal-form__actions">
+          <div class="meal-form__actions calendar-event-actions" data-test="event-actions">
             @if (eventDraft.id) {
-              <button type="button" class="cal-btn cal-btn--ghost cal-btn--danger" (click)="removeEvent()">{{ 'calendar.borrar' | t }}</button>
+              <button
+                type="button"
+                class="cal-btn cal-btn--ghost cal-btn--danger"
+                (click)="removeEvent()"
+              >
+                {{ 'calendar.borrar' | t }}
+              </button>
               @if (eventDraft.recurrence !== 'none') {
-                <button type="button" class="cal-btn cal-btn--ghost" data-test="event-skip-day" (click)="removeOccurrence()">
-                  {{ 'calendar.quitar_solo_este_dia' | t }}
+                <button
+                  type="button"
+                  class="cal-btn cal-btn--ghost"
+                  data-test="event-skip-day"
+                  [attr.aria-label]="'calendar.quitar_solo_este_dia' | t"
+                  [title]="'calendar.quitar_solo_este_dia' | t"
+                  (click)="removeOccurrence()"
+                >
+                  {{ 'calendar.quitar_dia' | t }}
                 </button>
               }
             }
-            <span class="meal-form__grow"></span>
-            <button type="button" class="cal-btn cal-btn--ghost" (click)="closeEventModal()">{{ 'common.cancel' | t }}</button>
+            <button type="button" class="cal-btn cal-btn--ghost" (click)="closeEventModal()">
+              {{ 'common.cancel' | t }}
+            </button>
             <button
               type="button"
               class="cal-btn cal-btn--primary"
@@ -509,6 +720,121 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               (click)="saveEvent()"
             >
               {{ (calendarService.creatingEvent() ? 'ui.guardando' : 'common.save') | t }}
+            </button>
+          </div>
+        </div>
+      </app-modal>
+
+      <app-modal
+        class="calendar-recurrence-modal"
+        [isOpen]="isRecurrenceModalOpen()"
+        [title]="'calendar.repeat_custom_title' | t"
+        size="sm"
+        (onClose)="cancelCustomRecurrence()"
+      >
+        <div class="recurrence-editor" data-test="custom-recurrence">
+          <div class="recurrence-editor__interval">
+            <label for="recurrence-interval">{{ 'calendar.repeat_every' | t }}</label>
+            <input
+              id="recurrence-interval"
+              type="number"
+              min="1"
+              max="99"
+              inputmode="numeric"
+              [(ngModel)]="customRecurrenceDraft.interval"
+              [attr.aria-label]="'calendar.repeat_interval' | t"
+            />
+            <app-picker
+              [label]="'calendar.repeat_frequency' | t"
+              [options]="recurrenceFrequencyOptions()"
+              [value]="customRecurrenceDraft.frequency"
+              [filterFrom]="99"
+              data-test="recurrence-frequency"
+              (valueChange)="setCustomFrequency($event)"
+            />
+          </div>
+
+          @if (customRecurrenceDraft.frequency === 'weekly') {
+            <fieldset class="recurrence-editor__days">
+              <legend>{{ 'calendar.repeat_on' | t }}</legend>
+              @for (weekday of recurrenceWeekdays; track weekday.value) {
+                <button
+                  type="button"
+                  class="recurrence-editor__day"
+                  [class.is-selected]="customRecurrenceDraft.weekdays?.includes(weekday.value)"
+                  [attr.aria-pressed]="customRecurrenceDraft.weekdays?.includes(weekday.value)"
+                  [attr.aria-label]="weekday.label"
+                  (click)="toggleCustomWeekday(weekday.value)"
+                >
+                  {{ weekday.short }}
+                </button>
+              }
+            </fieldset>
+          }
+
+          <fieldset class="recurrence-editor__ends">
+            <legend>{{ 'calendar.repeat_ends' | t }}</legend>
+            <label
+              ><input
+                type="radio"
+                name="recurrenceEnd"
+                [(ngModel)]="customEndType"
+                value="never"
+              />{{ 'calendar.repeat_never' | t }}</label
+            >
+            <label
+              ><input
+                type="radio"
+                name="recurrenceEnd"
+                [(ngModel)]="customEndType"
+                value="date"
+              />{{ 'calendar.repeat_end_date' | t }}</label
+            >
+            <input
+              type="date"
+              class="cal-input"
+              [(ngModel)]="customEndDate"
+              [min]="eventDraft.date"
+              [disabled]="customEndType !== 'date'"
+              [attr.aria-label]="'calendar.repeat_end_date' | t"
+            />
+            <label
+              ><input
+                type="radio"
+                name="recurrenceEnd"
+                [(ngModel)]="customEndType"
+                value="count"
+              />{{ 'calendar.repeat_after' | t }}</label
+            >
+            <div class="recurrence-editor__count">
+              <input
+                type="number"
+                min="1"
+                max="999"
+                inputmode="numeric"
+                [(ngModel)]="customEndCount"
+                [disabled]="customEndType !== 'count'"
+                [attr.aria-label]="'calendar.repeat_occurrences' | t"
+              />
+              <span>{{ 'calendar.repeat_occurrences' | t }}</span>
+            </div>
+          </fieldset>
+
+          <p *ngIf="customRecurrenceError" class="cal-note" role="alert">
+            {{ customRecurrenceError }}
+          </p>
+          <div class="meal-form__actions">
+            <span class="meal-form__grow"></span>
+            <button type="button" class="cal-btn cal-btn--ghost" (click)="cancelCustomRecurrence()">
+              {{ 'common.cancel' | t }}
+            </button>
+            <button
+              type="button"
+              class="cal-btn cal-btn--primary"
+              data-test="recurrence-done"
+              (click)="applyCustomRecurrence()"
+            >
+              {{ 'calendar.done' | t }}
             </button>
           </div>
         </div>
@@ -533,10 +859,18 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             <span>{{ 'calendar.no_se_pudo_quitar_comida' | t }}</span>
           </div>
           <div class="meal-form__when">
-            <span class="meal-form__band" [attr.data-meal]="draft.mealType" aria-hidden="true"></span>
+            <span
+              class="meal-form__band"
+              [attr.data-meal]="draft.mealType"
+              aria-hidden="true"
+            ></span>
             <strong>{{ mealLabel(draft.mealType) }}</strong>
             <span class="meal-form__date">{{ draftDateLabel() }}</span>
-            <div class="meal-form__tabs" role="tablist" [attr.aria-label]="'calendar.origen_de_la_comida' | t">
+            <div
+              class="meal-form__tabs"
+              role="tablist"
+              [attr.aria-label]="'calendar.origen_de_la_comida' | t"
+            >
               <button
                 type="button"
                 role="tab"
@@ -596,7 +930,6 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
                 id="meal-servings"
                 type="number"
                 min="1"
-                max="12"
                 [(ngModel)]="draft.servings"
                 class="cal-input"
               />
@@ -615,6 +948,89 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             ></textarea>
           </div>
 
+          <section *ngIf="draft.id" class="meal-replacement" data-test="meal-replacement">
+            <button
+              type="button"
+              class="cal-btn"
+              data-test="open-meal-replacement"
+              [attr.aria-expanded]="replacementOpen()"
+              (click)="toggleReplacementForm()"
+            >
+              {{
+                (replacementOpen() ? 'calendar.replacement_close' : 'calendar.replacement_open') | t
+              }}
+            </button>
+
+            <div
+              *ngIf="replacementOpen()"
+              class="meal-replacement__form"
+              data-test="replacement-guest-form"
+            >
+              <p class="cal-muted">{{ 'calendar.replacement_privacy' | t }}</p>
+              <app-ai-participants
+                *ngIf="replacementParticipantsReady(); else replacementParticipantsLoading"
+                [members]="replacementMembers()"
+                [selectedMemberIds]="replacementMemberIds()"
+                [guests]="replacementGuests()"
+                (selectedMemberIdsChange)="updateReplacementMembers($event)"
+                (guestsChange)="updateReplacementGuests($event)"
+              />
+              <ng-template #replacementParticipantsLoading>
+                <p class="cal-muted" role="status">
+                  {{ 'calendar.replacement_loading_participants' | t }}
+                </p>
+              </ng-template>
+              <div class="meal-form__actions">
+                <span class="meal-form__grow"></span>
+                <button
+                  type="button"
+                  class="cal-btn cal-btn--primary"
+                  data-test="request-meal-replacement"
+                  [disabled]="isReplacingMeal() || !replacementParticipantsReady()"
+                  (click)="requestMealReplacement()"
+                >
+                  {{
+                    isReplacingMeal()
+                      ? ('calendar.replacement_generating' | t)
+                      : ('calendar.replacement_generate' | t)
+                  }}
+                </button>
+              </div>
+              <p *ngIf="replacementFailed()" class="meal-form__error" role="alert">
+                {{ 'calendar.replacement_failed' | t }}
+              </p>
+              <section
+                *ngIf="replacementCandidate() as candidate"
+                class="meal-replacement__candidate"
+                data-test="replacement-candidate"
+                aria-live="polite"
+              >
+                <h3>{{ candidate.name }}</h3>
+                <p>{{ candidate.description }}</p>
+                <p class="cal-muted">
+                  {{
+                    'calendar.replacement_candidate_details'
+                      | t
+                        : {
+                            ingredients: candidate.ingredients.join(', '),
+                            time: candidate.estimatedTime,
+                            servings: candidate.servings
+                          }
+                  }}
+                </p>
+                <p class="cal-muted">{{ 'calendar.replacement_verify_labels' | t }}</p>
+                <button
+                  type="button"
+                  class="cal-btn cal-btn--primary"
+                  data-test="apply-meal-replacement"
+                  (click)="applyMealReplacement()"
+                >
+                  {{ 'calendar.replacement_apply' | t }}
+                </button>
+              </section>
+            </div>
+          </section>
+
           <div class="meal-form__actions meal-edit-actions">
             <button
               *ngIf="draft.id"
@@ -625,7 +1041,9 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               {{ 'common.delete' | t }}
             </button>
             <span class="meal-form__grow"></span>
-            <button type="button" class="cal-btn" (click)="closeMealModal()">{{ 'common.cancel' | t }}</button>
+            <button type="button" class="cal-btn" (click)="closeMealModal()">
+              {{ 'common.cancel' | t }}
+            </button>
             <button
               type="button"
               class="cal-btn cal-btn--primary"
@@ -643,6 +1061,8 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         [isOpen]="isGoalsModalOpen()"
         [title]="'calendar.objetivos_nutricionales' | t"
         size="md"
+        [closable]="!isSavingGoals()"
+        [closeOnOverlay]="!isSavingGoals()"
         (onClose)="closeGoalsModal()"
       >
         <div class="goals-form">
@@ -654,13 +1074,30 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               *ngFor="let goal of goalOptions"
               type="button"
               class="goal-option"
-              [class.goal-option--selected]="goalsDraft.type === goal.value"
-              [attr.aria-pressed]="goalsDraft.type === goal.value"
-              (click)="goalsDraft.type = goal.value"
+              [class.goal-option--selected]="goalsDraft.types.includes(goal.value)"
+              [attr.aria-pressed]="goalsDraft.types.includes(goal.value)"
+              [disabled]="isSavingGoals()"
+              (click)="toggleWeeklyGoal(goal.value)"
             >
-              <span class="goal-option__icon" aria-hidden="true">{{ goal.icon }}</span>
+              <span class="goal-option__icon" aria-hidden="true">
+                <app-icon [name]="goal.icon" [size]="18" [label]="null" />
+              </span>
               <span class="goal-option__label">{{ goal.labelKey | t }}</span>
             </button>
+          </div>
+
+          <div class="meal-form__field" *ngIf="goalsDraft.types.includes('custom')">
+            <label for="goals-custom">{{ 'calendar.describe_tu_objetivo' | t }}</label>
+            <textarea
+              id="goals-custom"
+              name="weeklyCustomInstructions"
+              rows="3"
+              maxlength="2000"
+              [(ngModel)]="goalsDraft.customInstructions"
+              [placeholder]="'calendar.ej_cenas_ligeras_y' | t"
+              [disabled]="isSavingGoals()"
+              class="cal-input cal-input--area"
+            ></textarea>
           </div>
 
           <div class="meal-form__field meal-form__field--sm">
@@ -672,14 +1109,51 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               max="6000"
               step="50"
               [(ngModel)]="goalsDraft.dailyCalories"
+              [disabled]="isSavingGoals()"
               class="cal-input"
             />
           </div>
 
+          <p
+            *ngIf="goalsSaveError()"
+            class="cal-note"
+            role="alert"
+            aria-live="assertive"
+            data-test="goals-save-error"
+          >
+            {{ 'calendar.no_se_pudieron_guardar_objetivos' | t }}
+          </p>
+
           <div class="meal-form__actions">
             <span class="meal-form__grow"></span>
-            <button type="button" class="cal-btn" (click)="closeGoalsModal()">{{ 'common.cancel' | t }}</button>
-            <button type="button" class="cal-btn cal-btn--primary" (click)="saveGoals()">{{ 'common.save' | t }}</button>
+            <button
+              type="button"
+              class="cal-btn"
+              [disabled]="isSavingGoals()"
+              (click)="closeGoalsModal()"
+            >
+              {{ 'common.cancel' | t }}
+            </button>
+            <button
+              type="button"
+              class="cal-btn cal-btn--primary"
+              data-test="goals-save"
+              [attr.aria-busy]="isSavingGoals()"
+              [disabled]="
+                isSavingGoals() ||
+                !goalsDraft.types.length ||
+                (goalsDraft.types.includes('custom') && !goalsDraft.customInstructions.trim())
+              "
+              (click)="saveGoals()"
+            >
+              {{
+                isSavingGoals()
+                  ? ('ui.guardando' | t)
+                  : goalsSaveError()
+                    ? ('calendar.reintentar' | t)
+                    : ('common.save' | t)
+              }}
+            </button>
           </div>
         </div>
       </app-modal>
@@ -693,7 +1167,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
       >
         <div class="generate-form">
           <p class="cal-muted">
-            {{ 'calendar.gen_intro' | t:{period: planWeekLabel()} }}
+            {{ 'calendar.gen_intro' | t: { period: planWeekLabel() } }}
           </p>
           @if (caducanPronto().length > 0) {
             <p class="cal-muted cal-caduca" data-test="gen-caducidades">
@@ -701,14 +1175,37 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             </p>
           }
 
-          <div class="meal-form__field">
-            <label for="gen-goal">{{ 'calendar.objetivo' | t }}</label>
-            <select id="gen-goal" [(ngModel)]="generateOptions.goalType" class="cal-input" (change)="onGoalTypeChange()">
-              <option *ngFor="let goal of goalOptions" [value]="goal.value">
-                {{ goal.labelKey | t }}
-              </option>
-            </select>
-          </div>
+          <app-ai-participants
+            [members]="householdService.household()?.members ?? []"
+            [selectedMemberIds]="generateMemberIds()"
+            (selectedMemberIdsChange)="generateMemberIds.set($event)"
+            [guests]="generateGuests()"
+            (guestsChange)="generateGuests.set($event)"
+          />
+          <p class="cal-hint" data-test="generate-participant-servings">
+            {{ 'ai_participants.servings' | t: { number: generateServings() } }}
+          </p>
+
+          <fieldset class="meal-form__field" data-test="gen-goals">
+            <legend class="meal-form__label">{{ 'calendar.objetivo' | t }}</legend>
+            <p class="cal-hint">{{ 'calendar.sirven_de_punto_de' | t }}</p>
+            <div class="goals-form__options">
+              <button
+                *ngFor="let goal of goalOptions"
+                type="button"
+                class="goal-option"
+                [class.goal-option--selected]="generateOptions.goalTypes.includes(goal.value)"
+                [attr.aria-pressed]="generateOptions.goalTypes.includes(goal.value)"
+                [attr.data-test]="'generate-goal-' + goal.value"
+                (click)="toggleGenerateGoal(goal.value)"
+              >
+                <span class="goal-option__icon" aria-hidden="true">
+                  <app-icon [name]="goal.icon" [size]="18" [label]="null" />
+                </span>
+                <span class="goal-option__label">{{ goal.labelKey | t }}</span>
+              </button>
+            </div>
+          </fieldset>
 
           <fieldset class="meal-form__field" data-test="gen-meals">
             <legend class="meal-form__label">{{ 'calendar.que_comidas_quieres_en' | t }}</legend>
@@ -730,11 +1227,11 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             <!-- Que la IA no ofrezca una comida no puede parecer un olvido: se dice cual esta bloqueada
                  y donde se cambia, aqui mismo, que es donde se echo de menos. -->
             <span class="cal-hint" *ngIf="blockedMeals().length > 0" data-test="gen-blocked-line">
-              {{ 'calendar.bloqueadas_en_preferencias' | t:{comidas: blockedMealsLabel()} }}
+              {{ 'calendar.bloqueadas_en_preferencias' | t: { comidas: blockedMealsLabel() } }}
             </span>
           </fieldset>
 
-          <div class="meal-form__field" *ngIf="generateOptions.goalType === 'custom'">
+          <div class="meal-form__field" *ngIf="generateOptions.goalTypes.includes('custom')">
             <label for="gen-custom">{{ 'calendar.describe_tu_objetivo' | t }}</label>
             <textarea
               id="gen-custom"
@@ -765,14 +1262,22 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           <div class="meal-form__actions">
             <span class="meal-form__grow"></span>
             <!-- Un boton apagado sin motivo es una app que no explica: el mensaje vive junto al boton. -->
-            <span class="cal-hint" *ngIf="mealTypesForPicker().length === 0" data-test="gen-blocked-all">
+            <span
+              class="cal-hint"
+              *ngIf="mealTypesForPicker().length === 0"
+              data-test="gen-blocked-all"
+            >
               {{ 'calendar.nada_que_planificar' | t }}
             </span>
-            <button type="button" class="cal-btn" (click)="closeGenerateModal()">{{ 'common.cancel' | t }}</button>
+            <button type="button" class="cal-btn" (click)="closeGenerateModal()">
+              {{ 'common.cancel' | t }}
+            </button>
             <button
               type="button"
               class="cal-btn cal-btn--primary"
-              [disabled]="isGenerating() || mealTypesForPicker().length === 0"
+              [disabled]="
+                isGenerating() || mealTypesForPicker().length === 0 || !generateGoalsReady()
+              "
               (click)="generateWeeklyPlan()"
             >
               <span class="cal-spinner" *ngIf="isGenerating()" aria-hidden="true"></span>
@@ -781,950 +1286,64 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
           </div>
         </div>
       </app-modal>
+
+      <app-calendar-replan
+        *ngIf="isReplanModalOpen()"
+        [weekStart]="replanWeek().start"
+        [weekEnd]="replanWeek().end"
+        (closed)="closeReplanModal()"
+        (applied)="onReplanApplied()"
+      />
     </div>
   `,
-  styles: [`  /*
-     * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
-     *
-     * Todo lo que se pulsa avisa antes de que se pulse. Va aqui arriba, junto, en lugar de repartido por
-     * las reglas de cada control: asi la proxima clase que se anada se compara con esta lista, y el
-     * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
-     * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
-     */
-    /* Capas y muestras de color: la respuesta tiene que ser la misma en las dos, porque son el mismo
-       control (ensenas/colores que se activan) y hoy una avisaba y la otra no. */
-    .cal-layer:hover:not(.is-on) {
-      color: var(--text-primary);
-      border-color: var(--border-strong);
-      background: var(--bg-tertiary);
-    }
-  
-    .cal-layer.is-on:hover {
-      filter: brightness(0.96);
-    }
-  
-    .cal-swatch:hover {
-      transform: scale(1.08);
-    }
-  
-    .cal-swatch:focus-visible,
-    .cal-layer:focus-visible {
-      outline: 2px solid var(--primary);
-      outline-offset: 2px;
-    }
-  
-
-    .cal-people {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-2);
-    }
-
-    .cal-person {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-1);
-      padding: 4px 8px;
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-full);
-      background: var(--bg-secondary);
-      color: var(--text-primary);
-      font: inherit;
-      font-size: var(--text-sm);
-      cursor: pointer;
-      transition: var(--transition-fast);
-    }
-
-    .cal-person:hover {
-      border-color: var(--primary);
-    }
-
-    .cal-person.is-on {
-      border-color: var(--primary);
-      background: color-mix(in srgb, var(--primary) 16%, transparent);
-    }
-
-    .cal-person__check {
-      color: var(--primary);
-      font-size: var(--text-sm);
-    }
-
-    .cal-pill--add {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-    }
-    /* La fila de filtros vive dentro de un panel sin padding propio (cada banda lo pone al
-       lado), y esta se habia quedado sin el suyo: las capsulas pegadas al borde de la tarjeta
-       se leian fuera de la pantalla. Mismos 16 px laterales que la cabecera y la franja. */
-    .cal-layers {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      padding: 6px var(--space-4) 0;
-    }
-    .cal-layer {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-full);
-      background: transparent;
-      color: var(--text-tertiary);
-      font-family: inherit;
-      font-size: var(--text-xs);
-      padding: 4px 10px;
-      min-height: 30px;
-      cursor: pointer;
-      transition: var(--transition-fast);
-    }
-    .cal-layer.is-on {
-      color: var(--text-primary);
-      background: var(--bg-tertiary);
-      border-color: var(--border-strong);
-    }
-    .cal-layer__dot {
-      width: 8px;
-      height: 8px;
-      border-radius: var(--radius-full);
-      opacity: 0.4;
-    }
-    .cal-layer.is-on .cal-layer__dot {
-      opacity: 1;
-    }
-    .cal-layer__count {
-      font-variant-numeric: tabular-nums;
-      color: var(--text-tertiary);
-    }
-    .cal-swatches {
-      display: flex;
-      gap: 6px;
-    }
-    .cal-swatch {
-      width: 22px;
-      height: 22px;
-      border-radius: var(--radius-full);
-      border: 2px solid transparent;
-      cursor: pointer;
-      padding: 0;
-    }
-    .cal-swatch.is-active {
-      border-color: var(--text-primary);
-    }
-    .cal-check {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-      cursor: pointer;
-    }
-    .cal-note {
-      margin: 0;
-      font-size: var(--text-xs);
-      color: var(--error);
-    }
-    .cal-evt {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      width: 100%;
-      border: none;
-      border-left: 3px solid var(--event-color, var(--primary));
-      border-radius: 4px;
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-      font-family: inherit;
-      font-size: 11px;
-      line-height: 1.25;
-      text-align: left;
-      padding: 2px 4px;
-      cursor: pointer;
-      overflow: hidden;
-    }
-    .cal-evt__when {
-      color: var(--text-tertiary);
-      font-variant-numeric: tabular-nums;
-    }
-    .cal-evt__who {
-      margin-left: auto;
-      font-size: 9px;
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-    }
-    :host {
-      --cal-line: var(--border-default);
-    }
-
-    .calendar {
-      padding-block: var(--container-padding);
-      max-width: 1280px;
-      margin: 0 auto;
-    }
-
-    /* Una sola superficie con líneas finas: el aspecto de un calendario real,
-       en vez de siete tarjetas sueltas. */
-    .calendar__panel {
-      display: grid;
-      background: var(--bg-secondary);
-      border: 1px solid var(--cal-line);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow-sm);
-      overflow: hidden;
-    }
-
-    /* ── Cabecera ── */
-    .cal-top {
-      --cal-control-size: 44px;
-      --cal-control-pad-block: var(--space-2);
-      --cal-control-pad-inline: var(--space-4);
-      --cal-control-font-size: var(--text-sm);
-
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: var(--space-3) var(--space-4);
-      padding: var(--space-3) var(--space-4);
-      border-bottom: 1px solid var(--cal-line);
-    }
-
-    .cal-top__title {
-      display: flex;
-      flex-direction: column;
-      gap: 1px;
-      margin-right: auto;
-      min-width: 0;
-    }
-
-    .cal-top__eyebrow {
-      font-size: 10px;
-      font-weight: var(--font-semibold);
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-tertiary);
-    }
-
-    .calendar__title {
-      font-family: var(--font-display);
-      font-size: var(--text-xl);
-      font-weight: var(--font-semibold);
-      letter-spacing: -0.01em;
-      line-height: 1.2;
-      color: var(--text-primary);
-    }
-
-    .cal-top__nav,
-    .cal-top__right {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-
-    @media (max-width: 600px) {
-      .cal-top__right {
-        flex: 1 1 100%;
-        flex-wrap: wrap;
-        min-width: 0;
+  styles: [
+    `
+      :where(
+        .cal-icon-btn,
+        .cal-pill,
+        .cal-btn,
+        .cal-pill--add,
+        .cal-layer,
+        .cal-link,
+        .cal-event-more,
+        .cal-swatch,
+        .cal-person,
+        .recurrence-editor__day,
+        .goal-option
+      ):focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
       }
-    }
 
-    @media (min-width: 1100px) {
-      .cal-top__title { margin-right: var(--space-6); }
-    }
-
-    .cal-icon-btn {
-      display: grid;
-      place-items: center;
-      box-sizing: border-box;
-      width: var(--cal-control-size);
-      height: var(--cal-control-size);
-      padding: 0;
-      color: var(--text-secondary);
-      background: none;
-      border: 1px solid transparent;
-      border-radius: var(--radius-full);
-      cursor: pointer;
-      transition: var(--transition-fast);
-    }
-
-    .cal-icon-btn svg {
-      width: 16px;
-      height: 16px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.75;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .cal-icon-btn:hover {
-      color: var(--text-primary);
-      background: var(--bg-tertiary);
-    }
-
-    .cal-pill {
-      padding: var(--cal-control-pad-block) var(--cal-control-pad-inline);
-      font: inherit;
-      font-size: var(--text-xs);
-      font-weight: var(--font-medium);
-      color: var(--text-secondary);
-      background: var(--bg-secondary);
-      border: 1px solid var(--cal-line);
-      border-radius: var(--radius-full);
-      cursor: pointer;
-      transition: var(--transition-fast);
-      white-space: nowrap;
-    }
-
-    .cal-pill:hover {
-      color: var(--text-primary);
-      border-color: var(--border-strong);
-      background: var(--bg-tertiary);
-    }
-
-    /* Selector de fecha nativo, disfrazado de botón de icono. */
-    .cal-jump {
-      position: relative;
-      display: grid;
-      place-items: center;
-      box-sizing: border-box;
-      width: var(--cal-control-size);
-      height: var(--cal-control-size);
-      color: var(--text-secondary);
-      border: 1px solid transparent;
-      border-radius: var(--radius-full);
-      cursor: pointer;
-      transition: var(--transition-fast);
-    }
-
-    .cal-jump:hover {
-      color: var(--text-primary);
-      background: var(--bg-tertiary);
-    }
-
-    .cal-jump svg {
-      width: 15px;
-      height: 15px;
-      fill: none;
-      stroke: currentColor;
-      stroke-width: 1.6;
-      stroke-linecap: round;
-    }
-
-    .cal-jump input {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      opacity: 0;
-      cursor: pointer;
-      font: inherit;
-    }
-
-    /* Conmutador de vistas: segmentado, como el Day/Week/Month de Google. */
-    .cal-segment {
-      display: inline-flex;
-      box-sizing: border-box;
-      height: var(--cal-control-size);
-      background: var(--bg-tertiary);
-      box-shadow: inset 0 0 0 1px var(--cal-line);
-      border-radius: var(--radius-lg);
-    }
-
-    .cal-segment__btn {
-      padding: var(--cal-control-pad-block) var(--cal-control-pad-inline);
-      font: inherit;
-      font-size: var(--text-xs);
-      font-weight: var(--font-medium);
-      color: var(--text-secondary);
-      background: none;
-      border: none;
-      border-radius: var(--radius-full);
-      cursor: pointer;
-      transition: var(--transition-fast);
-    }
-
-    .cal-segment__btn:hover {
-      color: var(--text-primary);
-    }
-
-    .cal-segment__btn.is-active {
-      color: var(--text-primary);
-      background: var(--bg-secondary);
-      box-shadow: var(--shadow-xs);
-    }
-
-    .cal-segment__btn:focus-visible,
-    .cal-pill:focus-visible,
-    .cal-icon-btn:focus-visible {
-      outline: 2px solid var(--primary);
-      outline-offset: 2px;
-    }
-
-    /* ── Botones ── */
-    .cal-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
-      min-height: 48px;
-      padding: 6px 14px;
-      font: inherit;
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-      color: var(--text-secondary);
-      background: var(--bg-secondary);
-      border: 1px solid var(--cal-line);
-      border-radius: var(--radius-full);
-      cursor: pointer;
-      transition: var(--transition-fast);
-    }
-
-    .cal-top .cal-pill,
-    .cal-top .cal-segment__btn,
-    .cal-top .cal-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      box-sizing: border-box;
-      width: auto;
-      height: var(--cal-control-size);
-      min-height: var(--cal-control-size);
-      gap: var(--space-2);
-      padding: var(--cal-control-pad-block) var(--cal-control-pad-inline);
-      font-family: var(--font-sans);
-      font-size: var(--cal-control-font-size);
-      font-weight: var(--font-medium);
-      line-height: var(--leading-none);
-      border-radius: var(--radius-lg);
-      border-width: 1px;
-      border-style: solid;
-    }
-
-    .cal-top .cal-segment__btn {
-      border-color: transparent;
-    }
-
-    .cal-btn:hover:not(:disabled) {
-      color: var(--text-primary);
-      border-color: var(--border-strong);
-    }
-
-    .cal-btn:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-
-    .cal-btn--primary {
-      color: var(--text-inverse);
-      background: var(--primary);
-      border-color: var(--primary);
-      box-shadow: var(--shadow-xs);
-    }
-
-    .cal-btn--primary:hover:not(:disabled) {
-      color: var(--text-inverse);
-      background: var(--primary-dark);
-      border-color: var(--primary-dark);
-    }
-
-    .cal-btn--danger {
-      color: var(--error);
-      border-color: color-mix(in srgb, var(--error) 35%, var(--cal-line));
-    }
-
-    .cal-btn--danger:hover:not(:disabled) {
-      color: var(--error);
-      background: var(--error-subtle);
-      border-color: var(--error);
-    }
-
-    .cal-spinner {
-      width: 12px;
-      height: 12px;
-      border: 2px solid color-mix(in srgb, var(--text-inverse) 40%, transparent);
-      border-top-color: var(--text-inverse);
-      border-radius: 50%;
-      animation: cal-spin 0.7s linear infinite;
-    }
-
-    @keyframes cal-spin {
-      to { transform: rotate(360deg); }
-    }
-
-    /* ── Tira de resumen ── */
-    .cal-strip {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: var(--space-2) var(--space-3);
-      padding: 7px var(--space-4);
-      background: color-mix(in srgb, var(--bg-tertiary) 45%, var(--bg-secondary));
-      border-bottom: 1px solid var(--cal-line);
-      font-size: var(--text-xs);
-    }
-
-    .cal-strip__item {
-      display: flex;
-      align-items: baseline;
-      gap: 5px;
-      white-space: nowrap;
-    }
-
-    .cal-strip__label {
-      color: var(--text-tertiary);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      font-size: 9px;
-      font-weight: var(--font-semibold);
-    }
-
-    .cal-strip__value {
-      font-weight: var(--font-semibold);
-      font-variant-numeric: tabular-nums;
-      color: var(--text-primary);
-    }
-
-    .cal-strip__value small {
-      font-weight: var(--font-normal);
-      color: var(--text-secondary);
-    }
-
-    .cal-strip__track {
-      flex: 0 1 110px;
-      height: 3px;
-      min-width: 46px;
-      background: var(--border-default);
-      border-radius: var(--radius-full);
-      overflow: hidden;
-    }
-
-    .cal-strip__fill {
-      display: block;
-      height: 100%;
-      background: var(--primary);
-      border-radius: inherit;
-      transition: width var(--duration-300) var(--ease-out);
-    }
-
-    .cal-strip__fill--kcal {
-      background: var(--secondary);
-    }
-
-    .cal-strip__done {
-      padding: 1px 8px;
-      color: var(--secondary-dark);
-      background: color-mix(in srgb, var(--secondary) 12%, var(--bg-secondary));
-      border-radius: var(--radius-full);
-      font-variant-numeric: tabular-nums;
-    }
-
-    .cal-strip__spacer {
-      flex: 1 1 auto;
-    }
-
-    .cal-strip__hint {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
-      color: var(--text-secondary);
-      flex-wrap: wrap;
-    }
-
-    .cal-link {
-      padding: 0;
-      font: inherit;
-      font-weight: var(--font-medium);
-      color: var(--primary-dark);
-      background: none;
-      border: none;
-      border-bottom: 1px solid color-mix(in srgb, var(--primary) 40%, transparent);
-      cursor: pointer;
-    }
-
-    .cal-link:hover {
-      border-bottom-color: var(--primary);
-    }
-
-    /* ── Cuerpo ── */
-    .cal-body {
-      position: relative;
-      min-width: 0;
-      min-height: 260px;
-    }
-
-    .cal-body.is-loading::after {
-      content: '';
-      position: absolute;
-      inset: 0 0 auto 0;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--primary), transparent);
-      background-size: 220px 100%;
-      animation: cal-sweep 1.1s var(--ease-in-out) infinite;
-    }
-
-    @keyframes cal-sweep {
-      from { transform: translateX(-220px); }
-      to { transform: translateX(100%); }
-    }
-
-    /* Primera carga (sin dato previo que mantener en pantalla). */
-    .cal-skeleton {
-      display: grid;
-      gap: 1px;
-      padding: var(--space-4);
-    }
-
-    .cal-skeleton span {
-      height: 86px;
-      border-radius: var(--radius-md);
-      background: linear-gradient(
-        90deg,
-        var(--bg-tertiary) 0%,
-        color-mix(in srgb, var(--bg-tertiary) 55%, var(--bg-secondary)) 50%,
-        var(--bg-tertiary) 100%
-      );
-      background-size: 420px 100%;
-      animation: cal-shimmer 1.3s var(--ease-in-out) infinite;
-    }
-
-    @keyframes cal-shimmer {
-      from { background-position: -160px 0; }
-      to { background-position: 420px 0; }
-    }
-
-    /* Aviso de caducidades (## 12ak): rojo suave, token de peligro real, sin inventar tokens. */
-    .cal-caduca {
-      margin: 0;
-      padding: var(--space-2, 8px) var(--space-3, 12px);
-      border-radius: var(--radius-md, 10px);
-      background: rgba(220, 38, 38, 0.08);
-      color: var(--danger, #dc2626);
-      font-size: var(--text-sm, 14px);
-    }
-
-    /* ── Formularios de los diálogos ── */
-    .meal-form,
-    .goals-form,
-    .generate-form {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-4);
-    }
-
-    .meal-form__when {
-      display: flex;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: var(--space-2);
-      padding-bottom: var(--space-3);
-      border-bottom: 1px solid var(--cal-line);
-      font-size: var(--text-sm);
-    }
-
-    .meal-form__error {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-1);
-      padding: var(--space-3) var(--space-4);
-      color: var(--text-primary);
-      background: var(--error-subtle);
-      border: 1px solid color-mix(in srgb, var(--error) 30%, var(--cal-line));
-      border-left: 4px solid var(--error);
-      border-radius: var(--radius-lg);
-      font-size: var(--text-sm);
-      line-height: 1.5;
-    }
-
-    .meal-form__error strong {
-      color: var(--error);
-      font-weight: var(--font-semibold);
-    }
-
-    .meal-form__band {
-      width: 3px;
-      height: 15px;
-      border-radius: var(--radius-full);
-      background: var(--primary);
-    }
-
-    .meal-form__band[data-meal='breakfast'] { background: var(--warning); }
-    .meal-form__band[data-meal='dinner'] { background: var(--info); }
-    .meal-form__band[data-meal='snack'] { background: var(--secondary); }
-
-    .meal-form__date {
-      color: var(--text-secondary);
-      font-size: var(--text-xs);
-    }
-
-    .meal-form__tabs {
-      display: flex;
-      gap: var(--space-1);
-      margin-left: auto;
-      padding: 2px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--cal-line);
-      border-radius: var(--radius-full);
-    }
-
-    .meal-form__field {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      min-width: 0;
-    }
-
-    .meal-form__field > label {
-      font-size: var(--text-xs);
-      font-weight: var(--font-medium);
-      color: var(--text-secondary);
-    }
-
-    .meal-form__field--sm {
-      max-width: 220px;
-    }
-
-    .meal-form__field--text {
-      gap: var(--space-1);
-    }
-
-    .meal-form__field--text > label {
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-      line-height: var(--leading-normal);
-      color: var(--text-primary);
-    }
-
-    .meal-form__row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: var(--space-4);
-    }
-
-    .meal-form__actions {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      padding-top: var(--space-1);
-    }
-
-    @media (max-width: 360px) {
-      .meal-edit-actions {
+      .meal-replacement {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: var(--space-3);
       }
 
-      .meal-edit-actions > .meal-form__grow {
-        display: none;
+      .meal-replacement__form,
+      .meal-replacement__candidate {
+        display: grid;
+        gap: var(--space-3);
       }
 
-      .meal-edit-actions > .cal-btn {
-        width: 100%;
-        min-width: 0;
-        justify-content: center;
+      .meal-replacement > .cal-btn,
+      .meal-replacement__candidate > .cal-btn {
+        justify-self: start;
       }
 
-      .meal-edit-actions > .cal-btn--primary {
-        grid-column: 1 / -1;
+      .meal-replacement__candidate h3,
+      .meal-replacement__candidate p {
+        margin: 0;
       }
-    }
 
-    .meal-form__grow {
-      flex: 1 1 auto;
-    }
-
-    .tab {
-      padding: 4px 12px;
-      font: inherit;
-      font-size: var(--text-xs);
-      color: var(--text-secondary);
-      background: none;
-      border: none;
-      border-radius: var(--radius-full);
-      cursor: pointer;
-      transition: var(--transition-fast);
-    }
-
-    .tab--active {
-      color: var(--text-primary);
-      background: var(--bg-secondary);
-      box-shadow: var(--shadow-xs);
-    }
-
-    .cal-input {
-      width: 100%;
-      padding: var(--space-2) var(--space-3);
-      font-family: var(--font-sans);
-      font-size: var(--text-sm);
-      color: var(--text-primary);
-      background: var(--bg-secondary);
-      border: 1px solid var(--cal-line);
-      border-radius: var(--radius-md);
-      transition: var(--transition-fast);
-    }
-
-    .cal-input:focus {
-      outline: none;
-      border-color: var(--primary);
-      box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
-    }
-
-    .cal-input--area {
-      resize: vertical;
-      min-height: 62px;
-      line-height: 1.5;
-    }
-
-    .cal-hint {
-      font-size: var(--text-xs);
-      color: var(--text-tertiary);
-    }
-
-    .cal-muted {
-      margin: 0;
-      font-size: var(--text-sm);
-      line-height: 1.5;
-      color: var(--text-secondary);
-    }
-
-    .goals-form__options {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: var(--space-2);
-    }
-
-    .goal-option {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      padding: var(--space-2) var(--space-3);
-      font: inherit;
-      text-align: left;
-      color: var(--text-primary);
-      background: var(--bg-secondary);
-      border: 1px solid var(--cal-line);
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: var(--transition-fast);
-    }
-
-    .goal-option:hover {
-      border-color: var(--border-strong);
-      background: var(--bg-tertiary);
-    }
-
-    .goal-option--selected {
-      border-color: var(--primary);
-      background: color-mix(in srgb, var(--primary) 8%, var(--bg-secondary));
-    }
-
-    .goal-option__icon {
-      font-size: var(--text-lg);
-      line-height: 1;
-    }
-
-    .goal-option__label {
-      font-size: var(--text-sm);
-      font-weight: var(--font-medium);
-    }
-
-    /* Cabecera pegajosa en semanas largas, como en Google. */
-    @media (min-width: 1024px) {
-      .cal-body {
-        max-height: min(72vh, 720px);
-        overflow: auto;
+      .meal-replacement__candidate {
+        padding: var(--space-3);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--bg-tertiary);
       }
-    }
-
-    /* ──────────────────────── Agenda del día ──────────────────────── */
-    /* La seccion existe para leerla de pie y con una mano. Sin su propio hueco era una
-       lista de 11 px pegada al calendario —la variante que encaja DENTRO de una celda—
-       y nadie la veia. Aquí es tarjeta: aire, jerarquia y filas que se tocan. */
-    .cal-agenda {
-      display: grid;
-      gap: var(--space-3);
-      margin-top: var(--space-4);
-      padding: var(--space-4);
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-default);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-xs);
-    }
-
-    .cal-agenda__head {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-    }
-
-    .cal-agenda__who {
-      min-width: 0;
-      display: grid;
-      gap: 2px;
-      margin-right: auto;
-    }
-
-    .cal-agenda__eyebrow {
-      margin: 0;
-      font-size: var(--text-xs);
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      color: var(--text-tertiary);
-    }
-
-    .cal-agenda__title {
-      margin: 0;
-      font-size: var(--text-lg);
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .cal-agenda__today,
-    .cal-agenda__count {
-      flex: 0 0 auto;
-      padding: 2px var(--space-2);
-      border-radius: var(--radius-full);
-      font-size: var(--text-xs);
-      font-weight: 600;
-      background: var(--primary-subtle);
-      color: var(--primary-dark);
-    }
-
-    .cal-agenda__count {
-      background: var(--bg-tertiary);
-      color: var(--text-secondary);
-    }
-
-    .cal-agenda__list {
-      display: grid;
-      gap: var(--space-2);
-    }
-
-    .cal-agenda__empty {
-      display: grid;
-      justify-items: center;
-      gap: var(--space-1);
-      margin: 0;
-      padding: var(--space-5) var(--space-4);
-      text-align: center;
-      color: var(--text-secondary);
-      font-size: var(--text-sm);
-      background: var(--bg-tertiary);
-      border: 1px dashed var(--border-default);
-      border-radius: var(--radius-md);
-    }
-
-    .cal-agenda__empty small {
-      color: var(--text-tertiary);
-      font-size: var(--text-xs);
-    }
-
-    @media (min-width: 900px) {
-      .cal-agenda {
-        padding: var(--space-5);
-      }
-    }
-  `]
+    `
+  ]
 })
 export class CalendarComponent implements OnInit {
   private readonly i18n = inject(I18nService);
@@ -1739,9 +1358,11 @@ export class CalendarComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly householdService = inject(HouseholdService);
+  readonly householdService = inject(HouseholdService);
   private readonly pantryService = inject(PantryService);
   private readonly modules = inject(ModulesService);
+  private readonly aiService = inject(AiService);
+  private replacementSubscription?: Subscription;
 
   /**
    * Si la cuenta tiene encendida «Comidas y recetas». No manda sobre la ruta —la agenda es de la
@@ -1757,9 +1378,8 @@ export class CalendarComponent implements OnInit {
   readonly MEAL_TYPE_META = MEAL_TYPE_META;
   readonly mealTypes = MEAL_ORDER;
   /**
-   * Miles al estilo `es-ES` («1.450 kcal»). El pipe `number` de Angular sigue el
-   * LOCALE_ID del módulo (en-US aquí) y saldría «1,450», fuera del resto de
-   * etiquetas en español, así que se formatea a mano.
+   * Kcal en el locale activo de la app (`es-ES` o `en-GB`). El pipe `number` de
+   * Angular sigue el LOCALE_ID del módulo, no el idioma seleccionado.
    */
   readonly fmt = formatNumber;
 
@@ -1767,27 +1387,112 @@ export class CalendarComponent implements OnInit {
   readonly view = signal<CalendarView>('week');
   /** Día de referencia: ancla la semana, el mes o el día que se ve. */
   readonly anchor = signal<Date>(startOfDay(new Date()));
+  readonly viewPickerOptions = computed<PickerOption[]>(() =>
+    this.viewOptions.map((view) => ({
+      value: view,
+      label: this.i18n.t(CALENDAR_VIEW_LABELS[view])
+    }))
+  );
 
   readonly isMealModalOpen = signal(false);
   readonly mealDeletionFailed = signal(false);
+  readonly replacementOpen = signal(false);
+  readonly isReplacingMeal = signal(false);
+  readonly replacementFailed = signal(false);
+  readonly replacementCandidate = signal<AIReplacementCandidate | null>(null);
+  readonly replacementGuests = signal<AIGuestPreferences[]>([]);
+  readonly replacementMemberIds = signal<string[]>([]);
+  readonly replacementParticipantsReady = computed(() => {
+    if (this.householdService.isLoading() || this.householdService.membershipsLoading())
+      return false;
+    const activeId = this.householdService.activeHouseholdId();
+    const household = this.householdService.household();
+    return activeId ? household?.id === activeId : household === null;
+  });
+  readonly replacementMembers = computed(() => {
+    const activeId = this.householdService.activeHouseholdId();
+    const household = this.householdService.household();
+    return household?.id === activeId ? household.members.filter((member) => member.isActive) : [];
+  });
+  private readonly replacementObservedHouseholdId = signal<string | null | undefined>(undefined);
+  private readonly replacementInitializedHouseholdId = signal<string | null | undefined>(undefined);
+  private readonly replacementCandidateContext = signal<{
+    householdId: string | null;
+    revision: number;
+  } | null>(null);
+  private readonly syncReplacementHouseholdParticipants = effect(() => {
+    if (!this.replacementOpen()) return;
+    const activeId = this.householdService.activeHouseholdId();
+    if (this.replacementObservedHouseholdId() !== activeId) {
+      this.replacementObservedHouseholdId.set(activeId);
+      this.replacementInitializedHouseholdId.set(undefined);
+      this.replacementMemberIds.set([]);
+      this.replacementGuests.set([]);
+      this.replacementCandidate.set(null);
+      this.replacementCandidateContext.set(null);
+      this.replacementSubscription?.unsubscribe();
+      this.replacementSubscription = undefined;
+      this.isReplacingMeal.set(false);
+      this.replacementFailed.set(false);
+    }
+    if (!this.replacementParticipantsReady()) return;
+    if (this.replacementInitializedHouseholdId() === activeId) return;
+    this.replacementInitializedHouseholdId.set(activeId);
+    this.replacementMemberIds.set(this.replacementMembers().map((member) => member.id));
+    this.replacementGuests.set([]);
+  });
   readonly isGoalsModalOpen = signal(false);
+  readonly isSavingGoals = signal(false);
+  readonly goalsSaveError = signal(false);
   readonly isGenerateModalOpen = signal(false);
   readonly isGenerating = signal(false);
+  readonly isReplanModalOpen = signal(false);
+  readonly replanWeek = computed(() => {
+    const start = startOfWeek(this.anchor());
+    return { start: toISODate(start), end: toISODate(addDays(start, 6)) };
+  });
+  readonly generateMemberIds = signal<string[]>([]);
+  readonly generateGuests = signal<AIGuestPreferences[]>([]);
+  readonly generateServings = computed(() => {
+    const count = this.generateMemberIds().length + this.generateGuests().length;
+    if (this.householdService.household()) return count || 2;
+    return Math.max(2, count + 1);
+  });
+  private readonly generateContextHouseholdId = signal<string | null | undefined>(undefined);
+  private readonly syncGenerateHouseholdParticipants = effect(() => {
+    if (!this.isGenerateModalOpen()) return;
+    const householdId = this.householdService.activeHouseholdId();
+    const household = this.householdService.household();
+    if (householdId && household?.id !== householdId) return;
+    if (this.generateContextHouseholdId() === householdId) return;
+    this.generateContextHouseholdId.set(householdId);
+    this.generateMemberIds.set(
+      household?.members.filter((member) => member.isActive).map((member) => member.id) ?? []
+    );
+    this.generateGuests.set([]);
+  });
   /** Pestaña del modal de comida: `?mealTab=recipe` mientras está abierto. */
   readonly mealTab = signal<'custom' | 'recipe'>('custom');
   readonly selectedGoal = signal<GoalType | null>(null);
 
   draft: MealDraft = emptyDraft(toISODate(new Date()), 'lunch');
-  goalsDraft = { type: 'balanced' as GoalType | string, dailyCalories: 2000 };
+  goalsDraft = {
+    types: ['balanced'] as TasteGoal[],
+    dailyCalories: 2000,
+    customInstructions: ''
+  };
   generateOptions = {
-    goalType: 'balanced',
+    goalTypes: ['balanced'] as TasteGoal[],
     calories: 2000,
     customDescription: '',
     /**
      * Que comidas se piden en el plan. Un mapa por clave, no una lista: lo que la plantilla pinta son
      * cuatro casillas y una lista obligaria a reconstruirla en cada click (y a perder el orden del dia).
      */
-    mealTypes: { breakfast: true, lunch: true, snack: true, dinner: true } as Record<MealType, boolean>
+    mealTypes: { breakfast: true, lunch: true, snack: true, dinner: true } as Record<
+      MealType,
+      boolean
+    >
   };
   readonly goalOptions = GOAL_OPTIONS;
   /**
@@ -1799,7 +1504,9 @@ export class CalendarComponent implements OnInit {
    * casa eligio.
    */
   readonly allowedMeals = computed(() => plannedMealTypes(this.tasteService.mealPlan()));
-  readonly blockedMeals = computed(() => MEAL_ORDER.filter((type) => !this.allowedMeals().includes(type)));
+  readonly blockedMeals = computed(() =>
+    MEAL_ORDER.filter((type) => !this.allowedMeals().includes(type))
+  );
 
   /**
    * ## 12ak: lo que caduca en 7 dias o menos, en orden de prisa, para avisar en el modal de
@@ -1809,9 +1516,9 @@ export class CalendarComponent implements OnInit {
   readonly caducanPronto = computed(() =>
     this.pantryService
       .caducidades()
-      .filter(fila => fila.daysLeft !== null && fila.daysLeft <= 7)
+      .filter((fila) => fila.daysLeft !== null && fila.daysLeft <= 7)
       .slice(0, 5)
-      .map(fila => fila.name)
+      .map((fila) => fila.name)
   );
   /** Lo que recorre la plantilla del dialogo de IA: el orden del dia, sin las bloqueadas. */
   readonly mealTypesForPicker = this.allowedMeals;
@@ -1840,17 +1547,19 @@ export class CalendarComponent implements OnInit {
   readonly days = computed<CalendarDayView[]>(() => {
     const view = this.view();
     const anchor = this.anchor();
-    const dates =
-      view === 'month' ? monthGrid(anchor) : view === 'week' ? weekDays(anchor) : [startOfDay(anchor)];
+    const dates = calendarViewDates(view, anchor);
     const byDate = this.calendarService.mealsByDate();
     const monthAnchor = anchor;
 
     return dates.map((date) => {
       const iso = toISODate(date);
-      // Apagar la capa de comidas no es esconder CSS: es no darles nada que pintar, y
-      // asi las tres vistas (mes, semana, día) se comportan igual sin tocarlas.
-      const meals = this.mealsVisible() ? byDate.get(iso) ?? [] : [];
-      const slots = { breakfast: [], lunch: [], dinner: [], snack: [] } as Record<MealType, CalendarMeal[]>;
+      // Apagar la capa de comidas no es esconder CSS: es no darles nada que pintar,
+      // y así cada vista respeta la misma selección de capas.
+      const meals = this.mealsVisible() ? (byDate.get(iso) ?? []) : [];
+      const slots = { breakfast: [], lunch: [], dinner: [], snack: [] } as Record<
+        MealType,
+        CalendarMeal[]
+      >;
       let calories = 0;
       let hasNutrition = false;
       let done = 0;
@@ -1867,7 +1576,10 @@ export class CalendarComponent implements OnInit {
       return {
         date,
         iso,
-        inCurrentMonth: view !== 'month' ? true : date.getMonth() === monthAnchor.getMonth() && date.getFullYear() === monthAnchor.getFullYear(),
+        inCurrentMonth:
+          view !== 'month' ||
+          (date.getMonth() === monthAnchor.getMonth() &&
+            date.getFullYear() === monthAnchor.getFullYear()),
         isToday: isSameDayAsToday(date),
         meals,
         slots,
@@ -1882,7 +1594,7 @@ export class CalendarComponent implements OnInit {
 
   readonly singleDay = computed<CalendarDayView | null>(() => this.days()[0] ?? null);
 
-  /** Rango que hay que pedir: cubre la rejilla entera, no solo el mes. */
+  /** Rango inclusivo que hay que pedir para toda la vista activa. */
   /**
    * El rango visible se calcula sobre el ancla y la vista, NUNCA sobre `days()`.
    *
@@ -1893,18 +1605,7 @@ export class CalendarComponent implements OnInit {
    * El rango depende de lo que se mira, no de lo que se ha cargado.
    */
   readonly visibleRange = computed<[string, string]>(() => {
-    const anchor = this.anchor();
-    const view = this.view();
-    if (view === 'month') {
-      const grid = monthGrid(anchor);
-      return [toISODate(grid[0]), toISODate(grid[grid.length - 1])];
-    }
-    if (view === 'week') {
-      const days = weekDays(anchor);
-      return [toISODate(days[0]), toISODate(days[days.length - 1])];
-    }
-    const iso = toISODate(startOfDay(anchor));
-    return [iso, iso];
+    return calendarViewRange(this.view(), this.anchor());
   });
 
   /**
@@ -1926,15 +1627,18 @@ export class CalendarComponent implements OnInit {
   readonly expectedMeals = computed(() => this.countedDays().length * MEAL_ORDER.length);
 
   constructor() {
-    // Convención de la app: lo que se ve, en la URL. Aquí son dos cosas —la vista
-    // y el día ancla—, así que se leen juntas y se escriben en UNA sola
-    // navegacion: dos `router.navigate` seguidos en el mismo tick cancelan el
-    // primero y el resultado es un `?view=` que desaparece a media prueba.
-    readTabParam<CalendarView>(this.route, CALENDAR_VIEW_PARAM, CALENDAR_VIEWS, 'week', (value) =>
-      this.view.set(value)
-    );
-    const fromUrl = parseISODate(this.route.snapshot.queryParamMap.get(CALENDAR_DATE_PARAM));
-    if (fromUrl) this.anchor.set(fromUrl);
+    // La vista y la fecha forman una sola unidad de navegación. Leer la URL de
+    // forma reactiva permite que Atrás/Adelante restaure ambos valores, no solo
+    // que la dirección cambie mientras la pantalla se queda en el estado nuevo.
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const requestedView = params.get(CALENDAR_VIEW_PARAM);
+      const nextView = (CALENDAR_VIEWS as readonly string[]).includes(requestedView ?? '')
+        ? (requestedView as CalendarView)
+        : 'week';
+      const nextAnchor = parseISODate(params.get(CALENDAR_DATE_PARAM)) ?? startOfDay(new Date());
+      this.view.set(nextView);
+      if (toISODate(nextAnchor) !== toISODate(this.anchor())) this.anchor.set(nextAnchor);
+    });
 
     effect(() => this.writeViewInUrl());
 
@@ -1956,16 +1660,33 @@ export class CalendarComponent implements OnInit {
   private writeViewInUrl(): void {
     const view = this.view();
     const iso = toISODate(this.anchor());
-    const isToday = iso === toISODate(startOfDay(new Date()));
+    const today = toISODate(startOfDay(new Date()));
+    const isToday = iso === today;
+    const targetView = view === 'week' ? null : view;
+    const targetDate = isToday ? null : iso;
+    const currentParams = this.route.snapshot.queryParamMap;
+    const currentView = currentParams.get(CALENDAR_VIEW_PARAM);
+    const currentDate = currentParams.get(CALENDAR_DATE_PARAM);
+
+    if (currentView === targetView && currentDate === targetDate) return;
+
+    // Entradas directas no canónicas se limpian reemplazando la URL actual;
+    // los cambios iniciados por la persona sí se apilan para respetar el
+    // historial del navegador.
+    const parsedCurrentDate = parseISODate(currentDate);
+    const replaceUrl =
+      (currentView !== null &&
+        (!(CALENDAR_VIEWS as readonly string[]).includes(currentView) || currentView === 'week')) ||
+      (currentDate !== null && (!parsedCurrentDate || toISODate(parsedCurrentDate) === today));
 
     this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {
-        [CALENDAR_VIEW_PARAM]: view === 'week' ? null : view,
-        [CALENDAR_DATE_PARAM]: isToday ? null : iso
+        [CALENDAR_VIEW_PARAM]: targetView,
+        [CALENDAR_DATE_PARAM]: targetDate
       },
       queryParamsHandling: 'merge',
-      replaceUrl: true
+      replaceUrl
     });
   }
 
@@ -1988,6 +1709,17 @@ export class CalendarComponent implements OnInit {
         return labels.month(anchor);
       case 'day':
         return labels.longDay(anchor);
+      case 'year':
+        return String(anchor.getFullYear());
+      case 'agenda': {
+        const days = this.days();
+        const format = new Intl.DateTimeFormat(dateLocale(), {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        });
+        return `${format.format(days[0]?.date ?? anchor)} – ${format.format(days[days.length - 1]?.date ?? anchor)}`;
+      }
       default: {
         const days = this.days();
         return labels.weekRange(days[0]?.date ?? anchor, days[days.length - 1]?.date ?? anchor);
@@ -2002,6 +1734,10 @@ export class CalendarComponent implements OnInit {
         return labels.month(this.anchor());
       case 'day':
         return this.i18n.t('calendar.este_dia');
+      case 'year':
+        return String(this.anchor().getFullYear());
+      case 'agenda':
+        return this.i18n.t('calendar.view.agenda');
       default:
         return this.i18n.t('calendar.esta_semana');
     }
@@ -2023,8 +1759,29 @@ export class CalendarComponent implements OnInit {
   }
 
   goalLabel(): string {
-    const type = this.selectedGoal() ?? this.calendarService.goalType();
-    return type ? this.i18n.t(GOAL_TYPE_LABELS[type] ?? ('calendar.goal.custom' as never)) : '';
+    return this.currentGoals()
+      .map((goal) => this.i18n.t(GOAL_TYPE_LABELS[goal] ?? ('calendar.goal.custom' as never)))
+      .join(' · ');
+  }
+
+  goalCount(): number {
+    return this.currentGoals().length;
+  }
+
+  goalAriaLabel(): string {
+    const label = this.goalLabel();
+    return label
+      ? `${this.i18n.t('calendar.objetivo')}: ${label}`
+      : this.i18n.t('calendar.objetivo');
+  }
+
+  private currentGoals(): GoalType[] {
+    const saved = this.calendarService.goals();
+    if (saved?.types?.length) return saved.types;
+    if (saved?.type) return [saved.type];
+    if (this.selectedGoal()) return [this.selectedGoal()!];
+    const legacy = this.calendarService.goalType();
+    return legacy ? [legacy] : [];
   }
 
   plannedPercent(): number {
@@ -2043,7 +1800,9 @@ export class CalendarComponent implements OnInit {
 
   /** La primera vez no hay nada que enseñar: esqueleto. Después, barra fina. */
   showSkeleton(): boolean {
-    return this.isLoading() && this.calendarService.meals().length === 0 && !this.calendarService.error();
+    return (
+      this.isLoading() && this.calendarService.meals().length === 0 && !this.calendarService.error()
+    );
   }
 
   reload(): void {
@@ -2059,15 +1818,17 @@ export class CalendarComponent implements OnInit {
     this.view.set(view);
   }
 
+  setViewFromPicker(value: string | null): void {
+    if ((this.viewOptions as readonly string[]).includes(String(value)))
+      this.setView(value as CalendarView);
+  }
+
   shift(direction: 1 | -1): void {
-    const anchor = this.anchor();
-    const next =
-      this.view() === 'month'
-        ? addMonths(anchor, direction)
-        : this.view() === 'week'
-          ? addDays(anchor, direction * WEEK_LENGTH)
-          : addDays(anchor, direction);
-    this.anchor.set(next);
+    this.anchor.set(shiftCalendarAnchor(this.view(), this.anchor(), direction));
+  }
+
+  shiftMiniMonth(direction: 1 | -1): void {
+    this.anchor.set(addMonths(this.anchor(), direction));
   }
 
   goToToday(): void {
@@ -2086,17 +1847,34 @@ export class CalendarComponent implements OnInit {
     this.view.set('day');
   }
 
+  openMonthFor(iso: string): void {
+    const date = parseISODate(iso);
+    if (date) this.anchor.set(date);
+    this.view.set('month');
+  }
+
+  openMealFromAgenda(meal: CalendarMeal): void {
+    this.openEditModal(meal);
+  }
+
   /* ─────────────────────────── Teclado ─────────────────────────── */
 
-  /** ← → periodos · T hoy · D/S/M vistas (como en Google Calendar). */
+  /** ← → periodos · T hoy · D/4/S/M/Y/A vistas (como en Google Calendar). */
   onKeydown(event: KeyboardEvent): void {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
-    if (this.isMealModalOpen() || this.isGoalsModalOpen() || this.isGenerateModalOpen()) return;
+    if (
+      this.isMealModalOpen() ||
+      this.isGoalsModalOpen() ||
+      this.isGenerateModalOpen() ||
+      this.isEventModalOpen()
+    )
+      return;
 
     const target = event.target as HTMLElement | null;
     if (target) {
       const tag = target.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable)
+        return;
     }
 
     switch (event.key) {
@@ -2122,6 +1900,17 @@ export class CalendarComponent implements OnInit {
       case 'M':
         this.setView('month');
         break;
+      case '4':
+        this.setView('fourDays');
+        break;
+      case 'y':
+      case 'Y':
+        this.setView('year');
+        break;
+      case 'a':
+      case 'A':
+        this.setView('agenda');
+        break;
       default:
         return;
     }
@@ -2143,8 +1932,10 @@ export class CalendarComponent implements OnInit {
   }
 
   openAddModal(date: string, mealType: MealType, time?: string): void {
+    this.resetReplacementState();
     this.mealDeletionFailed.set(false);
     this.draft = emptyDraft(date, mealType);
+    this.draft.servings = this.householdService.defaultServings();
     // La hora es la de la casa, no una pregunta: acabamos de decir a que hora se cena, y volver a
     // pedirla por cada comida seria no haberse enterado. Se puede vaciar la casilla, y entonces la
     // comida queda «sin hora» (la rejilla la coloca en su ancla) —es un estado real, no un cero.
@@ -2157,6 +1948,7 @@ export class CalendarComponent implements OnInit {
   }
 
   openEditModal(meal: CalendarMeal): void {
+    this.resetReplacementState();
     this.mealDeletionFailed.set(false);
     this.draft = {
       id: meal.id,
@@ -2172,6 +1964,150 @@ export class CalendarComponent implements OnInit {
     this.isMealModalOpen.set(true);
   }
 
+  toggleReplacementForm(): void {
+    const opening = !this.replacementOpen();
+    if (opening) this.householdService.ensureHousehold();
+    this.replacementOpen.set(opening);
+    this.replacementFailed.set(false);
+    this.replacementCandidate.set(null);
+    this.replacementCandidateContext.set(null);
+    if (opening && this.replacementParticipantsReady()) {
+      const activeId = this.householdService.activeHouseholdId();
+      this.replacementObservedHouseholdId.set(activeId);
+      this.replacementInitializedHouseholdId.set(activeId);
+      this.replacementMemberIds.set(this.replacementMembers().map((member) => member.id));
+      this.replacementGuests.set([]);
+    }
+    if (!opening) {
+      this.replacementGuests.set([]);
+      this.replacementMemberIds.set([]);
+      this.replacementObservedHouseholdId.set(undefined);
+      this.replacementInitializedHouseholdId.set(undefined);
+    }
+  }
+
+  updateReplacementMembers(memberIds: string[]): void {
+    const allowedIds = new Set(this.replacementMembers().map((member) => member.id));
+    this.replacementMemberIds.set([...new Set(memberIds)].filter((id) => allowedIds.has(id)));
+  }
+
+  updateReplacementGuests(guests: AIGuestPreferences[]): void {
+    this.replacementGuests.set(
+      guests.slice(0, 8).map((guest) => ({
+        allergies: [...guest.allergies],
+        intolerances: [...guest.intolerances],
+        diets: [...guest.diets],
+        likes: [...guest.likes],
+        dislikes: [...guest.dislikes],
+        notes: guest.notes.slice(0, 300)
+      }))
+    );
+  }
+
+  requestMealReplacement(): void {
+    const mealId = this.draft.id;
+    if (!mealId || this.isReplacingMeal()) return;
+    if (!this.replacementParticipantsReady()) {
+      this.replacementFailed.set(true);
+      return;
+    }
+    const householdId = this.householdService.activeHouseholdId();
+    const contextRevision = this.householdService.contextRevision();
+    const allowedIds = new Set(this.replacementMembers().map((member) => member.id));
+    const householdMemberIds = this.replacementMemberIds().filter((id) => allowedIds.has(id));
+    const guests = this.replacementGuests().map((guest) => ({
+      allergies: this.normalizeGuestValues(guest.allergies),
+      intolerances: this.normalizeGuestValues(guest.intolerances),
+      diets: this.normalizeGuestValues(guest.diets),
+      likes: this.normalizeGuestValues(guest.likes),
+      dislikes: this.normalizeGuestValues(guest.dislikes),
+      notes: guest.notes.replace(/\s+/g, ' ').trim().slice(0, 300)
+    }));
+    this.replacementSubscription?.unsubscribe();
+    this.replacementFailed.set(false);
+    this.replacementCandidate.set(null);
+    this.replacementCandidateContext.set(null);
+    this.isReplacingMeal.set(true);
+    this.replacementSubscription = this.aiService
+      .replaceMeal({ mealId, householdMemberIds, guests })
+      .subscribe({
+        next: (candidate) => {
+          this.isReplacingMeal.set(false);
+          this.replacementSubscription = undefined;
+          if (!this.replacementContextMatches(householdId, contextRevision)) return;
+          if (!candidate) {
+            this.replacementFailed.set(true);
+            return;
+          }
+          this.replacementCandidate.set(candidate);
+          this.replacementCandidateContext.set({ householdId, revision: contextRevision });
+        },
+        error: () => {
+          this.isReplacingMeal.set(false);
+          this.replacementSubscription = undefined;
+          if (this.replacementContextMatches(householdId, contextRevision)) {
+            this.replacementFailed.set(true);
+          }
+        }
+      });
+  }
+
+  applyMealReplacement(): void {
+    const mealId = this.draft.id;
+    const candidate = this.replacementCandidate();
+    const context = this.replacementCandidateContext();
+    if (!mealId || !candidate || !context) return;
+    if (!this.replacementContextMatches(context.householdId, context.revision)) {
+      this.replacementCandidate.set(null);
+      this.replacementCandidateContext.set(null);
+      this.replacementFailed.set(true);
+      return;
+    }
+    this.calendarService
+      .updateMeal(mealId, { recipeId: null, customMeal: candidate.name } as never)
+      .subscribe((saved) => {
+        if (!this.replacementContextMatches(context.householdId, context.revision)) return;
+        if (!saved) {
+          this.replacementFailed.set(true);
+          return;
+        }
+        this.toastService.success(this.i18n.t('calendar.replacement_applied'), candidate.name);
+        this.closeMealModal();
+      });
+  }
+
+  private resetReplacementState(): void {
+    this.replacementSubscription?.unsubscribe();
+    this.replacementSubscription = undefined;
+    this.replacementOpen.set(false);
+    this.isReplacingMeal.set(false);
+    this.replacementFailed.set(false);
+    this.replacementCandidate.set(null);
+    this.replacementGuests.set([]);
+    this.replacementMemberIds.set([]);
+    this.replacementObservedHouseholdId.set(undefined);
+    this.replacementInitializedHouseholdId.set(undefined);
+    this.replacementCandidateContext.set(null);
+  }
+
+  private replacementContextMatches(householdId: string | null, revision: number): boolean {
+    return (
+      this.replacementParticipantsReady() &&
+      this.householdService.activeHouseholdId() === householdId &&
+      this.householdService.contextRevision() === revision
+    );
+  }
+
+  private normalizeGuestValues(values: string[]): string[] {
+    const unique = new Map<string, string>();
+    for (const raw of values) {
+      const value = raw.replace(/\s+/g, ' ').trim().slice(0, 60);
+      const key = value.toLocaleLowerCase();
+      if (value && !unique.has(key)) unique.set(key, value);
+    }
+    return [...unique.values()].slice(0, 20);
+  }
+
   /** Cambia de pestaña y lo deja reflejado en la URL. */
   switchAddMealTab(tab: 'custom' | 'recipe'): void {
     this.mealTab.set(tab);
@@ -2180,6 +2116,7 @@ export class CalendarComponent implements OnInit {
 
   closeMealModal(): void {
     this.mealDeletionFailed.set(false);
+    this.resetReplacementState();
     this.isMealModalOpen.set(false);
     // El modal ya no está: la pestaña deja de tener sentido en la URL.
     clearTabParam(this.router, this.route, 'mealTab');
@@ -2219,17 +2156,23 @@ export class CalendarComponent implements OnInit {
     request.subscribe({
       next: (saved) => {
         if (!saved) {
-          this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.no_se_pudo_guardar'));
+          this.toastService.error(
+            this.i18n.t('ui.error'),
+            this.i18n.t('calendar.no_se_pudo_guardar')
+          );
           return;
         }
         const when = parseISODate(this.draft.date);
         this.toastService.success(
-          this.draft.id ? this.i18n.t('calendar.comida_actualizada') : this.i18n.t('calendar.comida_anadida'),
+          this.draft.id
+            ? this.i18n.t('calendar.comida_actualizada')
+            : this.i18n.t('calendar.comida_anadida'),
           `${this.i18n.t(MEAL_LABEL_KEYS[this.draft.mealType])}${when ? ' · ' + labels.longDay(when) : ''}`
         );
         this.closeMealModal();
       },
-      error: () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.no_se_pudo_guardar'))
+      error: () =>
+        this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.no_se_pudo_guardar'))
     });
   }
 
@@ -2239,9 +2182,12 @@ export class CalendarComponent implements OnInit {
    */
   private huecosYaOcupados(skipped: number): string {
     if (!skipped) return '';
-    return ' · ' + this.i18n.t(
-      skipped === 1 ? 'calendar.hueco_ocupado_uno' : 'calendar.huecos_ocupados_varios',
-      { n: skipped }
+    return (
+      ' · ' +
+      this.i18n.t(
+        skipped === 1 ? 'calendar.hueco_ocupado_uno' : 'calendar.huecos_ocupados_varios',
+        { n: skipped }
+      )
     );
   }
 
@@ -2288,36 +2234,86 @@ export class CalendarComponent implements OnInit {
 
   openGoalsModal(): void {
     const goals = this.calendarService.goals();
+    this.goalsSaveError.set(false);
     this.goalsDraft = {
-      type: goals?.type ?? this.selectedGoal() ?? 'balanced',
-      dailyCalories: goals?.dailyCalories ?? this.calendarService.targetCalories()
+      types: [
+        ...(goals?.types ?? (goals?.type ? [goals.type] : [this.selectedGoal() ?? 'balanced']))
+      ],
+      dailyCalories: goals?.dailyCalories ?? this.calendarService.targetCalories(),
+      customInstructions: goals?.customInstructions ?? ''
     };
     this.isGoalsModalOpen.set(true);
   }
 
+  toggleWeeklyGoal(goal: TasteGoal): void {
+    this.goalsDraft.types = toggleTasteGoal(this.goalsDraft.types, goal);
+  }
+
   closeGoalsModal(): void {
+    if (this.isSavingGoals()) return;
     this.isGoalsModalOpen.set(false);
+    this.goalsSaveError.set(false);
   }
 
   saveGoals(): void {
-    const type = (this.goalsDraft.type as GoalType) || 'balanced';
-    this.selectedGoal.set(type);
+    if (
+      this.isSavingGoals() ||
+      this.goalsDraft.types.length === 0 ||
+      (this.goalsDraft.types.includes('custom') && !this.goalsDraft.customInstructions.trim())
+    )
+      return;
     // Se parte de lo guardado: `PATCH /goals` reemplaza el objeto entero, así que
     // las restricciones que ya estuvieran ahí se copian en vez de borrarse.
     const previous = this.calendarService.goals();
-    this.calendarService.updateGoals({
-      ...previous,
-      type,
-      dailyCalories: Number(this.goalsDraft.dailyCalories) || undefined,
-      restrictions: previous?.restrictions ?? []
-    }, toISODate(startOfWeek(this.anchor())));
-    this.toastService.success(this.i18n.t('ui.guardado'), this.i18n.t('calendar.objetivos_de_la_semana'));
-    this.closeGoalsModal();
+    const selectedTypes = [...this.goalsDraft.types];
+    this.isSavingGoals.set(true);
+    this.goalsSaveError.set(false);
+    this.calendarService
+      .updateGoals(
+        {
+          ...previous,
+          types: selectedTypes,
+          customInstructions: this.goalsDraft.customInstructions.trim() || null,
+          dailyCalories: Number(this.goalsDraft.dailyCalories) || undefined,
+          restrictions: previous?.restrictions ?? []
+        },
+        toISODate(startOfWeek(this.anchor()))
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.isSavingGoals.set(false);
+          this.selectedGoal.set(selectedTypes[0] as GoalType);
+          this.closeGoalsModal();
+          this.toastService.success(
+            this.i18n.t('ui.guardado'),
+            this.i18n.t('calendar.objetivos_de_la_semana')
+          );
+        },
+        error: () => {
+          this.isSavingGoals.set(false);
+          this.goalsSaveError.set(true);
+        }
+      });
   }
 
   /* ────────────────────────── Plan con IA ────────────────────────── */
 
   private tasteGoalApplied = false;
+
+  openReplanModal(): void {
+    this.householdService.ensureHousehold();
+    this.isReplanModalOpen.set(true);
+  }
+
+  closeReplanModal(): void {
+    this.isReplanModalOpen.set(false);
+  }
+
+  onReplanApplied(): void {
+    this.isReplanModalOpen.set(false);
+    this.reload();
+  }
 
   openGenerateModal(): void {
     // ## 12ak: al planificar se mira lo que caduca. La peticion es barata (una lectura) y sin
@@ -2329,6 +2325,9 @@ export class CalendarComponent implements OnInit {
     for (const type of MEAL_ORDER) {
       this.generateOptions.mealTypes[type] = permitidas.includes(type);
     }
+    this.generateContextHouseholdId.set(undefined);
+    this.generateMemberIds.set([]);
+    this.generateGuests.set([]);
     this.isGenerateModalOpen.set(true);
     this.applyTasteGoal();
   }
@@ -2381,42 +2380,60 @@ export class CalendarComponent implements OnInit {
       return;
     }
 
-    const { goal, goalNotes } = this.tasteService.taste();
-    if (!goal || goal === 'balanced' || this.generateOptions.goalType !== 'balanced') return;
-
+    const { goals, goalNotes } = this.tasteService.taste();
+    if (
+      this.generateOptions.goalTypes.length !== 1 ||
+      this.generateOptions.goalTypes[0] !== 'balanced'
+    )
+      return;
     this.tasteGoalApplied = true;
-    this.generateOptions.goalType = goal;
-    if (goal === 'custom' && !this.generateOptions.customDescription) {
+    this.generateOptions.goalTypes = [...(goals.length ? goals : (['balanced'] as TasteGoal[]))];
+    if (
+      this.generateOptions.goalTypes.includes('custom') &&
+      !this.generateOptions.customDescription
+    ) {
       this.generateOptions.customDescription = goalNotes;
     }
   }
 
   closeGenerateModal(): void {
     this.isGenerateModalOpen.set(false);
+    this.generateMemberIds.set([]);
+    this.generateGuests.set([]);
+    this.generateContextHouseholdId.set(undefined);
   }
 
-  onGoalTypeChange(): void {
-    if (this.generateOptions.goalType !== 'custom') {
-      this.generateOptions.customDescription = '';
-    }
+  toggleGenerateGoal(goal: TasteGoal): void {
+    this.generateOptions.goalTypes = toggleTasteGoal(this.generateOptions.goalTypes, goal);
+  }
+
+  generateGoalsReady(): boolean {
+    return (
+      this.generateOptions.goalTypes.length > 0 &&
+      (!this.generateOptions.goalTypes.includes('custom') ||
+        this.generateOptions.customDescription.trim().length > 0)
+    );
   }
 
   generateWeeklyPlan(): void {
     // El boton ya esta apagado en ese caso; esto es por si el bloqueo llego mientras el dialog estaba
     // abierto (la otra pestana, otro aparato). Nunca se manda una peticion que el server va a tirar.
-    if (this.allowedMeals().length === 0) return;
+    if (this.allowedMeals().length === 0 || !this.generateGoalsReady()) return;
     this.isGenerating.set(true);
 
     // La IA planifica la semana del día ancla, vea lo que se vea.
     const start = startOfWeek(this.anchor());
     const end = addDays(start, 6);
 
-    const goals: { type: string; caloriesTarget?: number; customInstructions?: string } = {
-      type: this.generateOptions.goalType
+    const goals: { types: string[]; caloriesTarget?: number; customInstructions?: string } = {
+      types: [...this.generateOptions.goalTypes]
     };
     const calories = Number(this.generateOptions.calories);
     if (calories > 0) goals.caloriesTarget = calories;
-    if (this.generateOptions.goalType === 'custom' && this.generateOptions.customDescription.trim()) {
+    if (
+      this.generateOptions.goalTypes.includes('custom') &&
+      this.generateOptions.customDescription.trim()
+    ) {
       goals.customInstructions = this.generateOptions.customDescription.trim();
     }
 
@@ -2425,14 +2442,19 @@ export class CalendarComponent implements OnInit {
         startDate: toISODate(start),
         endDate: toISODate(end),
         goals,
-        mealTypes: this.generateMealTypes
+        mealTypes: this.generateMealTypes,
+        householdMemberIds: this.generateMemberIds(),
+        guests: this.generateGuests()
       })
       .subscribe({
         next: (data) => {
           this.isGenerating.set(false);
           const saved = data?.saved;
           if (!saved) {
-            this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.la_ia_no_devolvio'));
+            this.toastService.error(
+              this.i18n.t('ui.error'),
+              this.i18n.t('calendar.la_ia_no_devolvio')
+            );
             return;
           }
           this.reload();
@@ -2441,7 +2463,9 @@ export class CalendarComponent implements OnInit {
             this.i18n.t('calendar.plan_guardado'),
             saved.created
               ? this.i18n.t(
-                  saved.created === 1 ? 'calendar.comidas_generadas_uno' : 'calendar.comidas_generadas_varios',
+                  saved.created === 1
+                    ? 'calendar.comidas_generadas_uno'
+                    : 'calendar.comidas_generadas_varios',
                   { n: saved.created }
                 ) + this.huecosYaOcupados(saved.skipped)
               : this.i18n.t('calendar.la_semana_ya_estaba')
@@ -2460,7 +2484,10 @@ export class CalendarComponent implements OnInit {
             );
             return;
           }
-          this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('calendar.no_se_pudo_generar'));
+          this.toastService.error(
+            this.i18n.t('ui.error'),
+            this.i18n.t('calendar.no_se_pudo_generar')
+          );
         }
       });
   }
@@ -2470,6 +2497,28 @@ export class CalendarComponent implements OnInit {
   readonly eventKinds = HOUSEHOLD_EVENT_KINDS;
   readonly eventColors = HOUSEHOLD_EVENT_COLORS;
   readonly isEventModalOpen = signal(false);
+  readonly isRecurrenceModalOpen = signal(false);
+  readonly eventMoreOptions = signal(false);
+  customRecurrenceDraft: CalendarRecurrenceRule = {
+    frequency: 'weekly',
+    interval: 1,
+    weekdays: [1],
+    end: { type: 'never' }
+  };
+  customEndType: RecurrenceEndType = 'never';
+  customEndDate = '';
+  customEndCount = 13;
+  customRecurrenceError = '';
+  private presetBeforeCustom: EventRecurrencePreset = 'none';
+  readonly recurrenceWeekdays = WEEKDAYS.map((value) => {
+    const date = new Date(2024, 0, value);
+    return {
+      value,
+      short: new Intl.DateTimeFormat(dateLocale(), { weekday: 'narrow' }).format(date),
+      // La forma estrecha es visual; el nombre accesible debe identificar el día completo.
+      label: new Intl.DateTimeFormat(dateLocale(), { weekday: 'long' }).format(date)
+    };
+  });
   eventDraft: {
     id?: string;
     title: string;
@@ -2490,6 +2539,8 @@ export class CalendarComponent implements OnInit {
     attendeeIds: string[];
     /** Cada cuanto se repite (HOGARIA-SPEC 12t-R). `none` es un dia suelto, como toda la vida. */
     recurrence: HouseholdRecurrence;
+    repeatPreset: EventRecurrencePreset;
+    recurrenceRule: CalendarRecurrenceRule | null;
     /** El dia que define la serie. Al abrir un martes cualquiera sigue siendo el de inicio: si no, cambiar el titulo le moveria el ancla. */
     seriesDate?: string;
     /** El dia sobre el que se hizo clic. Es el que se quita con «solo este dia no». */
@@ -2509,6 +2560,8 @@ export class CalendarComponent implements OnInit {
     sharedWithHousehold: true,
     attendeeIds: [],
     recurrence: 'none',
+    repeatPreset: 'none',
+    recurrenceRule: null,
     editable: true
   };
 
@@ -2540,17 +2593,200 @@ export class CalendarComponent implements OnInit {
     if (!this.eventDraft.colorTouched) this.eventDraft.color = null;
   }
 
-  /** Opciones del «Repetir» (12t-R): el catalogo esta en el modelo; la etiqueta, en el diccionario. */
-  readonly recurrenceOptions = computed<PickerOption[]>(() =>
-    HOUSEHOLD_RECURRENCES.map((recurrence) => ({
-      value: recurrence,
-      label: this.i18n.t(HOUSEHOLD_RECURRENCE_META[recurrence].labelKey)
-    }))
-  );
+  protected eventDateLabel(): string {
+    const date = parseISODate(this.eventDraft.date);
+    return date
+      ? new Intl.DateTimeFormat(dateLocale(), {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long'
+        }).format(date)
+      : this.eventDraft.date;
+  }
 
-  /** El picker emite `string | null`; aqui el `null` vuelve a ser «una vez», que es lo que significa. */
+  protected eventDateCompactLabel(): string {
+    const date = parseISODate(this.eventDraft.date);
+    return date
+      ? new Intl.DateTimeFormat(dateLocale(), { weekday: 'short', day: 'numeric', month: 'short' })
+          .format(date)
+          .replace(/\./g, '')
+      : this.eventDraft.date;
+  }
+
+  eventRecurrenceOptions(): PickerOption[] {
+    const date = parseISODate(this.eventDraft.date) ?? this.anchor();
+    const weekday = new Intl.DateTimeFormat(dateLocale(), { weekday: 'long' }).format(date);
+    const monthDay = String(date.getDate());
+    const dateLabel = new Intl.DateTimeFormat(dateLocale(), {
+      day: 'numeric',
+      month: 'long'
+    }).format(date);
+    return [
+      { value: 'none', label: this.i18n.t('calendar.no_se_repite') },
+      { value: 'daily', label: this.i18n.t('calendar.todos_los_dias') },
+      { value: 'weekdays', label: this.i18n.t('calendar.repeat_weekdays') },
+      { value: 'weekly', label: this.i18n.t('calendar.repeat_weekly_on', { day: weekday }) },
+      { value: 'monthly', label: this.i18n.t('calendar.repeat_monthly_on', { day: monthDay }) },
+      { value: 'yearly', label: this.i18n.t('calendar.repeat_yearly_on', { date: dateLabel }) },
+      { value: 'custom', label: this.i18n.t('calendar.repeat_custom') }
+    ];
+  }
+
+  readonly recurrenceFrequencyOptions = computed<PickerOption[]>(() => [
+    { value: 'daily', label: this.i18n.t('calendar.repeat.frequency.daily') },
+    { value: 'weekly', label: this.i18n.t('calendar.repeat.frequency.weekly') },
+    { value: 'monthly', label: this.i18n.t('calendar.repeat.frequency.monthly') },
+    { value: 'yearly', label: this.i18n.t('calendar.repeat.frequency.yearly') }
+  ]);
+
+  /** El selector repite lo previsible con un toque y abre el diálogo solo para reglas avanzadas. */
   setRecurrence(value: string | null): void {
-    this.eventDraft.recurrence = value === 'daily' || value === 'weekly' ? value : 'none';
+    const preset = value as EventRecurrencePreset | null;
+    if (preset === 'custom') {
+      this.presetBeforeCustom = this.eventDraft.repeatPreset;
+      this.openCustomRecurrence();
+      return;
+    }
+    if (!preset || !['none', 'daily', 'weekdays', 'weekly', 'monthly', 'yearly'].includes(preset))
+      return;
+
+    this.eventDraft.repeatPreset = preset;
+    this.eventDraft.recurrenceRule = null;
+    if (preset === 'none') {
+      this.eventDraft.recurrence = 'none';
+    } else if (preset === 'daily') {
+      this.eventDraft.recurrence = 'daily';
+    } else if (preset === 'weekly') {
+      this.eventDraft.recurrence = 'weekly';
+    } else {
+      this.eventDraft.recurrence = 'weekly';
+      this.eventDraft.recurrenceRule = {
+        frequency: preset === 'weekdays' ? 'weekly' : preset,
+        interval: 1,
+        ...(preset === 'weekdays' ? { weekdays: [1, 2, 3, 4, 5] } : {}),
+        end: { type: 'never' }
+      };
+    }
+  }
+
+  private openCustomRecurrence(): void {
+    const existing = this.eventDraft.recurrenceRule;
+    const defaultRule = this.defaultRecurrenceRule(
+      this.eventDraft.date,
+      this.eventDraft.repeatPreset
+    );
+    this.customRecurrenceDraft = existing
+      ? {
+          ...existing,
+          weekdays: existing.weekdays ? [...existing.weekdays] : undefined,
+          end: { ...existing.end }
+        }
+      : defaultRule;
+    const end = this.customRecurrenceDraft.end;
+    this.customEndType = end.type;
+    this.customEndDate = end.type === 'date' ? end.date : this.eventDraft.date;
+    this.customEndCount = end.type === 'count' ? end.count : 13;
+    this.customRecurrenceError = '';
+    this.eventDraft.repeatPreset = 'custom';
+    this.isRecurrenceModalOpen.set(true);
+  }
+
+  private defaultRecurrenceRule(
+    dateIso: string,
+    preset: EventRecurrencePreset = 'custom'
+  ): CalendarRecurrenceRule {
+    const date = parseISODate(dateIso) ?? this.anchor();
+    const weekday = ((date.getDay() + 6) % 7) + 1;
+    const frequency: CalendarRecurrenceFrequency =
+      preset === 'daily'
+        ? 'daily'
+        : preset === 'monthly'
+          ? 'monthly'
+          : preset === 'yearly'
+            ? 'yearly'
+            : 'weekly';
+    const weekdays = preset === 'weekdays' ? [1, 2, 3, 4, 5] : [weekday];
+    return {
+      frequency,
+      interval: 1,
+      ...(frequency === 'weekly' ? { weekdays } : {}),
+      end: { type: 'never' }
+    };
+  }
+
+  setCustomFrequency(value: string | null): void {
+    if (!(['daily', 'weekly', 'monthly', 'yearly'] as string[]).includes(String(value))) return;
+    const frequency = value as CalendarRecurrenceFrequency;
+    const currentWeekdays = this.customRecurrenceDraft.weekdays;
+    this.customRecurrenceDraft = {
+      ...this.customRecurrenceDraft,
+      frequency,
+      weekdays:
+        frequency === 'weekly'
+          ? currentWeekdays?.length
+            ? currentWeekdays
+            : this.defaultRecurrenceRule(this.eventDraft.date).weekdays
+          : undefined
+    };
+    this.customRecurrenceError = '';
+  }
+
+  toggleCustomWeekday(weekday: number): void {
+    const selected = this.customRecurrenceDraft.weekdays ?? [];
+    this.customRecurrenceDraft = {
+      ...this.customRecurrenceDraft,
+      weekdays: selected.includes(weekday)
+        ? selected.filter((day) => day !== weekday)
+        : [...selected, weekday].sort((a, b) => a - b)
+    };
+    this.customRecurrenceError = '';
+  }
+
+  cancelCustomRecurrence(): void {
+    this.isRecurrenceModalOpen.set(false);
+    this.eventDraft.repeatPreset = this.presetBeforeCustom;
+  }
+
+  applyCustomRecurrence(): void {
+    const interval = Number(this.customRecurrenceDraft.interval);
+    const weekdays = this.customRecurrenceDraft.weekdays;
+    const invalidInterval = !Number.isInteger(interval) || interval < 1 || interval > 99;
+    const invalidWeekdays = this.customRecurrenceDraft.frequency === 'weekly' && !weekdays?.length;
+    const endDate = parseISODate(this.customEndDate);
+    const startDate = parseISODate(this.eventDraft.date);
+    const invalidEnd =
+      (this.customEndType === 'date' && (!endDate || !startDate || endDate < startDate)) ||
+      (this.customEndType === 'count' &&
+        (!Number.isInteger(this.customEndCount) ||
+          this.customEndCount < 1 ||
+          this.customEndCount > 999));
+    if (invalidInterval || invalidWeekdays || invalidEnd) {
+      this.customRecurrenceError = this.i18n.t('calendar.repeat_invalid');
+      return;
+    }
+
+    const end =
+      this.customEndType === 'date'
+        ? { type: 'date' as const, date: this.customEndDate }
+        : this.customEndType === 'count'
+          ? { type: 'count' as const, count: Number(this.customEndCount) }
+          : { type: 'never' as const };
+    this.eventDraft.recurrenceRule = {
+      ...this.customRecurrenceDraft,
+      interval,
+      ...(this.customRecurrenceDraft.frequency === 'weekly'
+        ? { weekdays: [...(weekdays ?? [])] }
+        : { weekdays: undefined }),
+      end
+    };
+    this.eventDraft.recurrence =
+      this.customRecurrenceDraft.frequency === 'daily' ? 'daily' : 'weekly';
+    this.eventDraft.repeatPreset = 'custom';
+    this.isRecurrenceModalOpen.set(false);
+  }
+
+  toggleEventMoreOptions(): void {
+    this.eventMoreOptions.update((expanded) => !expanded);
   }
 
   setAllDay(value: boolean): void {
@@ -2577,15 +2813,25 @@ export class CalendarComponent implements OnInit {
     // `mealsVisible`, no `showMeals`: con la cocina apagada no se escribe `meals` en la URL, que
     // seria re-anadir por enlace lo que la cuenta acaba de apagar —y dejar un enlace que miente.
     const params: Record<string, string | null> = {
-      layers: visible.length === all.length && this.mealsVisible() ? null : (this.mealsVisible() ? 'meals,' : '') + visible.join(',')
+      layers:
+        visible.length === all.length && this.mealsVisible()
+          ? null
+          : (this.mealsVisible() ? 'meals,' : '') + visible.join(',')
     };
-    void this.router.navigate([], { queryParams: params, queryParamsHandling: 'merge', replaceUrl: true });
+    void this.router.navigate([], {
+      queryParams: params,
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
   }
 
   readLayersFromUrl(): void {
     const raw = new URLSearchParams(window.location.search).get('layers');
     if (!raw) return;
-    const wanted = raw.split(',').map((entry) => entry.trim()).filter(Boolean);
+    const wanted = raw
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
     // Se respeta lo que pide el enlace... si la cuenta tiene cocina. Si no, `meals` se ignora:
     // no es un error, y no se escribe de vuelta (arriba se usa `mealsVisible`).
     this.showMeals.set(this.kitchen() && wanted.includes('meals'));
@@ -2597,7 +2843,7 @@ export class CalendarComponent implements OnInit {
   }
 
   countOf(kind: HouseholdEventKind): number {
-    return this.calendarService.householdEvents().filter(event => event.kind === kind).length;
+    return this.calendarService.householdEvents().filter((event) => event.kind === kind).length;
   }
 
   /** La casilla «que lo vea mi casa» solo tiene sentido si hay casa. */
@@ -2621,6 +2867,8 @@ export class CalendarComponent implements OnInit {
       void this.leaveEvent(event);
       return;
     }
+    const recurrence = event?.recurrence ?? 'none';
+    const recurrenceRule = event?.recurrenceRule ?? null;
     this.eventDraft = {
       id: event?.id,
       title: event?.title ?? '',
@@ -2634,7 +2882,9 @@ export class CalendarComponent implements OnInit {
       notes: event?.notes ?? '',
       sharedWithHousehold: event ? true : true,
       attendeeIds: selectedInvitees(event),
-      recurrence: event?.recurrence ?? 'none',
+      recurrence,
+      repeatPreset: this.presetForEvent(recurrence, recurrenceRule, serie),
+      recurrenceRule,
       seriesDate: serie,
       occurrenceDate: event ? iso : undefined,
       editable: event?.editable ?? true
@@ -2642,8 +2892,31 @@ export class CalendarComponent implements OnInit {
     // El picker solo existe si la casa estaba cargada al abrir. Guardar sin esa marca NO manda lista:
     // `attendeeIds: []` es «que no quede nadie», y eso no lo puede decidir un renderido a medias.
     this.eventAttendeesShown = this.hasHousehold();
+    this.eventMoreOptions.set(!!event);
+    this.isRecurrenceModalOpen.set(false);
     this.calendarService.eventsError.set(null);
     this.isEventModalOpen.set(true);
+  }
+
+  private presetForEvent(
+    recurrence: HouseholdRecurrence,
+    rule: CalendarRecurrenceRule | null,
+    date: string
+  ): EventRecurrencePreset {
+    if (!rule) return recurrence;
+    if (rule.end.type === 'never' && rule.interval === 1) {
+      if (rule.frequency === 'daily') return 'daily';
+      if (rule.frequency === 'weekly') {
+        const selected = [...(rule.weekdays ?? [])].sort((a, b) => a - b);
+        if (selected.join(',') === '1,2,3,4,5') return 'weekdays';
+        const parsed = parseISODate(date);
+        const anchorWeekday = parsed ? ((parsed.getDay() + 6) % 7) + 1 : 0;
+        if (selected.length === 1 && selected[0] === anchorWeekday) return 'weekly';
+      }
+      if (rule.frequency === 'monthly') return 'monthly';
+      if (rule.frequency === 'yearly') return 'yearly';
+    }
+    return 'custom';
   }
 
   /**
@@ -2655,22 +2928,33 @@ export class CalendarComponent implements OnInit {
       title: this.i18n.t('calendar.salir_del_evento'),
       message: this.i18n.t('calendar.lo_apunto_otra_persona', {
         title: event.title,
-        autor: event.authorName ?? this.i18n.t('calendar.otra_persona_de_la'),
+        autor: event.authorName ?? this.i18n.t('calendar.otra_persona_de_la')
       }),
       confirmText: this.i18n.t('calendar.salirme')
     });
     if (!accepted) return;
     const done = await this.calendarService.leaveHouseholdEvent(event.id);
     if (done) {
-      this.toastService.show({ type: 'info', title: this.i18n.t('calendar.te_has_salido_del'), duration: 4000, countdown: true });
+      this.toastService.show({
+        type: 'info',
+        title: this.i18n.t('calendar.te_has_salido_del'),
+        duration: 4000,
+        countdown: true
+      });
       return;
     }
-    this.toastService.error(this.i18n.t('calendar.no_se_pudo_salir'), this.i18n.t('calendar.vuelve_a_intentarlo_en'));
+    this.toastService.error(
+      this.i18n.t('calendar.no_se_pudo_salir'),
+      this.i18n.t('calendar.vuelve_a_intentarlo_en')
+    );
   }
 
   /** Los de la casa, menos yo, en orden de nombre: la regla vive en `core/event-invitations`. */
   protected householdPeople(): ReturnType<typeof inviteCandidates> {
-    return inviteCandidates(this.householdService.household()?.members ?? [], this.authService.userId() || null);
+    return inviteCandidates(
+      this.householdService.household()?.members ?? [],
+      this.authService.userId() || null
+    );
   }
 
   protected openHouseholdPage(): void {
@@ -2679,7 +2963,9 @@ export class CalendarComponent implements OnInit {
 
   toggleAttendee(userId: string): void {
     const list = this.eventDraft.attendeeIds;
-    this.eventDraft.attendeeIds = list.includes(userId) ? list.filter((entry) => entry !== userId) : [...list, userId];
+    this.eventDraft.attendeeIds = list.includes(userId)
+      ? list.filter((entry) => entry !== userId)
+      : [...list, userId];
   }
 
   /** Si el borrador actual lleva picker visible: ver `attendeeIdsPayload`. */
@@ -2687,24 +2973,27 @@ export class CalendarComponent implements OnInit {
 
   closeEventModal(): void {
     this.isEventModalOpen.set(false);
+    this.isRecurrenceModalOpen.set(false);
   }
 
   /** Se abre desde la celda: el día ya viene elegido, que es lo que ahorra el tecleo. */
   agendaDay(): CalendarDayView {
     const iso = this.anchorIso();
-    return this.days().find(day => day.iso === iso) ?? {
-      date: new Date(),
-      iso,
-      inCurrentMonth: true,
-      isToday: true,
-      meals: [],
-      slots: { breakfast: [], lunch: [], dinner: [], snack: [] } as never,
-      calories: 0,
-      hasNutrition: false,
-      planned: 0,
-      done: 0,
-      events: []
-    };
+    return (
+      this.days().find((day) => day.iso === iso) ?? {
+        date: new Date(),
+        iso,
+        inCurrentMonth: true,
+        isToday: true,
+        meals: [],
+        slots: { breakfast: [], lunch: [], dinner: [], snack: [] } as never,
+        calories: 0,
+        hasNutrition: false,
+        planned: 0,
+        done: 0,
+        events: []
+      }
+    );
   }
 
   anchorLabel(): string {
@@ -2729,6 +3018,7 @@ export class CalendarComponent implements OnInit {
       endTime: string | null;
       attendeeIds?: string[];
       recurrence: HouseholdRecurrence;
+      recurrenceRule: CalendarRecurrenceRule | null;
     } = {
       title,
       kind: draft.kind,
@@ -2740,7 +3030,8 @@ export class CalendarComponent implements OnInit {
       notes: draft.notes.trim() || null,
       startTime: draft.allDay ? null : draft.startTime || null,
       endTime: draft.allDay ? null : draft.endTime || null,
-      recurrence: draft.recurrence
+      recurrence: draft.recurrence,
+      recurrenceRule: draft.recurrenceRule
     };
     // Las caras van con el criterio del pure helper: lista vacia es «nadie invitado» SOLO si el picker
     // se vio; si no se vio, la clave no va y el servidor no toca la lista.
@@ -2750,7 +3041,8 @@ export class CalendarComponent implements OnInit {
     // Con recurrencia se vuelve a leer: lo que el servicio guarda en local es UNA fila, y los dias que
     // ocupa los calcula el servidor. Sin esto, crear «todos los dias» pintaba un dia y pareciera que no
     // se guardo nada. El parpadeo es el precio de no tener dos reglas de expansion (una aqui y otra alla).
-    if (draft.recurrence !== 'none') this.calendarService.refreshHouseholdEvents();
+    if (draft.recurrence !== 'none' || draft.recurrenceRule)
+      this.calendarService.refreshHouseholdEvents();
     this.closeEventModal();
   }
 
@@ -2777,7 +3069,12 @@ export class CalendarComponent implements OnInit {
     const ok = await this.calendarService.removeHouseholdEvent(id);
     if (ok) {
       this.closeEventModal();
-      this.toastService.show({ type: 'info', title: this.i18n.t('calendar.evento_borrado'), duration: 4000, countdown: true });
+      this.toastService.show({
+        type: 'info',
+        title: this.i18n.t('calendar.evento_borrado'),
+        duration: 4000,
+        countdown: true
+      });
     }
   }
 
@@ -2816,7 +3113,6 @@ export class CalendarComponent implements OnInit {
   eventTimeLabel(event: HouseholdEvent): string {
     return eventTimeLabel(event);
   }
-
 }
 
 function sum(days: CalendarDayView[], key: 'planned' | 'done' | 'calories'): number {
@@ -2830,5 +3126,4 @@ function isSameDayAsToday(date: Date): boolean {
     date.getMonth() === today.getMonth() &&
     date.getFullYear() === today.getFullYear()
   );
-
 }

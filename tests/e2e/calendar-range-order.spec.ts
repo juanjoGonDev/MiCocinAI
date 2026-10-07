@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { selectCalendarView } from './helpers/calendar-ui';
 
 function isoAfterToday(offset: number): string {
   const date = new Date();
@@ -23,7 +24,7 @@ async function waitForCalendarStable(page: Page): Promise<void> {
 }
 
 async function openDay(page: Page, date: string): Promise<void> {
-  await page.locator('#cal-view-day').click();
+  await selectCalendarView(page, 'day', 'Día');
   await page.locator('input[type="date"]').fill(date);
   await expect(page.locator('input[type="date"]')).toHaveValue(date);
   await waitForCalendarStable(page);

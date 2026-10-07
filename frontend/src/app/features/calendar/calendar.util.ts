@@ -24,7 +24,9 @@ export function parseISODate(value: string | null | undefined): Date | null {
   const [y, m, d] = value.split('-').map(Number);
   const date = new Date(y, m - 1, d);
   // Un 2026-02-31 se sale de mes: no es una fecha, se descarta.
-  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d ? date : null;
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d
+    ? date
+    : null;
 }
 
 export function startOfDay(date: Date): Date {
@@ -41,7 +43,9 @@ export function addDays(date: Date, amount: number): Date {
 export function addMonths(date: Date, amount: number): Date {
   const target = new Date(date.getFullYear(), date.getMonth() + amount, 1);
   const lastDay = daysInMonth(target);
-  return startOfDay(new Date(target.getFullYear(), target.getMonth(), Math.min(date.getDate(), lastDay)));
+  return startOfDay(
+    new Date(target.getFullYear(), target.getMonth(), Math.min(date.getDate(), lastDay))
+  );
 }
 
 export function daysInMonth(date: Date): number {
@@ -59,7 +63,11 @@ export function startOfMonth(date: Date): Date {
 }
 
 export function isSameDay(a: Date, b: Date): boolean {
-  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
 }
 
 export function isSameMonth(a: Date, b: Date): boolean {
@@ -79,7 +87,8 @@ export function weekDays(anchor: Date): Date[] {
 export function monthGrid(anchor: Date): Date[] {
   const first = startOfMonth(anchor);
   const gridStart = startOfWeek(first);
-  const weeks = Math.ceil((first.getDate() - 1 + daysInMonth(first)) / 7);
+  const daysBeforeMonth = (first.getDay() + 6) % 7;
+  const weeks = Math.ceil((daysBeforeMonth + daysInMonth(first)) / 7);
   return Array.from({ length: weeks * 7 }, (_, i) => addDays(gridStart, i));
 }
 
@@ -96,7 +105,10 @@ export function diffInDays(a: Date, b: Date): number {
  * eran un motivo de mas para que cambiar de idioma no se notara hasta recargar.
  */
 const fmt = (opts: Intl.DateTimeFormatOptions) =>
-  memoize(`${dateLocale()}|${JSON.stringify(opts)}`, () => new Intl.DateTimeFormat(dateLocale(), opts));
+  memoize(
+    `${dateLocale()}|${JSON.stringify(opts)}`,
+    () => new Intl.DateTimeFormat(dateLocale(), opts)
+  );
 
 const memo = new Map<string, Intl.DateTimeFormat>();
 function memoize(key: string, make: () => Intl.DateTimeFormat): Intl.DateTimeFormat {
@@ -122,13 +134,21 @@ export const labels = {
   dayOfWeekShort: (d: Date) => fmt({ weekday: 'short' }).format(d).replace('.', '').toUpperCase(),
   dayOfMonth: (d: Date) => fmt({ day: 'numeric' }).format(d),
   /** «16 de septiembre de 2026», para aria-labels. */
-  fullDate: (d: Date) => fmt({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d)
+  fullDate: (d: Date) =>
+    fmt({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(d)
 };
 
-/** 1450 -> «1.450»: separador de miles de `es-ES`. El pipe `number` de Angular
- * iría por el LOCALE_ID del módulo (en-US -> «1,450»), que no encaja con el
- * resto de etiquetas en español, así que se formatea aquí. */
-const numberFmt = new Intl.NumberFormat(dateLocale());
+/**
+ * 1450 -> «1.450»/«1,450»: separador del locale activo. El pipe `number` de Angular
+ * iría por el LOCALE_ID del módulo, que puede no coincidir con el idioma de la app.
+ */
+const numberFormatters = new Map<string, Intl.NumberFormat>();
 export function formatNumber(value: number): string {
-  return numberFmt.format(Math.round(value || 0));
+  const locale = dateLocale();
+  let formatter = numberFormatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, { useGrouping: true });
+    numberFormatters.set(locale, formatter);
+  }
+  return formatter.format(Math.round(value || 0));
 }

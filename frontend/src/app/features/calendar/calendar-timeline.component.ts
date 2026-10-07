@@ -1,5 +1,18 @@
 import { dateLocale } from '../../core/time';
-import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnChanges, Output, SimpleChanges, ViewChild, computed, inject, signal } from '@angular/core';
+import {
+  AfterViewInit,
+  Component,
+  ElementRef,
+  EventEmitter,
+  Input,
+  OnChanges,
+  Output,
+  SimpleChanges,
+  ViewChild,
+  computed,
+  inject,
+  signal
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { I18nService } from '../../core/services/i18n.service';
 import {
@@ -66,8 +79,7 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
 @Component({
   selector: 'app-calendar-timeline',
   standalone: true,
-  imports: [
-    TranslatePipe,CommonModule, IconButtonComponent, AvatarComponent],
+  imports: [TranslatePipe, CommonModule, IconButtonComponent, AvatarComponent],
   template: `
     <div class="tl" [class.tl--single]="single()" [style.--hour-px]="hourPx">
       <div
@@ -85,7 +97,7 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
                 type="button"
                 class="tl__daynum"
                 [attr.aria-current]="day.isToday ? 'date' : null"
-                [title]="'calendar.view_day_date' | t:{date: day.iso}"
+                [title]="'calendar.view_day_date' | t: { date: day.iso }"
                 (click)="openDay.emit(day.iso)"
               >
                 <span class="tl__dow">{{ dayLabel(day) }}</span>
@@ -95,7 +107,9 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
                    unico que la vista antigua aportaba, y perderlo habria sido cambiar un diseno por una
                    perdida de funcion. -->
               @if (kitchen && (day.hasNutrition || (single() && targetCalories > 0))) {
-                <span class="tl__kcal" data-test="timeline-kcal" [title]="kcalTip(day)">{{ kcalOf(day) }}</span>
+                <span class="tl__kcal" data-test="timeline-kcal" [title]="kcalTip(day)">{{
+                  kcalOf(day)
+                }}</span>
               }
               @if (kitchen) {
                 <app-icon-button
@@ -104,7 +118,7 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
                   size="sm"
                   variant="ghost"
                   data-test="timeline-add-meal"
-                  [attr.title]="'calendar.add_meal_on' | t:{date: day.iso}"
+                  [attr.title]="'calendar.add_meal_on' | t: { date: day.iso }"
                   (onClick)="onAddMeal(day)"
                 />
               }
@@ -116,11 +130,7 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
         <div class="tl__band" [style.grid-template-columns]="columns()">
           <span class="tl__gutter tl__gutter--band">{{ 'calendar.todo_el_dia' | t }}</span>
           @for (day of days; track day.iso) {
-            <div
-              class="tl__bandcol"
-              data-test="timeline-band"
-              (click)="onBandClick(day)"
-            >
+            <div class="tl__bandcol" data-test="timeline-band" (click)="onBandClick(day)">
               @for (item of bandOf(day); track item.id) {
                 <button
                   type="button"
@@ -141,7 +151,11 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
 
         <!-- La rejilla conserva su scroll vertical dentro del viewport común de las columnas. -->
         <div class="tl__scroll" #scroll (click)="onGridClick($event)">
-          <div class="tl__inner" [style.height.px]="heightPx()" [style.grid-template-columns]="columns()">
+          <div
+            class="tl__inner"
+            [style.height.px]="heightPx()"
+            [style.grid-template-columns]="columns()"
+          >
             <div class="tl__gutter tl__hours" aria-hidden="true">
               @for (hour of hourLabels(); track hour) {
                 <span class="tl__hour">{{ hourLabel(hour) }}</span>
@@ -155,7 +169,6 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
                 [attr.data-date]="day.iso"
                 data-test="timeline-col"
               >
-
                 @if (day.isToday && nowTop() !== null) {
                   <span class="tl__now" [style.top.px]="nowTop()" aria-hidden="true"></span>
                 }
@@ -183,7 +196,12 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
                            Ana?» cuando en la casa hay dos. -->
                       <span class="tl__block-faces" aria-hidden="true">
                         @for (person of facesOf(block.item); track person.id) {
-                          <app-avatar [name]="person.name" [src]="person.avatar ?? undefined" size="xs" [title]="person.who" />
+                          <app-avatar
+                            [name]="person.name"
+                            [src]="person.avatar ?? undefined"
+                            size="xs"
+                            [title]="person.who"
+                          />
                         }
                       </span>
                     }
@@ -197,7 +215,8 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
     </div>
   `,
   styles: [
-    `  /*
+    `
+      /*
      * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
      *
      * Todo lo que se pulsa avisa antes de que se pulse. Va aqui arriba, junto, en lugar de repartido por
@@ -205,18 +224,17 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
      * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
      * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
      */
-    /* El chicle de hora lleva el color del evento, asi que su hover no puede pintarse de primario: se
+      /* El chicle de hora lleva el color del evento, asi que su hover no puede pintarse de primario: se
        sube la tinta del propio color y se levanta un dedo. */
-    .tl__chip:hover {
-      background: color-mix(in srgb, var(--event-color, var(--primary)) 32%, var(--bg-secondary));
-      box-shadow: var(--shadow-sm);
-    }
-  
-    .tl__chip:focus-visible {
-      outline: 2px solid var(--primary);
-      outline-offset: 2px;
-    }
-  
+      .tl__chip:hover {
+        background: color-mix(in srgb, var(--event-color, var(--primary)) 32%, var(--bg-secondary));
+        box-shadow: var(--shadow-sm);
+      }
+
+      .tl__chip:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
 
       :host {
         display: block;
@@ -397,6 +415,11 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
         transform: translateY(-5px);
         font-variant-numeric: tabular-nums;
       }
+      /* El ajuste vertical de las horas alinea el texto con cada línea, pero la primera
+         etiqueta no debe desplazarse fuera del viewport con overflow-y:auto. */
+      .tl__hour:first-child {
+        transform: translateY(0);
+      }
 
       .tl__col {
         position: relative;
@@ -423,10 +446,13 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
           repeating-linear-gradient(
             to bottom,
             transparent 0 calc(var(--hour-px) / 2),
-            color-mix(in srgb, var(--border-default) 45%, transparent) calc(var(--hour-px) / 2) calc(var(--hour-px) / 2 + 1px),
+            color-mix(in srgb, var(--border-default) 45%, transparent) calc(var(--hour-px) / 2)
+              calc(var(--hour-px) / 2 + 1px),
             transparent calc(var(--hour-px) / 2 + 1px) var(--hour-px)
           );
-        background-size: 100% var(--hour-px), 100% var(--hour-px);
+        background-size:
+          100% var(--hour-px),
+          100% var(--hour-px);
       }
 
       .tl__block {
@@ -571,7 +597,9 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   protected readonly gridItems = signal<Map<string, TimelineItem[]>>(new Map());
   protected readonly window = signal({ startMinutes: 0, endMinutes: 60 });
 
-  readonly single = computed(() => this.days.length === 1);
+  single(): boolean {
+    return this.days.length === 1;
+  }
 
   readonly hourLabels = computed(() => hoursOf(this.window()));
 
@@ -647,7 +675,9 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
    * Quien sale en la foto del bloque. El autor solo aparece cuando NO es esta cuenta: si no, cada
    * bloque propio llevaria la cara del dueño repetida siete veces por semana.
    */
-  protected facesOf(item: TimelineItem): { id: string; name: string; avatar?: string | null; who: string }[] {
+  protected facesOf(
+    item: TimelineItem
+  ): { id: string; name: string; avatar?: string | null; who: string }[] {
     const event = item.event;
     if (!event) return [];
     const faces: { id: string; name: string; avatar?: string | null; who: string }[] = [];
@@ -658,7 +688,9 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
         id: event.userId,
         name: event.authorName ?? this.i18n.t('calendar.alguien'),
         avatar: event.authorAvatar,
-        who: this.i18n.t('calendar.lo_apunto_de', { name: event.authorName ?? this.i18n.t('calendar.alguien') })
+        who: this.i18n.t('calendar.lo_apunto_de', {
+          name: event.authorName ?? this.i18n.t('calendar.alguien')
+        })
       });
     }
     for (const person of event.attendees ?? []) {
@@ -697,7 +729,8 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
   }
 
   protected colorOf(item: TimelineItem): string {
-    if (item.kind === 'event') return item.event?.color ?? HOUSEHOLD_EVENT_META[item.event?.kind ?? 'other'].color;
+    if (item.kind === 'event')
+      return item.event?.color ?? HOUSEHOLD_EVENT_META[item.event?.kind ?? 'other'].color;
     return item.mealType ? MEAL_TYPE_META[item.mealType].color : 'var(--primary)';
   }
 
@@ -720,11 +753,14 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
     if (when) parts.push(when);
     if (item.allDay) parts.push(this.i18n.t('calendar.todo_el_dia'));
     if (item.kind === 'event' && item.event) {
-      if (item.event.authorName) parts.push(this.i18n.t('calendar.de_persona', { name: item.event.authorName }));
+      if (item.event.authorName)
+        parts.push(this.i18n.t('calendar.de_persona', { name: item.event.authorName }));
       const invited = (item.event.attendees ?? []).map((person) => person.name);
-      if (invited.length) parts.push(this.i18n.t('calendar.con_personas', { names: invited.join(', ') }));
+      if (invited.length)
+        parts.push(this.i18n.t('calendar.con_personas', { names: invited.join(', ') }));
     }
-    if (item.kind === 'meal' && item.mealType) parts.push(this.i18n.t(MEAL_LABEL_KEYS[item.mealType]));
+    if (item.kind === 'meal' && item.mealType)
+      parts.push(this.i18n.t(MEAL_LABEL_KEYS[item.mealType]));
     return parts.filter(Boolean).join(' · ');
   }
 

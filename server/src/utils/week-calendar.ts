@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid';
+import { activeHouseholdId } from './household-context.js';
 
 /**
  * El calendario semanal de una persona, creando el que falte.
@@ -29,7 +30,9 @@ export function utcDate(value: unknown): Date | null {
   if (typeof value !== 'string' || !DATE_RE.test(value)) return null;
   const [y, m, d] = value.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));
-  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d ? date : null;
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d
+    ? date
+    : null;
 }
 
 export function toUTCISO(date: Date): string {
@@ -65,15 +68,15 @@ export function ensureWeekCalendar(
   if (!weekStart) return null;
 
   const weekStartISO = toUTCISO(weekStart);
+  const householdId = activeHouseholdId(db, userId);
   const found = db
-    .prepare('SELECT * FROM weekly_calendars WHERE user_id = ? AND week_start = ?')
-    .get(userId, weekStartISO) as WeekCalendarRow | undefined;
+    .prepare(
+      'SELECT * FROM weekly_calendars WHERE user_id = ? AND household_id IS ? AND week_start = ?'
+    )
+    .get(userId, householdId, weekStartISO) as WeekCalendarRow | undefined;
   if (found) return found;
 
   const weekEndISO = toUTCISO(shiftDays(weekStart, 6));
-  const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
-    | { household_id: string | null }
-    | undefined;
   const id = nanoid();
 
   db.prepare(
@@ -81,8 +84,9 @@ export function ensureWeekCalendar(
      VALUES (?, ?, ?, ?, ?, ?)`
   ).run(
     id,
-    // NULL = calendario personal. Con '' la FK a households rompía el alta.
-    user?.household_id ?? null,
+    // Cada usuario conserva su propio calendario dentro del hogar activo; `NULL` solo
+    // representa su ámbito personal cuando no tiene ninguna membresía seleccionada.
+    householdId,
     userId,
     weekStartISO,
     weekEndISO,

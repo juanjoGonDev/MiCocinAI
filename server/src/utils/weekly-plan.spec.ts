@@ -32,16 +32,25 @@ function createUser(email: string): string {
 const mealsOf = (userId: string) =>
   db
     .prepare(
-      `SELECT m.date, m.meal_type, m.custom_meal, m.notes, m.completed
+      `SELECT m.date, m.meal_type, m.custom_meal, m.notes, m.completed, m.servings
        FROM meals m
        JOIN weekly_calendars c ON c.id = m.calendar_id
        WHERE c.user_id = ?
        ORDER BY m.date, m.meal_type`
     )
-    .all(userId) as Array<{ date: string; meal_type: string; custom_meal: string; notes: string | null; completed: number }>;
+    .all(userId) as Array<{
+    date: string;
+    meal_type: string;
+    custom_meal: string;
+    notes: string | null;
+    completed: number;
+    servings: number;
+  }>;
 
 const calendarsOf = (userId: string) =>
-  db.prepare('SELECT id, week_start, week_end, goals FROM weekly_calendars WHERE user_id = ?').all(userId) as Array<{
+  db
+    .prepare('SELECT id, week_start, week_end, goals FROM weekly_calendars WHERE user_id = ?')
+    .all(userId) as Array<{
     id: string;
     week_start: string;
     week_end: string;
@@ -128,6 +137,21 @@ describe('persistWeeklyPlan', () => {
     expect(meals.every((meal) => meal.completed === 0)).toBe(true);
   });
 
+  it('guarda las raciones del hogar para cada plato generado', () => {
+    const user = createUser('plan-servings@test');
+    persistWeeklyPlan(db, {
+      userId: user,
+      startDate: '2026-09-14',
+      endDate: '2026-09-14',
+      mealTypes: ['lunch'],
+      servings: 3,
+      plan: plan()
+    });
+
+    expect(mealsOf(user)).toHaveLength(1);
+    expect(mealsOf(user)[0].servings).toBe(3);
+  });
+
   it('no pisa lo que ya hay: rellena huecos y cuenta los omitidos', () => {
     const user = createUser('huecos@test');
     persistWeeklyPlan(db, {
@@ -153,7 +177,9 @@ describe('persistWeeklyPlan', () => {
 
     expect(again.created).toBe(0);
     expect(again.skipped).toBe(5);
-    const lunch = mealsOf(user).find((meal) => meal.meal_type === 'lunch' && meal.date === '2026-09-14');
+    const lunch = mealsOf(user).find(
+      (meal) => meal.meal_type === 'lunch' && meal.date === '2026-09-14'
+    );
     expect(lunch?.custom_meal).toBe('Sopa de pescado');
     // Una sola pasada = un solo calendario, no uno por generacion
     expect(calendarsOf(user)).toHaveLength(1);
@@ -184,7 +210,12 @@ describe('persistWeeklyPlan', () => {
     const user = createUser('vacio@test');
     for (const bad of [null, undefined, {}, { days: [] }, { days: 'no es array' }, []]) {
       expect(() =>
-        persistWeeklyPlan(db, { userId: user, startDate: '2026-09-14', endDate: '2026-09-20', plan: bad })
+        persistWeeklyPlan(db, {
+          userId: user,
+          startDate: '2026-09-14',
+          endDate: '2026-09-20',
+          plan: bad
+        })
       ).not.toThrow();
     }
     // No se crea un calendario vacio por el camino
@@ -203,6 +234,32 @@ describe('persistWeeklyPlan', () => {
 
     expect(result.weekStart).toBe('2026-09-14');
     expect(calendarsOf(user)[0].week_start).toBe('2026-09-14');
+  });
+
+  it('persiste objetivos plurales y texto libre junto a las metas nutricionales', () => {
+    const user = createUser('multiple-goals@test');
+
+    persistWeeklyPlan(db, {
+      userId: user,
+      startDate: '2026-09-14',
+      endDate: '2026-09-20',
+      goals: {
+        types: ['weight-loss', 'variety'],
+        customInstructions: 'Prioriza legumbres',
+        caloriesTarget: 1850,
+        restrictions: ['sin fritos']
+      },
+      plan: { days: [{ date: '2026-09-14', meals: { lunch: { name: 'Lentejas' } } }] }
+    });
+
+    const stored = JSON.parse(calendarsOf(user)[0].goals);
+    expect(stored).toMatchObject({
+      type: 'weight-loss',
+      types: ['weight-loss', 'variety'],
+      customInstructions: 'Prioriza legumbres',
+      dailyCalories: 1850,
+      restrictions: ['sin fritos']
+    });
   });
 });
 

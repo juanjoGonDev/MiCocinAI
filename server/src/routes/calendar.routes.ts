@@ -7,6 +7,7 @@ import {
   createCalendarSchema,
   addMealSchema,
   updateMealSchema,
+  replaceSelectedMealsSchema,
   updateGoalsSchema,
   calendarEventFilterSchema,
   createCalendarEventSchema,
@@ -14,13 +15,18 @@ import {
 } from '../schemas/calendar.schema.js';
 import { ensureWeekCalendar } from '../utils/week-calendar.js';
 import {
+  dayFromISO,
   expandOccurrences,
+  isRecurrenceSchedule,
   isRecurrence,
+  occursOn,
   parseExceptionDates,
-  type Recurrence
+  type Recurrence,
+  type RecurrenceSchedule
 } from '../utils/calendar-recurrence.js';
 import { readForm } from '../utils/form-body.js';
 import { describeIssues } from '../schemas/form.js';
+import { activeHouseholdId, activeHouseholdMemberCount } from '../utils/household-context.js';
 import type { AppEnv } from '../types/hono-env.js';
 
 const calendarRoutes = new Hono<AppEnv>();
@@ -30,20 +36,27 @@ calendarRoutes.use('*', authMiddleware);
 calendarRoutes.get('/', async (c) => {
   const userId = c.get('userId');
   const db = getDatabase();
+  const householdId = activeHouseholdId(db, userId);
 
   // Get current week's calendar
-  const calendar = db.prepare(`
+  const calendar = db
+    .prepare(
+      `
     SELECT * FROM weekly_calendars 
-    WHERE user_id = ? 
+    WHERE user_id = ? AND household_id IS ?
     ORDER BY week_start DESC 
     LIMIT 1
-  `).get(userId) as any;
+  `
+    )
+    .get(userId, householdId) as any;
 
   if (!calendar) {
     return c.json({ success: true, data: null });
   }
 
-  const meals = db.prepare(`
+  const meals = db
+    .prepare(
+      `
     SELECT m.*, r.name as recipe_name
     FROM meals m
     LEFT JOIN recipes r ON r.id = m.recipe_id
@@ -56,7 +69,9 @@ calendarRoutes.get('/', async (c) => {
         WHEN 'snack' THEN 3
         WHEN 'dinner' THEN 4
       END
-  `).all(calendar.id);
+  `
+    )
+    .all(calendar.id);
 
   return c.json({
     success: true,
@@ -75,13 +90,18 @@ calendarRoutes.get('/', async (c) => {
 // asi que en vista de mes todo lo demas salia vacio pase lo que pase.
 calendarRoutes.get('/range', async (c) => {
   const userId = c.get('userId');
+  const db = getDatabase();
+  const householdId = activeHouseholdId(db, userId);
   const today = new Date().toISOString().slice(0, 10);
   const parsed = calendarFilterSchema.safeParse({
     startDate: c.req.query('startDate') ?? undefined,
     endDate: c.req.query('endDate') ?? undefined
   });
   if (!parsed.success) {
-    return c.json({ success: false, message: 'startDate y endDate deben tener formato YYYY-MM-DD' }, 400);
+    return c.json(
+      { success: false, message: 'startDate y endDate deben tener formato YYYY-MM-DD' },
+      400
+    );
   }
 
   // Sin rango, la semana actual: la ruta sigue siendo util a mano.
@@ -91,13 +111,16 @@ calendarRoutes.get('/range', async (c) => {
     return c.json({ success: false, message: 'startDate debe ser anterior a endDate' }, 400);
   }
 
-  const db = getDatabase();
-  const meals = db.prepare(`
+  const meals = db
+    .prepare(
+      `
     SELECT m.*, r.name AS recipe_name, r.calories AS recipe_calories
     FROM meals m
     LEFT JOIN recipes r ON r.id = m.recipe_id
     WHERE m.date BETWEEN ? AND ?
-      AND m.calendar_id IN (SELECT id FROM weekly_calendars WHERE user_id = ?)
+      AND m.calendar_id IN (
+        SELECT id FROM weekly_calendars WHERE user_id = ? AND household_id IS ?
+      )
     ORDER BY m.date,
       CASE m.meal_type
         WHEN 'breakfast' THEN 1
@@ -106,17 +129,26 @@ calendarRoutes.get('/range', async (c) => {
         WHEN 'dinner' THEN 4
       END,
       m.time
-  `).all(startDate, endDate, userId);
+  `
+    )
+    .all(startDate, endDate, userId, householdId);
 
   // Objetivos de la semana que se esta mirando (si no existe, los ultimos).
   const goalsRow =
-    (db.prepare(`
+    (db
+      .prepare(
+        `
       SELECT goals FROM weekly_calendars
-      WHERE user_id = ? AND week_start <= ? AND week_end >= ?
+      WHERE user_id = ? AND household_id IS ? AND week_start <= ? AND week_end >= ?
       ORDER BY week_start DESC LIMIT 1
-    `).get(userId, startDate, endDate) as any) ||
-    (db.prepare('SELECT goals FROM weekly_calendars WHERE user_id = ? ORDER BY week_start DESC LIMIT 1')
-      .get(userId) as any);
+    `
+      )
+      .get(userId, householdId, startDate, endDate) as any) ||
+    (db
+      .prepare(
+        'SELECT goals FROM weekly_calendars WHERE user_id = ? AND household_id IS ? ORDER BY week_start DESC LIMIT 1'
+      )
+      .get(userId, householdId) as any);
 
   let goals: Record<string, unknown> = {};
   try {
@@ -148,8 +180,9 @@ calendarRoutes.post('/', async (c) => {
   }
 
   if (input.goals) {
-    db.prepare('UPDATE weekly_calendars SET goals = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(JSON.stringify(input.goals), calendar.id);
+    db.prepare(
+      'UPDATE weekly_calendars SET goals = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(JSON.stringify(input.goals), calendar.id);
   }
 
   return c.json({ success: true, data: calendar }, 201);
@@ -174,13 +207,14 @@ calendarRoutes.post('/meals', async (c) => {
     return c.json({ success: false, message: 'date debe ser una fecha real YYYY-MM-DD' }, 400);
   }
 
-  // Los huecos se escriben como NULL: better-sqlite3 lanza con undefined, y «no he rellenado el
-  // opcional» es precisamente el caso en el que el formulario no manda nada. En servings el hueco
-  // vale 1, porque la columna suma calorias y «sin valor» ahi significa «una racion».
-  db.prepare(`
+  // Los huecos se escriben como NULL: better-sqlite3 lanza con undefined. Si la UI no mandó raciones,
+  // usar el tamaño actual de la casa activa; un número explícito sigue siendo editable.
+  db.prepare(
+    `
     INSERT INTO meals (id, calendar_id, date, meal_type, recipe_id, custom_meal, time, servings, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  `
+  ).run(
     id,
     calendar.id,
     input.date,
@@ -188,7 +222,7 @@ calendarRoutes.post('/meals', async (c) => {
     input.recipeId ?? null,
     input.customMeal ?? null,
     input.time ?? null,
-    input.servings ?? 1,
+    input.servings ?? (activeHouseholdMemberCount(db, userId) || 2),
     input.notes ?? null
   );
 
@@ -197,28 +231,100 @@ calendarRoutes.post('/meals', async (c) => {
   return c.json({ success: true, data: meal }, 201);
 });
 
+// PATCH /api/calendar/meals/bulk/replace-selected — atomic planner replan commit.
+calendarRoutes.patch('/meals/bulk/replace-selected', async (c) => {
+  const userId = c.get('userId');
+  const parsed = await readForm(c, replaceSelectedMealsSchema, 'Sustitución de comidas');
+  if (!parsed.ok) return parsed.response;
+
+  const db = getDatabase();
+  const householdId = activeHouseholdId(db, userId);
+  const replacements = parsed.data.replacements;
+  const ids = replacements.map(({ id }) => id);
+  const placeholders = ids.map(() => '?').join(', ');
+  const owned = db
+    .prepare(
+      `
+    SELECT m.id, m.completed
+    FROM meals m
+    JOIN weekly_calendars wc ON wc.id = m.calendar_id
+    WHERE m.id IN (${placeholders}) AND wc.user_id = ? AND wc.household_id IS ?
+  `
+    )
+    .all(...ids, userId, householdId) as Array<{ id: string; completed: number | null }>;
+
+  // Valida TODO el conjunto antes de escribir para que un ID obsoleto/ajeno nunca deje
+  // una selección parcialmente aplicada.
+  if (owned.length !== replacements.length) {
+    return c.json(
+      { success: false, code: 'MEAL_NOT_FOUND', message: 'Alguno de los platos ya no existe.' },
+      404
+    );
+  }
+  if (owned.some((meal) => meal.completed === 1)) {
+    return c.json(
+      {
+        success: false,
+        code: 'MEAL_ALREADY_COMPLETED',
+        message: 'No se pueden sustituir comidas ya completadas.'
+      },
+      409
+    );
+  }
+
+  const select = db.prepare('SELECT * FROM meals WHERE id = ?');
+  const update = db.prepare(`
+    UPDATE meals
+    SET recipe_id = NULL, custom_meal = ?, completed = 0, completed_at = NULL
+    WHERE id = ?
+  `);
+  const applyAll = db.transaction(() => {
+    for (const replacement of replacements) update.run(replacement.customMeal, replacement.id);
+    return replacements.map(({ id }) => select.get(id));
+  });
+  const meals = applyAll();
+  return c.json({ success: true, data: meals });
+});
+
 // PATCH /api/calendar/meals/:id
 calendarRoutes.patch('/meals/:id', async (c) => {
+  const userId = c.get('userId');
   const id = c.req.param('id');
   const parsed = await readForm(c, updateMealSchema, 'Comida');
   if (!parsed.ok) return parsed.response;
   const input = parsed.data;
 
   const db = getDatabase();
+  const householdId = activeHouseholdId(db, userId);
 
   const updates: string[] = [];
   const values: any[] = [];
 
-  if (input.recipeId !== undefined) { updates.push('recipe_id = ?'); values.push(input.recipeId); }
-  if (input.customMeal !== undefined) { updates.push('custom_meal = ?'); values.push(input.customMeal); }
+  if (input.recipeId !== undefined) {
+    updates.push('recipe_id = ?');
+    values.push(input.recipeId);
+  }
+  if (input.customMeal !== undefined) {
+    updates.push('custom_meal = ?');
+    values.push(input.customMeal);
+  }
   // Faltaba esta linea: el dialog de editar mandaba `time` y la ruta no lo escribia NUNCA, asi que
   // cambiar la hora de una comida era un «Comida actualizada» que no cambiaba nada. `null` si vale,
   // y vale para quitarla —que hasta aqui era lo unico que no se podia hacer.
-  if (input.time !== undefined) { updates.push('time = ?'); values.push(input.time); }
-  if (input.servings !== undefined) { updates.push('servings = ?'); values.push(input.servings ?? 1); }
-  if (input.notes !== undefined) { updates.push('notes = ?'); values.push(input.notes); }
-  if (input.completed !== undefined) { 
-    updates.push('completed = ?'); 
+  if (input.time !== undefined) {
+    updates.push('time = ?');
+    values.push(input.time);
+  }
+  if (input.servings !== undefined) {
+    updates.push('servings = ?');
+    values.push(input.servings ?? 1);
+  }
+  if (input.notes !== undefined) {
+    updates.push('notes = ?');
+    values.push(input.notes);
+  }
+  if (input.completed !== undefined) {
+    updates.push('completed = ?');
     values.push(input.completed ? 1 : 0);
     if (input.completed) {
       updates.push('completed_at = CURRENT_TIMESTAMP');
@@ -227,19 +333,59 @@ calendarRoutes.patch('/meals/:id', async (c) => {
 
   if (updates.length > 0) {
     values.push(id);
-    db.prepare(`UPDATE meals SET ${updates.join(', ')} WHERE id = ?`).run(...values);
+    values.push(userId, householdId);
+    const result = db
+      .prepare(
+        `
+      UPDATE meals SET ${updates.join(', ')}
+      WHERE id = ? AND calendar_id IN (
+        SELECT id FROM weekly_calendars WHERE user_id = ? AND household_id IS ?
+      )
+    `
+      )
+      .run(...values);
+    if (result.changes === 0) {
+      return c.json(
+        { success: false, code: 'MEAL_NOT_FOUND', message: 'No se encuentra esa comida.' },
+        404
+      );
+    }
   }
 
-  const meal = db.prepare('SELECT * FROM meals WHERE id = ?').get(id);
+  const meal = db
+    .prepare(
+      `
+    SELECT m.* FROM meals m
+    JOIN weekly_calendars wc ON wc.id = m.calendar_id
+    WHERE m.id = ? AND wc.user_id = ? AND wc.household_id IS ?
+  `
+    )
+    .get(id, userId, householdId);
+  if (!meal) {
+    return c.json(
+      { success: false, code: 'MEAL_NOT_FOUND', message: 'No se encuentra esa comida.' },
+      404
+    );
+  }
   return c.json({ success: true, data: meal });
 });
 
 // DELETE /api/calendar/meals/:id
 calendarRoutes.delete('/meals/:id', async (c) => {
+  const userId = c.get('userId');
   const id = c.req.param('id');
   const db = getDatabase();
+  const householdId = activeHouseholdId(db, userId);
 
-  const result = db.prepare('DELETE FROM meals WHERE id = ?').run(id);
+  const result = db
+    .prepare(
+      `
+    DELETE FROM meals WHERE id = ? AND calendar_id IN (
+      SELECT id FROM weekly_calendars WHERE user_id = ? AND household_id IS ?
+    )
+  `
+    )
+    .run(id, userId, householdId);
   if (result.changes === 0) {
     return c.json({ success: false, message: 'Meal not found' }, 404);
   }
@@ -255,6 +401,7 @@ calendarRoutes.patch('/goals', async (c) => {
   const input = parsed.data;
 
   const db = getDatabase();
+  const householdId = activeHouseholdId(db, userId);
 
   // `weekStart` es opcional: el calendario que se está mirando, no «el último».
   // Antes, si la semana no tenía fila, respondía 404 y la interfaz lo enseñaba
@@ -269,10 +416,18 @@ calendarRoutes.patch('/goals', async (c) => {
     return c.json({ success: false, message: 'weekStart debe ser una fecha real YYYY-MM-DD' }, 400);
   }
 
-  db.prepare('UPDATE weekly_calendars SET goals = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-    .run(JSON.stringify(input), calendar.id);
+  db.prepare(
+    `
+    UPDATE weekly_calendars SET goals = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND user_id = ? AND household_id IS ?
+  `
+  ).run(JSON.stringify(input), calendar.id, userId, householdId);
 
-  return c.json({ success: true, message: 'Goals updated', data: { weekStart: calendar.week_start } });
+  return c.json({
+    success: true,
+    message: 'Goals updated',
+    data: { weekStart: calendar.week_start }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -303,12 +458,14 @@ type CalendarEventRow = {
   source: string;
   /** Cadencia de la serie (HOGARIA-SPEC 12t-R). En una base antigua puede faltar: se lee como `none`. */
   recurrence?: string;
+  /** Regla avanzada en JSON, ausente en las filas anteriores a §12at. */
+  recurrence_rule?: string | null;
   /** Dias que esta serie, concretamente, no ocurre. JSON en una columna TEXT. */
   exceptions?: string | null;
 };
 
 const EVENT_COLUMNS =
-  'id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, recurrence, exceptions, source';
+  'id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, recurrence, recurrence_rule, exceptions, source';
 
 /** Quien escribio la suelta: el nombre y su foto, resueltos de una vez para toda la lista. */
 type Author = { name: string; avatar: string | null };
@@ -347,8 +504,20 @@ function toEvent(row: CalendarEventRow, author: Author | null): Record<string, u
     // el dialog sobre un martes concreto necesita poder cambiar el titulo sin moverle el ancla a la
     // serie (12t-R).
     recurrence: isRecurrence(row.recurrence) ? row.recurrence : 'none',
+    recurrenceRule: readRecurrenceRule(row.recurrence_rule),
     seriesDate: row.date
   };
+}
+
+/** Deserializa reglas guardadas sin hacer que una fila antigua o dañada tumbe el listado entero. */
+function readRecurrenceRule(raw: string | null | undefined): RecurrenceSchedule | null {
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return isRecurrenceSchedule(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -357,14 +526,12 @@ function toEvent(row: CalendarEventRow, author: Author | null): Record<string, u
  * cambiar de casa a mitad de temporada no puede dejar eventos huerfanos.
  */
 /** Subconsulta comun a las dos formas del ambito: «me invitaron a esto». */
-const INVITED_CLAUSE =
-  'id IN (SELECT event_id FROM calendar_event_attendees WHERE user_id = ?)';
+const INVITED_CLAUSE = 'id IN (SELECT event_id FROM calendar_event_attendees WHERE user_id = ?)';
 
 function eventScope(userId: string) {
   const db = getDatabase();
   const user = db.prepare('SELECT household_id AS hid FROM users WHERE id = ?').get(userId) as
-    | { hid: string | null }
-    | undefined;
+    { hid: string | null } | undefined;
   const householdId = user?.hid ?? null;
   // Un evento al que te han invitado se ve, casa o no casa: una invitacion que no se ve es una
   // invitacion que no ha funcionado, y esa es justo la pregunta que hace el usuario al invitar.
@@ -375,7 +542,12 @@ function eventScope(userId: string) {
         userId,
         householdId
       }
-    : { clause: `(user_id = ? OR ${INVITED_CLAUSE})`, params: [userId, userId], userId, householdId: null };
+    : {
+        clause: `(user_id = ? OR ${INVITED_CLAUSE})`,
+        params: [userId, userId],
+        userId,
+        householdId: null
+      };
 }
 
 /**
@@ -383,7 +555,10 @@ function eventScope(userId: string) {
  * la vista de mes son 42 dias). El autor NO esta aqui: lo ve por ser el autor, y guardarlo en la
  * misma tabla permitiria que «salir del evento» le quitara su propio evento.
  */
-function attendeesByEvent(db: ReturnType<typeof getDatabase>, eventIds: string[]): Map<string, Attendee[]> {
+function attendeesByEvent(
+  db: ReturnType<typeof getDatabase>,
+  eventIds: string[]
+): Map<string, Attendee[]> {
   const byEvent = new Map<string, Attendee[]>();
   if (!eventIds.length) return byEvent;
   const marks = eventIds.map(() => '?').join(', ');
@@ -450,7 +625,11 @@ calendarRoutes.get('/events', async (c) => {
   });
   if (!parsed.success) {
     return c.json(
-      { success: false, message: 'from y to son obligatorios (AAAA-MM-DD)', issues: parsed.error.issues },
+      {
+        success: false,
+        message: 'from y to son obligatorios (AAAA-MM-DD)',
+        issues: parsed.error.issues
+      },
       400
     );
   }
@@ -469,7 +648,7 @@ calendarRoutes.get('/events', async (c) => {
   const rows = db
     .prepare(
       `SELECT ${EVENT_COLUMNS} FROM calendar_events
-       WHERE ${kindsClause} date <= ? AND (recurrence != 'none' OR date >= ?) AND ${scope.clause}
+       WHERE ${kindsClause} date <= ? AND (recurrence != 'none' OR recurrence_rule IS NOT NULL OR date >= ?) AND ${scope.clause}
        ORDER BY date ASC, all_day DESC, start_time ASC, id ASC
        LIMIT ?`
     )
@@ -484,7 +663,10 @@ calendarRoutes.get('/events', async (c) => {
   for (const n of names) authors.set(n.id, { name: n.name, avatar: n.avatar });
 
   // Una sola lectura para toda la pagina, no una por evento: en la vista de mes son 42 dias.
-  const invited = attendeesByEvent(db, rows.map((row) => row.id));
+  const invited = attendeesByEvent(
+    db,
+    rows.map((row) => row.id)
+  );
 
   // Cada fila se materializa en los dias que ocupa de la ventana (HOGARIA-SPEC 12t-R). Se expande
   // DESPUES del LIMIT a proposito: «200 filas» sigue significando 200 sueltas escritas por alguien, no
@@ -493,11 +675,15 @@ calendarRoutes.get('/events', async (c) => {
   const data: Record<string, unknown>[] = [];
   let truncated = false;
   for (const row of rows) {
-    const expansion = expandOccurrences({
-      date: row.date,
-      recurrence: (isRecurrence(row.recurrence) ? row.recurrence : 'none') as Recurrence,
-      exceptions: row.exceptions ?? null
-    }, { from, to });
+    const expansion = expandOccurrences(
+      {
+        date: row.date,
+        recurrence: (isRecurrence(row.recurrence) ? row.recurrence : 'none') as Recurrence,
+        schedule: readRecurrenceRule(row.recurrence_rule) ?? undefined,
+        exceptions: row.exceptions ?? null
+      },
+      { from, to }
+    );
     truncated = truncated || expansion.truncated;
     const base = toEvent(row, authors.get(row.user_id) ?? null);
     // Los invitados van en la proyeccion y no en un detalle aparte: en la rejilla se pintan las
@@ -547,7 +733,9 @@ calendarRoutes.post('/events', async (c) => {
       {
         success: false,
         message: 'MEAL_COMES_FROM_THE_PLAN',
-        data: { hint: 'La comida se planifica en el calendario de comidas; aqui van las otras cosas de la casa.' }
+        data: {
+          hint: 'La comida se planifica en el calendario de comidas; aqui van las otras cosas de la casa.'
+        }
       },
       400
     );
@@ -563,8 +751,8 @@ calendarRoutes.post('/events', async (c) => {
 
   db.prepare(
     `INSERT INTO calendar_events
-     (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, recurrence, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'user')`
+     (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, recurrence, recurrence_rule, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'user')`
   ).run(
     id,
     // Sin casa la suelta es solo tuya; con casa, solo se comparte si quien la escribe
@@ -581,7 +769,8 @@ calendarRoutes.post('/events', async (c) => {
     input.notes ?? null,
     input.location ?? null,
     // `exceptions` empieza vacia a proposito: no es un campo del formulario.
-    input.recurrence ?? 'none'
+    input.recurrence ?? 'none',
+    input.recurrenceRule ? JSON.stringify(input.recurrenceRule) : null
   );
 
   // Los invitados se escriben DESPUES del insert y antes de responder: si la lista era imposible
@@ -604,7 +793,9 @@ calendarRoutes.post('/events', async (c) => {
     );
   }
 
-  const row = db.prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`).get(id) as unknown as CalendarEventRow;
+  const row = db
+    .prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`)
+    .get(id) as unknown as CalendarEventRow;
   const attendees = attendeesByEvent(db, [id]).get(id) ?? [];
   return c.json(
     {
@@ -628,12 +819,24 @@ calendarRoutes.patch('/events/:id', async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId') as string;
   const existing = db.prepare('SELECT * FROM calendar_events WHERE id = ?').get(id) as
-    | (CalendarEventRow & { user_id: string; all_day: number; start_time: string | null; end_time: string | null })
+    | (CalendarEventRow & {
+        user_id: string;
+        all_day: number;
+        start_time: string | null;
+        end_time: string | null;
+      })
     | undefined;
   if (!existing) return c.json({ success: false, message: 'Evento no encontrado' }, 404);
   // Escrita en el sitio: ver el evento de otra persona no es poder reescribirlo.
   if (existing.user_id !== userId) {
-    return c.json({ success: false, message: 'FORBIDDEN', data: { hint: 'Solo quien lo escribio puede cambiarlo.' } }, 403);
+    return c.json(
+      {
+        success: false,
+        message: 'FORBIDDEN',
+        data: { hint: 'Solo quien lo escribio puede cambiarlo.' }
+      },
+      403
+    );
   }
 
   const body = await c.req.json().catch(() => ({}));
@@ -642,6 +845,30 @@ calendarRoutes.patch('/events/:id', async (c) => {
     return c.json({ success: false, code: 'INVALID_FORM', ...describeIssues(parsed.error) }, 400);
   }
   const input = parsed.data as Record<string, unknown> & { attendeeIds?: string[] | null };
+
+  const nextSchedule =
+    input.recurrenceRule !== undefined
+      ? (input.recurrenceRule as RecurrenceSchedule | null)
+      : input.recurrence !== undefined
+        ? null
+        : readRecurrenceRule(existing.recurrence_rule);
+  const nextSeriesDate = typeof input.date === 'string' ? input.date : existing.date;
+  if (nextSchedule?.end.type === 'date' && nextSchedule.end.date < nextSeriesDate) {
+    return c.json(
+      {
+        success: false,
+        code: 'INVALID_FORM',
+        message: 'La fecha final no puede ser anterior al inicio de la serie',
+        issues: [
+          {
+            field: 'recurrenceRule.end.date',
+            message: 'La fecha final no puede ser anterior al inicio de la serie'
+          }
+        ]
+      },
+      400
+    );
+  }
 
   const set: string[] = [];
   const params: (string | number | null)[] = [];
@@ -659,12 +886,19 @@ calendarRoutes.patch('/events/:id', async (c) => {
   put('notes', input.notes);
   put('location', input.location);
   put('recurrence', input.recurrence);
+  if (input.recurrenceRule !== undefined) {
+    set.push('recurrence_rule = ?');
+    params.push(input.recurrenceRule === null ? null : JSON.stringify(input.recurrenceRule));
+  } else if (input.recurrence !== undefined) {
+    // Al volver a la cadencia legacy se quita la regla avanzada que, de otro modo, tendría prioridad.
+    set.push('recurrence_rule = NULL');
+  }
   // Dos limpiezas que solo aqui se pueden hacer, y que sin ellas dejan basura con aspecto de dato:
   // 1) quitar la cadencia vacia los dias excluidos —una excepcion sin serie no significa nada, y
   //    volveria a molestar el dia que la cosa vuelva a repetirse—;
   // 2) mover el inicio de la serie a un dia que estaba quitado borra esa excepcion, porque lo que se
   //    pidio explicitamente es que la serie empiece (y por tanto ocurra) ese dia.
-  if (input.recurrence === 'none') put('exceptions', '[]');
+  if (input.recurrence === 'none' && !input.recurrenceRule) put('exceptions', '[]');
   const diaNuevo = typeof input.date === 'string' ? input.date : null;
   if (diaNuevo) {
     const antes = parseExceptionDates(existing.exceptions);
@@ -698,12 +932,20 @@ calendarRoutes.patch('/events/:id', async (c) => {
 
   if (set.length) {
     params.push(id);
-    db.prepare(`UPDATE calendar_events SET ${set.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
+    db.prepare(
+      `UPDATE calendar_events SET ${set.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).run(...params);
   }
 
   let rejected: string[] = [];
   if (wantsAttendees) {
-    const outcome = replaceAttendees(db, id, input.attendeeIds ?? [], userId, eventScope(userId).householdId);
+    const outcome = replaceAttendees(
+      db,
+      id,
+      input.attendeeIds ?? [],
+      userId,
+      eventScope(userId).householdId
+    );
     rejected = outcome.rejected;
   }
   if (rejected.length) {
@@ -718,7 +960,9 @@ calendarRoutes.patch('/events/:id', async (c) => {
     );
   }
 
-  const row = db.prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`).get(id) as unknown as CalendarEventRow;
+  const row = db
+    .prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`)
+    .get(id) as unknown as CalendarEventRow;
   const attendees = attendeesByEvent(db, [id]).get(id) ?? [];
   return c.json({
     success: true,
@@ -740,14 +984,17 @@ calendarRoutes.delete('/events/:id/attendees/me', async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId') as string;
   const event = db.prepare('SELECT user_id FROM calendar_events WHERE id = ?').get(id) as
-    | { user_id: string }
-    | undefined;
+    { user_id: string } | undefined;
   if (!event) return c.json({ success: false, message: 'Evento no encontrado' }, 404);
   // El autor no «sale»: su evento no depende de una invitacion, y borrarle a el de su propia fila
   // dejaria un evento sin dueno. Eso se borra, no se abandona.
   if (event.user_id === userId) {
     return c.json(
-      { success: false, message: 'FORBIDDEN', data: { hint: 'Tuyo es: lo borras, no te sales de el.' } },
+      {
+        success: false,
+        message: 'FORBIDDEN',
+        data: { hint: 'Tuyo es: lo borras, no te sales de el.' }
+      },
       403
     );
   }
@@ -770,20 +1017,39 @@ calendarRoutes.delete('/events/:id/occurrences/:date', async (c) => {
   const id = c.req.param('id');
   const date = c.req.param('date');
   const userId = c.get('userId') as string;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    return c.json({ success: false, message: 'La fecha tiene que ser AAAA-MM-DD' }, 400);
+  if (dayFromISO(date) === null) {
+    return c.json(
+      { success: false, message: 'La fecha tiene que ser un día real AAAA-MM-DD' },
+      400
+    );
   }
   const row = db
-    .prepare('SELECT user_id, date, recurrence, exceptions FROM calendar_events WHERE id = ?')
-    .get(id) as { user_id: string; date: string; recurrence: string; exceptions: string | null } | undefined;
+    .prepare(
+      'SELECT user_id, date, recurrence, recurrence_rule, exceptions FROM calendar_events WHERE id = ?'
+    )
+    .get(id) as
+    | {
+        user_id: string;
+        date: string;
+        recurrence: string;
+        recurrence_rule?: string | null;
+        exceptions: string | null;
+      }
+    | undefined;
   if (!row) return c.json({ success: false, message: 'Evento no encontrado' }, 404);
   if (row.user_id !== userId) {
     return c.json(
-      { success: false, message: 'FORBIDDEN', data: { hint: 'Solo quien lo escribio puede quitarle un dia.' } },
+      {
+        success: false,
+        message: 'FORBIDDEN',
+        data: { hint: 'Solo quien lo escribio puede quitarle un dia.' }
+      },
       403
     );
   }
-  if (!isRecurrence(row.recurrence) || row.recurrence === 'none') {
+  const schedule = readRecurrenceRule(row.recurrence_rule);
+  const legacyRepeats = isRecurrence(row.recurrence) && row.recurrence !== 'none';
+  if (!schedule && !legacyRepeats) {
     return c.json(
       {
         success: false,
@@ -797,14 +1063,41 @@ calendarRoutes.delete('/events/:id/occurrences/:date', async (c) => {
   if (antes.includes(date)) {
     // Idempotente a proposito: el segundo «quitar este dia» (doble clic, reintentar tras un pico) no
     // es un error, y contestar 404 por algo que ya esta como se pidio es enseñar un fallo que no hay.
-    return c.json({ success: true, message: 'Ese dia ya estaba fuera de la serie', data: { id, exceptions: antes } });
+    return c.json({
+      success: true,
+      message: 'Ese dia ya estaba fuera de la serie',
+      data: { id, exceptions: antes }
+    });
+  }
+  if (
+    schedule &&
+    !occursOn(
+      {
+        date: row.date,
+        recurrence: isRecurrence(row.recurrence) ? row.recurrence : 'none',
+        schedule
+      },
+      date
+    )
+  ) {
+    return c.json(
+      {
+        success: false,
+        message: 'EVENTO_NO_OCURRE_ESE_DIA',
+        data: { hint: 'Solo se puede quitar una fecha que forme parte de la regla de repetición.' }
+      },
+      400
+    );
   }
   const despues = [...antes, date].sort();
-  db.prepare('UPDATE calendar_events SET exceptions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
-    JSON.stringify(despues),
-    id
-  );
-  return c.json({ success: true, message: 'Dia quitado de la serie', data: { id, exceptions: despues } });
+  db.prepare(
+    'UPDATE calendar_events SET exceptions = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(JSON.stringify(despues), id);
+  return c.json({
+    success: true,
+    message: 'Dia quitado de la serie',
+    data: { id, exceptions: despues }
+  });
 });
 
 // DELETE /api/calendar/events/:id —la serie entera (para un dia esta la ruta de arriba).
@@ -812,10 +1105,18 @@ calendarRoutes.delete('/events/:id', async (c) => {
   const db = getDatabase();
   const id = c.req.param('id');
   const userId = c.get('userId') as string;
-  const existing = db.prepare('SELECT user_id FROM calendar_events WHERE id = ?').get(id) as { user_id: string } | undefined;
+  const existing = db.prepare('SELECT user_id FROM calendar_events WHERE id = ?').get(id) as
+    { user_id: string } | undefined;
   if (!existing) return c.json({ success: false, message: 'Evento no encontrado' }, 404);
   if (existing.user_id !== userId) {
-    return c.json({ success: false, message: 'FORBIDDEN', data: { hint: 'Solo quien lo escribio puede borrarlo.' } }, 403);
+    return c.json(
+      {
+        success: false,
+        message: 'FORBIDDEN',
+        data: { hint: 'Solo quien lo escribio puede borrarlo.' }
+      },
+      403
+    );
   }
   db.prepare('DELETE FROM calendar_events WHERE id = ?').run(id);
   return c.json({ success: true, message: 'Evento eliminado' });

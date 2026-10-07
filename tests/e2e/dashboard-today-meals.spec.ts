@@ -43,7 +43,10 @@ test('Dashboard lista solo comidas pendientes de hoy y permite recuperar un erro
     }
   });
 
-  let failNextRangeRequest = true;
+  // Registration enters Dashboard once while skipping onboarding, and
+  // registerAndGoto then navigates there again. Arm the fault only after both
+  // setup navigations so the first measured Dashboard load receives the 503.
+  let failNextRangeRequest = false;
   let holdNextRangeRequest = false;
   let notifyHeldRange: (() => void) | undefined;
   let releaseHeldRange: (() => void) | undefined;
@@ -74,6 +77,8 @@ test('Dashboard lista solo comidas pendientes de hoy y permite recuperar un erro
   await page.clock.install({ time: new Date('2026-09-30T22:30:00.000Z') });
   await registerAndGoto(page, '/dashboard', 'dashboard-today-meals');
   const token = await tokenOf(page);
+  failNextRangeRequest = true;
+  await page.reload();
   const todaySection = page
     .locator('.dashboard__section')
     .filter({ has: page.getByRole('heading', { name: /Comidas de hoy|Today's meals/ }) });

@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { effect, Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Observable, catchError, map, of, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
@@ -12,8 +12,10 @@ import {
   WeeklyCalendar
 } from '../../shared/models/calendar.model';
 import { I18nService } from '../../core/services/i18n.service';
+import { HouseholdService } from './household.service';
 import { LatestRequest } from '../utils/latest-request';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
+import type { AIGuestPreferences } from '../../shared/models/ai-config.model';
 
 /** Fila cruda de `meals` tal y como la devuelve la API (snake_case). */
 interface MealRow {
@@ -76,16 +78,45 @@ function toMeal(row: MealRow): CalendarMeal {
 })
 export class CalendarService {
   private readonly i18n = inject(I18nService);
+  private readonly householdService = inject(HouseholdService);
   private readonly apiUrl = `${environment.apiUrl}/calendar`;
   private http = inject(HttpClient);
+  private observedHouseholdRevision = this.householdService.contextRevision();
+  private observedHouseholdId = this.householdService.activeHouseholdId();
+  private householdContextNeedsReload = false;
 
   private mealsSignal = signal<CalendarMeal[]>([]);
   private goalsSignal = signal<NutritionalGoals | null>(null);
   private rangeSignal = signal<CalendarRange | null>(null);
+  private retainedRange: CalendarRange | null = null;
   private isLoadingSignal = signal(false);
   private errorSignal = signal<string | null>(null);
   private lastRequested = '';
   private readonly rangeLoadRequests = new LatestRequest();
+
+  constructor() {
+    effect(() => {
+      const revision = this.householdService.contextRevision();
+      const householdId = this.householdService.activeHouseholdId();
+      const switching = this.householdService.switchingHousehold();
+
+      if (revision !== this.observedHouseholdRevision || householdId !== this.observedHouseholdId) {
+        this.observedHouseholdRevision = revision;
+        this.observedHouseholdId = householdId;
+        this.householdContextNeedsReload = true;
+        this.clearHouseholdScopedData();
+      }
+
+      if (!this.householdContextNeedsReload || switching) return;
+
+      this.householdContextNeedsReload = false;
+      const range = this.retainedRange ?? this.rangeSignal();
+      if (!range) return;
+
+      this.loadRange(range.start, range.end, true);
+      this.loadHouseholdEvents(range.start, range.end, true);
+    });
+  }
 
   /** @deprecated El dashboard sigue leyendo el calendario «de la semana actual». */
   private calendarSignal = signal<WeeklyCalendar | null>(null);
@@ -97,9 +128,32 @@ export class CalendarService {
   readonly error = this.errorSignal.asReadonly();
   readonly calendar = this.calendarSignal.asReadonly();
 
+  /**
+   * Immediately drops data from the previous active home and invalidates its in-flight reads.
+   * Keep the visible date range so it can be fetched again once HouseholdService finishes switching.
+   */
+  private clearHouseholdScopedData(): void {
+    this.rangeLoadRequests.begin();
+    this.eventRangeRequests.begin();
+    this.lastRequested = '';
+    this.eventsWindow = null;
+    this.mealsSignal.set([]);
+    this.goalsSignal.set(null);
+    this.errorSignal.set(null);
+    this.isLoadingSignal.set(false);
+    this.householdEvents.set([]);
+    this.eventsError.set(null);
+    this.eventsLoading.set(false);
+    this.calendarSignal.set(null);
+  }
+
   /** Calorías objetivo del periodo visible (las de la semana que se mira). */
-  readonly targetCalories = computed(() => this.goalsSignal()?.dailyCalories || DEFAULT_DAILY_CALORIES);
-  readonly goalType = computed(() => this.goalsSignal()?.type ?? null);
+  readonly targetCalories = computed(
+    () => this.goalsSignal()?.dailyCalories || DEFAULT_DAILY_CALORIES
+  );
+  readonly goalType = computed(
+    () => this.goalsSignal()?.types?.[0] ?? this.goalsSignal()?.type ?? null
+  );
 
   /** Fecha -> comidas. Una Map para que la rejilla pinte en O(1) por celda. */
   readonly mealsByDate = computed(() => {
@@ -117,6 +171,7 @@ export class CalendarService {
     if (!force && key === this.lastRequested) return;
     const requestId = this.rangeLoadRequests.begin();
     this.lastRequested = key;
+    this.retainedRange = { start, end };
     this.isLoadingSignal.set(true);
 
     const params = new HttpParams().set('startDate', start).set('endDate', end);
@@ -146,6 +201,17 @@ export class CalendarService {
       .subscribe();
   }
 
+  /** Lee un rango auxiliar sin mutar la vista actualmente abierta (p. ej. semana desde vista mes/día). */
+  getMealsForRange(start: string, end: string): Observable<CalendarMeal[]> {
+    const params = new HttpParams().set('startDate', start).set('endDate', end);
+    return this.http
+      .get<RangeResponse>(`${this.apiUrl}/range`, {
+        params,
+        context: new HttpContext().set(SILENT_TOAST, true)
+      })
+      .pipe(map((response) => (response.data?.meals ?? []).map(toMeal)));
+  }
+
   /** Vuelve a pedir el rango visible (después de guardar, borrar, generar…). */
   refresh(): void {
     const range = this.rangeSignal();
@@ -172,6 +238,21 @@ export class CalendarService {
       tap(() => this.refresh()),
       catchError(() => of(null))
     );
+  }
+
+  /** Confirma una sustitución múltiple en una única transacción del servidor. */
+  replaceSelectedMeals(
+    replacements: Array<{ id: string; customMeal: string }>
+  ): Observable<boolean> {
+    return this.http
+      .patch<{ success?: boolean }>(`${this.apiUrl}/meals/bulk/replace-selected`, { replacements })
+      .pipe(
+        map((response) => response?.success === true),
+        tap((applied) => {
+          if (applied) this.refresh();
+        }),
+        catchError(() => of(false))
+      );
   }
 
   deleteMeal(id: string): Observable<boolean> {
@@ -207,29 +288,43 @@ export class CalendarService {
   }
 
   private patchMealLocally(id: string, patch: Partial<CalendarMeal>): void {
-    this.mealsSignal.update((meals) => meals.map((meal) => (meal.id === id ? { ...meal, ...patch } : meal)));
+    this.mealsSignal.update((meals) =>
+      meals.map((meal) => (meal.id === id ? { ...meal, ...patch } : meal))
+    );
   }
 
   /**
    * `weekStart` dice a qué semana applies los objetivos (la que se está viendo);
    * sin él el servidor usa la actual.
    */
-  updateGoals(goals: NutritionalGoals, weekStart?: string): void {
-    this.http
-      .patch<any>(`${this.apiUrl}/goals`, { ...goals, weekStart })
-      .pipe(tap(() => this.refresh()))
-      .subscribe();
+  updateGoals(goals: NutritionalGoals, weekStart?: string): Observable<unknown> {
+    return this.http
+      .patch<unknown>(
+        `${this.apiUrl}/goals`,
+        { ...goals, weekStart },
+        {
+          context: new HttpContext().set(SILENT_TOAST, true)
+        }
+      )
+      .pipe(tap(() => this.refresh()));
   }
 
   generateWithAi(params: {
     startDate: string;
     endDate: string;
-    goals: { type: string; caloriesTarget?: number; customInstructions?: string };
+    goals: {
+      types?: string[];
+      type?: string;
+      caloriesTarget?: number;
+      customInstructions?: string;
+    };
     /**
      * Que comidas se piden. Vacio = el dia entero (el mismo acuerdo que aplica el server en
      * `resolveMealTypes`): «no he marcado nada» no puede significar «no quiero plan».
      */
     mealTypes?: string[];
+    householdMemberIds?: string[];
+    guests?: AIGuestPreferences[];
   }): Observable<{ days: unknown[]; saved?: { created: number; skipped: number } } | null> {
     return this.http
       .post<any>(`${environment.apiUrl}/ai/plan-week`, params)
@@ -251,8 +346,9 @@ export class CalendarService {
 
   /** @deprecated Sin llamadas desde la app; persiste la semana que se le pida. */
   createCalendar(weekStart: string, goals?: NutritionalGoals): Observable<WeeklyCalendar | null> {
-    return this.http.post<any>(this.apiUrl, { weekStart, goals }).pipe(
-      tap((response) => this.calendarSignal.set(response.data)),
+    return this.http.post<{ data: WeeklyCalendar }>(this.apiUrl, { weekStart, goals }).pipe(
+      map((response) => response.data),
+      tap((calendar) => this.calendarSignal.set(calendar)),
       catchError(() => of(null))
     );
   }
@@ -295,8 +391,8 @@ export class CalendarService {
     this.http
       .get<{ data: HouseholdEvent[] }>(`${this.apiUrl}/events`, { params })
       .pipe(
-        map(response => response.data ?? []),
-        catchError(error => {
+        map((response) => response.data ?? []),
+        catchError((error) => {
           if (this.eventRangeRequests.isCurrent(requestId)) {
             this.eventsError.set(this.readError(error));
             // Una ventana que fallo se olvida: si no, reintentar sin cambiar de rango
@@ -309,7 +405,7 @@ export class CalendarService {
           if (this.eventRangeRequests.isCurrent(requestId)) this.eventsLoading.set(false);
         })
       )
-      .subscribe(events => {
+      .subscribe((events) => {
         if (this.eventRangeRequests.isCurrent(requestId)) this.householdEvents.set(events);
       });
   }
@@ -321,13 +417,15 @@ export class CalendarService {
   }
 
   toggleKind(kind: HouseholdEventKind): void {
-    this.visibleKinds.update(kinds => (kinds.includes(kind) ? kinds.filter(entry => entry !== kind) : [...kinds, kind]));
+    this.visibleKinds.update((kinds) =>
+      kinds.includes(kind) ? kinds.filter((entry) => entry !== kind) : [...kinds, kind]
+    );
   }
 
   visibleEventsOn(date: string): HouseholdEvent[] {
     const kinds = this.visibleKinds();
     return this.householdEvents()
-      .filter(event => event.date === date && kinds.includes(event.kind))
+      .filter((event) => event.date === date && kinds.includes(event.kind))
       .sort((a, b) => {
         // Todo el día arriba, y después por hora: es el orden en que se lee un día, y el
         // que hace que una franja de 8 h no se cuele entre dos citas de la tarde.
@@ -341,17 +439,17 @@ export class CalendarService {
     const call$ = id
       ? this.http.patch<{ data: HouseholdEvent }>(`${this.apiUrl}/events/${id}`, input)
       : this.http.post<{ data: HouseholdEvent }>(`${this.apiUrl}/events`, input);
-    return new Promise<HouseholdEvent | null>(resolve => {
+    return new Promise<HouseholdEvent | null>((resolve) => {
       call$
         .pipe(
-          map(response => response.data),
-          catchError(error => {
+          map((response) => response.data),
+          catchError((error) => {
             this.eventsError.set(this.readError(error));
             return of(null);
           })
         )
         .subscribe({
-          next: event => {
+          next: (event) => {
             this.creatingEvent.set(false);
             if (event) this.upsertLocal(event);
             resolve(event);
@@ -366,19 +464,22 @@ export class CalendarService {
   }
 
   removeHouseholdEvent(id: string): Promise<boolean> {
-    return new Promise<boolean>(resolve => {
+    return new Promise<boolean>((resolve) => {
       this.http
         .delete(`${this.apiUrl}/events/${id}`)
         .pipe(
-          catchError(error => {
+          map(() => true),
+          catchError((error) => {
             this.eventsError.set(this.readError(error));
-            return of(null);
+            return of(false);
           })
         )
         .subscribe({
-          next: () => {
-            this.householdEvents.update(events => events.filter(event => event.id !== id));
-            resolve(true);
+          next: (succeeded) => {
+            if (succeeded) {
+              this.householdEvents.update((events) => events.filter((event) => event.id !== id));
+            }
+            resolve(succeeded);
           },
           error: () => resolve(false)
         });
@@ -391,19 +492,20 @@ export class CalendarService {
    * quien sabe que dias ocupa una serie es la expansion del servidor.
    */
   skipHouseholdOccurrence(id: string, date: string): Promise<boolean> {
-    return new Promise<boolean>(resolve => {
+    return new Promise<boolean>((resolve) => {
       this.http
         .delete(`${this.apiUrl}/events/${id}/occurrences/${date}`)
         .pipe(
-          catchError(error => {
+          map(() => true),
+          catchError((error) => {
             this.eventsError.set(this.readError(error));
-            return of(null);
+            return of(false);
           })
         )
         .subscribe({
-          next: () => {
-            this.refreshHouseholdEvents();
-            resolve(true);
+          next: (succeeded) => {
+            if (succeeded) this.refreshHouseholdEvents();
+            resolve(succeeded);
           },
           error: () => resolve(false)
         });
@@ -415,22 +517,23 @@ export class CalendarService {
    * `delete` del evento daria 403 y, si no lo diera, borrariria la cena de toda la casa.
    */
   leaveHouseholdEvent(id: string): Promise<boolean> {
-    return new Promise<boolean>(resolve => {
+    return new Promise<boolean>((resolve) => {
       this.http
         .delete(`${this.apiUrl}/events/${id}/attendees/me`)
         .pipe(
-          catchError(error => {
+          map(() => true),
+          catchError((error) => {
             this.eventsError.set(this.readError(error));
-            return of(null);
+            return of(false);
           })
         )
         .subscribe({
-          next: () => {
+          next: (succeeded) => {
             // Se pide la ventana otra vez en vez de retocar la lista a mano: quien decide si un evento
             // se ve o no es la regla de visibilidad del servidor, y replicarla aqui seria un segundo
             // dueño de la misma verdad (que se desincroniza el día que cambie la regla).
-            this.refreshHouseholdEvents();
-            resolve(true);
+            if (succeeded) this.refreshHouseholdEvents();
+            resolve(succeeded);
           },
           error: () => resolve(false)
         });
@@ -438,9 +541,9 @@ export class CalendarService {
   }
 
   private upsertLocal(event: HouseholdEvent): void {
-    this.householdEvents.update(events =>
-      events.some(entry => entry.id === event.id)
-        ? events.map(entry => (entry.id === event.id ? { ...entry, ...event } : entry))
+    this.householdEvents.update((events) =>
+      events.some((entry) => entry.id === event.id)
+        ? events.map((entry) => (entry.id === event.id ? { ...entry, ...event } : entry))
         : [...events, event]
     );
   }

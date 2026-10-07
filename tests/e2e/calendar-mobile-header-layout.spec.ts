@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { selectCalendarView } from './helpers/calendar-ui';
 
 interface ViewportCase {
   label: string;
@@ -159,7 +160,7 @@ test('la cabecera del calendario refluye y permanece accesible en móviles y esc
   await page.goto(`${process.env.E2E_BASE_URL}/calendar`);
   await expect(page.locator('h1.calendar__title')).toBeVisible();
   await waitForCalendarPaint(page);
-  await page.locator('#cal-view-day').click();
+  await selectCalendarView(page, 'day', 'Día');
   const dateInput = page.locator('.cal-jump input[type="date"]');
   const mealDate = dateAfterToday(4);
   await dateInput.fill(mealDate);
@@ -175,13 +176,13 @@ test('la cabecera del calendario refluye y permanece accesible en móviles y esc
   await waitForCalendarPaint(page);
 
   observations.push(await setViewportAndInspect(page, viewports[1], 'after-day-view-and-meal'));
-  await page.locator('#cal-view-week').click();
+  await selectCalendarView(page, 'week', 'Semana');
   await waitForCalendarPaint(page);
   observations.push(await setViewportAndInspect(page, viewports[1], 'after-week-view'));
-  await page.locator('#cal-view-month').click();
+  await selectCalendarView(page, 'month', 'Mes');
   await waitForCalendarPaint(page);
   observations.push(await setViewportAndInspect(page, viewports[1], 'after-month-view'));
-  await page.locator('#cal-view-day').click();
+  await selectCalendarView(page, 'day', 'Día');
 
   const previousPeriod = page.locator('.cal-top__nav button').first();
   const dateBeforeKeyboardNavigation = await page.locator('h1.calendar__title').innerText();

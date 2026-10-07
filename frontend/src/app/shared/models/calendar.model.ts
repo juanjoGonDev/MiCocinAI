@@ -43,7 +43,10 @@ export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 export type GenerationType = 'user' | 'ai';
 
 export interface NutritionalGoals {
-  type: GoalType;
+  /** Canonical multi-selection; `type` remains readable only for older stored calendars. */
+  types?: GoalType[];
+  type?: GoalType;
+  customInstructions?: string | null;
   dailyCalories?: number;
   dailyProtein?: number;
   dailyCarbs?: number;
@@ -137,18 +140,21 @@ export type MealPlan = Record<MealType, boolean>;
 export const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'snack', 'dinner'];
 
 /* ═══════════════════════════════════════════════════════════════════════
-   Modelo de vistas del calendario (mes / semana / día)
+   Modelo de vistas del calendario (día / 4 días / semana / mes / año / agenda)
    ═══════════════════════════════════════════════════════════════════════ */
 
 /** Vista activa del calendario. `week` es la por defecto y la que no sale en la URL. */
-export type CalendarView = 'day' | 'week' | 'month';
+export type CalendarView = 'day' | 'fourDays' | 'week' | 'month' | 'year' | 'agenda';
 
-export const CALENDAR_VIEWS = ['day', 'week', 'month'] as const;
+export const CALENDAR_VIEWS = ['day', 'fourDays', 'week', 'month', 'year', 'agenda'] as const;
 /** Claves del diccionario, como `GOAL_TYPE_LABELS`. */
 export const CALENDAR_VIEW_LABELS: Record<CalendarView, TranslationKey> = {
   day: 'calendar.view.day',
+  fourDays: 'calendar.view.four_days',
   week: 'calendar.view.week',
-  month: 'calendar.view.month'
+  month: 'calendar.view.month',
+  year: 'calendar.view.year',
+  agenda: 'calendar.view.agenda'
 };
 
 /** Query params que definen lo que se está viendo. */
@@ -269,6 +275,8 @@ export interface HouseholdEvent {
    * calcula sobre la ventana leida, y por eso aqui llegan como una entrada por dia.
    */
   recurrence?: HouseholdRecurrence;
+  /** Regla ampliada opcional. Ausente conserva la semántica legacy de `recurrence`. */
+  recurrenceRule?: CalendarRecurrenceRule | null;
   /** El dia que define la serie. No es `date` cuando se abre la serie desde un martes cualquiera. */
   seriesDate?: string;
 }
@@ -291,6 +299,19 @@ export const HOUSEHOLD_EVENT_META: Record<
  */
 export const HOUSEHOLD_RECURRENCES = ['none', 'daily', 'weekly'] as const;
 export type HouseholdRecurrence = (typeof HOUSEHOLD_RECURRENCES)[number];
+
+export type CalendarRecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type CalendarRecurrenceEnd =
+  | { type: 'never' }
+  | { type: 'date'; date: string }
+  | { type: 'count'; count: number };
+/** Days follow ISO-8601 numbering: Monday=1 through Sunday=7. */
+export interface CalendarRecurrenceRule {
+  frequency: CalendarRecurrenceFrequency;
+  interval: number;
+  weekdays?: number[];
+  end: CalendarRecurrenceEnd;
+}
 
 /** Etiquetas del selector, en el catalogo y no en el componente: el idioma cambia y el campo no. */
 export const HOUSEHOLD_RECURRENCE_META: Record<HouseholdRecurrence, { labelKey: TranslationKey }> = {

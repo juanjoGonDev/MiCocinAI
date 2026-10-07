@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test, type Page } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { selectCalendarView } from './helpers/calendar-ui';
 
 test.use({ timezoneId: 'Europe/Madrid' });
 
@@ -91,7 +92,7 @@ test('muestra y enfoca las horas de madrugada si hoy está visible, haya eventos
     2, 8
   ]);
 
-  await page.locator('#cal-view-week').click();
+  await selectCalendarView(page, 'week', 'Semana');
   await waitForCalendarStable(page);
   await expect(page.locator('[data-test="timeline-col"]')).toHaveCount(7);
   await expectCurrentHourVisible(page);
@@ -129,11 +130,16 @@ test('muestra y enfoca las horas de madrugada si hoy está visible, haya eventos
   }
 
   await page.setViewportSize(initialViewport);
-  const dayView = page.locator('#cal-view-day');
+  const dayView = page.locator('[data-test="calendar-view-select"] .picker__trigger');
   await dayView.focus();
   await expect(dayView).toBeFocused();
   await page.keyboard.press('Enter');
-  await expect(dayView).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[data-test="calendar-view-select"]')).toHaveAttribute(
+    'data-view',
+    'day'
+  );
   await waitForCalendarStable(page);
   await expectCurrentHourVisible(page);
   await page.locator('[data-test="event-add"]').click();
@@ -156,5 +162,20 @@ test('muestra y enfoca las horas de madrugada si hoy está visible, haya eventos
   await waitForCalendarStable(page);
   await expect(page.locator('.tl__col.is-today')).toHaveCount(0);
   await expect(page.locator('.tl__now')).toHaveCount(0);
+  const midnightLabel = page.locator('.tl__hour').first();
+  await expect(midnightLabel).toHaveText('00:00');
+  const midnightFitsTimeline = await midnightLabel.evaluate((element) => {
+    const label = element.getBoundingClientRect();
+    const viewport = element.closest('.tl__scroll')?.getBoundingClientRect();
+    return Boolean(viewport && label.top >= viewport.top && label.bottom <= viewport.bottom);
+  });
+  expect(
+    midnightFitsTimeline,
+    'La etiqueta 00:00 debe mostrarse completa cuando el día comienza a medianoche'
+  ).toBe(true);
+  await page.screenshot({
+    path: join(screenshotDirectory, `${testInfo.project.name}-next-day-midnight.png`),
+    fullPage: false
+  });
   expect(pageErrors).toEqual([]);
 });
