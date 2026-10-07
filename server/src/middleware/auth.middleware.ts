@@ -1,6 +1,8 @@
 import { Context, Next } from 'hono';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/app.config.js';
+import { getDatabase } from '../config/database.js';
+import { resolveAiOutputLanguage } from '../utils/ai-output-language.js';
 
 /**
  * `EventSource` no puede mandar cabeceras, y el listado en vivo (HOGARIA-SPEC §8f)
@@ -24,10 +26,13 @@ export async function authMiddleware(c: Context, next: Next): Promise<Response |
   const token = bearerToken(c);
 
   if (!token) {
-    return c.json({
-      success: false,
-      message: 'Authorization header required'
-    }, 401);
+    return c.json(
+      {
+        success: false,
+        message: 'Authorization header required'
+      },
+      401
+    );
   }
 
   try {
@@ -41,20 +46,87 @@ export async function authMiddleware(c: Context, next: Next): Promise<Response |
     c.set('userId', payload.sub);
     c.set('userEmail', payload.email);
 
+    // When a home's admin deactivates the selected membership, do not let other
+    // household-scoped routes keep using users.household_id as an authorization shortcut.
+    // The user may inspect/select another active membership, but otherwise must fail closed.
+    const db = getDatabase();
+    const userPreferences = db
+      .prepare('SELECT preferences FROM users WHERE id = ?')
+      .get(payload.sub) as { preferences: string | null } | undefined;
+    let savedLanguage: string | undefined;
+    try {
+      const preferences = JSON.parse(userPreferences?.preferences ?? '{}') as {
+        language?: unknown;
+      };
+      if (typeof preferences.language === 'string') savedLanguage = preferences.language;
+    } catch {
+      // A malformed legacy preference must not make an authenticated request fail.
+    }
+    c.set(
+      'appLanguage',
+      resolveAiOutputLanguage(
+        c.req.header('X-App-Language'),
+        savedLanguage,
+        c.req.header('Accept-Language')
+      )
+    );
+    const selection = db
+      .prepare(
+        `SELECT u.household_id, hm.is_active AS membership_active
+           FROM users u
+           LEFT JOIN household_members hm
+             ON hm.household_id = u.household_id AND hm.user_id = u.id
+          WHERE u.id = ?`
+      )
+      .get(payload.sub) as
+      { household_id: string | null; membership_active: number | null } | undefined;
+    const activeMemberships = db
+      .prepare(
+        'SELECT COUNT(*) AS count FROM household_members WHERE user_id = ? AND is_active = 1'
+      )
+      .get(payload.sub) as { count: number };
+    const selectionRoute = isHouseholdSelectionRoute(c);
+
+    // A NULL pointer is a personal context only when the account has no household (or exactly
+    // one, which activeHouseholdId can safely restore). With multiple memberships it means the
+    // user deliberately has no selected household; do not silently expose personal-scope data.
+    if (!selection?.household_id && activeMemberships.count > 1 && !selectionRoute) {
+      return c.json({ success: false, code: 'HOUSEHOLD_SELECTION_REQUIRED' }, 409);
+    }
+
+    if (selection?.household_id && selection.membership_active !== 1) {
+      if (activeMemberships.count === 0) {
+        db.prepare('UPDATE users SET household_id = NULL WHERE id = ?').run(payload.sub);
+      } else if (!selectionRoute) {
+        return c.json({ success: false, code: 'HOUSEHOLD_SELECTION_REQUIRED' }, 409);
+      }
+    }
+
     await next();
   } catch (error) {
-    return c.json({
-      success: false,
-      message: 'Invalid or expired token'
-    }, 401);
+    return c.json(
+      {
+        success: false,
+        message: 'Invalid or expired token'
+      },
+      401
+    );
   }
+}
+
+function isHouseholdSelectionRoute(c: Context): boolean {
+  const path = new URL(c.req.url).pathname.replace(/\/+$/, '') || '/';
+  return (
+    (c.req.method === 'GET' &&
+      (path.endsWith('/api/household/memberships') || path.endsWith('/api/household'))) ||
+    (c.req.method === 'POST' && path.endsWith('/api/household/active'))
+  );
 }
 
 export async function optionalAuthMiddleware(c: Context, next: Next) {
   const token = bearerToken(c);
 
   if (token) {
-
     try {
       const payload = jwt.verify(token, config.auth.jwtSecret) as any;
 

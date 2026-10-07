@@ -161,12 +161,12 @@ test('authenticated invite acceptance stays recoverable and joins the intended h
   expect((await successfulResponse).status()).toBe(200);
   await expect(page).toHaveURL(/\/household$/);
   await expect(page.locator('.household-info__name')).toHaveText('Casa de invitación QA');
+  await page.getByRole('tab', { name: 'Miembros' }).click();
   await expect(page.locator('.member-card')).toHaveCount(2);
   expect(joinRequests).toBe(2);
   await expect(page.locator('.toast--error')).toHaveCount(0);
 
   await page.reload();
-  await expect(page.locator('.household-info__name')).toHaveText('Casa de invitación QA');
   await expect(page.locator('.member-card')).toHaveCount(2);
   expect(pageErrors, 'invite flow should not throw in the browser').toEqual([]);
   expect(undersizedTargets, 'all invitation CTAs should have 44px targets').toEqual([]);

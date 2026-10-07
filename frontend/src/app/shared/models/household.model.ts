@@ -32,6 +32,16 @@ export interface HouseholdMember {
   avatar?: string;
   joinedAt: Date;
   permissions?: MemberPermissions;
+  isActive: boolean;
+}
+
+/** Resumen de una casa a la que pertenece la persona autenticada. */
+export interface HouseholdMembership {
+  id: string;
+  name: string;
+  role: MemberRole;
+  permissions: MemberPermissions;
+  active: boolean;
 }
 
 export interface InvitePreview {
@@ -52,13 +62,7 @@ export interface FoodPreferences {
   portionSize: PortionSize;
 }
 
-export type DietType =
-  | 'omnivore'
-  | 'vegetarian'
-  | 'vegan'
-  | 'pescatarian'
-  | 'keto'
-  | 'paleo';
+export type DietType = 'omnivore' | 'vegetarian' | 'vegan' | 'pescatarian' | 'keto' | 'paleo';
 
 export type SpiceTolerance = 'low' | 'medium' | 'high';
 
@@ -73,17 +77,7 @@ export interface Allergy {
 
 export type AllergySeverity = 'mild' | 'moderate' | 'severe';
 
-
-
 // Los cinco `Record<Rol, string>` que habia aqui (roles, dieta, tolerancia al picante, racion y severidad
 // de la alergia) estaban exportados y no los leia nadie: texto en espanol que ningun idioma alcanzaba y que
 // ninguna pantalla ensenaba. Lo que si se ensena lleva `LABEL_KEYS` y sale del diccionario (## 12u).
 export { COOKING_LEVEL_LABEL_KEYS } from './home-profile';
-
-
-
-
-
-
-
-

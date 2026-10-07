@@ -62,7 +62,7 @@ async function capture(page: Page, name: string): Promise<void> {
     name
   );
   await mkdir(dirname(output), { recursive: true });
-  await page.screenshot({ path: output, fullPage: true });
+  await page.screenshot({ path: output, fullPage: true, animations: 'disabled' });
 }
 
 async function expectNoHorizontalOverflow(page: Page, width: number): Promise<void> {
@@ -113,6 +113,102 @@ function expectNoUnexpectedApplicationErrors(
 }
 
 test.describe('acciones de Hogar: confirmación real y reintento', () => {
+  test('pausa y reactiva una membresía sin borrar sus datos', async ({ browser }) => {
+    const viewport =
+      test.info().project.name === 'chromium'
+        ? { width: 1440, height: 900 }
+        : { width: 393, height: 851 };
+    const ownerContext = await browser.newContext({ viewport });
+    const ownerPage = await ownerContext.newPage();
+    const memberContext = await browser.newContext({ viewport });
+    const memberPage = await memberContext.newPage();
+
+    try {
+      await registerAndGoto(ownerPage, '/household', 'Owner membership QA');
+      await createHouseholdThroughUi(ownerPage, 'Hogar sintético de membresías');
+      const inviteCode = await readInviteCode(ownerPage);
+
+      await registerAndGoto(memberPage, '/household', 'Guest membership QA');
+      await memberPage.getByRole('button', { name: /Unirse con código/i }).click();
+      const joinDialog = memberPage.getByRole('dialog', { name: 'Unirse a un Hogar' });
+      await joinDialog.getByRole('textbox', { name: 'Código de invitación' }).fill(inviteCode);
+      await joinDialog.getByRole('button', { name: 'Unirse', exact: true }).click();
+      await expect(memberPage.locator('.household-info__name')).toHaveText(
+        'Hogar sintético de membresías'
+      );
+
+      await ownerPage.reload();
+      await ownerPage.goto('/household?tab=members');
+      const memberCard = ownerPage
+        .locator('.member-card')
+        .filter({ hasText: 'Guest membership QA' });
+      const deactivate = memberCard.locator('[data-test^="member-active-"]');
+      await expect(deactivate).toHaveText('Desactivar');
+      let failedDeactivation = false;
+      await ownerPage.route('**/api/household', async (route) => {
+        if (
+          route.request().method() === 'PATCH' &&
+          !failedDeactivation &&
+          (route.request().postDataJSON() as { memberActive?: boolean } | null)?.memberActive ===
+            false
+        ) {
+          failedDeactivation = true;
+          await route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: false, message: 'Synthetic temporary failure' })
+          });
+          return;
+        }
+        await route.continue();
+      });
+
+      await deactivate.locator('button').focus();
+      await ownerPage.keyboard.press('Enter');
+
+      const confirmation = ownerPage.getByRole('dialog', { name: 'Desactivar' });
+      await expect(confirmation).toContainText('Sus datos se conservarán');
+      await confirmation.getByRole('button', { name: 'Desactivar miembro' }).click();
+      await expect(errorToast(ownerPage, 'No se pudo cambiar el estado del miembro')).toBeVisible();
+      await expect(memberCard).toContainText('Activo');
+      await expect(deactivate).toHaveText('Desactivar');
+
+      await deactivate.locator('button').focus();
+      await ownerPage.keyboard.press('Enter');
+      const retryConfirmation = ownerPage.getByRole('dialog', { name: 'Desactivar' });
+      await retryConfirmation.getByRole('button', { name: 'Desactivar miembro' }).click();
+      await expect(memberCard).toContainText('Inactivo');
+      const reactivate = memberCard.locator('[data-test^="member-active-"]');
+      await expect(reactivate).toHaveText('Reactivar');
+      await capture(ownerPage, 'membership-inactive.png');
+
+      await ownerPage.goto('/calendar');
+      await expect(ownerPage.locator('h1.calendar__title')).toBeVisible();
+      await ownerPage.locator('[data-test="timeline-add-meal"]').first().click();
+      await expect(ownerPage.locator('#meal-servings')).toHaveValue('1');
+      await capture(ownerPage, 'servings-one-inactive.png');
+      await ownerPage.locator('app-modal .modal__close').click();
+
+      await ownerPage.goto('/household?tab=members');
+      await expect(memberCard).toBeVisible();
+      await reactivate.click();
+      await expect(memberCard).toContainText('Activo');
+      await expect(memberCard.locator('[data-test^="member-active-"]')).toHaveText('Desactivar');
+      await ownerPage.goto('/calendar');
+      await expect(ownerPage.locator('h1.calendar__title')).toBeVisible();
+      await ownerPage.locator('[data-test="timeline-add-meal"]').first().click();
+      await expect(ownerPage.locator('#meal-servings')).toHaveValue('2');
+      await capture(ownerPage, 'servings-two-reactivated.png');
+      await ownerPage.locator('app-modal .modal__close').click();
+      await ownerPage.goto('/household?tab=members');
+      await expect(memberCard).toContainText('Activo');
+      await capture(ownerPage, 'membership-reactivated.png');
+    } finally {
+      await memberContext.close();
+      await ownerContext.close();
+    }
+  });
+
   test('creation failure keeps the dialog and input, then retries successfully at viewport boundaries', async ({
     page
   }) => {
@@ -342,6 +438,7 @@ test.describe('acciones de Hogar: confirmación real y reintento', () => {
     await registerAndGoto(page, '/household', 'Owner synthetic');
     await createHouseholdThroughUi(page, 'Hogar sintético salida');
     await page.locator('.toast--success .toast__close').click();
+    await page.getByRole('tab', { name: 'Ajustes' }).click();
 
     let leaveRequests = 0;
     await page.route('**/api/household/leave', async (route) => {
@@ -367,7 +464,9 @@ test.describe('acciones de Hogar: confirmación real y reintento', () => {
     await dialog.getByRole('button', { name: 'Salir', exact: true }).click();
     await expect(errorToast(page, 'No se pudo salir del hogar')).toBeVisible();
     await expect(page.locator('.toast--error')).toHaveCount(1);
-    await expect(page.locator('.household-info__name')).toHaveText('Hogar sintético salida');
+    await expect(page.locator('[data-test="household-name-input"]')).toHaveValue(
+      'Hogar sintético salida'
+    );
     await expect(page.locator('.toast--success')).toHaveCount(0);
     expect(leaveRequests).toBe(1);
 

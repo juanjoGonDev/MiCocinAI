@@ -64,13 +64,15 @@ test('registration from an invite link preserves the code and joins that househo
   expect((await joinResponse).status()).toBe(200);
   await expect(page).toHaveURL(/\/household$/);
   await expect(page.locator('.household-info__name')).toHaveText('QA registration invite home');
+  await page.getByRole('tab', { name: 'Miembros' }).click();
   await expect(page.locator('.member-card')).toHaveCount(2);
   expect(registrationRequests).toBe(1);
   expect(joinRequests).toBe(1);
   expect(pageErrors).toEqual([]);
 
   await page.reload();
-  await expect(page.locator('.household-info__name')).toHaveText('QA registration invite home');
   await expect(page.locator('.member-card')).toHaveCount(2);
+  await page.goto('/household');
+  await expect(page.locator('.household-info__name')).toHaveText('QA registration invite home');
   expect(pageErrors).toEqual([]);
 });

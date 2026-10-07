@@ -313,6 +313,41 @@ describe('saltarse el onboarding (HOGARIA-SPEC 12o)', () => {
     const final = await json(await app.request('/api/auth/taste', withAuth(token)));
     expect(final.data.dislikes ?? []).toEqual([]);
   });
+
+  it('guarda objetivos múltiples y texto libre con respuesta plural, conservando el alias antiguo', async () => {
+    const { token } = await register('Objetivos');
+    const save = await app.request(
+      '/api/auth/taste',
+      withAuth(token, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          taste: {
+            goals: ['weight-loss', 'variety'],
+            goalNotes: 'Prioriza legumbres y cenas sencillas'
+          }
+        })
+      })
+    );
+
+    expect(save.status).toBe(200);
+    expect((await json(save)).data.taste).toMatchObject({
+      goals: ['weight-loss', 'variety'],
+      goalNotes: 'Prioriza legumbres y cenas sencillas'
+    });
+    const reloaded = await json(await app.request('/api/auth/taste', withAuth(token)));
+    expect(reloaded.data.taste.goals).toEqual(['weight-loss', 'variety']);
+    expect(reloaded.data.taste.goal).toBeUndefined();
+
+    const legacy = await app.request(
+      '/api/auth/taste',
+      withAuth(token, {
+        method: 'PATCH',
+        body: JSON.stringify({ taste: { goal: 'muscle-gain' } })
+      })
+    );
+    expect(legacy.status).toBe(200);
+    expect((await json(legacy)).data.taste.goals).toEqual(['muscle-gain']);
+  });
 });
 
 describe('límites del perfil de preferencias', () => {

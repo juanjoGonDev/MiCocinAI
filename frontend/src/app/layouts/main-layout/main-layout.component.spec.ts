@@ -4,6 +4,8 @@ import { signal } from '@angular/core';
 import { AuthService } from '../../core/services/auth.service';
 import { ModulesService } from '../../core/services/modules.service';
 import { TasteProfileService } from '../../core/services/taste-profile.service';
+import { HouseholdService } from '../../core/services/household.service';
+import { of } from 'rxjs';
 import { MainLayoutComponent } from './main-layout.component';
 
 describe('MainLayoutComponent mobile drawer keyboard behavior', () => {
@@ -13,6 +15,9 @@ describe('MainLayoutComponent mobile drawer keyboard behavior', () => {
   let authLogout: jasmine.Spy;
   let currentUser: ReturnType<typeof signal<{ avatar?: string } | null>>;
   let isPathVisible: jasmine.Spy;
+  let memberships: ReturnType<typeof signal<any[]>>;
+  let activeHouseholdId: ReturnType<typeof signal<string | null>>;
+  let membershipsFailed: ReturnType<typeof signal<boolean>>;
 
   beforeEach(async () => {
     mobileViewport = spyOn(window, 'matchMedia').and.returnValue({
@@ -28,6 +33,9 @@ describe('MainLayoutComponent mobile drawer keyboard behavior', () => {
     navigate = jasmine.createSpy('navigate');
     authLogout = jasmine.createSpy('logout');
     currentUser = signal<{ avatar?: string } | null>(null);
+    memberships = signal<any[]>([]);
+    activeHouseholdId = signal<string | null>(null);
+    membershipsFailed = signal(false);
     isPathVisible = jasmine
       .createSpy('isPathVisible')
       .and.callFake((path: string) => path !== '/calendar');
@@ -43,6 +51,16 @@ describe('MainLayoutComponent mobile drawer keyboard behavior', () => {
         {
           provide: TasteProfileService,
           useValue: { ensureLoaded: jasmine.createSpy('ensureLoaded') }
+        },
+        {
+          provide: HouseholdService,
+          useValue: {
+            memberships,
+            activeHouseholdId,
+            membershipsFailed,
+            loadMemberships: jasmine.createSpy('loadMemberships').and.returnValue(of([])),
+            ensureHousehold: jasmine.createSpy('ensureHousehold')
+          }
         },
         { provide: ModulesService, useValue: { isPathVisible } }
       ]
@@ -163,6 +181,36 @@ describe('MainLayoutComponent mobile drawer keyboard behavior', () => {
     expect(mobilePaths).toContain('/dashboard');
     expect(mobilePaths).not.toContain('/calendar');
     expect(isPathVisible).toHaveBeenCalledWith('/calendar');
+  });
+
+  it('shows AI settings only in personal mode or for an active household settings manager', () => {
+    createFixture();
+    const component = fixture.componentInstance;
+    const aiPathVisible = () => component.visibleNavItems().some((item) => item.path === '/ai-config');
+
+    expect(aiPathVisible()).toBeTrue();
+    memberships.set([
+      {
+        id: 'home-a',
+        permissions: { settings: false }
+      }
+    ]);
+    activeHouseholdId.set('home-a');
+    expect(aiPathVisible()).toBeFalse();
+
+    memberships.set([
+      {
+        id: 'home-a',
+        permissions: { settings: true }
+      }
+    ]);
+    expect(aiPathVisible()).toBeTrue();
+
+    activeHouseholdId.set(null);
+    expect(aiPathVisible()).toBeFalse();
+    membershipsFailed.set(true);
+    memberships.set([]);
+    expect(aiPathVisible()).toBeFalse();
   });
 
   it('returns the current avatar and logs out through the auth service', () => {

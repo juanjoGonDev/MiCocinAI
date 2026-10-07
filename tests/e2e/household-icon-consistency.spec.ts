@@ -46,10 +46,12 @@ test('los iconos de compartir e invitación no forman parte del texto accesible'
       await page.evaluate((nextLanguage) => {
         localStorage.setItem('hogar:v1:language', nextLanguage);
       }, language);
-      await page.reload();
+      await page.goto('/household');
       await expect(page.locator('.invite-card')).toBeVisible();
 
       for (const viewport of responsiveViewports) {
+        await page.locator('[data-test="household-tab-home"]').click();
+        await expect(page.locator('.invite-card')).toBeVisible();
         await page.setViewportSize(viewport);
         const linkLayout = await page.evaluate(() => {
           const card = document.querySelector<HTMLElement>('.invite-card')!;
@@ -88,6 +90,8 @@ test('los iconos de compartir e invitación no forman parte del texto accesible'
           'los botones de copiar y regenerar deben permanecer visibles dentro de la tarjeta'
         ).toBeLessThanOrEqual(linkLayout.card.right);
 
+        await page.goto('/household?tab=members');
+        await expect(page.locator('.member-card')).toBeVisible();
         const memberLayout = await page.evaluate(() => {
           const card = document.querySelector<HTMLElement>('.member-card')!;
           const info = card.querySelector<HTMLElement>('.member-card__info')!;
@@ -159,7 +163,7 @@ test('los iconos de compartir e invitación no forman parte del texto accesible'
       if (language === null) localStorage.removeItem('hogar:v1:language');
       else localStorage.setItem('hogar:v1:language', language);
     }, initialLanguage);
-    await page.reload();
+    await page.goto('/household');
     await expect(page.locator('.invite-card')).toBeVisible();
   }
   await page.setViewportSize(initialViewport);
@@ -179,16 +183,20 @@ test('los iconos de compartir e invitación no forman parte del texto accesible'
   await expect(page.locator('.invite-card__code')).not.toHaveText(linkBeforeRegeneration ?? '');
 
   await expect(page.locator('.household__title')).toHaveText('Hogar');
-  const shareTitle = page.locator('.settings-section__title');
+  await page.getByRole('tab', { name: 'Ajustes' }).click();
+  const shareTitle = page
+    .locator('.settings-section__title')
+    .filter({ hasText: 'Compartir en el hogar' });
   await expect(shareTitle).toHaveText('Compartir en el hogar');
   await expect(shareTitle.locator('app-icon')).toBeVisible();
 
-  await expect(page.getByRole('button', { name: 'Regenerar', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Salir del hogar', exact: true })).toBeVisible();
   while (await page.locator('.toast__close').count()) {
     await page.locator('.toast__close').first().click();
   }
 
+  await page.getByRole('tab', { name: 'Miembros' }).click();
+  await expect(page.locator('.member-card')).toBeVisible();
   if (screenshotDirectory) {
     mkdirSync(screenshotDirectory, { recursive: true });
     await page.screenshot({ path: join(screenshotDirectory, 'household-members.png') });

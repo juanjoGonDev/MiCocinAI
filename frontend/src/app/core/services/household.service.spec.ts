@@ -6,7 +6,8 @@ import type {
   Household,
   HouseholdMember,
   InvitePreview,
-  MemberPermissions
+  MemberPermissions,
+  MemberRole
 } from '../../shared/models/household.model';
 import { HouseholdService } from './household.service';
 import { STORAGE_KEYS } from './storage.service';
@@ -30,6 +31,7 @@ function member(overrides: Partial<RawMember> = {}): RawMember {
     email: 'ada@example.test',
     role: 'admin',
     cookingLevel: 'intermediate',
+    isActive: true,
     avatar: null,
     joinedAt: '2026-01-02T03:04:05.000Z' as unknown as Date,
     permissions: PERMISSIONS,
@@ -181,6 +183,28 @@ describe('HouseholdService', () => {
     expect(service.isAdmin()).toBeFalse();
   });
 
+  it('defaults new dishes to active household members, excluding inactive memberships', () => {
+    expect(service.defaultServings()).toBe(2);
+    service.loadHousehold();
+    http.expectOne(API_URL).flush({
+      data: household({
+        members: [
+          member({ userId: 'current-user', isActive: true }),
+          member({ id: 'active-2', userId: 'another-user', isActive: true }),
+          member({ id: 'active-3', userId: 'third-user', isActive: true }),
+          member({ id: 'inactive-4', userId: 'inactive-user', isActive: false })
+        ]
+      })
+    });
+
+    expect(service.defaultServings()).toBe(3);
+    service.loadHousehold();
+    http.expectOne(API_URL).flush({
+      data: household({ members: [member({ isActive: false })] })
+    });
+    expect(service.defaultServings()).toBe(2);
+  });
+
   it('clears loading after a failed ensure and retries successfully on the next ensure', () => {
     service.ensureHousehold();
     http
@@ -232,8 +256,19 @@ describe('HouseholdService', () => {
     expect(create.request.body).toEqual({ name: 'Casa sintética', sharedPantry: true });
     expect(create.request.context.get(SILENT_TOAST)).toBeTrue();
     create.flush({ success: true, data: raw });
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          { id: 'home-1', name: 'Casa sintética', role: 'admin', permissions: PERMISSIONS, active: true }
+        ]
+      }
+    });
     expect(created).toEqual(jasmine.objectContaining({ id: 'home-1', inviteCode: 'ABC12345' }));
     expect(service.household()?.name).toBe('Casa sintética');
+    expect(service.activeHouseholdId()).toBe('home-1');
+    expect(service.memberships().map((membership) => membership.id)).toContain('home-1');
 
     let noData: Household | null | undefined;
     service
@@ -246,7 +281,7 @@ describe('HouseholdService', () => {
     });
     createWithoutPantry.flush({ success: true, data: null });
     expect(noData).toBeNull();
-    expect(service.household()).toBeNull();
+    expect(service.household()?.name).toBe('Casa sintética');
 
     let failed: Household | null | undefined;
     service.createHousehold('No creada').subscribe((value) => (failed = value));
@@ -262,8 +297,17 @@ describe('HouseholdService', () => {
     expect(join.request.body).toEqual({});
     expect(join.request.context.get(SILENT_TOAST)).toBeFalse();
     join.flush({ success: true, message: 'Joined household' });
-    expect(joined).toEqual({ success: true, message: 'Joined household' });
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          { id: 'home-1', name: 'Casa sintética', role: 'member', permissions: PERMISSIONS, active: true }
+        ]
+      }
+    });
     http.expectOne(API_URL).flush({ data: household() });
+    expect(joined).toEqual({ success: true, message: 'Joined household' });
     expect(service.household()?.id).toBe('home-1');
 
     let joinError: unknown;
@@ -283,6 +327,15 @@ describe('HouseholdService', () => {
     expect(join.request.method).toBe('POST');
     expect(join.request.context.get(SILENT_TOAST)).toBeTrue();
     join.flush({ success: true, message: 'Joined household' });
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          { id: 'home-1', name: 'Casa sintética', role: 'member', permissions: PERMISSIONS, active: true }
+        ]
+      }
+    });
     http.expectOne(API_URL).flush({ data: household() });
   });
 
@@ -294,13 +347,57 @@ describe('HouseholdService', () => {
     expect(join.request.body).toEqual({ inviteCode: 'JOINCODE' });
     expect(join.request.context.get(SILENT_TOAST)).toBeTrue();
     join.flush({ success: true, message: 'Joined household' });
-    expect(joined).toEqual({ success: true, message: 'Joined household' });
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          { id: 'home-1', name: 'Casa sintética', role: 'member', permissions: PERMISSIONS, active: true }
+        ]
+      }
+    });
     http.expectOne(API_URL).flush({ data: null });
+    expect(joined).toEqual({ success: true, message: 'Joined household' });
 
     let failed: unknown;
     service.joinHousehold('BADCODE').subscribe((value) => (failed = value));
     http.expectOne(`${API_URL}/join`).flush({}, { status: 404, statusText: 'Not Found' });
     expect(failed).toBeNull();
+  });
+
+  it('refreshes membership selection and household data after joining another home', () => {
+    service.loadMemberships().subscribe();
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          { id: 'home-1', name: 'Casa uno', role: 'admin', permissions: PERMISSIONS, active: true }
+        ]
+      }
+    });
+    service.loadHousehold();
+    http.expectOne(API_URL).flush({ data: household({ id: 'home-1', name: 'Casa uno' }) });
+
+    let joined: unknown;
+    service.joinHousehold('SECONDHOME').subscribe((value) => (joined = value));
+    http.expectOne(`${API_URL}/join`).flush({ success: true, message: 'Joined household' });
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-2',
+        memberships: [
+          { id: 'home-1', name: 'Casa uno', role: 'admin', permissions: PERMISSIONS, active: false },
+          { id: 'home-2', name: 'Casa dos', role: 'member', permissions: PERMISSIONS, active: true }
+        ]
+      }
+    });
+    http.expectOne(API_URL).flush({ data: household({ id: 'home-2', name: 'Casa dos' }) });
+
+    expect(joined).toEqual({ success: true, message: 'Joined household' });
+    expect(service.activeHouseholdId()).toBe('home-2');
+    expect(service.household()?.name).toBe('Casa dos');
+    expect(service.memberships().map((membership) => membership.id)).toEqual(['home-1', 'home-2']);
   });
 
   it('updates settings and emits the mapped household, with null on an empty response or error', () => {
@@ -333,6 +430,39 @@ describe('HouseholdService', () => {
     service.updateSettings({ name: 'Error' }).subscribe((value) => (failed = value));
     http.expectOne(API_URL).flush({}, { status: 403, statusText: 'Forbidden' });
     expect(failed).toBeNull();
+  });
+
+  it('sends a selected member role and permission matrix as one household update', () => {
+    const permissions: MemberPermissions = {
+      ...PERMISSIONS,
+      calendar: { view: true, edit: false },
+      settings: false
+    };
+    const role: MemberRole = 'child';
+    let updated: Household | null | undefined;
+
+    service.updateMemberAccess('member-target', role, permissions).subscribe((value) => {
+      updated = value;
+    });
+
+    const request = http.expectOne(API_URL);
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({
+      memberId: 'member-target',
+      memberRole: role,
+      memberPermissions: permissions
+    });
+    expect(request.request.context.get(SILENT_TOAST)).toBeTrue();
+    request.flush({
+      success: true,
+      data: household({
+        members: [member({ id: 'member-target', role, permissions })]
+      })
+    });
+
+    expect(updated?.members[0].role).toBe(role);
+    expect(updated?.members[0].permissions).toEqual(permissions);
+    expect(service.household()?.members[0].permissions).toEqual(permissions);
   });
 
   it('regenerates and emits the invite code, preserves a null household, and catches errors', () => {
@@ -386,6 +516,192 @@ describe('HouseholdService', () => {
     service.leaveHousehold().subscribe((value) => (failed = value));
     http.expectOne(`${API_URL}/leave`).flush({}, { status: 404, statusText: 'Not Found' });
     expect(failed).toBeFalse();
+  });
+
+  it('loads only the current user memberships and marks the server-selected household', () => {
+    const data = {
+      activeHouseholdId: 'home-2',
+      memberships: [
+        {
+          id: 'home-1',
+          name: 'Casa uno',
+          role: 'member' as const,
+          permissions: PERMISSIONS,
+          active: false
+        },
+        {
+          id: 'home-2',
+          name: 'Casa dos',
+          role: 'admin' as const,
+          permissions: PERMISSIONS,
+          active: true
+        }
+      ]
+    };
+    let result: unknown;
+
+    service.loadMemberships().subscribe((value) => (result = value));
+    const request = http.expectOne(`${API_URL}/memberships`);
+    expect(request.request.method).toBe('GET');
+    request.flush({ success: true, data });
+
+    expect(result).toEqual(data.memberships);
+    expect(service.memberships()).toEqual(data.memberships);
+    expect(service.activeHouseholdId()).toBe('home-2');
+  });
+
+  it('clears an obsolete loading state and reloads after memberships resolve the active home', () => {
+    service.loadHousehold();
+    const staleRequest = http.expectOne(API_URL);
+    expect(service.isLoading()).toBeTrue();
+
+    service.loadMemberships().subscribe();
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          { id: 'home-1', name: 'Casa uno', role: 'admin', permissions: PERMISSIONS, active: true }
+        ]
+      }
+    });
+    expect(service.isLoading()).toBeFalse();
+
+    service.ensureHousehold();
+    const currentRequest = http.expectOne(API_URL);
+    staleRequest.flush({ data: household({ id: 'home-1', name: 'Casa obsoleta' }) });
+    expect(service.household()).toBeNull();
+    expect(service.isLoading()).toBeTrue();
+
+    currentRequest.flush({ data: household({ id: 'home-1', name: 'Casa uno' }) });
+    expect(service.household()?.name).toBe('Casa uno');
+    expect(service.isLoading()).toBeFalse();
+  });
+
+  it('changes the active household only after server validation, clears old data and loads the new one', () => {
+    service.loadMemberships().subscribe();
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          {
+            id: 'home-1',
+            name: 'Casa uno',
+            role: 'member',
+            permissions: PERMISSIONS,
+            active: true
+          },
+          { id: 'home-2', name: 'Casa dos', role: 'admin', permissions: PERMISSIONS, active: false }
+        ]
+      }
+    });
+    service.loadHousehold();
+    http.expectOne(API_URL).flush({ success: true, data: household({ id: 'home-1' }) });
+
+    let changed: boolean | undefined;
+    service.selectActiveHousehold('home-2').subscribe((value) => (changed = value));
+    const select = http.expectOne(`${API_URL}/active`);
+    expect(select.request.method).toBe('POST');
+    expect(select.request.body).toEqual({ householdId: 'home-2' });
+    select.flush({ success: true, data: { activeHouseholdId: 'home-2' } });
+
+    expect(service.activeHouseholdId()).toBe('home-2');
+    expect(service.household()).toBeNull();
+    http
+      .expectOne(API_URL)
+      .flush({ success: true, data: household({ id: 'home-2', name: 'Casa dos' }) });
+
+    expect(changed).toBeTrue();
+    expect(service.household()?.id).toBe('home-2');
+    expect(service.memberships().find((item) => item.id === 'home-2')?.active).toBeTrue();
+  });
+
+  it('keeps the previous household selection and data when the server rejects a selection', () => {
+    service.loadMemberships().subscribe();
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          { id: 'home-1', name: 'Casa uno', role: 'admin', permissions: PERMISSIONS, active: true },
+          {
+            id: 'home-2',
+            name: 'Casa dos',
+            role: 'member',
+            permissions: PERMISSIONS,
+            active: false
+          }
+        ]
+      }
+    });
+    service.loadHousehold();
+    http.expectOne(API_URL).flush({ success: true, data: household({ id: 'home-1' }) });
+
+    let changed: boolean | undefined;
+    service.selectActiveHousehold('foreign-home').subscribe((value) => (changed = value));
+    http.expectOne(`${API_URL}/active`).flush({}, { status: 404, statusText: 'Not Found' });
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          { id: 'home-1', name: 'Casa uno', role: 'admin', permissions: PERMISSIONS, active: true },
+          {
+            id: 'home-2',
+            name: 'Casa dos',
+            role: 'member',
+            permissions: PERMISSIONS,
+            active: false
+          }
+        ]
+      }
+    });
+    http.expectOne(API_URL).flush({ success: true, data: household({ id: 'home-1' }) });
+
+    expect(changed).toBeFalse();
+    expect(service.activeHouseholdId()).toBe('home-1');
+    expect(service.household()?.id).toBe('home-1');
+  });
+
+  it('ignores a delayed response from the old household after a successful selection', () => {
+    service.loadMemberships().subscribe();
+    http.expectOne(`${API_URL}/memberships`).flush({
+      success: true,
+      data: {
+        activeHouseholdId: 'home-1',
+        memberships: [
+          {
+            id: 'home-1',
+            name: 'Casa uno',
+            role: 'member',
+            permissions: PERMISSIONS,
+            active: true
+          },
+          { id: 'home-2', name: 'Casa dos', role: 'admin', permissions: PERMISSIONS, active: false }
+        ]
+      }
+    });
+
+    service.loadHousehold();
+    const oldHouseholdRequest = http.expectOne(API_URL);
+    let changed: boolean | undefined;
+    service.selectActiveHousehold('home-2').subscribe((value) => (changed = value));
+    http.expectOne(`${API_URL}/active`).flush({
+      success: true,
+      data: { activeHouseholdId: 'home-2' }
+    });
+    const newHouseholdRequest = http.expectOne(API_URL);
+
+    oldHouseholdRequest.flush({ success: true, data: household({ id: 'home-1' }) });
+    expect(service.household()).toBeNull();
+    newHouseholdRequest.flush({
+      success: true,
+      data: household({ id: 'home-2', name: 'Casa dos' })
+    });
+
+    expect(changed).toBeTrue();
+    expect(service.household()?.id).toBe('home-2');
   });
 
   it('copies a current invite URL and covers explicit/fallback link and admin states', () => {

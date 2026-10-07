@@ -103,6 +103,70 @@ describe('adoptLegacyDatabase', () => {
 });
 
 describe('initializeDatabase con fichero heredado', () => {
+  it('añade metadatos del libro a recetas legacy sin alterar su contenido', async () => {
+    const databaseFile = target();
+    const previous = new Database(databaseFile);
+    previous.exec(`
+      CREATE TABLE recipes (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        difficulty TEXT DEFAULT 'medium',
+        cuisine TEXT,
+        author_id TEXT,
+        is_public INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO recipes (id, name, cuisine, author_id)
+      VALUES ('legacy-recipe', 'Receta heredada', 'regional', 'old-owner');
+    `);
+    previous.close();
+
+    const mod = await dbModuleWith(databaseFile);
+    try {
+      await mod.initializeDatabase();
+      const recipe = mod
+        .getDatabase()
+        .prepare(
+          'SELECT id, name, cuisine, country_code, catalog_key, source_attribution, recipe_guidance, image_attribution FROM recipes WHERE id = ?'
+        )
+        .get('legacy-recipe');
+      const columns = mod.getDatabase().prepare('PRAGMA table_info(recipes)').all() as {
+        name: string;
+      }[];
+
+      expect(recipe).toEqual({
+        id: 'legacy-recipe',
+        name: 'Receta heredada',
+        cuisine: 'regional',
+        country_code: null,
+        catalog_key: null,
+        source_attribution: null,
+        recipe_guidance: null,
+        image_attribution: null
+      });
+      expect(columns.map(({ name }) => name)).toEqual(
+        expect.arrayContaining([
+          'country_code',
+          'catalog_key',
+          'source_attribution',
+          'recipe_guidance',
+          'image_attribution'
+        ])
+      );
+      expect(
+        mod
+          .getDatabase()
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'recipe_image_assets'"
+          )
+          .get()
+      ).toEqual({ name: 'recipe_image_assets' });
+    } finally {
+      mod.closeDatabase();
+    }
+  });
+
   it('anade purchase_date a recibos antiguos sin inventar una fecha de compra', async () => {
     const databaseFile = target();
     const previous = new Database(databaseFile);
@@ -125,7 +189,7 @@ describe('initializeDatabase con fichero heredado', () => {
       const receipt = mod
         .getDatabase()
         .prepare(
-          'SELECT id, store, created_at, purchase_date, store_manual, purchase_date_manual FROM receipts WHERE id = ?'
+          'SELECT id, store, created_at, purchase_date, store_manual, purchase_date_manual, ai_output_language FROM receipts WHERE id = ?'
         )
         .get('old-receipt');
       expect(receipt).toEqual({
@@ -134,7 +198,8 @@ describe('initializeDatabase con fichero heredado', () => {
         created_at: '2024-02-29 12:30:00',
         purchase_date: null,
         store_manual: 0,
-        purchase_date_manual: 0
+        purchase_date_manual: 0,
+        ai_output_language: 'es'
       });
     } finally {
       mod.closeDatabase();
@@ -225,6 +290,7 @@ describe('initializeDatabase con fichero heredado', () => {
 
       INSERT INTO households (id, name, invite_code) VALUES
         ('legacy-house', 'Hogar antiguo', 'LEGACY01'),
+        ('copy-house', 'Segunda casa del admin', 'COPY0001'),
         ('empty-admin-house', 'Sin administrador', 'NOADMIN1');
       INSERT INTO users (id, email, name, password_hash, household_id) VALUES
         ('member-first', 'member-first@test.invalid', 'Member', '', 'legacy-house'),
@@ -237,9 +303,11 @@ describe('initializeDatabase con fichero heredado', () => {
         ('admin-z-row', 'legacy-house', 'admin-z', 'admin', '2020-01-01 00:00:00'),
         ('admin-a-row', 'legacy-house', 'admin-a', 'admin', '2020-01-01 00:00:00'),
         ('admin-newer-row', 'legacy-house', 'admin-newer', 'admin', '2021-01-01 00:00:00'),
+        ('admin-a-copy-row', 'copy-house', 'admin-a', 'admin', '2022-01-01 00:00:00'),
         ('only-member-row', 'empty-admin-house', 'only-member', 'member', '2018-01-01 00:00:00');
       INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, is_active)
-        VALUES ('historic-config', 'admin-a', 'Existing config', 'custom', 'http://127.0.0.1', '', 'test-model', 1);
+        VALUES ('historic-config', 'admin-a', 'Existing config', 'custom', 'http://127.0.0.1', 'synthetic-key', 'test-model', 1),
+               ('historic-alt', 'admin-a', 'Personal alternative', 'custom', 'http://127.0.0.2', 'other-key', 'other-model', 0);
       INSERT INTO ai_jobs (id, user_id, kind, status, created_at)
         VALUES ('historic-job', 'member-first', 'custom', 'done', '2020-02-03 04:05:06');
     `);
@@ -256,23 +324,68 @@ describe('initializeDatabase con fichero heredado', () => {
       expect(
         db.prepare('SELECT ai_owner_user_id FROM households WHERE id = ?').get('empty-admin-house')
       ).toEqual({ ai_owner_user_id: null });
+      expect(
+        db
+          .prepare('SELECT MIN(is_active) AS min, MAX(is_active) AS max FROM household_members')
+          .get()
+      ).toEqual({ min: 1, max: 1 });
 
       const configsBeforeRestart = db
-        .prepare('SELECT id, user_id, name, api_key, model, is_active FROM ai_configs ORDER BY id')
+        .prepare(
+          'SELECT id, user_id, household_id, name, api_key, model, is_active FROM ai_configs ORDER BY id'
+        )
         .all();
       const jobsBeforeRestart = db
         .prepare('SELECT id, user_id, kind, status, created_at FROM ai_jobs ORDER BY id')
         .all();
-      expect(configsBeforeRestart).toEqual([
+      expect(
+        (configsBeforeRestart as Array<Record<string, unknown>>).filter(
+          (row) => row.household_id === null
+        )
+      ).toEqual([
+        {
+          id: 'historic-alt',
+          user_id: 'admin-a',
+          household_id: null,
+          name: 'Personal alternative',
+          api_key: 'other-key',
+          model: 'other-model',
+          is_active: 0
+        },
         {
           id: 'historic-config',
           user_id: 'admin-a',
+          household_id: null,
           name: 'Existing config',
-          api_key: '',
+          api_key: 'synthetic-key',
           model: 'test-model',
           is_active: 1
         }
       ]);
+      const homeCopies = (configsBeforeRestart as Array<Record<string, unknown>>).filter(
+        (row) => row.household_id !== null
+      );
+      expect(homeCopies).toHaveLength(2);
+      expect(new Set(homeCopies.map((row) => row.id)).size).toBe(2);
+      expect(homeCopies.map((row) => row.household_id).sort()).toEqual([
+        'copy-house',
+        'legacy-house'
+      ]);
+      for (const copy of homeCopies) {
+        expect(copy).toMatchObject({
+          user_id: 'admin-a',
+          name: 'Existing config',
+          api_key: 'synthetic-key',
+          model: 'test-model',
+          is_active: 1
+        });
+        expect(copy.id).not.toBe('historic-config');
+      }
+      expect(
+        db
+          .prepare('SELECT COUNT(*) AS n FROM ai_configs WHERE household_id = ?')
+          .get('empty-admin-house')
+      ).toEqual({ n: 0 });
       expect(jobsBeforeRestart).toEqual([
         {
           id: 'historic-job',
@@ -290,13 +403,19 @@ describe('initializeDatabase con fichero heredado', () => {
       expect(
         restartedDb.prepare('SELECT id, ai_owner_user_id FROM households ORDER BY id').all()
       ).toEqual([
+        { id: 'copy-house', ai_owner_user_id: 'admin-a' },
         { id: 'empty-admin-house', ai_owner_user_id: null },
         { id: 'legacy-house', ai_owner_user_id: 'admin-a' }
       ]);
       expect(
         restartedDb
+          .prepare('SELECT MIN(is_active) AS min, MAX(is_active) AS max FROM household_members')
+          .get()
+      ).toEqual({ min: 1, max: 1 });
+      expect(
+        restartedDb
           .prepare(
-            'SELECT id, user_id, name, api_key, model, is_active FROM ai_configs ORDER BY id'
+            'SELECT id, user_id, household_id, name, api_key, model, is_active FROM ai_configs ORDER BY id'
           )
           .all()
       ).toEqual(configsBeforeRestart);
@@ -305,6 +424,77 @@ describe('initializeDatabase con fichero heredado', () => {
           .prepare('SELECT id, user_id, kind, status, created_at FROM ai_jobs ORDER BY id')
           .all()
       ).toEqual(jobsBeforeRestart);
+    } finally {
+      restarted?.closeDatabase();
+      mod.closeDatabase();
+    }
+  });
+
+  it('añade recurrence_rule a una tabla legacy conservando la fila, recurrencia y excepciones', async () => {
+    const databaseFile = target();
+    const previous = new Database(databaseFile);
+    previous.exec(`
+      CREATE TABLE calendar_events (
+        id TEXT PRIMARY KEY,
+        household_id TEXT,
+        user_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'other',
+        date DATE NOT NULL,
+        start_time TEXT,
+        end_time TEXT,
+        all_day INTEGER NOT NULL DEFAULT 0,
+        color TEXT,
+        notes TEXT,
+        location TEXT,
+        recurrence TEXT NOT NULL DEFAULT 'none',
+        exceptions TEXT NOT NULL DEFAULT '[]',
+        source TEXT NOT NULL DEFAULT 'user',
+        source_id TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO calendar_events (id, user_id, title, kind, date, recurrence, exceptions)
+      VALUES ('legacy-series', 'synthetic-user', 'Legacy event', 'home', '2026-03-05', 'weekly', '["2026-03-12"]');
+    `);
+    previous.close();
+
+    const mod = await dbModuleWith(databaseFile);
+    let restarted: DbModule | undefined;
+    try {
+      await mod.initializeDatabase();
+      const db = mod.getDatabase();
+      const columns = db.prepare('PRAGMA table_info(calendar_events)').all() as { name: string }[];
+      expect(columns.some((column) => column.name === 'recurrence_rule')).toBe(true);
+      expect(
+        db
+          .prepare(
+            'SELECT id, recurrence, recurrence_rule, exceptions FROM calendar_events WHERE id = ?'
+          )
+          .get('legacy-series')
+      ).toEqual({
+        id: 'legacy-series',
+        recurrence: 'weekly',
+        recurrence_rule: null,
+        exceptions: '["2026-03-12"]'
+      });
+
+      mod.closeDatabase();
+      restarted = await dbModuleWith(databaseFile);
+      await restarted.initializeDatabase();
+      expect(
+        restarted
+          .getDatabase()
+          .prepare(
+            'SELECT id, recurrence, recurrence_rule, exceptions FROM calendar_events WHERE id = ?'
+          )
+          .get('legacy-series')
+      ).toEqual({
+        id: 'legacy-series',
+        recurrence: 'weekly',
+        recurrence_rule: null,
+        exceptions: '["2026-03-12"]'
+      });
     } finally {
       restarted?.closeDatabase();
       mod.closeDatabase();

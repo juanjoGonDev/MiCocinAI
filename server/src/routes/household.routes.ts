@@ -5,6 +5,8 @@ import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth.middl
 import { createHouseholdSchema, joinHouseholdSchema } from '../schemas/household.schema.js';
 import type { AppEnv } from '../types/hono-env.js';
 import { seedDefaultsForHousehold, adoptPersonalRowsIntoHousehold } from '../utils/seed-data.js';
+import { activeHouseholdId } from '../utils/household-context.js';
+import { copyActivePersonalAiConfigToHousehold } from '../utils/household-ai-config.js';
 
 const householdRoutes = new Hono<AppEnv>();
 
@@ -32,6 +34,7 @@ function mapHousehold(raw: any) {
       role: m.role,
       cookingLevel: m.cooking_level,
       joinedAt: m.joined_at,
+      isActive: m.is_active !== 0,
       permissions: m.permissions ? JSON.parse(m.permissions) : defaultPermissions(m.role)
     }))
   };
@@ -67,28 +70,16 @@ export function defaultPermissions(role: string) {
   };
 }
 
-function activeHouseholdId(db: ReturnType<typeof getDatabase>, userId: string): string | null {
-  const user = db.prepare('SELECT household_id FROM users WHERE id = ?').get(userId) as
-    { household_id: string | null } | undefined;
-  if (user?.household_id) {
-    const membership = db
-      .prepare('SELECT 1 FROM household_members WHERE household_id = ? AND user_id = ?')
-      .get(user.household_id, userId);
-    if (membership) return user.household_id;
+function canKickMember(membership: { role: string; permissions: string | null }): boolean {
+  try {
+    const permissions = JSON.parse(membership.permissions ?? '{}');
+    const configuredPermission = permissions?.members?.kick;
+    return typeof configuredPermission === 'boolean'
+      ? configuredPermission
+      : membership.role === 'admin';
+  } catch {
+    return false;
   }
-
-  const memberships = db
-    .prepare(
-      'SELECT household_id FROM household_members WHERE user_id = ? ORDER BY joined_at, household_id'
-    )
-    .all(userId) as Array<{ household_id: string }>;
-  if (memberships.length !== 1) return null;
-
-  db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(
-    memberships[0].household_id,
-    userId
-  );
-  return memberships[0].household_id;
 }
 
 // Public (no auth) invite info endpoint — so links work for non-logged users
@@ -104,7 +95,9 @@ householdRoutes.get('/invite/:code', optionalAuthMiddleware, async (c) => {
   }
 
   const memberCount = db
-    .prepare('SELECT COUNT(*) as count FROM household_members WHERE household_id = ?')
+    .prepare(
+      'SELECT COUNT(*) as count FROM household_members WHERE household_id = ? AND is_active = 1'
+    )
     .get(household.id) as any;
 
   return c.json({
@@ -133,7 +126,7 @@ householdRoutes.get('/memberships', authMiddleware, async (c) => {
       `SELECT h.id, h.name, hm.role, hm.permissions, hm.joined_at
          FROM household_members hm
          JOIN households h ON h.id = hm.household_id
-        WHERE hm.user_id = ?
+        WHERE hm.user_id = ? AND hm.is_active = 1
         ORDER BY hm.joined_at ASC, h.id ASC`
     )
     .all(userId) as Array<{
@@ -173,7 +166,9 @@ householdRoutes.post('/active', authMiddleware, async (c) => {
   const db = getDatabase();
   const selected = db.transaction(() => {
     const membership = db
-      .prepare('SELECT 1 FROM household_members WHERE household_id = ? AND user_id = ?')
+      .prepare(
+        'SELECT 1 FROM household_members WHERE household_id = ? AND user_id = ? AND is_active = 1'
+      )
       .get(householdId, userId);
     if (!membership) return false;
     db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(householdId, userId);
@@ -207,14 +202,14 @@ householdRoutes.get('/', authMiddleware, async (c) => {
     .prepare(
       `SELECT h.* FROM households h
        JOIN household_members hm ON hm.household_id = h.id
-       WHERE h.id = ? AND hm.user_id = ?`
+       WHERE h.id = ? AND hm.user_id = ? AND hm.is_active = 1`
     )
     .get(selectedHouseholdId, userId) as any;
   if (!household) return c.json({ success: true, data: null });
   const members = db
     .prepare(
       `
-    SELECT hm.id, hm.user_id, u.name, u.email, u.avatar, u.cooking_level, hm.role, hm.joined_at, hm.permissions
+    SELECT hm.id, hm.user_id, u.name, u.email, u.avatar, u.cooking_level, hm.role, hm.joined_at, hm.permissions, hm.is_active
     FROM household_members hm
     JOIN users u ON u.id = hm.user_id
     WHERE hm.household_id = ?
@@ -260,6 +255,7 @@ householdRoutes.post('/', authMiddleware, async (c) => {
     ).run(nanoid(), id, userId, perms);
 
     db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(id, userId);
+    copyActivePersonalAiConfigToHousehold(db, id, userId);
 
     // Solo la primera casa adopta las filas personales; crear otra no copia ni
     // mueve datos que ya pertenecen a otra casa.
@@ -273,7 +269,7 @@ householdRoutes.post('/', authMiddleware, async (c) => {
   const members = db
     .prepare(
       `
-    SELECT hm.id, hm.user_id, u.name, u.email, u.avatar, u.cooking_level, hm.role, hm.joined_at, hm.permissions
+    SELECT hm.id, hm.user_id, u.name, u.email, u.avatar, u.cooking_level, hm.role, hm.joined_at, hm.permissions, hm.is_active
     FROM household_members hm JOIN users u ON u.id = hm.user_id WHERE hm.household_id = ?
   `
     )
@@ -339,6 +335,9 @@ async function doJoin(c: any, userId: string, inviteCode: string) {
 householdRoutes.patch('/', authMiddleware, async (c) => {
   const userId = c.get('userId');
   const body = await c.req.json();
+  if (body?.memberRole !== undefined && !['admin', 'member', 'child'].includes(body.memberRole)) {
+    return c.json({ success: false, message: 'Invalid member role' }, 400);
+  }
 
   const db = getDatabase();
   const selectedHouseholdId = activeHouseholdId(db, userId);
@@ -347,19 +346,57 @@ householdRoutes.patch('/', authMiddleware, async (c) => {
   }
 
   const membership = db
-    .prepare('SELECT role FROM household_members WHERE household_id = ? AND user_id = ?')
-    .get(selectedHouseholdId, userId) as any;
-  if (!membership || membership.role !== 'admin') {
+    .prepare(
+      'SELECT role, permissions FROM household_members WHERE household_id = ? AND user_id = ?'
+    )
+    .get(selectedHouseholdId, userId) as { role: string; permissions: string | null } | undefined;
+  const hasMemberActive = Object.prototype.hasOwnProperty.call(body ?? {}, 'memberActive');
+  if (hasMemberActive && typeof body.memberActive !== 'boolean') {
+    return c.json({ success: false, message: 'Member active status must be boolean' }, 400);
+  }
+  const hasHouseholdChanges =
+    body.name !== undefined ||
+    body.sharedPantry !== undefined ||
+    body.shareRecipes !== undefined ||
+    body.shareCalendar !== undefined;
+  const hasRoleOrPermissionChanges = Boolean(body.memberRole || body.memberPermissions);
+  const isStatusOnlyRequest =
+    hasMemberActive && !hasHouseholdChanges && !hasRoleOrPermissionChanges;
+  if (!membership || (membership.role !== 'admin' && !isStatusOnlyRequest)) {
     return c.json({ success: false, message: 'Only admins can change settings' }, 403);
   }
+  if (hasMemberActive && !canKickMember(membership)) {
+    return c.json({ success: false, message: 'Missing members.kick permission' }, 403);
+  }
 
-  const updatesMember = Boolean(body.memberId && (body.memberRole || body.memberPermissions));
+  const updatesMember = Boolean(body.memberId && (hasRoleOrPermissionChanges || hasMemberActive));
+  if ((hasRoleOrPermissionChanges || hasMemberActive) && !body.memberId) {
+    return c.json({ success: false, message: 'Member id is required' }, 400);
+  }
   if (updatesMember) {
     const targetMember = db
-      .prepare('SELECT id FROM household_members WHERE id = ? AND household_id = ?')
-      .get(body.memberId, selectedHouseholdId);
+      .prepare('SELECT id, user_id, role, is_active FROM household_members WHERE id = ? AND household_id = ?')
+      .get(body.memberId, selectedHouseholdId) as
+      | { id: string; user_id: string; role: string; is_active: number }
+      | undefined;
     if (!targetMember) {
       return c.json({ success: false, message: 'Member not found' }, 404);
+    }
+    if (
+      body.memberRole &&
+      body.memberRole !== 'admin' &&
+      targetMember.role === 'admin' &&
+      targetMember.is_active === 1
+    ) {
+      const activeAdmins = db
+        .prepare(
+          `SELECT COUNT(*) AS count FROM household_members
+            WHERE household_id = ? AND role = 'admin' AND is_active = 1`
+        )
+        .get(selectedHouseholdId) as { count: number };
+      if (activeAdmins.count <= 1) {
+        return c.json({ success: false, code: 'LAST_ACTIVE_ADMIN' }, 409);
+      }
     }
   }
 
@@ -397,21 +434,54 @@ householdRoutes.patch('/', authMiddleware, async (c) => {
       memUpdates.push('role = ?');
       memValues.push(body.memberRole);
     }
-    if (body.memberPermissions) {
+    if (body.memberPermissions !== undefined) {
       memUpdates.push('permissions = ?');
-      memValues.push(
-        JSON.stringify(
-          body.memberRole ? defaultPermissions(body.memberRole) : body.memberPermissions
-        )
-      );
+      memValues.push(JSON.stringify(body.memberPermissions));
     } else if (body.memberRole) {
       memUpdates.push('permissions = ?');
       memValues.push(JSON.stringify(defaultPermissions(body.memberRole)));
     }
-    memValues.push(body.memberId, selectedHouseholdId);
-    db.prepare(
-      `UPDATE household_members SET ${memUpdates.join(', ')} WHERE id = ? AND household_id = ?`
-    ).run(...memValues);
+    if (hasMemberActive) {
+      const result = db.transaction(() => {
+        const target = db
+          .prepare(
+            `SELECT user_id, role, is_active FROM household_members
+              WHERE id = ? AND household_id = ?`
+          )
+          .get(body.memberId, selectedHouseholdId) as
+          { user_id: string; role: string; is_active: number } | undefined;
+        if (!target) return 'missing';
+        if (target.user_id === userId) return 'self';
+        if (target.is_active === 1 && body.memberActive === false && target.role === 'admin') {
+          const activeAdmins = db
+            .prepare(
+              `SELECT COUNT(*) AS count FROM household_members
+                WHERE household_id = ? AND role = 'admin' AND is_active = 1`
+            )
+            .get(selectedHouseholdId) as { count: number };
+          if (activeAdmins.count <= 1) return 'last-admin';
+        }
+        memUpdates.push('is_active = ?');
+        memValues.push(body.memberActive ? 1 : 0);
+        memValues.push(body.memberId, selectedHouseholdId);
+        db.prepare(
+          `UPDATE household_members SET ${memUpdates.join(', ')} WHERE id = ? AND household_id = ?`
+        ).run(...memValues);
+        return 'ok';
+      })();
+      if (result === 'missing') return c.json({ success: false, message: 'Member not found' }, 404);
+      if (result === 'self') {
+        return c.json({ success: false, code: 'MEMBER_CANNOT_DEACTIVATE_SELF' }, 409);
+      }
+      if (result === 'last-admin') {
+        return c.json({ success: false, code: 'LAST_ACTIVE_ADMIN' }, 409);
+      }
+    } else {
+      memValues.push(body.memberId, selectedHouseholdId);
+      db.prepare(
+        `UPDATE household_members SET ${memUpdates.join(', ')} WHERE id = ? AND household_id = ?`
+      ).run(...memValues);
+    }
   }
 
   const household = db
@@ -420,7 +490,7 @@ householdRoutes.patch('/', authMiddleware, async (c) => {
   const members = db
     .prepare(
       `
-    SELECT hm.id, hm.user_id, u.name, u.email, u.avatar, u.cooking_level, hm.role, hm.joined_at, hm.permissions
+    SELECT hm.id, hm.user_id, u.name, u.email, u.avatar, u.cooking_level, hm.role, hm.joined_at, hm.permissions, hm.is_active
     FROM household_members hm JOIN users u ON u.id = hm.user_id WHERE hm.household_id = ?
   `
     )
@@ -467,18 +537,10 @@ householdRoutes.delete('/leave', authMiddleware, async (c) => {
       userId
     );
 
-    const nextMembership = db
-      .prepare(
-        `SELECT household_id FROM household_members
-          WHERE user_id = ?
-          ORDER BY joined_at DESC, household_id ASC
-          LIMIT 1`
-      )
-      .get(userId) as { household_id: string } | undefined;
-    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(
-      nextMembership?.household_id ?? null,
-      userId
-    );
+    // Leaving a home must not silently switch the user's context to another one.
+    // The normal resolver may auto-select a sole remaining membership; with multiple
+    // memberships, keep the pointer empty until the user explicitly chooses.
+    db.prepare('UPDATE users SET household_id = NULL WHERE id = ?').run(userId);
 
     // Existing last-admin cleanup applies only to the household being left.
     if (membership.role === 'admin' && memberCount.c <= 1) {

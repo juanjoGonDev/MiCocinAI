@@ -16,12 +16,16 @@ describe('household create and join transactions', () => {
   beforeAll(async () => {
     const database = await import('../config/database.js');
     const { householdRoutes } = await import('./household.routes.js');
+    const { authMiddleware } = await import('../middleware/auth.middleware.js');
     const { config } = await import('../config/app.config.js');
     await database.initializeDatabase();
     closeDatabase = database.closeDatabase;
     db = database.getDatabase();
     app = new Hono();
     app.route('/api/household', householdRoutes);
+    app.get('/api/protected-household-test', authMiddleware, (context) =>
+      context.json({ success: true })
+    );
     app.onError((error, context) => {
       return context.json({ success: false, message: error.message }, 500);
     });
@@ -31,6 +35,11 @@ describe('household create and join transactions', () => {
   afterAll(() => closeDatabase());
 
   beforeEach(() => {
+    // users.household_id is a foreign key too; detach the selection before
+    // clearing household rows so repeated tests obey the same delete rules.
+    db.prepare('UPDATE users SET household_id = NULL').run();
+    db.prepare('DELETE FROM ai_jobs').run();
+    db.prepare('DELETE FROM ai_configs').run();
     for (const table of [
       'pantry_categories',
       'ingredients',
@@ -367,6 +376,11 @@ describe('household create and join transactions', () => {
   it('crea el hogar y adopta los datos personales cuando toda la secuencia termina', async () => {
     const owner = await makeUser('create-owner', null);
     addPersonalRows(owner.id);
+    db.prepare(
+      `INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, is_active)
+       VALUES ('personal-active', ?, 'Personal local', 'custom', 'http://127.0.0.1/v1', 'synthetic-key', 'gpt-test', 1),
+              ('personal-alt', ?, 'Personal alt', 'custom', 'http://127.0.0.2/v1', 'other-synthetic-key', 'other-test', 0)`
+    ).run(owner.id, owner.id);
 
     const response = await call(owner, 'POST', '', { name: 'Nuevo hogar' });
     const result = (await response.json()) as {
@@ -377,6 +391,25 @@ describe('household create and join transactions', () => {
     expect(response.status).toBe(201);
     expect(result.success).toBe(true);
     expect(result.data.id).toBeTruthy();
+    const copiedConfig = db
+      .prepare('SELECT id, user_id, household_id, name, base_url, api_key, model, is_active FROM ai_configs WHERE household_id = ?')
+      .get(result.data.id);
+    expect(copiedConfig).toMatchObject({
+      user_id: owner.id,
+      household_id: result.data.id,
+      name: 'Personal local',
+      base_url: 'http://127.0.0.1/v1',
+      api_key: 'synthetic-key',
+      model: 'gpt-test',
+      is_active: 1
+    });
+    expect((copiedConfig as { id: string }).id).not.toBe('personal-active');
+    expect(
+      db.prepare('SELECT id, household_id FROM ai_configs WHERE user_id = ? AND household_id IS NULL ORDER BY id').all(owner.id)
+    ).toEqual([
+      { id: 'personal-active', household_id: null },
+      { id: 'personal-alt', household_id: null }
+    ]);
     expect(
       db
         .prepare(
@@ -627,6 +660,179 @@ describe('household create and join transactions', () => {
     ).toEqual({ permissions: JSON.stringify(customPermissions) });
   });
 
+  it('conserva permisos personalizados al guardar rol y matriz en el mismo cambio', async () => {
+    const { admin } = await createJoinFixture();
+    const localMember = await makeUser('member-with-custom-access', 'target-house');
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('custom-access-membership', 'target-house', localMember.id);
+    const customPermissions = {
+      pantry: { view: true, edit: false, manage: false },
+      recipes: { view: true, create: false, edit: false, delete: false, generateAI: false },
+      calendar: { view: true, edit: false },
+      members: { invite: false, kick: false, manageRoles: false },
+      settings: false
+    };
+
+    const response = await call(admin, 'PATCH', '', {
+      memberId: 'custom-access-membership',
+      memberRole: 'child',
+      memberPermissions: customPermissions
+    });
+
+    expect(response.status).toBe(200);
+    expect(
+      db
+        .prepare('SELECT role, permissions FROM household_members WHERE id = ?')
+        .get('custom-access-membership')
+    ).toEqual({ role: 'child', permissions: JSON.stringify(customPermissions) });
+  });
+
+  it('allows authorized admins to deactivate and reactivate a membership without deleting it', async () => {
+    const { admin } = await createJoinFixture();
+    const member = await makeUser('target-toggle-member', 'target-house');
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('target-toggle-membership', 'target-house', member.id);
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'other-active-house',
+      'Otro hogar activo',
+      'OTHER001'
+    );
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('other-active-membership', 'other-active-house', member.id);
+
+    const initial = await call(admin, 'GET', '');
+    const initialBody = (await initial.json()) as any;
+    expect(
+      initialBody.data.members.find((item: any) => item.id === 'target-toggle-membership')
+    ).toMatchObject({ isActive: true });
+
+    const disabled = await call(admin, 'PATCH', '', {
+      memberId: 'target-toggle-membership',
+      memberActive: false
+    });
+    const disabledBody = (await disabled.json()) as any;
+    expect(disabled.status).toBe(200);
+    expect(
+      disabledBody.data.members.find((item: any) => item.id === 'target-toggle-membership')
+    ).toMatchObject({ isActive: false });
+    expect(
+      db.prepare('SELECT id FROM household_members WHERE id = ?').get('target-toggle-membership')
+    ).toEqual({ id: 'target-toggle-membership' });
+    const remainingMemberships = await call(member, 'GET', '/memberships');
+    expect(await remainingMemberships.json()).toMatchObject({
+      data: {
+        activeHouseholdId: null,
+        memberships: [{ id: 'other-active-house', active: false }]
+      }
+    });
+    expect(
+      (
+        await app.request('/api/protected-household-test', {
+          headers: { authorization: `Bearer ${member.token}` }
+        })
+      ).status
+    ).toBe(409);
+    expect(
+      (await call(member, 'POST', '/active', { householdId: 'other-active-house' })).status
+    ).toBe(200);
+    expect(
+      (
+        await app.request('/api/protected-household-test', {
+          headers: { authorization: `Bearer ${member.token}` }
+        })
+      ).status
+    ).toBe(200);
+
+    const reenabled = await call(admin, 'PATCH', '', {
+      memberId: 'target-toggle-membership',
+      memberActive: true
+    });
+    const reenabledBody = (await reenabled.json()) as any;
+    expect(reenabled.status).toBe(200);
+    expect(
+      reenabledBody.data.members.find((item: any) => item.id === 'target-toggle-membership')
+    ).toMatchObject({ isActive: true });
+  });
+
+  it('requires members.kick even for an admin when that permission is explicitly disabled', async () => {
+    const { admin } = await createJoinFixture();
+    const target = await makeUser('target-no-kick-member', 'target-house');
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('target-no-kick-membership', 'target-house', target.id);
+    db.prepare('UPDATE household_members SET permissions = ? WHERE household_id = ? AND user_id = ?').run(
+      JSON.stringify({ members: { kick: false } }),
+      'target-house',
+      admin.id
+    );
+
+    const denied = await call(admin, 'PATCH', '', {
+      memberId: 'target-no-kick-membership',
+      memberActive: false
+    });
+    const bundledDenied = await call(admin, 'PATCH', '', {
+      memberId: 'target-no-kick-membership',
+      memberActive: false,
+      name: 'Nombre que no se debe guardar'
+    });
+
+    expect(denied.status).toBe(403);
+    expect(bundledDenied.status).toBe(403);
+    expect(
+      db
+        .prepare('SELECT is_active FROM household_members WHERE id = ?')
+        .get('target-no-kick-membership')
+    ).toEqual({ is_active: 1 });
+  });
+
+  it('protects the last active admin from a member with kick permission', async () => {
+    await createJoinFixture();
+    const manager = await makeUser('target-kick-manager', 'target-house');
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', ?)`
+    ).run(
+      'target-kick-manager-membership',
+      'target-house',
+      manager.id,
+      JSON.stringify({ members: { kick: true } })
+    );
+
+    const lastAdmin = await call(manager, 'PATCH', '', {
+      memberId: 'target-membership',
+      memberActive: false
+    });
+    expect(lastAdmin.status).toBe(409);
+    expect(
+      db.prepare('SELECT is_active FROM household_members WHERE id = ?').get('target-membership')
+    ).toEqual({ is_active: 1 });
+  });
+
+  it('does not let an admin deactivate their own membership when another admin exists', async () => {
+    const { admin } = await createJoinFixture();
+    const otherAdmin = await makeUser('target-second-admin', 'target-house');
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'admin', '{}')`
+    ).run('target-second-admin-membership', 'target-house', otherAdmin.id);
+
+    const self = await call(admin, 'PATCH', '', {
+      memberId: 'target-membership',
+      memberActive: false
+    });
+    expect(self.status).toBe(409);
+    expect(
+      db.prepare('SELECT is_active FROM household_members WHERE id = ?').get('target-membership')
+    ).toEqual({ is_active: 1 });
+  });
+
   it('persiste los tres ajustes compartidos del admin y responde al PATCH vacío', async () => {
     const { admin } = await createJoinFixture();
 
@@ -709,12 +915,21 @@ describe('household create and join transactions', () => {
     ).toEqual({ id: 'old-admin-membership' });
   });
 
-  it('al salir de la casa activa conserva y selecciona otra membresía', async () => {
+  it('al salir con varias casas restantes deja la selección vacía hasta que el usuario elija', async () => {
     const { member } = await createJoinFixture();
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'third-house',
+      'Tercer hogar',
+      'THIRD001'
+    );
     db.prepare(
       `INSERT INTO household_members (id, household_id, user_id, role, permissions)
        VALUES (?, ?, ?, 'member', '{}')`
     ).run('member-target-membership', 'target-house', member.id);
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('member-third-membership', 'third-house', member.id);
 
     const response = await call(member, 'DELETE', '/leave');
 
@@ -730,8 +945,64 @@ describe('household create and join transactions', () => {
         .get('target-house', member.id)
     ).toEqual({ id: 'member-target-membership' });
     expect(
+      db
+        .prepare('SELECT id FROM household_members WHERE household_id = ? AND user_id = ?')
+        .get('third-house', member.id)
+    ).toEqual({ id: 'member-third-membership' });
+    expect(
       (db.prepare('SELECT household_id FROM users WHERE id = ?').get(member.id) as any).household_id
-    ).toBe('target-house');
+    ).toBeNull();
+
+    const memberships = await call(member, 'GET', '/memberships');
+    expect(await memberships.json()).toMatchObject({
+      success: true,
+      data: {
+        activeHouseholdId: null,
+        memberships: [
+          { id: 'target-house', active: false },
+          { id: 'third-house', active: false }
+        ]
+      }
+    });
+    expect(await (await call(member, 'GET', '')).json()).toMatchObject({
+      success: true,
+      data: null
+    });
+
+    const selected = await call(member, 'POST', '/active', { householdId: 'target-house' });
+    expect(selected.status).toBe(200);
+    expect(await selected.json()).toMatchObject({
+      success: true,
+      data: { activeHouseholdId: 'target-house' }
+    });
+    const selectedMemberships = (await (await call(member, 'GET', '/memberships')).json()) as {
+      data: { activeHouseholdId: string; memberships: Array<{ id: string; active: boolean }> };
+    };
+    expect(selectedMemberships.data.activeHouseholdId).toBe('target-house');
+    expect(selectedMemberships.data.memberships.map(({ id, active }) => ({ id, active }))).toEqual([
+      { id: 'target-house', active: true },
+      { id: 'third-house', active: false }
+    ]);
+  });
+
+  it('al salir y quedar una sola casa permite autoseleccionarla', async () => {
+    const { member } = await createJoinFixture();
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', '{}')`
+    ).run('member-target-membership', 'target-house', member.id);
+
+    expect((await call(member, 'DELETE', '/leave')).status).toBe(200);
+    expect(
+      (db.prepare('SELECT household_id FROM users WHERE id = ?').get(member.id) as any).household_id
+    ).toBeNull();
+
+    expect(await (await call(member, 'GET', '/memberships')).json()).toMatchObject({
+      data: {
+        activeHouseholdId: 'target-house',
+        memberships: [{ id: 'target-house', active: true }]
+      }
+    });
   });
 
   it('al salir el único admin elimina el hogar y solo su inventario compartido', async () => {

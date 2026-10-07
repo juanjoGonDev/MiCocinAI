@@ -2,7 +2,9 @@ import { test, expect } from './fixtures';
 import { skipOnboarding } from './helpers/auth';
 
 test.describe('Household sharing & invite flow', () => {
-  test('invite code appears immediately after creating household and is a full URL', async ({ page }) => {
+  test('invite code appears immediately after creating household and is a full URL', async ({
+    page
+  }) => {
     const email = `hh-${Date.now()}@example.com`;
     await page.goto('/auth/register');
     await page.fill('input#name', 'Homeowner');
@@ -22,16 +24,22 @@ test.describe('Household sharing & invite flow', () => {
     await expect(page.locator('.invite-card__code')).toContainText('/invite/');
     // Copy link button present
     await expect(page.getByRole('button', { name: /Copiar enlace/ })).toBeVisible();
+    await page.getByRole('tab', { name: 'Ajustes' }).click();
     // Share toggles present (admin sees them)
-    const shareSection = page.locator('.settings-section');
+    const shareSection = page
+      .locator('.settings-section')
+      .filter({ hasText: 'Compartir en el hogar' });
     await expect(shareSection).toContainText('Inventario compartido'); // ## 12aa: la pantalla es del inventario de la casa, no solo de la cocina
     await expect(shareSection).toContainText('Recetas compartidas');
     await expect(shareSection).toContainText('Calendario compartido');
+    await page.getByRole('tab', { name: 'Miembros' }).click();
     // Admin badge on member list
     await expect(page.locator('.member-card').first()).toContainText('Admin');
   });
 
-  test('public invite page shows household name and join/login CTAs for logged-out users', async ({ browser }) => {
+  test('public invite page shows household name and join/login CTAs for logged-out users', async ({
+    browser
+  }) => {
     // First register + create household in one context
     const ownerCtx = await browser.newContext();
     const ownerPage = await ownerCtx.newPage();

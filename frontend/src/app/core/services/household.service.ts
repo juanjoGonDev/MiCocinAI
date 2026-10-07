@@ -1,8 +1,14 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient, HttpContext } from '@angular/common/http';
-import { Observable, tap, catchError, map, of } from 'rxjs';
+import { Observable, tap, catchError, map, of, switchMap, finalize } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Household, InvitePreview } from '../../shared/models/household.model';
+import {
+  Household,
+  HouseholdMembership,
+  InvitePreview,
+  MemberPermissions,
+  MemberRole
+} from '../../shared/models/household.model';
 import { STORAGE_KEYS } from './storage.service';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
 
@@ -14,13 +20,35 @@ export class HouseholdService {
   private http = inject(HttpClient);
 
   private householdSignal = signal<Household | null>(null);
+  private membershipsSignal = signal<HouseholdMembership[]>([]);
+  private activeHouseholdIdSignal = signal<string | null>(null);
+  private contextRevisionSignal = signal(0);
+  private membershipsLoadingSignal = signal(false);
+  private membershipsFailedSignal = signal(false);
+  private switchingHouseholdSignal = signal(false);
   private isLoadingSignal = signal(false);
   private failedSignal = signal(false);
   /** Si la casa ya se pidio y la respuesta fue buena, incluso cuando la respuesta fue «no tienes casa». */
   private askedSignal = signal(false);
 
   readonly household = this.householdSignal.asReadonly();
+  readonly memberships = this.membershipsSignal.asReadonly();
+  readonly activeHouseholdId = this.activeHouseholdIdSignal.asReadonly();
+  readonly contextRevision = this.contextRevisionSignal.asReadonly();
+  readonly membershipsLoading = this.membershipsLoadingSignal.asReadonly();
+  readonly membershipsFailed = this.membershipsFailedSignal.asReadonly();
+  readonly switchingHousehold = this.switchingHouseholdSignal.asReadonly();
   readonly isLoading = this.isLoadingSignal.asReadonly();
+
+  /** Default rations are the active members in the selected home, with a personal fallback. */
+  defaultServings(): number {
+    const activeMembers =
+      this.householdSignal()?.members.filter((member) => member.isActive).length ?? 0;
+    return activeMembers > 0 ? activeMembers : 2;
+  }
+
+  private membershipRequestId = 0;
+  private householdRequestId = 0;
 
   /**
    * Carga la casa si aun no la tenemos, y solo una vez.
@@ -45,27 +73,93 @@ export class HouseholdService {
   }
 
   loadHousehold(): void {
-    this.isLoadingSignal.set(true);
+    this.requestHousehold(this.contextRevisionSignal()).subscribe();
+  }
 
-    this.http
-      .get<any>(this.apiUrl)
-      .pipe(
-        tap((response) => {
-          this.householdSignal.set(response.data ? this.mapHousehold(response.data) : null);
+  /** Lista las casas propias y adopta únicamente la selección validada por el servidor. */
+  loadMemberships(): Observable<HouseholdMembership[]> {
+    const requestId = ++this.membershipRequestId;
+    const revision = this.contextRevisionSignal();
+    this.membershipsLoadingSignal.set(true);
+
+    return this.http.get<any>(`${this.apiUrl}/memberships`).pipe(
+      map((response) => {
+        const data = response?.data;
+        const memberships = Array.isArray(data?.memberships)
+          ? data.memberships.map((item: any) => this.mapMembership(item))
+          : [];
+        const serverActiveId =
+          typeof data?.activeHouseholdId === 'string' ? data.activeHouseholdId : null;
+        const activeId = memberships.some((item: HouseholdMembership) => item.id === serverActiveId)
+          ? serverActiveId
+          : null;
+
+        if (requestId === this.membershipRequestId && revision === this.contextRevisionSignal()) {
+          const previousId = this.activeHouseholdIdSignal();
+          this.membershipsSignal.set(
+            memberships.map((item: HouseholdMembership) => ({
+              ...item,
+              active: item.id === activeId
+            }))
+          );
+          this.activeHouseholdIdSignal.set(activeId);
+          if (
+            previousId !== activeId ||
+            (this.householdSignal() && this.householdSignal()?.id !== activeId)
+          ) {
+            this.advanceContextRevision();
+            this.householdRequestId += 1;
+            this.isLoadingSignal.set(false);
+            this.householdSignal.set(null);
+            this.askedSignal.set(false);
+          }
+          this.membershipsFailedSignal.set(false);
+        }
+        return memberships;
+      }),
+      catchError(() => {
+        if (requestId === this.membershipRequestId && revision === this.contextRevisionSignal()) {
+          this.membershipsFailedSignal.set(true);
+          this.membershipsSignal.set([]);
+          this.activeHouseholdIdSignal.set(null);
+          this.householdRequestId += 1;
           this.isLoadingSignal.set(false);
-          this.askedSignal.set(true);
-          this.failedSignal.set(false);
-        }),
-        catchError(() => {
-          // Se apunta el fallo, no se finge una casa vacia: `household() === null` significa «no lo
-          // sabemos», y una pantalla que lo interpreta como «no tienes casa» esconde un boton que manana
-          // si existe.
-          this.isLoadingSignal.set(false);
-          this.failedSignal.set(true);
-          return of(null);
-        })
-      )
-      .subscribe();
+          this.householdSignal.set(null);
+          this.askedSignal.set(false);
+          this.advanceContextRevision();
+        }
+        return of([] as HouseholdMembership[]);
+      }),
+      finalize(() => {
+        if (requestId === this.membershipRequestId) this.membershipsLoadingSignal.set(false);
+      })
+    );
+  }
+
+  /** Pide al servidor cambiar el contexto y solo después carga los datos de esa casa. */
+  selectActiveHousehold(householdId: string): Observable<boolean> {
+    const requestedId = typeof householdId === 'string' ? householdId.trim() : '';
+    if (!requestedId || this.switchingHouseholdSignal()) return of(false);
+
+    this.switchingHouseholdSignal.set(true);
+    const revision = this.advanceContextRevision();
+    // Mientras se valida el cambio no se debe dejar visible un hogar cuyo contexto ya está obsoleto.
+    this.householdSignal.set(null);
+    this.askedSignal.set(false);
+
+    return this.http.post<any>(`${this.apiUrl}/active`, { householdId: requestedId }).pipe(
+      switchMap((response) => {
+        if (response?.data?.activeHouseholdId !== requestedId) {
+          return this.reconcileHouseholdContext(revision).pipe(map(() => false));
+        }
+        this.setActiveHousehold(requestedId);
+        return this.requestHousehold(revision);
+      }),
+      catchError(() => {
+        return this.reconcileHouseholdContext(revision).pipe(map(() => false));
+      }),
+      finalize(() => this.switchingHouseholdSignal.set(false))
+    );
   }
 
   /** Fetch public info about an invite code (no auth needed on backend, but we have cookie/token anyway). */
@@ -80,7 +174,9 @@ export class HouseholdService {
   joinByCode(code: string, options: { silentToast?: boolean } = {}): Observable<any> {
     const requestOptions = options.silentToast ? { context: this.silentToastContext() } : {};
     return this.http.post<any>(`${this.apiUrl}/join/${code}`, {}, requestOptions).pipe(
-      tap(() => this.loadHousehold()),
+      switchMap((response) =>
+        this.refreshMembershipAndHousehold().pipe(map(() => response))
+      ),
       catchError((err) => {
         throw err;
       })
@@ -92,9 +188,9 @@ export class HouseholdService {
       .post<any>(this.apiUrl, { name, sharedPantry }, { context: this.silentToastContext() })
       .pipe(
         map((response) => (response?.data ? this.mapHousehold(response.data) : null)),
-        tap((household) => {
-          this.householdSignal.set(household);
-        }),
+        switchMap((household) =>
+          household ? this.activateCreatedHousehold(household) : of(null)
+        ),
         catchError(() => of(null))
       );
   }
@@ -103,7 +199,9 @@ export class HouseholdService {
     return this.http
       .post<any>(`${this.apiUrl}/join`, { inviteCode }, { context: this.silentToastContext() })
       .pipe(
-        tap(() => this.loadHousehold()),
+        switchMap((response) =>
+          this.refreshMembershipAndHousehold().pipe(map(() => response))
+        ),
         catchError(() => of(null))
       );
   }
@@ -121,6 +219,38 @@ export class HouseholdService {
       }),
       catchError(() => of(null))
     );
+  }
+
+  setMemberActive(memberId: string, memberActive: boolean): Observable<Household | null> {
+    return this.http
+      .patch<any>(this.apiUrl, { memberId, memberActive }, { context: this.silentToastContext() })
+      .pipe(
+        map((response) => (response?.data ? this.mapHousehold(response.data) : null)),
+        tap((household) => {
+          if (household) this.householdSignal.set(household);
+        }),
+        catchError(() => of(null))
+      );
+  }
+
+  updateMemberAccess(
+    memberId: string,
+    memberRole: MemberRole,
+    memberPermissions: MemberPermissions
+  ): Observable<Household | null> {
+    return this.http
+      .patch<any>(
+        this.apiUrl,
+        { memberId, memberRole, memberPermissions },
+        { context: this.silentToastContext() }
+      )
+      .pipe(
+        map((response) => (response?.data ? this.mapHousehold(response.data) : null)),
+        tap((household) => {
+          if (household) this.householdSignal.set(household);
+        }),
+        catchError(() => of(null))
+      );
   }
 
   regenerateInviteCode(): Observable<string | null> {
@@ -182,6 +312,7 @@ export class HouseholdService {
         role: m.role,
         cookingLevel: m.cookingLevel,
         joinedAt: m.joinedAt,
+        isActive: m.isActive !== false,
         permissions: m.permissions
       })),
       sharedPantry: !!raw.sharedPantry,
@@ -192,6 +323,114 @@ export class HouseholdService {
       createdAt: raw.createdAt,
       updatedAt: raw.updatedAt
     };
+  }
+
+  private mapMembership(raw: any): HouseholdMembership {
+    return {
+      id: String(raw?.id ?? ''),
+      name: String(raw?.name ?? ''),
+      role: raw?.role as MemberRole,
+      permissions: raw?.permissions as MemberPermissions,
+      active: raw?.active === true
+    };
+  }
+
+  private requestHousehold(revision: number): Observable<boolean> {
+    const requestId = ++this.householdRequestId;
+    this.isLoadingSignal.set(true);
+
+    return this.http.get<any>(this.apiUrl).pipe(
+      map((response) => {
+        const isCurrent =
+          revision === this.contextRevisionSignal() && requestId === this.householdRequestId;
+        const household = response?.data ? this.mapHousehold(response.data) : null;
+        const householdMatchesSelection =
+          !household ||
+          !this.activeHouseholdIdSignal() ||
+          household.id === this.activeHouseholdIdSignal();
+        if (isCurrent) {
+          // A delayed response must not replace the selected context with another home's data.
+          if (!householdMatchesSelection) {
+            this.householdSignal.set(null);
+            this.failedSignal.set(true);
+          } else {
+            this.householdSignal.set(household);
+            this.failedSignal.set(false);
+          }
+          this.isLoadingSignal.set(false);
+          this.askedSignal.set(true);
+        }
+        return isCurrent && householdMatchesSelection;
+      }),
+      catchError(() => {
+        if (revision === this.contextRevisionSignal() && requestId === this.householdRequestId) {
+          this.isLoadingSignal.set(false);
+          this.failedSignal.set(true);
+        }
+        return of(false);
+      })
+    );
+  }
+
+  private setActiveHousehold(householdId: string | null): void {
+    this.activeHouseholdIdSignal.set(householdId);
+    this.membershipsSignal.update((memberships) =>
+      memberships.map((membership) => ({ ...membership, active: membership.id === householdId }))
+    );
+  }
+
+  private advanceContextRevision(): number {
+    this.contextRevisionSignal.update((revision) => revision + 1);
+    return this.contextRevisionSignal();
+  }
+
+  private reconcileHouseholdContext(revision: number): Observable<boolean> {
+    if (revision !== this.contextRevisionSignal()) return of(false);
+    this.activeHouseholdIdSignal.set(null);
+    this.membershipsSignal.update((memberships) =>
+      memberships.map((membership) => ({ ...membership, active: false }))
+    );
+    this.householdSignal.set(null);
+    this.askedSignal.set(false);
+
+    return this.loadMemberships().pipe(
+      switchMap(() => {
+        if (this.membershipsFailedSignal()) return of(false);
+        return this.requestHousehold(this.contextRevisionSignal());
+      })
+    );
+  }
+
+  private refreshMembershipAndHousehold(): Observable<boolean> {
+    this.householdSignal.set(null);
+    this.askedSignal.set(false);
+    return this.loadMemberships().pipe(
+      switchMap(() => {
+        if (this.membershipsFailedSignal()) return of(false);
+        return this.requestHousehold(this.contextRevisionSignal());
+      })
+    );
+  }
+
+  private activateCreatedHousehold(household: Household): Observable<Household | null> {
+    this.advanceContextRevision();
+    this.setActiveHousehold(household.id);
+    this.householdSignal.set(household);
+    this.askedSignal.set(true);
+    return this.loadMemberships().pipe(
+      map(() => {
+        if (
+          this.membershipsFailedSignal() ||
+          this.activeHouseholdIdSignal() !== household.id ||
+          this.householdSignal()?.id !== household.id
+        ) {
+          this.householdSignal.set(null);
+          this.askedSignal.set(false);
+          return null;
+        }
+        return this.householdSignal();
+      })
+    );
   }
 
   private currentUserId(): string | null {

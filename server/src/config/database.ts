@@ -9,6 +9,8 @@ import {
   backfillUserSeeds,
   asegurarPadreAlimentosTodas
 } from '../utils/seed-data.js';
+import { ensureRecipeBookCatalog } from '../utils/recipe-book-seed.js';
+import { backfillHouseholdAiConfigs } from '../utils/household-ai-config.js';
 
 let db: Database.Database;
 let drizzleDb: ReturnType<typeof drizzle>;
@@ -134,6 +136,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
       user_id TEXT NOT NULL,
       role TEXT DEFAULT 'member',
       permissions TEXT DEFAULT '{}',
+      is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
       joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (household_id) REFERENCES households(id),
       FOREIGN KEY (user_id) REFERENCES users(id),
@@ -186,12 +189,13 @@ async function runMigrations(db: Database.Database): Promise<void> {
       prep_time INTEGER,
       cook_time INTEGER,
       rest_time INTEGER,
-      servings INTEGER DEFAULT 4,
+      servings INTEGER DEFAULT 2,
       calories REAL,
       image TEXT,
       ingredients TEXT DEFAULT '[]',
       utensils TEXT DEFAULT '[]',
       steps TEXT DEFAULT '[]',
+      recipe_guidance TEXT,
       nutrition TEXT,
       storage TEXT,
       author TEXT DEFAULT 'user',
@@ -204,6 +208,20 @@ async function runMigrations(db: Database.Database): Promise<void> {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (author_id) REFERENCES users(id)
+    );
+
+    -- Copias locales de fotos públicas seleccionadas desde Commons. Solo se insertan después de
+    -- validar autoría/licencia, tipo raster y tamaño en el proveedor; el id es la huella estable.
+    CREATE TABLE IF NOT EXISTS recipe_image_assets (
+      id TEXT PRIMARY KEY CHECK (length(id) = 24),
+      image_data BLOB NOT NULL CHECK (length(image_data) BETWEEN 1 AND 4194304),
+      mime_type TEXT NOT NULL CHECK (mime_type IN ('image/jpeg', 'image/png', 'image/webp')),
+      alt_text TEXT NOT NULL,
+      author TEXT NOT NULL,
+      license_name TEXT NOT NULL,
+      license_url TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
     -- User recipes (favorites, history)
@@ -263,6 +281,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
     CREATE TABLE IF NOT EXISTS ai_configs (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
+      household_id TEXT,
       name TEXT NOT NULL,
       provider TEXT DEFAULT 'custom',
       base_url TEXT NOT NULL,
@@ -281,7 +300,8 @@ async function runMigrations(db: Database.Database): Promise<void> {
       test_error TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id)
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE
     );
 
     -- Create indexes for better performance
@@ -387,6 +407,8 @@ async function runMigrations(db: Database.Database): Promise<void> {
       -- la tabla meals —una fila por dia repetido serian dos verdades sobre el mismo lunes.
       recurrence TEXT NOT NULL DEFAULT 'none'
         CHECK (recurrence IN ('none', 'daily', 'weekly')),
+      -- Las reglas avanzadas se guardan como JSON opcional en la misma fila de la serie.
+      recurrence_rule TEXT,
       exceptions TEXT NOT NULL DEFAULT '[]',
       source TEXT NOT NULL DEFAULT 'user',
       source_id TEXT,
@@ -494,6 +516,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
       status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'analyzing', 'review', 'confirmed', 'failed', 'stopped')),
       store TEXT,
       store_manual INTEGER NOT NULL DEFAULT 0,
+      ai_output_language TEXT NOT NULL DEFAULT 'es' CHECK (ai_output_language IN ('es', 'en')),
       purchase_date TEXT,
       purchase_date_manual INTEGER NOT NULL DEFAULT 0,
       currency TEXT,
@@ -541,6 +564,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
     CREATE TABLE IF NOT EXISTS ai_jobs (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
+      household_id TEXT,
       kind TEXT NOT NULL DEFAULT 'receipt',
       receipt_id TEXT,
       status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'done', 'failed', 'stopped')),
@@ -554,10 +578,29 @@ async function runMigrations(db: Database.Database): Promise<void> {
       started_at DATETIME,
       finished_at DATETIME,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL,
       FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_ai_jobs_user ON ai_jobs(user_id, created_at);
     CREATE INDEX IF NOT EXISTS idx_ai_jobs_pick ON ai_jobs(status, created_at);
+
+    -- Búsquedas asíncronas de fotos para productos del inventario. Los resultados son metadatos
+    -- públicos con licencia; las imágenes completas solo se copian localmente cuando alguien elige una.
+    CREATE TABLE IF NOT EXISTS product_image_searches (
+      ingredient_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      household_id TEXT,
+      job_id TEXT NOT NULL,
+      candidates_json TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'running', 'complete', 'failed', 'cancelled')),
+      error_code TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE SET NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_product_image_searches_scope
+      ON product_image_searches(user_id, household_id, status);
 
     -- Las tiendas que la casa conoce: se registran al detectarse en un ticket (o al usarse en
     -- una lista), y son el vocabulario que el «inventario.json» ensena al modelo para que sepa
@@ -598,6 +641,21 @@ async function runMigrations(db: Database.Database): Promise<void> {
       console.log(`[DB] Added ${table}.${column}`);
     }
   };
+  addColumnIfMissing(
+    'household_members',
+    'is_active',
+    'INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))'
+  );
+  addColumnIfMissing('recipes', 'country_code', 'TEXT');
+  addColumnIfMissing('recipes', 'catalog_key', 'TEXT');
+  addColumnIfMissing('recipes', 'source_attribution', 'TEXT');
+  addColumnIfMissing('recipes', 'recipe_guidance', 'TEXT');
+  addColumnIfMissing('recipes', 'image_attribution', 'TEXT');
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_recipes_catalog_key
+      ON recipes(catalog_key) WHERE catalog_key IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_recipes_country_code ON recipes(country_code);
+  `);
   // El CHECK de `scope` vive dentro de la tabla: una base creada antes de los descuentos
   // por producto rechazaria 'product' con un error de constraint, y ese fallo no se ve
   // hasta que alguien intenta guardarlo. Se reconstruye la tabla si el CHECK es viejo.
@@ -654,6 +712,11 @@ async function runMigrations(db: Database.Database): Promise<void> {
   `
   ).run();
   addColumnIfMissing('receipts', 'store_manual', 'INTEGER NOT NULL DEFAULT 0');
+  addColumnIfMissing(
+    'receipts',
+    'ai_output_language',
+    "TEXT NOT NULL DEFAULT 'es' CHECK (ai_output_language IN ('es', 'en'))"
+  );
   addColumnIfMissing('receipts', 'purchase_date', 'TEXT');
   addColumnIfMissing('receipts', 'purchase_date_manual', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing('household_members', 'permissions', "TEXT DEFAULT '{}'");
@@ -661,6 +724,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // —ALTER TABLE no puede restringir lo que ya existe—, asi que en las viejas la cadencia la sujeta
   // el schema de entrada, y la expansion ignora un valor desconocido en vez de romper la lectura.
   addColumnIfMissing('calendar_events', 'recurrence', "TEXT NOT NULL DEFAULT 'none'");
+  addColumnIfMissing('calendar_events', 'recurrence_rule', 'TEXT');
   addColumnIfMissing('calendar_events', 'exceptions', "TEXT NOT NULL DEFAULT '[]'");
   // Las dianas del descuento: `target` se queda para las filas ya escritas (una sola
   // diana) y `targets` es el JSON con las demas. Reconstruir la tabla para migrar el
@@ -680,20 +744,59 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // La concurrencia máxima de IA es por configuración (por proveedor): default 0 = ilimitada, y se
   // toca desde el apartado de IA (## 12aj).
   addColumnIfMissing('ai_configs', 'concurrency', 'INTEGER NOT NULL DEFAULT 0');
+  // The household is the configuration owner; user_id remains its creator/source for provenance.
+  // These additive columns also make the backfill work on older installations with smaller tables.
+  addColumnIfMissing(
+    'ai_configs',
+    'household_id',
+    'TEXT REFERENCES households(id) ON DELETE CASCADE'
+  );
+  addColumnIfMissing('ai_configs', 'provider', "TEXT DEFAULT 'custom'");
+  addColumnIfMissing('ai_configs', 'temperature', 'REAL DEFAULT 0.7');
+  addColumnIfMissing('ai_configs', 'max_tokens', 'INTEGER DEFAULT 2000');
+  addColumnIfMissing('ai_configs', 'top_p', 'REAL');
+  addColumnIfMissing('ai_configs', 'frequency_penalty', 'REAL');
+  addColumnIfMissing('ai_configs', 'presence_penalty', 'REAL');
+  addColumnIfMissing('ai_configs', 'timeout', 'INTEGER DEFAULT 30000');
+  addColumnIfMissing('ai_configs', 'retry_attempts', 'INTEGER DEFAULT 3');
+  addColumnIfMissing('ai_configs', 'last_tested', 'DATETIME');
+  addColumnIfMissing('ai_configs', 'test_status', 'TEXT');
+  addColumnIfMissing('ai_configs', 'test_error', 'TEXT');
+  addColumnIfMissing('ai_configs', 'created_at', 'DATETIME');
+  addColumnIfMissing('ai_configs', 'updated_at', 'DATETIME');
+  db.exec(
+    'UPDATE ai_configs SET created_at = COALESCE(created_at, CURRENT_TIMESTAMP), updated_at = COALESCE(updated_at, CURRENT_TIMESTAMP)'
+  );
+  db.exec('CREATE INDEX IF NOT EXISTS idx_ai_configs_household_id ON ai_configs(household_id)');
   addColumnIfMissing('ai_jobs', 'config_id', 'TEXT');
+  addColumnIfMissing(
+    'ai_jobs',
+    'household_id',
+    'TEXT REFERENCES households(id) ON DELETE SET NULL'
+  );
+  addColumnIfMissing('ai_jobs', 'receipt_id', 'TEXT');
   addColumnIfMissing('ai_jobs', 'queue_order', 'INTEGER NOT NULL DEFAULT 0');
   addColumnIfMissing('ai_jobs', 'claim_generation', 'INTEGER NOT NULL DEFAULT 0');
-  // Los trabajos de tickets antiguos no tenian identidad de proveedor. Fijamos, una unica vez,
-  // la configuracion activa que mejor representa el comportamiento anterior; no se vuelve a
-  // consultar la activa al despachar. Los jobs sin configuracion quedan sin config_id y fallan
-  // de forma explicita al procesarse, en vez de adoptar una clave futura silenciosamente.
+  // Existing durable receipt jobs get their original home from the receipt itself. Generic jobs
+  // remain unscoped because their input only lives in RAM; never infer a home from current selection.
+  db.prepare(
+    `UPDATE ai_jobs
+        SET household_id = (SELECT household_id FROM receipts WHERE receipts.id = ai_jobs.receipt_id)
+      WHERE kind = 'receipt' AND receipt_id IS NOT NULL AND household_id IS NULL`
+  ).run();
+  backfillHouseholdAiConfigs(db);
+  // Los trabajos de tickets antiguos no tenían identidad de proveedor. Se fija el config del
+  // recibo/hogar original (o personal si no hay casa); no se vuelve a resolver por selección actual.
   db.prepare(
     `
     UPDATE ai_jobs
        SET config_id = (
          SELECT id FROM ai_configs
-          WHERE ai_configs.user_id = ai_jobs.user_id AND ai_configs.is_active = 1
-          ORDER BY ai_configs.updated_at DESC LIMIT 1
+          WHERE ai_configs.is_active = 1
+            AND ((ai_jobs.household_id IS NOT NULL AND ai_configs.household_id = ai_jobs.household_id)
+              OR (ai_jobs.household_id IS NULL AND ai_configs.household_id IS NULL
+                  AND ai_configs.user_id = ai_jobs.user_id))
+          ORDER BY ai_configs.updated_at DESC, ai_configs.id ASC LIMIT 1
        )
      WHERE ai_jobs.kind = 'receipt' AND ai_jobs.config_id IS NULL
        AND ai_jobs.status IN ('queued', 'running')
@@ -776,6 +879,9 @@ async function runMigrations(db: Database.Database): Promise<void> {
   // Y el padre de fabrica de la ## 12aa: las casas anteriores nacen con las doce categorias planas, y `alimentos`
   // es lo que les falta para que el visor y el catalogo hablen el mismo idioma.
   asegurarPadreAlimentosTodas(db);
+
+  // Refresca contenido editorial del catálogo sin pisar datos ni interacciones personales.
+  if (config.server.env !== 'test') ensureRecipeBookCatalog(db);
 
   console.log('Database tables and indexes created');
 }
