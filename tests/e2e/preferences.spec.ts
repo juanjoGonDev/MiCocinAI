@@ -132,6 +132,33 @@ test.describe('Preferencias', () => {
     await expect(page.locator('.tab', { hasText: 'Gustos' })).toContainText('1');
   });
 
+  test('permite combinar objetivos y texto personalizado, y los conserva al recargar', async ({ page }) => {
+    await registerAndGoto(page, '/preferences?tab=goal', 'prefs-multiple-goals');
+
+    const weightLoss = page.locator('.preferences__goal', { hasText: 'Perder peso' });
+    const muscleGain = page.locator('.preferences__goal', { hasText: 'Ganar músculo' });
+    const custom = page.locator('.preferences__goal', { hasText: 'Personalizada' });
+
+    await weightLoss.click();
+    await muscleGain.click();
+    await custom.click();
+    await expect(weightLoss).toHaveAttribute('aria-pressed', 'true');
+    await expect(muscleGain).toHaveAttribute('aria-pressed', 'true');
+    await expect(custom).toHaveAttribute('aria-pressed', 'true');
+
+    await page.locator('textarea#goalNotes').fill('Prioriza proteína y comidas variadas.');
+    await page.getByRole('button', { name: 'Guardar preferencias' }).click();
+    await expect(page.locator('.toast--success').filter({ hasText: 'Guardado' })).toBeVisible();
+
+    await page.reload();
+    await expect(weightLoss).toHaveAttribute('aria-pressed', 'true');
+    await expect(muscleGain).toHaveAttribute('aria-pressed', 'true');
+    await expect(custom).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('textarea#goalNotes')).toHaveValue(
+      'Prioriza proteína y comidas variadas.'
+    );
+  });
+
   test('descartar cambios revierte sin recargar la página', async ({ page }) => {
     await registerAndGoto(page, '/preferences?tab=allergies', 'prefs-discard');
 

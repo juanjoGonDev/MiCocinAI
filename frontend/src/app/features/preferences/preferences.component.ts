@@ -23,8 +23,10 @@ import {
   COMMON_DISLIKES,
   COMMON_LIKES,
   GOAL_OPTIONS,
+  normalizeTasteProfile,
   TasteProfile,
-  emptyTasteProfile
+  emptyTasteProfile,
+  toggleTasteGoal
 } from '../../shared/models/taste-profile';
 import { syncTabWithUrl } from '../../core/utils/tab-url';
 import {
@@ -203,8 +205,9 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
               *ngFor="let goal of goalOptions"
               type="button"
               class="preferences__goal"
-              [class.preferences__goal--on]="taste.goal === goal.value"
-              (click)="taste.goal = goal.value"
+              [class.preferences__goal--on]="taste.goals.includes(goal.value)"
+              [attr.aria-pressed]="taste.goals.includes(goal.value)"
+              (click)="toggleGoal(goal.value)"
             >
               <span class="preferences__goal-icon">
                 <app-icon [name]="goal.icon" [size]="20" [label]="null" />
@@ -217,7 +220,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
           <div class="preferences__field">
             <label class="preferences__field-title" for="goalNotes">
               {{
-                taste.goal === 'custom'
+                taste.goals.includes('custom')
                   ? ('calendar.describe_tu_objetivo' | t)
                   : ('onboarding.mas_sobre_el_objetivo' | t)
               }}
@@ -229,7 +232,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
               rows="3"
               maxlength="500"
               [placeholder]="
-                taste.goal === 'custom'
+                taste.goals.includes('custom')
                   ? ('onboarding.ej_sin_carne_los_lunes' | t)
                   : ('onboarding.ej_prioriza_proteina_en_la_cena' | t)
               "
@@ -572,7 +575,7 @@ export class PreferencesComponent implements OnInit {
     // siempre, no vale el que pudo cargar el layout al abrir la app.
     this.tasteService.load().subscribe({
       next: (data) => {
-        this.taste = { ...emptyTasteProfile(), ...data.taste };
+        this.taste = normalizeTasteProfile(data.taste);
         this.profile = toHomeProfile(data.profile);
         // El servicio ya ha normalizado (y la API contesta siempre las cuatro): aqui no se vuelve a
         // resolver el JSON, se copia lo que hay para poder editarlo.
@@ -594,8 +597,14 @@ export class PreferencesComponent implements OnInit {
 
   /** El objetivo en palabras, para que la pestaña no muestre el valor interno. */
   goalLabel(): string {
-    const goal = this.goalOptions.find((option) => option.value === this.taste.goal);
-    return goal ? this.i18n.t(goal.labelKey) : '—';
+    return this.goalOptions
+      .filter((option) => this.taste.goals.includes(option.value))
+      .map((option) => this.i18n.t(option.labelKey))
+      .join(' · ') || '—';
+  }
+
+  toggleGoal(goal: TasteProfile['goals'][number]): void {
+    this.taste.goals = toggleTasteGoal(this.taste.goals, goal);
   }
 
   /**
