@@ -6,8 +6,11 @@ import type {
   CalendarMeal,
   HouseholdEvent
 } from '../../shared/models/calendar.model';
+import { dateLocale, setDateLocale } from '../../core/time';
 import { I18nService } from '../../core/services/i18n.service';
 import { CalendarTimelineComponent } from './calendar-timeline.component';
+
+let previousLocale: string;
 
 function day(iso: string, isToday = false): CalendarDayView {
   return {
@@ -27,6 +30,8 @@ function day(iso: string, isToday = false): CalendarDayView {
 
 describe('CalendarTimelineComponent grid geometry', () => {
   beforeEach(async () => {
+    previousLocale = dateLocale();
+    setDateLocale('es-ES');
     await TestBed.configureTestingModule({
       imports: [CalendarTimelineComponent],
       providers: [{ provide: I18nService, useValue: { t: (key: string) => key } }]
@@ -34,6 +39,8 @@ describe('CalendarTimelineComponent grid geometry', () => {
       .overrideComponent(CalendarTimelineComponent, { set: { template: '' } })
       .compileComponents();
   });
+
+  afterEach(() => setDateLocale(previousLocale));
 
   it('keeps a non-zero day column when no days have loaded yet', () => {
     const component = TestBed.createComponent(CalendarTimelineComponent).componentInstance;
