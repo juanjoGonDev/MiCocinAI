@@ -182,6 +182,54 @@ describe('PantryService inventory and catalog contracts', () => {
 
   afterEach(() => http.verify());
 
+  it('loads, retries, cancels, selects and uploads inventory product images via scoped endpoints', async () => {
+    const view = {
+      status: 'complete' as const,
+      jobId: 'image-job-1',
+      candidates: [
+        {
+          id: 'a'.repeat(24),
+          altText: 'Tomates frescos',
+          author: 'Autora de prueba',
+          licenseName: 'CC BY-SA 4.0',
+          licenseUrl: 'https://creativecommons.org/licenses/by-sa/4.0/',
+          sourceUrl: 'https://commons.wikimedia.org/wiki/File:Tomates.jpg',
+          previewUrl: '/api/product-image-previews/aaaaaaaaaaaaaaaaaaaaaaaa'
+        }
+      ],
+      errorCode: null
+    };
+
+    const loaded = service.getProductImageSearch('item/1');
+    http.expectOne('/api/pantry/ingredients/item%2F1/image-search').flush({ data: view });
+    await expectAsync(loaded).toBeResolvedTo(view);
+
+    const retried = service.retryProductImageSearch('item/1');
+    const retryRequest = http.expectOne('/api/pantry/ingredients/item%2F1/image-search/retry');
+    expect(retryRequest.request.method).toBe('POST');
+    expect(retryRequest.request.body).toEqual({});
+    retryRequest.flush({ data: { ...view, status: 'queued' } });
+    await expectAsync(retried).toBeResolvedTo({ ...view, status: 'queued' });
+
+    const cancelled = service.cancelProductImageSearch('item/1');
+    http.expectOne('/api/pantry/ingredients/item%2F1/image-search/cancel').flush({
+      data: { ...view, status: 'cancelled' }
+    });
+    await expectAsync(cancelled).toBeResolvedTo({ ...view, status: 'cancelled' });
+
+    const selected = service.selectProductImage('item/1', 'a'.repeat(24));
+    const selectRequest = http.expectOne('/api/pantry/ingredients/item%2F1/image-search/select');
+    expect(selectRequest.request.body).toEqual({ photoId: 'a'.repeat(24) });
+    selectRequest.flush({ data: { image: '/api/recipe-images/aaaaaaaaaaaaaaaaaaaaaaaa' } });
+    await expectAsync(selected).toBeResolvedTo({ image: '/api/recipe-images/aaaaaaaaaaaaaaaaaaaaaaaa' });
+
+    const uploaded = service.uploadProductImage('item/1', 'data:image/png;base64,AAAA');
+    const uploadRequest = http.expectOne('/api/pantry/ingredients/item%2F1/image');
+    expect(uploadRequest.request.body).toEqual({ dataUrl: 'data:image/png;base64,AAAA' });
+    uploadRequest.flush({ data: { image: '/api/uploads/product-images/item-1-abcd.png' } });
+    await expectAsync(uploaded).toBeResolvedTo({ image: '/api/uploads/product-images/item-1-abcd.png' });
+  });
+
   it('projects the ingredient payload and returns null when a detail is absent or unavailable', () => {
     let ingredient: Ingredient | null | undefined;
     service.getIngredient('qa-ingredient-1').subscribe((value) => (ingredient = value));

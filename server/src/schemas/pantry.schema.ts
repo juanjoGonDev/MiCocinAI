@@ -149,6 +149,14 @@ export const catalogAddSchema = z.object({
   ids: z.array(z.string().trim().min(1).max(64)).min(1, 'Marca al menos un producto').max(100, 'Son demasiados de una vez (100)')
 });
 
+export const selectProductImageSchema = z.object({
+  photoId: z.string().regex(/^[a-f0-9]{24}$/)
+}).strict();
+
+export const uploadProductImageSchema = z.object({
+  dataUrl: z.string().max(2_900_000)
+}).strict();
+
 // Utensil schemas
 export const createUtensilSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),

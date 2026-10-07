@@ -122,6 +122,8 @@ describe('POST /catalog/add', () => {
     expect(payload.data).toMatchObject({ added: 1, skipped: 0, categoriesCreated: 0 });
     const fila = db.prepare("SELECT * FROM ingredients WHERE user_id = 'u-alice' OR user_id = ?").get(alice.id) as any;
     expect(fila).toMatchObject({ name: 'Leche entera', category: 'dairy', quantity: 1, unit: 'l', location: 'pantry' });
+      expect(db.prepare('SELECT kind FROM ai_jobs WHERE id = (SELECT job_id FROM product_image_searches WHERE ingredient_id = ?)').get(fila.id))
+        .toEqual({ kind: 'product_image_search' });
   });
 
   it('una hoja nueva se crea en la casa con su padre DELANTE: la relacion pedida es producto-categoria-categoria-padre', async () => {
@@ -145,6 +147,8 @@ describe('POST /catalog/add', () => {
     const cantidades = db.prepare("SELECT quantity FROM ingredients WHERE user_id = ? AND name = 'Leche entera'").all(alice.id) as { quantity: number }[];
     expect(cantidades).toHaveLength(1);
     expect(cantidades[0].quantity).toBe(1);
+      expect(db.prepare('SELECT job_id FROM product_image_searches WHERE ingredient_id = ?').get('i-ficha'))
+        .toEqual({ job_id: expect.any(String) });
   });
 
   it('lo que ya tiene unidades NO se toca: el catalogo no repone stock a nadie', async () => {

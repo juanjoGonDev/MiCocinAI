@@ -80,6 +80,7 @@ export interface PantryProduct {
   inPantry: boolean;
   expirationDate: string | null;
   location: StorageLocation;
+  image?: string | null;
   barcode: string | null;
   notes: string | null;
   /** Como llama la familia a esto. Sirve para buscar y para pintar la ficha; nada mas. */
@@ -87,6 +88,24 @@ export interface PantryProduct {
   createdAt: string;
   updatedAt: string;
   impact: { listLines: number; priceObservations: number };
+}
+
+export interface ProductImageCandidate {
+  id: string;
+  altText: string;
+  author: string;
+  licenseName: string;
+  licenseUrl: string;
+  sourceUrl: string;
+  thumbnailUrl?: string;
+  previewUrl: string;
+}
+
+export interface ProductImageSearchView {
+  status: 'idle' | 'queued' | 'running' | 'complete' | 'failed' | 'cancelled';
+  jobId: string | null;
+  candidates: ProductImageCandidate[];
+  errorCode: string | null;
 }
 
 export interface PantryProductInput {

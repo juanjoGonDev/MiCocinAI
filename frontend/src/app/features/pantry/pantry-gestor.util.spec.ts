@@ -21,6 +21,21 @@ const castellano = pantryEs as unknown as Record<string, string>;
 const ingles = pantryEn as unknown as Record<string, string>;
 const t = (clave: string): string => castellano[clave] ?? clave;
 const tEn = (clave: string): string => ingles[clave] ?? clave;
+const categoriasDeFabrica = [
+  { key: 'alimentos', nombre: 'Alimentos', ingles: 'Food' },
+  { key: 'vegetables', nombre: 'Verduras', ingles: 'Vegetables' },
+  { key: 'fruits', nombre: 'Frutas', ingles: 'Fruits' },
+  { key: 'meat', nombre: 'Carnes', ingles: 'Meat' },
+  { key: 'fish', nombre: 'Pescados', ingles: 'Fish' },
+  { key: 'dairy', nombre: 'Lácteos', ingles: 'Dairy' },
+  { key: 'grains', nombre: 'Cereales', ingles: 'Grains' },
+  { key: 'spices', nombre: 'Especias', ingles: 'Spices' },
+  { key: 'condiments', nombre: 'Condimentos', ingles: 'Condiments' },
+  { key: 'frozen', nombre: 'Congelados', ingles: 'Frozen' },
+  { key: 'canned', nombre: 'Enlatados', ingles: 'Canned' },
+  { key: 'beverages', nombre: 'Bebidas', ingles: 'Beverages' },
+  { key: 'other', nombre: 'Otros', ingles: 'Other' }
+] as const;
 
 const fila = (parciales: Partial<PantryCategory>): PantryCategory => ({
   id: parciales.id ?? 'x',
@@ -109,9 +124,14 @@ describe('aliasVisibles', () => {
 });
 
 describe('la etiqueta de una categoria (## 12x)', () => {
-  it('de fabrica, en el idioma activo', () => {
-    expect(pantryCategoryLabel({ key: 'vegetables', name: 'Verduras' }, t)).toBe('Verduras');
-    expect(pantryCategoryLabel({ key: 'vegetables', name: 'Verduras' }, tEn)).toBe('Vegetables');
+  it('traduce las 13 categorias de fabrica al espanol y al ingles', () => {
+    expect(categoriasDeFabrica.length).toBe(13);
+
+    for (const categoria of categoriasDeFabrica) {
+      const fila = { key: categoria.key, name: categoria.nombre };
+      expect(pantryCategoryLabel(fila, t)).withContext(categoria.key).toBe(categoria.nombre);
+      expect(pantryCategoryLabel(fila, tEn)).withContext(categoria.key).toBe(categoria.ingles);
+    }
   });
 
   it('en cuanto la casa le cambia el nombre, gana lo que ella escribio: el diccionario no corrige datos', () => {

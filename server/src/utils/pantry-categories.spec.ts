@@ -120,6 +120,43 @@ describe('el arbol', () => {
 });
 
 describe('sembrar y borrar', () => {
+  it('resuelve categorias del hogar activo sin mezclar categorias de otra casa del mismo usuario', () => {
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'old-home',
+      'Casa anterior',
+      'invite-old-home-categories'
+    );
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'active-home',
+      'Casa activa',
+      'invite-active-home-categories'
+    );
+    db.prepare("INSERT INTO users (id, email, name, password_hash) VALUES ('u-b', 'b@t.local', 'Beto', 'hash')").run();
+    db.prepare(
+      `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color)
+       VALUES ('old-category', 'u-a', 'old-home', 'old-only', 'Solo casa anterior', '#112233')`
+    ).run();
+    db.prepare(
+      `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color)
+       VALUES ('active-category', 'u-b', 'active-home', 'active-only', 'Casa activa', '#223344')`
+    ).run();
+    db.prepare(
+      `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color)
+       VALUES ('personal-category', 'u-a', NULL, 'personal-only', 'Personal', '#334455')`
+    ).run();
+
+    const activeKeys = mod.listCategories(db, { userId: 'u-a', householdId: 'active-home' }).map(
+      (category) => category.key
+    );
+    const personalKeys = mod.listCategories(db, { userId: 'u-a', householdId: null }).map(
+      (category) => category.key
+    );
+
+    expect(activeKeys).toContain('active-only');
+    expect(activeKeys).not.toContain('old-only');
+    expect(personalKeys).toEqual(['personal-only']);
+  });
+
   it('la casa arranca con el padre delante y las doce de siempre detras, y dos veces seguidas no son veintiseis', () => {
     mod.ensureDefaultCategories(db, 'u-a', null);
     mod.ensureDefaultCategories(db, 'u-a', null);

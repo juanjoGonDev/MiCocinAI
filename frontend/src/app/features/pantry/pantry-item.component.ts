@@ -11,7 +11,6 @@ import type { TranslationKey } from '../../core/i18n';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
-import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { TagComponent } from '../../shared/components/ui/tag/tag.component';
 import { TooltipComponent } from '../../shared/components/ui/tooltip/tooltip.component';
 import { CatalogLabelPipe } from '../../shared/pipes/catalog-label.pipe';
@@ -26,6 +25,7 @@ import type { PantryProduct } from '../../shared/models/pantry.model';
 import { colorDeCategoria } from './pantry-gestor.util';
 import { seriesPorTienda, type SerieTienda } from './precio-chart.util';
 import { PriceChartComponent } from './price-chart.component';
+import { PantryProductImageEditorComponent } from './pantry-product-image-editor.component';
 
 type ItemTab = 'detalles' | 'precios';
 
@@ -50,11 +50,11 @@ type ItemTab = 'detalles' | 'precios';
     TranslatePipe,
     IconComponent,
     BadgeComponent,
-    ButtonComponent,
     TagComponent,
     TooltipComponent,
     PriceChartComponent,
-    CatalogLabelPipe
+    CatalogLabelPipe,
+    PantryProductImageEditorComponent
   ],
   template: `
     <div class="item">
@@ -191,6 +191,8 @@ type ItemTab = 'detalles' | 'precios';
                 </dd>
               </div>
             </dl>
+
+            <app-pantry-product-image-editor [producto]="art" (imageChange)="actualizarImagen($event)" />
 
             @if (art.notes) {
               <div class="item__nota">
@@ -751,6 +753,10 @@ export class PantryItemComponent implements OnInit {
       return;
     }
     this.item.set(producto);
+  }
+
+  actualizarImagen(image: string): void {
+    this.item.update((current) => current ? { ...current, image } : current);
   }
 
   private async cargarPrecios(): Promise<void> {

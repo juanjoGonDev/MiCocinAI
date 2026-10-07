@@ -75,8 +75,11 @@ export type Scope = { userId: string; householdId: string | null };
 /** El mismo ambito que la cesta: si la despensa es compartida, las categorias tambien. */
 export function scopeClause(scope: Scope): { clause: string; params: unknown[] } {
   return scope.householdId
-    ? { clause: '(user_id = ? OR household_id = ?)', params: [scope.userId, scope.householdId] }
-    : { clause: 'user_id = ?', params: [scope.userId] };
+    ? {
+        clause: '(household_id = ? OR (household_id IS NULL AND user_id = ?))',
+        params: [scope.householdId, scope.userId]
+      }
+    : { clause: '(household_id IS NULL AND user_id = ?)', params: [scope.userId] };
 }
 
 export function normalizeCategoryName(value: unknown): string {

@@ -28,7 +28,8 @@ import {
   PantryCatalogCategory,
   PantryCatalogListResult,
   PantryCatalogAddResult,
-  PantryCatalogQuery
+  PantryCatalogQuery,
+  ProductImageSearchView
 } from '../../shared/models/pantry.model';
 import { CaducidadRow } from '../../shared/models/caducidades.model';
 
@@ -242,6 +243,50 @@ export class PantryService {
       }),
       catchError((error) => throwError(() => error))
     );
+  }
+
+  getProductImageSearch(id: string): Promise<ProductImageSearchView> {
+    return firstValueFrom(
+      this.http.get<{ data: ProductImageSearchView }>(
+        `${this.apiUrl}/ingredients/${encodeURIComponent(id)}/image-search`
+      )
+    ).then((response) => response.data);
+  }
+
+  retryProductImageSearch(id: string): Promise<ProductImageSearchView> {
+    return firstValueFrom(
+      this.http.post<{ data: ProductImageSearchView }>(
+        `${this.apiUrl}/ingredients/${encodeURIComponent(id)}/image-search/retry`,
+        {}
+      )
+    ).then((response) => response.data);
+  }
+
+  cancelProductImageSearch(id: string): Promise<ProductImageSearchView> {
+    return firstValueFrom(
+      this.http.post<{ data: ProductImageSearchView }>(
+        `${this.apiUrl}/ingredients/${encodeURIComponent(id)}/image-search/cancel`,
+        {}
+      )
+    ).then((response) => response.data);
+  }
+
+  selectProductImage(id: string, photoId: string): Promise<{ image: string }> {
+    return firstValueFrom(
+      this.http.post<{ data: { image: string } }>(
+        `${this.apiUrl}/ingredients/${encodeURIComponent(id)}/image-search/select`,
+        { photoId }
+      )
+    ).then((response) => response.data);
+  }
+
+  uploadProductImage(id: string, dataUrl: string): Promise<{ image: string }> {
+    return firstValueFrom(
+      this.http.post<{ data: { image: string } }>(
+        `${this.apiUrl}/ingredients/${encodeURIComponent(id)}/image`,
+        { dataUrl }
+      )
+    ).then((response) => response.data);
   }
 
   deleteIngredient(id: string): Observable<boolean> {
