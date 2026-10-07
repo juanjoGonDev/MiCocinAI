@@ -4,83 +4,14 @@ import { join } from 'node:path';
 import type { Request } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { registerToOnboarding, skipOnboarding } from './helpers/auth';
-
-type RouteCase = {
-  path: string;
-  component: string;
-  access: 'public' | 'onboarding' | 'authenticated';
-};
+import {
+  AUTHENTICATED_ROUTES,
+  ONBOARDING_ROUTE,
+  PUBLIC_ROUTES,
+  type RouteCase
+} from './helpers/route-layout-manifest';
 
 type ViewportCase = { width: number; height: number };
-
-const PUBLIC_ROUTES: RouteCase[] = [
-  { path: '/auth/login', component: 'app-login', access: 'public' },
-  { path: '/auth/register', component: 'app-register', access: 'public' },
-  { path: '/auth/forgot-password', component: 'app-forgot-password', access: 'public' },
-  { path: '/invite/qa-baseline-invalid-code', component: 'app-invite', access: 'public' }
-];
-
-const ONBOARDING_ROUTE: RouteCase = {
-  path: '/onboarding',
-  component: 'app-onboarding',
-  access: 'onboarding'
-};
-
-// Paths and component hosts revalidated against app.routes.ts and features/*/*.routes.ts.
-// Dynamic IDs are intentionally nonexistent so this baseline exercises route-level empty/error states.
-const AUTHENTICATED_ROUTES: RouteCase[] = [
-  { path: '/dashboard', component: 'app-dashboard', access: 'authenticated' },
-  { path: '/pantry', component: 'app-pantry', access: 'authenticated' },
-  { path: '/pantry/caducidades', component: 'app-caducidades', access: 'authenticated' },
-  {
-    path: '/pantry/inventario/qa-baseline-missing-item',
-    component: 'app-pantry-item',
-    access: 'authenticated'
-  },
-  {
-    path: '/pantry/inventario/qa-baseline-missing-item/editar',
-    component: 'app-pantry-item-edit',
-    access: 'authenticated'
-  },
-  { path: '/pantry/categories', component: 'app-pantry-categories', access: 'authenticated' },
-  {
-    path: '/pantry/categories/new',
-    component: 'app-pantry-categories',
-    access: 'authenticated'
-  },
-  { path: '/pantry/catalogo', component: 'app-pantry-catalog', access: 'authenticated' },
-  { path: '/pantry/products', component: 'app-pantry-products', access: 'authenticated' },
-  {
-    path: '/pantry/products/new',
-    component: 'app-pantry-products',
-    access: 'authenticated'
-  },
-  { path: '/recipes', component: 'app-recipes', access: 'authenticated' },
-  {
-    path: '/recipes?recipe=qa-baseline-missing-recipe',
-    component: 'app-recipes',
-    access: 'authenticated'
-  },
-  { path: '/shopping', component: 'app-shopping-lists', access: 'authenticated' },
-  {
-    path: '/shopping/qa-baseline-missing-list',
-    component: 'app-shopping-list-detail',
-    access: 'authenticated'
-  },
-  { path: '/receipts', component: 'app-receipts', access: 'authenticated' },
-  {
-    path: '/receipts/qa-baseline-missing-receipt',
-    component: 'app-receipt-detail',
-    access: 'authenticated'
-  },
-  { path: '/calendar', component: 'app-calendar', access: 'authenticated' },
-  { path: '/household', component: 'app-household', access: 'authenticated' },
-  { path: '/ai-config', component: 'app-ai-config', access: 'authenticated' },
-  { path: '/logs', component: 'app-logs', access: 'authenticated' },
-  { path: '/account', component: 'app-account', access: 'authenticated' },
-  { path: '/preferences', component: 'app-preferences', access: 'authenticated' },
-  { path: '/settings', component: 'app-settings', access: 'authenticated' }
-];
 
 const VIEWPORTS: ViewportCase[] = [
   { width: 320, height: 568 },
