@@ -57,7 +57,8 @@ class SyntheticReceiptProvider {
               {
                 delta: {
                   content:
-                    '{"lines":[{"name":"Partial synthetic product","quantity":1,"unit":"unit","category":"other","priceMinor":100,"confidence":1},'
+                    '{"lines":[{"name":"Partial synthetic product","quantity":1,"unit":"unit","category":"other","createCategory":null,"priceMinor":100,"offer":null,"confidence":1,"note":null},' +
+                    ' '.repeat(64)
                 }
               }
             ]
@@ -73,13 +74,18 @@ class SyntheticReceiptProvider {
             quantity: 1,
             unit: 'unit',
             category: 'other',
+            createCategory: null,
             priceMinor: 200,
-            confidence: 1
+            offer: null,
+            confidence: 1,
+            note: null
           }
         ],
         store: 'Synthetic market',
+        purchaseDate: null,
         currency: 'EUR',
-        totalMinor: 200
+        totalMinor: 200,
+        warnings: []
       });
 
       if (requestBody.stream) {
@@ -324,6 +330,7 @@ test.describe('acciones reales del gestor de cola de tickets', () => {
     expect(failedReceipt.job?.max_attempts).toBe(1);
 
     let panel = await openQueue(page);
+    await expect(panel.locator('[data-test="queue-job-failed"]')).toBeVisible();
     await expectTouchTargets(panel);
     const failedRow = panel.locator('[data-test="queue-job-failed"]');
     await expect(failedRow).toBeVisible();

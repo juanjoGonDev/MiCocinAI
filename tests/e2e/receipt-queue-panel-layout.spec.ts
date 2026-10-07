@@ -176,7 +176,7 @@ test('el panel de cola queda fuera del lateral y dentro del viewport', async ({ 
 test('la cola desplaza varios tickets sin salirse de la pantalla estrecha', async ({ page }) => {
   await registerAndGoto(page, '/receipts', 'receipt-queue-scroll');
   const ticketInput = page.locator('input[name="ticketFile"]');
-  const ticketRows = page.locator('[data-test="ticket-failed"]');
+  const ticketRows = page.locator('[data-test="ticket-history-item"]');
 
   for (let index = 1; index <= 10; index++) {
     await ticketInput.setInputFiles({
