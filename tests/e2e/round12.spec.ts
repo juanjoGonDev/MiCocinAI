@@ -1,6 +1,7 @@
 import { Page, test, expect } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 import { shoppingNewListAction } from './helpers/shopping-ui';
+import { selectCalendarView } from './helpers/calendar-ui';
 
 /** Un `pageerror` en la consola es un fallo, aunque la pantalla parezca buena (costumbre de la suite). */
 function watchPageErrors(page: Page): () => string {
@@ -47,10 +48,10 @@ test.describe('el calendario es de la casa, no de la cocina', () => {
     await expect(page.locator('[data-test="household-event"]')).toContainText('Revisar la caldera');
 
     // Las vistas siguen vivas: la rejilla del mes no pinta platos, pero pinta el dia.
-    await page.locator('#cal-view-month').click();
+    await selectCalendarView(page, 'month', 'Mes');
     await expect(page.locator('.cal-cell')).not.toHaveCount(0);
     await expect(page.locator('.cal-cell__plus')).toHaveCount(0);
-    await page.locator('#cal-view-week').click();
+    await selectCalendarView(page, 'week', 'Semana');
     // Sin la capa de cocina no hay ni un sitio donde anadir un plato: la rejilla sigue ahi (es la
     // agenda), pero no sus controles de comida.
     await expect(page.locator('[data-test="timeline-col"]')).not.toHaveCount(0);
