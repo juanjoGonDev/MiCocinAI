@@ -1275,6 +1275,20 @@ gate completo. Capturas sintéticas de escritorio/móvil y error inspeccionadas 
 
 **Evidencia/limitación:** la primera suite combinada reprodujo **12/14**, con los dos fallos del mismo escenario de recuperación (desktop/móvil); tras armar el error después del helper, el spec focal pasa **2/2** y la suite combinada original **14/14**. La revisión de los enlaces visibles detectó que faltaba cubrir Planificar ahora y Ver todo de recetas; QA-DASHBOARD.CTA-SUMMARY.1 los cierra. La casilla general `/dashboard` permanece abierta por las superficies de Today que el contrato activo aún requiere. Runner temporal sin escrituras a `localhost:4200` ni proveedor externo.
 
+### QA-DASHBOARD.NEXT-MEAL.1 · siguiente comida planificada
+
+**Fuente revalidada (2026-10-08):** `HOGARIA-SPEC.md` §2 define Today con comidas debidas y §P5 requiere la próxima comida planificada. El Dashboard actual consulta `CalendarService.loadRange(todayIso, todayIso)` y `pendingMealsForDate()` solo representa comidas pendientes de hoy; `CalendarService.getMealsForRange()` ya permite leer un rango auxiliar sin cambiar la vista/rango compartido del calendario. No existe aún una vista que permita anticipar el próximo día planificado.
+
+**Decisión de alcance (inferencia acotada):** buscar la próxima comida sin completar desde la hora local actual hasta siete fechas locales adelante (horizonte semanal, hoy incluido). Ordenar por fecha, hora, título e ID; las comidas sin hora quedan después de las que sí la tienen en el mismo día. Si la próxima comida ya pertenece a «Comidas de hoy», marcar esa fila como siguiente en vez de duplicarla. Si cae en otra fecha, mostrar una vista compacta con fecha, tipo, título y hora, con enlace a Calendario. Carga, error reintentable y ausencia de planes se distinguen; la ausencia ofrece el CTA a Calendario. Solo se leen datos: no se crea comida ni se llama a IA.
+
+- [ ] Añadir primero pruebas de la selección: excluir completadas y horas pasadas de hoy, aceptar comida sin hora hoy, respetar zona/fecha local, ordenar empates establemente y cubrir los extremos de 7 y 8 días.
+- [ ] Cargar el rango futuro con `getMealsForRange()` sin mutar la señal/rango que usa Calendario; al cancelarse/destruirse el Dashboard, no permitir que una respuesta antigua sobrescriba el estado actual.
+- [ ] Mostrar la próxima comida en la fila de hoy sin duplicación o, si es futura, en una vista compacta con fecha/tipo/título/hora y destino funcional a `/calendar`; añadir textos ES/EN y estados loading/vacío/error/reintento.
+- [ ] Probar fixtures sintéticas con Chromium y Pixel 5: comida futura hoy, siguiente fecha, comida completada, sin planes y fallo 503 seguido de recuperación; cubrir keyboard/focus/tap y límites 320×568, 393×851, 568×320 y 1440×900.
+- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil; asegurar ≥70 % S/B/F/L en cada fuente de producción instrumentable del cambio, ejecutar suite frontend con gate 80 %, E2E aislada, typecheck, `check:ui`, formato, build y `git diff --check`.
+
+**Rollback:** revertir la unidad que añade la búsqueda de siguiente comida, sus textos/pruebas y este subapartado; no cambiar el listado de comidas de hoy ni el estado del calendario compartido.
+
 ### QA-DASHBOARD.CTA-SUMMARY.1 · resumen y CTA renderizados
 
 **Fuente revalidada (2026-10-08):** `DashboardComponent` renderiza cuatro tarjetas numéricas y estas rutas visibles: generar receta (`/recipes#ai`), despensa, calendario, comidas vacías/«Ver todo», lista de recetas/«Ver todo» y detalle de receta sugerida. Los tests previos no seguían Planificar ahora ni el enlace «Ver todo» de recetas. La discrepancia funcional sigue abierta: la especificación de producto HOGARIA-SPEC §2/§12al también pide vencimientos, lista abierta/presupuesto semanal y trabajos IA pendientes; el Dashboard actual no los renderiza. No se añade esa funcionalidad sin resolverla en una unidad propia.
