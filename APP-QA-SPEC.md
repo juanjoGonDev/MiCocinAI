@@ -1393,7 +1393,7 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 ## Siguiente unidad de trabajo
 
-1. Continuar el barrido funcional de pantallas, formularios y acciones con datos sintéticos/proveedor mock, releyendo la fuente de verdad antes de cada unidad y marcando solo tras prueba real.
+1. Completar QA-AUTH.REGISTER.FORM.1: requerido de correo/contraseña y recuperación visible tras 500 sintético; después continuar el barrido funcional con datos sintéticos/proveedor mock.
 2. QA-REC.INGRESS.1 ya está verificada con Nginx real aislado; la siguiente validación de motor pendiente es Safari/iOS real para la hoja de ofertas de QA-04c.1, sin sustituir safe-area/teclado nativos por emulación WebKit/Chromium.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
 4. QA-04c: el gate global frontend está actualmente verde (**90.17/81.39/88.93/91.54 % S/B/F/L**); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.
@@ -1498,6 +1498,17 @@ Conducta esperada: un 401 del login muestra «Credenciales incorrectas» de form
 **Evidencia QA-AUTH.REGISTER-INVITE.1 (2026-10-03):** el primer run falló solo porque el contador de la prueba incluía el registro del owner además del invitee; el flujo real ya completaba registro 201, unión 200 y persistencia. Se reinició el contador tras preparar el hogar y antes de enviar el formulario del invitee. Con `E2E_RATE_LIMIT=on` y `E2E_CHROME_BIN=C:\Program Files\Google\Chrome\Application\chrome.exe`, `node scripts/run-isolated-playwright.mjs --config=playwright.full-stack.config.ts --project=chromium tests/e2e/full-stack/register-invite.spec.ts` pasó **1/1**; el mismo comando con `--project=mobile-chrome` pasó **1/1**. Cada runner usó SQLite, puerto, semilla y artefactos temporales propios; confirmó cleanup tras detener su proceso de app. Sin `pageerror`; no se usó la base habitual ni una cuenta real.
 
 **Rollback:** revertir únicamente `tests/e2e/full-stack/register-invite.spec.ts` y esta unidad de checklist; no cambia el comportamiento de producción.
+
+## Unidad QA-AUTH.REGISTER.FORM.1 · completar errores y recuperación del alta
+
+**Fuente revalidada (2026-10-08):** `HOGARIA-SPEC.md` §8b define que el alta pide solo nombre, correo y contraseña. El cliente valida nombre 2–100 caracteres, formato de correo y contraseña de al menos 6 caracteres, mayúscula, número y máximo bcrypt de 72 bytes; `server/src/schemas/auth.schema.ts` mantiene los límites de nombre/correo y `bcryptPasswordSchema`. `RegisterComponent` muestra error 409 para correo duplicado, 429 para límite de frecuencia y mensaje genérico recuperable para los demás estados; al éxito, sin código entra en onboarding y con `?code=` intenta unirse al hogar. Ya existen E2E de formato/política, límites, conflicto/doble envío, registro normal y transición de invitación. La cobertura de navegador no comprueba todavía que email y contraseña vacíos se anuncien como requeridos ni el estado visible y reintento tras un 500; los tests unitarios de `RegisterComponent` no sustituyen esas interacciones reales.
+
+- [ ] E2E aislada: completar campos uno por uno y verificar requerido de nombre/correo/contraseña, formato inválido, errores accesibles asociados al input y cero POST mientras la validación cliente no pasa.
+- [ ] E2E aislada: retener la primera solicitud válida, comprobar loading/submit deshabilitado, devolver 500 sintético, exigir un único mensaje genérico accesible, datos conservados y formulario reintentable; reintentar contra el backend aislado y confirmar 201 y entrada a onboarding.
+- [ ] Revalidar juntos `register-contract.spec.ts`, `auth-flow.spec.ts`, `auth-password-byte-limit.spec.ts` y `register-invite.spec.ts` en los proyectos Chromium de escritorio y Pixel 5, con rate limit activo, base/puerto/semilla únicos y cleanup. Registrar solo resultados actuales; no usar cuentas reales.
+- [ ] Si se toca producción, añadir primero la regresión roja, cubrir ≥70 % S/B/F/L por cada archivo cambiado sin bajar gates y ejecutar pruebas/build/typecheck/formato; guardar capturas sintéticas comparables solo si cambia la UI.
+
+**Rollback:** revertir solo las pruebas de registro incorporadas en esta unidad y esta sección; cualquier cambio de producción tendrá que formar parte del mismo commit atómico y ser reversible con él.
 
 ## Unidad QA-CALENDAR.NUMBER-LOCALE.1 · respetar el idioma activo al formatear calorías
 
