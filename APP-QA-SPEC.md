@@ -610,17 +610,19 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 ## Unidad QA-04c · cobertura global sin rebajar gates (en curso)
 
-La línea base histórica pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentencias/ramas/funciones/líneas). La revalidación anterior ejecutó `651/651` con 60.64/51.37/50.72/62.41 %. La revalidación actual ejecutó `665/665` sin fallos de aserción, pero la cobertura cae a **60.30/52.21/49.80/61.92 %**, por debajo tanto del mínimo de 70 % como del gate configurado de 80 %. No se rebajó ningún umbral.
+**Evidencia histórica (2026-10-01/02):** la línea base pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentencias/ramas/funciones/líneas); corridas posteriores pasaron `651/651` con 60.64/51.37/50.72/62.41 % y `665/665` con **60.30/52.21/49.80/61.92 %**, por debajo de los gates. No se rebajó ningún umbral. Estas métricas ya no describen el estado actual.
+
+**Revalidación vigente (2026-10-08):** `pnpm run test:client` ejecutó la suite frontend completa: **1152/1152**, Chrome Headless 154, salida **0**. Cobertura S/B/F/L: **88.88/80.44/88.38/90.23 %**; superó el 80 % en las cuatro métricas sin relajar thresholds ni cambiar la instrumentación. La corrida generó el reporte local en `frontend/coverage/`; no se añadió al commit.
 
 - [x] Revalidar cobertura global y por archivo antes del siguiente lote; archivar el reporte de esta ejecución en `%TEMP%`.
 - [ ] Añadir pruebas unitarias/integración para ramas y caminos de error/éxito no cubiertos; cada lote debe partir de fuentes actuales, tener regresión útil, cobertura ≥70 % en cada métrica del alcance y commit atómico.
-- [ ] Repetir la suite frontend completa con coverage y alcanzar 80 % en statements, ramas, funciones y líneas; documentar comandos y salidas, sin bajar umbrales.
+- [x] Repetir la suite frontend completa con coverage y alcanzar 80 % en statements, ramas, funciones y líneas; documentar comandos y salidas, sin bajar umbrales.
 
 Candidatos del informe previo al lote (histórico; orden statements/branches/functions/lines): `auth.service.ts` 100/81.82/94.59/100 %, `theme.service.ts` 96.67/92.86/87.50/96.67 %, `shopping.model.ts` 79.22/62.40/66.67/79.22 %, `error.interceptor.ts` 7.89/0/0/7.89 %, `swipe-row.directive.ts` 10.09/11.11/11.76/10.09 %, `core/time.ts` 86.75/57.83/95/86.75 %, `data-table.util.ts` 95.86/78.77/100/95.86 %, `i18n.service.ts` 61.70/23.68/61.54/61.70 %, `household.service.ts` 1.79/0/0/1.79 % y `taste-profile.service.ts` 3.33/0/0/3.33 %.
 
-Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `shopping.model.ts` 93.55/86.18/100/96.25 %, `shopping-http-error.ts` 100/100/100/100 %. El reporte completo actual instrumenta 135 de 182 fuentes de producción TS bajo `frontend/src/app`; `core/services` sigue siendo una superficie de riesgo: `shopping.service.ts` 0.29/0/0/0.33 %, `receipts.service.ts` 1.56/0/0/1.58 %, `household.service.ts` 3.33/0/0/1.78 %, `pantry.service.ts` 14.60/1.92/4.46/16.48 % y `calendar.service.ts` 43.60/42.64/15.78/45.94 % (S/B/F/L). Reporte completo archivado fuera de Git: `%TEMP%\hogaria-coverage-qa-20261001-1812`. El global sigue abierto.
+**Informe por archivo histórico (2026-10-01):** `picker.component.ts` 96.90/92.42/100/97.37 %, `shopping.model.ts` 93.55/86.18/100/96.25 %, `shopping-http-error.ts` 100/100/100/100 %. Ese reporte instrumentaba 135 de 182 fuentes de producción TS bajo `frontend/src/app` y medía entonces `shopping.service.ts` 0.29/0/0/0.33 %, `receipts.service.ts` 1.56/0/0/1.58 %, `household.service.ts` 3.33/0/0/1.78 %, `pantry.service.ts` 14.60/1.92/4.46/16.48 % y `calendar.service.ts` 43.60/42.64/15.78/45.94 % (S/B/F/L). Se conserva fuera de Git en `%TEMP%\hogaria-coverage-qa-20261001-1812`; estos porcentajes son históricos, no el informe actual.
 
-### QA-04c.GATE.1 · ejecutar realmente el gate configurado (pendiente)
+### QA-04c.GATE.1 · ejecutar realmente el gate configurado (positivo verificado)
 
 **Fuente y rojo reproducible (2026-10-01):** `frontend/karma.conf.js` declara 80 % global para sentencias, ramas, funciones y líneas, pero `frontend/angular.json` no conecta esa configuración al builder `test`. `ng test --no-watch --browsers=ChromeHeadlessNoSandbox --code-coverage` ejecutó 665/665 y salió `0` pese a los porcentajes inferiores. Cargando explícitamente `karma.conf.js` mediante un config temporal seguro para Chrome, la misma suite ejecutó 665/665, reportó **60.30/52.21/49.80/61.92 %** y falló las cuatro métricas con salida `1`. El launcher temporal se eliminó; no se tocó el umbral. Criterio: el comando estándar debe imponer el gate, no solo imprimirlo.
 
@@ -631,13 +633,15 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 - [x] Añadir primero una prueba de configuración que exija al target `test` cargar `karma.conf.js` y preserve sus cuatro thresholds globales.
 - [x] Conectar el target `test` estándar a `karma.conf.js`; mantener 80 % en las cuatro métricas y el launcher de CI `ChromeHeadless`.
 - [x] Verificar con Chrome local compatible que el comando estándar ejecuta la suite y falla por el baseline bajo, sin fallos de tests; conservar los artefactos de cobertura.
-- [ ] Probar un caso positivo auténtico donde la suite completa supere 80 % en las cuatro métricas; no fabricar cobertura ni relajar la instrumentación. La suite actual aún no alcanza el gate.
+- [x] Probar un caso positivo auténtico donde la suite completa supere 80 % en las cuatro métricas; no fabricar cobertura ni relajar la instrumentación.
 
 **TDD rojo (2026-10-02):** `node --test scripts/karma-coverage-gate.test.mjs` falló 2/2 antes del cambio: el target Angular no declaraba `karmaConfig` y `karma.conf.js` no registraba el launcher local `ChromeHeadlessLocal`. El comando `ng test --no-watch --code-coverage --browsers=ChromeHeadlessLocal` confirmó el launcher no registrado antes de ejecutar tests. La ejecución estándar con `ChromeHeadless` sí falló antes de iniciar tests por la limitación GPU de Chrome en esta máquina; no se contó como evidencia del gate.
 
 **Evidencia de gate conectado (2026-10-02):** ahora `frontend/angular.json` carga `karma.conf.js`; los cuatro thresholds siguen en 80 %, el launcher por defecto continúa `ChromeHeadless` para CI y `ChromeHeadlessLocal` con SwiftShader permite validar aquí. `npm run test:config` pasa **2/2**. `npm run test:coverage -- --browsers=ChromeHeadlessLocal` ejecuta **797/797** pruebas, luego retorna código **1** por statements/branches/functions/lines **75.55/65.61/73.92/77.19 %**, sin bajar umbrales. `node scripts/check-workflows.mjs` valida **5 workflows**; `make ci:yaml` no es invocable con GNU Make en esta máquina Windows porque interpreta los dos puntos del nombre del target. CI remoto no se ejecutó en esta ronda. Los artefactos de coverage permanecen en `frontend/coverage/`.
 
 **Revalidación completa más reciente (2026-10-02 06:06, árbol actual):** desde `frontend`, `npm run test:coverage -- --browsers=ChromeHeadlessLocal --progress=false` ejecutó **844/844** assertions, sin fallos funcionales; terminó con código **1** únicamente porque el gate 80 % recibe **74.97/62.80/72.66/76.47 % S/B/F/L**. El script ya incluye `--browsers=ChromeHeadless`, por lo que el override imprime una advertencia de parámetro duplicado y Karma selecciona el último valor `ChromeHeadlessLocal`; no afecta al umbral. No se redujeron thresholds ni se usaron servidor/base normales; `frontend/coverage/` corresponde a esta corrida.
+
+**Caso positivo auténtico (2026-10-08):** `pnpm run test:client` usa el target estándar Angular con `karma.conf.js`, preserva los cuatro thresholds de 80 % y terminó con **1152/1152** y **88.88/80.44/88.38/90.23 % S/B/F/L** (salida 0). No se fabricó cobertura ni se modificaron exclusiones. El workflow `.github/workflows/ci.yml` todavía valida el cableado de Karma y ejecuta coverage de servidor, pero no corre la suite frontend completa; esa discrepancia permanece registrada en QA-04.
 
 **Rollback:** revertir la unidad del gate restaura el builder Angular sin `karmaConfig`, elimina el guard de configuración/launcher local y quita su step de CI y script de test; no cambia los thresholds ni lógica de producto.
 
@@ -709,7 +713,7 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 
 **Evidencia QA-04c.CORE.TASTE.1 (2026-10-01):** `taste-profile.service.spec.ts` cubre carga/idempotencia, normalización, payloads y errores con `HttpTestingController`: 10/10; cobertura actual 100/100/100/100 %. La suite frontend completa, ya con esta spec, ejecutó 665/665 y dejó el global en 60.30/52.21/49.80/61.92 %, por debajo del gate 80 % (QA-04c.GATE.1). No se modificó threshold ni se escribieron datos externos.
 
-### QA-04c.CORE.SHOPPING.1 · cobertura y drenaje de escrituras offline (resuelta localmente; gate global pendiente)
+### QA-04c.CORE.SHOPPING.1 · cobertura y drenaje de escrituras offline (resuelta localmente; gate frontend revalidado)
 
 **Fuente revalidada (2026-10-01):** no hay spec directa de `ShoppingService`; la única spec que lo importa lo reemplaza con un mock. El HTML del reporte global actual confirma 1/338 statements (0.29 %), 0/174 branches, 0/154 functions y 1/298 lines (0.33 %). El servicio concentra consultas/paginación, sugerencias, CRUD de listas/artículos, precios, fotos, SSE y cola offline.
 
@@ -717,11 +721,11 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 - [x] Reproducir de forma acotada el fallo de red de `flush()`: el código conserva la primera escritura y ejecuta `continue` en el mismo `while`, reemitiéndola enseguida en vez de esperar el evento `online`; fijar conducta esperada de cola retenida, un intento por desconexión y reanudación al recuperar red, sin tormenta de solicitudes.
 - [x] Implementar las correcciones mínimas que exijan las regresiones; cubrir deduplicación, orden, conflicto 409, errores de red/no-red, cambios optimistas y `pendingWrites`.
 - [x] Cubrir streams, fotos, cierre de compra, artículos, precios y búsquedas dentro del contrato actual; alcanzar ≥70 % S/B/F/L del servicio antes de cerrar la unidad.
-- [ ] Repetir full frontend + gate local sin reducirlo; registrar impacto y mantener fixture sintético, sin tocar DB normal/proveedor real.
+- [x] Repetir full frontend + gate local sin reducirlo; registrar impacto y mantener fixture sintético, sin tocar DB normal/proveedor real.
 
-**Evidencia QA-04c.CORE.SHOPPING.1 (2026-10-01):** se añadieron 32 pruebas `HttpTestingController`; `shopping.service.spec.ts` pasó **32/32**. La regresión reprodujo el retry en bucle al recibir error de red; ahora conserva las escrituras, pausa el drenaje (también para nuevos cambios locales) y reanuda al evento `online`, con una comprobación de evento concurrente para no perder una reconexión recibida antes de que falle la request. Se normaliza whitespace en nombre de tienda y nota de foto en consonancia con `createListSchema`/`photoAnalyzeSchema`. Cobertura de `ShoppingService`: **98.56/90.96/100/99.02 %** (S/B/F/L). No se usó DB/proveedor normal; queda pendiente la suite frontend completa y el gate global.
+**Evidencia QA-04c.CORE.SHOPPING.1 (2026-10-01):** se añadieron 32 pruebas `HttpTestingController`; `shopping.service.spec.ts` pasó **32/32**. La regresión reprodujo el retry en bucle al recibir error de red; ahora conserva las escrituras, pausa el drenaje (también para nuevos cambios locales) y reanuda al evento `online`, con una comprobación de evento concurrente para no perder una reconexión recibida antes de que falle la request. Se normaliza whitespace en nombre de tienda y nota de foto en consonancia con `createListSchema`/`photoAnalyzeSchema`. Cobertura de `ShoppingService`: **98.56/90.96/100/99.02 %** (S/B/F/L). No se usó DB/proveedor normal; la repetición global y su impacto están revalidados en QA-04c.GATE.1 (2026-10-08).
 
-### QA-04c.CORE.PANTRY.1 · cobertura de inventario, categorías y catálogo (resuelta localmente; gate global pendiente)
+### QA-04c.CORE.PANTRY.1 · cobertura de inventario, categorías y catálogo (resuelta localmente; gate frontend revalidado)
 
 **Fuente revalidada (2026-10-01):** `pantry.service.spec.ts` existente solo cubre la carga/reintento de caducidades; el reporte global muestra `PantryService` en 14.60/1.92/4.46/16.48 % (S/B/F/L). La API actual agrupa ingredientes/utensilios, carga paginada, stats, categorías/productos, impactos y catálogo. `GET /ingredients/:id` devuelve `{data: ingredient}`, pero `getIngredient()` usa `tap(response => response.data)` sin proyectar el resultado; `createIngredient()` y `updateIngredient()` también declaran emitir `Ingredient|null` pero conservan el envelope mientras actualizan signals. Es discrepancia entre firmas, respuesta REST observada en `server/src/routes/pantry.routes.ts` y operador actual, no decisión de producto.
 
@@ -729,31 +733,31 @@ Revalidación focal anterior: `picker.component.ts` 96.90/92.42/100/97.37 %, `sh
 - [x] Añadir pruebas aisladas para paginación/defaults, filtros, CRUD y errores, carga de utensilios/stats, manager categorías/productos e impactos, operaciones bulk y catálogo.
 - [x] Corregir la proyección de envelopes solo cuando la regresión la demuestre; comprobar finalización de `loading/saving`, error reintentable y cache/force de categorías.
 - [x] Alcanzar ≥70 % S/B/F/L de `PantryService`; confirmar que el grupo unitario no escribe en DB de uso normal.
-- [ ] Ejecutar suite frontend completa y gate local.
+- [x] Ejecutar suite frontend completa y gate local.
 
-**Evidencia QA-04c.CORE.PANTRY.1 (2026-10-01):** `pantry.service.spec.ts` cubre contratos HTTP, estados, filtros/paginación, CRUD, utensilios/stats, categorías/productos, impactos/bulk y catálogo. El grupo aislado de servicios ejecutó **65/65**. TDD confirmó que `getIngredient`, `createIngredient` y `updateIngredient` emitían `{data: ...}` pese a declarar `Ingredient|null`; ahora proyectan `data`, mantienen las señales y no insertan `null`. `deleteIngredient` también proyecta éxito como `true` conforme a su tipo. Cobertura de `PantryService`: **100/84.82/100/100 %** (S/B/F/L). Suite completa/gate global pendientes.
+**Evidencia QA-04c.CORE.PANTRY.1 (2026-10-01):** `pantry.service.spec.ts` cubre contratos HTTP, estados, filtros/paginación, CRUD, utensilios/stats, categorías/productos, impactos/bulk y catálogo. El grupo aislado de servicios ejecutó **65/65**. TDD confirmó que `getIngredient`, `createIngredient` y `updateIngredient` emitían `{data: ...}` pese a declarar `Ingredient|null`; ahora proyectan `data`, mantienen las señales y no insertan `null`. `deleteIngredient` también proyecta éxito como `true` conforme a su tipo. Cobertura de `PantryService`: **100/84.82/100/100 %** (S/B/F/L). La suite completa y el gate se revalidaron en QA-04c.GATE.1 (2026-10-08).
 
-### QA-04c.CORE.HOUSEHOLD.1 · cobertura y contratos del hogar (resuelta localmente; gate global pendiente)
+### QA-04c.CORE.HOUSEHOLD.1 · cobertura y contratos del hogar (resuelta localmente; gate frontend revalidado)
 
 **Fuente revalidada (2026-10-01):** no existe spec directa; el reporte global mide 2/60 statements (3.33 %), 0/24 branches, 0/34 functions y 1/56 lines (1.78 %). Los callers activos consultan carga/creación/unión, permisos e invitaciones. Las firmas de `previewInvite`, `createHousehold`, `updateSettings` y `regenerateInviteCode` indican emitir `data`/entidad/código, pero los pipes actuales solo usan `tap`; la API real de regenerar devuelve `{data:{inviteCode}}`. Las pruebas fijarán contrato a partir de firma, caller y respuesta server, y cubrirán almacenamiento local corrupto.
 
 - [x] Añadir pruebas `HttpTestingController` de `ensureHousehold` (deduplicación, vacío exitoso, error y reintento), mapeo de members/current-user/defaults y respuestas públicas de invitación.
 - [x] Añadir pruebas de alta/unión/update/regeneración/salida, errores, clipboard y `getInviteLink/isAdmin`; exigir emisiones `data` conforme a las firmas públicas.
 - [x] Corregir solo los mappings confirmados por las regresiones; alcanzar ≥70 % S/B/F/L de `HouseholdService` sin escribir en servidor/DB real.
-- [ ] Repetir suite frontend + gate existente y registrar el impacto.
+- [x] Repetir suite frontend + gate existente y registrar el impacto.
 
-**Evidencia QA-04c.CORE.HOUSEHOLD.1 (2026-10-01):** se añadió `household.service.spec.ts` con 13 casos `HttpTestingController`; el grupo aislado hogar/pantry/tickets/gustos ejecutó **65/65**. Antes del fix, las regresiones confirmaron que `previewInvite`, `createHousehold`, `updateSettings` y `regenerateInviteCode` devolvían el envelope en vez de su firma pública, y `leaveHousehold()` devolvía el objeto HTTP en vez de booleano. Tras mapear `data`, actualizar signals con la entidad y emitir `true` en salida correcta, cobertura de `HouseholdService`: **100/96.55/100/100 %** (S/B/F/L). Sin escritura a servidor/DB normal. La suite completa y gate siguen pendientes.
+**Evidencia QA-04c.CORE.HOUSEHOLD.1 (2026-10-01):** se añadió `household.service.spec.ts` con 13 casos `HttpTestingController`; el grupo aislado hogar/pantry/tickets/gustos ejecutó **65/65**. Antes del fix, las regresiones confirmaron que `previewInvite`, `createHousehold`, `updateSettings` y `regenerateInviteCode` devolvían el envelope en vez de su firma pública, y `leaveHousehold()` devolvía el objeto HTTP en vez de booleano. Tras mapear `data`, actualizar signals con la entidad y emitir `true` en salida correcta, cobertura de `HouseholdService`: **100/96.55/100/100 %** (S/B/F/L). Sin escritura a servidor/DB normal. La repetición global y el gate están revalidados en QA-04c.GATE.1 (2026-10-08).
 
-### QA-04c.CORE.RECEIPTS.1 · cobertura del servicio de tickets y refresco inicial (resuelta localmente; gate global pendiente)
+### QA-04c.CORE.RECEIPTS.1 · cobertura del servicio de tickets y refresco inicial (resuelta localmente; gate frontend revalidado)
 
 **Fuente revalidada (2026-10-01):** no existe spec directa; el reporte actual marca 1.56/0/0/1.58 % (S/B/F/L). `ReceiptsService.watch()` incrementa su contador y llama `void this.refreshQueue()`, pero `HttpClient` devuelve un Observable frío: ese primer GET no se ejecuta hasta el siguiente tick de polling (1 s). El comentario de `watch()` describe activar el latido; el contrato §12aj exige que el icono refleje la cola activa. Se fija como conducta esperada refrescar inmediatamente al primer watcher, luego sondear una vez por segundo solo mientras haya watchers y cancelar al destruir el servicio.
 
 - [x] Añadir pruebas unitarias primero para endpoints/señales/flags, multipart sintético, errores y toast, operaciones explícitas de stop/retry/confirm, `stopAll()` en éxito/error y limpieza en destroy.
 - [x] Reproducir que `watch()` no inicia el GET inmediatamente; conectar un solo primer refresco y mantener el contador saturado en cero y polling solo mientras exista watcher.
 - [x] Alcanzar ≥70 % S/B/F/L de `ReceiptsService`; validar intervalos con tiempo virtual, sin EventSource/SSE/proveedor/DB real.
-- [ ] Repetir suite frontend + gate sin reducir umbrales y registrar el impacto.
+- [x] Repetir suite frontend + gate sin reducir umbrales y registrar el impacto.
 
-**Evidencia QA-04c.CORE.RECEIPTS.1 (2026-10-01):** `receipts.service.spec.ts` añadió 9 pruebas unitarias; el grupo aislado hogar/pantry/tickets/gustos pasó **65/65**. Antes del fix, `watch()` descartaba el Observable frío y no emitía el GET inmediato; ahora solo la transición de cero a primer watcher suscribe un refresco protegido por `DestroyRef`, y el polling sigue activo únicamente con watchers. Cobertura de `ReceiptsService`: **100/100/100/100 %** (S/B/F/L). Los tests de intervalo reinicializan el injector dentro de `fakeAsync` para que `tick()` controle el scheduler real. Suite completa/gate pendientes.
+**Evidencia QA-04c.CORE.RECEIPTS.1 (2026-10-01):** `receipts.service.spec.ts` añadió 9 pruebas unitarias; el grupo aislado hogar/pantry/tickets/gustos pasó **65/65**. Antes del fix, `watch()` descartaba el Observable frío y no emitía el GET inmediato; ahora solo la transición de cero a primer watcher suscribe un refresco protegido por `DestroyRef`, y el polling sigue activo únicamente con watchers. Cobertura de `ReceiptsService`: **100/100/100/100 %** (S/B/F/L). Los tests de intervalo reinicializan el injector dentro de `fakeAsync` para que `tick()` controle el scheduler real. La suite completa y el gate se revalidaron en QA-04c.GATE.1 (2026-10-08).
 
 **Subunidad QA-04c.1 — modelo de ofertas/descuentos de compra (fuente revalidada):** `HOGARIA-SPEC.md` §12h define `buy:3,take:2` como una oferta 3×2; el preset activo lo representa como `{ label:'3x2', buy:3, take:2 }`. `shopping.model.ts::describeOffer` antes devolvía `${buy}x${buy-take}` (3x1) y la plantilla de `shopping-list-detail.component.ts` lo pinta en la chapa accesible de cada fila; Playwright real reprodujo el texto visible y accesible «3x1». Los helpers puros `lineDiscountOfItem`, `describeLineDiscount`, `offerOfItem` y `describeOffer` son usados por la pantalla activa. El normalizador de backend `server/src/utils/list-discount.ts::normalizeOffer` exige `buy ≥ 2`, `take ≥ 1` y `take < buy`, por lo que el helper cliente debe ignorar también filas inválidas. Criterios:
 
@@ -964,9 +968,11 @@ Evidencia QA-04b (2026-09-30): Playwright aislado con `E2E_RATE_LIMIT=on`, proye
 - [x] `playwright.full-stack.config.ts` dejó de declarar `webServer`/DB en el repo: el supervisor asigna puerto y `DATABASE_PATH` temporal exclusivos y valida readiness antes de Playwright; smoke servido real 4 passed/1 skip (QA-E2E.1).
 - [x] La suite E2E de desarrollo ya no reutiliza `:4200` ni la base por defecto: ambas configs rechazan ejecución directa y el runner crea puertos/SQLite bajo `%TEMP%`; smoke de escritura autenticado pasó en Chromium y Pixel 5 (QA-E2E.1).
 - [x] Confirmar gates locales: frontend 80 % y backend 70 %; CI ejecuta cobertura backend y no declara job de coverage frontend.
-- [ ] Elevar coverage frontend al 80 % local sin rebajar el umbral ni ocultar ficheros; registrar discrepancia de CI.
+- [x] Elevar coverage frontend al 80 % local sin rebajar el umbral ni ocultar ficheros; registrar discrepancia de CI.
 
-Evidencia de la suite frontend completa (2026-10-01): Karma **614/614** tests pasan, pero Coverage queda en Statements **58.76 %**, Branches **50.00 %**, Functions **47.63 %** y Lines **60.51 %**, por debajo del umbral local existente del 80 %. No se modificó el umbral. El reporte instrumenta 110 de 177 fuentes de producción TS de `frontend/src/app`; CI no ejecuta este gate frontend. No cerrar esta casilla hasta ampliar pruebas y comprobar el reporte completo.
+**Evidencia histórica de la suite frontend (2026-10-01):** Karma **614/614** tests, con Statements **58.76 %**, Branches **50.00 %**, Functions **47.63 %** y Lines **60.51 %**. No se modificó el umbral. CI no ejecuta este gate frontend.
+
+**Cierre local (2026-10-08):** la revalidación vigente de QA-04c ejecutó `pnpm run test:client` con **1152/1152** y **88.88/80.44/88.38/90.23 % S/B/F/L**, salida 0. `.github/workflows/ci.yml` solo valida el cableado de Karma en Type Check; no ejecuta coverage frontend (sí ejecuta el gate backend al 70 % por archivo). Queda registrado el hueco de CI, sin falsear un resultado remoto para ese gate.
 
 ## QA-05.PATH.1 · exclusión portable del catálogo i18n (resuelta localmente)
 
