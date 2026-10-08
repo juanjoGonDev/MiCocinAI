@@ -3823,3 +3823,31 @@ sintéticas inspeccionadas e ignoradas por Git: `.e2e-screenshots/qa-recipe-time
 
 **Rollback:** revertir el commit atómico de esta unidad (`TimerComponent`, diccionario, regresión
 unitaria/E2E y esta sección); no revertir evidencia o commits anteriores.
+
+### QA-CI.RECEIPT.HISTORY-ASYNC.1 · sincronizar la E2E con el fin del análisis
+
+**Hallazgo de CI (2026-10-08, run `37847039744`, shard 3):** 98 pruebas pasaron y falló la E2E
+`la extracción IA conserva tienda y fecha civil (en)` en `tests/e2e/receipts.spec.ts:759`, porque
+esperó una fila del historial que seguía vacía durante 20 segundos. La prueba espera a que el fixture
+registre la solicitud upstream; `iniciarProveedorDeTickets()` la registra antes de enviar la respuesta.
+El historial solo incluye tickets terminales (`review`, `confirmed`, `failed`, `stopped`), por lo que
+esa señal no garantiza que el análisis asíncrono haya terminado. CI confirmó el fallo; aún no se ha
+reproducido localmente.
+
+**Contrato:** no cambiar producción salvo que una regresión reproduzca un defecto del producto. La E2E
+debe sincronizar la respuesta al proveedor y el estado terminal del ticket identificado antes de exigir
+que aparezca en el historial, y luego validar en EN que tienda/fecha desconocidas sigan siendo nulas y
+editables. La coordinación debe seguir basada en estado/respuesta observable, no en esperas temporales.
+
+- [ ] Reproducir el rojo en la prueba aislada y añadir primero una barrera determinista que libere la
+      respuesta sintética tras registrar la petición; comprobar que la prueba no confunda `analyzing`
+      con historial vacío.
+- [ ] Sincronizar por GET del ticket hasta estado `review` después de completar la respuesta del
+      proveedor; verificar la fila de historial y los campos EN tras navegación/recarga.
+- [ ] Ejecutar la regresión focal, `receipts.spec.ts` en Chromium y Pixel 5 emulado, typecheck E2E,
+      formato, `check:ui`, build y `git diff --check`; sin fixture/proveedor real ni base compartida.
+- [ ] Actualizar esta evidencia, crear commits atómicos con hooks completos y push a la rama; esperar
+      CI verde para el SHA actual del PR sin mergearlo.
+
+**Rollback:** retirar solo la barrera/sincronización E2E y esta subunidad; no cambiar la política del
+historial ni los estados de producción.
