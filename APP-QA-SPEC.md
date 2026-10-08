@@ -527,6 +527,19 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Rollback:** retirar solo la nueva E2E y esta subunidad; preservar los gestores, contratos de API y demás pruebas existentes.
 
+### QA-PANTRY.MANAGERS.COLOR-PICKER.1 · selector de color nativo accesible
+
+**Fuente revalidada (2026-10-08):** `HOGARIA-SPEC.md` §12x almacena colores de categoría como `#RRGGBB`, pero no prescribe escribirlos a mano. `PantryCategoriesComponent` ofrece ocho muestras circulares y además un `app-input type="text"` con ayuda hexadecimal; `guardar()` replica la expresión regular del formato antes de enviar al API. El servidor ya valida y normaliza el color. No existe un selector nativo en la aplicación.
+
+**Contrato:** conservar las muestras rápidas y sustituir el campo de texto/regex por un `input type="color"` accesible, con un área visual clicable y cómoda en escritorio y móvil, previsualización del color actual y valor hexadecimal solo de lectura. El control nativo abre el picker del navegador/sistema en cada plataforma; no se añade una dependencia ni se construye un selector de color duplicado. El color vacío conserva el significado existente (sin valor guardado) hasta que la persona elija uno; la previsualización usa el fallback visual de categoría. La UI no acepta ni necesita texto hexadecimal libre y no duplica validación del servidor. Muestras y picker deben tener foco visible, nombre accesible y objetivos táctiles de al menos 44×44 CSS px.
+
+- [ ] Añadir primero E2E aislado que pruebe tipo/nombre accesible, ausencia del textbox hex, selección personalizada distinta a las ocho muestras, guardado y persistencia tras F5; registrar el baseline rojo antes de cambiar producción. Conservar prueba de las muestras rápidas y de teclado.
+- [ ] Reemplazar el campo textual por un picker nativo presentado como control compacto: preview + acción + hexadecimal de lectura. Eliminar regex y ayuda de entrada manual en frontend, normalizar el valor del picker sin cambios falsos por mayúsculas/minúsculas y mantener intacto el contrato/validación API.
+- [ ] Verificar escritorio, Android Chrome y móvil Safari en 1440×900, 393×851, mínimo 320×568, orientación 568×320 y límites CSS afectados (720, 768 y 1024 px); comprobar etiqueta/teclado/foco, objetivos táctiles, scroll y ausencia de overflow/pageerror. Capturar e inspeccionar PC y móvil con fixture sintética.
+- [ ] Ejecutar Playwright full-stack con almacenamiento temporal, typecheck E2E, suite unitaria focal y coverage focal (≥70 % S/B/F/L de cualquier lógica añadida), `check:ui`, formato, build y `git diff --check`; no tocar la base normal ni cambiar dependencias.
+
+**Rollback:** revertir en un único commit el picker/estilos/traducciones de `pantry-categories.component.ts` y `dict/pantry.ts`, la regresión E2E y este bloque; no revertir el formato de datos de categoría ni las unidades previas del gestor.
+
 ### QA-PANTRY.MANAGERS.ALIAS-CLASH.1 · error de alias duplicado en el alta principal
 
 **Fuente revalidada (2026-10-08):** `HOGARIA-SPEC.md` §12x usa aliases como claves de búsqueda del producto, no como una ficha nueva. `normalizarAlias()` impide vacío, repetición dentro de la ficha o alias igual al nombre del mismo producto; no conoce el resto del catálogo. `POST /api/pantry/products` ya devuelve 409 `PANTRY_PRODUCT_ALIAS_CLASH` si un alias nuevo coincide con el nombre de otra ficha; `PantryProductsComponent.frase()` traduce ese código a un mensaje localizado. `pantry-item.spec.ts` ya cubre el mismo error en la edición dedicada del inventario, pero no el formulario de alta `/pantry/products/new`, donde una respuesta fallida debe conservar la ficha que la persona estaba registrando.
