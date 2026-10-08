@@ -1,7 +1,7 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-08):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend actual pasa **1164/1164** con coverage **90.17/81.39/88.93/91.54 % S/B/F/L**; el workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La suite frontend actual pasa 1164/1164 con el gate global 80 % verde; CI #461 y #462 pasaron 9/9, pero solo comprueban el cableado Karma y no ejecutan esa suite. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Estado (2026-10-08):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend actual pasa **1198/1198** con coverage **90.33/81.44/88.99/91.75 % S/B/F/L**; el workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La suite frontend actual pasa 1198/1198 con el gate global 80 % verde; CI #461 y #462 pasaron 9/9, pero solo comprueban el cableado Karma y no ejecutan esa suite. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-08
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -667,7 +667,7 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 **Evidencia histórica (2026-10-01/02):** la línea base pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentencias/ramas/funciones/líneas); corridas posteriores pasaron `651/651` con 60.64/51.37/50.72/62.41 % y `665/665` con **60.30/52.21/49.80/61.92 %**, por debajo de los gates. No se rebajó ningún umbral. Estas métricas ya no describen el estado actual.
 
-**Revalidación vigente (2026-10-08):** `pnpm run test:client` ejecutó la suite frontend completa: **1164/1164**, Chrome Headless 154, salida **0**. Cobertura S/B/F/L: **90.17/81.39/88.93/91.54 %**; superó el 80 % en las cuatro métricas sin relajar thresholds ni cambiar la instrumentación. La corrida generó el reporte local en `frontend/coverage/`; no se añadió al commit. El workflow CI #461 terminó 9/9, pero `.github/workflows/ci.yml` solo prueba el cableado Karma y no ejecuta la suite frontend completa.
+**Revalidación vigente (2026-10-08, HEAD `0d55928`):** el hook pre-push ejecutó `pnpm run test:client` y pasó la suite frontend completa: **1198/1198**, Chrome Headless 154, salida **0**. Cobertura S/B/F/L: **90.33/81.44/88.99/91.75 %**; superó el 80 % en las cuatro métricas sin relajar thresholds ni cambiar la instrumentación. La corrida generó el reporte local en `frontend/coverage/`; no se añadió al commit. `.github/workflows/ci.yml` comprueba el cableado Karma y ejecuta E2E, pero no incluye la suite frontend completa; por ello el gate se conservó y verificó localmente.
 
 - [x] Revalidar cobertura global y por archivo antes del siguiente lote; archivar el reporte de esta ejecución en `%TEMP%`.
 - [ ] Añadir pruebas unitarias/integración para ramas y caminos de error/éxito no cubiertos; cada lote debe partir de fuentes actuales, tener regresión útil, cobertura ≥70 % en cada métrica del alcance y commit atómico.
@@ -782,7 +782,7 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 
 **Rollback previsto:** revertir esta unidad de forma atómica: `data-table.component.ts`, `data-table.util.ts`, `data-table.component.spec.ts`, `data-table.util.spec.ts`, los cambios focales de `tests/e2e/pantry.spec.ts` y este bloque de spec. No incluir archivos modificados por otras unidades.
 
-### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (resuelta localmente; gate global pendiente)
+### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (resuelta localmente; gate global revalidado)
 
 **Fuente revalidada antes de añadir el spec (2026-10-01):** `TasteProfileService` no tenía spec propio y el reporte marcaba 5.40/0/0/3.33 % (sentencias/ramas/funciones/líneas). Sus caminos actuales son `ensureLoaded`/`load`, `save` con campos opcionales, normalización/aplicación de `TasteResponse` y `finalize` de loading en éxito/error. El alcance no cambia comportamiento de producción ni toca DB: se ejercita con `HttpTestingController`.
 
@@ -791,6 +791,8 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 - [x] Repetir la suite global y registrar el impacto real; mantener todos los thresholds existentes.
 
 **Evidencia QA-04c.CORE.TASTE.1 (2026-10-01):** `taste-profile.service.spec.ts` cubre carga/idempotencia, normalización, payloads y errores con `HttpTestingController`: 10/10; cobertura actual 100/100/100/100 %. La suite frontend completa, ya con esta spec, ejecutó 665/665 y dejó el global en 60.30/52.21/49.80/61.92 %, por debajo del gate 80 % (QA-04c.GATE.1). No se modificó threshold ni se escribieron datos externos.
+
+**Revalidación del gate (2026-10-08):** tras el trabajo actual, `pnpm run test:client` pasó **1198/1198** y el global quedó en **90.33/81.44/88.99/91.75 % S/B/F/L**. Esto sustituye el estado global histórico citado arriba, no cierra QA-04c completo: siguen abiertas las pruebas pendientes del inventario y las auditorías funcionales/responsive globales.
 
 ### QA-04c.CORE.SHOPPING.1 · cobertura y drenaje de escrituras offline (resuelta localmente; gate frontend revalidado)
 
