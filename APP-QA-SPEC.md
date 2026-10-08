@@ -1146,10 +1146,13 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 - [x] `/auth/login`: correo/contraseña válidos e inválidos, campos vacíos, revelar/ocultar contraseña, loading, error genérico y redirección correcta.
 
-**Evidencia QA-AUTH.LOGIN.1 (2026-10-03):** la E2E aislada `pnpm run test:e2e -- --project=chromium --project=mobile-chrome tests/e2e/auth.spec.ts` pasa **20/20** con SQLite/puertos/semillas temporales; cubre credenciales válidas e inválidas, campos vacíos, revelar/ocultar, loading, 503 recuperable y redirección. La primera corrida detectó dos toasts idénticos ante 503: el interceptor global y el formulario notificaban a la vez. `AuthService.login()` ahora marca `SILENT_TOAST` para que el formulario gestione ese error una sola vez. `AuthService` focal pasa **26/26** con **96/81.81/91.89/97.89 %** statements/branches/functions/lines en reporte temporal; typecheck E2E, formato y `git diff --check` pasan. Las rutas de registro, recuperación, invitación y onboarding continúan abiertas.
+**Evidencia QA-AUTH.LOGIN.1 (2026-10-03):** la E2E aislada `pnpm run test:e2e -- --project=chromium --project=mobile-chrome tests/e2e/auth.spec.ts` pasa **20/20** con SQLite/puertos/semillas temporales; cubre credenciales válidas e inválidas, campos vacíos, revelar/ocultar, loading, 503 recuperable y redirección. La primera corrida detectó dos toasts idénticos ante 503: el interceptor global y el formulario notificaban a la vez. `AuthService.login()` ahora marca `SILENT_TOAST` para que el formulario gestione ese error una sola vez. `AuthService` focal pasa **26/26** con **96/81.81/91.89/97.89 %** statements/branches/functions/lines en reporte temporal; typecheck E2E, formato y `git diff --check` pasan. Las rutas de registro, invitación y onboarding continúan abiertas; recuperación se cerró con la evidencia del 2026-10-08.
 
 - [ ] `/auth/register`: requerido/formato, política de contraseña y límites, correo duplicado, error del servidor, registro normal y retorno con `?code=` de invitación.
-- [ ] `/auth/forgot-password`: correo vacío/mal formado/válido, respuesta que no revela si existe la cuenta, loading y error recuperable.
+- [x] `/auth/forgot-password`: correo vacío/mal formado/válido, respuesta que no revela si existe la cuenta, loading y error recuperable.
+
+**Revalidación funcional (2026-10-08):** Vitest `pnpm --filter @hogaria/server exec vitest run src/routes/auth-forgot-password.spec.ts --coverage --coverage.include=src/routes/forgot-password.routes.ts`: **2/2**, ruta **100/100/100/100 % S/B/F/L**; Chromium Headless focal (`forgot-password.component.spec.ts` + `auth.service.spec.ts`): **34/34**; Playwright aislado `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/auth-forgot-password.spec.ts`, `E2E_RATE_LIMIT=on`: **4/4**. Verificado: vacío/malformado sin POST, mismo 200/cuerpo para cuenta conocida y desconocida, aviso honesto, 503 no duplica toast, carga deshabilita CTA y el retry conserva email. El runner aisló SQLite/puertos/semilla y confirmó cleanup; los viewports fueron 1440×900 y 393×851. No se implementa envío de correo porque el servicio sigue sin estar disponible.
+
 - [ ] `/invite/:code`: código válido, inválido o invalidado al regenerar (sin expiración temporal en el modelo actual), invitación repetida, ya pertenece al hogar, aceptar/rechazar con sesión y entrada por registro/login preservando el código.
 - [ ] `/onboarding`: validar los seis pasos de §12C/§12E; Pantry conserva la edición de utensilios y `kitchen` solo enlaza según §8c. Probar perfil, alergias/gustos/objetivos, horario, siguiente/anterior, omitir, persistencia, salida, recarga y reanudación.
 
@@ -1410,10 +1413,10 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 ## Siguiente unidad de trabajo
 
-1. Completar QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1, reabierta por la revalidación roja de 568×320; después retomar QA-AUTH.REGISTER.FORM.1 y el barrido funcional.
+1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password` ya se revalidó. Continuar el cierre verificable de `/auth/register` y `/invite/:code` contra sus criterios de ruta y los tests actuales antes de avanzar a onboarding.
 2. QA-REC.INGRESS.1 ya está verificada con Nginx real aislado; la siguiente validación de motor pendiente es Safari/iOS real para la hoja de ofertas de QA-04c.1, sin sustituir safe-area/teclado nativos por emulación WebKit/Chromium.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
-4. QA-04c: el gate global frontend está actualmente verde (**90.17/81.39/88.93/91.54 % S/B/F/L**); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.
+4. QA-04c: el último gate global frontend registrado está verde (**90.21/81.39/88.98/91.57 % S/B/F/L**, 1168/1168 tests, 2026-10-08); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.
 5. QA-05.PATH.1 está corregida y revalidada; no reabrir salvo nueva evidencia del source actual.
 6. QA-04b checkbox está completada con Karma y Playwright real en escritorio/Pixel 5 (incluido 320 px); investigar por separado el posible solapamiento visual del toast de error en móvil.
 7. QA-RECIPES.AI-FLOW.1 ya tiene pruebas unitarias, integración, E2E funcionales y gate frontend global ≥80 % verificado; no reabrir salvo cambio de código o nueva regresión.
