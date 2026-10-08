@@ -38,6 +38,68 @@ async function measureAccountLayout(page: Page) {
   });
 }
 
+async function expectAccountTabReachable(
+  page: Page,
+  tabList: ReturnType<Page['locator']>,
+  tab: 'account' | 'security' | 'info',
+  activation: string,
+  width: number
+) {
+  const layout = await measureAccountLayout(page);
+  expect(
+    layout.documentWidth,
+    `${tab} (${activation}) a ${width}px no debe ampliar el documento; nodos que rebasan: ${JSON.stringify(layout.elements)}`
+  ).toBeLessThanOrEqual(layout.viewportWidth + 1);
+
+  const tabsGeometry = await tabList.evaluate((container, testId) => {
+    const containerRect = container.getBoundingClientRect();
+    const activeTab = container.querySelector<HTMLElement>(`[data-test="${testId}"]`);
+    const activeRect = activeTab?.getBoundingClientRect();
+    const clipLeft = containerRect.left + container.clientLeft;
+    const clipRight = clipLeft + container.clientWidth;
+    return {
+      containerLeft: containerRect.left,
+      containerRight: containerRect.right,
+      clipLeft,
+      clipRight,
+      scrollWidth: container.scrollWidth,
+      clientWidth: container.clientWidth,
+      activeLeft: activeRect?.left ?? null,
+      activeRight: activeRect?.right ?? null,
+      activeVisibleWidth: activeRect
+        ? Math.max(0, Math.min(activeRect.right, clipRight) - Math.max(activeRect.left, clipLeft))
+        : 0
+    };
+  }, `account-tab-${tab}`);
+
+  expect(
+    tabsGeometry.containerLeft,
+    `la barra debe empezar dentro del viewport a ${width}px: ${JSON.stringify(tabsGeometry)}`
+  ).toBeGreaterThanOrEqual(-1);
+  expect(
+    tabsGeometry.containerRight,
+    `la barra debe acabar dentro del viewport a ${width}px: ${JSON.stringify(tabsGeometry)}`
+  ).toBeLessThanOrEqual(layout.viewportWidth + 1);
+  expect(
+    tabsGeometry.scrollWidth,
+    `el contenido de la barra no debe encogerse ni ocultarse a ${width}px: ${JSON.stringify(tabsGeometry)}`
+  ).toBeGreaterThanOrEqual(tabsGeometry.clientWidth);
+  expect(
+    tabsGeometry.activeLeft,
+    `${tab} debe existir y quedar visible tras ${activation} a ${width}px: ${JSON.stringify(tabsGeometry)}`
+  ).not.toBeNull();
+  expect(
+    tabsGeometry.activeVisibleWidth,
+    `${tab} debe conservar un área visible dentro del scrollport tras ${activation} a ${width}px: ${JSON.stringify(tabsGeometry)}`
+  ).toBeGreaterThan(0);
+  if (width === 320) {
+    expect(
+      tabsGeometry.scrollWidth,
+      'a 320px la barra desplaza internamente las pestañas que no caben juntas'
+    ).toBeGreaterThan(tabsGeometry.clientWidth);
+  }
+}
+
 test('Cuenta no desborda en móvil estrecho', async ({ page }, testInfo) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(`${error.name}: ${error.message}`));
@@ -92,37 +154,34 @@ test('Cuenta no desborda en móvil estrecho', async ({ page }, testInfo) => {
   for (const viewport of viewports) {
     const { width } = viewport;
     await page.setViewportSize(viewport);
+    const tabList = page.locator('[data-test="account-tabs"]');
+    await expect(tabList.getByRole('tab')).toHaveCount(3);
+
     for (const tab of ['account', 'security', 'info'] as const) {
       const tabButton = page.locator(`[data-test="account-tab-${tab}"]`);
-      if (tab === 'security') {
-        await tabButton.focus();
-        await page.keyboard.press('Enter');
-      } else {
-        await tabButton.click();
-      }
+      await tabButton.click();
       await expect(tabButton).toHaveAttribute('aria-selected', 'true');
 
       if (width === 320 && tab === 'account') {
         await page.locator('[data-test="account-name"]').fill('N'.repeat(100));
       }
 
-      const layout = await measureAccountLayout(page);
-      expect(
-        layout.documentWidth,
-        `${tab} a ${width}px no debe ampliar el documento; nodos que rebasan: ${JSON.stringify(layout.elements)}`
-      ).toBeLessThanOrEqual(layout.viewportWidth + 1);
-      const tabBounds = await page
-        .locator('[data-test="account-tabs"] [role="tab"]')
-        .evaluateAll((tabs) =>
-          tabs.map((element) => {
-            const rect = element.getBoundingClientRect();
-            return { left: rect.left, right: rect.right };
-          })
-        );
-      expect(
-        tabBounds.every((bounds) => bounds.left >= -1 && bounds.right <= layout.viewportWidth + 1),
-        `todas las pestañas deben estar dentro a ${width}px: ${JSON.stringify(tabBounds)}`
-      ).toBe(true);
+      await expectAccountTabReachable(page, tabList, tab, 'click', width);
+    }
+
+    const accountTab = page.locator('[data-test="account-tab-account"]');
+    await accountTab.click();
+    await page.keyboard.press('Enter');
+    await expect(accountTab).toHaveAttribute('aria-selected', 'true');
+    await expectAccountTabReachable(page, tabList, 'account', 'Enter', width);
+
+    for (const tab of ['security', 'info'] as const) {
+      await page.keyboard.press('Tab');
+      const tabButton = page.locator(`[data-test="account-tab-${tab}"]`);
+      await expect(tabButton).toBeFocused();
+      await page.keyboard.press('Enter');
+      await expect(tabButton).toHaveAttribute('aria-selected', 'true');
+      await expectAccountTabReachable(page, tabList, tab, 'Tab + Enter', width);
     }
   }
 
