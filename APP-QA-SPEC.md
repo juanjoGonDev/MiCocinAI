@@ -533,9 +533,11 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Contrato:** crear por UI un producto sintético propio y, desde un segundo alta, proponer su nombre como alias. El servidor rechaza el conflicto con 409; la ficha de alta no navega ni se guarda, expone el error accesible esperado y conserva nombre y alias para corregirlos. La primera ficha no cambia. Usar Chromium y Pixel 5 sobre la SQLite temporal del runner, con rate limit activo; sin IA/WebAPI, catálogo global ni datos reales.
 
-- [ ] Añadir E2E primero contra `/pantry/products/new`; verificar POST 409, `role=alert`, ruta/borrador conservados y que el producto existente sigue siendo el único resultado tras F5. Registrar rojo baseline si la UI pierde mensaje o borrador.
-- [ ] Ejecutar en Chromium y Pixel 5, typecheck E2E, Prettier, `check:ui`, build y `git diff --check`; confirmar aislamiento/cleanup. No hay cambio productivo previsto, coverage N/A y capturas comparables N/A salvo que se corrija presentación.
+- [x] Añadir E2E primero contra `/pantry/products/new`; verificar POST 409, `role=alert`, ruta/borrador conservados y que el producto existente sigue siendo el único resultado tras F5. Registrar rojo baseline si la UI pierde mensaje o borrador.
+- [x] Ejecutar en Chromium y Pixel 5, typecheck E2E, Prettier, `check:ui`, build y `git diff --check`; confirmar aislamiento/cleanup. No hay cambio productivo previsto, coverage N/A y capturas comparables N/A salvo que se corrija presentación.
 - [ ] Actualizar evidencia y rollback, commit atómico con todos los hooks y push a la rama del PR; verificar los jobs del SHA sin mergear.
+
+**TDD y evidencia (2026-10-08):** el alta de producto ya mapea el 409 a un error accesible y conserva el formulario. El primer intento E2E local falló solo por un selector ambiguo (`getByRole('alert')` encontraba tanto el error de ficha como el toast); el selector se limitó a `data-test="gestor-productos-error"` y se comprobó además `role="alert"`. No se necesitó cambio productivo. `node scripts/run-isolated-playwright.mjs --config=playwright.full-stack.config.ts --grep "el alta nueva conserva borrador" --project=chromium --project=mobile-chrome`: **2/2 pasaron** con POST inicial 201, conflicto 409, mensaje/ruta/borrador conservados, y tras F5 una sola ficha original (mismo id y sin alias) y ninguna ficha borrador. `pnpm run typecheck:e2e` pasó. El runner informa SQLite temporal y limpieza al cerrar; screenshots y coverage N/A al no cambiar UI ni lógica productiva.
 
 **Rollback:** retirar el E2E y esta subunidad; no tocar la normalización/API de aliases ni la edición de producto ya cubierta.
 
