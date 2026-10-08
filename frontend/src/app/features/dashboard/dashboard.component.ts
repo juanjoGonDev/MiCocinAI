@@ -1,4 +1,4 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -13,11 +13,15 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import type { TranslationKey } from '../../core/i18n';
-import type { MealType } from '../../shared/models/calendar.model';
+import type { CalendarMeal, MealType } from '../../shared/models/calendar.model';
 import type { CaducidadRow } from '../../shared/models/caducidades.model';
+import { formatShortDay } from '../../core/time';
+import { Subscription } from 'rxjs';
 import {
   localIsoDate,
+  localIsoDateOffset,
   mealTypeLabel as translateMealTypeLabel,
+  nextPendingMeal,
   pendingMealsForDate
 } from './dashboard-meals.util';
 import { expiringWithinDays } from './dashboard-expiry.util';
@@ -178,11 +182,19 @@ interface SuggestedRecipe {
         </div>
 
         <div class="meals-list">
-          <div *ngFor="let meal of upcomingMeals()" class="meal-card" data-test="today-meal">
+          <div
+            *ngFor="let meal of upcomingMeals()"
+            class="meal-card"
+            [class.meal-card--next]="nextMealToday()?.id === meal.id"
+            data-test="today-meal"
+          >
             <span class="meal-card__icon"
               ><app-icon name="event_note" [size]="24" [label]="null"
             /></span>
             <div class="meal-card__content">
+              <span *ngIf="nextMealToday()?.id === meal.id" class="meal-card__next">
+                {{ 'dashboard.nextMealBadge' | t }}
+              </span>
               <span class="meal-card__type">{{ mealTypeLabel(meal.mealType) }}</span>
               <span class="meal-card__name">{{ meal.title }}</span>
             </div>
@@ -234,6 +246,69 @@ interface SuggestedRecipe {
             <a routerLink="/calendar" class="empty-state__link">{{ 'dashboard.planNow' | t }}</a>
           </div>
         </div>
+
+        <section
+          *ngIf="!nextMealToday()"
+          class="next-meal-preview"
+          data-test="next-meal"
+          [attr.aria-busy]="nextMealLoading()"
+        >
+          <h3 class="next-meal-preview__title">{{ 'dashboard.nextMealTitle' | t }}</h3>
+
+          <div
+            *ngIf="nextMealLoading()"
+            class="meal-status"
+            role="status"
+            data-test="next-meal-loading"
+          >
+            {{ 'common.loading' | t }}
+          </div>
+
+          <div
+            *ngIf="!nextMealLoading() && nextMealError()"
+            class="meal-error"
+            role="alert"
+            data-test="next-meal-error"
+          >
+            <p class="meal-error__message">{{ 'dashboard.nextMealLoadError' | t }}</p>
+            <button
+              class="meal-error__retry"
+              type="button"
+              data-test="next-meal-retry"
+              (click)="retryNextMeal()"
+            >
+              {{ 'calendar.reintentar' | t }}
+            </button>
+          </div>
+
+          <div
+            *ngIf="!nextMealLoading() && !nextMealError() && !nextPlannedMeal()"
+            class="empty-state"
+            data-test="next-meal-empty"
+          >
+            <p class="empty-state__text">{{ 'dashboard.nextMealEmpty' | t }}</p>
+            <a routerLink="/calendar" class="empty-state__link">{{ 'dashboard.planNow' | t }}</a>
+          </div>
+
+          <a
+            *ngIf="!nextMealLoading() && !nextMealError() && nextPlannedMeal() as meal"
+            routerLink="/calendar"
+            class="meal-card next-meal-card"
+            data-test="next-meal-card"
+          >
+            <span class="meal-card__icon"
+              ><app-icon name="event_note" [size]="24" [label]="null"
+            /></span>
+            <span class="meal-card__content">
+              <span class="meal-card__type">{{ mealTypeLabel(meal.mealType) }}</span>
+              <span class="meal-card__name">{{ meal.title }}</span>
+            </span>
+            <span class="next-meal-card__schedule">
+              <time [attr.datetime]="meal.date">{{ formatMealDate(meal.date) }}</time>
+              <time *ngIf="meal.time" [attr.datetime]="meal.time">{{ meal.time }}</time>
+            </span>
+          </a>
+        </section>
       </section>
 
       <!-- Suggested Recipes -->
@@ -570,6 +645,51 @@ interface SuggestedRecipe {
         border: 1px solid var(--border-default);
       }
 
+      .meal-card--next {
+        border-color: var(--primary);
+      }
+
+      .meal-card__next {
+        color: var(--primary);
+        font-size: var(--text-xs);
+        font-weight: var(--font-medium);
+      }
+
+      .next-meal-preview {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+        margin-top: var(--space-3);
+      }
+
+      .next-meal-preview__title {
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+      }
+
+      .next-meal-card {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      .next-meal-card:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+
+      .next-meal-card__schedule {
+        display: flex;
+        flex: none;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: var(--space-1);
+        color: var(--text-secondary);
+        font-size: var(--text-xs);
+        text-align: right;
+      }
+
       .meal-card__icon {
         display: inline-flex;
         flex: none;
@@ -692,7 +812,7 @@ interface SuggestedRecipe {
     `
   ]
 })
-export class DashboardComponent implements OnInit {
+export class DashboardComponent implements OnDestroy, OnInit {
   private authService = inject(AuthService);
   private recipeService = inject(RecipeService);
   private pantryService = inject(PantryService);
@@ -700,6 +820,8 @@ export class DashboardComponent implements OnInit {
   private calendarService = inject(CalendarService);
   private householdService = inject(HouseholdService);
   private i18n = inject(I18nService);
+  private nextMealSubscription: Subscription | null = null;
+  private nextMealRequestId = 0;
 
   userName = signal('');
 
@@ -712,6 +834,17 @@ export class DashboardComponent implements OnInit {
   readonly calendarReady = computed(() => {
     const range = this.calendarService.range();
     return range?.start === this.todayIso && range.end === this.todayIso;
+  });
+  private readonly nextMealMeals = signal<CalendarMeal[]>([]);
+  private readonly nextMealNow = signal(new Date());
+  readonly nextMealLoading = signal(false);
+  readonly nextMealError = signal(false);
+  readonly nextPlannedMeal = computed(() =>
+    nextPendingMeal(this.nextMealMeals(), this.nextMealNow())
+  );
+  readonly nextMealToday = computed(() => {
+    const meal = this.nextPlannedMeal();
+    return meal?.date === this.todayIso ? meal : null;
   });
   readonly expiringItems = computed(() =>
     expiringWithinDays(
@@ -791,6 +924,7 @@ export class DashboardComponent implements OnInit {
 
     // Comidas de hoy: el rango y el estado de error vienen del calendario compartido.
     this.calendarService.loadRange(this.todayIso, this.todayIso);
+    this.loadNextMealPreview();
 
     // El hogar es best-effort; el dashboard no debe romperse si falla.
     try {
@@ -804,8 +938,48 @@ export class DashboardComponent implements OnInit {
     return translateMealTypeLabel(mealType, (key) => this.i18n.t(key));
   }
 
+  formatMealDate(date: string): string {
+    return formatShortDay(date);
+  }
+
   retryTodayMeals(): void {
     this.calendarService.loadRange(this.todayIso, this.todayIso, true);
+  }
+
+  retryNextMeal(): void {
+    this.loadNextMealPreview();
+  }
+
+  ngOnDestroy(): void {
+    this.nextMealRequestId += 1;
+    this.nextMealSubscription?.unsubscribe();
+    this.nextMealSubscription = null;
+  }
+
+  private loadNextMealPreview(): void {
+    this.nextMealSubscription?.unsubscribe();
+    const requestId = ++this.nextMealRequestId;
+    const now = new Date();
+    this.nextMealMeals.set([]);
+    this.nextMealNow.set(now);
+    this.nextMealLoading.set(true);
+    this.nextMealError.set(false);
+
+    this.nextMealSubscription = this.calendarService
+      .getMealsForRange(this.todayIso, localIsoDateOffset(now, 6))
+      .subscribe({
+        next: (meals) => {
+          if (requestId !== this.nextMealRequestId) return;
+          this.nextMealMeals.set(meals);
+          this.nextMealNow.set(new Date());
+          this.nextMealLoading.set(false);
+        },
+        error: () => {
+          if (requestId !== this.nextMealRequestId) return;
+          this.nextMealError.set(true);
+          this.nextMealLoading.set(false);
+        }
+      });
   }
 
   retryExpiries(): void {

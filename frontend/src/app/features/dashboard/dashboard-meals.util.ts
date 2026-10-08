@@ -10,20 +10,50 @@ export function localIsoDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Shift by local calendar days without crossing a UTC date boundary or mutating the input. */
+export function localIsoDateOffset(date: Date, offset: number): string {
+  return localIsoDate(new Date(date.getFullYear(), date.getMonth(), date.getDate() + offset));
+}
+
+function compareMealTimes(left: CalendarMeal, right: CalendarMeal): number {
+  if (left.time == null && right.time != null) return 1;
+  if (left.time != null && right.time == null) return -1;
+
+  return (
+    (left.time ?? '').localeCompare(right.time ?? '') ||
+    left.title.localeCompare(right.title) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
 /** Keep only pending meals for one local date, in a stable time order. */
 export function pendingMealsForDate(meals: readonly CalendarMeal[], date: string): CalendarMeal[] {
-  return meals
-    .filter((meal) => meal.date === date && !meal.completed)
-    .sort((left, right) => {
-      if (left.time == null && right.time != null) return 1;
-      if (left.time != null && right.time == null) return -1;
+  return meals.filter((meal) => meal.date === date && !meal.completed).sort(compareMealTimes);
+}
 
-      return (
-        (left.time ?? '').localeCompare(right.time ?? '') ||
-        left.title.localeCompare(right.title) ||
-        left.id.localeCompare(right.id)
-      );
-    });
+/**
+ * Find the next incomplete meal in seven local calendar dates, including today.
+ * Untimed meals today remain candidates; timed meals earlier than the local
+ * current time do not.
+ */
+export function nextPendingMeal(meals: readonly CalendarMeal[], now: Date): CalendarMeal | null {
+  const today = localIsoDate(now);
+  const lastDate = localIsoDateOffset(now, 6);
+  const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  return (
+    meals
+      .filter(
+        (meal) =>
+          !meal.completed &&
+          meal.date >= today &&
+          meal.date <= lastDate &&
+          (meal.date !== today || meal.time == null || meal.time >= currentTime)
+      )
+      .sort(
+        (left, right) => left.date.localeCompare(right.date) || compareMealTimes(left, right)
+      )[0] ?? null
+  );
 }
 
 /** Resolve meal type through the shared dictionary instead of hard-coding Spanish text. */
