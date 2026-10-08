@@ -22,7 +22,10 @@ describe('diccionario simetrico', () => {
   });
 
   it('no deja ninguna traduccion vacia', () => {
-    for (const [idioma, dict] of [['es', es], ['en', en]] as const) {
+    for (const [idioma, dict] of [
+      ['es', es],
+      ['en', en]
+    ] as const) {
       // Se aserta sobre la lista unida, y no con el segundo argumento de `expect`: en Karma (Jasmine) ese
       // sitio lo ocupa `withContext`, que vitest no tiene —y este spec se corre en los dos.
       const vacias = Object.entries(dict)
