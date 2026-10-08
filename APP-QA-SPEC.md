@@ -2534,31 +2534,56 @@ sintéticos y el smoke general preexistente.
 ### QA-AI.SMOKE.PRESERVE-REDACTED-LOGS.1 · conservar la telemetría local existente
 
 **Fuente revalidada (2026-10-09):** el usuario activó expresamente los logs locales para poder
-diagnosticar fallos y pidió ejecutarlos, sin exponer cuerpos ni credenciales. Aunque
-`prepareAiLiveSmokeSession()` consulta primero los controles, actualmente cambia mediante `PATCH`
-`requestLogging.enabled` a `false` y también apaga temporalmente grabación de sesión/HTML diagnóstico;
-después intenta restaurar todo. Esto modifica ajustes persistentes del servicio y suprime justo los
-logs que el usuario quiere disponibles.
+diagnosticar fallos y pidió ejecutarlos. El coordinador real usa
+`prepareExistingAiLiveSmokeSession()`, que ya hace preflight read-only y solo acepta logs con
+`HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS=1` y bounds verificados. La inspección del
+WebAPI activo muestra `enabled=true`, `captureDetails=true`, límites numéricos en cero y grabación
+de sesión/HTML desactivadas. El logger de WebAPI tiene allowlist de cabeceras (`accept`, content
+type/length y encoding), estructura/cantidad/profundidad acotadas y redacción de `messages`, prompt,
+contenido de adjuntos, autorización, cookies y claves; `tests/api/create-app.test.ts` verifica que los
+detalles quedan sanitizados. El intento de preflight anterior llamó por error al helper legado
+`prepareAiLiveSmokeSession()`, no al coordinador activo; ese helper sí modificaba ajustes. Se lo
+actualizó para que también rechace estado inseguro sin mutarlo.
 
-**Contrato:** el preflight de la WebAPI solo lee controles. Se permite que el log de requests esté
-`enabled=true` si `captureDetails=false`, `maxBodyChars=0`, `maxHeaderValueChars=0` y `maxHeaders=0`;
-así se preservan los eventos técnicos locales sin registrar contenido. `sessionRecording` y
-`diagnosticHtml` deben estar ya desactivados. Si cualquier captura de contenido está activa o no se
-puede comprobar, abortar antes de crear el token/subir ticket; no parchear ni revertir ajustes. Sí se
-permite crear y borrar el token propio autorizado, sin tocar tokens preexistentes.
+**Contrato:** conservar íntegros los settings del servicio. El preflight real permite logs
+`enabled=true` y `captureDetails=true` solo con el opt-in explícito, código de redacción vigente y
+bounds que impiden campos/cabeceras arbitrarios; cualquier estado fuera de la allowlist aborta antes
+de crear el token/subir tickets. `sessionRecording` y `diagnosticHtml` deben estar desactivados. No
+parchear ni revertir ajustes. Sí se permite crear y borrar el token propio autorizado, sin tocar tokens
+preexistentes.
 
-- [ ] Escribir primero pruebas que demuestren que logs redacted `enabled=true` se conservan sin
-      ningún `PATCH`, y que captura insegura, grabación o diagnóstico activos fallan antes de crear
-      token o abrir tickets, también ante cancelación/error de modelo.
-- [ ] Cambiar el preflight a lectura/validación read-only y eliminar la restauración de settings;
-      mantener cleanup verificable solo para el token temporal propio.
-- [ ] Ejecutar pruebas del coordinador/seguridad, contract tests, formato, typecheck/build; comprobar
+- [x] Confirmar primero las pruebas del coordinador que preservan logs sanitizados con opt-in,
+      rechazan captura/bounds/recording inseguros sin token ni `PATCH`, y limpian solo el token propio
+      al cancelar o fallar el catálogo.
+- [x] Eliminar la escritura/restauración de settings del helper legado para que ambas rutas sean
+      read-only; mantener cleanup verificable solo para el token temporal propio.
+- [x] Ejecutar pruebas del coordinador/seguridad, contract tests, formato, typecheck/build; comprobar
       que las rutas de fallo no mutan ningún control local.
-- [ ] Confirmar en el preflight de la próxima corrida que los logs técnicos permanecen activos con
+- [x] Confirmar en el preflight de la próxima corrida que los logs técnicos permanecen activos con
       contenido redacted y los demás controles de captura siguen apagados.
 
-**Rollback:** revertir solo el preflight read-only y sus tests; no restaurar ni modificar settings
-actuales de WebAPI.
+**Evidencia (2026-10-09):** TDD rojo: al sustituir las expectativas de mutación del helper legado,
+`node --test --test-reporter=dot scripts/ai-live-smoke-safety.test.mjs` reprodujo **4 fallos** por
+el `PATCH` que apagaba/restauraba ajustes; tras el cambio, seguridad/coordinador/contrato pasan
+**47/47** con `node --experimental-test-coverage --test scripts/ai-live-existing-webapi.test.mjs
+scripts/ai-live-smoke-safety.test.mjs scripts/run-ai-real-smoke.test.mjs
+scripts/ai-live-smoke-contract.test.mjs`. Coverage en archivos de alcance: `ai-live-existing-webapi.mjs`
+95.28 % líneas / 90.27 % ramas / 76 % funciones; `ai-live-smoke-safety.mjs` 88.84 / 77.61 / 93.10 %.
+La suite WebAPI `pnpm exec vitest run --config vitest.config.ts tests/api/create-app.test.ts
+--reporter=dot` pasa **9/9**, incluido el rechazo de prompt, adjunto, Authorization, cookies y claves
+en request logs. También pasan `pnpm run typecheck:e2e`, `pnpm run check:ui` (210 archivos/21 reglas),
+Prettier, build (solo warnings previos de presupuesto/template/imports) y `git diff --check`.
+
+El preflight real se ejecutó con `prepareExistingAiLiveSmokeSession()` y el opt-in de logs redacted;
+validó identidad/readiness, modelo `gpt-5` y privacidad, creó y borró/verificó solo su token propio:
+`{result: passed, model: gpt-5, cleanup: verified, completedRequests: 0}`. No se abrió ni subió ticket.
+GETs posteriores confirmaron sin cambio `enabled=true`, `captureDetails=true`, los tres límites en 0,
+`sessionRecording=false` y `diagnosticHtml=false`. La lectura del sanitizer del WebAPI activo y sus
+pruebas sustentan que esos logs locales muestran estructura técnica redacted, no el prompt ni sus
+adjuntos. No hubo PATCH de settings.
+
+**Rollback:** revertir solo el preflight read-only del helper legado y sus tests; no restaurar ni
+modificar settings actuales de WebAPI.
 
 ### QA-AI.RECEIPT.RESUME-SAFE-SELECTION.1 · reanudar solo las fuentes no completadas
 

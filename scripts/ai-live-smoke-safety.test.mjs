@@ -97,19 +97,19 @@ test('receipt-only runner requires a private source directory and selected JPEG 
   );
 });
 
-test('disables all WebAPI prompt capture before token/model setup and restores temporary settings', async () => {
+test('keeps enabled redacted WebAPI logs unchanged around token/model setup', async () => {
   const originalSettings = {
-    captureDetails: true,
+    captureDetails: false,
     enabled: true,
-    maxBodyChars: 4096,
-    maxHeaderValueChars: 256,
-    maxHeaders: 20
+    maxBodyChars: 0,
+    maxHeaderValueChars: 0,
+    maxHeaders: 0
   };
   const requests = [];
   let currentLogging = { ...originalSettings };
-  let sessionRecording = true;
-  let diagnosticHtml = true;
-  let tokenCreatedWithCaptureDisabled = false;
+  let sessionRecording = false;
+  let diagnosticHtml = false;
+  let tokenCreatedWithSafeLogs = false;
   const fetchImpl = async (url, options = {}) => {
     const parsed = new URL(url);
     const path = parsed.pathname;
@@ -132,9 +132,12 @@ test('disables all WebAPI prompt capture before token/model setup and restores t
       }
     }
     if (method === 'POST' && path === '/admin/api/tokens') {
-      tokenCreatedWithCaptureDisabled =
-        currentLogging.enabled === false &&
+      tokenCreatedWithSafeLogs =
+        currentLogging.enabled === true &&
         currentLogging.captureDetails === false &&
+        currentLogging.maxBodyChars === 0 &&
+        currentLogging.maxHeaderValueChars === 0 &&
+        currentLogging.maxHeaders === 0 &&
         sessionRecording === false &&
         diagnosticHtml === false;
     }
@@ -172,7 +175,7 @@ test('disables all WebAPI prompt capture before token/model setup and restores t
     fetchImpl,
     now: () => 1000
   });
-  assert.equal(tokenCreatedWithCaptureDisabled, true);
+  assert.equal(tokenCreatedWithSafeLogs, true);
   assert.equal(session.model, 'gpt-5');
   assert.equal(session.token, 'synthetic-live-token-secret');
   const modelRequest = requests.find(({ path }) => path === '/v1/models');
@@ -189,30 +192,9 @@ test('disables all WebAPI prompt capture before token/model setup and restores t
   assert.equal(JSON.parse(createTokenRequest.options.body).expiresAt, 1000 + 30 * 60 * 1000);
 
   await session.cleanup();
-  assert.deepEqual(
-    requests
-      .filter(
-        ({ method, path }) =>
-          method === 'PATCH' && path === '/admin/api/runtime-controls/request-logging'
-      )
-      .map(({ options }) => JSON.parse(options.body)),
-    [{ ...originalSettings, captureDetails: false, enabled: false }, originalSettings]
-  );
-  assert.deepEqual(
-    requests
-      .filter(
-        ({ method, path }) => method === 'PATCH' && path === '/admin/api/settings/session-recording'
-      )
-      .map(({ options }) => JSON.parse(options.body)),
-    [{ enabled: false }, { enabled: true }]
-  );
-  assert.deepEqual(
-    requests
-      .filter(
-        ({ method, path }) => method === 'PATCH' && path === '/admin/api/settings/diagnostic-html'
-      )
-      .map(({ options }) => JSON.parse(options.body)),
-    [{ enabled: false }, { enabled: true }]
+  assert.equal(
+    requests.some(({ method }) => method === 'PATCH'),
+    false
   );
   assert.equal(
     requests.some(
@@ -220,6 +202,94 @@ test('disables all WebAPI prompt capture before token/model setup and restores t
     ),
     true
   );
+});
+
+test('preserves redacted request logs and rejects unsafe capture settings without mutation', async () => {
+  const createFakeApi = ({ captureDetails = false, sessionRecording = false } = {}) => {
+    const requests = [];
+    let logging = {
+      captureDetails,
+      enabled: true,
+      maxBodyChars: 0,
+      maxHeaderValueChars: 0,
+      maxHeaders: 0
+    };
+    let recording = sessionRecording;
+    let tokenCreated = false;
+    const fetchImpl = async (url, options = {}) => {
+      const path = new URL(url).pathname;
+      const method = options.method ?? 'GET';
+      requests.push({ path, method, body: options.body });
+      if (method === 'DELETE') return new Response(null, { status: 204 });
+      if (method === 'PATCH') {
+        if (path === '/admin/api/runtime-controls/request-logging') {
+          logging = JSON.parse(options.body);
+          return Response.json({ settings: logging });
+        }
+        if (path === '/admin/api/settings/session-recording') {
+          recording = JSON.parse(options.body).enabled;
+          return Response.json({ enabled: recording });
+        }
+      }
+      if (method === 'POST' && path === '/admin/api/tokens') {
+        tokenCreated = true;
+        return Response.json(
+          { record: { id: 'synthetic-token-id' }, token: 'synthetic-live-token-secret' },
+          { status: 201 }
+        );
+      }
+      if (path === '/admin/api/runtime-controls') {
+        return Response.json({ requestLogging: { settings: logging } });
+      }
+      if (path === '/admin/api/settings/session-recording') {
+        return Response.json({ enabled: recording });
+      }
+      if (path === '/admin/api/settings/diagnostic-html') return Response.json({ enabled: false });
+      const values = {
+        '/': { name: 'web-api' },
+        '/health/ready': { ready: true },
+        '/admin/api/chatgpt/session': { state: 'ready' },
+        '/v1/models': {
+          data: [{ id: 'gpt-5', status: 'active', modalities: { input: ['text', 'image'] } }]
+        }
+      };
+      return values[path] ? Response.json(values[path]) : new Response(null, { status: 404 });
+    };
+    return { fetchImpl, requests, tokenCreated: () => tokenCreated };
+  };
+
+  const safeApi = createFakeApi();
+  const session = await prepareAiLiveSmokeSession({
+    origin: WEB_API_ORIGIN,
+    fetchImpl: safeApi.fetchImpl
+  });
+  assert.equal(safeApi.tokenCreated(), true);
+  await session.cleanup();
+  assert.equal(
+    safeApi.requests.some(({ method }) => method === 'PATCH'),
+    false
+  );
+  assert.equal(
+    safeApi.requests.some(
+      ({ method, path }) => method === 'DELETE' && path === '/admin/api/tokens/synthetic-token-id'
+    ),
+    true
+  );
+
+  for (const unsafeApi of [
+    createFakeApi({ captureDetails: true }),
+    createFakeApi({ sessionRecording: true })
+  ]) {
+    await assert.rejects(
+      prepareAiLiveSmokeSession({ origin: WEB_API_ORIGIN, fetchImpl: unsafeApi.fetchImpl }),
+      /capture|privacy|redacted/i
+    );
+    assert.equal(unsafeApi.tokenCreated(), false);
+    assert.equal(
+      unsafeApi.requests.some(({ method }) => method === 'PATCH'),
+      false
+    );
+  }
 });
 
 test('rejects any WebAPI origin outside the supervised loopback without making a request', async () => {
@@ -239,15 +309,15 @@ test('rejects any WebAPI origin outside the supervised loopback without making a
 test('aborts session setup and rolls back its token and privacy settings after cancellation', async () => {
   const controller = new AbortController();
   const originalLogging = {
-    captureDetails: true,
+    captureDetails: false,
     enabled: true,
-    maxBodyChars: 2048,
-    maxHeaderValueChars: 128,
-    maxHeaders: 10
+    maxBodyChars: 0,
+    maxHeaderValueChars: 0,
+    maxHeaders: 0
   };
   let logging = { ...originalLogging };
-  let sessionRecording = true;
-  let diagnosticHtml = true;
+  let sessionRecording = false;
+  let diagnosticHtml = false;
   let tokenCreated = false;
   let tokenDeleted = false;
   let tokenName = '';
@@ -323,12 +393,12 @@ test('aborts session setup and rolls back its token and privacy settings after c
     assert.equal(tokenCreated, true);
     assert.equal(tokenDeleted, true);
     assert.deepEqual(logging, originalLogging);
-    assert.equal(sessionRecording, true);
-    assert.equal(diagnosticHtml, true);
+    assert.equal(sessionRecording, false);
+    assert.equal(diagnosticHtml, false);
     assert.equal(
       requests.filter(({ method, path }) => method === 'PATCH' && path.includes('request-logging'))
         .length,
-      2
+      0
     );
     assert.equal(
       requests
@@ -348,16 +418,16 @@ test('aborts session setup and rolls back its token and privacy settings after c
 
 test('rolls back the token and every privacy setting when the model catalog is unusable', async () => {
   const originalSettings = {
-    captureDetails: true,
+    captureDetails: false,
     enabled: true,
-    maxBodyChars: 4096,
-    maxHeaderValueChars: 256,
-    maxHeaders: 20
+    maxBodyChars: 0,
+    maxHeaderValueChars: 0,
+    maxHeaders: 0
   };
   const requests = [];
   let currentLogging = { ...originalSettings };
-  let sessionRecording = true;
-  let diagnosticHtml = true;
+  let sessionRecording = false;
+  let diagnosticHtml = false;
   const fetchImpl = async (url, options = {}) => {
     const path = new URL(url).pathname;
     const method = options.method ?? 'GET';
@@ -403,16 +473,11 @@ test('rolls back the token and every privacy setting when the model catalog is u
     prepareAiLiveSmokeSession({ origin: WEB_API_ORIGIN, fetchImpl, now: () => 1000 }),
     /could not be completed safely/i
   );
-  assert.equal(sessionRecording, true);
-  assert.equal(diagnosticHtml, true);
-  assert.deepEqual(
-    requests
-      .filter(
-        ({ method, path }) =>
-          method === 'PATCH' && path === '/admin/api/runtime-controls/request-logging'
-      )
-      .map(({ body }) => JSON.parse(body)),
-    [{ ...originalSettings, captureDetails: false, enabled: false }, originalSettings]
+  assert.equal(sessionRecording, false);
+  assert.equal(diagnosticHtml, false);
+  assert.equal(
+    requests.some(({ method }) => method === 'PATCH'),
+    false
   );
   assert.equal(
     requests.some(

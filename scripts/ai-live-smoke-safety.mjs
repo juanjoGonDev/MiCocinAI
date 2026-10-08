@@ -211,14 +211,17 @@ function validRequestLoggingSettings(value) {
   );
 }
 
-function sameRequestLoggingSettings(actual, expected) {
-  if (!validRequestLoggingSettings(actual)) return false;
-  return ['captureDetails', 'enabled', 'maxBodyChars', 'maxHeaderValueChars', 'maxHeaders'].every(
-    (field) => actual[field] === expected[field]
+function safeRequestLoggingSettings(value) {
+  return (
+    validRequestLoggingSettings(value) &&
+    value.captureDetails === false &&
+    value.maxBodyChars === 0 &&
+    value.maxHeaderValueChars === 0 &&
+    value.maxHeaders === 0
   );
 }
 
-/** Provisiona un token corto solo tras desactivar la captura de cuerpos de WebAPI. */
+/** Provisions a short-lived token only when existing WebAPI logs are safely redacted. */
 function validateIsolatedWebApiOrigin(value) {
   let parsed;
   try {
@@ -251,12 +254,7 @@ export async function prepareAiLiveSmokeSession({
   let tokenId;
   let tokenName;
   let tokenCreateStarted = false;
-  let originalLoggingSettings;
-  let restoreLogging = false;
-  let originalSessionRecording;
-  let restoreSessionRecording = false;
-  let originalDiagnosticHtml;
-  let restoreDiagnosticHtml = false;
+  let privacyPreflightFailed = false;
   let cleanupPromise;
   let cleanupStarted = false;
 
@@ -290,31 +288,6 @@ export async function prepareAiLiveSmokeSession({
     }
   };
 
-  const patchRequestLogging = async (settings) => {
-    let response;
-    try {
-      response = await request('/admin/api/runtime-controls/request-logging', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(settings)
-      });
-    } catch {
-      throw new Error('WebAPI request logging settings could not be updated.');
-    }
-    if (response.status !== 200) {
-      throw new Error('WebAPI request logging settings could not be updated.');
-    }
-    let payload;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new Error('WebAPI request logging settings could not be verified.');
-    }
-    if (!sameRequestLoggingSettings(payload?.settings, settings)) {
-      throw new Error('WebAPI request logging settings could not be verified.');
-    }
-  };
-
   const readBooleanPreference = async (path) => {
     const payload = await readJson(path);
     if (typeof payload?.enabled !== 'boolean') {
@@ -323,39 +296,11 @@ export async function prepareAiLiveSmokeSession({
     return payload.enabled;
   };
 
-  const patchBooleanPreference = async (path, enabled) => {
-    let response;
-    try {
-      response = await request(path, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ enabled })
-      });
-    } catch {
-      throw new Error('WebAPI privacy settings could not be updated.');
-    }
-    if (response.status !== 200) {
-      throw new Error('WebAPI privacy settings could not be updated.');
-    }
-    let payload;
-    try {
-      payload = await response.json();
-    } catch {
-      throw new Error('WebAPI privacy settings could not be verified.');
-    }
-    if (payload?.enabled !== enabled || (await readBooleanPreference(path)) !== enabled) {
-      throw new Error('WebAPI privacy settings could not be verified.');
-    }
-  };
-
   const cleanup = () => {
     if (cleanupPromise) return cleanupPromise;
     cleanupStarted = true;
     cleanupPromise = (async () => {
       let tokenRemoved = true;
-      let loggingRestored = true;
-      let sessionRecordingRestored = true;
-      let diagnosticHtmlRestored = true;
       if (tokenId) {
         try {
           const response = await request(`/admin/api/tokens/${encodeURIComponent(tokenId)}`, {
@@ -385,42 +330,8 @@ export async function prepareAiLiveSmokeSession({
           tokenRemoved = false;
         }
       }
-      if (restoreLogging && originalLoggingSettings) {
-        try {
-          await patchRequestLogging(originalLoggingSettings);
-        } catch {
-          loggingRestored = false;
-        }
-      }
-      if (restoreSessionRecording) {
-        try {
-          await patchBooleanPreference(
-            '/admin/api/settings/session-recording',
-            originalSessionRecording
-          );
-        } catch {
-          sessionRecordingRestored = false;
-        }
-      }
-      if (restoreDiagnosticHtml) {
-        try {
-          await patchBooleanPreference(
-            '/admin/api/settings/diagnostic-html',
-            originalDiagnosticHtml
-          );
-        } catch {
-          diagnosticHtmlRestored = false;
-        }
-      }
-      if (
-        !tokenRemoved ||
-        !loggingRestored ||
-        !sessionRecordingRestored ||
-        !diagnosticHtmlRestored
-      ) {
-        throw new Error(
-          'WebAPI AI smoke cleanup failed; temporary credentials or privacy settings need attention.'
-        );
+      if (!tokenRemoved) {
+        throw new Error('WebAPI AI smoke cleanup failed; the temporary token needs attention.');
       }
     })();
     return cleanupPromise;
@@ -448,38 +359,23 @@ export async function prepareAiLiveSmokeSession({
     }
 
     const runtime = await readJson('/admin/api/runtime-controls');
-    originalLoggingSettings = runtime?.requestLogging?.settings;
-    if (!validRequestLoggingSettings(originalLoggingSettings)) {
-      throw new Error('WebAPI request logging settings are unavailable.');
+    if (!safeRequestLoggingSettings(runtime?.requestLogging?.settings)) {
+      privacyPreflightFailed = true;
+      throw new Error('WebAPI request/session content capture is enabled or not safely redacted.');
     }
-    originalSessionRecording = await readBooleanPreference('/admin/api/settings/session-recording');
-    originalDiagnosticHtml = await readBooleanPreference('/admin/api/settings/diagnostic-html');
-
-    const safeLoggingSettings = {
-      ...originalLoggingSettings,
-      captureDetails: false,
-      enabled: false
-    };
-    if (!sameRequestLoggingSettings(originalLoggingSettings, safeLoggingSettings)) {
-      restoreLogging = true;
-      await patchRequestLogging(safeLoggingSettings);
+    const sessionRecording = await readBooleanPreference('/admin/api/settings/session-recording');
+    const diagnosticHtml = await readBooleanPreference('/admin/api/settings/diagnostic-html');
+    if (sessionRecording || diagnosticHtml) {
+      privacyPreflightFailed = true;
+      throw new Error('WebAPI request/session content capture remains enabled.');
     }
-    if (originalSessionRecording) {
-      restoreSessionRecording = true;
-      await patchBooleanPreference('/admin/api/settings/session-recording', false);
-    }
-    if (originalDiagnosticHtml) {
-      restoreDiagnosticHtml = true;
-      await patchBooleanPreference('/admin/api/settings/diagnostic-html', false);
-    }
-
     const verifiedRuntime = await readJson('/admin/api/runtime-controls');
     if (
-      verifiedRuntime?.requestLogging?.settings?.enabled !== false ||
-      verifiedRuntime?.requestLogging?.settings?.captureDetails !== false ||
-      (await readBooleanPreference('/admin/api/settings/session-recording')) !== false ||
-      (await readBooleanPreference('/admin/api/settings/diagnostic-html')) !== false
+      !safeRequestLoggingSettings(verifiedRuntime?.requestLogging?.settings) ||
+      (await readBooleanPreference('/admin/api/settings/session-recording')) ||
+      (await readBooleanPreference('/admin/api/settings/diagnostic-html'))
     ) {
+      privacyPreflightFailed = true;
       throw new Error('WebAPI request/session content capture remains enabled.');
     }
 
@@ -516,7 +412,10 @@ export async function prepareAiLiveSmokeSession({
       throw new Error('AI smoke setup failed and WebAPI rollback needs attention.');
     }
     if (signal?.aborted) {
-      throw new Error('AI smoke setup was cancelled and its temporary changes were rolled back.');
+      throw new Error('AI smoke setup was cancelled and its temporary token was removed.');
+    }
+    if (privacyPreflightFailed) {
+      throw new Error('AI smoke setup refused because WebAPI request/session capture is unsafe.');
     }
     throw new Error('AI smoke setup could not be completed safely.');
   }
