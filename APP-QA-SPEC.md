@@ -2668,7 +2668,14 @@ borrado|una oferta 3x2 se pinta en la fila y se quita con un toque'`. El runner 
   optional chaining/nullish coalescing en ficheros ajenos a este cambio.
 - Capturas sintéticas revisadas e ignoradas por Git: `.e2e-screenshots/qa-ci-active-contracts/chromium/`
   y `.e2e-screenshots/qa-ci-active-contracts/mobile-chrome/`.
-- **CI nuevo:** pendiente de commit/push; el subunidad no se cierra hasta que todos sus jobs queden verdes.
+- CI `37705486074` (#451) pasó build, typecheck, server tests, full-stack y shards 1/3/4; shard 2 falló
+  solo en `logs-clear-filters.spec.ts`: exigía terminal vacío aunque el stream global seguía recibiendo
+  logs sintéticos del servidor desde otros workers. El snapshot confirma 161 entradas `[SRV]` activas tras
+  el `DELETE` correcto; el contrato relevante es que se borren las tres filas del test y la selección.
+- Se quitó la aserción global de terminal vacío, manteniendo las aserciones sobre las filas de este test y
+  la selección. Verificado con `E2E_RATE_LIMIT=on pnpm run test:e2e -- --workers=1 --project=chromium
+tests/e2e/logs-clear-filters.spec.ts` (1/1), `pnpm run typecheck:e2e` y `git diff --check`.
+- **CI nuevo:** pendiente de commit/push y verde de todos los jobs.
 
 **Rollback:** revertir únicamente este commit quita el guard y sus pruebas (`modules.service.ts` y
 `settings.component.ts`, con sus specs unitarias), los ajustes de las seis specs E2E y esta evidencia; no

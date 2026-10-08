@@ -128,8 +128,9 @@ test.describe('filtros y borrado de Logs', () => {
     expect(response.status()).toBe(200);
     expect(deleteAttempts).toBe(2);
 
+    // El stream de logs es global al proceso: otros workers de la shard pueden seguir añadiendo
+    // entradas del servidor justo después del DELETE. Verificamos las filas sintéticas de este test.
     await expect(markerLines).toHaveCount(0);
-    await expect(page.locator('.terminal__empty')).toBeVisible();
     await expect(page.locator('.terminal__line--selected')).toHaveCount(0);
   });
 });
