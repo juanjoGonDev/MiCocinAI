@@ -683,7 +683,14 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
         totalMinor: 300,
         warnings: []
       };
-      const proveedor = await iniciarProveedorDeTickets(respuesta);
+      let liberarRespuestaProveedor: () => void = () => {};
+      const respuestaProveedorPendiente = new Promise<void>((resolve) => {
+        liberarRespuestaProveedor = resolve;
+      });
+      const proveedor = await iniciarProveedorDeTickets(
+        respuesta,
+        () => respuestaProveedorPendiente
+      );
       const erroresPagina: string[] = [];
       page.on('pageerror', (error) => erroresPagina.push(`${error.name}: ${error.message}`));
 
@@ -722,9 +729,21 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
           mimeType: 'image/png',
           buffer: pngDeMentira()
         });
-        expect((await uploadResponse).status()).toBe(201);
+        const uploadResult = await uploadResponse;
+        expect(uploadResult.status()).toBe(201);
+        const uploadedReceipt = (await uploadResult.json()) as { data: { id: string } };
+        const receiptId = uploadedReceipt.data.id;
+        expect(receiptId).toBeTruthy();
 
         await expect.poll(() => proveedor.solicitudes.length, { timeout: 20_000 }).toBe(1);
+        const receiptStatus = async () => {
+          const response = await page.request.get(`/api/receipts/${receiptId}`, {
+            headers: { authorization: `Bearer ${token}` }
+          });
+          expect(response.ok()).toBeTruthy();
+          return ((await response.json()) as { data: { status: string } }).data.status;
+        };
+        await expect.poll(receiptStatus, { timeout: 20_000 }).toBe('analyzing');
         const providerRequest = proveedor.solicitudes[0];
         expect(providerRequest.model).toBe('synthetic-ticket-model');
         expect(providerRequest.stream).toBe(true);
@@ -756,6 +775,18 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
 
         const history = page.locator('[data-test="receipt-history"]');
         const historyRow = history.locator('[data-test="ticket-history-item"]');
+        const pendingHistoryResponse = await page.request.get(
+          '/api/receipts?scope=history&limit=50&offset=0',
+          { headers: { authorization: `Bearer ${token}` } }
+        );
+        expect(pendingHistoryResponse.ok()).toBeTruthy();
+        const pendingHistory = (await pendingHistoryResponse.json()) as {
+          data: { id: string }[];
+        };
+        expect(pendingHistory.data.some((receipt) => receipt.id === receiptId)).toBe(false);
+        await expect(historyRow).toHaveCount(0);
+        liberarRespuestaProveedor();
+        await expect.poll(receiptStatus, { timeout: 20_000 }).toBe('review');
         await expect(historyRow).toHaveCount(1, { timeout: 20_000 });
         if (scenario.store) await expect(historyRow).toContainText(scenario.store);
         if (!scenario.purchaseDate) {
@@ -776,8 +807,6 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
         await page.keyboard.press('Tab');
         await expect(purchaseDateField).toBeFocused();
 
-        const receiptId = new URL(page.url()).pathname.split('/').at(-1);
-        expect(receiptId).toBeTruthy();
         const detailResponse = await page.request.get(`/api/receipts/${receiptId}`, {
           headers: { authorization: `Bearer ${token}` }
         });
@@ -893,6 +922,7 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
         });
         expect(erroresPagina).toEqual([]);
       } finally {
+        liberarRespuestaProveedor();
         await proveedor.close();
       }
     });

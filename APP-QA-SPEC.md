@@ -3839,15 +3839,30 @@ debe sincronizar la respuesta al proveedor y el estado terminal del ticket ident
 que aparezca en el historial, y luego validar en EN que tienda/fecha desconocidas sigan siendo nulas y
 editables. La coordinación debe seguir basada en estado/respuesta observable, no en esperas temporales.
 
-- [ ] Reproducir el rojo en la prueba aislada y añadir primero una barrera determinista que libere la
+- [x] Reproducir el rojo en la prueba aislada y añadir primero una barrera determinista que libere la
       respuesta sintética tras registrar la petición; comprobar que la prueba no confunda `analyzing`
       con historial vacío.
-- [ ] Sincronizar por GET del ticket hasta estado `review` después de completar la respuesta del
+- [x] Sincronizar por GET del ticket hasta estado `review` después de completar la respuesta del
       proveedor; verificar la fila de historial y los campos EN tras navegación/recarga.
-- [ ] Ejecutar la regresión focal, `receipts.spec.ts` en Chromium y Pixel 5 emulado, typecheck E2E,
+- [x] Ejecutar la regresión focal, `receipts.spec.ts` en Chromium y Pixel 5 emulado, typecheck E2E,
       formato, `check:ui`, build y `git diff --check`; sin fixture/proveedor real ni base compartida.
 - [ ] Actualizar esta evidencia, crear commits atómicos con hooks completos y push a la rama; esperar
       CI verde para el SHA actual del PR sin mergearlo.
+
+**Evidencia (2026-10-08):** CI `37847039744` confirmó el rojo en shard 3: 98 pasaron, 6 omitidas
+y falló `receipts.spec.ts:759` con 0 filas de historial. El handler de proveedor sintético guarda la
+solicitud antes de responder, mientras el endpoint de historial excluye `queued`/`analyzing`; la prueba
+local original sin barrera pasó **2/2**, ocultando la carrera. Se añadió una respuesta upstream retenida
+determinísticamente: antes de la corrección, ambas variantes fallaron al exigir la fila mientras el
+ticket seguía `analyzing` (**0** recibidas). Ahora se verifica que la API de historial excluye ese ticket,
+se libera la respuesta, se espera por GET el estado terminal `review` y solo entonces se exige la fila;
+también se verifica que ES/EN permitan editar tienda/fecha ausentes. La suite completa de recibos pasó
+**24/24** con `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium
+--project=mobile-chrome --forbid-only tests/e2e/receipts.spec.ts --reporter=line`, SQLite, puertos,
+semilla y cleanup temporales; sin proveedor real ni cambios de producción. `pnpm run typecheck:e2e`,
+`pnpm run check:ui` (**210 archivos, 21 reglas**), Prettier focal, `pnpm run build` y
+`git diff --check` pasan. La compilación conserva warnings de bundle/imports/optional chaining y budgets
+en otros componentes. Cobertura de producción: N/A, porque el cambio es solo de E2E/spec.
 
 **Rollback:** retirar solo la barrera/sincronización E2E y esta subunidad; no cambiar la política del
 historial ni los estados de producción.
