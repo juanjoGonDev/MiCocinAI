@@ -859,7 +859,7 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
         align-items: center;
         gap: var(--space-3);
         min-width: 0;
-        padding: var(--space-3) var(--space-4);
+        padding: var(--space-4);
         color: var(--text-secondary);
       }
       .stat-card + .stat-card {

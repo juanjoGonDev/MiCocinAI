@@ -3314,16 +3314,31 @@ alineación y tipografía de valor/etiqueta; anchos dependen del grid contenedor
 Despensa conserva `font-variant-numeric: tabular-nums`; superficies/divisores del contenedor siguen sus
 variantes funcionales actuales. Sin cambio de datos, etiquetas, orden ni acciones.
 
-- [ ] Añadir primero una E2E roja con usuario sintético vacío que mida todas las `.stat-card` en
+- [x] Añadir primero una E2E roja con usuario sintético vacío que mida todas las `.stat-card` en
       `/dashboard` y `/pantry`: padding, gap, alineación y tipografía de valor/etiqueta deben coincidir
       con tolerancia ≤1 CSS px; el baseline reproduce 12 px frente a 16 px de padding vertical.
-- [ ] Cambiar solo el padding interno de Despensa al contrato compartido; preservar wrapper continuo,
+- [x] Cambiar solo el padding interno de Despensa al contrato compartido; preservar wrapper continuo,
       separadores, colores, anchuras responsivas y números tabulares.
-- [ ] Repetir Chromium y Pixel 5 en 320×568, 393×851, 600/601 y 1440×900; validar todas las tarjetas,
-      ausencia de overflow y persistencia/estado vacío estable, sin escrituras a DB normal.
-- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil de las dos rutas; ejecutar `typecheck:e2e`,
+- [x] Repetir Chromium y Pixel 5 en 320×568, 393×851, 600/601 y 1440×900; validar todas las tarjetas,
+      estado vacío y ausencia de overflow, sin escribir en la DB normal.
+- [x] Guardar e inspeccionar capturas sintéticas PC/móvil de las dos rutas; ejecutar `typecheck:e2e`,
       `check:ui`, Prettier, build, pruebas focales, `git diff --check` y coverage ≥70 % S/B/F/L si
       aparece lógica instrumentable. Registrar evidencia y rollback antes de cerrar.
+
+**Evidencia (2026-10-08):** la E2E roja aislada falló en Chromium y Pixel 5 con 30 discrepancias por
+proyecto: los tres `.stat-card` de Despensa calculaban 12 px de padding arriba/abajo en cada uno de cinco
+viewports, frente a 16 px en Dashboard; gap, alineación y tipografía de valor/etiqueta coincidían. Se
+aplicó TDD cambiando únicamente ese padding a `var(--space-4)` y dejando intactos el wrapper agrupado,
+divisores, anchos del grid y números tabulares. `node scripts/run-isolated-playwright.mjs --workers=1
+--project=chromium --project=mobile-chrome tests/e2e/stats-card-geometry.spec.ts --reporter=line` pasó
+**2/2** en 320×568, 393×851, 600/601×900 y 1440×900; todas las tarjetas ahora comparten los estilos
+geométricos declarados y no hay overflow. Se guardaron e inspeccionaron capturas PC/móvil de ambas rutas
+en `.e2e-screenshots/qa-stat-card-parity-20261008/`. `pnpm run typecheck:e2e`, `pnpm run check:ui`
+(210 ficheros, 21 reglas, sin incidencias), `pnpm run build` de servidor + frontend producción,
+Prettier focal y `git diff --check` pasan; el build conserva avisos de presupuestos del bundle/estilos y
+templates no usados, sin cambiar sus gates. Coverage S/B/F/L: N/A, la producción cambiada es CSS estático
+y el cambio no añade lógica instrumentable. El runner preservó el diagnóstico temporal del primer intento
+rojo en su carpeta propia `hogaria-e2e-*`; no se usó ni modificó la DB normal.
 
 **Rollback focal:** restaurar el padding vertical previo solo en `.stat-card` de Despensa, retirar la
 regresión E2E y esta subunidad; no revertir el contrato de los títulos ni otros componentes de resumen.
