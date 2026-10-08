@@ -563,6 +563,19 @@ La casilla agregada `/pantry` sigue abierta: falta validar la vista vacía real 
 
 **Rollback previsto:** revertir la asociación de etiqueta, la E2E y esta subunidad; sin cambios de esquema ni APIs.
 
+### QA-PANTRY.ROOT.EMPTY-STATE.1 · inventario realmente vacío y CTA de alta
+
+**Fuente revalidada (2026-10-08):** el checklist activo `/pantry` exige separar vacío, sin resultados y error. `PantryComponent` solo pinta `.empty-state` cuando la lectura fue correcta, no hay cantidad positiva y `suggestions()` también está vacía; la CTA abre el modal de alta manual. En cambio, el registro estándar siembra actualmente 68 productos personales a cero, y `pantry.spec.ts` comprueba que haya cero filas de inventario pero nunca que aparezca este estado ni que la CTA funcione. La diferencia es importante: una casa con productos conocidos a cero debe ofrecer sugerencias, no decir que el inventario está realmente vacío. No se detecta un defecto de producción; esta unidad cierra el hueco de cobertura.
+
+**Contrato:** con respuesta válida y colección de productos personales vacía, mostrar «Tu inventario está vacío», su ayuda y «Agregar primer ingrediente»; ocultar sugerencias y tabla, sin convertirlo en error ni en estado «sin resultados». La CTA abre el formulario manual. Cerrar el formulario sin guardar no crea filas. Usar solamente el usuario semilla y SQLite temporal propios del runner, eliminando sus filas iniciales a cero mediante el endpoint de lote; no tocar la base normal, catálogos globales ni proveedor de IA.
+
+- [ ] Añadir E2E primero con usuario aislado sin hogar: leer únicamente sus filas semilla (todas a cero), vaciarlas con el endpoint autenticado de lote y recargar para preparar la colección realmente vacía; no usar la base normal ni modificar datos globales.
+- [ ] Verificar estado vacío/localizado, ausencia de sugerencias/tabla/error, apertura de la CTA al modal manual y cancelación sin POST ni persistencia.
+- [ ] Ejecutar Chromium escritorio y Pixel 5 con rate limit activo; probar el ancho mínimo, `B−1/B/B+1` de breakpoints de la pantalla y orientación horizontal, sin overflow ni CTA tapada. Guardar e inspeccionar capturas sintéticas 1440×900 y 393×851 en carpeta única ignorada por Git; confirmar cleanup del runner.
+- [ ] Ejecutar typecheck E2E, Prettier, `check:ui`, build y diff-check. Coverage S/B/F/L: N/A porque el comportamiento productivo no cambia; mantener abierta la auditoría total de `/pantry`.
+
+**Rollback:** retirar solo la E2E y esta subunidad; no revertir el endpoint de lote, los datos seed ni el estado vacío ya existente.
+
 ## Unidad QA-PANTRY.TOUCH.1 · objetivos táctiles de acciones por ingrediente (resuelta localmente)
 
 **Fuente revalidada (2026-10-01):** `PantryComponent` renderizaba controles `.stock-btn` de 28×28 px y acciones `.action-btn` de 40×40 px. `DataTableComponent` usa tarjetas hasta 719 px y vuelve a tabla con scroll horizontal desde 720 px; por tanto, un teléfono girado (Pixel 5 ~851×393 CSS px) ya no estaba cubierto por `max-width:719px`. `pantry.spec.ts` ya comprobaba la actualización hasta cero, pero no rectángulos táctiles, acciones por toque ni el destino de foco al desaparecer la fila. La revisión también descubrió que una respuesta lenta podía devolver el foco al stepper inicial después de que la persona lo hubiera movido a Editar.
