@@ -1869,6 +1869,14 @@ ya fallaba `prettier --check` en el `HEAD` inicial; se conservaron sus líneas a
 reformatear el archivo entero. El manejo del runner con secretos y la verificación explícita de red
 quedan pendientes; no se hizo ninguna llamada real a proveedor.
 
+**Revalidación de CI (2026-10-08):** el run `37711377694` falló porque el test comprobaba que la
+respuesta no contuviera el prefijo genérico `sk-`; un ID aleatorio de configuración coincidió por
+azar con ese texto aunque la clave no se devolviera. Se reprodujo de forma determinista con un ID
+sintético que contiene el prefijo: la assertion antigua falla; la nueva verifica ausencia de ambos
+campos (`api_key`/`apiKey`) y del valor sintético completo enviado como clave, conservando el ID.
+El test dirigido pasó **1/1** y `ai.routes.spec.ts` **57/57**, sin modificar producción ni llamar al
+proveedor.
+
 ## Unidad QA-LAYOUT.CONTENT-GUTTERS.1 · márgenes homogéneos en las vistas
 
 **Fuente inicial anterior a la implementación (2026-10-03):** `app.routes.ts` monta las rutas privadas de producto bajo

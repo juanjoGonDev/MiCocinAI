@@ -125,14 +125,15 @@ async function crearConfig(
   user: User,
   nombre: string,
   baseUrl = 'http://localhost:9/v1',
-  retryAttempts = 3
+  retryAttempts = 3,
+  apiKey = 'sk-x'
 ) {
   return data(
     await call(user, 'POST', '/configs', {
       name: nombre,
       provider: 'custom',
       baseUrl,
-      apiKey: 'sk-x',
+      apiKey,
       model: 'gpt-5',
       retryAttempts
     })
@@ -155,13 +156,22 @@ describe('la configuracion activa es UNA', () => {
     expect(segunda.isActive).toBe(true);
   });
 
-  it('la respuesta no devuelve la api_key', async () => {
-    await crearConfig(alice, 'Con llave');
+  it('omite la api_key sin rechazar ids que contienen texto parecido', async () => {
+    const config = await crearConfig(
+      alice,
+      'Con llave',
+      'http://localhost:9/v1',
+      3,
+      'fixture-secret-value-not-returned'
+    );
+    db.prepare('UPDATE ai_configs SET id = ? WHERE id = ?').run('fixture-sk-id', config.id);
     const respuesta = await call(alice, 'GET', '/configs');
     const cuerpo = (await respuesta.json()) as { data: Record<string, unknown>[] };
     expect(cuerpo.data).toHaveLength(1);
-    expect(JSON.stringify(cuerpo.data)).not.toContain('sk-');
-    expect(JSON.stringify(cuerpo.data)).not.toContain('api_key');
+    expect(cuerpo.data[0].id).toBe('fixture-sk-id');
+    expect(cuerpo.data[0]).not.toHaveProperty('api_key');
+    expect(cuerpo.data[0]).not.toHaveProperty('apiKey');
+    expect(JSON.stringify(cuerpo.data)).not.toContain('fixture-secret-value-not-returned');
     expect(cuerpo.data[0].baseUrl).toBe('http://localhost:9/v1'); // camelCase, lo que la UI lee
   });
 
