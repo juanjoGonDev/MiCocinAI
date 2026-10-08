@@ -1,6 +1,8 @@
 import {
-  AI_LIVE_RECEIPT_SMOKE_COMPLETION_BUDGET,
+  AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET,
   AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES,
+  AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS,
+  AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT,
   AI_LIVE_SMOKE_COMPLETION_BUDGET,
   createAiLiveSmokeRunnerEnvironment,
   createAiLiveProxy,
@@ -50,8 +52,8 @@ export async function runAiLiveSmoke({
 } = {}) {
   validateAiLiveSmokeOptIn(env);
   const receiptsOnly = validateAiLiveReceiptSmokeRequest(env);
-  const completionBudget = receiptsOnly
-    ? AI_LIVE_RECEIPT_SMOKE_COMPLETION_BUDGET
+  const requestBudget = receiptsOnly
+    ? AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET
     : AI_LIVE_SMOKE_COMPLETION_BUDGET;
   assertAiLiveSmokeDeadlineContract();
   signal?.throwIfAborted();
@@ -69,19 +71,20 @@ export async function runAiLiveSmoke({
       token: session.token,
       model: session.model,
       targetOrigin: session.origin,
-      maxCalls: completionBudget,
+      maxCalls: requestBudget,
+      requireReceiptAttachments: receiptsOnly,
       ...(receiptsOnly ? { maxRequestBytes: AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES } : {}),
       timeoutMs: AI_LIVE_SMOKE_DEADLINES.proxyMs,
       onRequest: ({ ordinal }) => {
-        if (Number.isInteger(ordinal) && ordinal > 0 && ordinal <= completionBudget) {
-          writeProgress(`Solicitud IA ${ordinal}/${completionBudget} enviada al servicio local.`);
+        if (Number.isInteger(ordinal) && ordinal > 0 && ordinal <= requestBudget) {
+          writeProgress(`Solicitud IA ${ordinal}/${requestBudget} enviada al servicio local.`);
         }
       },
       onCompletion: ({ ordinal, status, responseFormat }) => {
         if (
           Number.isInteger(ordinal) &&
           ordinal > 0 &&
-          ordinal <= completionBudget &&
+          ordinal <= requestBudget &&
           Number.isInteger(status)
         ) {
           const responseShape =
@@ -105,7 +108,7 @@ export async function runAiLiveSmoke({
             ? responseFormat.finishReason
             : 'no disponible';
           writeProgress(
-            `Respuesta IA ${ordinal}/${completionBudget} completada (HTTP ${status}; ${responseShape}; cierre ${finishReason}).`
+            `Respuesta IA ${ordinal}/${requestBudget} completada (HTTP ${status}; ${responseShape}; cierre ${finishReason}).`
           );
         }
       }
@@ -159,7 +162,7 @@ export async function runAiLiveSmoke({
           ? 'Smoke real cancelado; se intentó cerrar el runner y limpiar los recursos propios.'
           : runnerExit.timedOut
             ? 'Smoke real fallido: se agotó el límite de tiempo; se intentó cerrar y limpiar.'
-            : `Smoke real fallido: resultado del runner=${runnerExit.code}, llamadas=${calls.length}/${completionBudget} (mínimo permitido ${receiptsOnly ? 4 : 9}).`
+            : `Smoke real fallido: resultado del runner=${runnerExit.code}, peticiones=${calls.length}/${requestBudget} (mínimo permitido ${receiptsOnly ? AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS : 9}).`
     );
     return 1;
   }
@@ -172,8 +175,18 @@ export async function runAiLiveSmoke({
         provider: 'local WebAPI :3001',
         model: session.model,
         sourceCount: 6,
-        tickets: 4,
-        completions: calls.length,
+        tickets: AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT,
+        requests: calls.length,
+        completions: calls.filter((call) => call.status >= 200 && call.status < 300).length,
+        verifiedStrictSchemaRequests: calls.filter(
+          (call) => call.requestContract?.strictJsonSchema === true
+        ).length,
+        verifiedInventoryJsonAttachments: calls.filter(
+          (call) => call.requestContract?.inventoryJsonAttachmentCount === 1
+        ).length,
+        verifiedReceiptAttachments: calls.filter(
+          (call) => call.requestContract?.receiptAttachmentCount === 1
+        ).length,
         elapsedMs: calls.reduce((sum, call) => sum + (call.elapsedMs ?? 0), 0),
         recoveredFallbacks: calls.filter(
           (call, index) =>

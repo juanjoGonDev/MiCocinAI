@@ -5,11 +5,22 @@ export const AI_LIVE_RECEIPT_SOURCE_COUNT = 6;
 export const AI_LIVE_RECEIPT_MAX_BYTES = 10 * 1024 * 1024;
 export const AI_LIVE_RECEIPT_TICKET_COUNT = 4;
 export const AI_LIVE_RECEIPT_COMPLETION_BUDGET = 8;
+export const AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION = 'unsubmitted-only';
+export const AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT = 2;
+export const AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET = 4;
 
 const NAME_COLLATOR = new Intl.Collator('es-ES', { numeric: true, sensitivity: 'base' });
 
 /** Load six local source files as four in-memory receipt inputs, never returning original names. */
-export async function loadAiLiveReceiptPlan({ directory, preferredJpegOrdinal } = {}) {
+export async function loadAiLiveReceiptPlan({
+  directory,
+  preferredJpegOrdinal,
+  selection = 'all',
+  readFileImpl = readFile
+} = {}) {
+  if (!['all', AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION].includes(selection)) {
+    throw new Error('The receipt selection is invalid.');
+  }
   if (typeof directory !== 'string' || !isAbsolute(directory)) {
     throw new Error('A local absolute ticket directory is required.');
   }
@@ -59,11 +70,8 @@ export async function loadAiLiveReceiptPlan({ directory, preferredJpegOrdinal } 
     throw new Error('The preferred JPEG must be selected by its sorted 1-based index.');
   }
 
-  const pdfs = await Promise.all(
-    pdfEntries.map((entry) => readVerifiedFile(root, entry.name, 'pdf'))
-  );
   const jpegs = await Promise.all(
-    jpegEntries.map((entry) => readVerifiedFile(root, entry.name, 'jpeg'))
+    jpegEntries.map((entry) => readVerifiedFile(root, entry.name, 'jpeg', readFileImpl))
   );
   const bestJpeg = jpegs[preferredJpegOrdinal - 1];
   const longTicketJpegs = jpegs.filter((_, index) => index !== preferredJpegOrdinal - 1);
@@ -72,9 +80,26 @@ export async function loadAiLiveReceiptPlan({ directory, preferredJpegOrdinal } 
     throw new Error('The in-memory multi-page ticket exceeds the 10 MiB upload limit.');
   }
 
+  if (selection === AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION) {
+    return Object.freeze({
+      sourceCount: AI_LIVE_RECEIPT_SOURCE_COUNT,
+      ticketCount: AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT,
+      selection,
+      tickets: Object.freeze([
+        makeTicket(bestJpeg, 'jpeg', 1),
+        makeTicket(longTicketPdf, 'pdf', longTicketJpegs.length, longTicketJpegs.length)
+      ])
+    });
+  }
+
+  const pdfs = await Promise.all(
+    pdfEntries.map((entry) => readVerifiedFile(root, entry.name, 'pdf', readFileImpl))
+  );
+
   return Object.freeze({
     sourceCount: AI_LIVE_RECEIPT_SOURCE_COUNT,
     ticketCount: AI_LIVE_RECEIPT_TICKET_COUNT,
+    selection,
     tickets: Object.freeze([
       ...pdfs.map((buffer) => makeTicket(buffer, 'pdf', 1, null)),
       makeTicket(bestJpeg, 'jpeg', 1),
@@ -83,7 +108,7 @@ export async function loadAiLiveReceiptPlan({ directory, preferredJpegOrdinal } 
   });
 }
 
-async function readVerifiedFile(root, name, expectedKind) {
+async function readVerifiedFile(root, name, expectedKind, readFileImpl) {
   let buffer;
   try {
     const filePath = join(root, name);
@@ -92,7 +117,7 @@ async function readVerifiedFile(root, name, expectedKind) {
     if (stats.size <= 0 || stats.size > AI_LIVE_RECEIPT_MAX_BYTES) {
       throw new Error('invalid-size');
     }
-    buffer = await readFile(filePath);
+    buffer = await readFileImpl(filePath);
   } catch (error) {
     if (error instanceof Error && error.message === 'invalid-size') {
       throw new Error('A ticket file is empty or exceeds the 10 MiB limit.');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { test } from 'node:test';
 
 import { loadAiLiveReceiptPlan } from './ai-live-receipt-inputs.mjs';
@@ -64,6 +64,55 @@ test('agrupa dos PDF, una JPEG elegida y tres tramos como un PDF multipágina en
   assert.equal((composite.match(/\/Subtype \/Image/g) ?? []).length, 3);
   assert.equal((composite.match(/\/BitsPerComponent 8/g) ?? []).length, 3);
   assert.equal(JSON.stringify(plan).includes('04.jpeg'), false);
+});
+
+test('unsubmitted-only devuelve JPEG + PDF largo y nunca lee los PDF ya enviados', async (t) => {
+  const directory = await fixtureDirectory(t, SIX_SOURCES);
+  const reads = [];
+
+  const plan = await loadAiLiveReceiptPlan({
+    directory,
+    preferredJpegOrdinal: 2,
+    selection: 'unsubmitted-only',
+    readFileImpl: async (path) => {
+      reads.push(basename(path));
+      return readFile(path);
+    }
+  });
+
+  assert.equal(plan.sourceCount, 6);
+  assert.equal(plan.ticketCount, 2);
+  assert.equal(plan.selection, 'unsubmitted-only');
+  assert.deepEqual(
+    plan.tickets.map(({ kind, sourceFileCount, pageCount }) => ({
+      kind,
+      sourceFileCount,
+      pageCount
+    })),
+    [
+      { kind: 'jpeg', sourceFileCount: 1, pageCount: 1 },
+      { kind: 'pdf', sourceFileCount: 3, pageCount: 3 }
+    ]
+  );
+  assert.equal(plan.tickets[0].buffer.equals(JPEG), true);
+  assert.deepEqual(reads.sort(), ['03.jpg', '04.jpeg', '05.jpg', '06.jpeg']);
+  assert.equal(
+    reads.some((name) => name.endsWith('.pdf')),
+    false
+  );
+});
+
+test('rechaza toda selección de tickets no reconocida', async (t) => {
+  const directory = await fixtureDirectory(t, SIX_SOURCES);
+
+  await assert.rejects(
+    loadAiLiveReceiptPlan({
+      directory,
+      preferredJpegOrdinal: 2,
+      selection: 'everything-again'
+    }),
+    /selection/i
+  );
 });
 
 test('no adivina qué JPEG priorizar si el usuario no indica su índice', async (t) => {

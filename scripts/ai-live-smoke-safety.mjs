@@ -2,6 +2,11 @@ import { createServer, request as httpRequest } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import {
+  AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET,
+  AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION,
+  AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT
+} from './ai-live-receipt-inputs.mjs';
+import {
   AI_LIVE_SMOKE_DEADLINES,
   assertAiLiveSmokeDeadlineContract
 } from './ai-live-smoke-contract.mjs';
@@ -21,6 +26,7 @@ export const AI_LIVE_SMOKE_ENV = Object.freeze({
   globalTimeoutMs: 'HOGARIA_AI_REAL_SMOKE_GLOBAL_TIMEOUT_MS',
   receiptPath: 'HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH',
   receiptsOnly: 'HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY',
+  receiptSelection: 'HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION',
   receiptDirectory: 'HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY',
   preferredJpegOrdinal: 'HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL'
 });
@@ -29,8 +35,9 @@ export const AI_LIVE_SMOKE_KEY_MARKER = '__HOGARIA_AI_REAL_SMOKE_PROVIDER_KEY__'
 export const WEB_API_ORIGIN = 'http://127.0.0.1:3001';
 export const AI_LIVE_SMOKE_MIN_COMPLETIONS = 9;
 export const AI_LIVE_SMOKE_COMPLETION_BUDGET = 10;
-export const AI_LIVE_RECEIPT_SMOKE_COMPLETION_BUDGET = 8;
-export const AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS = 4;
+export const AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET = AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET;
+export const AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT = AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT;
+export const AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS = AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT;
 export const AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES = 15 * 1024 * 1024;
 
 export function validateAiLiveReceiptSmokeRequest(env = process.env) {
@@ -38,13 +45,17 @@ export function validateAiLiveReceiptSmokeRequest(env = process.env) {
   if (requested === undefined || requested === '0' || requested === '') {
     if (
       env[AI_LIVE_SMOKE_ENV.receiptDirectory] !== undefined ||
-      env[AI_LIVE_SMOKE_ENV.preferredJpegOrdinal] !== undefined
+      env[AI_LIVE_SMOKE_ENV.preferredJpegOrdinal] !== undefined ||
+      env[AI_LIVE_SMOKE_ENV.receiptSelection] !== undefined
     ) {
       throw new Error('Receipt-only source inputs require receipt-only mode.');
     }
     return false;
   }
   if (requested !== '1') throw new Error('Invalid receipt-only mode for the AI smoke runner.');
+  if (env[AI_LIVE_SMOKE_ENV.receiptSelection] !== AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION) {
+    throw new Error('Receipt-only mode requires the unsubmitted-only selection.');
+  }
 
   const directory = env[AI_LIVE_SMOKE_ENV.receiptDirectory];
   if (typeof directory !== 'string' || !isAbsoluteLocalPath(directory)) {
@@ -172,6 +183,52 @@ function validStrictResponseFormat(value) {
     strictJsonSchemaNode(format.schema) &&
     format.schema.type === 'object'
   );
+}
+
+function validBase64DataUri(value, prefix) {
+  if (typeof value !== 'string' || !value.startsWith(prefix)) return false;
+  const encoded = value.slice(prefix.length);
+  return encoded.length > 0 && encoded.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(encoded);
+}
+
+function validInventoryJsonDataUri(value) {
+  const prefix = 'data:application/json;base64,';
+  if (!validBase64DataUri(value, prefix)) return false;
+  try {
+    const snapshot = JSON.parse(Buffer.from(value.slice(prefix.length), 'base64').toString('utf8'));
+    return (
+      snapshot !== null &&
+      typeof snapshot === 'object' &&
+      Array.isArray(snapshot.categorias) &&
+      Array.isArray(snapshot.productos)
+    );
+  } catch {
+    return false;
+  }
+}
+
+function hasExactReceiptAttachments(messages) {
+  const userMessages = messages.filter((message) => message?.role === 'user');
+  if (userMessages.length !== 1 || !Array.isArray(userMessages[0]?.content)) return false;
+  const parts = userMessages[0].content;
+  const attachments = parts.filter((part) => part?.type === 'file' || part?.type === 'image_url');
+  if (attachments.length !== 2) return false;
+
+  const inventoryFiles = attachments.filter(
+    (part) =>
+      part.type === 'file' &&
+      part.file?.filename === 'inventario.json' &&
+      validInventoryJsonDataUri(part.file?.file_data)
+  );
+  const receiptFiles = attachments.filter(
+    (part) =>
+      (part.type === 'file' &&
+        part.file?.filename === 'ticket.pdf' &&
+        validBase64DataUri(part.file?.file_data, 'data:application/pdf;base64,')) ||
+      (part.type === 'image_url' &&
+        validBase64DataUri(part.image_url?.url, 'data:image/jpeg;base64,'))
+  );
+  return inventoryFiles.length === 1 && receiptFiles.length === 1;
 }
 
 export function selectAiLiveModel(models, requestedModel) {
@@ -432,6 +489,7 @@ export function isolatedProcessEnvironments(env) {
   delete browser[AI_LIVE_SMOKE_ENV.receiptPath];
   for (const key of [
     AI_LIVE_SMOKE_ENV.receiptsOnly,
+    AI_LIVE_SMOKE_ENV.receiptSelection,
     AI_LIVE_SMOKE_ENV.receiptDirectory,
     AI_LIVE_SMOKE_ENV.preferredJpegOrdinal
   ]) {
@@ -464,6 +522,7 @@ export function createAiLiveSmokeRunnerEnvironment(
     'E2E_CHROME_BIN',
     AI_LIVE_SMOKE_ENV.receiptPath,
     AI_LIVE_SMOKE_ENV.receiptsOnly,
+    AI_LIVE_SMOKE_ENV.receiptSelection,
     AI_LIVE_SMOKE_ENV.receiptDirectory,
     AI_LIVE_SMOKE_ENV.preferredJpegOrdinal
   ];
@@ -545,7 +604,7 @@ function isSuccessfulReceiptOnlyRun(calls) {
   if (
     !Array.isArray(calls) ||
     calls.length < AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS ||
-    calls.length > AI_LIVE_RECEIPT_SMOKE_COMPLETION_BUDGET
+    calls.length > AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET
   ) {
     return false;
   }
@@ -554,8 +613,9 @@ function isSuccessfulReceiptOnlyRun(calls) {
   let completedTickets = 0;
   while (index < calls.length) {
     const call = calls[index];
-    if (call?.schemaName !== 'receipt') return false;
+    if (call?.schemaName !== 'receipt' || !validReceiptRequestContract(call)) return false;
     if (call.status >= 200 && call.status < 300) {
+      if (call.stream !== true) return false;
       completedTickets += 1;
       index += 1;
       continue;
@@ -566,6 +626,7 @@ function isSuccessfulReceiptOnlyRun(calls) {
       call.status !== 400 ||
       call.stream !== true ||
       fallback?.schemaName !== 'receipt' ||
+      !validReceiptRequestContract(fallback) ||
       fallback.status < 200 ||
       fallback.status >= 300 ||
       fallback.stream !== false
@@ -575,7 +636,15 @@ function isSuccessfulReceiptOnlyRun(calls) {
     completedTickets += 1;
     index += 2;
   }
-  return completedTickets === 4;
+  return completedTickets === AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT;
+}
+
+function validReceiptRequestContract(call) {
+  return (
+    call?.requestContract?.strictJsonSchema === true &&
+    call.requestContract.inventoryJsonAttachmentCount === 1 &&
+    call.requestContract.receiptAttachmentCount === 1
+  );
 }
 
 function validateLoopbackOrigin(value) {
@@ -763,7 +832,17 @@ async function handleProxyRequest(request, response, state) {
     sendJson(response, 401, 'Live AI smoke authorization rejected.');
     return;
   }
+  if (state.requireReceiptAttachments && state.failed) {
+    sendJson(response, 409, 'Live receipt smoke stopped after an earlier request failure.');
+    return;
+  }
+  if (state.requireReceiptAttachments && state.upstreamRequests.size > 0) {
+    state.failed = true;
+    sendJson(response, 409, 'Live receipt smoke allows only one provider request at a time.');
+    return;
+  }
   if (!String(request.headers['content-type'] ?? '').includes('application/json')) {
+    if (state.requireReceiptAttachments) state.failed = true;
     sendJson(response, 415, 'Live AI smoke accepts JSON requests only.');
     return;
   }
@@ -772,6 +851,7 @@ async function handleProxyRequest(request, response, state) {
   try {
     body = await collectRequestBody(request, state.maxRequestBytes);
   } catch (error) {
+    if (state.requireReceiptAttachments) state.failed = true;
     if (!response.destroyed && !response.headersSent) {
       sendJson(
         response,
@@ -785,6 +865,7 @@ async function handleProxyRequest(request, response, state) {
   try {
     payload = JSON.parse(body.toString('utf8'));
   } catch {
+    if (state.requireReceiptAttachments) state.failed = true;
     sendJson(response, 400, 'Live AI smoke request is malformed.');
     return;
   }
@@ -793,16 +874,39 @@ async function handleProxyRequest(request, response, state) {
     !Array.isArray(payload.messages) ||
     payload.messages.length === 0
   ) {
+    if (state.requireReceiptAttachments) state.failed = true;
     sendJson(response, 400, 'Live AI smoke request is outside its model/fixture contract.');
     return;
   }
   if (!validStrictResponseFormat(payload.response_format)) {
+    if (state.requireReceiptAttachments) state.failed = true;
     sendJson(response, 400, 'Live AI smoke requires a strict JSON Schema response format.');
     return;
   }
   const requestStream = payload.stream === true;
   const requestSchemaName = payload.response_format.json_schema.name;
+  if (
+    state.requireReceiptAttachments &&
+    (requestSchemaName !== 'receipt' || !hasExactReceiptAttachments(payload.messages))
+  ) {
+    state.failed = true;
+    sendJson(response, 400, 'Live receipt smoke requires one ticket and the inventory JSON file.');
+    return;
+  }
+  const expectedStreaming = !state.fallbackPending;
+  if (state.requireReceiptAttachments && requestStream !== expectedStreaming) {
+    state.failed = true;
+    sendJson(
+      response,
+      409,
+      state.fallbackPending
+        ? 'Live receipt fallback must be non-streaming after HTTP 400.'
+        : 'Live receipt requests must stream before an HTTP 400 fallback.'
+    );
+    return;
+  }
   if (state.acceptedCalls >= state.maxCalls) {
+    if (state.requireReceiptAttachments) state.failed = true;
     sendJson(response, 429, 'Live AI smoke completion budget exhausted.');
     return;
   }
@@ -818,11 +922,22 @@ async function handleProxyRequest(request, response, state) {
     if (upstream) state.upstreamRequests.delete(upstream);
     const ordinal = state.metrics.calls.length + 1;
     const elapsedMs = Date.now() - startedAt;
+    if (state.requireReceiptAttachments) {
+      if (status >= 200 && status < 300) state.fallbackPending = false;
+      else if (status === 400 && requestStream) state.fallbackPending = true;
+      else state.failed = true;
+    }
     state.metrics.calls.push({
       model: state.model,
       status,
       stream: requestStream,
       schemaName: requestSchemaName,
+      requestContract: {
+        strictJsonSchema: true,
+        ...(state.requireReceiptAttachments
+          ? { inventoryJsonAttachmentCount: 1, receiptAttachmentCount: 1 }
+          : {})
+      },
       elapsedMs,
       usage,
       responseFormat
@@ -917,6 +1032,7 @@ export async function createAiLiveProxy({
   timeoutMs = 120_000,
   maxRequestBytes = 6 * 1024 * 1024,
   maxResponseBytes = 4 * 1024 * 1024,
+  requireReceiptAttachments = false,
   onRequest,
   onCompletion
 }) {
@@ -940,9 +1056,12 @@ export async function createAiLiveProxy({
     target,
     maxCalls,
     acceptedCalls: 0,
+    failed: false,
+    fallbackPending: false,
     timeoutMs,
     maxRequestBytes,
     maxResponseBytes,
+    requireReceiptAttachments,
     onRequest,
     onCompletion,
     upstreamRequests: new Set(),

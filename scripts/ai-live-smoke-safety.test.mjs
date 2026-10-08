@@ -64,12 +64,26 @@ test('receipt-only runner requires a private source directory and selected JPEG 
     HOGARIA_AI_REAL_SMOKE_PROXY_URL: 'http://127.0.0.1:41000/v1',
     HOGARIA_AI_REAL_SMOKE_MODEL: 'gpt-5',
     HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1',
+    HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'unsubmitted-only',
     HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/Users/example/tickets',
     HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '2',
     CI: ''
   };
 
   assert.equal(validateAiLiveSmokeRunner(env, args), true);
+  assert.throws(
+    () =>
+      validateAiLiveSmokeRunner(
+        { ...env, HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: undefined },
+        args
+      ),
+    /unsubmitted-only selection/i
+  );
+  assert.throws(
+    () =>
+      validateAiLiveSmokeRunner({ ...env, HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'all' }, args),
+    /unsubmitted-only selection/i
+  );
   assert.throws(
     () =>
       validateAiLiveSmokeRunner(
@@ -511,6 +525,7 @@ test('keeps the WebAPI bearer out of browser and Playwright environments', () =>
     HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/Downloads/private-tickets',
     HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '2',
     HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1',
+    HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'unsubmitted-only',
     HOGARIA_AI_REAL_SMOKE: '1',
     E2E_BASE_URL: 'http://127.0.0.1:45678'
   };
@@ -530,6 +545,8 @@ test('keeps the WebAPI bearer out of browser and Playwright environments', () =>
   assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY' in separated.browser, false);
   assert.equal('HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL' in separated.browser, false);
   assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY' in separated.browser, false);
+  assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION' in separated.server, false);
+  assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION' in separated.browser, false);
   assert.equal(
     separated.playwright.HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH,
     'C:/Downloads/private-ticket.jpeg'
@@ -540,6 +557,7 @@ test('keeps the WebAPI bearer out of browser and Playwright environments', () =>
   );
   assert.equal(separated.playwright.HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL, '2');
   assert.equal(separated.playwright.HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY, '1');
+  assert.equal(separated.playwright.HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION, 'unsubmitted-only');
   assert.equal(separated.browser.E2E_BASE_URL, source.E2E_BASE_URL);
 });
 
@@ -554,6 +572,7 @@ test('builds a minimal live-runner environment without inherited provider creden
       HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/Downloads/private-tickets',
       HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '2',
       HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'unsubmitted-only',
       HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS: '1',
       CI: 'true',
       OPENAI_API_KEY: 'sentinel-openai-secret',
@@ -575,6 +594,7 @@ test('builds a minimal live-runner environment without inherited provider creden
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY, 'C:/Downloads/private-tickets');
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL, '2');
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY, '1');
+  assert.equal(env.HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION, 'unsubmitted-only');
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN, 'synthetic-local-proxy-token');
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_RECIPE_MAX_TOKENS, '4096');
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_CONFIG_TIMEOUT_MS, '240000');
@@ -652,18 +672,60 @@ test('accepts only a fully successful run with nine or ten live completions', ()
   );
 });
 
-test('accepts four receipt jobs with at most one immediate stream fallback each', () => {
+const VALID_RECEIPT_REQUEST_CONTRACT = {
+  strictJsonSchema: true,
+  inventoryJsonAttachmentCount: 1,
+  receiptAttachmentCount: 1
+};
+
+test('accepts exactly two receipt jobs with at most one immediate stream fallback each', () => {
   const runnerExit = { code: 0, timedOut: false, cancelled: false, runnerCleaned: true };
-  const receipts = Array.from({ length: 4 }, () => ({
+  const receipts = Array.from({ length: 2 }, () => ({
     status: 200,
     stream: true,
-    schemaName: 'receipt'
+    schemaName: 'receipt',
+    requestContract: VALID_RECEIPT_REQUEST_CONTRACT
   }));
   const withFallback = [
-    ...receipts.slice(0, 2),
-    { status: 400, stream: true, schemaName: 'receipt' },
-    { status: 200, stream: false, schemaName: 'receipt' },
-    ...receipts.slice(3)
+    ...receipts.slice(0, 1),
+    {
+      status: 400,
+      stream: true,
+      schemaName: 'receipt',
+      requestContract: VALID_RECEIPT_REQUEST_CONTRACT
+    },
+    {
+      status: 200,
+      stream: false,
+      schemaName: 'receipt',
+      requestContract: VALID_RECEIPT_REQUEST_CONTRACT
+    }
+  ];
+  const withFallbackForEach = [
+    {
+      status: 400,
+      stream: true,
+      schemaName: 'receipt',
+      requestContract: VALID_RECEIPT_REQUEST_CONTRACT
+    },
+    {
+      status: 200,
+      stream: false,
+      schemaName: 'receipt',
+      requestContract: VALID_RECEIPT_REQUEST_CONTRACT
+    },
+    {
+      status: 400,
+      stream: true,
+      schemaName: 'receipt',
+      requestContract: VALID_RECEIPT_REQUEST_CONTRACT
+    },
+    {
+      status: 200,
+      stream: false,
+      schemaName: 'receipt',
+      requestContract: VALID_RECEIPT_REQUEST_CONTRACT
+    }
   ];
 
   assert.equal(
@@ -688,7 +750,16 @@ test('accepts four receipt jobs with at most one immediate stream fallback each'
     isSuccessfulAiLiveSmokeResult({
       runnerExit,
       cleanupFailed: false,
-      calls: receipts.slice(0, 3),
+      calls: withFallbackForEach,
+      receiptsOnly: true
+    }),
+    true
+  );
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: receipts.slice(0, 1),
       receiptsOnly: true
     }),
     false
@@ -698,10 +769,13 @@ test('accepts four receipt jobs with at most one immediate stream fallback each'
       runnerExit,
       cleanupFailed: false,
       calls: [
-        ...receipts.slice(0, 1),
-        { status: 400, stream: true, schemaName: 'receipt' },
-        { status: 500, stream: false, schemaName: 'receipt' },
-        ...receipts.slice(1)
+        {
+          status: 500,
+          stream: true,
+          schemaName: 'receipt',
+          requestContract: VALID_RECEIPT_REQUEST_CONTRACT
+        },
+        ...receipts
       ],
       receiptsOnly: true
     }),
@@ -711,7 +785,14 @@ test('accepts four receipt jobs with at most one immediate stream fallback each'
     isSuccessfulAiLiveSmokeResult({
       runnerExit,
       cleanupFailed: false,
-      calls: [...receipts, { status: 200, schemaName: 'recipe' }],
+      calls: [
+        ...receipts,
+        {
+          status: 200,
+          schemaName: 'recipe',
+          requestContract: VALID_RECEIPT_REQUEST_CONTRACT
+        }
+      ],
       receiptsOnly: true
     }),
     false
@@ -1014,6 +1095,321 @@ test('live proxy rejects JSON requests without strict response_format before spe
     await new Promise((resolve, reject) =>
       upstream.close((error) => (error ? reject(error) : resolve()))
     );
+  }
+});
+
+test('receipt proxy requires and verifies exactly one ticket plus current inventory JSON', async () => {
+  const receiptFormat = {
+    ...SYNTHETIC_STRICT_RESPONSE_FORMAT,
+    json_schema: { ...SYNTHETIC_STRICT_RESPONSE_FORMAT.json_schema, name: 'receipt' }
+  };
+  const makeProxy = async () => {
+    const upstreamRequests = [];
+    const upstream = createServer(async (request, response) => {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(chunk);
+      upstreamRequests.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({ choices: [{ message: { content: JSON.stringify({ lines: [] }) } }] })
+      );
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = await createAiLiveProxy({
+      token: 'synthetic-provider-token',
+      model: 'gpt-5',
+      targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+      maxCalls: 4,
+      requireReceiptAttachments: true
+    });
+    return {
+      proxy,
+      upstreamRequests,
+      close: async () => {
+        await proxy.close();
+        await new Promise((resolve, reject) =>
+          upstream.close((error) => (error ? reject(error) : resolve()))
+        );
+      }
+    };
+  };
+  const inventoryData = Buffer.from('{"categorias":[],"productos":[]}', 'utf8').toString('base64');
+  const inventory = {
+    type: 'file',
+    file: {
+      filename: 'inventario.json',
+      file_data: `data:application/json;base64,${inventoryData}`
+    }
+  };
+  const jpeg = {
+    type: 'image_url',
+    image_url: { url: 'data:image/jpeg;base64,MQ==' }
+  };
+  const pdf = {
+    type: 'file',
+    file: { filename: 'ticket.pdf', file_data: 'data:application/pdf;base64,MQ==' }
+  };
+  const request = (proxy, parts) =>
+    postJson(`${proxy.baseUrl}/chat/completions`, proxy.clientToken, {
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'synthetic' }, ...parts] }],
+      stream: true,
+      response_format: receiptFormat
+    });
+
+  const valid = await makeProxy();
+  try {
+    assert.equal((await request(valid.proxy, [inventory, jpeg])).status, 200);
+    assert.equal((await request(valid.proxy, [inventory, pdf])).status, 200);
+    assert.equal(valid.upstreamRequests.length, 2);
+    assert.deepEqual(
+      valid.upstreamRequests.map((payload) => payload.response_format),
+      [receiptFormat, receiptFormat]
+    );
+    assert.deepEqual(
+      valid.upstreamRequests.map((payload) =>
+        payload.messages[0].content
+          .filter((part) => part.type === 'file' || part.type === 'image_url')
+          .map((part) => (part.type === 'file' ? part.file.filename : 'jpeg-ticket'))
+      ),
+      [
+        ['inventario.json', 'jpeg-ticket'],
+        ['inventario.json', 'ticket.pdf']
+      ]
+    );
+    assert.deepEqual(
+      valid.proxy.metrics.calls.map(({ requestContract, schemaName }) => ({
+        requestContract,
+        schemaName
+      })),
+      [
+        {
+          requestContract: {
+            strictJsonSchema: true,
+            inventoryJsonAttachmentCount: 1,
+            receiptAttachmentCount: 1
+          },
+          schemaName: 'receipt'
+        },
+        {
+          requestContract: {
+            strictJsonSchema: true,
+            inventoryJsonAttachmentCount: 1,
+            receiptAttachmentCount: 1
+          },
+          schemaName: 'receipt'
+        }
+      ]
+    );
+    assert.equal(JSON.stringify(valid.proxy.metrics).includes('inventario.json'), false);
+    assert.equal(JSON.stringify(valid.proxy.metrics).includes(inventoryData), false);
+    assert.equal((await request(valid.proxy, [jpeg])).status, 400);
+    assert.equal(valid.upstreamRequests.length, 2);
+    assert.equal(valid.proxy.metrics.calls.length, 2);
+  } finally {
+    await valid.close();
+  }
+});
+
+test('receipt proxy rejects invalid inventory JSON and extra binary attachments before forwarding', async () => {
+  const receiptFormat = {
+    ...SYNTHETIC_STRICT_RESPONSE_FORMAT,
+    json_schema: { ...SYNTHETIC_STRICT_RESPONSE_FORMAT.json_schema, name: 'receipt' }
+  };
+  const validInventory = {
+    type: 'file',
+    file: {
+      filename: 'inventario.json',
+      file_data: `data:application/json;base64,${Buffer.from(
+        '{"categorias":[],"productos":[]}',
+        'utf8'
+      ).toString('base64')}`
+    }
+  };
+  const invalidInventory = {
+    type: 'file',
+    file: { filename: 'inventario.json', file_data: 'data:application/json;base64,eA==' }
+  };
+  const jpeg = {
+    type: 'image_url',
+    image_url: { url: 'data:image/jpeg;base64,MQ==' }
+  };
+  const pdf = {
+    type: 'file',
+    file: { filename: 'ticket.pdf', file_data: 'data:application/pdf;base64,MQ==' }
+  };
+  for (const attachments of [
+    [invalidInventory, jpeg],
+    [validInventory, jpeg, pdf]
+  ]) {
+    let upstreamCalls = 0;
+    const upstream = createServer((_request, response) => {
+      upstreamCalls += 1;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ choices: [{ message: { content: '{"lines":[]}' } }] }));
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = await createAiLiveProxy({
+      token: 'synthetic-provider-token',
+      model: 'gpt-5',
+      targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+      requireReceiptAttachments: true
+    });
+
+    try {
+      const result = await postJson(`${proxy.baseUrl}/chat/completions`, proxy.clientToken, {
+        model: 'gpt-5',
+        messages: [
+          { role: 'user', content: [{ type: 'text', text: 'synthetic' }, ...attachments] }
+        ],
+        stream: true,
+        response_format: receiptFormat
+      });
+      assert.equal(result.status, 400);
+      assert.equal(upstreamCalls, 0);
+      assert.equal(proxy.metrics.calls.length, 0);
+    } finally {
+      await proxy.close();
+      await new Promise((resolve, reject) =>
+        upstream.close((error) => (error ? reject(error) : resolve()))
+      );
+    }
+  }
+});
+
+test('receipt proxy allows only the HTTP 400 non-stream fallback and stops after other failures', async (t) => {
+  const receiptFormat = {
+    ...SYNTHETIC_STRICT_RESPONSE_FORMAT,
+    json_schema: { ...SYNTHETIC_STRICT_RESPONSE_FORMAT.json_schema, name: 'receipt' }
+  };
+  const inventoryData = Buffer.from('{"categorias":[],"productos":[]}', 'utf8').toString('base64');
+  const parts = [
+    {
+      type: 'file',
+      file: {
+        filename: 'inventario.json',
+        file_data: `data:application/json;base64,${inventoryData}`
+      }
+    },
+    { type: 'image_url', image_url: { url: 'data:image/jpeg;base64,MQ==' } }
+  ];
+  const body = (stream) => ({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: [{ type: 'text', text: 'synthetic' }, ...parts] }],
+    stream,
+    response_format: receiptFormat
+  });
+  const makeProxy = async (statuses) => {
+    const upstreamRequests = [];
+    const upstream = createServer(async (request, response) => {
+      for await (const _chunk of request) {
+        // Drain the request without retaining the private attachment body.
+      }
+      const status = statuses.shift() ?? 500;
+      upstreamRequests.push(status);
+      response.writeHead(status, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify(
+          status >= 200 && status < 300
+            ? { choices: [{ message: { content: '{"lines":[]}' } }] }
+            : { error: { message: 'synthetic provider error' } }
+        )
+      );
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = await createAiLiveProxy({
+      token: 'synthetic-provider-token',
+      model: 'gpt-5',
+      targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+      maxCalls: 4,
+      requireReceiptAttachments: true
+    });
+    return {
+      proxy,
+      upstreamRequests,
+      close: async () => {
+        await proxy.close();
+        await new Promise((resolve, reject) =>
+          upstream.close((error) => (error ? reject(error) : resolve()))
+        );
+      }
+    };
+  };
+
+  const allowedFallback = await makeProxy([400, 200]);
+  try {
+    assert.equal(
+      (
+        await postJson(
+          `${allowedFallback.proxy.baseUrl}/chat/completions`,
+          allowedFallback.proxy.clientToken,
+          body(true)
+        )
+      ).status,
+      400
+    );
+    assert.equal(
+      (
+        await postJson(
+          `${allowedFallback.proxy.baseUrl}/chat/completions`,
+          allowedFallback.proxy.clientToken,
+          body(false)
+        )
+      ).status,
+      200
+    );
+    assert.deepEqual(allowedFallback.upstreamRequests, [400, 200]);
+  } finally {
+    await allowedFallback.close();
+  }
+
+  const replayAfter400 = await makeProxy([400, 200]);
+  try {
+    await postJson(
+      `${replayAfter400.proxy.baseUrl}/chat/completions`,
+      replayAfter400.proxy.clientToken,
+      body(true)
+    );
+    assert.equal(
+      (
+        await postJson(
+          `${replayAfter400.proxy.baseUrl}/chat/completions`,
+          replayAfter400.proxy.clientToken,
+          body(true)
+        )
+      ).status,
+      409
+    );
+    assert.deepEqual(replayAfter400.upstreamRequests, [400]);
+  } finally {
+    await replayAfter400.close();
+  }
+
+  const stoppedAfterFailure = await makeProxy([500, 200]);
+  try {
+    assert.equal(
+      (
+        await postJson(
+          `${stoppedAfterFailure.proxy.baseUrl}/chat/completions`,
+          stoppedAfterFailure.proxy.clientToken,
+          body(true)
+        )
+      ).status,
+      500
+    );
+    assert.equal(
+      (
+        await postJson(
+          `${stoppedAfterFailure.proxy.baseUrl}/chat/completions`,
+          stoppedAfterFailure.proxy.clientToken,
+          body(true)
+        )
+      ).status,
+      409
+    );
+    assert.deepEqual(stoppedAfterFailure.upstreamRequests, [500]);
+  } finally {
+    await stoppedAfterFailure.close();
   }
 });
 

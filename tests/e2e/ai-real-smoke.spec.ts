@@ -43,6 +43,7 @@ const LIVE_TEST_TIMEOUT_MS = smokeLimit('HOGARIA_AI_REAL_SMOKE_TEST_TIMEOUT_MS',
 const LIVE_SMOKE_ENABLED =
   process.env.HOGARIA_AI_REAL_SMOKE === '1' && process.env.HOGARIA_AI_REAL_SMOKE_RUNNER === '1';
 const LIVE_RECEIPTS_ONLY = process.env.HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY === '1';
+const LIVE_RECEIPT_SELECTION = process.env.HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION;
 const LIVE_SMOKE_PHASE_FILE = process.env.E2E_RUN_DIR
   ? join(process.env.E2E_RUN_DIR, 'ai-live-smoke-phase')
   : undefined;
@@ -517,7 +518,9 @@ async function selectShelfPhotoMode(page: Parameters<typeof registerAndGoto>[0])
   await expect(picker.locator('.picker__trigger')).toContainText('Estanteria');
 }
 
-test('procesa cuatro tickets privados y verifica la revisión sin confirmar', async ({ page }) => {
+test('procesa solo los dos tickets no enviados y verifica la revisión sin confirmar', async ({
+  page
+}) => {
   test.skip(
     !LIVE_SMOKE_ENABLED || !LIVE_RECEIPTS_ONLY,
     'El lote real de tickets solo corre con opt-in específico.'
@@ -527,10 +530,18 @@ test('procesa cuatro tickets privados y verifica la revisión sin confirmar', as
 
   const directory = process.env.HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY ?? '';
   const preferredJpegOrdinal = Number(process.env.HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL);
-  const plan = await loadAiLiveReceiptPlan({ directory, preferredJpegOrdinal });
+  if (LIVE_RECEIPT_SELECTION !== 'unsubmitted-only') {
+    throw new Error('The live receipt smoke only accepts unsubmitted-only selection.');
+  }
+  const plan = await loadAiLiveReceiptPlan({
+    directory,
+    preferredJpegOrdinal,
+    selection: LIVE_RECEIPT_SELECTION
+  });
   expect(plan.sourceCount).toBe(6);
-  expect(plan.ticketCount).toBe(4);
-  expect(plan.tickets.map(({ sourceFileCount }) => sourceFileCount)).toEqual([1, 1, 1, 3]);
+  expect(plan.ticketCount).toBe(2);
+  expect(plan.selection).toBe('unsubmitted-only');
+  expect(plan.tickets.map(({ sourceFileCount }) => sourceFileCount)).toEqual([1, 3]);
   reportLiveSmokePhase('real-receipts-inputs-validated');
 
   await registerAndGoto(page, '/receipts', 'ai-live-receipts-only');
@@ -582,7 +593,7 @@ test('procesa cuatro tickets privados y verifica la revisión sin confirmar', as
     const receipt = (await detailResponse.json()).data as {
       lines: ReceiptLineForDeduplication[];
     };
-    if (index === 3) {
+    if (ticket.sourceFileCount === 3) {
       expect(
         hasEquivalentReceiptLine(receipt.lines),
         'el ticket largo no debe persistir líneas equivalentes repetidas'

@@ -2617,13 +2617,13 @@ temporales; verificar respuesta contra schema, detectar duplicados en el ticket 
 filas revisables/editables e historial, no confirmar compras ni escribir en despensa/inventario real.
 No guardar nombres/contenido real en logs, screenshots, traces, videos, reportes o Git.
 
-- [ ] Añadir primero pruebas rojas de loader/coordinador que prueben que `unsubmitted-only` devuelve
+- [x] Añadir primero pruebas rojas de loader/coordinador que prueben que `unsubmitted-only` devuelve
       solo JPEG + PDF multipágina, no lee los dos PDF originales, rechaza selecciones inválidas y
       limita el total a cuatro requests sin avanzar al segundo ticket tras un fallo inesperado.
-- [ ] Implementar la selección explícita en loader, ambiente aislado y E2E; conservar la selección
+- [x] Implementar la selección explícita en loader, ambiente aislado y E2E; conservar la selección
       completa únicamente donde sea necesaria para probar el agrupamiento, pero el coordinador live
       solo permite el modo no reenviable definido arriba y deriva el presupuesto del número de tickets.
-- [ ] Ejecutar unitarias focales, typecheck E2E, `check:ui`, formato, build y regresión loopback
+- [x] Ejecutar unitarias focales, typecheck E2E, `check:ui`, formato, build y regresión loopback
       sintética; confirmar antes de tickets que proceso/checkout WebAPI siguen en estado corregido,
       readiness, privacidad y redacción de logs son seguros.
 - [ ] Con el preflight verde, subir solo la JPEG preferida y el PDF largo al proveedor mediante UI
@@ -2636,9 +2636,39 @@ No guardar nombres/contenido real en logs, screenshots, traces, videos, reportes
 **Evidencia de preflight (2026-10-09):** `pnpm exec vitest run --config
 vitest.clipboard-e2e.config.ts tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts
 --reporter=dot` en `D:\projects\webApi`: **18/18** con PNG/JSON sintéticos, sin completion, ticket
-real, base de datos de MiCocinAI ni reinicio del listener. El live preflight previo a abrir cualquier
-archivo debe volver a comprobar runtime y privacidad; si un criterio no puede verificarse, no se
-ejecuta el ticket real.
+real, base de datos de MiCocinAI ni reinicio del listener. Repetido inmediatamente antes del smoke:
+**18/18**. En MiCocinAI las unitarias focales pasaron **57/57**; cobertura por archivo modificado:
+`ai-live-receipt-inputs.mjs` 94.34% líneas / 72.22% ramas / 100% funciones,
+`ai-live-smoke-safety.mjs` 89.50% / 78.63% / 93.94% y `run-ai-real-smoke.mjs` 92.62% / 82.89% /
+86.36%. También pasaron `pnpm run typecheck:e2e`, `pnpm run check:ui`, Prettier, `pnpm run build`,
+`git diff --check` y el E2E sintético loopback (**1 passed, 2 skipped**) con SQLite/upload aislados.
+Build finaliza; conserva warnings Angular y budgets preexistentes. El nuevo loader verificó seis
+fuentes y construyó dos entradas `[1,3]` JPEG/PDF sin leer los PDF originales. El preflight live
+comprobó identidad/readiness, controles de privacidad y modelo `gpt-5`, y limpió su credencial propia;
+reportó **0 requests de completion**. El listener existente (PID 43088; iniciado 21:48 UTC) sigue
+ready, WebAPI está limpio en `fix/partial-attachment-cleanup` a `7c1e52e9`; no se cambió settings ni
+se reinició el servicio.
+
+**Intento real y limitación (2026-10-09; unidad incompleta):** el smoke aislado activó exclusivamente
+`unsubmitted-only`, sin capturas, traces o vídeo. El proxy verificó antes de reenviar las dos
+peticiones que cada una llevaba `response_format` JSON Schema estricto y exactamente el adjunto
+`inventario.json` más un ticket; no se abrió ni se leyó ningún PDF original. La JPEG preferida fue el
+único ticket que llegó al flujo WebAPI: petición streaming **HTTP 400**, seguida solo por el fallback
+no-stream permitido **HTTP 504**. El proxy se bloqueó y la E2E no inició el PDF largo ni otra llamada.
+Los logs locales redacted del PID 43088 muestran `attachmentCount: 2`, etapa
+`chatgpt_attachment_upload`, `errorCode: attachment_upload_failed`, `errorStatus: 504`,
+`outcome: timeout`, `retryCount: 0`; el fallo ocurrió en `upload_attachments`, antes de que hubiera
+una respuesta del modelo. El cleanup terminó cerrando la página (`cleanupOutcome: success`,
+`cleanupMethod: page_closed`). No se afirma que el modelo recibiera ambos ficheros: el servicio los
+intentó subir, pero el upload falló. Se observaron **2 requests HTTP, 0 respuestas completadas**;
+no hubo duplicados evaluables, revisión/historial ni escritura de compra. El runner de aplicación,
+SQLite y uploads fue temporal; no quedaban carpetas `hogaria-e2e-*` recientes al verificar después,
+y el coordinador no reportó fallo al limpiar su token propio. WebAPI permaneció arriba, sin cambios.
+No repetir ni reenviar ninguno de los tickets hasta resolver el 504 y recibir nueva autorización o
+instrucción explícita sobre una nueva prueba.
+
+Por tanto, quedan sin marcar las casillas de validación de los tickets y cierre completo; la respuesta
+real no llegó al modelo y no se puede declarar esta subunidad ni la spec completa.
 
 **Rollback:** revertir únicamente la selección live `unsubmitted-only`, sus pruebas y esta subunidad;
 mantener el cargador general de fixtures sintéticas, adjuntos de inventario ya probados y el código de

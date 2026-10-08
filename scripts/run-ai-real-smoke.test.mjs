@@ -4,6 +4,7 @@ import test from 'node:test';
 import { runAiLiveSmoke } from './run-ai-real-smoke.mjs';
 import {
   AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES,
+  AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT,
   AI_LIVE_SMOKE_ENV
 } from './ai-live-smoke-safety.mjs';
 import { AI_LIVE_SMOKE_DEADLINES } from './ai-live-smoke-contract.mjs';
@@ -51,7 +52,8 @@ test('coordinator rejects an incomplete receipt-only request before any live set
     runAiLiveSmoke({
       env: {
         [AI_LIVE_SMOKE_ENV.optIn]: '1',
-        [AI_LIVE_SMOKE_ENV.receiptsOnly]: '1'
+        [AI_LIVE_SMOKE_ENV.receiptsOnly]: '1',
+        [AI_LIVE_SMOKE_ENV.receiptSelection]: 'unsubmitted-only'
       },
       dependencies: createGuardedDependencies(calls)
     }),
@@ -239,25 +241,50 @@ test('live coordinator uses the existing WebAPI and never starts the legacy supe
   );
 });
 
-test('receipt-only coordinator enforces an eight-call ceiling and emits aggregate-only evidence', async () => {
+test('receipt-only coordinator caps four requests and emits aggregate-only evidence', async () => {
   const calls = [];
   const successMessages = [];
   const errors = [];
   const progressMessages = [];
   const sourceDirectory = 'C:/Users/private/tickets';
   const usage = { promptTokens: 3, completionTokens: 2, totalTokens: 5, costUsd: 0.01 };
+  const requestContract = {
+    strictJsonSchema: true,
+    inventoryJsonAttachmentCount: 1,
+    receiptAttachmentCount: 1
+  };
   const receiptCalls = [
-    { status: 200, stream: true, schemaName: 'receipt', elapsedMs: 20, usage },
-    { status: 400, stream: true, schemaName: 'receipt', elapsedMs: 30, usage },
-    { status: 200, stream: false, schemaName: 'receipt', elapsedMs: 40, usage },
-    { status: 200, stream: true, schemaName: 'receipt', elapsedMs: 50, usage },
-    { status: 200, stream: true, schemaName: 'receipt', elapsedMs: 60, usage }
+    {
+      status: 200,
+      stream: true,
+      schemaName: 'receipt',
+      requestContract,
+      elapsedMs: 20,
+      usage
+    },
+    {
+      status: 400,
+      stream: true,
+      schemaName: 'receipt',
+      requestContract,
+      elapsedMs: 30,
+      usage
+    },
+    {
+      status: 200,
+      stream: false,
+      schemaName: 'receipt',
+      requestContract,
+      elapsedMs: 40,
+      usage
+    }
   ];
 
   const result = await runAiLiveSmoke({
     env: {
       [AI_LIVE_SMOKE_ENV.optIn]: '1',
       [AI_LIVE_SMOKE_ENV.receiptsOnly]: '1',
+      [AI_LIVE_SMOKE_ENV.receiptSelection]: 'unsubmitted-only',
       [AI_LIVE_SMOKE_ENV.receiptDirectory]: sourceDirectory,
       [AI_LIVE_SMOKE_ENV.preferredJpegOrdinal]: '2'
     },
@@ -268,10 +295,17 @@ test('receipt-only coordinator enforces an eight-call ceiling and emits aggregat
         model: 'gpt-5',
         cleanup: async () => calls.push('session:cleanup')
       }),
-      createAiLiveProxy: async ({ maxCalls, maxRequestBytes, onRequest, onCompletion }) => {
+      createAiLiveProxy: async ({
+        maxCalls,
+        maxRequestBytes,
+        requireReceiptAttachments,
+        onRequest,
+        onCompletion
+      }) => {
         calls.push('proxy:create');
-        assert.equal(maxCalls, 8);
+        assert.equal(maxCalls, 4);
         assert.equal(maxRequestBytes, AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES);
+        assert.equal(requireReceiptAttachments, true);
         onRequest({ ordinal: 1 });
         onCompletion({ ordinal: 1, status: 200, elapsedMs: 20, responseFormat: {} });
         return {
@@ -284,6 +318,7 @@ test('receipt-only coordinator enforces an eight-call ceiling and emits aggregat
       createAiLiveSmokeRunnerEnvironment: (parentEnv) => {
         calls.push('runner:environment');
         assert.equal(parentEnv[AI_LIVE_SMOKE_ENV.receiptDirectory], sourceDirectory);
+        assert.equal(parentEnv[AI_LIVE_SMOKE_ENV.receiptSelection], 'unsubmitted-only');
         return { runnerOnly: true };
       },
       runAiLiveSmokeRunner: async () => {
@@ -314,14 +349,18 @@ test('receipt-only coordinator enforces an eight-call ceiling and emits aggregat
     provider: 'local WebAPI :3001',
     model: 'gpt-5',
     sourceCount: 6,
-    tickets: 4,
-    completions: 5,
-    elapsedMs: 200,
+    tickets: AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT,
+    requests: 3,
+    completions: 2,
+    verifiedStrictSchemaRequests: 3,
+    verifiedInventoryJsonAttachments: 3,
+    verifiedReceiptAttachments: 3,
+    elapsedMs: 90,
     recoveredFallbacks: 1,
-    usage: { promptTokens: 15, completionTokens: 10, totalTokens: 25, costUsd: 0.05 }
+    usage: { promptTokens: 9, completionTokens: 6, totalTokens: 15, costUsd: 0.03 }
   });
   assert.equal(successMessages[0].includes(sourceDirectory), false);
-  assert.equal(progressMessages.includes('Solicitud IA 1/8 enviada al servicio local.'), true);
+  assert.equal(progressMessages.includes('Solicitud IA 1/4 enviada al servicio local.'), true);
 });
 
 test('coordinator fails without creating proxy or runner when existing-WebAPI preflight fails', async () => {
@@ -344,7 +383,7 @@ test('coordinator fails without creating proxy or runner when existing-WebAPI pr
   assert.equal(result, 1);
   assert.deepEqual(calls, ['existing:prepare']);
   assert.equal(errors.length, 1);
-  assert.match(errors[0], /llamadas=0\/10/);
+  assert.match(errors[0], /peticiones=0\/10/);
 });
 
 test('coordinator reports cleanup failures and does not hide them as success', async () => {
