@@ -2352,10 +2352,12 @@ El primer setup fallido no consumió el presupuesto ni alcanzó archivos/proveed
 lote cuando pase el preflight de privacidad. Solo se registrarán estado y métricas agregadas, con el
 cleanup ya existente.
 
-- [ ] Completar satisfactoriamente la única repetición autorizada del lote exacto de seis archivos/cuatro
-      tickets sobre el payload actualizado: revisión, edición/guardado/historial en UI y cleanup, sin
-      duplicados en las tres fotos solapadas. El intento del 2026-10-08 falló; no repetir ni ampliar
-      presupuesto.
+- [ ] Completar la validación real pendiente: solo se podrá reanudar si WebAPI demuestra primero que
+      corrigió la limpieza de adjuntos. No reenviar los dos PDF individuales: sus fallbacks no-stream
+      devolvieron HTTP 200 en el intento previo y podrían haber completado. Si se corrige WebAPI, validar
+      únicamente la JPEG preferida y el PDF largo de las otras tres fotos como un solo ticket, con
+      `inventario.json` y `response_format`, UI/DB temporal, respuesta validada y sin duplicados.
+      Detenerse ante el primer fallo y no repetir ninguna petición ya completada o posiblemente completada.
 
 **Diagnóstico seguro del intento único (2026-10-08):** el preflight y los ajustes de privacidad volvieron
 a pasar; se leyó el log local con extracción allowlist, sin volcar cuerpos, prompts, respuestas, nombres
@@ -2379,6 +2381,30 @@ multipágina. No se escribieron copias permanentes ni nombres en evidencia. El p
 desactivados; Playwright tiene screenshot/trace/video apagados y el coordinador solo emitió fases y
 métricas. Al terminar, no reportó fallo de limpieza del token/proxy y el runner confirmó cierre de la
 app/puertos y eliminación de su directorio SQLite/uploads temporal antes de devolver el resultado rojo.
+
+**Preflight condicionado de la nueva validación (2026-10-08):** antes de abrir o subir tickets comprobé
+la WebAPI local. `http://127.0.0.1:3001/health/ready` respondió HTTP 200, pero eso solo acredita
+disponibilidad. En `D:\projects\webApi`, el árbol está limpio y la rama local coincide con
+`origin/fix/ticket-prompt-association-diagnostics` en `fd00bfd3`; el cambio más reciente del flujo de
+adjuntos es `9c8de018` («trace attachment upload stages»), de instrumentación, no de recuperación. El
+código de `src/providers/chatgpt/flows/attachment-flow.ts` todavía llama a
+`rollbackAttachmentState()` tras un upload parcial/fallido y puede terminar en
+`attachment_cleanup_failed` HTTP 500 si no restaura el estado base; el test sintético
+`attachment-clipboard-fallback.e2e.test.ts` aún cubre ese fallo cerrado. No encontré una corrección
+posterior. La revisión no ata el proceso vivo de 3001 a un SHA verificable y no hubo una ejecución nueva
+que pruebe la recuperación de la JPEG; el preflight, por tanto, falla y no autoriza subir tickets.
+
+El usuario autorizó una nueva validación **solo si** se demuestra que el fallo se corrigió y prohibió
+repetir peticiones que pudieran completarse. Los dos fallbacks no-stream de los PDF devolvieron HTTP 200
+en la corrida anterior; se consideran potencialmente completados y quedan excluidos de todo reenvío. Si
+WebAPI se corrige y acredita la entrega, la única parte que puede continuar son la JPEG preferida y el
+ticket largo multipágina aún no enviado.
+
+Por la condición explícita de no enviar si el fallo continúa, **no se abrieron ni reenviaron tickets**:
+0 archivos subidos, 0 nuevas completions y 0 escrituras en la base/inventario real. La validación real
+sigue incompleta; no se afirma que WebAPI envíe ambos adjuntos al modelo ni que la respuesta/deduplicación
+sean correctas. Reanudar únicamente tras demostrar la recuperación de adjuntos en WebAPI y sin volver a
+enviar los PDF que podrían haber completado.
 
 **Rollback del registro:** revertir solo este bloque diagnóstico/preparación y la actualización de
 checklist; no alterar el transporte probado ni los datos reales.
