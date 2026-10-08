@@ -519,6 +519,17 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Revalidación adicional (2026-10-01):** con `E2E_RATE_LIMIT=off` y `E2E_CHROME_BIN` apuntando al Chrome local, `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/auth-password-byte-limit.spec.ts` pasó **6/6** (3 Chromium + 3 Pixel 5), con SQLite y puertos efímeros; el runner limpió sus datos al terminar. Esta repetición confirma el source actual y no introduce otro cambio de producción.
 
+### QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 · evitar que el error quede bajo la cabecera fija
+
+**Fuente revalidada (2026-10-08):** `AccountComponent.savePassword()` pone el error UTF-8 en una alerta después de los campos de contraseña. En `MainLayoutComponent`, `.header` es fija, mide 56 px y tiene `z-index:100`; `.main` reserva 56 px arriba y la barra inferior también es fija. La revalidación aislada actual del test `Cuenta rechaza más de 72 bytes antes de llamar al servidor` contradice la evidencia verde histórica: en Pixel 5 emulado a 568×320, tras fijar viewport, recargar, rellenar y enviar con Enter, la alerta queda en `top=34 px` frente a `header.bottom=56 px`. El test no fuerza `scrollIntoView`; `waitForStableView()` solo espera frames/animaciones. No hubo POST de cambio de contraseña antes de la aserción. No se ha cambiado producción; debe inspeccionarse una captura actual antes de decidir el arreglo mínimo.
+
+- [ ] Guardar e inspeccionar captura sintética de la alerta en 568×320 antes de la aserción geométrica, conservando la interacción real que reproduce el estado.
+- [ ] Reproducir la superposición con test enfocado y confirmar su geometría, foco/scroll y que no sea un artefacto del helper ni del cambio de viewport.
+- [ ] Aplicar solo si la captura confirma el defecto un arreglo de UI guiado por regresión; el error debe quedar totalmente bajo la cabecera y sobre la navegación inferior, sin overflow ni petición de cambio de contraseña.
+- [ ] Revalidar ES/EN en 393×851, 320×568 y 568×320, más escritorio; ejecutar E2E real aislado, cobertura ≥70 % S/B/F/L de cada archivo de producción tocado, build/typecheck/formato y capturas PC/móvil comparables.
+
+**Rollback:** revertir únicamente la corrección de visibilidad, su regresión y esta subunidad; no cambia la política de contraseña ni credenciales existentes.
+
 ## Evidencia inicial (no equivale a aprobación de la app)
 
 - [x] La ruta pública `/auth/login` responde desde `http://localhost:4200`; revisé también `/auth/register`, `/auth/forgot-password` y la invitación inválida.
@@ -1393,7 +1404,7 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 ## Siguiente unidad de trabajo
 
-1. Completar QA-AUTH.REGISTER.FORM.1: requerido de correo/contraseña y recuperación visible tras 500 sintético; después continuar el barrido funcional con datos sintéticos/proveedor mock.
+1. Completar QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1, reabierta por la revalidación roja de 568×320; después retomar QA-AUTH.REGISTER.FORM.1 y el barrido funcional.
 2. QA-REC.INGRESS.1 ya está verificada con Nginx real aislado; la siguiente validación de motor pendiente es Safari/iOS real para la hoja de ofertas de QA-04c.1, sin sustituir safe-area/teclado nativos por emulación WebKit/Chromium.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
 4. QA-04c: el gate global frontend está actualmente verde (**90.17/81.39/88.93/91.54 % S/B/F/L**); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.
