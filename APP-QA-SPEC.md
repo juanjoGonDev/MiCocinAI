@@ -1237,11 +1237,13 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 **Rollback focal:** retirar el cierre al navegar desde el perfil del drawer, las regresiones de navegación/captura y este subapartado; no revertir los cierres existentes por enlace, overlay o Escape.
 
-- [ ] `/dashboard`: estados con/sin datos, resumen, vencimientos, comidas/recetas y cada CTA; verificar los destinos anotados en discrepancias.
+- [x] `/dashboard`: estados con/sin datos, resumen, vencimientos, comidas/recetas y cada CTA; verificar los destinos anotados en discrepancias.
 - [x] `/household`: crear hogar, unirse por código, código incorrecto, copiar/regenerar invitación, miembros/roles, permisos para compartir, salir del hogar y estados sin hogar.
 - [x] `/account`: tabs y URL, editar/cancelar nombre, seguridad/cambio de contraseña, cerrar sesión, información de cuenta; avatar: formatos/tamaño permitidos, recorte, zoom, recentrar, cancelar, subir, quitar, error y persistencia.
 - [x] `/preferences`: tabs/URL y recarga, perfil, alergias, gustos, comidas/horas y objetivos; añadir/quitar opciones personalizadas, guardar/descartar, aviso de cambios sin guardar y enlaces a onboarding/despensa.
 - [x] `/settings`: tema claro/oscuro/sistema, idioma ES/EN, módulos habilitar/deshabilitar, reinicio/persistencia y rutas directas con módulo oculto.
+
+**Revalidación integral de `/dashboard` (2026-10-08):** las seis specs de Dashboard pasaron aisladas en Chromium y Pixel 5: **28/28** en 1,3 min, con rate limit activo, SQLite/puertos/semilla temporales y cleanup confirmado. Cubren bienvenida/vacío, resumen y estadísticas, CTAs y destinos, detalle/deep link/modal de recetas, preferencias/errores/reintento de caducidades, comidas de hoy, próxima comida y su cola, permisos del hogar y enlaces recuperables. El caso de hogar recién creado valida un miembro visible. Capturas sintéticas del arreglo de estadísticas, comparables PC/móvil, revisadas e ignoradas por Git: `.e2e-screenshots/qa-ci-dashboard-shard-2/dashboard-members-{1440x900,393x851}.png`.
 
 **Revalidación integral de `/preferences` (2026-10-08):** Playwright aislado ejecuta
 `preferences.spec.ts`, `preferences-meals.spec.ts`, `preferences-custom-limits.spec.ts`,
@@ -2952,7 +2954,7 @@ lo crea.
       se reproduce contra el contrato, de lo contrario corregir el setup/espera obsoletos del E2E.
 - [x] Ejecutar las cuatro regresiones focales aisladas y el shard 2 completo, typecheck, formato,
       `check:ui`, build y `git diff --check`; no alterar datos ni proveedores reales.
-- [ ] Registrar evidencia y resultados, crear commit atómico con hooks completos, push sin reescribir
+- [x] Registrar evidencia y resultados, crear commit atómico con hooks completos, push sin reescribir
       historia publicada y verificar el nuevo CI completo sin mergear.
 
 **Hallazgo y decisión:** en `dashboard.spec.ts` el registro temporal confirmó que la base contiene un
@@ -2980,6 +2982,9 @@ scripts/run-isolated-playwright.mjs --project=chromium --shard=2/4 --forbid-only
 - `pnpm run typecheck:e2e`, Prettier de los archivos de la unidad, `pnpm run check:ui` (210 archivos,
   21 reglas), `pnpm run build` y `git diff --check` pasan. Build mantiene warnings conocidos de bundle,
   presupuestos SCSS, imports y optional chaining en archivos ajenos a esta corrección.
+- Commit `21c935b` (`fix(dashboard): reload active household`) con hooks pre-commit/pre-push completos,
+  push a la rama del PR; CI `37755849709` terminó **9/9 jobs en verde**, incluido shard 2. PR #41 sigue
+  abierto y fuera de Draft; no se mergeó.
 - No se usa WebAPI ni proveedor real; solo datos sintéticos del runner. Sin cambios de esquema ni datos
   persistentes.
 
