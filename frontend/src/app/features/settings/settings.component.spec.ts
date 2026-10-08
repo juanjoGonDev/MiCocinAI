@@ -4,6 +4,7 @@ import { SettingsComponent } from './settings.component';
 import { I18nService } from '../../core/services/i18n.service';
 import { ModulesService } from '../../core/services/modules.service';
 import { ThemeService } from '../../core/services/theme.service';
+import { DashboardPreferencesService } from '../../core/services/dashboard-preferences.service';
 import type { Language } from '../../core/services/i18n.service';
 import type { Theme } from '../../core/services/theme.service';
 
@@ -31,6 +32,10 @@ describe('SettingsComponent', () => {
     canSwitchOff: jasmine.Spy;
     toggle: jasmine.Spy;
     resetSelection: jasmine.Spy;
+  };
+  let dashboardPreferences: {
+    expiryHorizonDays: WritableSignal<number>;
+    setExpiryHorizonDays: jasmine.Spy;
   };
 
   beforeEach(async () => {
@@ -64,13 +69,26 @@ describe('SettingsComponent', () => {
       toggle: jasmine.createSpy('toggle'),
       resetSelection: jasmine.createSpy('resetSelection')
     };
+    dashboardPreferences = {
+      expiryHorizonDays: signal(3),
+      setExpiryHorizonDays: jasmine
+        .createSpy('setExpiryHorizonDays')
+        .and.callFake((value: unknown) => {
+          if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 30) {
+            return false;
+          }
+          dashboardPreferences.expiryHorizonDays.set(value);
+          return true;
+        })
+    };
 
     await TestBed.configureTestingModule({
       imports: [SettingsComponent],
       providers: [
         { provide: ThemeService, useValue: theme },
         { provide: I18nService, useValue: i18n },
-        { provide: ModulesService, useValue: modules }
+        { provide: ModulesService, useValue: modules },
+        { provide: DashboardPreferencesService, useValue: dashboardPreferences }
       ]
     }).compileComponents();
     fixture = TestBed.createComponent(SettingsComponent);
@@ -99,6 +117,39 @@ describe('SettingsComponent', () => {
     expect(i18n.setLang).toHaveBeenCalledWith('en');
     expect(englishButton.getAttribute('aria-pressed')).toBe('true');
     expect(themeButtons.length).toBe(3);
+  });
+
+  it('exposes the expiry horizon as an accessible bounded setting and rejects invalid edits', async () => {
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector(
+      '#settings-expiry-horizon-days'
+    ) as HTMLInputElement;
+    expect(input.type).toBe('number');
+    expect(input.getAttribute('min')).toBe('1');
+    expect(input.getAttribute('max')).toBe('30');
+    expect(input.value).toBe('3');
+    expect(input.labels?.length).toBe(1);
+    expect(input.getAttribute('aria-describedby')).toBe('settings-expiry-horizon-days-helper');
+
+    input.value = '5';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(dashboardPreferences.setExpiryHorizonDays).toHaveBeenCalledWith(5);
+    expect(input.value).toBe('5');
+    expect(dashboardPreferences.expiryHorizonDays()).toBe(5);
+
+    input.value = '31';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(dashboardPreferences.setExpiryHorizonDays).toHaveBeenCalledWith(31);
+    expect(input.value).toBe('31');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(
+      fixture.nativeElement.querySelector('#settings-expiry-horizon-days-error')
+    ).not.toBeNull();
   });
 
   it('keeps module reset disabled while saving and exposes failures as an alert', () => {

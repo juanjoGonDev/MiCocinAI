@@ -1,12 +1,15 @@
 import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ThemeService, Theme } from '../../core/services/theme.service';
 import { I18nService, Language } from '../../core/services/i18n.service';
 import { ModulesService } from '../../core/services/modules.service';
+import { DashboardPreferencesService } from '../../core/services/dashboard-preferences.service';
 import type { HomeModule } from '../../shared/models/home-profile';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
+import { InputComponent } from '../../shared/components/ui/input/input.component';
 
 interface Option<T extends string> {
   value: T;
@@ -16,7 +19,7 @@ interface Option<T extends string> {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, TranslatePipe, IconComponent],
+  imports: [CommonModule, FormsModule, TranslatePipe, IconComponent, InputComponent],
   template: `
     <div class="settings-page">
       <h1 class="settings-title">
@@ -66,6 +69,25 @@ interface Option<T extends string> {
             {{ opt.labelKey | t }}
           </button>
         </div>
+      </section>
+
+      <section class="settings-group" data-test="settings-today">
+        <h2 class="settings-group__title">{{ 'settings.today' | t }}</h2>
+        <app-input
+          id="settings-expiry-horizon-days"
+          name="expiryHorizonDays"
+          type="number"
+          size="lg"
+          min="1"
+          max="30"
+          step="1"
+          [label]="'settings.expiryDays' | t"
+          [helper]="'settings.expiryDaysHint' | t"
+          [error]="expiryHorizonInvalid ? ('settings.expiryDaysError' | t) : ''"
+          [(ngModel)]="expiryHorizonDraft"
+          (ngModelChange)="updateExpiryHorizon($event)"
+          data-test="settings-expiry-horizon-days"
+        ></app-input>
       </section>
 
       <section class="settings-group">
@@ -381,6 +403,9 @@ export class SettingsComponent {
   i18n = inject(I18nService);
   /** Secciones de la app: se activan aqui y se aplican sin recargar. */
   modules = inject(ModulesService);
+  readonly dashboardPreferences = inject(DashboardPreferencesService);
+  expiryHorizonDraft = this.dashboardPreferences.expiryHorizonDays();
+  expiryHorizonInvalid = false;
 
   themeOptions: Option<Theme>[] = [
     { value: 'light', labelKey: 'settings.theme.light' },
@@ -400,6 +425,16 @@ export class SettingsComponent {
 
   setLang(l: Language): void {
     this.i18n.setLang(l);
+  }
+
+  updateExpiryHorizon(value: string | number): void {
+    if (this.dashboardPreferences.setExpiryHorizonDays(value)) {
+      this.expiryHorizonDraft = this.dashboardPreferences.expiryHorizonDays();
+      this.expiryHorizonInvalid = false;
+      return;
+    }
+
+    this.expiryHorizonInvalid = true;
   }
 
   toggleModule(id: HomeModule): void {

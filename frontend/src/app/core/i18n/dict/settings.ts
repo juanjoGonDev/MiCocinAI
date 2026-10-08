@@ -8,6 +8,10 @@
  */
 export const settingsEs = {
   'settings.themeDetected': 'Detectado: {theme}',
+  'settings.today': 'Hoy',
+  'settings.expiryDays': 'Avisar antes de caducidad (días)',
+  'settings.expiryDaysHint': 'Incluye productos ya caducados. El valor inicial es 3 días.',
+  'settings.expiryDaysError': 'Elige un número entero entre 1 y 30.',
   'settings.lang.auto': 'Detectar automáticamente',
   'settings.lang.en': 'English',
   'settings.lang.es': 'Español',
@@ -28,6 +32,10 @@ export const settingsEs = {
 
 export const settingsEn: Record<keyof typeof settingsEs, string> = {
   'settings.themeDetected': 'Detected: {theme}',
+  'settings.today': 'Today',
+  'settings.expiryDays': 'Expiry warning window (days)',
+  'settings.expiryDaysHint': 'Includes items that have already expired. The default is 3 days.',
+  'settings.expiryDaysError': 'Choose a whole number from 1 to 30.',
   'settings.lang.auto': 'Auto-detect',
   'settings.lang.en': 'English',
   'settings.lang.es': 'Spanish',

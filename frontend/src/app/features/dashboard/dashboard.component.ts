@@ -7,17 +7,20 @@ import { PantryService } from '../../core/services/pantry.service';
 import { CalendarService } from '../../core/services/calendar.service';
 import { HouseholdService } from '../../core/services/household.service';
 import { I18nService } from '../../core/services/i18n.service';
+import { DashboardPreferencesService } from '../../core/services/dashboard-preferences.service';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import type { MealType } from '../../shared/models/calendar.model';
+import type { CaducidadRow } from '../../shared/models/caducidades.model';
 import {
   localIsoDate,
   mealTypeLabel as translateMealTypeLabel,
   pendingMealsForDate
 } from './dashboard-meals.util';
+import { expiringWithinDays } from './dashboard-expiry.util';
 
 interface QuickStat {
   icon: IconName;
@@ -81,6 +84,88 @@ interface SuggestedRecipe {
           /></span>
           <span class="action-card__label">{{ 'dashboard.plan' | t }}</span>
         </a>
+      </section>
+
+      <!-- Expiries -->
+      <section
+        class="dashboard__section"
+        data-test="dashboard-expiry"
+        [attr.aria-busy]="expiryLoading()"
+      >
+        <div class="dashboard__section-header">
+          <h2 class="dashboard__section-title">{{ 'dashboard.expiryTitle' | t }}</h2>
+          <div class="expiry-preview__heading-actions">
+            <span
+              *ngIf="expiringItems().length > 0 && !expiryLoading() && !expiryError()"
+              class="expiry-preview__count"
+              [attr.aria-label]="
+                'dashboard.expiryCountShown' | t: { count: expiringItems().length }
+              "
+            >
+              {{ expiringItems().length }}
+            </span>
+            <a
+              routerLink="/pantry/caducidades"
+              class="dashboard__section-link expiry-preview__all-link"
+            >
+              {{ 'dashboard.expiryViewAll' | t }}
+            </a>
+          </div>
+        </div>
+
+        <div
+          *ngIf="expiryLoading()"
+          class="meal-status"
+          role="status"
+          data-test="dashboard-expiry-loading"
+        >
+          {{ 'common.loading' | t }}
+        </div>
+
+        <div
+          *ngIf="!expiryLoading() && expiryError()"
+          class="expiry-preview__error"
+          role="alert"
+          data-test="dashboard-expiry-error"
+        >
+          <p>{{ 'dashboard.expiryLoadError' | t }}</p>
+          <button
+            type="button"
+            class="meal-error__retry"
+            data-test="dashboard-expiry-retry"
+            (click)="retryExpiries()"
+          >
+            {{ 'dashboard.expiryRetry' | t }}
+          </button>
+        </div>
+
+        <div
+          *ngIf="!expiryLoading() && !expiryError() && expiringItems().length === 0"
+          class="empty-state"
+          data-test="dashboard-expiry-empty"
+        >
+          <span class="empty-state__icon"
+            ><app-icon name="event_busy" [size]="36" [label]="null"
+          /></span>
+          <p class="empty-state__text">{{ 'dashboard.expiryEmpty' | t }}</p>
+        </div>
+
+        <div
+          *ngIf="!expiryLoading() && !expiryError() && expiringItems().length > 0"
+          class="expiry-list"
+        >
+          <article
+            *ngFor="let item of expiringItems()"
+            class="expiry-card"
+            data-test="dashboard-expiry-row"
+          >
+            <span class="expiry-card__icon"
+              ><app-icon name="event_busy" [size]="20" [label]="null"
+            /></span>
+            <span class="expiry-card__name">{{ item.name }}</span>
+            <span class="expiry-card__status">{{ expiryStatus(item.daysLeft) }}</span>
+          </article>
+        </div>
       </section>
 
       <!-- Today's Meals -->
@@ -310,8 +395,10 @@ interface SuggestedRecipe {
 
       .dashboard__section-header {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         justify-content: space-between;
+        gap: var(--space-2);
         margin-bottom: var(--space-4);
       }
 
@@ -329,6 +416,94 @@ interface SuggestedRecipe {
         &:hover {
           color: var(--primary-dark);
         }
+      }
+
+      .expiry-preview__heading-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        margin-left: auto;
+      }
+
+      .expiry-preview__all-link {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+        white-space: nowrap;
+      }
+
+      .expiry-preview__count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 24px;
+        min-height: 24px;
+        padding-inline: var(--space-1);
+        border-radius: var(--radius-full);
+        background: var(--warning-subtle);
+        color: var(--color-warning-700);
+        font-size: var(--text-xs);
+        font-weight: var(--font-semibold);
+        font-variant-numeric: tabular-nums;
+      }
+
+      .expiry-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+      }
+
+      .expiry-card {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        min-width: 0;
+        padding: var(--space-3);
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+      }
+
+      .expiry-card__icon {
+        display: inline-flex;
+        flex: none;
+        color: var(--color-warning-700);
+      }
+
+      .expiry-card__name {
+        flex: 1;
+        min-width: 0;
+        color: var(--text-primary);
+        font-size: var(--text-sm);
+        font-weight: var(--font-medium);
+        overflow-wrap: anywhere;
+      }
+
+      .expiry-card__status {
+        flex: none;
+        color: var(--text-secondary);
+        font-size: var(--text-xs);
+        white-space: nowrap;
+      }
+
+      .expiry-preview__error {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        background: var(--bg-secondary);
+      }
+
+      .expiry-preview__error p {
+        flex: 1;
+        min-width: 0;
+        margin: 0;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
       }
 
       .meals-list {
@@ -521,6 +696,7 @@ export class DashboardComponent implements OnInit {
   private authService = inject(AuthService);
   private recipeService = inject(RecipeService);
   private pantryService = inject(PantryService);
+  private dashboardPreferences = inject(DashboardPreferencesService);
   private calendarService = inject(CalendarService);
   private householdService = inject(HouseholdService);
   private i18n = inject(I18nService);
@@ -537,6 +713,14 @@ export class DashboardComponent implements OnInit {
     const range = this.calendarService.range();
     return range?.start === this.todayIso && range.end === this.todayIso;
   });
+  readonly expiringItems = computed(() =>
+    expiringWithinDays(
+      this.pantryService.caducidades(),
+      this.dashboardPreferences.expiryHorizonDays()
+    )
+  );
+  readonly expiryLoading = this.pantryService.cargandoCaducidades;
+  readonly expiryError = this.pantryService.caducidadesError;
 
   /** Recetas sugeridas: las 6 mas recientes del listado. */
   suggestedRecipes = computed<SuggestedRecipe[]>(() =>
@@ -600,6 +784,7 @@ export class DashboardComponent implements OnInit {
     // Ingredientes y estadisticas de la despensa
     this.pantryService.loadIngredients();
     this.pantryService.loadStats();
+    this.pantryService.loadCaducidades();
 
     // Recetas (la rejilla muestra las 6 primeras)
     this.recipeService.loadRecipes();
@@ -621,6 +806,17 @@ export class DashboardComponent implements OnInit {
 
   retryTodayMeals(): void {
     this.calendarService.loadRange(this.todayIso, this.todayIso, true);
+  }
+
+  retryExpiries(): void {
+    this.pantryService.loadCaducidades();
+  }
+
+  expiryStatus(daysLeft: CaducidadRow['daysLeft']): string {
+    if (daysLeft === null) return '';
+    if (daysLeft < 0) return this.i18n.t('dashboard.expiryStatusExpired');
+    if (daysLeft === 0) return this.i18n.t('dashboard.expiryStatusToday');
+    return this.i18n.t('dashboard.expiryStatusDays', { days: daysLeft });
   }
 
   getDifficultyVariant(difficulty: string): 'success' | 'warning' | 'error' {

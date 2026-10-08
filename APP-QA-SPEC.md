@@ -1279,11 +1279,33 @@ gate completo. Capturas sintéticas de escritorio/móvil y error inspeccionadas 
 
 **Decisión de alcance:** añadir en Settings una preferencia local de 1–30 días, con valor inicial de 3 para conservar el umbral vigente de «por caducar». Es una preferencia de visualización, no modifica datos ni el API. Dashboard incluye caducados y los que vencen hoy o dentro de N días; omite fechas desconocidas y ofrece enlace a Caducidades. El presupuesto de compra, la próxima comida planificada y la cola IA son unidades Today separadas; no quedan implícitamente resueltas por este cambio.
 
-- [ ] Añadir primero una E2E roja con despensa sintética que verifique límite inclusivo N, producto ya caducado, N+1 días, fecha desconocida y lista vacía; probar 3 → 5 días desde Settings y persistencia tras recarga.
-- [ ] Implementar la preferencia accesible ES/EN en Settings, persistida con el patrón local de tema/idioma, rango 1–30 y default 3; entrada inválida no debe alterar el último valor válido.
-- [ ] Mostrar en Dashboard la cantidad y nombres de hasta cinco próximos/caducados, correctamente ordenados; añadir estados loading, vacío, error y reintento, y enlace funcional a `/pantry/caducidades`.
-- [ ] Verificar Chromium escritorio y Pixel 5, desktop 1440×900, móvil 393×851 y mínimo 320×568, rotación 568×320, sin overflow/solapamiento con navegación fija; guardar e inspeccionar capturas sintéticas PC/móvil.
-- [ ] Ejecutar regresión roja→verde, Karma/unitarios, E2E aislada con rate limit activo y SQLite/puerto/semilla temporales, cobertura ≥70 % S/B/F/L por archivo instrumentable, `typecheck:e2e`, `check:ui`, formato, build y `git diff --check`; documentar comandos y rollback.
+- [x] Añadir primero una E2E roja con despensa sintética que verifique límite inclusivo N, producto ya caducado, N+1 días, fecha desconocida y lista vacía; probar 3 → 5 días desde Settings y persistencia tras recarga.
+- [x] Implementar la preferencia accesible ES/EN en Settings, persistida con el patrón local de tema/idioma, rango 1–30 y default 3; entrada inválida no debe alterar el último valor válido.
+- [x] Mostrar en Dashboard la cantidad y nombres de hasta cinco próximos/caducados, correctamente ordenados; añadir estados loading, vacío, error y reintento, y enlace funcional a `/pantry/caducidades`.
+- [x] Verificar Chromium escritorio y Pixel 5, desktop 1440×900, móvil 393×851 y mínimo 320×568, rotación 568×320, sin overflow ni contenido inaccesible tras la navegación fija; guardar e inspeccionar capturas sintéticas PC/móvil.
+- [x] Ejecutar regresión roja→verde, Karma/unitarios, E2E aislada con rate limit activo y SQLite/puerto/semilla temporales, cobertura ≥70 % S/B/F/L por archivo instrumentable, `typecheck:e2e`, `check:ui`, formato, build y `git diff --check`; documentar comandos y rollback.
+
+**TDD y evidencia (2026-10-08):** la E2E inicial fue roja en el baseline porque faltaba
+`[data-test="dashboard-expiry"]`. Tras implementar, `node scripts/run-isolated-playwright.mjs
+--workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/dashboard-expiry-window.spec.ts --reporter=line` pasa **4/4** con
+`E2E_RATE_LIMIT=on`; la ejecución usa SQLite, puertos y semilla temporales, y confirma cleanup.
+Se prueba N inclusivo, caducados/hoy/N+1/fecha desconocida, cambio 3→5 con recarga, error,
+reintento, estado vacío, destino del enlace, overflow, controles táctiles ≥44 px y acceso al
+último vencimiento por encima de la navegación fija. `pnpm --filter @hogaria/web exec ng test
+--no-watch --include src/app/features/dashboard/dashboard.component.spec.ts --include
+src/app/features/dashboard/dashboard-expiry.util.spec.ts --include
+src/app/core/services/dashboard-preferences.service.spec.ts --include
+src/app/features/settings/settings.component.spec.ts --browsers=ChromeHeadless` pasa **17/17**;
+`pnpm run test:client:coverage` pasa **1180/1180**, cobertura global S/B/F/L
+**90,28/81,48/89,01/91,64 %**. Cobertura por archivo (S/B/F/L): `dashboard-expiry.util.ts`
+**100/88,24/100/100 %**; `dashboard-preferences.service.ts` **100/100/100/100 %**;
+`settings.component.ts` **100/100/100/100 %**; `dashboard.component.ts`
+**97,83/87,5/93,75/97,83 %**. También pasan `pnpm run typecheck:e2e`, `pnpm run check:ui`
+(210 archivos, 21 reglas), `pnpm run build` y `git diff --check`; Prettier valida los archivos
+del cambio. La build mantiene avisos de presupuesto Angular ya existentes, sin error de salida.
+
+Capturas sintéticas inspeccionadas (ignoradas por Git): `.e2e-screenshots/qa-dashboard-expiry-window-20261008/`; incluye Dashboard y Settings en escritorio/móvil, anchos 1440, 393, 320 y orientación 568×320.
 
 **Rollback de unidad:** retirar la preferencia de horizonte, su control Settings, el resumen de caducidades Dashboard, las pruebas y este subapartado; no cambiar la lista completa de Caducidades ni el umbral del API.
 
