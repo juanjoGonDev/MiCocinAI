@@ -626,7 +626,11 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 
 **Alcance:** probar `SwipeRowDirective` y `LongPressDirective` contra el contrato y los handlers actuales; no cambiar producción si las pruebas confirman el comportamiento existente. Si una regresión revela discrepancia, registrar primero su criterio y prueba roja antes de corregir.
 
+**Discrepancia a reproducir (2026-10-08):** durante el arrastre izquierdo, `onPointerMove()` escribe un desplazamiento negativo; al soltar, `onPointerEnd()` llama `apply()` con un desplazamiento positivo. El consumidor transforma `.detail__face` directamente con `translateX(var(--swipe-x))`, mientras `.detail__rail` está anclado a la derecha. Esto contradice §8e: el gesto debe dejar accesibles los botones del riel derecho. La E2E existente solo usa `toBeVisible()` —que no prueba hit-testing—, así que se añadirá una aserción con `document.elementFromPoint()` al botón expuesto antes de cambiar producción.
+
 - [ ] Añadir pruebas de ciclo de vida de `SwipeRowDirective`: puntero izquierdo y propiedad del `pointerId`, exclusiones de controles/`data-gesture-stop`, eje vertical, movimiento bajo umbral, reveal/cierre, +1 por umbral, quitar al 60 %, `gestureEnded`, protección residual de 250 ms y cleanup al destruir.
+- [ ] Reforzar la E2E del reveal para comprobar que la cara se desplaza hacia la izquierda y el botón `Quitar` del riel derecho es realmente el elemento alcanzable en su centro; confirmar que el test falla en el baseline antes del arreglo.
+- [ ] Corregir el signo del offset final solo si la regresión de hit-testing lo confirma, preservando umbrales, undo y supresión del tap residual.
 - [ ] Añadir pruebas temporizadas de `LongPressDirective`: emitir exactamente a 350 ms, cancelar por movimiento o liberación/cancelación temprana, no iniciar con deshabilitado/puntero secundario/controles excluidos y consumir el click posterior una sola vez.
 - [ ] Alcanzar ≥70 % en statements, branches, functions y lines para el archivo de directivas, conservando los cuatro gates globales de 80 %.
 - [ ] Ejecutar Karma focal y la suite frontend completa; repetir en Playwright real aislado los casos existentes de swipe/undo/+1/long-press en Chromium y Pixel 5, sin DB ni proveedor de uso normal.
