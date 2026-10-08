@@ -616,17 +616,20 @@ type FilaCategoria = PantryCategory & {
       }
 
       .boton {
+        box-sizing: border-box;
         display: inline-flex;
         align-items: center;
         gap: var(--space-2);
-        padding: var(--space-2) var(--space-4);
+        height: var(--button-control-height);
+        padding: var(--button-control-padding-block) var(--button-control-padding-inline);
         font: inherit;
-        font-size: var(--text-sm);
+        font-size: var(--button-control-font-size);
+        line-height: var(--leading-none);
         font-weight: var(--font-medium);
         color: var(--text-primary);
         background: var(--bg-tertiary);
         border: 1px solid var(--border-default);
-        border-radius: var(--radius-full);
+        border-radius: var(--radius-lg);
         cursor: pointer;
         transition: var(--transition-fast);
       }
