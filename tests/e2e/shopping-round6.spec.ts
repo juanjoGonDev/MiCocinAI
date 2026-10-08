@@ -244,7 +244,8 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
   });
 
   test('una oferta 3x2 se pinta en la fila y se quita con un toque', async ({ page }, testInfo) => {
-    const isMobile = testInfo.project.name === 'mobile-chrome';
+    const isMobile = Boolean(testInfo.project.use.isMobile);
+    const isWebKitDeviceEmulation = testInfo.project.name === 'mobile-safari';
     const initialViewport = page.viewportSize();
     if (!isMobile) await page.setViewportSize({ width: 1440, height: 900 });
     await registerAndGoto(page, '/shopping', 'r6-offer');
@@ -259,10 +260,12 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
 
     const offerRow = page.locator('[data-test="item-row"]').first();
     if (isMobile) {
-      const addRow = await page.evaluate(() => {
+      const addRow = await page.evaluate((useLayoutWidth) => {
         const visual = {
           left: visualViewport?.offsetLeft ?? 0,
-          width: visualViewport?.width ?? innerWidth
+          width: useLayoutWidth
+            ? document.documentElement.clientWidth
+            : (visualViewport?.width ?? innerWidth)
         };
         const form = document.querySelector<HTMLFormElement>('.detail__add');
         if (!form) return null;
@@ -287,7 +290,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
           },
           controls
         };
-      });
+      }, isWebKitDeviceEmulation);
       expect(addRow).not.toBeNull();
       expect(addRow!.rootScrollWidth).toBeLessThanOrEqual(addRow!.visual.width);
       expect(addRow!.form.scrollWidth).toBeLessThanOrEqual(addRow!.form.clientWidth);
@@ -324,7 +327,10 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
           left: visualViewport?.offsetLeft ?? 0,
           top: visualViewport?.offsetTop ?? 0,
           width: visualViewport?.width ?? innerWidth,
-          height: visualViewport?.height ?? innerHeight
+          height: visualViewport?.height ?? innerHeight,
+          layoutWidth: innerWidth,
+          rootClientWidth: document.documentElement.clientWidth,
+          rootScrollWidth: document.documentElement.scrollWidth
         };
         const style = getComputedStyle(sheet);
         return {
@@ -342,8 +348,17 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
         };
       });
       expect(geometry.sheet.left).toBeGreaterThanOrEqual(geometry.viewport.left);
-      expect(geometry.sheet.right).toBeLessThanOrEqual(
-        geometry.viewport.left + geometry.viewport.width
+      expect(
+        geometry.sheet.right,
+        `sheet/viewports: ${JSON.stringify(geometry)}`
+      ).toBeLessThanOrEqual(
+        geometry.viewport.left +
+          (testInfo.project.name === 'mobile-safari'
+            ? geometry.viewport.rootClientWidth
+            : geometry.viewport.width)
+      );
+      expect(geometry.viewport.rootScrollWidth).toBeLessThanOrEqual(
+        geometry.viewport.rootClientWidth
       );
       expect(geometry.sheet.top).toBeGreaterThanOrEqual(geometry.viewport.top);
       expect(geometry.sheet.bottom).toBeLessThanOrEqual(
@@ -356,8 +371,10 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     if (isMobile) {
       // 320×568 is the narrow-height edge: the sheet must scroll internally so «Hecho» stays reachable.
       await page.setViewportSize({ width: 320, height: 568 });
-      const narrowAddRow = await page.evaluate(() => {
-        const width = visualViewport?.width ?? innerWidth;
+      const narrowAddRow = await page.evaluate((useLayoutWidth) => {
+        const width = useLayoutWidth
+          ? document.documentElement.clientWidth
+          : (visualViewport?.width ?? innerWidth);
         const form = document.querySelector<HTMLFormElement>('.detail__add');
         if (!form) return null;
         const rect = form.getBoundingClientRect();
@@ -378,7 +395,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
           formRight: rect.right,
           controls
         };
-      });
+      }, isWebKitDeviceEmulation);
       expect(narrowAddRow).not.toBeNull();
       expect(narrowAddRow!.rootScrollWidth).toBeLessThanOrEqual(narrowAddRow!.width);
       expect(narrowAddRow!.formScrollWidth).toBeLessThanOrEqual(narrowAddRow!.formWidth);
@@ -396,7 +413,9 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
           width: visualViewport?.width ?? innerWidth,
           height: visualViewport?.height ?? innerHeight,
           left: visualViewport?.offsetLeft ?? 0,
-          top: visualViewport?.offsetTop ?? 0
+          top: visualViewport?.offsetTop ?? 0,
+          rootClientWidth: document.documentElement.clientWidth,
+          rootScrollWidth: document.documentElement.scrollWidth
         };
         const rect = sheet.getBoundingClientRect();
         const style = getComputedStyle(sheet);
@@ -415,7 +434,13 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
       await expect(editSheet).toBeVisible();
       await expect(editSheet).toHaveCSS('transform', 'none');
       expect(narrowSheet.right).toBeLessThanOrEqual(
-        narrowSheet.viewport.left + narrowSheet.viewport.width
+        narrowSheet.viewport.left +
+          (testInfo.project.name === 'mobile-safari'
+            ? narrowSheet.viewport.rootClientWidth
+            : narrowSheet.viewport.width)
+      );
+      expect(narrowSheet.viewport.rootScrollWidth).toBeLessThanOrEqual(
+        narrowSheet.viewport.rootClientWidth
       );
       expect(narrowSheet.top).toBeGreaterThanOrEqual(narrowSheet.viewport.top);
       expect(narrowSheet.bottom).toBeLessThanOrEqual(
@@ -442,6 +467,16 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
       await page.keyboard.press('Enter');
       await expect(editSheet).toHaveCount(0);
       if (initialViewport) await page.setViewportSize(initialViewport);
+
+      await offerRow.getByRole('button', { name: 'Acciones de la linea' }).tap();
+      await expect(editSheet).toBeVisible();
+      await editSheet.locator('[data-test="edit-close"]').tap();
+      await expect(editSheet).toHaveCount(0);
+
+      await offerRow.getByRole('button', { name: 'Acciones de la linea' }).tap();
+      await expect(editSheet).toBeVisible();
+      await page.locator('.detail__sheet-backdrop').tap({ position: { x: 2, y: 2 } });
+      await expect(editSheet).toHaveCount(0);
     }
 
     // La fila recuerda la oferta y el chip la quita con un toque, sin abrir la hoja.
@@ -468,7 +503,7 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
   test('el descuento de la lista se aplica al total y se puede quitar', async ({
     page
   }, testInfo) => {
-    const isMobile = testInfo.project.name === 'mobile-chrome';
+    const isMobile = Boolean(testInfo.project.use.isMobile);
     const viewports = isMobile
       ? [
           { width: 393, height: 851 },
