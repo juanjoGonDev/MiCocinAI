@@ -1793,6 +1793,19 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 **Rollback del work unit:** revertir el commit `fix(logs): retain selection after clear failure` restaura el comportamiento previo de borrado/filtros y elimina sus pruebas, sin tocar otros cambios de la rama.
 
+### Unidad QA-LOGS.ONLY-ERRORS.1 · filtro independiente «solo errores»
+
+**Fuente revalidada (2026-10-09):** el contrato activo `HOGARIA-SPEC.md` §6 exige que el visor conserve los filtros de nivel/fuente y añada «solo errores». `LogService.isVisible()` combina actualmente únicamente fuente y nivel; el toolbar no expone otro control. La capacidad debe ser un filtro adicional, no un alias del selector de nivel: al activarlo solo quedan errores visibles; no altera la fuente ni el nivel elegidos y, al desactivarlo, esos filtros previos siguen aplicándose.
+
+**Contrato:** un control de casilla con nombre accesible «Solo errores» alterna el predicado de error y conserva los filtros de nivel y fuente. Los filtros se intersectan: con «solo errores» activo y nivel `warn`, el resultado es vacío; al apagarlo, vuelven las warnings de la fuente seleccionada. El valor inicial es apagado y no requiere escritura remota ni persistencia entre sesiones. La casilla y su etiqueta ofrecen foco visible y una superficie táctil de al menos 44×44 CSS px; no añade dependencias ni modifica el contrato del API.
+
+- [ ] Añadir primero regresión unitaria y E2E con logs sintéticos error/warn/info; reproducir el filtro ausente y verificar activación/desactivación, combinación con fuente/nivel y restauración de los filtros previos.
+- [ ] Implementar el estado independiente en `LogService` y un control localizado, nombrado y operable por teclado; mantener semántica de casilla, foco visible y hit area ≥44×44 px.
+- [ ] Verificar en Chromium y Pixel 5 a 320×568, 393×851, 568×320, 1023/1024/1025 y 1440×900: cero overflow/pageerror, conteos correctos, persistencia del filtro mientras cambia fuente/nivel y captura sintética comparable PC/móvil.
+- [ ] Ejecutar unitarias focales con coverage ≥70 % S/B/F/L en cada archivo de producción afectado, E2E full-stack aislada con DB temporal, typecheck, `check:ui`, formato, build y `git diff --check`; registrar los comandos/resultados y no rebajar gates.
+
+**Rollback:** retirar el control «solo errores» de `logs.component.ts`, su estado/predicado y pruebas de `LogService`, las claves de idioma y esta sección; no revertir filtros existentes, reconexión SSE ni borrado.
+
 ## Matriz responsive, visual y accesibilidad
 
 - [ ] Barrido de **todas las rutas** en 320, 360, 390/393, 430, 768, 1023, 1024, 1280 y 1440 px; guardar ruta, viewport, overflow y errores por página.
