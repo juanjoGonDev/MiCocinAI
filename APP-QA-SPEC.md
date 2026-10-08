@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-08):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La última suite frontend local pasó **1201/1201** con coverage **90.32/81.46/88.96/91.75 % S/B/F/L**; el workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-08):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La última suite frontend local pasó **1206/1206** con coverage **90.38/81.51/89.11/91.79 % S/B/F/L**; el workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (2026-10-08):** el smoke autorizado consumió el presupuesto de 8/8 completions; la última respondió HTTP 504 y la E2E acabó en fallo antes de la fase «cuatro tickets verificados». No se hizo un reintento manual. El runner aislado y su carpeta temporal se cerraron/eliminaron; QA-AI.REAL-INTEGRATIONS.1 permanece abierta.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1201/1201 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1206/1206 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-08
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -900,18 +900,32 @@ también se traduce; un nombre personalizado prevalece sobre el diccionario; cla
 ausente se conserva según el helper. El pipe lee `changeTick()` en cada transformación. No modifica datos,
 estructura ni geometría de Despensa.
 
-- [ ] Añadir pruebas Angular directas del pipe real con `I18nService` controlado (sin exigir un fallo
+- [x] Añadir pruebas Angular directas del pipe real con `I18nService` controlado (sin exigir un fallo
       inicial de producción): factoría del servicio, lectura de `changeTick()` en cada llamada y
       traducción con el idioma activo; cubrir clave
       como string, objeto con nombre de fábrica, nombre personalizado, clave desconocida, `null` y
       `undefined`. No duplicar los casos puros ya cubiertos por `pantry-gestor.util.spec.ts`.
-- [ ] Corregir solo el defecto demostrado por esas pruebas; si no aparece defecto, no cambiar producción.
-- [ ] Medir `pantry-category-label.pipe.ts` y superar ≥70 % en statements/branches/functions/lines; repetir
-      el spec E2E sintético de Despensa/gestor de categorías en Chromium y Pixel 5 para confirmar las
-      etiquetas traducidas existentes, con SQLite/semilla/puertos temporales y cleanup. Sin cambios visuales:
+- [x] Las pruebas no detectan defecto funcional en el pipe; no se modifica producción.
+- [x] Medir el pipe y superar ≥70 % en sentencias/ramas/funciones/líneas; repetir los flujos de
+      categoría en Chromium de escritorio y Pixel 5 con entorno E2E aislado. Sin cambios visuales:
       capturas N/A.
-- [ ] Ejecutar Karma completo con el gate 80 % en las cuatro métricas, `typecheck:e2e`, `check:ui`, formato,
-      build y `git diff --check`; registrar cobertura focal/global, comandos y rollback. Nunca bajar gates.
+- [x] `pnpm run typecheck:e2e`, `pnpm run check:ui` (210 ficheros/21 reglas), `pnpm run build`,
+      Prettier y `git diff --check` pasan. No bajar gates.
+
+**Evidencia (2026-10-08):** el spec focal ejecutó 5/5; `pnpm run test:client` ejecutó 1206/1206.
+LCOV del pipe: statements 4/4, functions 3/3 y lines 4/4 (100 % cada métrica); branches 0/0, no
+instrumentadas. Cobertura global: 90.38/81.51/89.11/91.79 % S/B/F/L, gate 80 % aprobado. E2E aislado:
+
+```powershell
+$env:E2E_RATE_LIMIT = 'on'
+pnpm run test:e2e -- --project=chromium --project=mobile-chrome --grep='el filtro de categorias minimiza el riel|una categoria nueva con color y padre queda en su sitio'
+Remove-Item Env:E2E_RATE_LIMIT
+```
+
+El flujo de Despensa y el gestor pasó 4/4; el runner confirmó SQLite/semilla/puertos/artefactos
+temporales y su limpieza. `typecheck:e2e`, `check:ui` (210 ficheros, 21 reglas), `build`, Prettier y
+`git diff --check` pasan; el build conserva avisos de presupuesto/imports ya existentes. Al no haber
+cambio visual, las capturas son N/A.
 
 **Rollback:** retirar únicamente el spec directo del pipe y este subapartado, sin afectar las pruebas puras
 de categorías ni la lógica de producción.
