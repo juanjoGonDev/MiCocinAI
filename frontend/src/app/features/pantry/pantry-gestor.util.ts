@@ -47,6 +47,16 @@ export function clavesNoElegiblesComoPadre(
   return prohibidas;
 }
 
+/** Acepta solo un padre conocido del catálogo; una query es una sugerencia, no autoridad sobre el árbol. */
+export function padreDeCategoriaDesdeQuery(
+  solicitado: string | null,
+  categorias: readonly PantryCategory[]
+): string | null {
+  const clave = solicitado?.trim();
+  if (!clave || !categorias.some((categoria) => categoria.key === clave)) return null;
+  return clave;
+}
+
 /** El color con el que se pinta una fila: el punto de la categoria, o gris de reserva si no trae ninguno. */
 export const COLOR_RESERVA = '#8A8F98';
 

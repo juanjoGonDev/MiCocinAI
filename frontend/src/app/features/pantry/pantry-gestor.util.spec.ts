@@ -5,6 +5,7 @@ import {
   aliasVisibles,
   clavesSubarbolDe,
   clavesNoElegiblesComoPadre,
+  padreDeCategoriaDesdeQuery,
   colorDeCategoria,
   normalizarAlias,
   offsetDeQuery,
@@ -78,6 +79,20 @@ describe('clavesNoElegiblesComoPadre (## 12x)', () => {
 
   it('un id que ya no esta en el catalogo no convierte la lista entera en prohibida', () => {
     expect([...clavesNoElegiblesComoPadre(catalogo, 'no-existe')]).toEqual([]);
+  });
+});
+
+describe('el padre que propone el enlace de alta', () => {
+  const catalogo = [fila({ id: '1', key: 'alimentos' }), fila({ id: '2', key: 'fruits' })];
+
+  it('acepta una clave existente y recorta espacios externos', () => {
+    expect(padreDeCategoriaDesdeQuery(' alimentos ', catalogo)).toBe('alimentos');
+  });
+
+  it('ignora una consulta ausente, vacia o que no corresponde a una categoria', () => {
+    expect(padreDeCategoriaDesdeQuery(null, catalogo)).toBeNull();
+    expect(padreDeCategoriaDesdeQuery('  ', catalogo)).toBeNull();
+    expect(padreDeCategoriaDesdeQuery('category_food', catalogo)).toBeNull();
   });
 });
 

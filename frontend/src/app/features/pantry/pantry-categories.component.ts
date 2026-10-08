@@ -31,6 +31,7 @@ import {
   clavesNoElegiblesComoPadre,
   coincideGestor,
   colorDeCategoria,
+  padreDeCategoriaDesdeQuery,
   valorDeQuery
 } from './pantry-gestor.util';
 
@@ -1144,6 +1145,7 @@ export class PantryCategoriesComponent implements OnInit {
         canDelete: false
       };
       this.formulario = { name: '', color: '', description: '', parentKey: '' };
+      await this.seleccionarPadreDeQuery();
       return;
     }
     const catalogo = this.pantry.categories();
@@ -1171,12 +1173,12 @@ export class PantryCategoriesComponent implements OnInit {
   }
 
   protected opcionesPadre(): PickerOption[] {
+    const categorias = this.categoriasDisponibles();
     const prohibidas = clavesNoElegiblesComoPadre(
-      this.pantry.categories(),
+      categorias,
       this.esNueva ? null : (this.ficha?.id ?? null)
     );
-    return this.pantry
-      .categories()
+    return categorias
       .filter((fila) => !prohibidas.has(fila.key))
       .map((fila) => ({
         value: fila.key,
@@ -1190,6 +1192,28 @@ export class PantryCategoriesComponent implements OnInit {
       }));
   }
 
+  /** La query propone un padre, pero solo se acepta si existe y mantiene el límite del árbol. */
+  private async seleccionarPadreDeQuery(): Promise<void> {
+    const solicitado = this.route.snapshot.queryParamMap.get('parent');
+    if (!solicitado?.trim()) return;
+    const categorias = await cargarTodasLasPaginas<PantryCategory>(
+      (offset, tamano) => this.pantry.listCategories('all', '', tamano, offset),
+      100,
+      2000
+    );
+    if (!categorias) return;
+    this.lista.set(categorias);
+    const padre = padreDeCategoriaDesdeQuery(solicitado, categorias);
+    if (!padre) return;
+    this.formulario.parentKey = padre;
+    if (this.comprobarFormaDelArbol(categorias)) this.formulario.parentKey = '';
+  }
+
+  private categoriasDisponibles(): PantryCategory[] {
+    const cargadas = this.lista();
+    return cargadas.length > 0 ? cargadas : this.pantry.categories();
+  }
+
   /**
    * Las dos comprobaciones estructurales, hechas en la pantalla antes de llamar al server.
    *
@@ -1198,7 +1222,7 @@ export class PantryCategoriesComponent implements OnInit {
    * 400 escrito en el idioma del log. Y el techo de cuatro niveles es de los que se saltan sin darse cuenta: la
    * lista se ve bien, lo que ya no cabe es la pantalla.
    */
-  private comprobarFormaDelArbol(): string | null {
+  private comprobarFormaDelArbol(categorias = this.categoriasDisponibles()): string | null {
     const padre = this.formulario.parentKey.trim();
     if (!padre) return null;
     const propia = this.esNueva ? null : (this.ficha?.key ?? null);
@@ -1210,17 +1234,20 @@ export class PantryCategoriesComponent implements OnInit {
       vistas.add(cadena);
       profundidadPadre++;
       if (propia && cadena === propia) return this.i18n.t('pantry.error_ciclo');
-      cadena = this.pantry.categoryByKey(cadena)?.parentKey ?? '';
+      cadena = categorias.find((categoria) => categoria.key === cadena)?.parentKey ?? '';
     }
-    if (profundidadPadre + this.altura(propia ?? '') > 4)
+    if (profundidadPadre + this.altura(propia ?? '', categorias) > 4)
       return this.i18n.t('pantry.error_profundidad');
     return null;
   }
 
-  private altura(clave: string): number {
+  private altura(clave: string, categorias = this.categoriasDisponibles()): number {
     if (!clave) return 1;
-    const hijas = this.pantry.categories().filter((fila) => fila.parentKey === clave);
-    return 1 + (hijas.length > 0 ? Math.max(...hijas.map((hija) => this.altura(hija.key))) : 0);
+    const hijas = categorias.filter((fila) => fila.parentKey === clave);
+    return (
+      1 +
+      (hijas.length > 0 ? Math.max(...hijas.map((hija) => this.altura(hija.key, categorias))) : 0)
+    );
   }
 
   protected pintar(color: string): void {
