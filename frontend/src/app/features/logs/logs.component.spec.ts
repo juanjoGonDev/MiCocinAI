@@ -50,11 +50,13 @@ describe('LogsComponent', () => {
       paused: signal(false),
       sourceFilter: signal('all'),
       levelFilter: signal('all'),
+      onlyErrors: signal(false),
       isVisible: jasmine.createSpy('isVisible').and.returnValue(true),
       connect: jasmine.createSpy('connect'),
       disconnect: jasmine.createSpy('disconnect'),
       setSourceFilter: jasmine.createSpy('setSourceFilter'),
       setLevelFilter: jasmine.createSpy('setLevelFilter'),
+      setOnlyErrors: jasmine.createSpy('setOnlyErrors'),
       togglePause: jasmine.createSpy('togglePause'),
       toggleAutoScroll: jasmine.createSpy('toggleAutoScroll'),
       clear: jasmine.createSpy('clear').and.returnValue(of({}))
@@ -96,6 +98,22 @@ describe('LogsComponent', () => {
     expect(logService.setSourceFilter).toHaveBeenCalledOnceWith('browser');
     expect(logService.setLevelFilter).toHaveBeenCalledOnceWith('error');
     expect(logService.connect).toHaveBeenCalledTimes(2);
+  });
+
+  it('renders the accessible only-errors checkbox and forwards its value', () => {
+    const checkbox = fixture.nativeElement.querySelector(
+      '.logs-only-errors input[type="checkbox"]'
+    ) as HTMLInputElement;
+    expect(checkbox).toBeTruthy();
+    expect(checkbox.checked).toBeFalse();
+    expect(checkbox.closest('label')?.textContent).toContain('logs.solo_errores');
+
+    checkbox.click();
+    expect(logService.setOnlyErrors).toHaveBeenCalledOnceWith(true);
+
+    logService.onlyErrors.set(true);
+    fixture.detectChanges();
+    expect(checkbox.checked).toBeTrue();
   });
 
   it('keeps the selected log when confirmation is declined or the DELETE fails', async () => {

@@ -30,6 +30,7 @@ export class LogService {
   private autoScrollSignal = signal(true);
   private filterSource = signal<LogSource | 'all'>('all');
   private filterLevel = signal<LogLevel | 'all'>('all');
+  private onlyErrorsSignal = signal(false);
   private pausedSignal = signal(false);
 
   private stream?: StreamHandle;
@@ -49,6 +50,7 @@ export class LogService {
   readonly paused = this.pausedSignal.asReadonly();
   readonly sourceFilter = this.filterSource.asReadonly();
   readonly levelFilter = this.filterLevel.asReadonly();
+  readonly onlyErrors = this.onlyErrorsSignal.asReadonly();
 
   connect(): void {
     this.disconnect();
@@ -56,11 +58,13 @@ export class LogService {
     // Load historical logs first
     this.http.get<any>(`${this.apiUrl}?limit=500`).subscribe({
       next: (res) => {
-        const entries: LogEntry[] = (res?.data?.logs ?? []);
+        const entries: LogEntry[] = res?.data?.logs ?? [];
         // Oldest first for terminal scroll
-        this.logsSignal.set(entries.reverse().map(e => this.withId(e)));
+        this.logsSignal.set(entries.reverse().map((e) => this.withId(e)));
       },
-      error: () => { /* ignore, SSE will still try */ }
+      error: () => {
+        /* ignore, SSE will still try */
+      }
     });
 
     // Then open an SSE stream for live updates. Con backoff propio: el `EventSource`
@@ -72,7 +76,9 @@ export class LogService {
           const entry: LogEntry = JSON.parse(data);
           if (this.pausedSignal()) return;
           this.pushEntry(entry);
-        } catch { /* ignore bad JSON */ }
+        } catch {
+          /* ignore bad JSON */
+        }
       },
       onStatus: (status, detail) => {
         this.connectedSignal.set(status === 'live');
@@ -103,12 +109,16 @@ export class LogService {
     this.filterLevel.set(l);
   }
 
+  setOnlyErrors(enabled: boolean): void {
+    this.onlyErrorsSignal.set(enabled);
+  }
+
   toggleAutoScroll(): void {
-    this.autoScrollSignal.update(v => !v);
+    this.autoScrollSignal.update((v) => !v);
   }
 
   togglePause(): void {
-    this.pausedSignal.update(v => !v);
+    this.pausedSignal.update((v) => !v);
   }
 
   clear(): Observable<unknown> {
@@ -117,6 +127,7 @@ export class LogService {
 
   isVisible(entry: LogEntry): boolean {
     if (entry.type === 'connected') return false;
+    if (this.onlyErrors() && entry.level !== 'error') return false;
     if (this.filterSource() !== 'all' && entry.source !== this.filterSource()) return false;
     if (this.filterLevel() !== 'all' && entry.level !== this.filterLevel()) return false;
     return true;
@@ -134,7 +145,7 @@ export class LogService {
     this.flushTimer = window.setTimeout(() => {
       const batch = this.buffer.splice(0);
       this.flushTimer = undefined;
-      this.logsSignal.update(list => {
+      this.logsSignal.update((list) => {
         const merged = [...list, ...batch];
         // Cap at last 1500 entries
         return merged.length > 1500 ? merged.slice(merged.length - 1500) : merged;

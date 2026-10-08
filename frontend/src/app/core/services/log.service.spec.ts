@@ -156,6 +156,37 @@ describe('LogService', () => {
     expect(service.paused()).toBeTrue();
   });
 
+  it('combines the independent only-errors filter without replacing source or level', () => {
+    const browserError = entry('browser-error', { source: 'browser', level: 'error' });
+    const browserWarning = entry('browser-warning', { source: 'browser', level: 'warn' });
+    const browserInfo = entry('browser-info', { source: 'browser', level: 'info' });
+    const serverError = entry('server-error', { source: 'server', level: 'error' });
+
+    expect(service.onlyErrors()).toBeFalse();
+    service.setOnlyErrors(true);
+    expect(service.isVisible(browserError)).toBeTrue();
+    expect(service.isVisible(serverError)).toBeTrue();
+    expect(service.isVisible(browserWarning)).toBeFalse();
+    expect(service.isVisible(browserInfo)).toBeFalse();
+
+    service.setSourceFilter('browser');
+    service.setLevelFilter('warn');
+    expect(service.isVisible(browserWarning)).toBeFalse();
+    expect(service.isVisible(browserError)).toBeFalse();
+
+    service.setOnlyErrors(false);
+    expect(service.sourceFilter()).toBe('browser');
+    expect(service.levelFilter()).toBe('warn');
+    expect(service.isVisible(browserWarning)).toBeTrue();
+    expect(service.isVisible(browserError)).toBeFalse();
+
+    service.setLevelFilter('all');
+    expect(service.isVisible(browserError)).toBeTrue();
+    expect(service.isVisible(browserWarning)).toBeTrue();
+    expect(service.isVisible(browserInfo)).toBeTrue();
+    expect(service.isVisible(serverError)).toBeFalse();
+  });
+
   it('preserves a stable id and caps a flushed burst at 1500 entries', fakeAsync(() => {
     service.connect();
     http.expectOne(`${LOGS_API}?limit=500`).flush({ data: { logs: [] } });

@@ -1,4 +1,14 @@
-import { Component, inject, signal, OnInit, OnDestroy, AfterViewChecked, ElementRef, ViewChild, computed } from '@angular/core';
+import {
+  Component,
+  inject,
+  signal,
+  OnInit,
+  OnDestroy,
+  AfterViewChecked,
+  ElementRef,
+  ViewChild,
+  computed
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { clientTimeZone, formatTimePrecise, timeZoneLabel } from '../../core/time';
@@ -21,9 +31,9 @@ interface FilterOption<T extends string> {
 @Component({
   selector: 'app-logs',
   standalone: true,
-  imports: [
-    TranslatePipe,
-    CommonModule, FormsModule, ButtonComponent, IconComponent],
+  imports: [TranslatePipe, CommonModule, FormsModule, ButtonComponent, IconComponent],
+  // Keep the established embedded template formatting stable when the formatter runs.
+  // prettier-ignore
   template: `
     <div class="logs-page">
       <!-- Toolbar -->
@@ -73,6 +83,16 @@ interface FilterOption<T extends string> {
           >
             <option *ngFor="let opt of levelOptions" [value]="opt.value">{{ opt.labelKey | t }}</option>
           </select>
+
+          <label class="logs-only-errors" data-test="logs-only-errors-control">
+            <input
+              type="checkbox"
+              name="logs-only-errors"
+              [ngModel]="logService.onlyErrors()"
+              (ngModelChange)="logService.setOnlyErrors($event)"
+            />
+            <span>{{ 'logs.solo_errores' | t }}</span>
+          </label>
 
           <app-button
             [variant]="logService.paused() ? 'primary' : 'ghost'"
@@ -164,6 +184,7 @@ interface FilterOption<T extends string> {
       </div>
     </div>
   `,
+  // prettier-ignore
   styles: [`  /*
      * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
      *
@@ -220,6 +241,29 @@ interface FilterOption<T extends string> {
       gap: var(--space-2);
       flex-wrap: wrap;
       align-items: center;
+    }
+
+    .logs-only-errors {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      min-height: var(--button-control-height);
+      padding-inline: var(--space-2);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .logs-only-errors input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--primary);
+    }
+
+    .logs-only-errors input:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 3px;
     }
 
     /* Tres estados, no dos: «reintentando en 5 s» es accionable y «desconectado» a
@@ -468,7 +512,7 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   ];
 
   filtered = computed<LogEntry[]>(() =>
-    this.logService.logs().filter(e => this.logService.isVisible(e))
+    this.logService.logs().filter((e) => this.logService.isVisible(e))
   );
   visibleCount = computed(() => this.filtered().length);
   private lastLen = 0;
@@ -485,7 +529,7 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   selectedEntries = computed<LogEntry[]>(() => {
     const selected = this.selection();
     if (selected.size === 0) return [];
-    return this.filtered().filter(e => selected.has(this.keyOf(e)));
+    return this.filtered().filter((e) => selected.has(this.keyOf(e)));
   });
 
   /**
@@ -523,17 +567,18 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
     if (event.shiftKey && this.anchorIndex >= 0) {
       const from = Math.min(this.anchorIndex, index);
       const to = Math.max(this.anchorIndex, index);
-      const range = this.filtered().slice(from, to + 1).map(e => this.keyOf(e));
-      this.selection.update(current =>
-        add ? new Set([...current, ...range]) : new Set(range)
-      );
+      const range = this.filtered()
+        .slice(from, to + 1)
+        .map((e) => this.keyOf(e));
+      this.selection.update((current) => (add ? new Set([...current, ...range]) : new Set(range)));
       return;
     }
 
     if (add) {
-      this.selection.update(current => {
+      this.selection.update((current) => {
         const next = new Set(current);
-        if (next.has(key)) next.delete(key); else next.add(key);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
         return next;
       });
       this.anchorIndex = index;
@@ -557,19 +602,23 @@ export class LogsComponent implements OnInit, OnDestroy, AfterViewChecked {
   copyVisible(): void {
     const entries = this.hasSelection() ? this.selectedEntries() : this.filtered();
     if (entries.length === 0) {
-      this.toastService.info(this.i18n.t('logs.nada_que_copiar'), this.i18n.t('logs.no_hay_lineas_visibles'));
+      this.toastService.info(
+        this.i18n.t('logs.nada_que_copiar'),
+        this.i18n.t('logs.no_hay_lineas_visibles')
+      );
       return;
     }
 
-    const text = entries.map(e => this.formatEntry(e)).join('\n');
+    const text = entries.map((e) => this.formatEntry(e)).join('\n');
     this.clipboardService.copy(text).then(
-      () => this.toastService.success(
-        this.i18n.t('household.copiado'),
-        this.i18n.t(
-          entries.length === 1 ? 'logs.lineas_copiadas_uno' : 'logs.lineas_copiadas_varios',
-          { n: entries.length }
-        )
-      ),
+      () =>
+        this.toastService.success(
+          this.i18n.t('household.copiado'),
+          this.i18n.t(
+            entries.length === 1 ? 'logs.lineas_copiadas_uno' : 'logs.lineas_copiadas_varios',
+            { n: entries.length }
+          )
+        ),
       () => this.toastService.error(this.i18n.t('ui.error'), this.i18n.t('logs.no_se_pudo_copiar'))
     );
   }

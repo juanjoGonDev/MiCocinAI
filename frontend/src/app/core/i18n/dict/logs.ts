@@ -14,16 +14,19 @@ export const logsEs = {
   'logs.no_se_pudo_copiar': 'No se pudo copiar al portapapeles',
   'logs.fuente_filtro_label': 'Filtrar por fuente',
   'logs.nivel_filtro_label': 'Filtrar por nivel',
+  'logs.solo_errores': 'Solo errores',
   'logs.no_hay_lineas_visibles': 'No hay líneas visibles',
   'logs.nada_que_copiar': 'Nada que copiar',
   'logs.zona_detectada': 'Zona detectada: {zone}',
   'logs.terminal_de': 'HogarIA — terminal',
-  'logs.seleccion_en_el_terminal': '{n} línea(s) seleccionadas · Ctrl/Cmd o Mayús + clic para ajustar',
+  'logs.seleccion_en_el_terminal':
+    '{n} línea(s) seleccionadas · Ctrl/Cmd o Mayús + clic para ajustar',
   'logs.hora_de': 'hora de {zone}',
   'logs.copiar_todo': 'Copiar todo',
   'logs.copiar_seleccionado': 'Copiar seleccionado ({n})',
   'logs.autoscroll_estado': 'Auto-scroll: {state}',
-  'logs.clic_seleccionar_ctrl_cmd': 'Clic: seleccionar · Ctrl/Cmd: añadir o quitar · Mayús: seleccionar rango',
+  'logs.clic_seleccionar_ctrl_cmd':
+    'Clic: seleccionar · Ctrl/Cmd: añadir o quitar · Mayús: seleccionar rango',
   'logs.limpiar_seleccion': 'Limpiar selección',
   'logs.limpiar': 'Limpiar',
   'logs.reintentar_la_conexion': 'Reintentar la conexion',
@@ -41,7 +44,7 @@ export const logsEs = {
   'logs.estado_conectando': 'Conectando',
   'logs.estado_reintentando': 'Reintentando',
   'logs.estado_reintentando_en': 'Reintentando en {seconds} s',
-  'logs.estado_sinConexion': 'Sin conexion',
+  'logs.estado_sinConexion': 'Sin conexion'
 } as const;
 
 export const logsEn: Record<keyof typeof logsEs, string> = {
@@ -52,6 +55,7 @@ export const logsEn: Record<keyof typeof logsEs, string> = {
   'logs.no_se_pudo_copiar': 'Could not copy to the clipboard',
   'logs.fuente_filtro_label': 'Filter by log source',
   'logs.nivel_filtro_label': 'Filter by log level',
+  'logs.solo_errores': 'Only errors',
   'logs.no_hay_lineas_visibles': 'There are no visible lines',
   'logs.nada_que_copiar': 'Nothing to copy',
   'logs.zona_detectada': 'Detected time zone: {zone}',
@@ -61,7 +65,8 @@ export const logsEn: Record<keyof typeof logsEs, string> = {
   'logs.copiar_todo': 'Copy everything',
   'logs.copiar_seleccionado': 'Copy selection ({n})',
   'logs.autoscroll_estado': 'Auto-scroll: {state}',
-  'logs.clic_seleccionar_ctrl_cmd': 'Click: select · Ctrl/Cmd: add or remove · Shift: select a range',
+  'logs.clic_seleccionar_ctrl_cmd':
+    'Click: select · Ctrl/Cmd: add or remove · Shift: select a range',
   'logs.limpiar_seleccion': 'Clear selection',
   'logs.limpiar': 'Clear',
   'logs.reintentar_la_conexion': 'Try the connection again',
@@ -79,5 +84,5 @@ export const logsEn: Record<keyof typeof logsEs, string> = {
   'logs.estado_conectando': 'Connecting',
   'logs.estado_reintentando': 'Retrying',
   'logs.estado_reintentando_en': 'Retrying in {seconds} s',
-  'logs.estado_sinConexion': 'Offline',
+  'logs.estado_sinConexion': 'Offline'
 };
