@@ -24,6 +24,7 @@ import type { TranslationKey } from '../../core/i18n';
 import { I18nService } from '../../core/services/i18n.service';
 import { MAX_BCRYPT_PASSWORD_BYTES, newPasswordIssue } from '../../core/utils/password-policy';
 import { nameDraftIsDirty } from './account-name-draft';
+import { FocusErrorDirective } from './focus-error.directive';
 
 /**
  * La cuenta de la persona, en su propia pagina (HOGARIA-SPEC §12l).
@@ -58,7 +59,8 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
     ButtonComponent,
     IconComponent,
     ModalComponent,
-    AvatarEditorComponent
+    AvatarEditorComponent,
+    FocusErrorDirective
   ],
   template: `
     <div class="account-page">
@@ -236,6 +238,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
               *ngIf="passwordError()"
               id="account-password-error"
               role="alert"
+              [appFocusError]="!!passwordError()"
               data-test="account-password-error"
             >
               {{ passwordError() }}

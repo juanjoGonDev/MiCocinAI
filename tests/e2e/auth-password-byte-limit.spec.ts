@@ -45,11 +45,22 @@ async function capturePasswordError(
       viewport: window.innerWidth,
       viewportHeight: window.innerHeight,
       document: document.documentElement.scrollWidth,
+      scrollY: window.scrollY,
       alert: { top: alertRect.top, bottom: alertRect.bottom },
+      activeElementId: document.activeElement?.id ?? null,
+      alertTabIndex: alert.tabIndex,
+      alertScrollMarginStart: getComputedStyle(alert).scrollMarginBlockStart,
+      alertScrollMarginEnd: getComputedStyle(alert).scrollMarginBlockEnd,
       headerBottom: header?.bottom ?? 0,
       bottomNavTop: bottomNav?.top ?? window.innerHeight
     };
   }, name);
+  const screenshotPath = join(
+    directory,
+    `${name.replace(/[^a-z0-9-]/gi, '-')}-${language}-${viewport.width}x${viewport.height}.png`
+  );
+  await page.screenshot({ path: screenshotPath, animations: 'disabled' });
+
   expect(layout.viewport).toBe(viewport.width);
   expect(layout.viewportHeight).toBe(viewport.height);
   expect(layout.document, `no debe haber overflow a ${viewport.width}px`).toBeLessThanOrEqual(
@@ -57,19 +68,12 @@ async function capturePasswordError(
   );
   expect(
     layout.alert.top,
-    `el error debe estar visible a ${viewport.width}x${viewport.height}`
+    `el error debe estar visible a ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`
   ).toBeGreaterThanOrEqual(isMobile ? layout.headerBottom : 0);
   expect(
     layout.alert.bottom,
-    `el error no debe quedar bajo la barra inferior a ${viewport.width}x${viewport.height}`
+    `el error no debe quedar bajo la barra inferior a ${viewport.width}x${viewport.height}: ${JSON.stringify(layout)}`
   ).toBeLessThanOrEqual(isMobile ? layout.bottomNavTop : layout.viewportHeight);
-  await page.screenshot({
-    path: join(
-      directory,
-      `${name.replace(/[^a-z0-9-]/gi, '-')}-${language}-${viewport.width}x${viewport.height}.png`
-    ),
-    animations: 'disabled'
-  });
 }
 
 test.describe('límite de bytes UTF-8 para contraseñas nuevas', () => {
@@ -165,6 +169,7 @@ test.describe('límite de bytes UTF-8 para contraseñas nuevas', () => {
           language === 'es' ? 'no puede superar 72 bytes' : 'cannot exceed 72 bytes'
         );
         await expect(error).toHaveAttribute('role', 'alert');
+        await expect(error).toBeFocused();
         const accountPasswordDescription = await page
           .locator('[data-test="account-password-new"]')
           .getAttribute('aria-describedby');
