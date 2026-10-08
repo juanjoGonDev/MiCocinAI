@@ -8,24 +8,19 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
 @Component({
   selector: 'app-timer',
   standalone: true,
-  imports: [
-    TranslatePipe,
-    CommonModule, ButtonComponent],
+  imports: [TranslatePipe, CommonModule, ButtonComponent],
   template: `
-    <div [class]="getClasses()">
+    <div [class]="getClasses()" role="timer" [attr.aria-label]="label || null" aria-live="off">
       <span *ngIf="label" class="timer__label">{{ label }}</span>
-      
+
       <div class="timer__display">
         {{ formatTime(currentTime) }}
       </div>
-      
+
       <div class="timer__progress">
-        <div 
-          class="timer__progress-bar" 
-          [style.width.%]="progress"
-        ></div>
+        <div class="timer__progress-bar" [style.width.%]="progress"></div>
       </div>
-      
+
       <div class="timer__controls">
         <app-button
           *ngIf="state === 'idle' || state === 'paused'"
@@ -35,92 +30,89 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
         >
           {{ (state === 'paused' ? 'ui.reanudar' : 'ui.iniciar') | t }}
         </app-button>
-        
-        <app-button
-          *ngIf="state === 'running'"
-          variant="outline"
-          size="sm"
-          (onClick)="pause()"
-        >
+
+        <app-button *ngIf="state === 'running'" variant="outline" size="sm" (onClick)="pause()">
           {{ 'ui.pausar' | t }}
         </app-button>
-        
-        <app-button
-          *ngIf="state !== 'idle'"
-          variant="ghost"
-          size="sm"
-          (onClick)="reset()"
-        >
+
+        <app-button *ngIf="state !== 'idle'" variant="ghost" size="sm" (onClick)="reset()">
           {{ 'ui.reiniciar' | t }}
         </app-button>
       </div>
     </div>
   `,
-  styles: [`
-    .timer {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: var(--space-4);
-      padding: var(--space-6);
-      background: var(--bg-secondary);
-      border-radius: var(--radius-2xl);
-      box-shadow: var(--shadow-lg);
-    }
+  styles: [
+    `
+      .timer {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--space-4);
+        padding: var(--space-6);
+        background: var(--bg-secondary);
+        border-radius: var(--radius-2xl);
+        box-shadow: var(--shadow-lg);
+      }
 
-    .timer__label {
-      font-size: var(--text-sm);
-      color: var(--text-secondary);
-      text-align: center;
-    }
+      .timer__label {
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+        text-align: center;
+      }
 
-    .timer__display {
-      font-family: var(--font-mono);
-      font-size: var(--text-5xl);
-      font-weight: var(--font-bold);
-      color: var(--text-primary);
-      letter-spacing: var(--tracking-wide);
-    }
+      .timer__display {
+        font-family: var(--font-mono);
+        font-size: var(--text-5xl);
+        font-weight: var(--font-bold);
+        color: var(--text-primary);
+        letter-spacing: var(--tracking-wide);
+      }
 
-    .timer__progress {
-      width: 100%;
-      height: 4px;
-      background: var(--bg-tertiary);
-      border-radius: var(--radius-full);
-      overflow: hidden;
-    }
+      .timer__progress {
+        width: 100%;
+        height: 4px;
+        background: var(--bg-tertiary);
+        border-radius: var(--radius-full);
+        overflow: hidden;
+      }
 
-    .timer__progress-bar {
-      height: 100%;
-      background: var(--primary);
-      border-radius: var(--radius-full);
-      transition: width 1s linear;
-    }
+      .timer__progress-bar {
+        height: 100%;
+        background: var(--primary);
+        border-radius: var(--radius-full);
+        transition: width 1s linear;
+      }
 
-    .timer__controls {
-      display: flex;
-      gap: var(--space-3);
-    }
+      .timer__controls {
+        display: flex;
+        gap: var(--space-3);
+      }
 
-    /* States */
-    .timer--running .timer__display {
-      color: var(--primary);
-    }
+      /* States */
+      .timer--running .timer__display {
+        color: var(--primary);
+      }
 
-    .timer--paused .timer__display {
-      color: var(--warning);
-    }
+      .timer--paused .timer__display {
+        color: var(--warning);
+      }
 
-    .timer--finished .timer__display {
-      color: var(--success);
-      animation: pulse 1s infinite;
-    }
+      .timer--finished .timer__display {
+        color: var(--success);
+        animation: pulse 1s infinite;
+      }
 
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-  `]
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.5;
+        }
+      }
+    `
+  ]
 })
 export class TimerComponent implements OnInit, OnDestroy {
   @Input() duration = 0; // in seconds

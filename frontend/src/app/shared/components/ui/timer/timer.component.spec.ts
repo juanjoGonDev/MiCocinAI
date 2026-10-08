@@ -25,6 +25,16 @@ describe('TimerComponent', () => {
     expect(component.state).toBe('idle');
   });
 
+  it('exposes a named, non-live timer region for assistive technology', () => {
+    component.label = 'Temporizador del paso 1';
+    fixture.detectChanges();
+
+    const timer = fixture.nativeElement.querySelector('[role="timer"]') as HTMLElement | null;
+    expect(timer).not.toBeNull();
+    expect(timer?.getAttribute('aria-label')).toBe('Temporizador del paso 1');
+    expect(timer?.getAttribute('aria-live')).toBe('off');
+  });
+
   it('should format time correctly', () => {
     expect(component.formatTime(0)).toBe('00:00');
     expect(component.formatTime(30)).toBe('00:30');
@@ -88,6 +98,24 @@ describe('TimerComponent', () => {
 
     expect(component.state).toBe('finished');
     expect(component.currentTime).toBe(0);
+  }));
+
+  it('restarts a completed timer from its full duration', fakeAsync(() => {
+    component.duration = 1;
+    component.currentTime = 1;
+    component.start();
+    tick(1000);
+
+    expect(component.state).toBe('finished');
+
+    const reset = spyOn(component, 'reset').and.callThrough();
+    component.start();
+
+    expect(component.state).toBe('running');
+    expect(component.currentTime).toBe(1);
+    expect(reset).toHaveBeenCalledTimes(1);
+    tick(1000);
+    expect(component.state).toBe('finished');
   }));
 
   it('should emit timerStart', fakeAsync(() => {
@@ -155,6 +183,16 @@ describe('TimerComponent', () => {
     component['calculateProgress']();
 
     expect(component.progress).toBe(50);
+  });
+
+  it('keeps progress at zero for a zero-duration timer', () => {
+    component.duration = 0;
+    component.currentTime = 0;
+    component.progress = 50;
+
+    component['calculateProgress']();
+
+    expect(component.progress).toBe(0);
   });
 
   it('should have 100% progress when finished', fakeAsync(() => {

@@ -3016,3 +3016,49 @@ scripts/run-isolated-playwright.mjs --project=chromium --shard=2/4 --forbid-only
 
 **Rollback:** revertir el commit dedicado a esta subunidad conserva la evidencia CI previa; no hay
 cambios de esquema ni migraciones.
+
+### Unidad QA-RECIPES.TIMER-CONTROLS.1 · temporizador interactivo en la ficha
+
+**Fuente revalidada (2026-10-08):** `HOGARIA-SPEC.md` §QA-RECIPE.FULL-DETAIL-VIEW.1 requiere
+temporizadores por paso. `recipes.component.ts` monta `app-timer` cuando un paso declara duración de
+temporizador; `TimerComponent` ya implementa iniciar, pausar, reanudar, completar y reiniciar y su
+spec unitario cubría su estado interno, pero ninguna E2E visible comprobaba la integración. Además,
+el temporizador no exponía un rol/nombre accesible y su etiqueta española decía «Timer paso».
+
+**Contrato de prueba:** una receta sintética guardada con un paso cronometrado presenta el tiempo
+inicial y una acción accesible de inicio; pausar detiene el contador, reanudar continúa el tiempo
+restante, llegar a cero muestra el estado completado y reiniciar vuelve al tiempo inicial. La prueba
+controla el reloj del navegador, no espera un minuto real, no contacta al proveedor IA y no persiste
+cambios en la receta.
+
+- [x] Añadir primero una E2E de navegador contra receta guardada en SQLite aislada que valide iniciar
+      con teclado/Enter, pausa sin decrementos, reanudación, finalización exacta, reinicio y nombres
+      accesibles de temporizador y controles en Chromium escritorio y Pixel 5.
+- [x] Comprobar en 1440×900, 393×851, 320×568 y 568×320 que no hay overflow/recorte y que los
+      controles táctiles miden ≥44×44 CSS px; el fixture sintético se persiste y elimina en su propia
+      base aislada, sin tocar receta ajena.
+- [x] Reproducir primero en E2E y unidad que faltaba el rol/nombre accesible; añadir `role="timer"`,
+      nombre ES/EN y `aria-live="off"`, y corregir la etiqueta del paso ES/EN sin cambiar el flujo.
+- [x] Ejecutar prueba focal y suite frontend, `typecheck:e2e`, `check:ui`, Prettier, build de
+      producción y `git diff --check`; mantener ≥70 % S/B/F/L por archivo y capturas sintéticas
+      comparables de PC/móvil.
+- [x] Documentar evidencia y rollback sin marcar completa la checklist global `/recipes` mientras
+      falten los demás flujos.
+
+**Evidencia (2026-10-08):** TDD reprodujo el fallo primero: la E2E no encontraba un temporizador
+con nombre accesible y la unidad quedó en **19/20** por ausencia de `role="timer"`. La suite unitaria
+focal pasó **22/22**; la cobertura aislada del componente da **100/100/100/100 % S/B/F/L**
+(51/51 sentencias y líneas, 5/5 ramas, 12/12 funciones). `dict/recipes.ts` da 100 % (2/2
+sentencias/líneas; 0 ramas/funciones). `pnpm run test:client` pasó **1198/1198** y el gate global
+fue **90,31/81,44/88,95/91,75 % S/B/F/L**. E2E aislada con `E2E_RATE_LIMIT=on`, SQLite y puerto
+temporal pasó **2/2** (Chromium y Pixel 5), sin IA real; verifica estado inicial, pausa, reanudación,
+fin, reinicio, Enter, overflow y geometría de los controles. Al añadir el caso de teclado una primera
+repetición reveló avance de reloj en tiempo real durante la interacción; se fijó y pausó el reloj de
+Playwright para hacer el tiempo determinista y la repetición pasó. El runner limpió datos/servidor.
+`typecheck:e2e`, `check:ui` (**210 ficheros, 21 reglas**), Prettier focal, `pnpm run build:client`
+y `git diff --check` pasan; el build solo conserva avisos de budgets/imports preexistentes. Capturas
+sintéticas inspeccionadas e ignoradas por Git: `.e2e-screenshots/qa-recipe-timer-controls/`
+`{chromium,mobile-chrome}-{idle,finished}.png`.
+
+**Rollback:** revertir el commit atómico de esta unidad (`TimerComponent`, diccionario, regresión
+unitaria/E2E y esta sección); no revertir evidencia o commits anteriores.
