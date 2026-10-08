@@ -518,10 +518,16 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Conducta esperada:** cualquier ficha válida del hogar abre directamente su editor desde `/pantry/products/:id`, incluso cuando queda fuera de la primera página. Un id ausente conserva la salida segura a la lista. Usar solo el hogar/SQLite aislados de la prueba; no llamar a IA ni crear datos en el servidor normal.
 
-- [ ] Añadir primero una regresión Playwright que aumente la colección sintética hasta más de 100 productos, obtenga por API un id de la página siguiente y navegue directamente a esa URL; reproducir que la implementación actual vuelve a la lista.
-- [ ] Cambiar la resolución de la ficha para reutilizar `PantryService.getProduct(id)`; conservar el redireccionamiento a la lista al recibir `null`/404.
-- [ ] Verificar el deep link en Chromium escritorio y Pixel 5, junto con el caso de id inexistente, sin errores de página ni escrituras fuera del fixture propio.
-- [ ] Guardar/inspeccionar una captura sintética de la ficha en PC y móvil; ejecutar E2E aislado, regresión unitaria de `getProduct`, typecheck, formato, `check:ui`, build y coverage del alcance sin bajar gates.
+- [x] Añadir primero una regresión Playwright que aumente la colección sintética hasta más de 100 productos, obtenga por API un id de la página siguiente y navegue directamente a esa URL; reproducir que la implementación actual vuelve a la lista.
+- [x] Cambiar la resolución de la ficha para reutilizar `PantryService.getProduct(id)`; conservar el redireccionamiento a la lista al recibir `null`/404.
+- [x] Verificar el deep link en Chromium escritorio y Pixel 5, junto con el caso de id inexistente, sin errores de página ni escrituras fuera del fixture propio.
+- [x] Guardar/inspeccionar una captura sintética de la ficha en PC y móvil; ejecutar E2E aislado, regresión unitaria de `getProduct`, typecheck, formato, `check:ui`, build y coverage del alcance sin bajar gates.
+
+**TDD rojo → verde (2026-10-08):** `pantry-product-deep-link.spec.ts` registra un hogar/SQLite aislado, crea 40 productos sintéticos por API y elige uno real del catálogo con offset ≥100. Antes del cambio, Chromium reproduce el fallo: la URL válida se resuelve como lista y no aparece el campo de nombre para `ZZ QA Deep Link Product 032`. `PantryProductsComponent.buscarPorId()` ahora consulta el endpoint de detalle ya existente a través de `PantryService.getProduct()`; si devuelve `null`, conserva la vuelta a la lista.
+
+**Evidencia final (2026-10-08):** el Playwright aislado, con limitador activo y Chrome local, pasa **2/2** en Chromium escritorio (1440×900) y Pixel 5 (393×851): abre y muestra el producto de la segunda página, un id inexistente vuelve a `/pantry/products`, la CTA queda visible dentro del viewport y por encima de la navegación fija móvil, y no hay errores de página. El runner confirmó SQLite/puertos/semilla temporales y limpieza al acabar. Capturas sintéticas inspeccionadas e ignoradas por Git: `.e2e-screenshots/qa-pantry-product-deep-link-1/{chromium,mobile-chrome}/ficha-producto-cta.png`.
+
+`ng test` focal `pantry.service.spec.ts`: **35/35**; cobertura de `getProduct` en el último `lcov.info`: **100/100/100/100 % S/B/F/L**. `pnpm run test:client`: **1206/1206**, cobertura global **90.37/81.51/89.07/91.79 % S/B/F/L**, por encima del gate 80. También pasan `pnpm run typecheck:e2e`, `pnpm run check:ui` (**210 ficheros/21 reglas**), `pnpm run build:client`, Prettier focal y `git diff --check`. Build mantiene warnings previos de imports, bundle y CSS; no se cambiaron budgets.
 
 **Rollback previsto:** revertir juntos el cambio en `pantry-products.component.ts`, `tests/e2e/pantry-product-deep-link.spec.ts` y este subapartado; preservar el endpoint y cobertura ya existentes de `PantryService.getProduct`.
 

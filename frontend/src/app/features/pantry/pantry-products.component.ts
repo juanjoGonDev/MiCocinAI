@@ -1293,8 +1293,7 @@ export class PantryProductsComponent implements OnInit {
   }
 
   private async buscarPorId(id: string): Promise<void> {
-    const resultado = await this.pantry.listProducts({ filter: 'all', limit: 100 });
-    const fila = resultado?.data.find((candidata) => candidata.id === id);
+    const fila = await this.pantry.getProduct(id);
     if (!fila) {
       await this.router.navigate(['../'], { relativeTo: this.route });
       return;
