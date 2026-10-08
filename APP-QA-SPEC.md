@@ -2253,9 +2253,9 @@ latencias/uso/coste agregados, sin tienda, artículos, importes ni fechas person
       pasos utilizables y contenido `basic`/`intermediate`/`expert` no vacío. La receta múltiple recibe
       ingredientes variados y devuelve 2 borradores distintos; la planificación transmite más de un
       objetivo y texto custom cuando están seleccionados, sin reducirlos a una sola preferencia.
-- [ ] Admitir exactamente los seis archivos PDF/JPEG de la carpeta indicada (dos PDF y cuatro JPEG),
+- [x] Admitir exactamente los seis archivos PDF/JPEG de la carpeta indicada (dos PDF y cuatro JPEG),
       comprobar firma real y límite de 10 MiB antes de subir; no seguir enlaces ni leer carpetas hijas.
-- [ ] Tratar los dos PDF como tickets independientes y la JPEG que el usuario identifica como más clara
+- [x] Tratar los dos PDF como tickets independientes y la JPEG que el usuario identifica como más clara
       por separado; agrupar las tres fotos restantes, ordenadas por nombre, en un PDF multipágina temporal
       en memoria para analizarlas como un único ticket largo. Así se prueba el solape entre tramos sin
       crear tickets o productos repetidos por procesar cada foto de forma independiente.
@@ -2282,10 +2282,10 @@ latencias/uso/coste agregados, sin tienda, artículos, importes ni fechas person
       y [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 - [ ] Verificar en UI aislada estado/reconocimiento, campos editables, guardado y aparición en historial;
       no confirmar los tickets ni tocar despensa/inventario. Usar nombres genéricos al subir.
-- [ ] Mantener cuerpos/sesiones/diagnóstico sin captura, Playwright sin screenshot/trace/video/reportes
+- [x] Mantener cuerpos/sesiones/diagnóstico sin captura, Playwright sin screenshot/trace/video/reportes
       con contenido, y stdout/errores limitados a estado y métricas agregadas; no conservar nombres,
       tiendas, artículos, importes, fechas, imágenes, prompts ni respuestas.
-- [ ] Confirmar cierre de app/procesos/puertos, borrado de token propio y limpieza de SQLite/uploads/
+- [x] Confirmar cierre de app/procesos/puertos, borrado de token propio y limpieza de SQLite/uploads/
       artefactos temporales antes de marcar verde; abortar ante privacidad insegura o cleanup no verificado.
 
 **Evidencia QA-AI.REAL-INTEGRATIONS.1 (2026-10-08):** `node --test scripts/ai-live-existing-webapi.test.mjs
@@ -2352,9 +2352,36 @@ El primer setup fallido no consumió el presupuesto ni alcanzó archivos/proveed
 lote cuando pase el preflight de privacidad. Solo se registrarán estado y métricas agregadas, con el
 cleanup ya existente.
 
-- [ ] Repetir una sola vez el lote exacto de seis archivos/cuatro tickets sobre el payload actualizado;
-      marcar como validado solo si termina la revisión, edición/guardado/historial en UI y cleanup, sin
-      duplicados en las tres fotos solapadas. Si falla, conservar el fallo y no ampliar el presupuesto.
+- [ ] Completar satisfactoriamente la única repetición autorizada del lote exacto de seis archivos/cuatro
+      tickets sobre el payload actualizado: revisión, edición/guardado/historial en UI y cleanup, sin
+      duplicados en las tres fotos solapadas. El intento del 2026-10-08 falló; no repetir ni ampliar
+      presupuesto.
+
+**Diagnóstico seguro del intento único (2026-10-08):** el preflight y los ajustes de privacidad volvieron
+a pasar; se leyó el log local con extracción allowlist, sin volcar cuerpos, prompts, respuestas, nombres
+ni datos del ticket. Se consumieron **6/8 completions**: las tres peticiones streaming dieron HTTP 400;
+los fallbacks no-stream de los dos PDF dieron HTTP 200 y el de la JPEG preferida dio HTTP 500. Los
+diagnósticos de WebAPI (HEAD `fd00bfd3`) muestran dos adjuntos recibidos en cada flujo de subida: los
+dos PDF completaron la subida; para la JPEG el flujo terminó en `upload_failed`,
+`attachment_cleanup_failed` (HTTP 500, `cleanupOutcome=failure`) después de aproximadamente 54 s.
+El flujo de prompt quedó en `upload_attachments` → `turn_failed`, sin `prompt_submitted`; esto confirma
+que los dos adjuntos alcanzaron el uploader de WebAPI, pero **no** que el modelo recibiera o leyera la
+foto junto con el inventario. El fallo está en la recuperación/limpieza del uploader de WebAPI ante la
+subida fallida, no en que MiCocinAI omitiera un segundo adjunto. No se hicieron reintentos manuales ni
+se confirmaron compras al inventario; el cuarto ticket no se procesó. El coordinador no informó fallo
+al borrar el token propio y no quedó una carpeta `hogaria-e2e-*` reciente. La única repetición queda
+consumida: no enviar de nuevo los tickets reales en esta subunidad.
+
+**Preparación y cleanup:** el coordinador validó en memoria seis archivos regulares (2 PDF, 4 JPEG),
+firmas y límites; formó cuatro tickets: cada PDF, la JPEG preferida y las otras tres fotos en un PDF
+multipágina. No se escribieron copias permanentes ni nombres en evidencia. El preflight observó
+`maxBodyChars=0`, `maxHeaderValueChars=0`, `maxHeaders=0`, grabación de sesión y diagnóstico HTML
+desactivados; Playwright tiene screenshot/trace/video apagados y el coordinador solo emitió fases y
+métricas. Al terminar, no reportó fallo de limpieza del token/proxy y el runner confirmó cierre de la
+app/puertos y eliminación de su directorio SQLite/uploads temporal antes de devolver el resultado rojo.
+
+**Rollback del registro:** revertir solo este bloque diagnóstico/preparación y la actualización de
+checklist; no alterar el transporte probado ni los datos reales.
 
 **Registro de fallo aportado (2026-10-08):** OpenCode recibió un mensaje con el marcador antiguo
 `INVENTARIO_JSON_ACTUAL:` vacío y `attachmentCount: 1`; la versión actual de MiCocinAI pide leer el
