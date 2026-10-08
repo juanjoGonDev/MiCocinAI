@@ -165,7 +165,9 @@ describe('initializeDatabase con fichero heredado', () => {
     } finally {
       mod.closeDatabase();
     }
-  });
+    // La inicializacion ejecuta muchas migraciones historicas y puede superar el
+    // timeout por defecto mientras corre el resto de la suite en paralelo.
+  }, 30_000);
 
   it('anade purchase_date a recibos antiguos sin inventar una fecha de compra', async () => {
     const databaseFile = target();

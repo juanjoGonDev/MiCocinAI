@@ -527,6 +527,18 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Rollback:** retirar solo la nueva E2E y esta subunidad; preservar los gestores, contratos de API y demás pruebas existentes.
 
+### QA-PANTRY.MANAGERS.ALIAS-CLASH.1 · error de alias duplicado en el alta principal
+
+**Fuente revalidada (2026-10-08):** `HOGARIA-SPEC.md` §12x usa aliases como claves de búsqueda del producto, no como una ficha nueva. `normalizarAlias()` impide vacío, repetición dentro de la ficha o alias igual al nombre del mismo producto; no conoce el resto del catálogo. `POST /api/pantry/products` ya devuelve 409 `PANTRY_PRODUCT_ALIAS_CLASH` si un alias nuevo coincide con el nombre de otra ficha; `PantryProductsComponent.frase()` traduce ese código a un mensaje localizado. `pantry-item.spec.ts` ya cubre el mismo error en la edición dedicada del inventario, pero no el formulario de alta `/pantry/products/new`, donde una respuesta fallida debe conservar la ficha que la persona estaba registrando.
+
+**Contrato:** crear por UI un producto sintético propio y, desde un segundo alta, proponer su nombre como alias. El servidor rechaza el conflicto con 409; la ficha de alta no navega ni se guarda, expone el error accesible esperado y conserva nombre y alias para corregirlos. La primera ficha no cambia. Usar Chromium y Pixel 5 sobre la SQLite temporal del runner, con rate limit activo; sin IA/WebAPI, catálogo global ni datos reales.
+
+- [ ] Añadir E2E primero contra `/pantry/products/new`; verificar POST 409, `role=alert`, ruta/borrador conservados y que el producto existente sigue siendo el único resultado tras F5. Registrar rojo baseline si la UI pierde mensaje o borrador.
+- [ ] Ejecutar en Chromium y Pixel 5, typecheck E2E, Prettier, `check:ui`, build y `git diff --check`; confirmar aislamiento/cleanup. No hay cambio productivo previsto, coverage N/A y capturas comparables N/A salvo que se corrija presentación.
+- [ ] Actualizar evidencia y rollback, commit atómico con todos los hooks y push a la rama del PR; verificar los jobs del SHA sin mergear.
+
+**Rollback:** retirar el E2E y esta subunidad; no tocar la normalización/API de aliases ni la edición de producto ya cubierta.
+
 ### QA-PANTRY.PRODUCT.DEEP-LINK.1 · ficha directa de productos más allá de la primera página
 
 **Fuente revalidada (2026-10-08):** el contrato activo `HOGARIA-SPEC.md` §12x dice que la ficha del producto vive en su URL para sobrevivir a F5, y el API ya expone `GET /api/pantry/products/:id`. `PantryService.getProduct(id)` consume esa ruta y su caso 200/404/503 está probado. Sin embargo, `PantryProductsComponent.buscarPorId()` ignora ese contrato y obtiene una sola página de `listProducts({ filter: 'all', limit: 100 })`; si la ficha no está entre las primeras 100, trata un id válido como inexistente y vuelve a la lista. El gestor sí pagina toda la colección hasta el límite establecido de 2.000.
