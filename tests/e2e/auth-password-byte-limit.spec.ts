@@ -112,8 +112,8 @@ test.describe('límite de bytes UTF-8 para contraseñas nuevas', () => {
         const passwordError = page.locator('#password-error');
         await expect(passwordError).toHaveText(
           language === 'es'
-            ? 'La contraseña es demasiado larga. Acórtala e inténtalo de nuevo.'
-            : 'The password is too long. Shorten it and try again.'
+            ? 'La contraseña que has escrito no se puede guardar porque es demasiado larga. Prueba con una más corta.'
+            : 'The password you entered is too long to save. Try a shorter one.'
         );
         await expect(passwordError).not.toContainText(/bytes?|UTF-8/i);
         const registerPasswordDescription = await page
@@ -178,8 +178,9 @@ test.describe('límite de bytes UTF-8 para contraseñas nuevas', () => {
 
         await expect(error).toHaveText(
           language === 'es'
-            ? 'La contraseña es demasiado larga. Acórtala e inténtalo de nuevo.'
-            : 'The password is too long. Shorten it and try again.'
+            ? 'La contraseña que has escrito no se puede guardar porque es demasiado larga. Prueba con una más corta.'
+            : 'The password you entered is too long to save. Try a shorter one.',
+          { useInnerText: true }
         );
         await expect(error).not.toContainText(/bytes?|UTF-8/i);
         await expect(error).toHaveAttribute('role', 'alert');

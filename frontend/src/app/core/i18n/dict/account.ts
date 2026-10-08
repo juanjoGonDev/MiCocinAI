@@ -7,7 +7,7 @@ export const accountEs = {
   'account.la_nueva_contrasena_necesita':
     'La nueva contrasena necesita seis caracteres, una mayuscula y un numero.',
   'account.password_max_72_bytes':
-    'La contraseña es demasiado larga. Acórtala e inténtalo de nuevo.',
+    'La contraseña que has escrito no se puede guardar porque es demasiado larga. Prueba con una más corta.',
   'account.password_max_72_bytes_hint':
     'Si aparece un aviso de longitud, prueba con una contraseña más corta.',
   'account.falta_la_contrasena_actual': 'Falta la contrasena actual.',
@@ -93,7 +93,8 @@ export const accountEn: Record<keyof typeof accountEs, string> = {
   'account.las_dos_contrasenas_nuevas': 'The two new passwords do not match.',
   'account.la_nueva_contrasena_necesita':
     'The new password needs six characters, one uppercase letter and one number.',
-  'account.password_max_72_bytes': 'The password is too long. Shorten it and try again.',
+  'account.password_max_72_bytes':
+    'The password you entered is too long to save. Try a shorter one.',
   'account.password_max_72_bytes_hint': 'If you see a length warning, try a shorter password.',
   'account.falta_la_contrasena_actual': 'The current password is missing.',
   'account.no_se_pudo_guardar': 'Could not save the name. Try again.',

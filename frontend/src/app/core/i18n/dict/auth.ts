@@ -10,7 +10,8 @@ export const authEs = {
   'auth.la_contrasena_debe_tener': 'La contraseña debe tener al menos 6 caracteres',
   'auth.la_contrasena_necesita_mayuscula': 'La contraseña debe incluir una mayúscula',
   'auth.la_contrasena_necesita_numero': 'La contraseña debe incluir un número',
-  'auth.password_max_72_bytes': 'La contraseña es demasiado larga. Acórtala e inténtalo de nuevo.',
+  'auth.password_max_72_bytes':
+    'La contraseña que has escrito no se puede guardar porque es demasiado larga. Prueba con una más corta.',
   'auth.el_nombre_es_requerido': 'El nombre es requerido',
   'auth.el_nombre_debe_tener': 'El nombre debe tener al menos 2 caracteres',
   'auth.el_nombre_no_puede_superar': 'El nombre no puede superar los 100 caracteres',
@@ -61,7 +62,7 @@ export const authEn: Record<keyof typeof authEs, string> = {
   'auth.la_contrasena_debe_tener': 'Password must be at least 6 characters',
   'auth.la_contrasena_necesita_mayuscula': 'Password must include an uppercase letter',
   'auth.la_contrasena_necesita_numero': 'Password must include a number',
-  'auth.password_max_72_bytes': 'The password is too long. Shorten it and try again.',
+  'auth.password_max_72_bytes': 'The password you entered is too long to save. Try a shorter one.',
   'auth.el_nombre_es_requerido': 'Name is required',
   'auth.el_nombre_debe_tener': 'Name must be at least 2 characters',
   'auth.el_nombre_no_puede_superar': 'Name cannot exceed 100 characters',
