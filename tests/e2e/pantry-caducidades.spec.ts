@@ -280,4 +280,132 @@ test.describe('las caducidades de la despensa (## 12ak)', () => {
     await page.getByRole('button', { name: /Planificar IA/ }).click();
     await expect(page.locator('[data-test="gen-caducidades"]')).toContainText('Yogur natural');
   });
+
+  test('ordena por caducidad, nombre y duración, y vuelve al inventario', async ({
+    page
+  }, testInfo) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    const rows = [
+      {
+        id: 'qa-expiry-zeta',
+        name: 'Zanahoria',
+        category: 'other',
+        quantity: 2,
+        unit: 'ud',
+        expirationDate: dia(2),
+        estimatedDays: null,
+        shelfSource: 'fecha',
+        vence: dia(2),
+        daysLeft: 2,
+        cadaDias: null,
+        unidadesPorCompra: null,
+        duraDias: 20,
+        lastBought: null
+      },
+      {
+        id: 'qa-expiry-uva',
+        name: 'Uva',
+        category: 'other',
+        quantity: 2,
+        unit: 'ud',
+        expirationDate: dia(-1),
+        estimatedDays: null,
+        shelfSource: 'fecha',
+        vence: dia(-1),
+        daysLeft: -1,
+        cadaDias: null,
+        unidadesPorCompra: null,
+        duraDias: 30,
+        lastBought: null
+      },
+      {
+        id: 'qa-expiry-manzana',
+        name: 'Manzana',
+        category: 'other',
+        quantity: 2,
+        unit: 'ud',
+        expirationDate: dia(5),
+        estimatedDays: null,
+        shelfSource: 'fecha',
+        vence: dia(5),
+        daysLeft: 5,
+        cadaDias: null,
+        unidadesPorCompra: null,
+        duraDias: 10,
+        lastBought: null
+      },
+      {
+        id: 'qa-expiry-sin-fecha',
+        name: 'Sin fecha',
+        category: 'other',
+        quantity: 2,
+        unit: 'ud',
+        expirationDate: null,
+        estimatedDays: null,
+        shelfSource: null,
+        vence: null,
+        daysLeft: null,
+        cadaDias: null,
+        unidadesPorCompra: null,
+        duraDias: null,
+        lastBought: null
+      }
+    ];
+
+    await page.route('**/api/pantry/expiry', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: true, data: rows })
+      });
+    });
+
+    await registerAndGoto(page, '/pantry/caducidades', 'qa-expiry-route-audit');
+    const mobile = testInfo.project.name === 'mobile-chrome';
+    const viewport = mobile ? { width: 393, height: 851 } : { width: 1440, height: 900 };
+    await page.setViewportSize(viewport);
+    await expect(filaDe(page)).toHaveCount(4);
+
+    const names = () =>
+      page.locator('[data-test^="cad-fila-"] .cad-tabla__nombre').allTextContents();
+    await expect.poll(names).toEqual(['Uva', 'Zanahoria', 'Manzana', 'Sin fecha']);
+
+    const sortByExpiry = page.getByRole('button', { name: 'Ordenar por Caduca' });
+    const sortByName = page.getByRole('button', { name: 'Ordenar por Producto' });
+    const sortByDuration = page.getByRole('button', { name: 'Ordenar por El stock dura' });
+    await expect(sortByExpiry).toBeVisible();
+    await expect(sortByName).toBeVisible();
+    await expect(sortByDuration).toBeVisible();
+
+    const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+    if (screenshotDirectory) {
+      const projectDirectory = join(screenshotDirectory, testInfo.project.name);
+      mkdirSync(projectDirectory, { recursive: true });
+      await page.screenshot({
+        path: join(projectDirectory, `expiry-route-${viewport.width}x${viewport.height}.png`),
+        fullPage: true,
+        animations: 'disabled'
+      });
+    }
+
+    await sortByExpiry.focus();
+    await page.keyboard.press('Enter');
+    await expect.poll(names).toEqual(['Manzana', 'Zanahoria', 'Uva', 'Sin fecha']);
+    await sortByName.click();
+    await expect.poll(names).toEqual(['Manzana', 'Sin fecha', 'Uva', 'Zanahoria']);
+    await sortByDuration.click();
+    await expect.poll(names).toEqual(['Sin fecha', 'Manzana', 'Zanahoria', 'Uva']);
+
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(scrollWidth).toBeLessThanOrEqual(viewport.width);
+    await page.getByRole('link', { name: 'Volver al inventario' }).click();
+    await expect(page).toHaveURL(/\/pantry$/);
+    await expect(page.locator('[data-test="pantry-caducidades"]')).toBeVisible();
+    expect(pageErrors).toEqual([]);
+  });
 });

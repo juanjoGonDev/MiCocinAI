@@ -449,6 +449,20 @@ Playwright real con `E2E_SCOPE=all`, rate limit activo, servidor de producción 
 
 Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Prettier focal y `git diff --check`: pasan. El build conserva avisos previos de bundle (697.57 KB frente al presupuesto de aviso de 500 KB), estilos e imports; no se alteraron budgets. Capturas sintéticas PC/móvil inspeccionadas: `.e2e-screenshots/qa-pantry-2/current/desktop/expiry-load-error-chromium-1440x900.png`, `.e2e-screenshots/qa-pantry-2/current/mobile/expiry-load-error-mobile-chrome-320x740.png` y `.../expiry-load-error-mobile-chrome-393x851.png`. Rollback: revertir el commit atómico de QA-PANTRY.2.
 
+### QA-PANTRY.EXPIRY.ROUTE.1 · cerrar ordenamientos y retorno de caducidades (en curso)
+
+**Fuente revalidada (2026-10-08):** `HOGARIA-SPEC.md` §12ak.E exige ordenar la tabla por urgencia/caducidad, producto y duración del stock; la pantalla también ofrece un enlace localizado «Volver al inventario». `CaducidadesComponent` implementa los tres comparadores y la ruta del enlace, pero `pantry-caducidades.spec.ts` solo había demostrado el orden inicial por urgencia y toggle de nombre; ningún E2E ejercitaba duración ni el retorno. El estado vacío y el 503 con retry ya se cubren en QA-PANTRY.2 y no se duplican aquí.
+
+**Alcance:** cerrar la evidencia E2E de `/pantry/caducidades` sin cambiar producción ni inventar filtros/ficha de producto.
+
+- [x] Añadir una E2E con filas sintéticas que compruebe el orden inicial y los botones accesibles de caducidad, nombre y duración; probar el retorno por el enlace a `/pantry`.
+- [x] Ejecutar la ruta en Chromium escritorio y Pixel 5 móvil, comprobar los rectángulos sin overflow y guardar/revisar capturas sintéticas.
+- [x] Repetir typecheck E2E, Prettier, build y `git diff --check`; marcar la fila `/pantry/caducidades` del barrido global solo tras evidencia final.
+
+**Baseline (2026-10-08):** antes de ampliar las aserciones, el `pantry-caducidades.spec.ts` existente pasó **8/8** en Chromium y Pixel 5 con el runner aislado; el faltante es solo cobertura de orden por duración y navegación de retorno, no un fallo de producción reproducido.
+
+**Evidencia final QA-PANTRY.EXPIRY.ROUTE.1 (2026-10-08):** `pantry-caducidades.spec.ts` pasa **10/10** en Chromium y Pixel 5 con rate limit activo y runner de SQLite/puerto/semilla temporal; el fixture poblado existente verifica caducado, próximo, catálogo y sin datos de vida; también se cubren lista vacía, 503/reintento de QA-PANTRY.2, orden por urgencia y por cada columna con nombres accesibles, activación de caducidad con Enter y vuelta a `/pantry`. La nueva respuesta de ordenamiento es sintética y solo intercepta `GET /api/pantry/expiry`; los demás casos usan los datos propios del runner. A 1440×900 y 393×851 se comprobó `scrollWidth ≤ viewport`, no hubo `pageerror`, y se inspeccionaron las capturas ignoradas por Git `.e2e-screenshots/qa-pantry-expiry-route-20261008-verified/chromium/expiry-route-1440x900.png` y `.../mobile-chrome/expiry-route-393x851.png`. También pasan `pnpm run typecheck:e2e`, `pnpm run check:ui` (210 ficheros/21 reglas/sin incidencias), Prettier focal, `pnpm run build:client` y `git diff --check`; el build mantiene los avisos preexistentes de budgets e imports no usados. Coverage focal N/A: no cambió lógica de producción. Rollback: quitar el test añadido en `tests/e2e/pantry-caducidades.spec.ts`, esta unidad y la casilla `/pantry/caducidades` del barrido, sin revertir QA-PANTRY.2 ni producto.
+
 ## Unidad QA-PANTRY.TOUCH.1 · objetivos táctiles de acciones por ingrediente (resuelta localmente)
 
 **Fuente revalidada (2026-10-01):** `PantryComponent` renderizaba controles `.stock-btn` de 28×28 px y acciones `.action-btn` de 40×40 px. `DataTableComponent` usa tarjetas hasta 719 px y vuelve a tabla con scroll horizontal desde 720 px; por tanto, un teléfono girado (Pixel 5 ~851×393 CSS px) ya no estaba cubierto por `max-width:719px`. `pantry.spec.ts` ya comprobaba la actualización hasta cero, pero no rectángulos táctiles, acciones por toque ni el destino de foco al desaparecer la fila. La revisión también descubrió que una respuesta lenta podía devolver el foco al stepper inicial después de que la persona lo hubiera movido a Editar.
@@ -1507,7 +1521,7 @@ La evidencia de QA-HOUSEHOLD.API-SURFACE.1 y QA-HOUSEHOLD.CLIPBOARD.1 dejó abie
 ### Cocina, despensa y planificación
 
 - [ ] `/pantry`: ingredientes/utensilios, búsqueda, filtro/categoría, orden, paginar/seleccionar, lote, cantidad/unidad, alta/edición/borrado y sugerencias; estados vacío, sin resultados, error y recarga.
-- [ ] `/pantry/caducidades`: fechas ausentes/pasadas/próximas, orden por caducidad/nombre/duración, estado vacío frente a error/reintento y navegación de vuelta a `/pantry`; el contrato activo §12ak no define filtros ni enlace a la ficha.
+- [x] `/pantry/caducidades`: fechas ausentes/pasadas/próximas, orden por caducidad/nombre/duración, estado vacío frente a error/reintento y navegación de vuelta a `/pantry`; evidencia en QA-PANTRY.2 y QA-PANTRY.EXPIRY.ROUTE.1. §12ak no define filtros ni enlace a la ficha.
 - [ ] `/pantry/inventario/:id` y `/editar`: ficha válida/no encontrada, atributos, historial/precios, editar/cancelar/guardar, aliases/código de barras, error y borrar observación con confirmación.
 - [ ] `/pantry/categories[/:id]` y `/pantry/products[/:id]`: buscar/filtrar/ordenar, alta/edición, padres/aliases, selección y acciones por lote, protección de registros en uso, validación y confirmaciones.
 - [ ] `/pantry/catalogo`: búsqueda, pasillos/categorías, query string, filtros/paginación, alta individual y por lote, ya existente/en inventario, quitar con confirmación y persistencia al volver.
