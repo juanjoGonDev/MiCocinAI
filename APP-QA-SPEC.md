@@ -531,6 +531,19 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Rollback previsto:** revertir juntos el cambio en `pantry-products.component.ts`, `tests/e2e/pantry-product-deep-link.spec.ts` y este subapartado; preservar el endpoint y cobertura ya existentes de `PantryService.getProduct`.
 
+### QA-PANTRY.INVENTORY.LOAD-ERROR.1 · error y reintento de la carga inicial
+
+**Fuente revalidada (2026-10-08):** la casilla activa de `/pantry` exige distinguir carga, vacío y error. `PantryService.cargarInventarioCompleto()` limpia `isLoading` en `finally`, pero vuelve a propagar el 503. `PantryComponent.ngOnInit()` lanza `void this.recargarInventario()` y el método privado solo tiene `.then()` de éxito; no guarda error ni presenta un reintento. Por eso el primer fallo no tiene estado local recuperable y puede generar una promesa rechazada sin manejar.
+
+**Conducta esperada:** un error de lectura muestra una alerta localizada y acción de reintento; no debe disfrazarse de despensa vacía ni de lista de sugerencias. Los fallos repetidos terminan el estado de carga y dejan reintentar; al recuperarse, el error desaparece y vuelve el contenido real. Sin escrituras de negocio ni proveedor IA.
+
+- [ ] Añadir primero E2E aislado que fuerce 503 en la lectura inicial, compruebe el estado accesible distinto de vacío y reproduzca el rechazo no manejado; mantener la petición bajo el hogar/DB propios del runner.
+- [ ] Capturar el fallo en el flujo de carga de la pantalla, limpiar el estado de error al reintentar y volver al contenido solo cuando la carga termina bien.
+- [ ] Verificar dos fallos consecutivos y un tercer intento correcto en Chromium escritorio y Pixel 5; el loading termina, la CTA sigue accesible, la lista no se presenta como vacía y no quedan errores de página.
+- [ ] Añadir prueba unitaria del camino de `recargarInventario()` con ≥70 % S/B/F/L en el alcance; guardar e inspeccionar capturas sintéticas PC/móvil de error y recuperación y ejecutar typecheck, formato, `check:ui`, build y gates vigentes.
+
+**Rollback previsto:** revertir el estado/reintento de carga en `pantry.component.ts`, sus pruebas unitarias y E2E, las claves de traducción y este subapartado; mantener intacto el contrato de carga y paginación de `PantryService`.
+
 ## Unidad QA-PANTRY.TOUCH.1 · objetivos táctiles de acciones por ingrediente (resuelta localmente)
 
 **Fuente revalidada (2026-10-01):** `PantryComponent` renderizaba controles `.stock-btn` de 28×28 px y acciones `.action-btn` de 40×40 px. `DataTableComponent` usa tarjetas hasta 719 px y vuelve a tabla con scroll horizontal desde 720 px; por tanto, un teléfono girado (Pixel 5 ~851×393 CSS px) ya no estaba cubierto por `max-width:719px`. `pantry.spec.ts` ya comprobaba la actualización hasta cero, pero no rectángulos táctiles, acciones por toque ni el destino de foco al desaparecer la fila. La revisión también descubrió que una respuesta lenta podía devolver el foco al stepper inicial después de que la persona lo hubiera movido a Editar.
