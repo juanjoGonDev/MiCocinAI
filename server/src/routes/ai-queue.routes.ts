@@ -10,7 +10,10 @@ import {
   reintentarTrabajo
 } from '../utils/ticket-queue.js';
 import { aiConfigByIdInScope, aiConfigScopeForUser } from '../utils/ai-config-scope.js';
-import { needsActiveHouseholdSelection } from '../utils/household-context.js';
+import {
+  canManageHouseholdAiSettings,
+  needsActiveHouseholdSelection
+} from '../utils/household-context.js';
 
 const aiQueueRoutes = new Hono<AppEnv>();
 aiQueueRoutes.use('*', authMiddleware);
@@ -23,6 +26,16 @@ aiQueueRoutes.use('*', async (c, next) => {
         message: 'Selecciona primero el hogar para consultar su cola de IA.'
       },
       409
+    );
+  }
+  if (!canManageHouseholdAiSettings(getDatabase(), c.get('userId'))) {
+    return c.json(
+      {
+        success: false,
+        code: 'HOUSEHOLD_SETTINGS_REQUIRED',
+        message: 'Se necesita permiso de configuración en el hogar activo.'
+      },
+      403
     );
   }
   return next();

@@ -31,12 +31,17 @@ async function makeUser(name: string): Promise<User> {
   };
 }
 
-function createConfig(userId: string, id = `${userId}-config`, active = 1): string {
+function createConfig(
+  userId: string,
+  id = `${userId}-config`,
+  active = 1,
+  householdId: string | null = null
+): string {
   db.prepare(
     `INSERT INTO ai_configs (id, user_id, name, provider, base_url, api_key, model, retry_attempts,
-       concurrency, is_active) VALUES (?, ?, 'Test', 'custom', 'http://provider.test/v1',
-       'never-return-this-key', 'model', 1, 1, ?)`
-  ).run(id, userId, active);
+       concurrency, is_active, household_id) VALUES (?, ?, 'Test', 'custom', 'http://provider.test/v1',
+       'never-return-this-key', 'model', 1, 1, ?, ?)`
+  ).run(id, userId, active, householdId);
   return id;
 }
 
@@ -47,15 +52,18 @@ function createJob(input: {
   kind?: string;
   status?: string;
   queueOrder?: number;
+  householdId?: string | null;
   errorCode?: string | null;
   errorDetail?: string | null;
 }): void {
   db.prepare(
-    `INSERT INTO ai_jobs (id, user_id, config_id, kind, status, queue_order, error_code, error_detail)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO ai_jobs
+       (id, user_id, household_id, config_id, kind, status, queue_order, error_code, error_detail)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     input.id,
     input.userId,
+    input.householdId ?? null,
     input.configId,
     input.kind ?? 'recipe',
     input.status ?? 'queued',
@@ -63,6 +71,19 @@ function createJob(input: {
     input.errorCode ?? null,
     input.errorDetail ?? null
   );
+}
+
+function addHouseholdMember(user: User, householdId: string, settings: boolean): void {
+  db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+    householdId,
+    householdId,
+    `${householdId}-invite`
+  );
+  db.prepare(
+    `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+     VALUES (?, ?, ?, 'member', ?)`
+  ).run(`membership-${householdId}`, householdId, user.id, JSON.stringify({ settings }));
+  db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(householdId, user.id);
 }
 
 async function call(user: User, method: string, path: string, body?: unknown) {
@@ -106,6 +127,45 @@ beforeEach(async () => {
 });
 
 describe('AI queue API', () => {
+  it('denies every queue route to a home member without settings permission', async () => {
+    const householdId = 'queue-home-no-settings';
+    addHouseholdMember(alice, householdId, false);
+    const configId = createConfig(alice.id, 'home-queue-config', 1, householdId);
+    createJob({
+      id: 'protected-queued',
+      userId: alice.id,
+      householdId,
+      configId,
+      queueOrder: 3
+    });
+    createJob({
+      id: 'protected-failed',
+      userId: alice.id,
+      householdId,
+      configId,
+      status: 'failed'
+    });
+
+    const responses = await Promise.all([
+      call(alice, 'GET', `/configs/${configId}/queue`),
+      call(alice, 'PATCH', `/configs/${configId}/queue/order`, { jobIds: ['protected-queued'] }),
+      call(alice, 'POST', `/configs/${configId}/queue/protected-queued/cancel`, {}),
+      call(alice, 'POST', `/configs/${configId}/queue/protected-failed/retry`, {})
+    ]);
+
+    expect(responses.map((response) => response.status)).toEqual([403, 403, 403, 403]);
+    for (const response of responses) {
+      expect(response.payload).toMatchObject({
+        success: false,
+        code: 'HOUSEHOLD_SETTINGS_REQUIRED'
+      });
+    }
+    expect(db.prepare('SELECT id, status, queue_order FROM ai_jobs ORDER BY id').all()).toEqual([
+      { id: 'protected-failed', status: 'failed', queue_order: 0 },
+      { id: 'protected-queued', status: 'queued', queue_order: 3 }
+    ]);
+  });
+
   it('requires an active home before exposing personal configs or queues to a multi-home member', async () => {
     const personalConfig = createConfig(alice.id);
     for (const [id, inviteCode] of [
