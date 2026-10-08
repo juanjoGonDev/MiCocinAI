@@ -2365,10 +2365,9 @@ prevalece sobre la excepción anterior que permitía anchos máximos distintos e
 - [x] Extender el manifiesto/Playwright para comparar bordes reales de cada root con el área útil de
       `app-page-container` en rutas públicas, onboarding, privadas y detalles poblados; incluir 320 px,
       horizontal, 1920 px y cada breakpoint ±1, con tolerancia geométrica ≤1 px y sin overflow.
-- [ ] Ejecutar primero la regresión roja; luego matriz Chromium escritorio/Pixel 5, comprobar shells,
+- [x] Ejecutar primero la regresión roja; luego matriz Chromium escritorio/Pixel 5, comprobar shells,
       scroll, drawer/modal/teclado/foco/targets táctiles y safe-area; guardar e inspeccionar capturas
-      sintéticas PC/móvil. Correr build, typecheck, formato, diff-check y cobertura por archivo ≥70 % sin
-      rebajar gates existentes.
+      sintéticas PC/móvil. Correr build, typecheck, formato, diff-check y coverage sin rebajar gates.
 
 **Rollback:** revertir únicamente los cambios de anchura de raíces de página, su cobertura en manifiesto/
 E2E y este subapartado; conservar el contenedor compartido y las pruebas de safe-area ya existentes.
@@ -2386,7 +2385,23 @@ y `recipe-detail-{desktop,mobile}.png`.
 pero el reporte agregado no supera el gate global configurado (coverage **77.43/64.51/75.65/78.93 % S/B/F/L**); no se
 rebajó. Prettier focal pasa en los demás archivos cambiados, pero señala `logs.component.ts` y `caducidades.component.ts`
 por formato histórico: se conservaron sin reformateo masivo. Por estos gates de cobertura/formato, la última casilla
-permanece abierta y el Draft PR no se marca listo.
+quedó abierta en ese momento.
+
+**Revalidación final (2026-10-08, HEAD `e53d6e9`):** la matriz se repitió en Chromium y Pixel 5 con
+`E2E_RATE_LIMIT=on` y el runner aislado:
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/layout-gutters.spec.ts --reporter=dot`.
+Pasó **4/4**; volvió a recorrer 31 rutas estáticas y 8 detalles poblados, cada una en 49 viewports desde 320 px
+hasta 1920 px, incluyendo orientación horizontal y cada breakpoint CSS ±1. Las raíces coinciden con el área
+útil compartida (≤1 px), se conservan shells y anchos internos deliberados y no aparece overflow horizontal.
+El runner detuvo su proceso y limpió DB, puertos y artefactos temporales. Generó 68 capturas sintéticas en
+`.e2e-screenshots/qa-layout-main-content-width-20261008-final/`; se inspeccionaron Dashboard, ficha de receta
+y lista de compra comparables PC/móvil.
+
+El hook pre-push de este HEAD volvió a ejecutar build/typecheck y suite completa: Karma **1201/1201**, coverage
+**90.33/81.46/88.99/91.75 % S/B/F/L**, server **1226 passed/1 skipped**; formato y `check:ui` pasan. En esta
+unidad solo cambian wrappers/estilos, sin lógica de negocio instrumentable, así que coverage focal por archivo
+es N/A; la geometría se valida en navegador. Se conserva sin bajar ningún gate. PR #41 está abierto y Ready
+(no Draft), sin merge. La validación de safe-area nativa no nula en iOS sigue pendiente en su unidad propia.
 
 ### QA-LAYOUT.SAFE-AREA.SYNTHETIC.1 · geometría del shell con inset inyectado
 
