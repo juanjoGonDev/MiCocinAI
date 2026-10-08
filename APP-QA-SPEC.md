@@ -2417,12 +2417,34 @@ en todos), pero se descartó como contrato insuficiente porque no mide el marco 
       afirmar shell esperado y medir en navegador el mismo gutter/borde exterior por viewport. Incluir
       cada breakpoint hallado en código y 320 px/orientación horizontal; no sustituir mediciones por
       `scrollWidth` solamente.
-- [ ] Ejecutar la matriz real en desktop y móvil: bordes alineados, sin clipping/overflow, safe-area,
+- [x] Ejecutar la matriz real en desktop y móvil: bordes alineados, sin clipping/overflow, safe-area,
       scroll, navegación fija, drawers/modales, teclado/foco y targets táctiles; guardar e inspeccionar
       capturas sintéticas comparables PC/móvil y mantener los anchos internos intencionalmente distintos.
-- [ ] Añadir pruebas unitarias para la regla compartida, ejecutar E2E completo del manifiesto en
+- [x] Añadir pruebas unitarias para la regla compartida, ejecutar E2E completo del manifiesto en
       Chromium escritorio y Pixel 5, build/typecheck/formato/diff checks y cobertura por archivo ≥70 %;
       no marcar como homogéneo un baseline que solo haya comprobado ausencia de overflow.
+
+**Evidencia final (2026-10-08):** fuente revalidada en `styles.scss`, `PageContainerComponent` y los tests
+del manifiesto antes de cerrar. La unidad de `app-page-container` pasó **3/3** pruebas Karma y cobertura
+por archivo **100/100/100/100 % S/B/F/L** (0 ramas instrumentadas); comprueba proyección y la variante
+deliberada `fullContent=false`. La matriz aislada de
+`layout-gutters.spec.ts` más `safe-area-layout.spec.ts`, `main-layout-drawer.spec.ts` y
+`pantry-touch-targets.spec.ts` cubrió 39 rutas (incluidos detalles sintéticos) en Chromium y Pixel 5:
+shell/gutters/raíces en 49 viewports, scroll hasta el final sin quedar bajo navegación fija, insets
+sintéticos portrait/landscape, nav fija, drawer/foco/Escape, modales y acciones táctiles. La unidad
+E2E valida en navegador la geometría calculada del marco/gutter. El primer pase combinado reveló y
+reprodujo la carrera del test de Pantry descrita en QA-PANTRY.TOUCH.1; tras corregir solo la
+sincronización E2E, todas las pruebas de layout/drawer/safe-area pasaron y el archivo Pantry pasó
+**7/7 aplicables** (un caso táctil omitido en Chromium). `preferences-width.spec.ts` pasó sus dos casos
+aplicables en desktop y Pixel 5 (dos skips condicionados al proyecto). También pasan
+`page-container.component.spec.ts` **3/3**, `pnpm run test:client` **1201/1201** con coverage
+**90,32/81,46/88,96/91,75 % S/B/F/L**, `pnpm run typecheck:e2e`, `pnpm run check:ui` (210 archivos,
+21 reglas, 0 incidencias), build de producción, Prettier focal y `git diff --check`. Las capturas
+sintéticas comparables, guardadas e
+inspeccionadas de Dashboard, Calendario, Preferencias, drawer, safe-area y Pantry están en
+`.e2e-screenshots/qa-layout-content-gutters-recheck-20261008/` (ignoradas por Git). No hubo cambios CSS:
+las raíces mantienen el marco común `--container-max:1280px`, sin alterar los max-width interiores de
+formularios y tarjetas; la auditoría geométrica global de familias sigue abierta.
 
 ### QA-LAYOUT.PREFERENCES-END-CONTROL.1 · acción final alcanzable sobre navegación fija
 
