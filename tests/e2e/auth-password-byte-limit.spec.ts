@@ -99,15 +99,23 @@ test.describe('límite de bytes UTF-8 para contraseñas nuevas', () => {
         await page.setViewportSize(viewport);
         await page.reload();
         expect(await page.locator('#password').getAttribute('maxlength')).toBe('72');
+        await expect(page.locator('#password-helper')).toHaveText(
+          language === 'es'
+            ? 'Mínimo 6 caracteres, una mayúscula y un número. Si aparece un aviso de longitud, prueba con una contraseña más corta.'
+            : 'At least 6 characters, one uppercase letter, and one number. If you see a length warning, try a shorter password.'
+        );
         await page.locator('#name').fill('QA límite bcrypt');
         await page.locator('#email').fill(email);
         await page.locator('#password').fill(PASSWORD_AT_73_UTF8_BYTES);
         await page.locator('#password').press('Enter');
 
         const passwordError = page.locator('#password-error');
-        await expect(passwordError).toContainText('72 bytes');
-        if (language === 'en') await expect(passwordError).toContainText('cannot exceed');
-        else await expect(passwordError).toContainText('no puede superar');
+        await expect(passwordError).toHaveText(
+          language === 'es'
+            ? 'La contraseña es demasiado larga. Acórtala e inténtalo de nuevo.'
+            : 'The password is too long. Shorten it and try again.'
+        );
+        await expect(passwordError).not.toContainText(/bytes?|UTF-8/i);
         const registerPasswordDescription = await page
           .locator('#password')
           .getAttribute('aria-describedby');
@@ -156,6 +164,11 @@ test.describe('límite de bytes UTF-8 para contraseñas nuevas', () => {
       for (const viewport of viewportsFor(testInfo.project.name)) {
         await page.setViewportSize(viewport);
         await page.reload();
+        await expect(page.locator('#account-password-new-hint')).toHaveText(
+          language === 'es'
+            ? 'Si aparece un aviso de longitud, prueba con una contraseña más corta.'
+            : 'If you see a length warning, try a shorter password.'
+        );
         await page.locator('[data-test="account-password-current"]').fill('Test1234');
         await page.locator('[data-test="account-password-new"]').fill(PASSWORD_AT_73_UTF8_BYTES);
         await page.locator('[data-test="account-password-repeat"]').fill(PASSWORD_AT_73_UTF8_BYTES);
@@ -163,9 +176,12 @@ test.describe('límite de bytes UTF-8 para contraseñas nuevas', () => {
         await saveButton.focus();
         await page.keyboard.press('Enter');
 
-        await expect(error).toContainText(
-          language === 'es' ? 'no puede superar 72 bytes' : 'cannot exceed 72 bytes'
+        await expect(error).toHaveText(
+          language === 'es'
+            ? 'La contraseña es demasiado larga. Acórtala e inténtalo de nuevo.'
+            : 'The password is too long. Shorten it and try again.'
         );
+        await expect(error).not.toContainText(/bytes?|UTF-8/i);
         await expect(error).toHaveAttribute('role', 'alert');
         await expect(error).toBeFocused();
         const accountPasswordDescription = await page
