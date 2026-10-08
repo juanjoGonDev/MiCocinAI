@@ -3,6 +3,7 @@ import { HttpClient, HttpParams, HttpErrorResponse, HttpContext } from '@angular
 import { Observable, firstValueFrom, tap, map, catchError, of, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
+import { originalHttpError } from './shopping-http-error';
 import {
   Ingredient,
   Utensil,
@@ -406,15 +407,13 @@ export class PantryService {
     });
     if (q) params = params.set('q', q);
     return this.request<PantryCategoryListResult>(() =>
-      this.http
-        .get<any>(`${this.apiUrl}/categories`, { params })
-        .pipe(
-          map((response) => ({
-            data: response.data ?? [],
-            meta: response.meta,
-            hasMore: Boolean(response.hasMore)
-          }))
-        )
+      this.http.get<any>(`${this.apiUrl}/categories`, { params }).pipe(
+        map((response) => ({
+          data: response.data ?? [],
+          meta: response.meta,
+          hasMore: Boolean(response.hasMore)
+        }))
+      )
     ).then((resultado) => (resultado.ok ? resultado.data : null));
   }
 
@@ -470,15 +469,13 @@ export class PantryService {
       .set('limit', String(query.limit ?? 10))
       .set('offset', String(query.offset ?? 0));
     return this.request<PantryProductListResult>(() =>
-      this.http
-        .get<any>(`${this.apiUrl}/products`, { params })
-        .pipe(
-          map((response) => ({
-            data: (response.data ?? []) as PantryProduct[],
-            meta: response.meta,
-            hasMore: Boolean(response.hasMore)
-          }))
-        )
+      this.http.get<any>(`${this.apiUrl}/products`, { params }).pipe(
+        map((response) => ({
+          data: (response.data ?? []) as PantryProduct[],
+          meta: response.meta,
+          hasMore: Boolean(response.hasMore)
+        }))
+      )
     ).then((resultado) => (resultado.ok ? resultado.data : null));
   }
 
@@ -550,15 +547,13 @@ export class PantryService {
       .set('limit', String(query.limit ?? 24))
       .set('offset', String(query.offset ?? 0));
     return this.request<PantryCatalogListResult>(() =>
-      this.http
-        .get<any>(`${this.apiUrl}/catalog/products`, { params })
-        .pipe(
-          map((response) => ({
-            data: (response.data ?? []) as PantryCatalogListResult['data'],
-            meta: response.meta,
-            hasMore: Boolean(response.hasMore)
-          }))
-        )
+      this.http.get<any>(`${this.apiUrl}/catalog/products`, { params }).pipe(
+        map((response) => ({
+          data: (response.data ?? []) as PantryCatalogListResult['data'],
+          meta: response.meta,
+          hasMore: Boolean(response.hasMore)
+        }))
+      )
     ).then((resultado) => (resultado.ok ? resultado.data : null));
   }
 
@@ -581,17 +576,20 @@ export class PantryService {
     try {
       return { ok: true, data: await firstValueFrom(factory()) };
     } catch (error) {
-      if (error instanceof HttpErrorResponse) {
-        const cuerpo = (error.error ?? {}) as {
+      // El interceptor comun devuelve { status, message, original }; desenvolverlo permite
+      // conservar el codigo de dominio (p. ej. PANTRY_PRODUCT_ALIAS_CLASH) en formularios.
+      const respuesta = error instanceof HttpErrorResponse ? error : originalHttpError(error);
+      if (respuesta instanceof HttpErrorResponse) {
+        const cuerpo = (respuesta.error ?? {}) as {
           error?: string;
           message?: string;
           details?: unknown;
         };
         return {
           ok: false,
-          status: error.status,
+          status: respuesta.status,
           error: cuerpo.error ?? 'UNKNOWN',
-          message: cuerpo.message ?? error.statusText,
+          message: cuerpo.message ?? respuesta.statusText,
           ...(cuerpo.details === undefined ? {} : { details: cuerpo.details })
         };
       }

@@ -1,5 +1,7 @@
 import { TestBed } from '@angular/core/testing';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { throwError } from 'rxjs';
 import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import { CaducidadRow } from '../../shared/models/caducidades.model';
 import {
@@ -221,13 +223,17 @@ describe('PantryService inventory and catalog contracts', () => {
     const selectRequest = http.expectOne('/api/pantry/ingredients/item%2F1/image-search/select');
     expect(selectRequest.request.body).toEqual({ photoId: 'a'.repeat(24) });
     selectRequest.flush({ data: { image: '/api/recipe-images/aaaaaaaaaaaaaaaaaaaaaaaa' } });
-    await expectAsync(selected).toBeResolvedTo({ image: '/api/recipe-images/aaaaaaaaaaaaaaaaaaaaaaaa' });
+    await expectAsync(selected).toBeResolvedTo({
+      image: '/api/recipe-images/aaaaaaaaaaaaaaaaaaaaaaaa'
+    });
 
     const uploaded = service.uploadProductImage('item/1', 'data:image/png;base64,AAAA');
     const uploadRequest = http.expectOne('/api/pantry/ingredients/item%2F1/image');
     expect(uploadRequest.request.body).toEqual({ dataUrl: 'data:image/png;base64,AAAA' });
     uploadRequest.flush({ data: { image: '/api/uploads/product-images/item-1-abcd.png' } });
-    await expectAsync(uploaded).toBeResolvedTo({ image: '/api/uploads/product-images/item-1-abcd.png' });
+    await expectAsync(uploaded).toBeResolvedTo({
+      image: '/api/uploads/product-images/item-1-abcd.png'
+    });
   });
 
   it('projects the ingredient payload and returns null when a detail is absent or unavailable', () => {
@@ -819,6 +825,33 @@ describe('PantryService inventory and catalog contracts', () => {
       expect(result.error).toBe('NETWORK');
       expect(result.message).toContain('data');
     }
+    expect(service.saving()).toBeFalse();
+  });
+
+  it('preserves the API error from an interceptor-wrapped product update failure', async () => {
+    const payload = {
+      error: 'PANTRY_PRODUCT_ALIAS_CLASH',
+      message: 'Ese alias ya esta usado',
+      details: { alias: 'Queso de cabra' }
+    };
+    const response = new HttpErrorResponse({
+      error: payload,
+      status: 409,
+      statusText: 'Conflict'
+    });
+    spyOn(TestBed.inject(HttpClient), 'patch').and.returnValue(
+      throwError(() => ({ status: 409, message: 'Conflicto con el recurso', original: response }))
+    );
+
+    const result = await service.updateProduct(PRODUCT.id, { aliases: ['Queso de cabra'] });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 409,
+      error: 'PANTRY_PRODUCT_ALIAS_CLASH',
+      message: 'Ese alias ya esta usado',
+      details: { alias: 'Queso de cabra' }
+    });
     expect(service.saving()).toBeFalse();
   });
 
