@@ -3042,6 +3042,37 @@ global permanece bajo el gate de 80 % anotado arriba; no se cambia el umbral.
 **Rollback focal:** retirar únicamente los tokens/reglas de geometría de inputs de texto estándar, esta
 regresión E2E y esta subunidad; conservar el contrato global, el marco común y estilos de otras familias.
 
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.PAGE-HEADINGS.1 · títulos principales de vistas
+
+**Fuente revalidada (2026-10-08):** Dashboard, Cuenta, Preferencias y la portada de Compra muestran un
+`h1` que nombra la vista. Sus estilos repiten la misma familia display, tamaño `--text-2xl`, peso bold y
+color principal; el reset global elimina los márgenes por defecto, pero solo `.dashboard__title` declara
+`margin-bottom: var(--space-1)`. Los otros tres títulos calculan margen inferior cero, así que un grupo
+de la misma jerarquía deja una separación distinta respecto al subtítulo siguiente. Esta unidad cubre
+solo esos cuatro títulos de página; no incluye títulos de diálogo, contenido de recetas/artículos ni
+encabezados de sección con jerarquía inferior.
+
+**Contrato:** los cuatro `h1` de vista comparten la misma geometría calculada y tokens de tipografía,
+incluido line-height y margen; el ancho sigue dependiendo del texto y de su contenedor. El contrato se
+mantiene en los anchos móviles, tablet y escritorio; selección, hover u otros estados no aplican a estos
+encabezados no interactivos. No se cambia el texto/localización ni la estructura semántica `h1`.
+
+- [ ] Añadir primero una E2E aislada roja que mida los cuatro `h1` con Chromium y Pixel 5 en 320, 393,
+      568×320, 767/768/769, 1023/1024/1025 y 1440×900; contrastar fuente, tamaño, peso, interlineado,
+      tracking, márgenes, padding, borde y caja con tolerancia ≤1 CSS px. La reproducción debe localizar
+      la diferencia de margen Dashboard vs. las otras tres vistas.
+- [ ] Crear un único contrato compartido para los títulos de página y migrar los cuatro consumidores,
+      preservando texto, rutas, jerarquía semántica, subtítulos y anchuras fluidas.
+- [ ] Repetir la matriz de medidas, comprobar encabezado accesible único, contenido visible y sin
+      overflow; guardar e inspeccionar capturas sintéticas comparables de las cuatro rutas en escritorio
+      1440×900 y móvil 393×851.
+- [ ] Ejecutar Karma completo con gate ≥80 % S/B/F/L, `typecheck:e2e`, `check:ui`, formato, build de
+      producción y `git diff --check`; CSS estático se valida por E2E y coverage instrumentable: N/A.
+      Registrar comando/resultados, rollback acotado y mantener abierta la auditoría global.
+
+**Rollback focal:** retirar la clase/estilo compartido de estos cuatro títulos, restaurar sus reglas
+locales y quitar esta regresión y subunidad; mantener intactos los encabezados de otras jerarquías.
+
 ### Subunidad QA-CALENDAR.EARLY-HOURS.1 · hora actual visible en la rejilla
 
 **Fuente revalidada antes de implementar (2026-10-04):** el contrato histórico vigente de `HOGARIA-SPEC.md §8f`
