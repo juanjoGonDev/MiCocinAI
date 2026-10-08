@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { isRecipeGenerationRequest } from './helpers/ai-requests';
 import { waitForStableView } from './helpers/recipe-fixtures';
 
 test.use({ serviceWorkers: 'block', timezoneId: 'Europe/Madrid' });
@@ -77,11 +78,13 @@ test('Dashboard marca la comida siguiente de hoy y anticipa la próxima fecha', 
 }, testInfo) => {
   skipSafari(testInfo);
   const pageErrors: string[] = [];
-  const aiRequests: string[] = [];
+  const generationRequests: string[] = [];
   const mealIds: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('request', (request) => {
-    if (new URL(request.url()).pathname.startsWith('/api/ai/')) aiRequests.push(request.url());
+    if (isRecipeGenerationRequest(request.url(), request.method())) {
+      generationRequests.push(request.url());
+    }
   });
   await page.clock.install({ time: new Date('2026-10-08T08:30:00.000Z') });
   await registerAndGoto(page, '/dashboard', 'dashboard-next-meal');
@@ -216,7 +219,7 @@ test('Dashboard marca la comida siguiente de hoy y anticipa la próxima fecha', 
 
   await page.goto('/dashboard');
   await expect(page.locator('[data-test="next-meal-card"]')).toHaveCount(0);
-  expect(aiRequests).toEqual([]);
+  expect(generationRequests, 'la navegación del calendario no debe generar recetas').toEqual([]);
   expect(pageErrors).toEqual([]);
 });
 

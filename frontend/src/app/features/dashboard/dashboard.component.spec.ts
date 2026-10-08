@@ -140,13 +140,14 @@ describe('DashboardComponent', () => {
     getMealsForRange: jasmine.Spy;
   };
   let household: {
-    household: ReturnType<typeof signal<{ members: unknown[] }>>;
+    household: ReturnType<typeof signal<{ members: unknown[] } | null>>;
     memberships: ReturnType<typeof signal<HouseholdMembership[]>>;
     membershipsFailed: ReturnType<typeof signal<boolean>>;
     activeHouseholdId: ReturnType<typeof signal<string | null>>;
     contextRevision: ReturnType<typeof signal<number>>;
     loadMemberships: jasmine.Spy;
     loadHousehold: jasmine.Spy;
+    ensureHousehold: jasmine.Spy;
   };
   let ai: {
     configs: ReturnType<typeof signal<AIProviderConfig[]>>;
@@ -206,7 +207,8 @@ describe('DashboardComponent', () => {
       loadMemberships: jasmine
         .createSpy('loadMemberships')
         .and.callFake(() => of(household.memberships())),
-      loadHousehold: jasmine.createSpy('loadHousehold')
+      loadHousehold: jasmine.createSpy('loadHousehold'),
+      ensureHousehold: jasmine.createSpy('ensureHousehold')
     };
     ai = {
       configs: signal<AIProviderConfig[]>([]),
@@ -270,6 +272,21 @@ describe('DashboardComponent', () => {
     expect(recipes.loadRecipes).toHaveBeenCalled();
     expect(calendar.loadRange).toHaveBeenCalledWith(component.todayIso, component.todayIso);
     expect(household.loadHousehold).toHaveBeenCalled();
+  });
+
+  it('ensures household data after membership loading discovers a new active context', () => {
+    const home = membership('home-discovered', true);
+    household.loadMemberships.and.callFake(() => {
+      household.activeHouseholdId.set(home.id);
+      household.contextRevision.update((revision) => revision + 1);
+      household.household.set(null);
+      return of([home]);
+    });
+
+    const component = createComponent();
+    component.ngOnInit();
+
+    expect(household.ensureHousehold).toHaveBeenCalled();
   });
 
   it('does not request AI queues before permission is known or for a non-settings member', () => {

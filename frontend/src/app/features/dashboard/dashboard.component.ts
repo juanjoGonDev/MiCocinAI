@@ -1223,6 +1223,10 @@ export class DashboardComponent implements OnDestroy, OnInit {
         this.aiQueueContextRevision.set(contextRevision);
         if (this.householdService.membershipsFailed()) return;
 
+        // Membership discovery can change the active home and clear a previously loaded snapshot.
+        // Load that home again after resolving the selection instead of racing the initial GET.
+        this.householdService.ensureHousehold();
+
         const activeHouseholdId = this.householdService.activeHouseholdId();
         const allowed =
           memberships.length === 0

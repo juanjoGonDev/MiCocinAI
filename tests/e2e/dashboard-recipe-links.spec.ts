@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from './fixtures';
+import { isRecipeGenerationRequest } from './helpers/ai-requests';
 import { registerAndGoto } from './helpers/auth';
 import {
   createSyntheticRecipe,
@@ -68,9 +69,11 @@ test('los enlaces Dashboard y el fragmento directo abren el modal IA sin invocar
     await route.continue();
   });
   await registerAndGoto(page, '/dashboard', 'dashboard-recipes-ai');
-  const aiRequests: string[] = [];
+  const generationRequests: string[] = [];
   page.on('request', (request) => {
-    if (request.url().includes('/api/ai/')) aiRequests.push(request.url());
+    if (isRecipeGenerationRequest(request.url(), request.method())) {
+      generationRequests.push(request.url());
+    }
   });
 
   await page.locator('a.action-card--primary').click();
@@ -105,7 +108,7 @@ test('los enlaces Dashboard y el fragmento directo abren el modal IA sin invocar
   await expect(page).toHaveURL(/\/recipes#ai$/);
   await expect(page.locator('.ai-form')).toBeVisible();
   await expect(page.getByRole('dialog', { name: 'Generar Receta con IA' })).toBeVisible();
-  expect(aiRequests).toEqual([]);
+  expect(generationRequests, 'abrir el formulario no debe generar recetas').toEqual([]);
 });
 
 test('un id de receta inexistente deja la lista en una URL recuperable', async ({ page }) => {

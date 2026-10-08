@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { test } from './fixtures';
+import { isRecipeGenerationRequest } from './helpers/ai-requests';
 import { registerAndGoto } from './helpers/auth';
 import { waitForStableView } from './helpers/recipe-fixtures';
 
@@ -35,11 +36,11 @@ test('Dashboard lista solo comidas pendientes de hoy y permite recuperar un erro
   page
 }, testInfo) => {
   const pageErrors: string[] = [];
-  const aiRequests: string[] = [];
+  const generationRequests: string[] = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
   page.on('request', (request) => {
-    if (new URL(request.url()).pathname.startsWith('/api/ai/')) {
-      aiRequests.push(request.url());
+    if (isRecipeGenerationRequest(request.url(), request.method())) {
+      generationRequests.push(request.url());
     }
   });
 
@@ -289,6 +290,6 @@ test('Dashboard lista solo comidas pendientes de hoy y permite recuperar un erro
   await page.goto('/dashboard');
   await expect(todaySection.locator('[data-test="today-meals-empty"]')).toBeVisible();
   await expect(todaySection.locator('[data-test="today-meals-error"]')).toHaveCount(0);
-  expect(aiRequests, 'no se debe llamar a endpoints IA desde este flujo').toEqual([]);
+  expect(generationRequests, 'no se deben generar recetas desde este flujo').toEqual([]);
   expect(pageErrors, 'la pantalla no debe lanzar errores JavaScript').toEqual([]);
 });

@@ -1,5 +1,10 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { test, expect } from './fixtures';
 import { registerUser, registerWithHousehold } from './helpers/auth';
+import { waitForStableView } from './helpers/recipe-fixtures';
+
+const SCREENSHOT_DIR = process.env.E2E_SCREENSHOT_DIR;
 
 test.describe('Dashboard (new user) — empty states', () => {
   test('shows greeting, empty states and quick stats', async ({ page }) => {
@@ -17,7 +22,9 @@ test.describe('Dashboard (new user) — empty states', () => {
     await expect(page.locator('.stat-card__label').first()).toBeVisible();
   });
 
-  test('las stats reflejan la despensa real, no el catálogo sembrado', async ({ page }) => {
+  test('las stats reflejan la despensa real, no el catálogo sembrado', async ({
+    page
+  }, testInfo) => {
     // El hogar se siembra con ~68 ingredientes de sugerencia con cantidad 0.
     // "Ingredientes" debe contar solo los que tienen cantidad > 0.
     await registerWithHousehold(page, '/dashboard');
@@ -31,6 +38,19 @@ test.describe('Dashboard (new user) — empty states', () => {
     const members = page.locator('.stat-card').filter({ hasText: /Miembros|Members/i });
     await expect(members).toHaveCount(1);
     await expect(members.locator('.stat-card__value')).toHaveText('1');
+
+    if (SCREENSHOT_DIR) {
+      const viewport = testInfo.project.use.isMobile
+        ? { width: 393, height: 851 }
+        : { width: 1440, height: 900 };
+      await page.setViewportSize(viewport);
+      await waitForStableView(page);
+      mkdirSync(SCREENSHOT_DIR, { recursive: true });
+      await page.screenshot({
+        path: join(SCREENSHOT_DIR, `dashboard-members-${viewport.width}x${viewport.height}.png`),
+        fullPage: false
+      });
+    }
 
     // Con un ingrediente real la tarjeta deja de estar a cero: no es un valor
     // calculado una vez, se vuelve a leer al volver de la despensa.

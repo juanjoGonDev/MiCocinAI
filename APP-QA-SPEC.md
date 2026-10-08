@@ -2933,3 +2933,55 @@ tests/e2e/logs-clear-filters.spec.ts` (1/1), `pnpm run typecheck:e2e` y `git dif
 **Rollback:** revertir únicamente este commit quita el guard y sus pruebas (`modules.service.ts` y
 `settings.component.ts`, con sus specs unitarias), los ajustes de las seis specs E2E y esta evidencia; no
 hay migraciones ni cambios de datos persistentes.
+
+#### Subunidad QA-CI.E2E.DASHBOARD-SHARD-2 · corregir regresiones E2E del Dashboard
+
+**Fuente revalidada (CI `37752614623`, commit `ccd253c`):** typecheck, full-stack E2E, server tests,
+shards 1/3/4 y build pasaron; shard 2 falló en tres pruebas que contaban todo `GET /api/ai/configs`
+como invocación del proveedor, y en una prueba que esperaba un miembro en el hogar recién creado
+mientras la tarjeta del Dashboard mostraba cero.
+
+**Contrato:** los accesos de solo lectura a la configuración IA no cuentan como generación ni como
+llamada a proveedor; la navegación/estado vacío no debe enviar solicitudes de generación. La tarjeta
+de miembros del Dashboard debe reflejar los miembros activos del hogar seleccionado, incluido quien
+lo crea.
+
+- [x] Ajustar primero las E2E para distinguir lecturas de configuración de solicitudes que generan
+      contenido; reproducirlas localmente con SQLite temporal y comprobar que generación no se invoca.
+- [x] Reproducir el cero de miembros en hogar recién creado; corregir el producto solo si la regresión
+      se reproduce contra el contrato, de lo contrario corregir el setup/espera obsoletos del E2E.
+- [x] Ejecutar las cuatro regresiones focales aisladas y el shard 2 completo, typecheck, formato,
+      `check:ui`, build y `git diff --check`; no alterar datos ni proveedores reales.
+- [ ] Registrar evidencia y resultados, crear commit atómico con hooks completos, push sin reescribir
+      historia publicada y verificar el nuevo CI completo sin mergear.
+
+**Hallazgo y decisión:** en `dashboard.spec.ts` el registro temporal confirmó que la base contiene un
+miembro activo, pero las peticiones iniciales concurrentes de hogar/membresías cargaban primero el hogar
+y después `loadMemberships()` descubría el id activo, invalidaba la instantánea y la dejaba a `null`.
+Dashboard ahora vuelve a asegurar la carga del hogar después de resolver membresías. Las otras tres
+E2E confundían lecturas `GET /api/ai/configs` (solo metadatos) con generación; ahora capturan únicamente
+`POST /api/ai/generate-recipe` y `POST /api/ai/generate-multiple-recipes`, que son las rutas que
+despachan trabajo al modelo.
+
+**Evidencia:**
+
+- TDD: la nueva regresión unitaria falló primero porque no se llamaba `ensureHousehold`; tras el cambio,
+  `pnpm --filter @hogaria/web exec ng test --no-watch
+--include=src/app/features/dashboard/dashboard.component.spec.ts --browsers=ChromeHeadless` pasó
+  **16/16**.
+- Las cuatro E2E afectadas pasaron en Chromium escritorio y Pixel 5 emulado: **8/8**, runner aislado,
+  SQLite temporal, rate limit E2E activo, sin llamadas a proveedores. Capturas comparables sintéticas,
+  revisadas e ignoradas por Git: `.e2e-screenshots/qa-ci-dashboard-shard-2/` (1440×900 y 393×851).
+- Shard 2 completo, `CI=true E2E_SEED=local-dashboard-shard2-20261008 node
+scripts/run-isolated-playwright.mjs --project=chromium --shard=2/4 --forbid-only`: **102 pasaron**
+  en 3,1 min con base aislada.
+- `pnpm run test:client`: **1195/1195**. Cobertura global S/B/F/L: **90.29/81.39/88.99/91.71 %**;
+  `dashboard.component.ts`: **92.1/76.19/86/96.4 %**, sobre el gate requerido del 70 %.
+- `pnpm run typecheck:e2e`, Prettier de los archivos de la unidad, `pnpm run check:ui` (210 archivos,
+  21 reglas), `pnpm run build` y `git diff --check` pasan. Build mantiene warnings conocidos de bundle,
+  presupuestos SCSS, imports y optional chaining en archivos ajenos a esta corrección.
+- No se usa WebAPI ni proveedor real; solo datos sintéticos del runner. Sin cambios de esquema ni datos
+  persistentes.
+
+**Rollback:** revertir el commit dedicado a esta subunidad conserva la evidencia CI previa; no hay
+cambios de esquema ni migraciones.
