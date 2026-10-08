@@ -2415,6 +2415,22 @@ código de `src/providers/chatgpt/flows/attachment-flow.ts` todavía llama a
 posterior. La revisión no ata el proceso vivo de 3001 a un SHA verificable y no hubo una ejecución nueva
 que pruebe la recuperación de la JPEG; el preflight, por tanto, falla y no autoriza subir tickets.
 
+**Reintento de preflight solicitado (2026-10-08):** volví a inspeccionar WebAPI antes de reabrir los
+tickets. El checkout local está limpio en `fix/partial-attachment-cleanup`, commit `d4843c0b`; su único
+cambio respecto de `fd00bfd3` añade `openspec/changes/partial-attachment-cleanup/spec.md` y no modifica
+el flujo ni las pruebas. Esa propuesta mantiene tareas sin marcar de rollback verificado, reset seguro
+del composer, conservación del error original y veto a repetir uploads ambiguos. El código vigente aún
+propaga `attachment_cleanup_failed` HTTP 500 cuando no puede verificar el baseline; por tanto el error
+de limpieza sigue presente. El servicio de `127.0.0.1:3001` devuelve 200 en `/health/ready` y `/`, pero
+ninguna ruta identifica el SHA servido. La lectura allowlist del log asociado al PID 58572 no encontró
+eventos `attachment`/`upload`/`prompt_submitted`; una línea genérica `cleanup` no se puede atribuir a
+esta ruta. Esto no aporta evidencia de que la WebAPI desplegada haya corregido la recuperación. Por la
+regla de no repetir nada que pudiera completar: **0 archivos re-subidos, 0 nuevas completions y 0
+escrituras en el inventario/base normal**. No reenvío los PDF cuyo fallback anterior devolvió HTTP 200,
+ni la JPEG que ya terminó en cleanup fallido; tampoco se procesa el lote largo. Se requieren el cambio
+real de WebAPI y una prueba sintética de la nueva recuperación, además de poder identificar la versión
+activa, antes de considerar otra corrida live.
+
 El usuario autorizó una nueva validación **solo si** se demuestra que el fallo se corrigió y prohibió
 repetir peticiones que pudieran completarse. Los dos fallbacks no-stream de los PDF devolvieron HTTP 200
 en la corrida anterior; se consideran potencialmente completados y quedan excluidos de todo reenvío. Si
