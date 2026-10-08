@@ -166,6 +166,9 @@ export const pantryEs = {
   'pantry.caducados': 'Caducados',
   'pantry.cantidad': 'Cantidad',
   'pantry.cargando_ingredientes': 'Cargando ingredientes...',
+  'pantry.inventario_carga_error':
+    'No se ha podido cargar el inventario. Comprueba tu conexión e inténtalo de nuevo.',
+  'pantry.inventario_reintentar': 'Reintentar',
   'pantry.categoria': 'Categoría',
   'pantry.congelador': 'Congelador',
   'pantry.cucharadas': 'Cucharadas',
@@ -590,6 +593,9 @@ export const pantryEn: Record<keyof typeof pantryEs, string> = {
   'pantry.caducados': 'Expired',
   'pantry.cantidad': 'Amount',
   'pantry.cargando_ingredientes': 'Loading ingredients...',
+  'pantry.inventario_carga_error':
+    "Couldn't load the inventory. Check your connection and try again.",
+  'pantry.inventario_reintentar': 'Retry',
   'pantry.categoria': 'Category',
   'pantry.congelador': 'Freezer',
   'pantry.cucharadas': 'Tablespoons',

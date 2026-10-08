@@ -83,6 +83,26 @@ describe('PantryComponent add action', () => {
     expect(component.formData.name).toBe('harina');
   });
 
+  it('keeps a failed inventory refresh recoverable without loading stale stats', async () => {
+    const component = createComponent();
+    pantryService.cargarInventarioCompleto.and.rejectWith(new Error('Synthetic 503'));
+
+    await component.reintentarCargaInventario();
+
+    expect(component.inventoryLoadError()).toBeTrue();
+    expect(pantryService.loadStats).not.toHaveBeenCalled();
+  });
+
+  it('clears the inventory error and reloads stats after a successful retry', async () => {
+    const component = createComponent();
+    component.inventoryLoadError.set(true);
+
+    await component.reintentarCargaInventario();
+
+    expect(component.inventoryLoadError()).toBeFalse();
+    expect(pantryService.loadStats).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps unused emoji metadata out of pantry category controls', () => {
     const component = createComponent();
     const categories = [

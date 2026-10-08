@@ -222,7 +222,25 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
           [message]="'pantry.cargando_ingredientes' | t"
         ></app-loading>
 
-        <div *ngIf="!pantryService.isLoading()">
+        <section
+          *ngIf="!pantryService.isLoading() && inventoryLoadError()"
+          class="pantry__load-error"
+          role="alert"
+          data-test="pantry-inventory-error"
+        >
+          <p class="pantry__load-error-message">{{ 'pantry.inventario_carga_error' | t }}</p>
+          <app-button
+            variant="primary"
+            type="button"
+            [touchTarget]="true"
+            (onClick)="reintentarCargaInventario()"
+            data-test="pantry-inventory-retry"
+          >
+            {{ 'pantry.inventario_reintentar' | t }}
+          </app-button>
+        </section>
+
+        <div *ngIf="!pantryService.isLoading() && !inventoryLoadError()">
           <!-- Lo que la casa conoce y no tiene: un expand cerrado por defecto (## 12ab). -->
           @if (suggestions().length > 0) {
             <div class="suggestions" data-test="pantry-sugerencias">
@@ -760,6 +778,21 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
         font-family: var(--font-display);
         font-size: var(--text-2xl);
         font-weight: var(--font-bold);
+      }
+
+      .pantry__load-error {
+        display: grid;
+        justify-items: start;
+        gap: var(--space-3);
+      }
+
+      .pantry__load-error-message {
+        margin: 0;
+        padding: var(--space-2) var(--space-3);
+        border-radius: var(--radius-md);
+        background: var(--error-subtle);
+        color: var(--color-error-700);
+        font-size: var(--text-sm);
       }
 
       /* Tabs */
@@ -1409,6 +1442,7 @@ export class PantryComponent implements OnInit {
   searchTerm = signal('');
   filtroCategoria = signal('');
   sugerenciasAbiertas = signal(false);
+  inventoryLoadError = signal(false);
   /** La seleccion del lote es de esta visita: no viaja en la URL (igual que en el gestor de productos). */
   inventarioSeleccion = signal<readonly unknown[]>([]);
   utensiliosSeleccion = signal<readonly unknown[]>([]);
@@ -2120,9 +2154,20 @@ export class PantryComponent implements OnInit {
 
   /** El inventario entero y las stats detras: lo que llama toda mutacion de filas (## 12ab). */
   private recargarInventario(): Promise<void> {
-    return this.pantryService.cargarInventarioCompleto().then(() => {
-      this.pantryService.loadStats();
-    });
+    this.inventoryLoadError.set(false);
+    return this.pantryService.cargarInventarioCompleto().then(
+      () => {
+        this.inventoryLoadError.set(false);
+        this.pantryService.loadStats();
+      },
+      () => {
+        this.inventoryLoadError.set(true);
+      }
+    );
+  }
+
+  reintentarCargaInventario(): Promise<void> {
+    return this.recargarInventario();
   }
 
   saveIngredient(): void {
