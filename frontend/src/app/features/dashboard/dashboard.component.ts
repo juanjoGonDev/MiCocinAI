@@ -64,7 +64,9 @@ interface DashboardAiQueueRow {
       <!-- Welcome Section -->
       <section class="dashboard__welcome">
         <div class="dashboard__greeting">
-          <h1 class="dashboard__title">{{ 'dashboard.greeting' | t: { name: userName() } }}</h1>
+          <h1 class="page-heading dashboard__title">
+            {{ 'dashboard.greeting' | t: { name: userName() } }}
+          </h1>
           <p class="dashboard__subtitle">{{ 'dashboard.subtitle' | t }}</p>
         </div>
       </section>
@@ -478,14 +480,6 @@ interface DashboardAiQueueRow {
 
       .dashboard__welcome {
         margin-bottom: var(--space-6);
-      }
-
-      .dashboard__title {
-        font-family: var(--font-display);
-        font-size: var(--text-2xl);
-        font-weight: var(--font-bold);
-        color: var(--text-primary);
-        margin-bottom: var(--space-1);
       }
 
       .dashboard__subtitle {

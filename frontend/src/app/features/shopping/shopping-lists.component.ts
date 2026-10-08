@@ -82,7 +82,7 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
     <div class="tray">
       <header class="tray__head">
         <div>
-          <h1 class="tray__title">{{ 'shopping_lists.lista_de_la_compra' | t }}</h1>
+          <h1 class="page-heading tray__title">{{ 'shopping_lists.lista_de_la_compra' | t }}</h1>
           <p class="tray__subtitle">{{ 'shopping_lists.cesta_por_tienda_precio' | t }}</p>
         </div>
         <div class="tray__head-actions">
@@ -557,12 +557,6 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
         align-items: flex-start;
         justify-content: space-between;
         gap: var(--space-3);
-      }
-      .tray__title {
-        font-family: var(--font-display);
-        font-size: var(--text-2xl);
-        font-weight: var(--font-bold);
-        color: var(--text-primary);
       }
       .tray__subtitle {
         margin-top: var(--space-1);

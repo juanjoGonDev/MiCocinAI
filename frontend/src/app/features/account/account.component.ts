@@ -67,7 +67,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
       <header class="account__head">
         <div>
           <p class="account__eyebrow">{{ 'nav.household' | t }}</p>
-          <h1 class="account__title">{{ 'account.mi_cuenta' | t }}</h1>
+          <h1 class="page-heading account__title">{{ 'account.mi_cuenta' | t }}</h1>
           <p class="account__subtitle">
             {{ 'account.tu_nombre_tu_foto' | t }}
             <a routerLink="/preferences" class="account__inline-link">{{ 'nav.preferences' | t }}</a
@@ -440,12 +440,6 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
         letter-spacing: 0.08em;
         text-transform: uppercase;
         color: var(--text-tertiary);
-      }
-      .account__title {
-        font-family: var(--font-display);
-        font-size: var(--text-2xl);
-        font-weight: var(--font-bold);
-        color: var(--text-primary);
       }
       .account__subtitle {
         margin-top: var(--space-1);

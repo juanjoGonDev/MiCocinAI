@@ -3052,12 +3052,13 @@ de la misma jerarquía deja una separación distinta respecto al subtítulo sigu
 solo esos cuatro títulos de página; no incluye títulos de diálogo, contenido de recetas/artículos ni
 encabezados de sección con jerarquía inferior.
 
-**Contrato:** los cuatro `h1` de vista comparten la misma geometría calculada y tokens de tipografía,
-incluido line-height y margen; su altura de caja corresponde al line-height por el número real de líneas.
-No se exige igual alto entre títulos con diferente longitud: el Dashboard puede envolver el saludo. El
-ancho sigue dependiendo del texto y de su contenedor. El contrato se mantiene en los anchos móviles,
-tablet y escritorio; selección, hover u otros estados no aplican a estos encabezados no interactivos. No
-se cambia el texto/localización ni la estructura semántica `h1`.
+**Contrato:** los cuatro `h1` de vista usan un único `.page-heading`: familia `--font-display`, tamaño
+`--text-2xl`, peso `--font-bold`, `--leading-normal`, color `--text-primary` y margen `0 0 var(--space-1)`;
+sus cajas miden el line-height por el número real de líneas. No se exige igual alto entre títulos con
+diferente longitud: el Dashboard puede envolver el saludo. El ancho sigue dependiendo del texto y de su
+contenedor. El contrato se mantiene en los anchos móviles, tablet y escritorio; selección, hover u otros
+estados no aplican a estos encabezados no interactivos. No se cambia el texto/localización ni la estructura
+semántica `h1`.
 
 **Baseline rojo (2026-10-08):** la nueva E2E aislada falló en Chromium y Pixel 5 en 320 px al comparar
 Dashboard con Cuenta. El saludo mide 72 px por sus dos líneas frente a 36 px del título de Cuenta; esa
@@ -3065,19 +3066,37 @@ diferencia de altura es contenido esperado. Las métricas tipográficas coincide
 margen inferior de 4 px y Cuenta/Preferencias/Compra 0 px; el test se limita por tanto a exigir que cada
 caja mida `line-height × líneas` y contrasta el margen y resto de estilos entre rutas.
 
-- [ ] Añadir primero una E2E aislada roja que mida los cuatro `h1` con Chromium y Pixel 5 en 320, 393,
+- [x] Añadir primero una E2E aislada roja que mida los cuatro `h1` con Chromium y Pixel 5 en 320, 393,
       568×320, 767/768/769, 1023/1024/1025 y 1440×900; contrastar fuente, tamaño, peso, interlineado,
       tracking, márgenes, padding y borde con tolerancia ≤1 CSS px; comprobar el alto de caja frente al
       número real de líneas, sin comparar títulos de distinta longitud como si tuvieran el mismo alto. La
       reproducción debe localizar la diferencia de margen Dashboard vs. las otras tres vistas.
-- [ ] Crear un único contrato compartido para los títulos de página y migrar los cuatro consumidores,
+- [x] Crear un único contrato compartido para los títulos de página y migrar los cuatro consumidores,
       preservando texto, rutas, jerarquía semántica, subtítulos y anchuras fluidas.
-- [ ] Repetir la matriz de medidas, comprobar encabezado accesible único, contenido visible y sin
+- [x] Repetir la matriz de medidas, comprobar encabezado accesible único, contenido visible y sin
       overflow; guardar e inspeccionar capturas sintéticas comparables de las cuatro rutas en escritorio
       1440×900 y móvil 393×851.
-- [ ] Ejecutar Karma completo con gate ≥80 % S/B/F/L, `typecheck:e2e`, `check:ui`, formato, build de
+- [x] Ejecutar Karma completo con gate ≥80 % S/B/F/L, `typecheck:e2e`, `check:ui`, formato, build de
       producción y `git diff --check`; CSS estático se valida por E2E y coverage instrumentable: N/A.
       Registrar comando/resultados, rollback acotado y mantener abierta la auditoría global.
+
+**TDD rojo→verde y evidencia (2026-10-08):** la primera E2E aislada falló en Chromium y Pixel 5 con
+Dashboard margin-block-end 4 px vs. 0 px en Cuenta/Preferencias/Compra. Se normalizaron los cuatro
+consumidores al estilo global `.page-heading` sin alterar texto, jerarquía `h1`, anchuras ni subtítulos.
+La repetición con `E2E_RATE_LIMIT=on` y
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/ui-page-heading-geometry.spec.ts --reporter=line` pasó **2/2** con la app, SQLite, semilla y
+puertos propios; comparó los cuatro títulos en los diez anchos/orientaciones declarados, midió borde,
+padding, márgenes, tipografía e interlineado, validó altura por rango de texto/líneas, heading accesible
+único y ausencia de overflow. El runner confirmó cleanup tras cerrar la app. Ocho capturas sintéticas
+1440×900 y 393×851 se guardaron e inspeccionaron en
+`.e2e-screenshots/qa-page-headings-20261008/` (cuatro rutas × Chromium y Pixel 5), ignoradas por Git.
+`pnpm run test:client` pasó **1201/1201**; coverage global **90,32/81,46/88,96/91,75 % S/B/F/L**, con
+los gates 80 % intactos. `pnpm run typecheck:e2e`, Prettier focal, `pnpm run check:ui` (**210 ficheros,
+21 reglas, 0 incidencias**), `pnpm run build` de servidor + cliente producción y `git diff --check`
+pasaron. La cobertura instrumentable del cambio es N/A: solo CSS estático y clases de plantilla, medidos
+en el navegador. El build conserva warnings preexistentes de bundle inicial, presupuestos de estilos e
+imports/plantillas no relacionados; no se modificaron budgets. La auditoría visual global sigue abierta.
 
 **Rollback focal:** retirar la clase/estilo compartido de estos cuatro títulos, restaurar sus reglas
 locales y quitar esta regresión y subunidad; mantener intactos los encabezados de otras jerarquías.

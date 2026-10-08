@@ -71,7 +71,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
     <div class="preferences-page">
       <header class="preferences__head">
         <div>
-          <h1 class="preferences__title">{{ 'nav.preferences' | t }}</h1>
+          <h1 class="page-heading preferences__title">{{ 'nav.preferences' | t }}</h1>
           <p class="preferences__subtitle">
             {{ 'preferences.tu_perfil_alergias_gustos' | t }}
           </p>
@@ -286,12 +286,6 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
         align-items: flex-start;
         justify-content: space-between;
         gap: var(--space-3);
-      }
-      .preferences__title {
-        font-family: var(--font-display);
-        font-size: var(--text-2xl);
-        font-weight: var(--font-bold);
-        color: var(--text-primary);
       }
       .preferences__subtitle {
         margin-top: var(--space-1);
