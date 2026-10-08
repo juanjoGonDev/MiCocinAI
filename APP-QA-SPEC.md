@@ -544,6 +544,19 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Rollback previsto:** revertir el estado/reintento de carga en `pantry.component.ts`, sus pruebas unitarias y E2E, las claves de traducción y este subapartado; mantener intacto el contrato de carga y paginación de `PantryService`.
 
+### QA-PANTRY.ROOT-CRUD.1 · editar y borrar una fila desde la tabla
+
+**Fuente revalidada (2026-10-08):** `HOGARIA-SPEC.md` §12ab conserva las acciones individuales de editar/borrar del visor. `PantryComponent` conecta los botones de la fila a `editIngredient()`, `saveIngredient()` y `deleteIngredient()`. `tests/e2e/pantry.spec.ts` cubre alta, búsqueda, filtros, ordenación, lote, stepper, sugerencias y paginación; `pantry-touch-targets.spec.ts` abre el editor y lo cancela, y abre el diálogo de borrado para cancelarlo, pero no guarda una edición ni confirma un borrado individual. Además, la etiqueta visible «Unidad» del `<select name="unit">` no tiene `for` ni envuelve el control, por lo que el selector no tiene nombre accesible verificable.
+
+**Contrato:** desde una fila real de `/pantry`, editar mantiene el nombre y guarda cantidad/unidad; tras recargar siguen mostrándose los valores persistidos. La unidad del editor tiene nombre accesible localizado. Borrar individualmente exige confirmación: Escape conserva la fila; confirmar la quita de la despensa y sigue ausente después de recargar. Solo se usan filas sintéticas de SQLite aislada; sin IA/WebAPI ni cambios de catálogo ajenos.
+
+- [ ] Añadir primero una regresión Playwright roja: el editor de una fila no expone la unidad con el nombre accesible «Unidad»; después probar el guardado de cantidad/unidad y el borrado individual cancelar/confirmar desde la tabla.
+- [ ] Asociar correctamente label y `<select>` de unidad sin cambiar su geometría ni el resto del contrato visual del formulario.
+- [ ] Comprobar cantidad/unidad por UI, fila y recarga; verificar que Escape no envía DELETE y confirmar elimina únicamente la fila sintética, también tras recargar.
+- [ ] Ejecutar en Chromium escritorio y Pixel 5 con runner/SQLite/semilla/puertos aislados, typecheck, prueba unitaria focal, `check:ui`, formato, build y suites/gates vigentes; mantener ≥70 % S/B/F/L por archivo instrumentable. Guardar e inspeccionar capturas sintéticas PC/móvil y confirmar cleanup.
+
+**Rollback previsto:** revertir la asociación de etiqueta, la E2E y esta subunidad; sin cambios de esquema ni APIs.
+
 ## Unidad QA-PANTRY.TOUCH.1 · objetivos táctiles de acciones por ingrediente (resuelta localmente)
 
 **Fuente revalidada (2026-10-01):** `PantryComponent` renderizaba controles `.stock-btn` de 28×28 px y acciones `.action-btn` de 40×40 px. `DataTableComponent` usa tarjetas hasta 719 px y vuelve a tabla con scroll horizontal desde 720 px; por tanto, un teléfono girado (Pixel 5 ~851×393 CSS px) ya no estaba cubierto por `max-width:719px`. `pantry.spec.ts` ya comprobaba la actualización hasta cero, pero no rectángulos táctiles, acciones por toque ni el destino de foco al desaparecer la fila. La revisión también descubrió que una respuesta lenta podía devolver el foco al stepper inicial después de que la persona lo hubiera movido a Editar.
