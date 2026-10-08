@@ -168,11 +168,14 @@ test('Dashboard aplica el horizonte de caducidad guardado en Settings', async ({
         const nav = document.querySelector<HTMLElement>('.bottom-nav');
         return {
           rowBottom: row?.getBoundingClientRect().bottom ?? Number.POSITIVE_INFINITY,
-          navTop: nav?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY
+          navTop: nav?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
+          navVisible: Boolean(nav && getComputedStyle(nav).display !== 'none')
         };
       });
       await expect(finalRow).toBeVisible();
-      expect(navClearance.rowBottom).toBeLessThanOrEqual(navClearance.navTop);
+      if (navClearance.navVisible) {
+        expect(navClearance.rowBottom).toBeLessThanOrEqual(navClearance.navTop);
+      }
       await page.evaluate(() => window.scrollTo(0, 0));
       await capture(page, 'dashboard', testInfo.project.name, viewport.width);
 

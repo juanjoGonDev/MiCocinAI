@@ -96,7 +96,10 @@ test('los enlaces Dashboard y el fragmento directo abren el modal IA sin invocar
   await expect(page.locator('.ai-form')).toHaveCount(0);
 
   await page.goto('/dashboard');
-  const emptyStateLink = page.locator('.dashboard__section').nth(1).locator('.empty-state__link');
+  const suggestedRecipes = page.locator('.dashboard__section').filter({
+    has: page.getByRole('heading', { name: /Recetas sugeridas|Suggested recipes/i })
+  });
+  const emptyStateLink = suggestedRecipes.locator('.empty-state__link');
   await expect(emptyStateLink).toBeVisible();
   await emptyStateLink.click();
   await expect(page).toHaveURL(/\/recipes#ai$/);

@@ -14,8 +14,9 @@ test.describe('Preferencias', () => {
     // comensal ni una tarjeta que lo recuerde
     await page.goto('/settings');
     await expect(page.locator('.settings-title')).toBeVisible();
-    // Tema, idioma y modulos: los modulos son de la app, no del comensal
-    await expect(page.locator('.settings-group')).toHaveCount(3);
+    // Tema, idioma, resumen de hoy y modulos: son ajustes de la app, no del comensal
+    await expect(page.locator('.settings-group')).toHaveCount(4);
+    await expect(page.locator('[data-test="settings-today"]')).toHaveCount(1);
     // La tarjeta de acceso rapido se fue: no queda ni su enlace
     await expect(page.locator('.settings-group__link')).toHaveCount(0);
     await expect(page.locator('app-chip-select')).toHaveCount(0);

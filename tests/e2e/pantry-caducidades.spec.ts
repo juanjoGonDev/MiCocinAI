@@ -101,10 +101,16 @@ test.describe('las caducidades de la despensa (## 12ak)', () => {
   test('distingue el error de carga del vacío y permite reintentar por teclado', async ({
     page
   }, testInfo) => {
-    let requests = 0;
+    let controlExpiryResponses = false;
+    let controlledRequests = 0;
     await page.route('**/api/pantry/expiry', async (route) => {
-      requests += 1;
-      if (requests === 1) {
+      if (!controlExpiryResponses) {
+        await route.continue();
+        return;
+      }
+
+      controlledRequests += 1;
+      if (controlledRequests === 1) {
         await route.fulfill({
           status: 503,
           contentType: 'application/json',
@@ -142,10 +148,14 @@ test.describe('las caducidades de la despensa (## 12ak)', () => {
       });
     });
 
+    await registerAndGoto(page, '/pantry/caducidades', 'qa-cad-load-retry');
+    await expect(page.locator('.cad__vacio')).toBeVisible();
+    controlExpiryResponses = true;
+
     const firstFailure = page.waitForResponse(
       (response) => response.url().endsWith('/api/pantry/expiry') && response.status() === 503
     );
-    await registerAndGoto(page, '/pantry/caducidades', 'qa-cad-load-retry');
+    await page.reload();
     await firstFailure;
     await expect(page.locator('.cad__vacio')).toHaveCount(0);
     await expect(page.locator('[data-test="cad-error-carga"]')).toContainText(
@@ -172,7 +182,7 @@ test.describe('las caducidades de la despensa (## 12ak)', () => {
 
     await expect(page.locator('[data-test="cad-fila-Tomates de prueba"]')).toBeVisible();
     await expect(page.locator('[data-test="cad-error-carga"]')).toHaveCount(0);
-    expect(requests).toBe(2);
+    expect(controlledRequests).toBe(2);
   });
 
   test('un 200 con lista vacía conserva el estado vacío legítimo', async ({ page }) => {
