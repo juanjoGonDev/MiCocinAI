@@ -512,6 +512,19 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Rollback previsto:** revertir juntos los estilos `.boton` de `pantry-categories.component.ts` y `pantry-products.component.ts`, la nueva spec Playwright y esta unidad, dejando intactos el enlace padre y demás unidades Pantry.
 
+### QA-PANTRY.MANAGERS.SINGLE-RECORD.1 · editar y borrar una categoría y un producto
+
+**Fuente revalidada (2026-10-08):** `HOGARIA-SPEC.md` §12x define los gestores con lista, ficha y editor; toda eliminación pasa por confirmación. `pantry-managers.spec.ts` cubre alta de categoría/producto, padre, aliases, protección de filas reservadas/en uso y borrado por lote, pero no el guardado y persistencia de una edición ordinaria ni la cancelación/confirmación del borrado individual. Las rutas actuales implementan esos caminos: `PantryCategoriesComponent.guardar()` envía el diff de categoría, `borrar()` consulta impacto y pide confirmación; `PantryProductsComponent.guardar()` guarda nombre/categoría/unidad/notas/aliases y `borrar()` también exige confirmación. No se infiere un defecto de producción: falta evidencia E2E de estos flujos.
+
+**Contrato:** cambiar desde las acciones de fila la categoría y el producto creados por la prueba, guardar y comprobar los valores tras recargar. Para cada registro, cancelar el diálogo de borrado no envía `DELETE` y conserva la fila; aceptar lo envía una sola vez y la fila sigue ausente después de F5. El producto se crea sin stock y la categoría no tiene productos ni subcategorías. Solo se mutan fixtures de hogar/SQLite temporales; no se usan registros sembrados para borrar ni se llama a IA/WebAPI externo.
+
+- [ ] Añadir E2E antes de cualquier cambio productivo: crear registros propios por la UI, editarlos desde la tabla, validar el PATCH y la persistencia al recargar; si el baseline revela un defecto, conservar la reproducción roja antes del arreglo mínimo.
+- [ ] Probar cancelación y confirmación de borrado individual en ambas fichas/listas: cero DELETE y fila conservada al cancelar; exactamente un DELETE y ausencia persistida al confirmar. No tocar categorías reservadas, categorías en uso ni productos con stock.
+- [ ] Ejecutar Chromium y Pixel 5 con rate limit activo; comprobar nombres accesibles, cero errores de página, formularios usables en 320×568 y 393×851, y guardar/inspeccionar capturas sintéticas comparables de edición a 1440×900 y 393×851. Confirmar cleanup del runner aislado.
+- [ ] Ejecutar E2E focal, `typecheck:e2e`, Prettier, `check:ui`, build y `git diff --check`. Coverage S/B/F/L: N/A si permanece test-only; reabrir cobertura si se modifica lógica productiva.
+
+**Rollback:** retirar solo la nueva E2E y esta subunidad; preservar los gestores, contratos de API y demás pruebas existentes.
+
 ### QA-PANTRY.PRODUCT.DEEP-LINK.1 · ficha directa de productos más allá de la primera página
 
 **Fuente revalidada (2026-10-08):** el contrato activo `HOGARIA-SPEC.md` §12x dice que la ficha del producto vive en su URL para sobrevivir a F5, y el API ya expone `GET /api/pantry/products/:id`. `PantryService.getProduct(id)` consume esa ruta y su caso 200/404/503 está probado. Sin embargo, `PantryProductsComponent.buscarPorId()` ignora ese contrato y obtiene una sola página de `listProducts({ filter: 'all', limit: 100 })`; si la ficha no está entre las primeras 100, trata un id válido como inexistente y vuelve a la lista. El gestor sí pagina toda la colección hasta el límite establecido de 2.000.
