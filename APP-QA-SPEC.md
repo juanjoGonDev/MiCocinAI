@@ -2200,34 +2200,33 @@ latencias agregadas en ms `[146487, 15872, 152151, 117259, 19133, 22275, 19050, 
 la llamada 9 de `receipt` devolvió 400 al pedir stream y el fallback no-stream devolvió 200. El proceso
 confirmó cleanup del runner y borrado/verificación del token propio. No se pasó un ticket real.
 
-**Inventario fresco para tickets (2026-10-08):** TDD reprodujo primero que la petición contenía solo
-una parte de texto y describía falsamente el inventario como archivo adjunto. La implementación ahora
-consulta categorías/productos del hogar por ticket y envía la instantánea como una segunda parte
-`type: "text"`, etiquetada `INVENTARIO_JSON_ACTUAL`; el prompt aclara que está incluida en el mensaje y
-que debe usarse su categoría vigente. Las pruebas de `ai-queue.spec.ts` mueven un producto sintético de
-categoría antes de cargarlo y comprueban que tanto el payload PDF como el JPEG contienen la categoría
-nueva, el producto y el `response_format` estricto; cantidades/precios de existencias no forman parte de
-la instantánea. La respuesta estricta también obliga a tomar una decisión de categoría no nula para cada
-línea; el prompt manda reutilizar la categoría actual del producto y usar `other`/proponer categoría solo
-cuando corresponda. El TDD de categoría primero falló en los dos casos `missing`/`null`; el contrato
-estricto ahora los rechaza. Regresión focal de schemas/cola/prompt: **59/59**; schemas de receipt y
-prompt: **22/22** con cobertura **100/100/100/100 % S/B/F/L**. Suite completa del server:
-**1234/1234** tests no omitidos (1 skip explícito), cobertura global **91.72/83.23/96.05/94.23 %**.
-La E2E de acciones de cola pasa **2/2**, la E2E sintética loopback **1/1**, ambas con cleanup del
-runner y sin llamadas a proveedor. Comandos reproducibles: `pnpm --filter @hogaria/server exec vitest
-run src/schemas/receipts.schema.spec.ts src/schemas/ai-response-format.spec.ts
-src/utils/ai-queue.spec.ts src/utils/ticket-prompt.spec.ts --reporter=dot` (59/59);
-`pnpm --filter @hogaria/server exec vitest run src/schemas/receipts.schema.spec.ts
-src/utils/ticket-prompt.spec.ts --coverage.enabled --coverage.include=src/schemas/receipts.schema.ts
---coverage.include=src/utils/ticket-prompt.ts --reporter=dot` (22/22, 100 % focal);
-`node --test scripts/ai-live-existing-webapi.test.mjs scripts/run-ai-real-smoke.test.mjs
+**Inventario fresco para tickets (primer transporte; corregido el 2026-10-08):** TDD reprodujo que
+la petición anterior llevaba una sola parte de texto y el prompt describía falsamente el inventario como
+archivo adjunto. Ese primer cambio envió la instantánea como otra parte `type: "text"`, etiquetada
+`INVENTARIO_JSON_ACTUAL`; no satisfacía que la persona viera un segundo archivo. La subunidad
+`QA-AI.RECEIPT-INVENTORY-ATTACHMENT.1` que sigue corrigió el transporte vigente: `ticket-queue.ts`
+adjunta la instantánea fresca del hogar como `type: "file"`, nombre `inventario.json` y MIME
+`application/json`; PDF también es `file` y JPEG continúa como `image_url`. `ai-queue.spec.ts` decodifica
+y comprueba los bytes JSON y las categorías/productos actuales en ambas rutas, el MIME/nombre del PDF y
+`RECEIPT_RESPONSE_FORMAT`; `tests/e2e/receipts.spec.ts` comprueba en el proveedor sintético las tres
+partes del mensaje JPEG. La instantánea no incluye existencias/precios/historial. El prompt/schema
+estricto exige una categoría no nula por línea; el prompt reutiliza la categoría vigente del producto y
+solo usa `other`/propone clave cuando corresponde. El TDD de categoría primero falló en `missing` y
+`null`; ahora el contrato estricto los rechaza.
+
+La cobertura focal de schemas/cola/prompt fue **59/59**; schemas de receipt y prompt, **22/22** con
+**100/100/100/100 % S/B/F/L**. Suite de servidor registrada en esa revalidación: **1234/1234** pruebas
+no omitidas (1 skip explícito), coverage global **91.72/83.23/96.05/94.23 %**. La E2E de acciones de
+cola pasó **2/2** y la sintética loopback **1/1**, ambas con cleanup y sin proveedor real. La prueba
+loopback acredita el transporte sintético, no la ruta vigente de `localhost:3001`; no se repetirá el
+lote de tickets reales ni se afirmará que el modelo vio ambos archivos hasta reparar y verificar ese
+relay en WebAPI. Comandos: `pnpm --filter @hogaria/server exec vitest run
+src/schemas/receipts.schema.spec.ts src/schemas/ai-response-format.spec.ts
+src/utils/ai-queue.spec.ts src/utils/ticket-prompt.spec.ts --reporter=dot` (59/59); `node --test
+scripts/ai-live-existing-webapi.test.mjs scripts/run-ai-real-smoke.test.mjs
 scripts/ai-live-smoke-safety.test.mjs scripts/ai-live-smoke-runner-control.test.mjs
-scripts/ai-live-smoke-contract.test.mjs scripts/ai-live-receipt-inputs.test.mjs` (57/57);
-`node scripts/run-isolated-playwright.mjs --project=chromium
-tests/e2e/receipt-queue-actions.spec.ts --reporter=dot` (2/2); y
-`node scripts/run-isolated-playwright.mjs --config=playwright.ai-real-smoke.config.ts
---project=chromium-ai-real-smoke tests/e2e/ai-real-smoke.spec.ts --grep "cubre los ocho AiJobKind
-con fixtures de proveedor loopback" --reporter=dot` (1/1).
+scripts/ai-live-smoke-contract.test.mjs scripts/ai-live-receipt-inputs.test.mjs` (57/57); y la suite
+E2E aislada `tests/e2e/receipt-queue-actions.spec.ts` (2/2) más `ai-real-smoke.spec.ts` loopback (1/1).
 
 **Revalidación del lote real de tickets (2026-10-08):** el opt-in procesó la carpeta autorizada como
 cuatro tickets secuenciales y llegó al techo de **8/8 completions**. Las llamadas de formato streaming
