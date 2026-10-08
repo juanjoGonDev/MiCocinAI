@@ -90,7 +90,10 @@ test.describe('Dashboard (new user) — empty states', () => {
       has: page.getByRole('heading', { name: /Comidas de hoy|Today's meals/ })
     });
     await expect(meals.locator('[data-test="today-meals-empty"]')).toBeVisible();
-    await meals.getByRole('link', { name: /Planificar ahora|Plan now/ }).click();
+    await meals
+      .locator('[data-test="today-meals-empty"]')
+      .getByRole('link', { name: /Planificar ahora|Plan now/ })
+      .click();
     await expect(page).toHaveURL(/\/calendar/);
 
     await page.goto('/dashboard');
