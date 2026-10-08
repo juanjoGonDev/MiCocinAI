@@ -66,4 +66,38 @@ test.describe('Dashboard (new user) — empty states', () => {
     await page.locator('a.action-card[href="/calendar"]').click();
     await expect(page).toHaveURL(/.*calendar/);
   });
+
+  test('empty-meals and recipe-list links reach their destinations and summaries render', async ({
+    page
+  }) => {
+    await registerUser(page, 'Dashboard CTA');
+    await page.goto('/dashboard');
+
+    const stats = page.locator('.dashboard__stats .stat-card');
+    await expect(stats).toHaveCount(4);
+    for (const label of [
+      /Ingredientes|Ingredients/i,
+      /Recetas|Recipes/i,
+      /Miembros|Members/i,
+      /Cocinadas|Cooked/i
+    ]) {
+      const card = stats.filter({ hasText: label });
+      await expect(card).toHaveCount(1);
+      await expect(card.locator('.stat-card__value')).toHaveText(/^\d+$/);
+    }
+
+    const meals = page.locator('.dashboard__section').filter({
+      has: page.getByRole('heading', { name: /Comidas de hoy|Today's meals/ })
+    });
+    await expect(meals.locator('[data-test="today-meals-empty"]')).toBeVisible();
+    await meals.getByRole('link', { name: /Planificar ahora|Plan now/ }).click();
+    await expect(page).toHaveURL(/\/calendar/);
+
+    await page.goto('/dashboard');
+    const recipes = page.locator('.dashboard__section').filter({
+      has: page.getByRole('heading', { name: /Recetas sugeridas|Suggested recipes/ })
+    });
+    await recipes.getByRole('link', { name: /Ver todo|See all/ }).click();
+    await expect(page).toHaveURL(/\/recipes$/);
+  });
 });

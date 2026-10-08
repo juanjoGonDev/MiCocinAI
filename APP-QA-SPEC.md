@@ -1221,7 +1221,18 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 - [x] Matriz visual a 320, 393, 479, 480, 481, 767, 768, 769, 844×390, 1023, 1024 y 1440 px: sin overflow ni comida tapada por navegación fija.
 - [x] Ejecución focal tras el arreglo: `tests/e2e/dashboard-today-meals.spec.ts` **2/2** (Chromium + Pixel 5). Suite combinada `dashboard.spec.ts`, `dashboard-recipe-links.spec.ts` y `dashboard-today-meals.spec.ts`: **14/14** aislada con rate limit activo y SQLite/puertos temporales. Cobertura de producción N/A (solo se corrigió sincronización del test); no se cambió el gate.
 
-**Evidencia/limitación:** la primera suite combinada reprodujo **12/14**, con los dos fallos del mismo escenario de recuperación (desktop/móvil); tras armar el error después del helper, el spec focal pasa **2/2** y la suite combinada **14/14**. Estas corridas cubren estados vacíos/resumen, quick actions, deep links a recetas y comidas; no completan todos los vencimientos ni cada CTA de Dashboard. La casilla general `/dashboard` permanece abierta. Runner temporal sin escrituras a `localhost:4200` ni proveedor externo.
+**Evidencia/limitación:** la primera suite combinada reprodujo **12/14**, con los dos fallos del mismo escenario de recuperación (desktop/móvil); tras armar el error después del helper, el spec focal pasa **2/2** y la suite combinada original **14/14**. La revisión de los enlaces visibles detectó que faltaba cubrir Planificar ahora y Ver todo de recetas; QA-DASHBOARD.CTA-SUMMARY.1 los cierra. La casilla general `/dashboard` permanece abierta por las superficies de Today que el contrato activo aún requiere. Runner temporal sin escrituras a `localhost:4200` ni proveedor externo.
+
+### QA-DASHBOARD.CTA-SUMMARY.1 · resumen y CTA renderizados
+
+**Fuente revalidada (2026-10-08):** `DashboardComponent` renderiza cuatro tarjetas numéricas y estas rutas visibles: generar receta (`/recipes#ai`), despensa, calendario, comidas vacías/«Ver todo», lista de recetas/«Ver todo» y detalle de receta sugerida. Los tests previos no seguían Planificar ahora ni el enlace «Ver todo» de recetas. La discrepancia funcional sigue abierta: la especificación de producto HOGARIA-SPEC §2/§12al también pide vencimientos, lista abierta/presupuesto semanal y trabajos IA pendientes; el Dashboard actual no los renderiza. No se añade esa funcionalidad sin resolverla en una unidad propia.
+
+- [x] Añadir E2E para las cuatro tarjetas de resumen y los dos CTA sin destino verificado: Planificar ahora abre `/calendar` y Ver todo de recetas abre `/recipes`.
+- [x] Revalidar en Chromium escritorio y Pixel 5 los CTA actualmente renderizados, estados vacíos/poblados, resumen y destino de receta sugerida; preservar el test que confirma que abrir el modal IA no invoca el proveedor.
+
+**Evidencia (2026-10-08):** `dashboard.spec.ts --grep 'empty-meals'` pasa **2/2** en Chromium y Pixel 5; verifica cuatro resúmenes numéricos, el CTA vacío de comidas y el listado de recetas. Repetición aislada de `dashboard.spec.ts`, `dashboard-recipe-links.spec.ts` y `dashboard-today-meals.spec.ts`: **16/16** en **39,6 s**, con `E2E_RATE_LIMIT=on`, Chromium instalado, SQLite/puertos/semillas temporales y cleanup confirmado. Se cubren los CTA presentes, enlaces directos y estados de hoy; ninguna llamada a IA ocurre en el flujo de enlaces. No cambió UI, por lo que no se generaron capturas nuevas.
+
+**Pendiente de producto, mantiene abierta la casilla general `/dashboard`:** decidir/implementar las superficies Today de vencimientos, lista abierta/presupuesto y cola IA del contrato activo; esta auditoría solo cubre la pantalla que existe actualmente.
 
 ### QA-AUTH.LOGIN.DOUBLE-SUBMIT.1 · Evitar envíos concurrentes del login
 
@@ -1423,7 +1434,7 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 ## Siguiente unidad de trabajo
 
-1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code`, `/onboarding` y el shell autenticado se revalidaron en pruebas aisladas. Continuar con `/dashboard` y después el resto de acciones por pantalla.
+1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code`, `/onboarding`, el shell autenticado y los CTA actuales de `/dashboard` se revalidaron aislados. El dashboard sigue abierto por la discrepancia de alcance Today (vencimientos/lista y presupuesto/cola IA); continuar con `/household` y volver a esa decisión antes de cerrar el dashboard.
 2. QA-REC.INGRESS.1 ya está verificada con Nginx real aislado; la siguiente validación de motor pendiente es Safari/iOS real para la hoja de ofertas de QA-04c.1, sin sustituir safe-area/teclado nativos por emulación WebKit/Chromium.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
 4. QA-04c: el gate global frontend en el hook pre-push del commit `db2eeeb` pasó (**90.20/81.39/88.94/91.57 % S/B/F/L**, 1168/1168 tests, 2026-10-08); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.
