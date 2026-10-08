@@ -2244,7 +2244,7 @@ problema ni alterar su configuración.
       legible aunque las instrucciones de usuario se normalicen; usar contenido sintético, sin ticket real.
 - [x] Ejecutar pruebas focales y suite server requerida, coverage ≥70 % S/B/F/L por archivo afectado,
       formato, build/typecheck y E2E apropiada con SQLite temporal; no llamar al proveedor con tickets reales.
-- [ ] Documentar resultados/rollback, commit atómico con hooks completos, push a la rama del PR y comprobar
+- [x] Documentar resultados/rollback, commit atómico con hooks completos, push a la rama del PR y comprobar
       todos los jobs CI del SHA publicado; mantener el PR abierto y fuera de Draft como pidió el usuario.
 
 **Evidencia reproducible:** primero, las pruebas focales fallaron antes del cambio (3 fallos esperados)
@@ -2267,8 +2267,10 @@ shards 1, 2 y 4 pasaron; shard 3 descubrió que la E2E de metadatos todavía exi
 Las dos variantes ES/EN fallaron en esa aserción al recibir ahora el tercer adjunto JSON. Se reprodujo
 localmente antes de corregirla (2 fallos) y se amplió la E2E para validar exactamente los tres tipos,
 el nombre/MIME y el JSON legible; la repetición aislada pasó 2/2 con proveedor sintético. La prueba de
-favoritos tuvo un timeout en su primer intento de CI, pero su retry pasó; no causó el fallo del job.
-La verificación CI del commit que actualiza este contrato sigue pendiente.
+favoritos tuvo un timeout en su primer intento de CI, pero su retry pasó; no causó el fallo del job;
+una ejecución local aislada adicional pasó 1/1. El fix se publicó en `27749a9`; CI run
+`37783573686` terminó con **9/9 jobs verdes**. Los hooks pre-commit y pre-push también pasaron en
+los commits publicados. PR #41 permanece abierto y fuera de Draft; no se mergeó.
 
 **Rollback:** revertir únicamente la serialización/adjunto `inventario.json`, sus pruebas de cola/contrato
 y esta subunidad; mantener el snapshot de catálogo consultado en memoria y el transporte PDF/JPEG.
