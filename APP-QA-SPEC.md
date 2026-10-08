@@ -2837,7 +2837,7 @@ misma barra/grupo comparten tamaño. Variantes compactas, icon-only y touch-targ
 función o accesibilidad, deben ser explícitas y no pueden servir para destacar importancia. Se documentan
 excepciones deliberadas antes de implantarlas; no hay excepciones visuales implícitas por página.
 
-- [ ] Recorrer el manifiesto vigente de rutas, shells y vistas pobladas con fixtures sintéticos; inventariar
+- [x] Recorrer el manifiesto vigente de rutas, shells y vistas pobladas con fixtures sintéticos; inventariar
       familias equivalentes de botones/acciones, tabs/segmentos, campos, tarjetas, modales, navegación,
       encabezados, gutters y espaciado interior. Registrar rutas/estados no cubiertos y el baseline calculado.
 - [ ] Añadir primero una regresión E2E roja que mida «Planificar IA» y sus acciones pares en `/calendar`,
@@ -2858,6 +2858,20 @@ excepciones deliberadas antes de implantarlas; no hay excepciones visuales impl�
 - [ ] Guardar e inspeccionar capturas sintéticas comparables PC/móvil por grupo corregido y actualizar la
       matriz con comandos, resultados, errores existentes, gates de formato/build y cobertura ≥70 % S/B/F/L
       del alcance. No bajar gates superiores ni declarar la web pixel-perfect si queda una familia pendiente.
+
+**Inventario inicial (2026-10-08):** `layout-gutters.spec.ts` adjunta mediciones calculadas y sin texto/
+valores de 31 rutas de manifiesto (públicas, onboarding y privadas en estado inicial) y 8 detalles dinámicos
+poblados con fixtures sintéticos, a 393×851 y 1440×900, tanto en Chromium como en Pixel 5. La matriz pasó
+**6/6** con SQLite/puertos temporales. En las rutas iniciales se midieron 1097 acciones, 32 tabs, 48 campos,
+50 tarjetas, 190 elementos de navegación, 164 encabezados y 86 secciones; los detalles poblados añadieron
+218 acciones, 6 tabs, 34 campos, 4 tarjetas, 72 elementos de navegación, 28 encabezados y 24 secciones.
+Los perfiles se agrupan por viewport y firma geométrica (dimensiones, padding/márgenes, gap, tipografía,
+radios, bordes y alineación); son baseline para comparar, no una declaración de equivalencia aprobada.
+No se encontró ningún diálogo visible en esas vistas (`dialogs: 0`): los overlays cerrados, loading,
+disabled, focus, validación y listas pobladas quedan fuera. Los detalles sí están poblados; las rutas de
+colecciones permanecen en su estado inicial. Gutter/espaciado del marco se conserva cubierto por la matriz
+existente. `pnpm run typecheck:e2e`, Prettier focal y `git diff --check` pasan; coverage de producción:
+N/A (solo instrumentación E2E, sin código de producción). La matriz completa sigue abierta.
 
 **Rollback:** revertir solo los tokens/primitivas y ajustes geométricos de esta unidad, sus pruebas/capturas
 ignoradas y este subapartado; preservar el marco/gutters compartidos y las correcciones ajenas.

@@ -5,6 +5,11 @@ import { expect, test, type Page } from './fixtures';
 import { registerToOnboarding, skipOnboarding } from './helpers/auth';
 import { createSyntheticRecipe, deleteSyntheticRecipe } from './helpers/recipe-fixtures';
 import {
+  attachVisualFamilyInventory,
+  collectVisualFamilyMeasurements,
+  type VisualFamilyMeasurement
+} from './helpers/visual-family-inventory';
+import {
   AUTHENTICATED_ROUTES,
   ONBOARDING_ROUTE,
   populatedDynamicRoutes,
@@ -15,6 +20,18 @@ import {
 } from './helpers/route-layout-manifest';
 
 type ViewportCase = { width: number; height: number };
+
+async function addVisualInventorySample(
+  page: Page,
+  target: RouteCase,
+  viewport: ViewportCase,
+  measurements: VisualFamilyMeasurement[],
+  sampledRoutes: string[]
+): Promise<void> {
+  if (viewport.width !== 393 && viewport.width !== 1440) return;
+  sampledRoutes.push(target.path);
+  measurements.push(...(await collectVisualFamilyMeasurements(page, target, viewport)));
+}
 
 const WIDTH_BREAKPOINTS = [
   360, 362, 480, 481, 560, 600, 601, 640, 641, 719, 720, 721, 767, 768, 860, 900, 959, 1023, 1024,
@@ -511,12 +528,24 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
   test.setTimeout(300_000);
 
   const mismatches: string[] = [];
+  const visualMeasurements: VisualFamilyMeasurement[] = [];
+  const sampledRoutes: string[] = [];
   for (const target of PUBLIC_ROUTES) {
-    await checkRouteAcrossViewports(page, target, mismatches);
+    await checkRouteAcrossViewports(page, target, mismatches, async (viewport) => {
+      await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
+    });
   }
 
   await registerToOnboarding(page, 'Layout gutter QA');
-  await checkRouteAcrossViewports(page, ONBOARDING_ROUTE, mismatches);
+  await checkRouteAcrossViewports(page, ONBOARDING_ROUTE, mismatches, async (viewport) => {
+    await addVisualInventorySample(
+      page,
+      ONBOARDING_ROUTE,
+      viewport,
+      visualMeasurements,
+      sampledRoutes
+    );
+  });
   await skipOnboarding(page);
 
   for (const target of AUTHENTICATED_ROUTES) {
@@ -573,8 +602,17 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
           animations: 'disabled'
         });
       }
+
+      await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
     });
   }
+
+  await attachVisualFamilyInventory(
+    testInfo,
+    'visual-family-inventory-route-default.json',
+    visualMeasurements,
+    sampledRoutes
+  );
 
   expect(
     mismatches,
@@ -588,6 +626,8 @@ test('los detalles dinámicos poblados conservan shell, raíz, gutter y ancho', 
   test.setTimeout(300_000);
 
   const mismatches: string[] = [];
+  const visualMeasurements: VisualFamilyMeasurement[] = [];
+  const sampledRoutes: string[] = [];
   await registerToOnboarding(page, 'Layout gutter dynamic QA');
   await skipOnboarding(page);
 
@@ -599,6 +639,8 @@ test('los detalles dinámicos poblados conservan shell, raíz, gutter y ancho', 
         if (viewport.width === 393 || viewport.width === 1440) {
           await assertPrivateContentCanReachEnd(page, target, viewport, mismatches);
         }
+
+        await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
 
         const captureDesktop = testInfo.project.name === 'chromium' && viewport.width === 1440;
         const captureMobile = testInfo.project.name === 'mobile-chrome' && viewport.width === 393;
@@ -620,6 +662,13 @@ test('los detalles dinámicos poblados conservan shell, raíz, gutter y ancho', 
   } finally {
     await deleteSyntheticRecipe(page, fixtures.recipe);
   }
+
+  await attachVisualFamilyInventory(
+    testInfo,
+    'visual-family-inventory-populated-details.json',
+    visualMeasurements,
+    sampledRoutes
+  );
 
   expect(
     mismatches,
