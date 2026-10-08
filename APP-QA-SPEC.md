@@ -1297,8 +1297,11 @@ gate completo. Capturas sintéticas de escritorio/móvil y error inspeccionadas 
 
 - [x] Añadir E2E para las cuatro tarjetas de resumen y los dos CTA sin destino verificado: Planificar ahora abre `/calendar` y Ver todo de recetas abre `/recipes`.
 - [x] Revalidar en Chromium escritorio y Pixel 5 los CTA actualmente renderizados, estados vacíos/poblados, resumen y destino de receta sugerida; preservar el test que confirma que abrir el modal IA no invoca el proveedor.
+- [ ] Mantener los localizadores del CTA «Planificar ahora» acotados al bloque vacío de comidas de hoy, para que el mismo enlace de la próxima comida no vuelva ambigua la prueba en modo estricto.
 
 **Evidencia (2026-10-08):** `dashboard.spec.ts --grep 'empty-meals'` pasa **2/2** en Chromium y Pixel 5; verifica cuatro resúmenes numéricos, el CTA vacío de comidas y el listado de recetas. Repetición aislada de `dashboard.spec.ts`, `dashboard-recipe-links.spec.ts` y `dashboard-today-meals.spec.ts`: **16/16** en **39,6 s**, con `E2E_RATE_LIMIT=on`, Chromium instalado, SQLite/puertos/semillas temporales y cleanup confirmado. Se cubren los CTA presentes, enlaces directos y estados de hoy; ninguna llamada a IA ocurre en el flujo de enlaces. No cambió UI, por lo que no se generaron capturas nuevas.
+
+**Regresión CI (2026-10-08):** en `0c432ab`, `E2E Tests (shard 2)` falla en `tests/e2e/dashboard.spec.ts:93` porque el localizador del CTA, limitado a la sección general de comidas, encuentra tanto el enlace de hoy como el nuevo CTA de próxima comida. La selección debe dirigirse a `[data-test="today-meals-empty"]`; no se altera el comportamiento visible.
 
 **Pendiente de producto, mantiene abierta la casilla general `/dashboard`:** decidir/implementar las superficies Today de vencimientos, lista abierta/presupuesto y cola IA del contrato activo; esta auditoría solo cubre la pantalla que existe actualmente.
 
