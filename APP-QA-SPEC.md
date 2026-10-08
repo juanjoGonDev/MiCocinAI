@@ -900,8 +900,9 @@ también se traduce; un nombre personalizado prevalece sobre el diccionario; cla
 ausente se conserva según el helper. El pipe lee `changeTick()` en cada transformación. No modifica datos,
 estructura ni geometría de Despensa.
 
-- [ ] Añadir primero pruebas Angular rojas del pipe real con `I18nService` controlado: factoría del
-      servicio, lectura de `changeTick()` en cada llamada y traducción con el idioma activo; cubrir clave
+- [ ] Añadir pruebas Angular directas del pipe real con `I18nService` controlado (sin exigir un fallo
+      inicial de producción): factoría del servicio, lectura de `changeTick()` en cada llamada y
+      traducción con el idioma activo; cubrir clave
       como string, objeto con nombre de fábrica, nombre personalizado, clave desconocida, `null` y
       `undefined`. No duplicar los casos puros ya cubiertos por `pantry-gestor.util.spec.ts`.
 - [ ] Corregir solo el defecto demostrado por esas pruebas; si no aparece defecto, no cambiar producción.
