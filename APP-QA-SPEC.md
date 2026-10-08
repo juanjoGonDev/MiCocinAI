@@ -2634,7 +2634,7 @@ el alcance de la app.
       las rutas UI afectadas si se cambia producción, con DB/puertos/semillas temporales y cleanup propio.
 - [x] Ejecutar typecheck E2E, pruebas unitarias focales si cambia producto, formato, `check:ui`, build y
       `git diff --check`; documentar resultado, warnings heredados y capturas PC/móvil si cambia UI.
-- [ ] Commit atómico con hooks, push a la rama del PR sin quitar CI ni saltar verificaciones, y esperar a
+- [x] Commit atómico con hooks, push a la rama del PR sin quitar CI ni saltar verificaciones, y esperar a
       que todos los jobs del nuevo run queden verdes.
 
 **Evidencia local:**
@@ -2675,7 +2675,9 @@ borrado|una oferta 3x2 se pinta en la fila y se quita con un toque'`. El runner 
 - Se quitó la aserción global de terminal vacío, manteniendo las aserciones sobre las filas de este test y
   la selección. Verificado con `E2E_RATE_LIMIT=on pnpm run test:e2e -- --workers=1 --project=chromium
 tests/e2e/logs-clear-filters.spec.ts` (1/1), `pnpm run typecheck:e2e` y `git diff --check`.
-- **CI nuevo:** pendiente de commit/push y verde de todos los jobs.
+- Commit `0fbc74f` (`test(logs): tolerate parallel server entries`), hook pre-commit y pre-push completos;
+  CI `37706780544` (#452) terminó con **todos los jobs verdes**, incluidos los cuatro shards E2E y
+  Full-stack E2E.
 
 **Rollback:** revertir únicamente este commit quita el guard y sus pruebas (`modules.service.ts` y
 `settings.component.ts`, con sus specs unitarias), los ajustes de las seis specs E2E y esta evidencia; no
