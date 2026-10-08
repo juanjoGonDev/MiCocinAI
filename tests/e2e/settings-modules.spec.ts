@@ -1,5 +1,7 @@
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test, expect } from './fixtures';
-import { registerAndGoto } from './helpers/auth';
+import { registerAndGoto, registerUser } from './helpers/auth';
 
 test.use({ serviceWorkers: 'block' });
 
@@ -136,6 +138,8 @@ test.describe('Configuración — módulos', () => {
   test('los interruptores de módulo responden a Espacio y conservan el foco', async ({ page }) => {
     await registerAndGoto(page, '/settings', 'mods-keyboard-toggle');
     const pantrySwitch = page.locator('[data-module-switch="pantry"]');
+    await expect(pantrySwitch).toBeEnabled();
+    await expect(pantrySwitch).toHaveAttribute('aria-disabled', 'false');
     let signalPatch!: () => void;
     let releasePatch!: () => void;
     let patchCount = 0;
@@ -174,6 +178,51 @@ test.describe('Configuración — módulos', () => {
     await expect(pantrySwitch).toHaveAttribute('aria-checked', 'true');
     await expect(pantrySwitch).toBeFocused();
     await expect.poll(() => patchCount).toBe(2);
+  });
+
+  test('no se pueden cambiar módulos hasta cargar el perfil inicial', async ({ page }) => {
+    await registerUser(page, 'mods-profile-load');
+
+    let signalProfileRequest!: () => void;
+    let releaseProfile!: () => void;
+    const profileRequest = new Promise<void>((resolve) => {
+      signalProfileRequest = resolve;
+    });
+    const profileResponse = new Promise<void>((resolve) => {
+      releaseProfile = resolve;
+    });
+
+    await page.route('**/api/auth/taste*', async (route) => {
+      if (route.request().method() !== 'GET') return route.continue();
+      signalProfileRequest();
+      await profileResponse;
+      await route.continue();
+    });
+
+    await page.goto('/settings');
+    await profileRequest;
+
+    const pantrySwitch = page.locator('[data-module-switch="pantry"]');
+    await expect(pantrySwitch).toBeDisabled();
+    await expect(pantrySwitch).toHaveAttribute('aria-disabled', 'true');
+    const screenshotDir = join(
+      process.cwd(),
+      '.e2e-screenshots',
+      'qa-ci-active-contracts',
+      test.info().project.name
+    );
+    await mkdir(screenshotDir, { recursive: true });
+    await page.screenshot({
+      path: join(screenshotDir, 'settings-profile-loading.png'),
+      fullPage: true,
+      animations: 'disabled'
+    });
+
+    releaseProfile();
+    await expect(pantrySwitch).toBeEnabled();
+    await expect(pantrySwitch).toHaveAttribute('aria-checked', 'true');
+    await pantrySwitch.click();
+    await expect(pantrySwitch).toHaveAttribute('aria-checked', 'false');
   });
 
   test('una sección apagada sigue accesible por URL: no se expulsa a nadie', async ({ page }) => {

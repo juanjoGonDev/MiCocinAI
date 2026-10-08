@@ -97,8 +97,15 @@ interface Option<T extends string> {
               [attr.data-module-switch]="def.id"
               [attr.aria-checked]="modules.isEnabled(def.id)"
               [attr.aria-label]="def.labelKey | t"
-              [disabled]="!modules.canSwitchOff(def.id)"
-              [attr.aria-disabled]="modules.isSaving() || !modules.canSwitchOff(def.id)"
+              [disabled]="
+                (!modules.profileLoaded() && modules.profileLoading()) ||
+                !modules.canSwitchOff(def.id)
+              "
+              [attr.aria-disabled]="
+                (!modules.profileLoaded() && modules.profileLoading()) ||
+                modules.isSaving() ||
+                !modules.canSwitchOff(def.id)
+              "
               [attr.data-on]="modules.isEnabled(def.id)"
               (click)="toggleModule(def.id)"
             >
@@ -396,7 +403,12 @@ export class SettingsComponent {
   }
 
   toggleModule(id: HomeModule): void {
-    if (this.modules.isSaving() || !this.modules.canSwitchOff(id)) return;
+    if (
+      (!this.modules.profileLoaded() && this.modules.profileLoading()) ||
+      this.modules.isSaving() ||
+      !this.modules.canSwitchOff(id)
+    )
+      return;
     this.modules.toggle(id);
   }
 }

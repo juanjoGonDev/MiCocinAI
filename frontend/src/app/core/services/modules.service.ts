@@ -33,6 +33,8 @@ export class ModulesService {
 
   readonly registry = MODULE_REGISTRY;
   readonly isSaving = signal(false);
+  readonly profileLoaded = this.tasteService.isLoaded.asReadonly();
+  readonly profileLoading = this.tasteService.isLoading.asReadonly();
   /** Código del último guardado fallido: la vista lo traduce, el servicio no. */
   readonly lastError = signal<string | null>(null);
 
@@ -54,9 +56,7 @@ export class ModulesService {
   }
 
   /** Secciones que de verdad se ven ahora mismo (disponibles y encendidas). */
-  readonly visibleNow = computed(() =>
-    this.active().filter((id) => this.isAvailable(id))
-  );
+  readonly visibleNow = computed(() => this.active().filter((id) => this.isAvailable(id)));
 
   /**
    * La ultima seccion visible no se apaga: con la seleccion vacia la regla es
@@ -103,9 +103,7 @@ export class ModulesService {
   /** Activa o apaga un módulo. Optimista: la UI responde al clic, no a la red. */
   toggle(id: HomeModule): void {
     const current = this.active();
-    const next = this.isEnabled(id)
-      ? current.filter((module) => module !== id)
-      : [...current, id];
+    const next = this.isEnabled(id) ? current.filter((module) => module !== id) : [...current, id];
 
     this.apply(next);
   }

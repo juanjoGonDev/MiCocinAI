@@ -2610,3 +2610,66 @@ este fragmento sí coincide con su salida formateada. Sin WebAPI, tokens ni tick
 
 **Rollback:** retirar únicamente el permiso de edición durante `queued`/`analyzing`, sus pruebas y este
 subapartado; conservar la detección, edición terminal e historial.
+
+#### Subunidad QA-CI.E2E.ACTIVE-CONTRACTS.1 · corregir regresiones E2E contra la UI vigente
+
+**Fuente revalidada (CI `37701326593`, commit `9700f810`):** Type Check, build, Server Tests y Full-stack
+E2E pasaron; los shards 2 y 4 fallaron. Los informes muestran selectores/assertions obsoletos (objetivo
+del generador ahora son botones; varios objetivos pueden estar seleccionados; Hogar separa las pestañas
+Inicio/Miembros/Ajustes; la búsqueda del inventario solo existe al montar la tabla), un rango semanal
+esperado hasta el día ancla en vez de hasta domingo, y una aserción de tipo de evento que no abre antes
+«Más opciones». El test de módulos también permite interacción antes de terminar la carga del perfil; hay
+que probar esa carrera con GET retenido antes de decidir si hace falta un cambio de interfaz.
+
+**Contrato:** los E2E deben representar controles y rangos que existen hoy, sembrar los datos mínimos que
+montan controles condicionales y probar los estados de carga sin `waitForTimeout` ni assertions ambiguas.
+Los cambios de producto se limitan a un defecto de interacción reproducido; los ajustes de test no alteran
+el alcance de la app.
+
+- [x] Añadir primero una E2E aislada que retenga la carga del perfil en Configuración y compruebe que una
+      interacción temprana no puede perderse; implementar el cambio mínimo solo si reproduce el riesgo.
+- [x] Actualizar los selectores/setup de Calendario, Inventario, Preferencias/planificador y Hogar contra
+      templates, servicios y labels actuales; la semana solicitada debe comprobar el rango inclusivo real.
+- [x] Ejecutar todas las regresiones de ambos shards en Chromium aislado; ejecutar móvil real/emulado en
+      las rutas UI afectadas si se cambia producción, con DB/puertos/semillas temporales y cleanup propio.
+- [x] Ejecutar typecheck E2E, pruebas unitarias focales si cambia producto, formato, `check:ui`, build y
+      `git diff --check`; documentar resultado, warnings heredados y capturas PC/móvil si cambia UI.
+- [ ] Commit atómico con hooks, push a la rama del PR sin quitar CI ni saltar verificaciones, y esperar a
+      que todos los jobs del nuevo run queden verdes.
+
+**Evidencia local:**
+
+- CI `37701326593` confirmó los rojos originales en shards 2 y 4. El test reteniendo `GET /api/auth/taste`
+  falló primero mientras el control seguía habilitado; después el bloqueo de módulos espera la carga inicial
+  y permite recuperarse si esa carga falla.
+- E2E de carga del perfil, **4/4**: `$env:E2E_RATE_LIMIT='on'; pnpm run test:e2e -- --workers=1
+--project=chromium --project=mobile-chrome tests/e2e/settings-modules.spec.ts --grep
+'interruptores de módulo responden|no se pueden cambiar módulos'`. Red antes del cambio: la nueva E2E
+  fallaba al mantener el perfil pendiente y encontrar el control habilitado.
+- Los selectores y fixtures reflejan la UI viva (incluye el campo de búsqueda condicional del inventario,
+  objetivos múltiples, pestañas de Hogar, rango semanal lunes–domingo y opciones avanzadas de evento).
+- Las seis specs afectadas completas corrieron en Chromium + Pixel 5 emulado: **138 pasaron, 2 fallaron y
+  4 se omitieron**; ambos rojos eran supuestos incorrectos de las propias E2E móviles. La prueba de scroll
+  usaba rueda de ratón en contexto
+  táctil; ahora envía un gesto CDP táctil y espera el fin de la animación antes de medir el botón. La prueba
+  de compra cuenta el host `<app-button>` junto con los botones de icono. Repetición de ambas regresiones:
+  **4/4** (Chromium + Pixel 5); configuración tras el guard de carga: **4/4**; conjunto inicial de regresiones
+  CI: **20/20**.
+- Comando de las dos regresiones móviles, **4/4**: `$env:E2E_RATE_LIMIT='on'; pnpm run test:e2e --
+--workers=1 --project=chromium --project=mobile-chrome tests/e2e/calendar.spec.ts
+tests/e2e/shopping-round6.spec.ts --grep 'conserva la comida y permite reintentar si falla el
+borrado|una oferta 3x2 se pinta en la fila y se quita con un toque'`. El runner usa SQLite y puertos
+  aislados; limpia los artefactos al terminar en verde.
+- Karma focal: **21/21**. Coverage focal: `modules.service.ts` **98/90/100/100 %** y
+  `settings.component.ts` **100/100/100/100 %** (statements/branches/functions/lines); el comando parcial
+  termina con código 1 solo por el umbral global configurado al 80 % (no se bajó).
+- `pnpm run typecheck:e2e`, `pnpm run check:ui` (207 ficheros, 21 reglas, sin incidencias), Prettier y
+  `git diff --check` pasan. `pnpm run build:client` pasa con warnings de presupuesto, imports no usados y
+  optional chaining/nullish coalescing en ficheros ajenos a este cambio.
+- Capturas sintéticas revisadas e ignoradas por Git: `.e2e-screenshots/qa-ci-active-contracts/chromium/`
+  y `.e2e-screenshots/qa-ci-active-contracts/mobile-chrome/`.
+- **CI nuevo:** pendiente de commit/push; el subunidad no se cierra hasta que todos sus jobs queden verdes.
+
+**Rollback:** revertir únicamente este commit quita el guard y sus pruebas (`modules.service.ts` y
+`settings.component.ts`, con sus specs unitarias), los ajustes de las seis specs E2E y esta evidencia; no
+hay migraciones ni cambios de datos persistentes.

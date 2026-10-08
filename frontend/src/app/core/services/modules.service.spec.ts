@@ -1,7 +1,12 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Observable } from 'rxjs';
-import { DEFAULT_HOME_PROFILE, HOME_MODULE_OPTIONS, HomeModule, HomeProfile } from '../../shared/models/home-profile';
+import {
+  DEFAULT_HOME_PROFILE,
+  HOME_MODULE_OPTIONS,
+  HomeModule,
+  HomeProfile
+} from '../../shared/models/home-profile';
 import { TasteProfileService } from './taste-profile.service';
 import { DICTS } from '../i18n';
 import { MODULE_REGISTRY, ModulesService, moduleOwningPath } from './modules.service';
@@ -26,6 +31,8 @@ describe('ModulesService', () => {
   let service: ModulesService;
 
   class FakeTasteService {
+    readonly isLoaded = signal(true);
+    readonly isLoading = signal(false);
     /** Señal real: los computed del servicio deben invalidarse en cada escritura del fixture. */
     private readonly profileSignal = signal(current);
     readonly profile = Object.assign(() => this.profileSignal(), {
@@ -77,6 +84,22 @@ describe('ModulesService', () => {
     expect(ensureLoadedCalls).toBe(1);
   });
 
+  it('expone si el perfil inicial ya permite editar los modulos', () => {
+    configure({ modules: [] });
+    const taste = TestBed.inject(TasteProfileService) as unknown as FakeTasteService;
+
+    expect(service.profileLoaded()).toBeTrue();
+    taste.isLoaded.set(false);
+    expect(service.profileLoaded()).toBeFalse();
+    taste.isLoading.set(true);
+    expect(service.profileLoading()).toBeTrue();
+
+    taste.isLoaded.set(true);
+    taste.isLoading.set(false);
+    expect(service.profileLoaded()).toBeTrue();
+    expect(service.profileLoading()).toBeFalse();
+  });
+
   it('sin seleccion deja visibles todos los modulos que trae el build', () => {
     configure({ modules: [] });
 
@@ -91,7 +114,16 @@ describe('ModulesService', () => {
 
     // La agenda es de la casa, no de la cocina: apagar «comer» no la borra, asi que vive en el
     // nucleo y ningun modulo la gobierna (lo que se apaga dentro es el contenido de cocina).
-    for (const path of ['/dashboard', '/calendar', '/account', '/household', '/preferences', '/settings', '/logs', '/ai-config']) {
+    for (const path of [
+      '/dashboard',
+      '/calendar',
+      '/account',
+      '/household',
+      '/preferences',
+      '/settings',
+      '/logs',
+      '/ai-config'
+    ]) {
       expect(service.isPathVisible(path)).withContext(path).toBeTrue();
     }
     expect(moduleOwningPath('/settings')).toBeUndefined();
@@ -125,9 +157,9 @@ describe('ModulesService', () => {
     service.toggle('pantry');
 
     // Optimista: la navegacion ya refleja el cambio, sin respuesta del server.
-    const remainingModules = MODULE_REGISTRY
-      .filter((definition) => definition.available && definition.id !== 'pantry')
-      .map((definition) => definition.id);
+    const remainingModules = MODULE_REGISTRY.filter(
+      (definition) => definition.available && definition.id !== 'pantry'
+    ).map((definition) => definition.id);
     expect(service.selected()).toEqual(remainingModules);
     expect(service.isPathVisible('/pantry')).toBeFalse();
     expect(service.isPathVisible('/calendar')).toBeTrue();
@@ -251,8 +283,12 @@ describe('ModulesService', () => {
     // Y la clave no puede estar de adorno: si no resuelve en los dos idiomas, la pantalla sale a medias.
     for (const definition of MODULE_REGISTRY) {
       for (const idioma of ['es', 'en'] as const) {
-        expect(DICTS[idioma][definition.labelKey]).withContext(`${definition.id} en ${idioma}`).toBeTruthy();
-        expect(DICTS[idioma][definition.hintKey]).withContext(`${definition.id} (pista) en ${idioma}`).toBeTruthy();
+        expect(DICTS[idioma][definition.labelKey])
+          .withContext(`${definition.id} en ${idioma}`)
+          .toBeTruthy();
+        expect(DICTS[idioma][definition.hintKey])
+          .withContext(`${definition.id} (pista) en ${idioma}`)
+          .toBeTruthy();
       }
     }
     expect(MODULE_REGISTRY.filter((definition) => definition.available).length).toBe(4);
@@ -262,7 +298,9 @@ describe('ModulesService', () => {
     for (const definition of MODULE_REGISTRY) {
       const option = HOME_MODULE_OPTIONS.find((candidate) => candidate.value === definition.id);
       expect(option).withContext(`opcion de perfil para ${definition.id}`).toBeDefined();
-      expect(option?.available).withContext(`available de ${definition.id}`).toBe(definition.available);
+      expect(option?.available)
+        .withContext(`available de ${definition.id}`)
+        .toBe(definition.available);
     }
   });
 });

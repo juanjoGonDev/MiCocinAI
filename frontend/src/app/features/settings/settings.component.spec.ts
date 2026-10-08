@@ -23,6 +23,8 @@ describe('SettingsComponent', () => {
   let modules: {
     registry: Array<{ id: string; available: boolean; labelKey: string; hintKey: string }>;
     isSaving: WritableSignal<boolean>;
+    profileLoaded: WritableSignal<boolean>;
+    profileLoading: WritableSignal<boolean>;
     lastError: WritableSignal<string | null>;
     selected: WritableSignal<string[]>;
     isEnabled: jasmine.Spy;
@@ -53,6 +55,8 @@ describe('SettingsComponent', () => {
         }
       ],
       isSaving: signal(false),
+      profileLoaded: signal(true),
+      profileLoading: signal(false),
       lastError: signal<string | null>(null),
       selected: signal<string[]>(['meals']),
       isEnabled: jasmine.createSpy('isEnabled').and.returnValue(true),
@@ -149,5 +153,25 @@ describe('SettingsComponent', () => {
     expect(toggle.getAttribute('aria-disabled')).toBe('true');
     toggle.click();
     expect(modules.toggle).not.toHaveBeenCalled();
+  });
+
+  it('disables module controls until the profile is ready', () => {
+    modules.profileLoaded.set(false);
+    modules.profileLoading.set(true);
+    fixture.detectChanges();
+
+    const toggle = fixture.nativeElement.querySelector(
+      '[data-module-switch="meals"]'
+    ) as HTMLButtonElement;
+    expect(toggle.disabled).toBeTrue();
+    expect(toggle.getAttribute('aria-disabled')).toBe('true');
+
+    fixture.componentInstance.toggleModule('meals');
+    expect(modules.toggle).not.toHaveBeenCalled();
+
+    // Si la carga falla (deja de estar pendiente), el control no queda bloqueado para siempre.
+    modules.profileLoading.set(false);
+    fixture.detectChanges();
+    expect(toggle.disabled).toBeFalse();
   });
 });

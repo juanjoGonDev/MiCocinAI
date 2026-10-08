@@ -76,6 +76,14 @@ test.describe('Pestañas y URL', () => {
     await registerWithHousehold(page, '/pantry');
     await expect(page.locator('h1.pantry__title')).toBeVisible();
 
+    // La tabla —y su búsqueda— se monta cuando hay inventario. El hogar nuevo está vacío, así que
+    // sembramos una fila sintética por la misma UI antes de probar URL/reload.
+    await page.getByRole('button', { name: '+ Agregar', exact: true }).click();
+    await page.fill('input#ingredientName', 'Tomate');
+    await page.fill('input#quantity', '500');
+    await page.locator('app-modal button[type="submit"]').click();
+    await expect(page.locator('.toast--success').last()).toContainText('Agregado');
+
     // Escribir en la busqueda no navega a ningun otro sitio: reescribe la URL de la pantalla, sin historial.
     await page.fill('input#search', 'Leche');
     await expect(page).toHaveURL(/[?&]buscar=Leche/);

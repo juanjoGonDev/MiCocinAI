@@ -190,7 +190,14 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
 
     await page.locator('.tab', { hasText: 'Objetivo' }).click();
     await expect(page).toHaveURL(/tab=goal/);
-    await expect(page.locator('.preferences__goal--on')).toContainText('Perder peso');
+    await expect(page.locator('.preferences__goal', { hasText: 'Perder peso' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await expect(page.locator('.preferences__goal', { hasText: 'Ganar músculo' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
     await expect(page.locator('textarea#goalNotes')).toHaveValue('Poco frito y nada de bollería.');
 
     // La hora escrita en el tour vive en Preferencias, que es donde se cambia despues
@@ -331,7 +338,10 @@ test.describe('Onboarding — gustos, alergias y objetivo', () => {
     await expect(page.locator('h1.calendar__title')).toBeVisible();
     await page.getByRole('button', { name: /Planificar IA/ }).click();
 
-    await expect(page.locator('#gen-goal')).toHaveValue('muscle-gain');
+    await expect(page.locator('[data-test="generate-goal-muscle-gain"]')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
 
     // Las cuatro comidas vienen marcadas; desmarcar la merienda es decirle a la IA que no la escriba
     await expect(page.locator('[data-test="gen-meals"]')).toBeVisible();

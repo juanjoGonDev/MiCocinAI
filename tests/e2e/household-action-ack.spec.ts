@@ -325,6 +325,7 @@ test.describe('acciones de Hogar: confirmación real y reintento', () => {
 
     const inviteUrl = (await page.locator('.invite-card__code').innerText()).trim();
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await page.locator('[data-test="household-tab-members"]').click();
     const inviteTrigger = page.getByRole('button', { name: /Invitar/i });
     await inviteTrigger.focus();
     await inviteTrigger.press('Enter');
@@ -369,6 +370,7 @@ test.describe('acciones de Hogar: confirmación real y reintento', () => {
     const appErrors = trackApplicationErrors(page);
     await registerAndGoto(page, '/household', 'Owner synthetic');
     await createHouseholdThroughUi(page, 'Hogar sintético ajustes');
+    await page.locator('[data-test="household-tab-settings"]').click();
     const checkbox = page.getByRole('checkbox', { name: 'Inventario compartido' });
     const initialInviteUrl = (await page.locator('.invite-card__code').innerText()).trim();
 
@@ -417,6 +419,7 @@ test.describe('acciones de Hogar: confirmación real y reintento', () => {
     await page.reload();
     await expect(page.getByRole('checkbox', { name: 'Inventario compartido' })).not.toBeChecked();
 
+    await page.locator('[data-test="household-tab-home"]').click();
     await page.getByRole('button', { name: 'Regenerar' }).click();
     await expect(errorToast(page, 'No se pudo regenerar el código de invitación')).toBeVisible();
     await expect(page.locator('.toast--error')).toHaveCount(1);

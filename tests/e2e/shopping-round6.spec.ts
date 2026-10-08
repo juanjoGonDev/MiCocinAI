@@ -36,7 +36,9 @@ function rowOf(page: Page, name: string): Locator {
 }
 
 test.describe('Bandeja: tabla, filtros y paginación', () => {
-  test('la bandeja ordena columnas en escritorio y se adapta a tarjetas móviles', async ({ page }) => {
+  test('la bandeja ordena columnas en escritorio y se adapta a tarjetas móviles', async ({
+    page
+  }) => {
     const mobile = (page.viewportSize()?.width ?? 1024) <= 720;
     const echo = watchPageErrors(page);
     await registerAndGoto(page, '/shopping', 'r6-table');
@@ -45,8 +47,12 @@ test.describe('Bandeja: tabla, filtros y paginación', () => {
 
     if (mobile) {
       await expect(page.locator('.tray__row--head')).toBeHidden();
-      await expect(rowOf(page, 'Cesta pequena').locator('.tray__cell--name')).toContainText('Cesta pequena');
-      await expect(rowOf(page, 'Cesta pequena').locator('.tray__cell--store')).toContainText('Ahorro');
+      await expect(rowOf(page, 'Cesta pequena').locator('.tray__cell--name')).toContainText(
+        'Cesta pequena'
+      );
+      await expect(rowOf(page, 'Cesta pequena').locator('.tray__cell--store')).toContainText(
+        'Ahorro'
+      );
       await expect(rowOf(page, 'Cesta pequena').locator('.tray__cell--actions')).toBeVisible();
       expect(echo()).toBe('sin errores de pagina');
       return;
@@ -57,12 +63,17 @@ test.describe('Bandeja: tabla, filtros y paginación', () => {
     expect(echo()).toBe('sin errores de pagina');
 
     await page.getByRole('columnheader', { name: 'Total' }).click();
-    await expect(page.getByRole('columnheader', { name: 'Total' })).toHaveAttribute('aria-sort', 'descending');
+    await expect(page.getByRole('columnheader', { name: 'Total' })).toHaveAttribute(
+      'aria-sort',
+      'descending'
+    );
     // Ordenar vive en la URL: la pantalla ordenada es un enlace que se puede mandar.
     await expect(page).toHaveURL(/sort=total/);
   });
 
-  test('buscar filtra por producto y el contador de filtros dice cuanto hay puesto', async ({ page }) => {
+  test('buscar filtra por producto y el contador de filtros dice cuanto hay puesto', async ({
+    page
+  }) => {
     await registerAndGoto(page, '/shopping', 'r6-search');
     await newList(page, 'Frutas', 'Ahorro');
     // `newList` vuelve a la bandeja tras comprobar que la fila existe.
@@ -178,7 +189,10 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
       if (screenshotDirectory) {
         mkdirSync(screenshotDirectory, { recursive: true });
         await page.screenshot({
-          path: join(screenshotDirectory, `shopping-quick-add-mobile-${viewport.width}x${viewport.height}.png`)
+          path: join(
+            screenshotDirectory,
+            `shopping-quick-add-mobile-${viewport.width}x${viewport.height}.png`
+          )
         });
       }
 
@@ -212,7 +226,10 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
 
         await input.fill('2 LecHE');
         await expect(suggestions).toBeVisible();
-        const keyboardSelectedName = await suggestions.locator('[role="option"] .detail__sug-nombre').nth(1).innerText();
+        const keyboardSelectedName = await suggestions
+          .locator('[role="option"] .detail__sug-nombre')
+          .nth(1)
+          .innerText();
         await input.press('ArrowDown');
         await input.press('ArrowDown');
         await input.press('Enter');
@@ -243,12 +260,18 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     const offerRow = page.locator('[data-test="item-row"]').first();
     if (isMobile) {
       const addRow = await page.evaluate(() => {
-        const visual = { left: visualViewport?.offsetLeft ?? 0, width: visualViewport?.width ?? innerWidth };
+        const visual = {
+          left: visualViewport?.offsetLeft ?? 0,
+          width: visualViewport?.width ?? innerWidth
+        };
         const form = document.querySelector<HTMLFormElement>('.detail__add');
         if (!form) return null;
         const rect = form.getBoundingClientRect();
         const controls = Array.from(form.children)
-          .filter((child): child is HTMLElement => child instanceof HTMLElement && child.matches('button, app-icon-button'))
+          .filter(
+            (child): child is HTMLElement =>
+              child instanceof HTMLElement && child.matches('button, app-button, app-icon-button')
+          )
           .map((control) => {
             const controlRect = control.getBoundingClientRect();
             return { left: controlRect.left, right: controlRect.right };
@@ -256,7 +279,12 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
         return {
           visual,
           rootScrollWidth: document.documentElement.scrollWidth,
-          form: { left: rect.left, right: rect.right, clientWidth: form.clientWidth, scrollWidth: form.scrollWidth },
+          form: {
+            left: rect.left,
+            right: rect.right,
+            clientWidth: form.clientWidth,
+            scrollWidth: form.scrollWidth
+          },
           controls
         };
       });
@@ -265,15 +293,21 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
       expect(addRow!.form.scrollWidth).toBeLessThanOrEqual(addRow!.form.clientWidth);
       expect(addRow!.form.right).toBeLessThanOrEqual(addRow!.visual.left + addRow!.visual.width);
       expect(addRow!.controls).toHaveLength(4);
-      expect(addRow!.controls.every((control) => control.left >= addRow!.visual.left
-        && control.right <= addRow!.visual.left + addRow!.visual.width)).toBe(true);
+      expect(
+        addRow!.controls.every(
+          (control) =>
+            control.left >= addRow!.visual.left &&
+            control.right <= addRow!.visual.left + addRow!.visual.width
+        )
+      ).toBe(true);
     }
     await offerRow.getByRole('button', { name: 'Acciones de la linea' }).click();
-    const offerSaved = page.waitForResponse((response) =>
-      response.url().includes('/api/shopping/lists/')
-      && response.url().includes('/items/')
-      && response.request().method() === 'PATCH'
-      && response.ok()
+    const offerSaved = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/shopping/lists/') &&
+        response.url().includes('/items/') &&
+        response.request().method() === 'PATCH' &&
+        response.ok()
     );
     await page.locator('[data-test="offer-preset"]', { hasText: '3x2' }).click();
     await offerSaved;
@@ -295,13 +329,26 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
         const style = getComputedStyle(sheet);
         return {
           viewport,
-          sheet: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: sheet.clientWidth, height: sheet.clientHeight, scrollHeight: sheet.scrollHeight, overflowY: style.overflowY }
+          sheet: {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: sheet.clientWidth,
+            height: sheet.clientHeight,
+            scrollHeight: sheet.scrollHeight,
+            overflowY: style.overflowY
+          }
         };
       });
       expect(geometry.sheet.left).toBeGreaterThanOrEqual(geometry.viewport.left);
-      expect(geometry.sheet.right).toBeLessThanOrEqual(geometry.viewport.left + geometry.viewport.width);
+      expect(geometry.sheet.right).toBeLessThanOrEqual(
+        geometry.viewport.left + geometry.viewport.width
+      );
       expect(geometry.sheet.top).toBeGreaterThanOrEqual(geometry.viewport.top);
-      expect(geometry.sheet.bottom).toBeLessThanOrEqual(geometry.viewport.top + geometry.viewport.height);
+      expect(geometry.sheet.bottom).toBeLessThanOrEqual(
+        geometry.viewport.top + geometry.viewport.height
+      );
       expect(geometry.sheet.overflowY).toBe('auto');
     }
     await doneButton.click({ timeout: isMobile ? 6000 : undefined });
@@ -315,23 +362,42 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
         if (!form) return null;
         const rect = form.getBoundingClientRect();
         const controls = Array.from(form.children)
-          .filter((child): child is HTMLElement => child instanceof HTMLElement && child.matches('button, app-icon-button'))
+          .filter(
+            (child): child is HTMLElement =>
+              child instanceof HTMLElement && child.matches('button, app-button, app-icon-button')
+          )
           .map((control) => {
             const controlRect = control.getBoundingClientRect();
             return { left: controlRect.left, right: controlRect.right };
           });
-        return { width, rootScrollWidth: document.documentElement.scrollWidth, formWidth: form.clientWidth, formScrollWidth: form.scrollWidth, formRight: rect.right, controls };
+        return {
+          width,
+          rootScrollWidth: document.documentElement.scrollWidth,
+          formWidth: form.clientWidth,
+          formScrollWidth: form.scrollWidth,
+          formRight: rect.right,
+          controls
+        };
       });
       expect(narrowAddRow).not.toBeNull();
       expect(narrowAddRow!.rootScrollWidth).toBeLessThanOrEqual(narrowAddRow!.width);
       expect(narrowAddRow!.formScrollWidth).toBeLessThanOrEqual(narrowAddRow!.formWidth);
       expect(narrowAddRow!.formRight).toBeLessThanOrEqual(narrowAddRow!.width);
       expect(narrowAddRow!.controls).toHaveLength(4);
-      expect(narrowAddRow!.controls.every((control) => control.left >= 0 && control.right <= narrowAddRow!.width)).toBe(true);
+      expect(
+        narrowAddRow!.controls.every(
+          (control) => control.left >= 0 && control.right <= narrowAddRow!.width
+        )
+      ).toBe(true);
       await offerRow.getByRole('button', { name: 'Acciones de la linea' }).click();
       await expect(editSheet).toHaveCSS('transform', 'none');
       const narrowSheet = await editSheet.evaluate((sheet) => {
-        const viewport = { width: visualViewport?.width ?? innerWidth, height: visualViewport?.height ?? innerHeight, left: visualViewport?.offsetLeft ?? 0, top: visualViewport?.offsetTop ?? 0 };
+        const viewport = {
+          width: visualViewport?.width ?? innerWidth,
+          height: visualViewport?.height ?? innerHeight,
+          left: visualViewport?.offsetLeft ?? 0,
+          top: visualViewport?.offsetTop ?? 0
+        };
         const rect = sheet.getBoundingClientRect();
         const style = getComputedStyle(sheet);
         return {
@@ -348,9 +414,13 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
       });
       await expect(editSheet).toBeVisible();
       await expect(editSheet).toHaveCSS('transform', 'none');
-      expect(narrowSheet.right).toBeLessThanOrEqual(narrowSheet.viewport.left + narrowSheet.viewport.width);
+      expect(narrowSheet.right).toBeLessThanOrEqual(
+        narrowSheet.viewport.left + narrowSheet.viewport.width
+      );
       expect(narrowSheet.top).toBeGreaterThanOrEqual(narrowSheet.viewport.top);
-      expect(narrowSheet.bottom).toBeLessThanOrEqual(narrowSheet.viewport.top + narrowSheet.viewport.height);
+      expect(narrowSheet.bottom).toBeLessThanOrEqual(
+        narrowSheet.viewport.top + narrowSheet.viewport.height
+      );
       expect(narrowSheet.height).toBeLessThanOrEqual(narrowSheet.viewport.height);
       expect(narrowSheet.scrollHeight).toBeGreaterThan(narrowSheet.height);
       expect(narrowSheet.overflowY).toBe('auto');
@@ -359,8 +429,12 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
         const rect = button.getBoundingClientRect();
         const left = visualViewport?.offsetLeft ?? 0;
         const top = visualViewport?.offsetTop ?? 0;
-        return rect.left >= left && rect.right <= left + (visualViewport?.width ?? innerWidth)
-          && rect.top >= top && rect.bottom <= top + (visualViewport?.height ?? innerHeight);
+        return (
+          rect.left >= left &&
+          rect.right <= left + (visualViewport?.width ?? innerWidth) &&
+          rect.top >= top &&
+          rect.bottom <= top + (visualViewport?.height ?? innerHeight)
+        );
       });
       expect(buttonInViewport).toBe(true);
       await doneButton.focus();
@@ -391,10 +465,15 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     await expect(page.locator('[data-test="offer-chip"]')).toHaveCount(0);
   });
 
-  test('el descuento de la lista se aplica al total y se puede quitar', async ({ page }, testInfo) => {
+  test('el descuento de la lista se aplica al total y se puede quitar', async ({
+    page
+  }, testInfo) => {
     const isMobile = testInfo.project.name === 'mobile-chrome';
     const viewports = isMobile
-      ? [{ width: 393, height: 851 }, { width: 320, height: 568 }]
+      ? [
+          { width: 393, height: 851 },
+          { width: 320, height: 568 }
+        ]
       : [{ width: 1440, height: 900 }];
 
     for (const viewport of viewports) {
@@ -405,9 +484,16 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
       await page.locator('[data-test="create-submit"]').click();
       await page.locator('[data-test="add-input"]').fill('1 Aceite');
       await page.locator('[data-test="add-submit"]').click();
-      await page.locator('[data-test="item-row"]').first().getByRole('button', { name: 'Acciones de la linea' }).click();
+      await page
+        .locator('[data-test="item-row"]')
+        .first()
+        .getByRole('button', { name: 'Acciones de la linea' })
+        .click();
       await page.locator('[data-test="price-input"]').fill('10');
-      await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
+      await page
+        .locator('[data-test="edit-sheet"]')
+        .getByRole('button', { name: /Hecho/i })
+        .click();
 
       await page.locator('[data-test="discount-open"]').click();
       await page.locator('[data-test="discount-kind"]', { hasText: 'Porcentaje' }).click();
@@ -421,7 +507,10 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
       if (screenshotDirectory) {
         mkdirSync(screenshotDirectory, { recursive: true });
         await page.screenshot({
-          path: join(screenshotDirectory, `shopping-discount-${viewport.width}x${viewport.height}.png`)
+          path: join(
+            screenshotDirectory,
+            `shopping-discount-${viewport.width}x${viewport.height}.png`
+          )
         });
       }
       await page.locator('[data-test="discount-save"]').click();
@@ -446,18 +535,26 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==',
       'base64'
     );
-    await page.locator('input[name="photoFile"]').setInputFiles({ name: 'ticket.png', mimeType: 'image/png', buffer: png });
-    const photoResponsePromise = page.waitForResponse((response) =>
-      response.url().includes('/photo/analyze') && response.request().method() === 'POST'
+    await page
+      .locator('input[name="photoFile"]')
+      .setInputFiles({ name: 'ticket.png', mimeType: 'image/png', buffer: png });
+    const photoResponsePromise = page.waitForResponse(
+      (response) =>
+        response.url().includes('/photo/analyze') && response.request().method() === 'POST'
     );
     await page.locator('[data-test="photo-analyze"]').click();
 
     const photoResponse = await photoResponsePromise;
-    const photoBody = await photoResponse.json() as { message?: string; data?: { redirect?: string } };
+    const photoBody = (await photoResponse.json()) as {
+      message?: string;
+      data?: { redirect?: string };
+    };
     expect(photoResponse.status(), `photo error code: ${String(photoBody.message)}`).toBe(409);
     expect(photoBody.message).toBe('AI_NOT_CONFIGURED');
     expect(photoBody.data?.redirect).toBe('/ai-config');
-    await expect(page.locator('[data-test="photo-error"]')).toContainText(/Falta configurar la IA/i);
+    await expect(page.locator('[data-test="photo-error"]')).toContainText(
+      /Falta configurar la IA/i
+    );
     await expect(page.locator('[data-test="photo-error"] a')).toHaveAttribute('href', '/ai-config');
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(0);
   });
@@ -472,8 +569,8 @@ test.describe('Calendario de la casa', () => {
     // lo que hacia el de abajo y por eso se fue.
     await page.locator('[data-test="event-add"]').click();
     await page.locator('[data-test="event-title"]').fill('Carpinteria: medir el pasillo');
-    // El tipo se elige en el selector de la casa (mismo control que unidades y secciones),
-    // no en un `select` nativo: el nativo no lleva el color del tipo.
+    await page.locator('[data-test="event-more-options"]').click();
+    // El tipo vive dentro de «Más opciones» y usa el picker de la casa, no un select nativo.
     await page.locator('[data-test="event-kind"] button').first().click();
     await page.getByRole('option', { name: 'Casa', exact: true }).click();
     await page.locator('[data-test="event-save"]').click();
@@ -499,8 +596,9 @@ test.describe('Calendario de la casa', () => {
       if (/\/api\/calendar\/events\?/.test(request.url())) requests.push(request.url());
     });
 
-    await page.getByRole('button', { name: 'Periodo siguiente' }).click();
-    await page.getByRole('button', { name: 'Periodo anterior' }).click();
+    const periodNav = page.locator('.cal-top__nav');
+    await periodNav.getByRole('button', { name: 'Periodo siguiente' }).click();
+    await periodNav.getByRole('button', { name: 'Periodo anterior' }).click();
     await page.waitForTimeout(500);
     // Uno por ventana cargada (la inicial y los dos saltos). El bucle de antes multiplicaba
     // esto por decenas y el server contestaba 429.
@@ -520,18 +618,23 @@ test.describe('Descuento por producto (la etiqueta del supermercado)', () => {
       await page.locator('[data-test="add-submit"]').click();
     }
     // Precios unitarios: 4,00 € Jamón y 0,50 € Leche (dos unidades = 1,00 €).
-    await page.locator('[data-test="item-row"]').first().getByRole('button', { name: 'Acciones de la linea' }).click();
+    await page
+      .locator('[data-test="item-row"]')
+      .first()
+      .getByRole('button', { name: 'Acciones de la linea' })
+      .click();
     await page.locator('[data-test="price-input"]').fill('4');
     await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
 
     const milkRow = page.locator('[data-test="item-row"]').filter({ hasText: 'Leche' });
     await milkRow.getByRole('button', { name: 'Acciones de la linea' }).click();
     await page.locator('[data-test="price-input"]').fill('0,50');
-    const milkPriceSaved = page.waitForResponse((response) =>
-      response.url().includes('/api/shopping/lists/')
-      && response.url().includes('/items/')
-      && response.request().method() === 'PATCH'
-      && response.ok()
+    const milkPriceSaved = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/shopping/lists/') &&
+        response.url().includes('/items/') &&
+        response.request().method() === 'PATCH' &&
+        response.ok()
     );
     await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
     await milkPriceSaved;
@@ -561,7 +664,10 @@ test.describe('Descuento por producto (la etiqueta del supermercado)', () => {
 });
 
 test.describe('Selector de unidad con búsqueda', () => {
-  async function checkUnitSearch(page: Page, viewport: { width: number; height: number }): Promise<void> {
+  async function checkUnitSearch(
+    page: Page,
+    viewport: { width: number; height: number }
+  ): Promise<void> {
     const pageErrors = watchPageErrors(page);
     await registerAndGoto(page, '/shopping', `r6-unit-picker-${viewport.width}`);
     await newList(page, 'Unidad buscable');
@@ -581,39 +687,65 @@ test.describe('Selector de unidad con búsqueda', () => {
             clientWidth: tabs.clientWidth,
             scrollWidth: tabs.scrollWidth
           },
-          tabTargets: Array.from(tabs?.querySelectorAll<HTMLElement>('.tray__tab, .tray__filter-toggle') ?? []).map((item) => {
+          tabTargets: Array.from(
+            tabs?.querySelectorAll<HTMLElement>('.tray__tab, .tray__filter-toggle') ?? []
+          ).map((item) => {
             const rect = item.getBoundingClientRect();
-            return { name: item.getAttribute('aria-label') || item.innerText, width: rect.width, height: rect.height };
+            return {
+              name: item.getAttribute('aria-label') || item.innerText,
+              width: rect.width,
+              height: rect.height
+            };
           }),
           tabChildren: Array.from(tabs?.children ?? []).map((child) => {
             const element = child as HTMLElement;
             const rect = element.getBoundingClientRect();
-            return { className: element.className, text: element.innerText, left: rect.left, right: rect.right, width: rect.width };
-          }),
-          navItems: Array.from(nav?.querySelectorAll<HTMLElement>('.bottom-nav__item') ?? []).map((item) => {
-            const rect = item.getBoundingClientRect();
             return {
-              label: item.innerText,
+              className: element.className,
+              text: element.innerText,
               left: rect.left,
               right: rect.right,
-              width: rect.width,
-              height: rect.height,
-              style: {
-                flex: getComputedStyle(item).flex,
-                minWidth: getComputedStyle(item).minWidth,
-                labelWidth: item.querySelector('.bottom-nav__label')?.getBoundingClientRect().width
-              }
+              width: rect.width
             };
-          })
+          }),
+          navItems: Array.from(nav?.querySelectorAll<HTMLElement>('.bottom-nav__item') ?? []).map(
+            (item) => {
+              const rect = item.getBoundingClientRect();
+              return {
+                label: item.innerText,
+                left: rect.left,
+                right: rect.right,
+                width: rect.width,
+                height: rect.height,
+                style: {
+                  flex: getComputedStyle(item).flex,
+                  minWidth: getComputedStyle(item).minWidth,
+                  labelWidth: item.querySelector('.bottom-nav__label')?.getBoundingClientRect()
+                    .width
+                }
+              };
+            }
+          )
         };
       });
       expect(shellLayout.viewportWidth).toBe(viewport.width);
-      expect(shellLayout.rootScrollWidth, JSON.stringify(shellLayout)).toBeLessThanOrEqual(shellLayout.viewportWidth);
+      expect(shellLayout.rootScrollWidth, JSON.stringify(shellLayout)).toBeLessThanOrEqual(
+        shellLayout.viewportWidth
+      );
       expect(shellLayout.navRight).toBeLessThanOrEqual(shellLayout.viewportWidth);
-      expect(shellLayout.navItems.every((item) => item.left >= 0 && item.right <= shellLayout.viewportWidth
-        && item.width >= 44 && item.height >= 44)).toBe(true);
+      expect(
+        shellLayout.navItems.every(
+          (item) =>
+            item.left >= 0 &&
+            item.right <= shellLayout.viewportWidth &&
+            item.width >= 44 &&
+            item.height >= 44
+        )
+      ).toBe(true);
       expect(shellLayout.tabs?.scrollWidth).toBeLessThanOrEqual(shellLayout.tabs?.clientWidth ?? 0);
-      expect(shellLayout.tabTargets.every((item) => item.width >= 44 && item.height >= 44)).toBe(true);
+      expect(shellLayout.tabTargets.every((item) => item.width >= 44 && item.height >= 44)).toBe(
+        true
+      );
       await expect(page.locator('.tray__filter-toggle')).toHaveAccessibleName('Filtros');
       await expect(page.locator('.tray__filter-toggle')).toHaveAttribute('aria-expanded', 'false');
     }
@@ -628,8 +760,11 @@ test.describe('Selector de unidad con búsqueda', () => {
     await rowOf(page, 'Unidad buscable').getByRole('link').click();
     await page.locator('[data-test="add-input"]').fill('1 Leche');
     await page.locator('[data-test="add-submit"]').click();
-    await page.locator('[data-test="item-row"]').first()
-      .getByRole('button', { name: 'Acciones de la linea' }).click();
+    await page
+      .locator('[data-test="item-row"]')
+      .first()
+      .getByRole('button', { name: 'Acciones de la linea' })
+      .click();
 
     const editSheet = page.locator('[data-test="edit-sheet"]');
     const picker = editSheet.locator('[data-test="unit-picker"]');
@@ -683,23 +818,32 @@ test.describe('Selector de unidad con búsqueda', () => {
     if (screenshotDirectory) {
       mkdirSync(screenshotDirectory, { recursive: true });
       await page.screenshot({
-        path: join(screenshotDirectory, `shopping-unit-search-${viewport.width}x${viewport.height}.png`),
+        path: join(
+          screenshotDirectory,
+          `shopping-unit-search-${viewport.width}x${viewport.height}.png`
+        ),
         animations: 'disabled'
       });
     }
 
-    const unitSaved = page.waitForResponse((response) =>
-      response.url().includes('/api/shopping/lists/')
-      && response.url().includes('/items/')
-      && response.request().method() === 'PATCH'
-      && response.ok()
+    const unitSaved = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/shopping/lists/') &&
+        response.url().includes('/items/') &&
+        response.request().method() === 'PATCH' &&
+        response.ok()
     );
     await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
     await unitSaved;
     await page.reload();
-    await page.locator('[data-test="item-row"]').first()
-      .getByRole('button', { name: 'Acciones de la linea' }).click();
-    await expect(page.locator('[data-test="unit-picker"] .picker__trigger')).toContainText('caja familiar');
+    await page
+      .locator('[data-test="item-row"]')
+      .first()
+      .getByRole('button', { name: 'Acciones de la linea' })
+      .click();
+    await expect(page.locator('[data-test="unit-picker"] .picker__trigger')).toContainText(
+      'caja familiar'
+    );
     expect(pageErrors()).toBe('sin errores de pagina');
   }
 

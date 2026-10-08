@@ -255,7 +255,13 @@ test.describe('Calendario', () => {
 
     const editor = await openMealEditorFromTimeline(page, 'Ensalada completa');
     const deleteButton = editor.getByRole('button', { name: 'Eliminar', exact: true });
-    const deleteButtonBounds = await deleteButton.boundingBox();
+    let deleteButtonBounds = await deleteButton.boundingBox();
+    if (testInfo.project.name === 'mobile-chrome') {
+      await expect
+        .poll(async () => (await deleteButton.boundingBox())?.height ?? 0)
+        .toBeGreaterThanOrEqual(44);
+      deleteButtonBounds = await deleteButton.boundingBox();
+    }
 
     // Cancelar debe conservar el editor y no iniciar ninguna petición de escritura.
     await deleteButton.click();
@@ -367,14 +373,33 @@ test.describe('Calendario', () => {
         const bodyBounds = await modalBody.boundingBox();
         expect(bodyBounds).not.toBeNull();
         if (bodyBounds) {
-          await page.mouse.move(
-            bodyBounds.x + bodyBounds.width / 2,
-            bodyBounds.y + bodyBounds.height / 2
-          );
-          await page.mouse.wheel(
-            0,
-            initialModalScroll.scrollHeight - initialModalScroll.clientHeight + 16
-          );
+          const touchX = bodyBounds.x + bodyBounds.width / 2;
+          const touchStartY = bodyBounds.y + bodyBounds.height * 0.75;
+          const touchEndY = bodyBounds.y + bodyBounds.height * 0.25;
+          const cdp = await page.context().newCDPSession(page);
+          try {
+            await cdp.send('Input.dispatchTouchEvent', {
+              type: 'touchStart',
+              touchPoints: [{ x: touchX, y: touchStartY }]
+            });
+            for (let step = 1; step <= 4; step++) {
+              await cdp.send('Input.dispatchTouchEvent', {
+                type: 'touchMove',
+                touchPoints: [
+                  {
+                    x: touchX,
+                    y: touchStartY + ((touchEndY - touchStartY) * step) / 4
+                  }
+                ]
+              });
+            }
+            await cdp.send('Input.dispatchTouchEvent', {
+              type: 'touchEnd',
+              touchPoints: []
+            });
+          } finally {
+            await cdp.detach();
+          }
         }
       }
       const narrowDeleteButtonBounds = await deleteButton.boundingBox();
@@ -622,9 +647,7 @@ test.describe('Calendario', () => {
     await expect(dialog.locator('#event-end')).toHaveValue('07:45');
     await expect(kind.locator('.picker__value')).toHaveText('Casa');
     await expect(dialog.locator('#event-place')).toHaveValue('Armario del recibidor');
-    await expect(dialog.locator('#event-notes')).toHaveValue(
-      'Comprobar fecha y llevar una lista.'
-    );
+    await expect(dialog.locator('#event-notes')).toHaveValue('Comprobar fecha y llevar una lista.');
     await expect(dialog.getByRole('button', { name: 'Color #E05A5A', exact: true })).toHaveClass(
       /is-active/
     );
@@ -1180,12 +1203,15 @@ test.describe('Calendario — repeticiones', () => {
     await nuevaSuelta(page, 'Cambiar sábanas semanal', start, 'Cada semana', true);
 
     const nextWeek = mondayOfIsoWeek(followingOccurrence);
+    const nextWeekEndDate = new Date(`${nextWeek}T12:00:00Z`);
+    nextWeekEndDate.setUTCDate(nextWeekEndDate.getUTCDate() + 6);
+    const nextWeekEnd = nextWeekEndDate.toISOString().slice(0, 10);
     const eventsResponse = page.waitForResponse((response) => {
       const url = new URL(response.url());
       return (
         url.pathname.endsWith('/api/calendar/events') &&
         url.searchParams.get('from') === nextWeek &&
-        url.searchParams.get('to') === followingOccurrence
+        url.searchParams.get('to') === nextWeekEnd
       );
     });
     const responseData = eventsResponse.then(
