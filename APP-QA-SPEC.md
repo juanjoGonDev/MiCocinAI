@@ -2944,6 +2944,36 @@ el foco visible; las capturas sintéticas de Compra a 1440×900 y 393×851 se in
 el grosor exacto del outline (el navegador calcula 3 px), pero exige estilo sólido y al menos 2 px; no
 reduce los requisitos de caja ni de objetivo táctil.
 
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.SETTINGS-TABS.1 · pestañas de Cuenta y Preferencias
+
+**Fuente revalidada (2026-10-08):** `/account` y `/preferences` implementan pestañas de sección con el mismo
+contrato de `.tab`: icono más texto, tipografía, padding, gap, borde activo y transiciones equivalentes.
+Sin embargo, Preferencias conserva una sola fila desplazable en móvil (`overflow-x: auto`, elementos sin
+reducción), mientras Cuenta cambia a `flex-wrap: wrap` hasta 560 px. La prioridad/selección debe reflejarse
+solo en color y borde, no cambiar medidas; ambas listas deben conservar la fila y exponer por scroll las
+pestañas que no quepan.
+
+**Contrato:** comparar el estilo calculado de `.tab`, sus cajas y el contenedor de pestañas en Cuenta y
+Preferencias, sin exigir que el ancho de etiquetas distintas sea igual. En móvil, tabs de una sola línea,
+sin reducción ni salto de fila, scroll horizontal dentro del grupo y último elemento alcanzable por toque,
+Tab y Enter; la página no adquiere overflow. El foco/selección no altera la geometría. Las diferencias de
+contenido (tres frente a cinco secciones) se conservan.
+
+- [ ] Añadir primero una regresión Playwright real aislada para Account y Preferences; comparar medidas,
+      padding, gap, fuente, borde y radio con tolerancia ≤1 CSS px en 320, 393, 568×320, 559/560/561,
+      767/768/769, 1023/1024/1025 y 1440 px. El baseline debe fallar en el wrap de Cuenta ≤560 px.
+- [ ] Normalizar solo el grupo móvil de Cuenta al contrato desplazable/no encogible de Preferencias; no
+      alterar rutas/query, contenido, colores activos ni el tamaño/padding de los controles.
+- [ ] Repetir en Chromium escritorio y Pixel 5; probar selección normal/foco, scroll hasta la última tab
+      con toque y teclado, estados activos sin cambio de caja y ausencia de overflow global.
+- [ ] Guardar e inspeccionar capturas sintéticas comparables PC/móvil de ambas rutas. Ejecutar typecheck,
+      `check:ui`, Prettier, build y `git diff --check`; coverage instrumentable S/B/F/L: N/A si el cambio
+      queda en CSS estático, documentando la razón. Mantener abierta la auditoría visual global.
+
+**Rollback focal:** restaurar únicamente el comportamiento de wrap/overflow de las pestañas en
+`AccountComponent`, retirar su regresión Playwright y este subapartado; preservar la familia compartida y
+las demás vistas de Cuenta y Preferencias.
+
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.TEXT-FIELDS.1 · campos de texto de una línea
 
 **Fuente revalidada (2026-10-04):** el marco/gutter y las raíces ya se comparan en `layout-gutters.spec.ts`,
