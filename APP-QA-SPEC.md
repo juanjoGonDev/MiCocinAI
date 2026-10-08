@@ -620,6 +620,20 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 Candidatos del informe previo al lote (histórico; orden statements/branches/functions/lines): `auth.service.ts` 100/81.82/94.59/100 %, `theme.service.ts` 96.67/92.86/87.50/96.67 %, `shopping.model.ts` 79.22/62.40/66.67/79.22 %, `error.interceptor.ts` 7.89/0/0/7.89 %, `swipe-row.directive.ts` 10.09/11.11/11.76/10.09 %, `core/time.ts` 86.75/57.83/95/86.75 %, `data-table.util.ts` 95.86/78.77/100/95.86 %, `i18n.service.ts` 61.70/23.68/61.54/61.70 %, `household.service.ts` 1.79/0/0/1.79 % y `taste-profile.service.ts` 3.33/0/0/3.33 %.
 
+### Unidad QA-04c.SWIPE-DIRECTIVES.1 · cobertura de los gestos de compra
+
+**Fuente revalidada (2026-10-08):** el contrato vigente de `HOGARIA-SPEC.md` §8e fija revelar el riel al superar 56 px, confirmar quitar al 60 % del ancho, sumar una unidad a la derecha con `max(56 px, 35 %)`, pulsación larga de 350 ms y prioridad del scroll vertical. También exige que el gesto no se convierta en un tap residual y permite iniciar el swipe sobre botones de la fila, salvo controles con `data-gesture-stop`. `shopping-lists.spec.ts` ya ejercita reveal, quitar/undo, +1 y selección por pulsación larga en Chromium/Pixel 5. Sin embargo, `swipe-row.directive.spec.ts` solo prueba siete casos de las funciones puras y no ejecuta los dos ciclos de vida de directiva. El LCOV de la suite completa actual registra para `swipe-row.directive.ts` **10.09/11.11/11.76/10.09 % S/B/F/L** (11/109 líneas, 5/45 ramas, 2/17 funciones); esta unidad añade cobertura unitaria sin duplicar la E2E de producto.
+
+**Alcance:** probar `SwipeRowDirective` y `LongPressDirective` contra el contrato y los handlers actuales; no cambiar producción si las pruebas confirman el comportamiento existente. Si una regresión revela discrepancia, registrar primero su criterio y prueba roja antes de corregir.
+
+- [ ] Añadir pruebas de ciclo de vida de `SwipeRowDirective`: puntero izquierdo y propiedad del `pointerId`, exclusiones de controles/`data-gesture-stop`, eje vertical, movimiento bajo umbral, reveal/cierre, +1 por umbral, quitar al 60 %, `gestureEnded`, protección residual de 250 ms y cleanup al destruir.
+- [ ] Añadir pruebas temporizadas de `LongPressDirective`: emitir exactamente a 350 ms, cancelar por movimiento o liberación/cancelación temprana, no iniciar con deshabilitado/puntero secundario/controles excluidos y consumir el click posterior una sola vez.
+- [ ] Alcanzar ≥70 % en statements, branches, functions y lines para el archivo de directivas, conservando los cuatro gates globales de 80 %.
+- [ ] Ejecutar Karma focal y la suite frontend completa; repetir en Playwright real aislado los casos existentes de swipe/undo/+1/long-press en Chromium y Pixel 5, sin DB ni proveedor de uso normal.
+- [ ] Registrar cobertura/comandos/resultados actuales, ejecutar formato, typecheck y `git diff --check`, commit atómico con hooks y push al PR sin bypass. No se modifica UI; capturas no aplican salvo que se cambie el comportamiento visual.
+
+**Rollback:** revertir el commit atómico que añade la spec y las pruebas focales; no elimina gestos existentes ni toca datos.
+
 **Informe por archivo histórico (2026-10-01):** `picker.component.ts` 96.90/92.42/100/97.37 %, `shopping.model.ts` 93.55/86.18/100/96.25 %, `shopping-http-error.ts` 100/100/100/100 %. Ese reporte instrumentaba 135 de 182 fuentes de producción TS bajo `frontend/src/app` y medía entonces `shopping.service.ts` 0.29/0/0/0.33 %, `receipts.service.ts` 1.56/0/0/1.58 %, `household.service.ts` 3.33/0/0/1.78 %, `pantry.service.ts` 14.60/1.92/4.46/16.48 % y `calendar.service.ts` 43.60/42.64/15.78/45.94 % (S/B/F/L). Se conserva fuera de Git en `%TEMP%\hogaria-coverage-qa-20261001-1812`; estos porcentajes son históricos, no el informe actual.
 
 ### QA-04c.GATE.1 · ejecutar realmente el gate configurado (positivo verificado)
