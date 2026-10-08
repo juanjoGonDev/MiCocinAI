@@ -9,6 +9,24 @@ const table = (page: Page): Locator => page.locator('[data-test="pantry-tabla-in
 const row = (page: Page, name = ITEM_NAME): Locator =>
   table(page).locator('tr.ingredient-item', { hasText: name });
 
+function waitForInventoryRefresh(page: Page) {
+  return page.waitForResponse((response) => {
+    const request = response.request();
+    return (
+      request.method() === 'GET' && new URL(response.url()).pathname === '/api/pantry/ingredients'
+    );
+  });
+}
+
+async function waitForFocusRender(page: Page): Promise<void> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      )
+  );
+}
+
 async function addIngredient(page: Page, name = ITEM_NAME): Promise<void> {
   await page.getByRole('button', { name: '+ Agregar', exact: true }).click();
   await page.fill('input#ingredientName', name);
@@ -169,16 +187,25 @@ test.describe('Pantry — objetivos táctiles de acciones por ingrediente', () =
     const remove = ingredientRow.getByRole('button', { name: 'Eliminar ingrediente', exact: true });
     const addButton = page.locator('app-button[data-test="pantry-agregar"] button');
 
+    const inventoryAfterIncrement = waitForInventoryRefresh(page);
     await minus.focus();
     await page.keyboard.press('Tab');
     await expect(plus).toBeFocused();
     expect(await plus.evaluate((button) => button.matches(':focus-visible'))).toBe(true);
     await page.keyboard.press('Enter');
+    const incrementRefresh = await inventoryAfterIncrement;
+    expect(incrementRefresh.ok(), 'la recarga tras incrementar debe completar').toBe(true);
     await expect(ingredientRow).toContainText('3 g');
-    expect.soft(plus).toBeFocused();
+    await waitForFocusRender(page);
+    await expect(plus).toBeFocused();
+
+    const inventoryAfterDecrement = waitForInventoryRefresh(page);
     await minus.focus();
     await page.keyboard.press('Enter');
+    const decrementRefresh = await inventoryAfterDecrement;
+    expect(decrementRefresh.ok(), 'la recarga tras reducir debe completar').toBe(true);
     await expect(ingredientRow).toContainText('2 g');
+    await waitForFocusRender(page);
     await expect(minus).toBeFocused();
 
     await edit.focus();
@@ -228,12 +255,7 @@ test.describe('Pantry — objetivos táctiles de acciones por ingrediente', () =
       await route.fulfill({ response });
     });
 
-    const inventoryRefresh = page.waitForResponse((response) => {
-      const request = response.request();
-      return (
-        request.method() === 'GET' && new URL(response.url()).pathname === '/api/pantry/ingredients'
-      );
-    });
+    const inventoryRefresh = waitForInventoryRefresh(page);
     await plus.focus();
     await page.keyboard.press('Enter');
     await patchIsReady;
@@ -242,12 +264,7 @@ test.describe('Pantry — objetivos táctiles de acciones por ingrediente', () =
     const refreshResponse = await inventoryRefresh;
     expect(refreshResponse.ok(), 'la recarga de inventario debe completar').toBe(true);
     await expect(ingredientRow).toContainText('3 g');
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) =>
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-        )
-    );
+    await waitForFocusRender(page);
     await expect(edit).toBeFocused();
   });
 });
