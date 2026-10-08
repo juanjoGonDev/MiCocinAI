@@ -2191,6 +2191,17 @@ temporal `hogaria-e2e-*` reciente. Esta corrida es anterior al nuevo bloque text
 schema que exige categoría no nula, así que no valida esos cambios ni cierra el lote; el resultado live
 queda fallido y la unidad continúa abierta.
 
+**Revalidación limitada del payload actualizado (2026-10-08):** como el cambio posterior ahora envía
+el inventario fresco como texto JSON aparte, fuerza la decisión de categoría y transporta el PDF como
+`file`, se autoriza una única corrida nueva de los mismos cuatro tickets para validar esa versión. Esta
+corrida conserva el techo de **8 completions**, concurrencia 1, `retryAttempts: 0` y parada en el primer
+fallo; no habrá reintento individual ni tercera repetición del lote si esta validación vuelve a fallar.
+Solo se registrarán estado y métricas agregadas, con el preflight de privacidad y cleanup ya existente.
+
+- [ ] Repetir una sola vez el lote exacto de seis archivos/cuatro tickets sobre el payload actualizado;
+      marcar como validado solo si termina la revisión, edición/guardado/historial en UI y cleanup, sin
+      duplicados en las tres fotos solapadas. Si falla, conservar el fallo y no ampliar el presupuesto.
+
 **Rollback:** revertir la ruta de tickets en `server/src/utils/ai-client.ts`, `ticket-queue.ts`,
 `ticket-prompt.ts`, `ticket-lines-dedup.ts` y `server/src/schemas/receipts.schema.ts`, sus specs
 `ai-client.spec.ts`, `ai-queue.spec.ts`, `ticket-prompt.spec.ts`, `ticket-lines-dedup.spec.ts`,
