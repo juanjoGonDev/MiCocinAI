@@ -65,6 +65,7 @@ test('un fallo al guardar módulos revierte, desbloquea y permite reintentar', a
   await expect(page.locator('.settings-hint--error')).toBeVisible();
   await expect(page.locator('.settings-hint--error')).toHaveAttribute('role', 'alert');
   await expect(page.locator('.settings-hint--error')).toHaveAttribute('aria-atomic', 'true');
+  await expect(page.locator('app-toast .toast')).toHaveCount(0);
 
   const viewports = isMobile
     ? [
@@ -95,13 +96,42 @@ test('un fallo al guardar módulos revierte, desbloquea y permite reintentar', a
     ).toBe(false);
     await expect(pantrySwitch).toBeVisible();
     await expect(pantrySwitch).toBeEnabled();
+
+    if (viewport.width < 1024) {
+      const errorAlert = page.locator('.settings-hint--error');
+      await errorAlert.scrollIntoViewIfNeeded();
+      const errorBox = await errorAlert.boundingBox();
+      const navBox = await page.locator('.bottom-nav').boundingBox();
+      expect(errorBox, 'El aviso debe tener una caja visible').not.toBeNull();
+      expect(navBox, 'La navegación móvil debe estar visible').not.toBeNull();
+
+      const intersectsBottomNav =
+        errorBox!.x < navBox!.x + navBox!.width &&
+        errorBox!.x + errorBox!.width > navBox!.x &&
+        errorBox!.y < navBox!.y + navBox!.height &&
+        errorBox!.y + errorBox!.height > navBox!.y;
+      expect(
+        intersectsBottomNav,
+        `El aviso contextual no debe solaparse con la navegación a ${viewport.width}×${viewport.height}`
+      ).toBe(false);
+    }
   }
 
   const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
   if (screenshotDirectory) {
     mkdirSync(screenshotDirectory, { recursive: true });
     await page.setViewportSize(initialViewport);
-    await pantrySwitch.scrollIntoViewIfNeeded();
+    if (!isMobile) {
+      await expect(page.locator('.sidebar')).toHaveCSS('transform', 'matrix(1, 0, 0, 1, 0, 0)');
+    }
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.locator('.settings-hint--error').scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: join(
+        screenshotDirectory,
+        `settings-modules-error-viewport-${isMobile ? 'mobile' : 'desktop'}-${Date.now()}.png`
+      )
+    });
     await page.screenshot({
       path: join(
         screenshotDirectory,
