@@ -2710,11 +2710,13 @@ geometría y este subapartado; no revertir `AGENTS.md` ni la matriz global.
 
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.ROOT-DISPLAY.1 · preservar el layout de las raíces
 
-**Fuente revalidada (2026-10-03):** la regla común de `styles.scss` normaliza ancho, max-width y márgenes,
-pero también imponía `display: block` al primer hijo de cada `app-page-container`. Esto anulaba reglas
-de layout intencionales de `.cad` y `.tickets` (`display: grid`) y `.preferences-page` (`display: flex`).
-La matriz anterior medía sus cajas, no el `display` calculado; por tanto podía pasar pese a que el contenido
-interno de esas vistas se hubiera desarmado.
+**Fuente revalidada (2026-10-08):** `route-layout-manifest.ts` declara 24 selectores `pageRoot` distintos
+y un `contentRoot` adicional de autenticación. Las raíces con layout intencional explícito son `.cad`,
+`.calendar`, `.ficha` de tickets y `.tickets` (`grid`), y las restantes familias con `display: flex`
+son cuenta, autenticación, invitación, logs, onboarding, gestores de despensa, ficha/edición de artículo,
+preferencias, ajustes y listas/detalle de compra. Las demás raíces son `block` por regla local o estilo
+predeterminado. La matriz medía cajas y solo contrastaba tres displays; se hará un contrato único y
+exhaustivo sobre todas las raíces estáticas y dinámicas, incluidos ambos niveles de autenticación.
 
 - [x] Extender primero la E2E real para contrastar el `display` calculado de esas tres raíces en todos
       los viewports del manifiesto; antes del cambio falla en Chromium mostrando `block` en vez de
@@ -2724,8 +2726,8 @@ interno de esas vistas se hubiera desarmado.
 - [x] Ejecutar la matriz estática en escritorio y Pixel 5, guardar/inspeccionar capturas sintéticas
       de Caducidades, Tickets y Preferencias en ambos tamaños; repetir el manifiesto completo incluidas
       rutas dinámicas antes de cerrar esta subunidad.
-- [ ] Extender el censo a todas las raíces y familias internas; esta regresión cubre tres raíces
-      representativas, no declara la auditoría visual global completa.
+- [x] Extender el censo a todas las raíces y familias internas con un contrato exhaustivo sobre
+      `pageRoot` y `contentRoot`, incluida cobertura exacta del manifiesto estático y dinámico.
 
 **Evidencia de la subunidad (2026-10-03):** TDD aislado reprodujo `display:block` para las tres raíces en
 todos los anchos; tras quitar únicamente esa declaración, la matriz completa estática + dinámica y el
@@ -2739,13 +2741,24 @@ aislado pasa; conserva avisos previos de bundle inicial (**715,16 kB > 500 kB**)
 otros componentes e imports Angular sin uso. Los cambios de producción de esta subunidad son CSS (global
 y estilos inline); coverage instrumentable S/B/F/L: N/A. No se modificaron gates ni datos normales.
 
-El checkbox del inventario global sigue abierto deliberadamente: se preservaron tres layouts de raíz,
-pero aún no existe comparación calculada de todas las familias interiores del sitio; no se declara
+El checkbox del inventario global sigue abierto deliberadamente: este contrato valida el `display` de
+todas las raíces, no la comparación geométrica/visual de todos los componentes interiores; no se declara
 «pixel-perfect» ni finalizada la auditoría.
 
-**Rollback focal:** restaurar la declaración `display: block` de ese selector y quitar únicamente la
-aserción `expectedRootDisplay`, los tres valores del manifiesto y este subapartado; conservar el resto
-de la normalización de ancho/gutters.
+**Censo exhaustivo (2026-10-08):** un contrato central cubre exactamente los 24 selectores `pageRoot`
+distintos y el selector `contentRoot` de autenticación; comprueba raíz y contenido calculado en la matriz.
+La prueba `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium
+tests/e2e/layout-gutters.spec.ts --grep "contrato de display" --reporter=line` pasó 1/1 y la matriz
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/layout-gutters.spec.ts --reporter=line` pasó **6/6** (1,6 min), sin desajustes ni overflow.
+El TDD rojo previo mostró los 22 roots faltantes al declarar solo los tres casos históricos.
+`pnpm run typecheck:e2e`, `pnpm exec prettier --check tests/e2e/helpers/route-layout-manifest.ts
+tests/e2e/layout-gutters.spec.ts APP-QA-SPEC.md` y `git diff --check` pasan. No hubo cambios de CSS;
+coverage S/B/F/L N/A (contrato E2E, sin código instrumentable de producción).
+
+**Rollback focal:** restaurar la declaración global `display: block` solo si se revierte toda la unidad
+de raíces; quitar `ROOT_DISPLAY_EXPECTATIONS`, sus aserciones E2E y el test de cobertura del manifiesto,
+además de este subapartado. Conservar el resto de la normalización de ancho/gutters.
 
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.PAGE-SPACING.1 · separación vertical común
 

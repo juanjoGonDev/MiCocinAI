@@ -9,6 +9,7 @@ import {
   ONBOARDING_ROUTE,
   populatedDynamicRoutes,
   PUBLIC_ROUTES,
+  ROOT_DISPLAY_EXPECTATIONS,
   type RouteCase,
   type RouteShell
 } from './helpers/route-layout-manifest';
@@ -37,6 +38,28 @@ const VIEWPORTS: ViewportCase[] = (() => {
         width === 568 ? 320 : width >= 1920 ? 1080 : width < 768 ? 851 : width < 1024 ? 768 : 900
     }));
 })();
+
+test('el contrato de display cubre exactamente todas las raíces estáticas y dinámicas', () => {
+  const routes = [
+    ...PUBLIC_ROUTES,
+    ONBOARDING_ROUTE,
+    ...AUTHENTICATED_ROUTES,
+    ...populatedDynamicRoutes({
+      categoryId: 'layout-category',
+      productId: 'layout-product',
+      aiConfigId: 'layout-ai-config',
+      inventoryItemId: 'layout-item',
+      shoppingListId: 'layout-shopping-list',
+      receiptId: 'layout-receipt',
+      recipeId: 'layout-recipe'
+    })
+  ];
+  const roots = new Set(
+    routes.flatMap((route) => [route.pageRoot, route.contentRoot].filter(Boolean))
+  );
+
+  expect(Object.keys(ROOT_DISPLAY_EXPECTATIONS).sort()).toEqual([...roots].sort());
+});
 
 const SHELL_HOSTS: Record<RouteShell, string> = {
   auth: 'app-auth-layout',
@@ -110,16 +133,23 @@ async function checkPageContainer(
   if (target.pageRoot) {
     const roots = page.locator(target.pageRoot);
     await expect(roots, `${target.path} debe tener una superficie raíz`).toHaveCount(1);
-    const rootPadding = await roots.evaluate((element) => {
+    const rootLayout = await roots.evaluate((element) => {
       const style = getComputedStyle(element);
-      return [
-        Number.parseFloat(style.paddingInlineStart),
-        Number.parseFloat(style.paddingInlineEnd)
-      ];
+      return {
+        display: style.display,
+        paddingStart: Number.parseFloat(style.paddingInlineStart),
+        paddingEnd: Number.parseFloat(style.paddingInlineEnd)
+      };
     });
-    if (rootPadding[0] !== 0 || rootPadding[1] !== 0) {
+    const expectedPageRootDisplay = ROOT_DISPLAY_EXPECTATIONS[target.pageRoot];
+    if (rootLayout.display !== expectedPageRootDisplay) {
       mismatches.push(
-        `${target.path} @ ${viewport.width}x${viewport.height}: el wrapper de feature duplica el gutter con padding ${rootPadding.join('/')}`
+        `${target.path} @ ${viewport.width}x${viewport.height}: display de raíz esperado ${expectedPageRootDisplay}, actual ${rootLayout.display}`
+      );
+    }
+    if (rootLayout.paddingStart !== 0 || rootLayout.paddingEnd !== 0) {
+      mismatches.push(
+        `${target.path} @ ${viewport.width}x${viewport.height}: el wrapper de feature duplica el gutter con padding ${rootLayout.paddingStart}/${rootLayout.paddingEnd}`
       );
     }
   }
@@ -219,9 +249,10 @@ async function checkPageContainer(
         paddingBlockEnd: Number.parseFloat(style.paddingBlockEnd)
       };
     });
-    if (target.expectedRootDisplay && root.display !== target.expectedRootDisplay) {
+    const expectedContentRootDisplay = ROOT_DISPLAY_EXPECTATIONS[contentRoot];
+    if (root.display !== expectedContentRootDisplay) {
       mismatches.push(
-        `${target.path} @ ${viewport.width}x${viewport.height}: display de raíz esperado ${target.expectedRootDisplay}, actual ${root.display}`
+        `${target.path} @ ${viewport.width}x${viewport.height}: display de contenido esperado ${expectedContentRootDisplay}, actual ${root.display}`
       );
     }
     if (

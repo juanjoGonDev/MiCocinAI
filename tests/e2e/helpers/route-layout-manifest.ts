@@ -1,5 +1,35 @@
 export type RouteAccess = 'public' | 'onboarding' | 'authenticated';
 export type RouteShell = 'auth' | 'invite' | 'onboarding' | 'private';
+export type RootDisplay = 'block' | 'flex' | 'grid';
+
+/** Baseline for every distinct page/content root represented in this manifest. */
+export const ROOT_DISPLAY_EXPECTATIONS: Readonly<Record<string, RootDisplay>> = {
+  'app-account > .account-page': 'flex',
+  'app-ai-config > .ai-config': 'block',
+  'app-ai-provider-queue-page > .ai-queue-page': 'block',
+  'app-auth-layout > .auth-layout': 'flex',
+  'app-auth-layout > .auth-layout > app-page-container > .auth-layout__container': 'flex',
+  'app-caducidades > .cad': 'grid',
+  'app-calendar > .calendar': 'grid',
+  'app-dashboard > .dashboard': 'block',
+  'app-household > .household': 'block',
+  'app-invite > .invite-page': 'flex',
+  'app-logs > .logs-page': 'flex',
+  'app-onboarding > app-page-container > .onboarding': 'flex',
+  'app-pantry > .pantry': 'block',
+  'app-pantry-catalog > .gestor': 'flex',
+  'app-pantry-categories > .gestor': 'flex',
+  'app-pantry-item > .item': 'flex',
+  'app-pantry-item-edit > .editar': 'flex',
+  'app-pantry-products > .gestor': 'flex',
+  'app-preferences > .preferences-page': 'flex',
+  'app-receipt-detail > .ficha': 'grid',
+  'app-receipts > .tickets': 'grid',
+  'app-recipes > .recipes': 'block',
+  'app-settings > .settings-page': 'flex',
+  'app-shopping-list-detail > .detail': 'flex',
+  'app-shopping-lists > .tray': 'flex'
+};
 
 export type RouteCase = {
   path: string;
@@ -8,7 +38,6 @@ export type RouteCase = {
   shell: RouteShell;
   pageRoot?: string;
   contentRoot?: string;
-  expectedRootDisplay?: 'block' | 'flex' | 'grid';
   readySelector?: string;
   readyContent?: { selector: string; text: string };
   finalPath?: string;
@@ -190,8 +219,7 @@ export const AUTHENTICATED_ROUTES: RouteCase[] = [
     component: 'app-caducidades',
     access: 'authenticated',
     shell: 'private',
-    pageRoot: 'app-caducidades > .cad',
-    expectedRootDisplay: 'grid'
+    pageRoot: 'app-caducidades > .cad'
   },
   {
     path: '/pantry/inventario/qa-baseline-missing-item',
@@ -276,8 +304,7 @@ export const AUTHENTICATED_ROUTES: RouteCase[] = [
     component: 'app-receipts',
     access: 'authenticated',
     shell: 'private',
-    pageRoot: 'app-receipts > .tickets',
-    expectedRootDisplay: 'grid'
+    pageRoot: 'app-receipts > .tickets'
   },
   {
     path: '/receipts/qa-baseline-missing-receipt',
@@ -326,8 +353,7 @@ export const AUTHENTICATED_ROUTES: RouteCase[] = [
     component: 'app-preferences',
     access: 'authenticated',
     shell: 'private',
-    pageRoot: 'app-preferences > .preferences-page',
-    expectedRootDisplay: 'flex'
+    pageRoot: 'app-preferences > .preferences-page'
   },
   {
     path: '/settings',
