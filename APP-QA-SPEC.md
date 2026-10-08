@@ -2531,6 +2531,35 @@ aislado en `scripts/ai-live-receipt-inputs.mjs`, `ai-live-receipt-inputs.d.mts`,
 subunidad. No hay migración ni cambio de settings/datos de WebAPI; mantener separados los tests
 sintéticos y el smoke general preexistente.
 
+### QA-AI.SMOKE.PRESERVE-REDACTED-LOGS.1 · conservar la telemetría local existente
+
+**Fuente revalidada (2026-10-09):** el usuario activó expresamente los logs locales para poder
+diagnosticar fallos y pidió ejecutarlos, sin exponer cuerpos ni credenciales. Aunque
+`prepareAiLiveSmokeSession()` consulta primero los controles, actualmente cambia mediante `PATCH`
+`requestLogging.enabled` a `false` y también apaga temporalmente grabación de sesión/HTML diagnóstico;
+después intenta restaurar todo. Esto modifica ajustes persistentes del servicio y suprime justo los
+logs que el usuario quiere disponibles.
+
+**Contrato:** el preflight de la WebAPI solo lee controles. Se permite que el log de requests esté
+`enabled=true` si `captureDetails=false`, `maxBodyChars=0`, `maxHeaderValueChars=0` y `maxHeaders=0`;
+así se preservan los eventos técnicos locales sin registrar contenido. `sessionRecording` y
+`diagnosticHtml` deben estar ya desactivados. Si cualquier captura de contenido está activa o no se
+puede comprobar, abortar antes de crear el token/subir ticket; no parchear ni revertir ajustes. Sí se
+permite crear y borrar el token propio autorizado, sin tocar tokens preexistentes.
+
+- [ ] Escribir primero pruebas que demuestren que logs redacted `enabled=true` se conservan sin
+      ningún `PATCH`, y que captura insegura, grabación o diagnóstico activos fallan antes de crear
+      token o abrir tickets, también ante cancelación/error de modelo.
+- [ ] Cambiar el preflight a lectura/validación read-only y eliminar la restauración de settings;
+      mantener cleanup verificable solo para el token temporal propio.
+- [ ] Ejecutar pruebas del coordinador/seguridad, contract tests, formato, typecheck/build; comprobar
+      que las rutas de fallo no mutan ningún control local.
+- [ ] Confirmar en el preflight de la próxima corrida que los logs técnicos permanecen activos con
+      contenido redacted y los demás controles de captura siguen apagados.
+
+**Rollback:** revertir solo el preflight read-only y sus tests; no restaurar ni modificar settings
+actuales de WebAPI.
+
 ### QA-AI.RECEIPT.RESUME-SAFE-SELECTION.1 · reanudar solo las fuentes no completadas
 
 **Fuente revalidada (2026-10-09):** la corrección de WebAPI ya existe en `D:\projects\webApi`: el
