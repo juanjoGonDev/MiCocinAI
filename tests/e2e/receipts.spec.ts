@@ -69,6 +69,7 @@ type TicketProviderMessage = {
   content?:
     | string
     | {
+        file?: { filename?: string; file_data?: string };
         type?: string;
         text?: string;
         image_url?: { url?: string; detail?: string };
@@ -731,11 +732,27 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
           (message) => message.role === 'user'
         )?.content;
         const parts = Array.isArray(userContent) ? userContent : [];
-        expect(parts).toHaveLength(2);
+        expect(parts).toHaveLength(3);
+        expect(parts.map((part) => part.type).sort()).toEqual(['file', 'image_url', 'text']);
         expect(parts.find((part) => part.type === 'text')?.text).toContain('purchaseDate');
         expect(parts.find((part) => part.type === 'image_url')?.image_url?.url).toMatch(
           /^data:image\/png;base64,/
         );
+        const inventoryFile = parts.find((part) => part.type === 'file');
+        expect(inventoryFile?.file?.filename).toBe('inventario.json');
+        const inventoryData = inventoryFile?.file?.file_data ?? '';
+        expect(inventoryData).toMatch(/^data:application\/json;base64,/);
+        const inventory = JSON.parse(
+          Buffer.from(
+            inventoryData.replace(/^data:application\/json;base64,/, ''),
+            'base64'
+          ).toString('utf8')
+        ) as { categorias: unknown[]; productos: unknown[]; tiendas: unknown[] };
+        expect(inventory).toEqual({
+          tiendas: expect.any(Array),
+          categorias: expect.any(Array),
+          productos: expect.any(Array)
+        });
 
         const history = page.locator('[data-test="receipt-history"]');
         const historyRow = history.locator('[data-test="ticket-history-item"]');

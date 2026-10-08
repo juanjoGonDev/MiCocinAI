@@ -2262,6 +2262,14 @@ En WebAPI pasó la prueba existente `pnpm exec vitest run tests/api/opencode/con
 --reporter=dot` (1/1), y una petición aislada al router con JSON/JPEG sintéticos entregó ambos bytes
 intactos al ejecutor falso (HTTP 200, 2 adjuntos, 0 llamadas a proveedor). No se usaron tickets reales.
 
+**Corrección CI (run 37781914046):** Type Check, Server Tests, Production Build, full-stack y los
+shards 1, 2 y 4 pasaron; shard 3 descubrió que la E2E de metadatos todavía exigía solo texto+imagen.
+Las dos variantes ES/EN fallaron en esa aserción al recibir ahora el tercer adjunto JSON. Se reprodujo
+localmente antes de corregirla (2 fallos) y se amplió la E2E para validar exactamente los tres tipos,
+el nombre/MIME y el JSON legible; la repetición aislada pasó 2/2 con proveedor sintético. La prueba de
+favoritos tuvo un timeout en su primer intento de CI, pero su retry pasó; no causó el fallo del job.
+La verificación CI del commit que actualiza este contrato sigue pendiente.
+
 **Rollback:** revertir únicamente la serialización/adjunto `inventario.json`, sus pruebas de cola/contrato
 y esta subunidad; mantener el snapshot de catálogo consultado en memoria y el transporte PDF/JPEG.
 
