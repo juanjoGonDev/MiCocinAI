@@ -4,6 +4,9 @@ import { expect, test, type Page } from '../fixtures';
 
 const REGISTER_ENDPOINT = '/api/auth/register';
 
+// The SPA registers NGSW; service-worker-controlled requests bypass Playwright's page.route stubs.
+test.use({ serviceWorkers: 'block' });
+
 function uniqueEmail(): string {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   return `qa-register-${suffix}@example.test`;
@@ -72,6 +75,118 @@ test.describe('contrato del formulario de registro', () => {
         hasHorizontalOverflow,
         `registro no debe desbordarse a ${viewport.width}x${viewport.height}`
       ).toBe(false);
+    }
+  });
+
+  test('anuncia cada campo requerido y no solicita el registro hasta completar el formulario', async ({
+    page
+  }) => {
+    await page.goto('/auth/register');
+    let registerRequests = 0;
+    page.on('request', (request) => {
+      if (new URL(request.url()).pathname === REGISTER_ENDPOINT && request.method() === 'POST') {
+        registerRequests += 1;
+      }
+    });
+    const submit = page.getByRole('button', { name: /Crear Cuenta|Create account/i });
+
+    await submit.click();
+    await expect(fieldError(page, 'name')).toContainText('requerido');
+    await expect(page.locator('#name')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('#name')).toHaveAttribute('aria-describedby', 'name-error');
+    await expect(page.locator('#name-error')).toHaveAttribute('role', 'alert');
+
+    await page.locator('#name').fill('Ana');
+    await submit.click();
+    await expect(fieldError(page, 'email')).toContainText('requerido');
+    await expect(page.locator('#email')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('#email')).toHaveAttribute('aria-describedby', 'email-error');
+    await expect(page.locator('#email-error')).toHaveAttribute('role', 'alert');
+
+    await page.locator('#email').fill('ana@example.test');
+    await submit.click();
+    await expect(fieldError(page, 'password')).toContainText('requerida');
+    await expect(page.locator('#password')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator('#password')).toHaveAttribute('aria-describedby', 'password-error');
+    await expect(page.locator('#password-error')).toHaveAttribute('role', 'alert');
+    expect(registerRequests).toBe(0);
+  });
+
+  test('recupera un 500 de registro con mensaje genérico y permite reintentar', async ({
+    page
+  }) => {
+    await page.goto('/auth/register');
+    const email = uniqueEmail();
+    await fillValidRegistration(page, 'Ana', email);
+
+    let failFirstRequest!: () => void;
+    let sawFirstRequest!: () => void;
+    const firstRequestSeen = new Promise<void>((resolve) => {
+      sawFirstRequest = resolve;
+    });
+    const firstResponseGate = new Promise<void>((resolve) => {
+      failFirstRequest = resolve;
+    });
+    let requestCount = 0;
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error.message));
+    await page.route(
+      (url) => url.pathname === REGISTER_ENDPOINT,
+      async (route) => {
+        if (route.request().method() !== 'POST') {
+          await route.continue();
+          return;
+        }
+        requestCount += 1;
+        if (requestCount === 1) {
+          sawFirstRequest();
+          await firstResponseGate;
+          await route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: false, message: 'Synthetic private server detail' })
+          });
+          return;
+        }
+        await route.continue();
+      }
+    );
+
+    const submit = page.getByRole('button', { name: /Crear Cuenta|Create account/i });
+    const failedResponse = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === REGISTER_ENDPOINT &&
+        response.request().method() === 'POST'
+    );
+    const firstSubmission = submit.click();
+    try {
+      await firstRequestSeen;
+      await expect(submit).toBeDisabled();
+      await expect(page.locator('#name')).toHaveValue('Ana');
+      await expect(page.locator('#email')).toHaveValue(email);
+      await expect(page.locator('#password')).toHaveValue(/\S+/);
+
+      failFirstRequest();
+      expect((await failedResponse).status()).toBe(500);
+      await firstSubmission;
+      const errorToast = page.locator('.toast--error[role="alert"]');
+      await expect(errorToast).toHaveCount(1);
+      await expect(errorToast).toContainText('Error al crear la cuenta');
+      await expect(errorToast).not.toContainText('Synthetic private server detail');
+      await expect(submit).toBeEnabled();
+
+      const retryResponse = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === REGISTER_ENDPOINT &&
+          response.request().method() === 'POST'
+      );
+      await submit.click();
+      expect((await retryResponse).status()).toBe(201);
+      await expect(page).toHaveURL(/\/onboarding$/);
+      expect(requestCount).toBe(2);
+      expect(pageErrors).toEqual([]);
+    } finally {
+      failFirstRequest();
     }
   });
 
