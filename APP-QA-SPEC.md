@@ -2956,14 +2956,16 @@ pestañas que no quepan.
 **Contrato:** comparar el estilo calculado de `.tab`, sus cajas y el contenedor de pestañas en Cuenta y
 Preferencias, sin exigir que el ancho de etiquetas distintas sea igual. En móvil, tabs de una sola línea,
 sin reducción ni salto de fila, scroll horizontal dentro del grupo y último elemento alcanzable por toque,
-Tab y Enter; la página no adquiere overflow. El foco/selección no altera la geometría. Las diferencias de
-contenido (tres frente a cinco secciones) se conservan.
+Tab y Enter; la página no adquiere overflow. Todas las pestañas conservan un objetivo ≥44×44 CSS px en
+desktop y móvil. El foco/selección no altera la geometría. Las diferencias de contenido (tres frente a
+cinco secciones) se conservan.
 
 - [ ] Añadir primero una regresión Playwright real aislada para Account y Preferences; comparar medidas,
       padding, gap, fuente, borde y radio con tolerancia ≤1 CSS px en 320, 393, 568×320, 559/560/561,
-      767/768/769, 1023/1024/1025 y 1440 px. El baseline debe fallar en el wrap de Cuenta ≤560 px.
-- [ ] Normalizar solo el grupo móvil de Cuenta al contrato desplazable/no encogible de Preferencias; no
-      alterar rutas/query, contenido, colores activos ni el tamaño/padding de los controles.
+      767/768/769, 1023/1024/1025 y 1440 px; exigir targets ≥44×44. El baseline debe fallar por wrap de
+      Cuenta ≤560 px y por altura táctil de 43 px.
+- [ ] Normalizar el grupo móvil de Cuenta al contrato desplazable/no encogible de Preferencias y fijar
+      mínimo 44 px a los controles equivalentes en ambas rutas; no alterar rutas/query, contenido ni color.
 - [ ] Repetir en Chromium escritorio y Pixel 5; probar selección normal/foco, scroll hasta la última tab
       con toque y teclado, estados activos sin cambio de caja y ausencia de overflow global.
 - [ ] Guardar e inspeccionar capturas sintéticas comparables PC/móvil de ambas rutas. Ejecutar typecheck,
