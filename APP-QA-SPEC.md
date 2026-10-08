@@ -3053,14 +3053,23 @@ solo esos cuatro títulos de página; no incluye títulos de diálogo, contenido
 encabezados de sección con jerarquía inferior.
 
 **Contrato:** los cuatro `h1` de vista comparten la misma geometría calculada y tokens de tipografía,
-incluido line-height y margen; el ancho sigue dependiendo del texto y de su contenedor. El contrato se
-mantiene en los anchos móviles, tablet y escritorio; selección, hover u otros estados no aplican a estos
-encabezados no interactivos. No se cambia el texto/localización ni la estructura semántica `h1`.
+incluido line-height y margen; su altura de caja corresponde al line-height por el número real de líneas.
+No se exige igual alto entre títulos con diferente longitud: el Dashboard puede envolver el saludo. El
+ancho sigue dependiendo del texto y de su contenedor. El contrato se mantiene en los anchos móviles,
+tablet y escritorio; selección, hover u otros estados no aplican a estos encabezados no interactivos. No
+se cambia el texto/localización ni la estructura semántica `h1`.
+
+**Baseline rojo (2026-10-08):** la nueva E2E aislada falló en Chromium y Pixel 5 en 320 px al comparar
+Dashboard con Cuenta. El saludo mide 72 px por sus dos líneas frente a 36 px del título de Cuenta; esa
+diferencia de altura es contenido esperado. Las métricas tipográficas coinciden, pero Dashboard calcula
+margen inferior de 4 px y Cuenta/Preferencias/Compra 0 px; el test se limita por tanto a exigir que cada
+caja mida `line-height × líneas` y contrasta el margen y resto de estilos entre rutas.
 
 - [ ] Añadir primero una E2E aislada roja que mida los cuatro `h1` con Chromium y Pixel 5 en 320, 393,
       568×320, 767/768/769, 1023/1024/1025 y 1440×900; contrastar fuente, tamaño, peso, interlineado,
-      tracking, márgenes, padding, borde y caja con tolerancia ≤1 CSS px. La reproducción debe localizar
-      la diferencia de margen Dashboard vs. las otras tres vistas.
+      tracking, márgenes, padding y borde con tolerancia ≤1 CSS px; comprobar el alto de caja frente al
+      número real de líneas, sin comparar títulos de distinta longitud como si tuvieran el mismo alto. La
+      reproducción debe localizar la diferencia de margen Dashboard vs. las otras tres vistas.
 - [ ] Crear un único contrato compartido para los títulos de página y migrar los cuatro consumidores,
       preservando texto, rutas, jerarquía semántica, subtítulos y anchuras fluidas.
 - [ ] Repetir la matriz de medidas, comprobar encabezado accesible único, contenido visible y sin
