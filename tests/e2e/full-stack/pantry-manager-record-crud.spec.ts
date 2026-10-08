@@ -30,6 +30,10 @@ async function captureEditor(page: Page, testInfo: TestInfo, name: string): Prom
   });
 }
 
+async function waitForSearchQuery(page: Page, value: string): Promise<void> {
+  await expect.poll(() => new URL(page.url()).searchParams.get('q')).toBe(value);
+}
+
 async function useMinimumMobileViewport(page: Page, testInfo: TestInfo): Promise<void> {
   if (testInfo.project.name !== 'mobile-chrome') return;
   await page.setViewportSize({ width: 320, height: 568 });
@@ -104,6 +108,7 @@ test.describe('CRUD individual de gestores de despensa', () => {
       'background-color',
       'rgb(224, 90, 90)'
     );
+    await waitForSearchQuery(page, editedName);
     await page.reload();
     await expect(page.locator('#gestor-categorias-q')).toHaveValue(editedName);
     await expect(editedRow).toHaveCount(1);
@@ -188,6 +193,7 @@ test.describe('CRUD individual de gestores de despensa', () => {
     await expect(editedRow).toBeVisible();
     await expect(editedRow).toContainText(alias);
     await expect(editedRow.locator('.celda--categoria')).toContainText('Verduras');
+    await waitForSearchQuery(page, editedName);
     await page.reload();
     await expect(page.locator('#gestor-productos-q')).toHaveValue(editedName);
     await expect(editedRow).toBeVisible();

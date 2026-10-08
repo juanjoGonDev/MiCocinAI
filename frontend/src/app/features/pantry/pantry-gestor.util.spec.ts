@@ -7,6 +7,7 @@ import {
   clavesNoElegiblesComoPadre,
   padreDeCategoriaDesdeQuery,
   colorDeCategoria,
+  normalizarColorSeleccionado,
   normalizarAlias,
   offsetDeQuery,
   valorDeQuery,
@@ -102,6 +103,19 @@ describe('colorDeCategoria', () => {
     expect(colorDeCategoria({ color: 'rojo' } as PantryCategory)).toBe('#8A8F98');
     expect(colorDeCategoria({ color: '' } as PantryCategory)).toBe('#8A8F98');
     expect(colorDeCategoria(null)).toBe('#8A8F98');
+  });
+});
+
+describe('normalizarColorSeleccionado', () => {
+  it('recorta espacios y canoniza el color del control nativo a mayúsculas', () => {
+    expect(normalizarColorSeleccionado(' #12ab34 ')).toBe('#12AB34');
+  });
+
+  it('conserva la ausencia de color sin sustituirla por el fallback visual', () => {
+    expect(normalizarColorSeleccionado('')).toBeNull();
+    expect(normalizarColorSeleccionado('   ')).toBeNull();
+    expect(normalizarColorSeleccionado(null)).toBeNull();
+    expect(normalizarColorSeleccionado(undefined)).toBeNull();
   });
 });
 

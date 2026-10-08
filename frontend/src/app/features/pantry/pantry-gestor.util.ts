@@ -60,6 +60,12 @@ export function padreDeCategoriaDesdeQuery(
 /** El color con el que se pinta una fila: el punto de la categoria, o gris de reserva si no trae ninguno. */
 export const COLOR_RESERVA = '#8A8F98';
 
+/** Normaliza el valor que entregan los controles de color nativos sin convertir el vacío en un color real. */
+export function normalizarColorSeleccionado(color: string | null | undefined): string | null {
+  const valor = color?.trim() ?? '';
+  return valor ? valor.toUpperCase() : null;
+}
+
 export function colorDeCategoria(
   categoria: Pick<PantryCategory, 'color'> | null | undefined
 ): string {

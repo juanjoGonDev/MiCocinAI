@@ -31,6 +31,7 @@ import {
   clavesNoElegiblesComoPadre,
   coincideGestor,
   colorDeCategoria,
+  normalizarColorSeleccionado,
   padreDeCategoriaDesdeQuery,
   valorDeQuery
 } from './pantry-gestor.util';
@@ -270,7 +271,7 @@ type FilaCategoria = PantryCategory & {
             data-test="gestor-categorias-campo-nombre"
           ></app-input>
 
-          <div class="ficha__campo">
+          <div class="ficha__campo" data-test="gestor-categorias-campo-color">
             <span class="ficha__etiqueta">{{ 'pantry.color_categoria' | t }}</span>
             <div class="swatches" role="group" [attr.aria-label]="'pantry.color_categoria' | t">
               @for (muestra of muestras; track muestra) {
@@ -278,22 +279,44 @@ type FilaCategoria = PantryCategory & {
                   type="button"
                   class="swatch"
                   [class.swatch--activa]="formulario.color.toUpperCase() === muestra"
-                  [style.background]="muestra"
+                  [attr.aria-pressed]="formulario.color.toUpperCase() === muestra"
                   [attr.aria-label]="muestra"
                   (click)="pintar(muestra)"
                   [attr.data-test]="'gestor-categorias-color-' + muestra.toLowerCase()"
-                ></button>
+                >
+                  <span
+                    class="swatch__muestra"
+                    [style.background]="muestra"
+                    aria-hidden="true"
+                  ></span>
+                </button>
               }
+              <div class="boton selector-color" data-test="gestor-categorias-color-picker-surface">
+                <span
+                  class="selector-color__muestra"
+                  [style.background]="formulario.color || '#8A8F98'"
+                  aria-hidden="true"
+                ></span>
+                <span class="selector-color__accion">{{ 'pantry.color_personalizado' | t }}</span>
+                <span
+                  id="gestor-categoria-color-valor"
+                  class="selector-color__valor"
+                  data-test="gestor-categorias-color-valor"
+                  >{{ (formulario.color || '#8A8F98').toUpperCase() }}</span
+                >
+                <input
+                  id="gestor-categoria-color"
+                  name="gestor-categoria-color"
+                  class="selector-color__input"
+                  type="color"
+                  [ngModel]="formulario.color || '#8A8F98'"
+                  (ngModelChange)="pintar($event)"
+                  [attr.aria-label]="'pantry.color_personalizado' | t"
+                  aria-describedby="gestor-categoria-color-valor"
+                  data-test="gestor-categorias-selector-color-control"
+                />
+              </div>
             </div>
-            <app-input
-              id="gestor-categoria-color"
-              name="gestor-categoria-color"
-              type="text"
-              [placeholder]="'#4CAF50'"
-              [helper]="'pantry.color_ayuda' | t"
-              [(ngModel)]="formulario.color"
-              data-test="gestor-categorias-campo-color"
-            ></app-input>
           </div>
 
           <div class="ficha__campo">
@@ -649,8 +672,7 @@ type FilaCategoria = PantryCategory & {
         border-color: color-mix(in srgb, var(--error) 45%, transparent);
       }
 
-      /* El color se elige tocandolo, y el hex se escribe: las dos cosas necesitan su hueco para no parecer un
-       solo control apretujado. */
+      /* Las muestras conservan una zona táctil de 44 px aunque el círculo visible sea compacto. */
       .swatches {
         display: flex;
         flex-wrap: wrap;
@@ -658,26 +680,65 @@ type FilaCategoria = PantryCategory & {
         gap: var(--space-2);
       }
       .swatch {
-        width: 28px;
-        height: 28px;
+        display: grid;
+        place-items: center;
+        flex: 0 0 44px;
+        width: 44px;
+        height: 44px;
         padding: 0;
-        background-clip: padding-box;
-        border: 1px solid var(--border-default);
+        background: transparent;
+        border: 0;
         border-radius: var(--radius-full);
         cursor: pointer;
-        transition: var(--transition-fast);
       }
-      .swatch:hover {
-        transform: scale(1.08);
+      .swatch__muestra {
+        display: block;
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-full);
+      }
+      .swatch:hover .swatch__muestra {
+        border-color: var(--border-strong);
       }
       .swatch:focus-visible {
         outline: 2px solid var(--primary);
         outline-offset: 2px;
       }
-      .swatch--activa {
+      .swatch--activa .swatch__muestra {
         box-shadow:
           0 0 0 2px var(--bg-secondary),
           0 0 0 4px var(--text-primary);
+      }
+      .selector-color {
+        position: relative;
+        flex: 0 0 100%;
+        width: 100%;
+        min-width: 0;
+      }
+      .selector-color:focus-within {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+      .selector-color__muestra {
+        flex: 0 0 28px;
+        width: 28px;
+        height: 28px;
+        border: 1px solid var(--border-strong);
+        border-radius: var(--radius-sm);
+      }
+      .selector-color__valor {
+        margin-inline-start: auto;
+        color: var(--text-secondary);
+        font-size: var(--text-sm);
+        font-variant-numeric: tabular-nums;
+      }
+      .selector-color__input {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
       }
 
       /* Que un boton se pueda pulsar se nota sin tocarlo: hover y foco visible en todo lo que acepta un click
@@ -1254,7 +1315,7 @@ export class PantryCategoriesComponent implements OnInit {
   }
 
   protected pintar(color: string): void {
-    this.formulario.color = color;
+    this.formulario.color = normalizarColorSeleccionado(color) ?? '';
   }
 
   protected quitarPadre(): void {
@@ -1278,11 +1339,7 @@ export class PantryCategoriesComponent implements OnInit {
       this.error = antesDelCambio;
       return;
     }
-    const color = this.formulario.color.trim();
-    if (color && !/^#[0-9a-fA-F]{6}$/.test(color)) {
-      this.error = this.i18n.t('pantry.error_color_invalido');
-      return;
-    }
+    const color = normalizarColorSeleccionado(this.formulario.color) ?? '';
     const entrada = {
       name: nombre,
       color: color || null,
@@ -1298,7 +1355,7 @@ export class PantryCategoriesComponent implements OnInit {
     if (original) {
       if (nombre !== original.name) cambios.name = nombre;
       const colorFinal = color || null;
-      const colorAntes = (original.color ?? '').trim() || null;
+      const colorAntes = normalizarColorSeleccionado(original.color);
       if (colorFinal !== colorAntes) cambios.color = colorFinal;
       const descripcion = this.formulario.description.trim() || null;
       if (descripcion !== (original.description ?? null)) cambios.description = descripcion;
