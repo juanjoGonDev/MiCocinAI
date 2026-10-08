@@ -3086,6 +3086,19 @@ rutas inspeccionadas en `.e2e-screenshots/qa-settings-tabs-final-20261008/` (ign
 `AccountComponent` y `min-height` de las pestañas en `AccountComponent` y `PreferencesComponent`, retirar
 su regresión Playwright y este subapartado; preservar las demás vistas de Cuenta y Preferencias.
 
+### QA-CI.ACCOUNT-SCROLLABLE-TABS.1 · alinear E2E heredada al contrato de pestañas desplazables
+
+**Fuente revalidada (2026-10-08, CI `37824419628`):** `QA-LAYOUT.VISUAL-CONSISTENCY.SETTINGS-TABS.1` establece una fila desplazable en móvil y que cada pestaña sea alcanzable; `AccountComponent` ya aplica `overflow-x: auto`, `flex-wrap: nowrap` y conserva cada `.tab` sin encogimiento hasta 560 px. En cambio, `tests/e2e/full-stack/account-responsive.spec.ts` todavía exige que los tres rectángulos de tab estén visibles simultáneamente dentro de 320 px. CI falló en esa aserción aunque la medida anterior del mismo E2E confirmó `documentWidth <= viewportWidth`; la ruta de tabs que corre tras el cambio de contrato deja la tercera tab fuera de la ventana desplazable, no de la página.
+
+**Conducta esperada:** mantener la barra dentro del viewport y sin overflow del documento. Las tabs quepan juntas cuando corresponda; donde excedan el espacio, la barra conserva scroll horizontal interno y cada tab —incluida Información— sigue accesible con toque y teclado/Enter, con el tab activo visible tras la interacción. No reintroducir el wrap que el contrato más reciente eliminó, ni hacer cambios de producción para satisfacer una expectativa E2E obsoleta.
+
+- [ ] Reproducir primero el rojo actual con el E2E full-stack de Cuenta en Chromium y Pixel 5 a 320 px; registrar que falla la aserción de «todas las pestañas dentro» pero pasa la de ancho de documento.
+- [ ] Actualizar la regresión para medir los límites del contenedor y el scroll interno, y para activar cada tab por click/foco/Enter verificando que la activa queda visible; conservar las pruebas de tabs, nombre de 100 caracteres, orientación y breakpoints vigentes.
+- [ ] Ejecutar el E2E contra build de producción y rate limit activo, con SQLite/puertos/semillas aisladas; guardar/inspeccionar capturas sintéticas en destino único y confirmar cleanup propio.
+- [ ] Ejecutar typecheck, Prettier, `check:ui`, build y diff-check; sin cambios de producción, coverage instrumentable N/A. Revalidar CI del SHA publicado y documentar resultado sin cerrar la auditoría visual global.
+
+**Rollback:** revertir únicamente `tests/e2e/full-stack/account-responsive.spec.ts` y esta subunidad; no cambiar `AccountComponent` ni `PreferencesComponent`.
+
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.TEXT-FIELDS.1 · campos de texto de una línea
 
 **Fuente revalidada (2026-10-04):** el marco/gutter y las raíces ya se comparan en `layout-gutters.spec.ts`,
