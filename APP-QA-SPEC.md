@@ -512,6 +512,19 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Rollback previsto:** revertir juntos los estilos `.boton` de `pantry-categories.component.ts` y `pantry-products.component.ts`, la nueva spec Playwright y esta unidad, dejando intactos el enlace padre y demás unidades Pantry.
 
+### QA-PANTRY.PRODUCT.DEEP-LINK.1 · ficha directa de productos más allá de la primera página
+
+**Fuente revalidada (2026-10-08):** el contrato activo `HOGARIA-SPEC.md` §12x dice que la ficha del producto vive en su URL para sobrevivir a F5, y el API ya expone `GET /api/pantry/products/:id`. `PantryService.getProduct(id)` consume esa ruta y su caso 200/404/503 está probado. Sin embargo, `PantryProductsComponent.buscarPorId()` ignora ese contrato y obtiene una sola página de `listProducts({ filter: 'all', limit: 100 })`; si la ficha no está entre las primeras 100, trata un id válido como inexistente y vuelve a la lista. El gestor sí pagina toda la colección hasta el límite establecido de 2.000.
+
+**Conducta esperada:** cualquier ficha válida del hogar abre directamente su editor desde `/pantry/products/:id`, incluso cuando queda fuera de la primera página. Un id ausente conserva la salida segura a la lista. Usar solo el hogar/SQLite aislados de la prueba; no llamar a IA ni crear datos en el servidor normal.
+
+- [ ] Añadir primero una regresión Playwright que aumente la colección sintética hasta más de 100 productos, obtenga por API un id de la página siguiente y navegue directamente a esa URL; reproducir que la implementación actual vuelve a la lista.
+- [ ] Cambiar la resolución de la ficha para reutilizar `PantryService.getProduct(id)`; conservar el redireccionamiento a la lista al recibir `null`/404.
+- [ ] Verificar el deep link en Chromium escritorio y Pixel 5, junto con el caso de id inexistente, sin errores de página ni escrituras fuera del fixture propio.
+- [ ] Guardar/inspeccionar una captura sintética de la ficha en PC y móvil; ejecutar E2E aislado, regresión unitaria de `getProduct`, typecheck, formato, `check:ui`, build y coverage del alcance sin bajar gates.
+
+**Rollback previsto:** revertir juntos el cambio en `pantry-products.component.ts`, `tests/e2e/pantry-product-deep-link.spec.ts` y este subapartado; preservar el endpoint y cobertura ya existentes de `PantryService.getProduct`.
+
 ## Unidad QA-PANTRY.TOUCH.1 · objetivos táctiles de acciones por ingrediente (resuelta localmente)
 
 **Fuente revalidada (2026-10-01):** `PantryComponent` renderizaba controles `.stock-btn` de 28×28 px y acciones `.action-btn` de 40×40 px. `DataTableComponent` usa tarjetas hasta 719 px y vuelve a tabla con scroll horizontal desde 720 px; por tanto, un teléfono girado (Pixel 5 ~851×393 CSS px) ya no estaba cubierto por `max-width:719px`. `pantry.spec.ts` ya comprobaba la actualización hasta cero, pero no rectángulos táctiles, acciones por toque ni el destino de foco al desaparecer la fila. La revisión también descubrió que una respuesta lenta podía devolver el foco al stepper inicial después de que la persona lo hubiera movido a Editar.
