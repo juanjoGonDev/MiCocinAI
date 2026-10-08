@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Locator, Page, expect } from '@playwright/test';
 import { test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
@@ -179,15 +181,77 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
 
   test('un arrastre corto descubre el riel y un arrastre del todo quita la línea', async ({
     page
-  }) => {
+  }, testInfo) => {
+    if (testInfo.project.name === 'chromium') {
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
     await openNewList(page, 'shop-swipe-rail');
     await addItem(page, 'Tomates');
     const row = row_(page, 'Tomates');
     await expect(row).toHaveCount(1);
 
     // Medio dedo: el riel se descubre, la acción NO se ejecuta (25 % < 60 %)
+    const face = row.locator('.detail__face');
+    const stickyBar = page.locator('.detail__bar');
+    await face.evaluate((element) =>
+      element.scrollIntoView({ block: 'center', inline: 'nearest' })
+    );
+    await expect(stickyBar).toBeVisible();
+    const rowIsAboveStickyBar = await row.evaluate((element) => {
+      const bar = document.querySelector('.detail__bar');
+      return !!bar && element.getBoundingClientRect().bottom <= bar.getBoundingClientRect().top;
+    });
+    expect(rowIsAboveStickyBar).toBe(true);
+    const initialFaceX = await face.evaluate((element) => element.getBoundingClientRect().x);
     await dragRow(page, row, 0.86, 0.62);
     await expect(row.locator('[data-test="rail-remove"]')).toBeVisible();
+    const expectedRevealOffset = await row.evaluate(
+      (element) => -Math.round(Math.min((element as HTMLElement).offsetWidth * 0.62, 56 * 2.4))
+    );
+    await expect
+      .poll(() =>
+        face.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m41)
+      )
+      .toBe(expectedRevealOffset);
+    const revealedFaceX = await face.evaluate((element) => element.getBoundingClientRect().x);
+    expect(revealedFaceX).toBeLessThan(initialFaceX);
+    const removeButtonHitTest = await row
+      .locator('[data-test="rail-remove"]')
+      .evaluate((button) => {
+        const row = button.closest('[data-test="item-row"]');
+        const face = row?.querySelector('.detail__face');
+        const rail = row?.querySelector('.detail__rail');
+        const bounds = button.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          bounds.left + bounds.width / 2,
+          bounds.top + bounds.height / 2
+        );
+        const rect = (element: Element | null | undefined) => {
+          if (!element) return null;
+          const box = element.getBoundingClientRect();
+          return { x: box.x, y: box.y, width: box.width, height: box.height };
+        };
+        return {
+          reachable: hit === button || (hit instanceof Node && button.contains(hit)),
+          hit: hit instanceof HTMLElement ? `${hit.tagName}.${hit.className}` : hit?.nodeName,
+          button: rect(button),
+          row: rect(row),
+          face: rect(face),
+          rail: rect(rail),
+          transform: face ? getComputedStyle(face).transform : null
+        };
+      });
+    const screenshotDir = resolve(process.cwd(), '.e2e-screenshots/qa-swipe-row-reveal-20261008');
+    mkdirSync(screenshotDir, { recursive: true });
+    await page.screenshot({
+      path: resolve(
+        screenshotDir,
+        testInfo.project.name === 'mobile-chrome' ? 'mobile.png' : 'desktop.png'
+      ),
+      fullPage: false
+    });
+    expect(removeButtonHitTest.reachable, JSON.stringify(removeButtonHitTest)).toBe(true);
+    await expect(row).not.toHaveClass(/detail__row--checked/);
     await expect(row).toHaveCount(1);
 
     // Cerrando de nuevo con otro arrastre a la izquierda, sin cruzar el umbral

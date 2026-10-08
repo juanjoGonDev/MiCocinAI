@@ -1,4 +1,12 @@
-import { Directive, ElementRef, EventEmitter, Input, OnDestroy, Output, inject } from '@angular/core';
+import {
+  Directive,
+  ElementRef,
+  EventEmitter,
+  Input,
+  OnDestroy,
+  Output,
+  inject
+} from '@angular/core';
 
 /** Desplazamiento minimo para que el riel asome (px). Por debajo, es un dedo dudando. */
 export const REVEAL_PX = 56;
@@ -15,14 +23,17 @@ export interface SwipeState {
 }
 
 /**
- * Traduccion horizontal -> estado del riel. Funcion pura a proposito: es la unica
- * manera razonable de escribir pruebas de un gesto sin un dedo delante.
+ * Traduccion horizontal -> estado del riel. Separa la geometria de los umbrales del
+ * ciclo de vida del puntero, y permite probar ambos niveles de forma independiente.
  */
 export function swipeState(deltaX: number, width: number): SwipeState {
   if (width <= 0) return { reveal: 0, armed: false };
   const left = Math.min(0, deltaX);
   const reveal = Math.min(1, Math.abs(left) / width);
-  return { reveal: reveal < REVEAL_PX / width ? 0 : reveal, armed: Math.abs(left) >= width * COMMIT_RATIO };
+  return {
+    reveal: reveal < REVEAL_PX / width ? 0 : reveal,
+    armed: Math.abs(left) >= width * COMMIT_RATIO
+  };
 }
 
 /** Un deslizamiento a la derecha corto no es nada; uno decidido, una unidad mas. */
@@ -90,7 +101,8 @@ export class SwipeRowDirective implements OnDestroy {
     if (this.disabled || event.button !== 0 || this.pointerId !== null) return;
     // El gesto nace sobre la fila, y la fila puede ser un enlace: solo se cede ante
     // lo que escribe o pulsa por si mismo ([data-gesture-stop]).
-    if ((event.target as HTMLElement).closest('input, select, textarea, [data-gesture-stop]')) return;
+    if ((event.target as HTMLElement).closest('input, select, textarea, [data-gesture-stop]'))
+      return;
     this.pointerId = event.pointerId;
     this.startX = event.clientX;
     this.startY = event.clientY;
@@ -150,7 +162,7 @@ export class SwipeRowDirective implements OnDestroy {
       }
       const reveal = Math.abs(deltaX) > REVEAL_PX && deltaX < 0;
       this.railOpen = reveal;
-      this.apply(reveal ? Math.min(width * 0.62, REVEAL_PX * 2.4) : 0, reveal);
+      this.apply(reveal ? -Math.min(width * 0.62, REVEAL_PX * 2.4) : 0, reveal);
       return;
     }
     this.apply(0, false);
@@ -216,7 +228,8 @@ export class LongPressDirective {
 
   start(event: PointerEvent): void {
     if (this.longPressDisabled || event.button !== 0) return;
-    if ((event.target as HTMLElement).closest('input, select, textarea, [data-gesture-stop]')) return;
+    if ((event.target as HTMLElement).closest('input, select, textarea, [data-gesture-stop]'))
+      return;
     this.fired = false;
     this.startX = event.clientX;
     this.startY = event.clientY;
@@ -228,7 +241,8 @@ export class LongPressDirective {
 
   move(event: PointerEvent): void {
     if (this.timer === null) return;
-    if (Math.abs(event.clientX - this.startX) > 12 || Math.abs(event.clientY - this.startY) > 12) this.stop();
+    if (Math.abs(event.clientX - this.startX) > 12 || Math.abs(event.clientY - this.startY) > 12)
+      this.stop();
   }
 
   stop(): void {
