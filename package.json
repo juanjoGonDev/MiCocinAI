@@ -17,6 +17,7 @@
     "test:client": "pnpm --filter @hogaria/web run test",
     "test:server": "pnpm --filter @hogaria/server run test",
     "test:e2e": "node scripts/run-isolated-playwright.mjs",
+    "test:e2e:nginx": "node scripts/run-isolated-playwright.mjs --nginx-ingress",
     "smoke:ai:real": "node scripts/run-ai-real-smoke.mjs",
     "test:e2e:full-stack": "pnpm run build && node scripts/run-isolated-playwright.mjs --config=playwright.full-stack.config.ts",
     "test:coverage": "pnpm run test:client:coverage && pnpm run test:server:coverage",
@@ -59,6 +60,6 @@
     ]
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   }
 }

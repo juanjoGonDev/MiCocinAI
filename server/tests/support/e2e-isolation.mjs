@@ -30,9 +30,9 @@ export function validateIsolatedEnvironment(env = process.env, systemTempRoot = 
     throw new Error('Playwright must run through the isolated stack supervisor.');
   }
   const stack = env.E2E_STACK;
-  if (stack !== 'dev' && stack !== 'full-stack') {
+  if (stack !== 'dev' && stack !== 'full-stack' && stack !== 'ingress') {
     throw new Error(
-      'E2E_STACK must be dev or full-stack; run Playwright through the isolated runner.'
+      'E2E_STACK must be dev, full-stack or ingress; run Playwright through the isolated runner.'
     );
   }
 
@@ -77,11 +77,11 @@ export function validateIsolatedEnvironment(env = process.env, systemTempRoot = 
   }
 
   const apiPort = parsePort(env.E2E_API_PORT, 'E2E_API_PORT');
-  if (RESERVED_PORTS.has(apiPort)) {
+  if (stack !== 'ingress' && RESERVED_PORTS.has(apiPort)) {
     throw new Error('E2E_API_PORT must not use the app’s shared development port.');
   }
 
-  if (existsSync(databasePath)) {
+  if (existsSync(databasePath) && stack !== 'ingress') {
     const readyFile = join(runDir, 'server.ready');
     const ready = existsSync(readyFile) ? readFileSync(readyFile, 'utf8').trim().split(':') : [];
     const readyPid = Number(ready[0]);
@@ -101,11 +101,26 @@ export function validateIsolatedEnvironment(env = process.env, systemTempRoot = 
         'The dev UI origin must match E2E_FRONTEND_PORT and use a distinct API port.'
       );
     }
-  } else if (
-    parsePort(env.E2E_FRONTEND_PORT, 'E2E_FRONTEND_PORT') !== basePort ||
-    apiPort !== basePort
-  ) {
-    throw new Error('The full-stack UI and API must share the configured isolated port.');
+  } else if (stack === 'full-stack') {
+    if (
+      parsePort(env.E2E_FRONTEND_PORT, 'E2E_FRONTEND_PORT') !== basePort ||
+      apiPort !== basePort
+    ) {
+      throw new Error('The full-stack UI and API must share the configured isolated port.');
+    }
+  } else {
+    const ingressReadyFile = join(runDir, 'ingress.ready');
+    const ingressOrigin = existsSync(ingressReadyFile)
+      ? readFileSync(ingressReadyFile, 'utf8').trim()
+      : '';
+    if (
+      parsePort(env.E2E_FRONTEND_PORT, 'E2E_FRONTEND_PORT') !== basePort ||
+      apiPort !== basePort ||
+      ingressOrigin !== base.origin
+    ) {
+      throw new Error('The isolated Nginx ingress must be ready on the configured UI/API origin.');
+    }
+    frontendPort = basePort;
   }
 
   return { runDir, databasePath, stack, baseUrl: base.origin, frontendPort, apiPort, seed };

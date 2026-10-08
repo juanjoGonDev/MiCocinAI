@@ -473,9 +473,11 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Revalidación de gates (2026-10-02):** con `DATABASE_PATH=:memory:` y `NODE_ENV=test`, `npm run test:coverage --prefix server -- --reporter=dot --coverage.reportsDirectory=<directorio único en %TEMP%>` pasa **45 archivos / 922 pruebas** y supera el umbral por archivo configurado de 70 %; agregado S/B/F/L **93,93/85,55/95,19/96,61 %**. La salida anterior de 917/922 queda como antecedente ya no reproducido. `npx tsc --project server/tsconfig.json --noEmit`, `npm run build --prefix server -- --outDir <directorio único en %TEMP%>` y `git diff --check` terminan con código **0**. El build y los informes se escribieron fuera del worktree; no se bajaron umbrales.
 
+**Revalidación de runtime y decisión (2026-10-08):** Docker Desktop/Compose ya está disponible y `nginx:alpine` permite montar la configuración versionada sin tocar los contenedores ni puertos de HogarIA/WebAPI. `better-sqlite3@13.0.3` declara `engines.node >=22`; el intento de cargar SQLite con Node 20 terminó con código 139, mientras que el backend aislado en Node 22 compila y arranca. Alinear los tres stages Docker y los `engines` del workspace/servidor a Node 22 coincide con CI y con la dependencia actual. El runner de ingreso copia solo manifests, `server/src` y `tsconfig` a un contexto temporal allowlisted; no monta `server/data`, `.env`, `node_modules` ni datos locales. SQLite/uploads viven en el directorio temporal del run; Nginx monta el `nginx.conf` versionado en solo lectura y publica únicamente en loopback.
+
 - [ ] Preparar una prueba real por el ingress Nginx efectivo con backend/SQLite aislados: una PNG sintética válida de 513 KiB debe alcanzar el backend y, sin proveedor configurado, terminar en `NO_CONFIG`; no usar `page.route` que evite el proxy.
 - [x] Añadir pruebas del backend para firma/tamaño en 0 bytes, 10 MiB exactos y 10 MiB + 1 byte; validar 413 con `FILE_TOO_LARGE` solo al superar el límite. (QA-REC.UPLOAD-BOUNDARY.1; 14/14 del archivo dirigido.)
-- [ ] Corregir el límite del proxy para incluir el multipart overhead sin cambiar innecesariamente el límite global; verificar con Chromium y Pixel 5 sobre Nginx real aislado y documentar si falta el runtime.
+- [ ] Corregir el límite del proxy para incluir multipart overhead sin cambiar innecesariamente el límite global; verificar con Chromium y Pixel 5 sobre Nginx real aislado y documentar si falta el runtime.
 
 ## Unidad QA-REC.FAV.1 · quitar favoritos desde la pestaña filtrada (resuelta)
 

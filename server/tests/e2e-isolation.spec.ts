@@ -59,6 +59,31 @@ describe('validateIsolatedEnvironment', () => {
     expect(validateIsolatedEnvironment(env).stack).toBe('full-stack');
   });
 
+  it('accepts an isolated Nginx ingress after the runner records its public origin', () => {
+    const env = environment({
+      E2E_STACK: 'ingress',
+      E2E_API_PORT: '62123',
+      E2E_FRONTEND_PORT: '62123'
+    });
+    writeFileSync(env.DATABASE_PATH, 'created by the isolated ingress backend');
+    writeFileSync(join(env.E2E_RUN_DIR, 'ingress.ready'), `${env.E2E_BASE_URL}\n`);
+
+    const result = validateIsolatedEnvironment(env);
+
+    expect(result).toMatchObject({ stack: 'ingress', apiPort: 62123, frontendPort: 62123 });
+  });
+
+  it('rejects an ingress readiness marker for a different public origin', () => {
+    const env = environment({
+      E2E_STACK: 'ingress',
+      E2E_API_PORT: '62123',
+      E2E_FRONTEND_PORT: '62123'
+    });
+    writeFileSync(join(env.E2E_RUN_DIR, 'ingress.ready'), 'http://127.0.0.1:62124\n');
+
+    expect(() => validateIsolatedEnvironment(env)).toThrow(/Nginx ingress/);
+  });
+
   it('rejects a database that predates the isolated server ready marker', () => {
     const env = environment();
     writeFileSync(env.DATABASE_PATH, 'pre-existing');

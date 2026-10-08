@@ -15,6 +15,9 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "migrate": "tsx src/migrate.ts"
   },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
     "hono": "4.13.7",
     "hono-rate-limiter": "0.5.4",
