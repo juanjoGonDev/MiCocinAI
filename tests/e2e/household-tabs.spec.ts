@@ -9,12 +9,8 @@ async function screenshot(page: Page, name: string): Promise<void> {
       ? { width: 1440, height: 900 }
       : { width: 393, height: 851 };
   await page.setViewportSize(viewport);
-  const directory = join(
-    process.cwd(),
-    '.e2e-screenshots',
-    'household-tabs',
-    test.info().project.name
-  );
+  const screenshotRoot = process.env.E2E_SCREENSHOT_DIR ?? join(process.cwd(), '.e2e-screenshots');
+  const directory = join(screenshotRoot, 'household-tabs', test.info().project.name);
   while (await page.locator('.toast__close').count()) {
     await page.locator('.toast__close').first().click();
   }

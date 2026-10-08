@@ -1204,7 +1204,7 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 **Rollback focal:** retirar el cierre al navegar desde el perfil del drawer, las regresiones de navegación/captura y este subapartado; no revertir los cierres existentes por enlace, overlay o Escape.
 
 - [ ] `/dashboard`: estados con/sin datos, resumen, vencimientos, comidas/recetas y cada CTA; verificar los destinos anotados en discrepancias.
-- [ ] `/household`: crear hogar, unirse por código, código incorrecto, copiar/regenerar invitación, miembros/roles, permisos para compartir, salir del hogar y estados sin hogar.
+- [x] `/household`: crear hogar, unirse por código, código incorrecto, copiar/regenerar invitación, miembros/roles, permisos para compartir, salir del hogar y estados sin hogar.
 - [ ] `/account`: tabs y URL, editar/cancelar nombre, seguridad/cambio de contraseña, cerrar sesión, información de cuenta; avatar: formatos/tamaño permitidos, recorte, zoom, recentrar, cancelar, subir, quitar, error y persistencia.
 - [ ] `/preferences`: tabs/URL y recarga, perfil, alergias, gustos, comidas/horas y objetivos; añadir/quitar opciones personalizadas, guardar/descartar, aviso de cambios sin guardar y enlaces a onboarding/despensa.
 - [x] `/settings`: tema claro/oscuro/sistema, idioma ES/EN, módulos habilitar/deshabilitar, reinicio/persistencia y rutas directas con módulo oculto.
@@ -1331,6 +1331,18 @@ La coverage focal S/B/F/L de `HouseholdComponent` es **88.04/95.65/74.28/87.2 %*
 
 **Rollback:** revertir la unidad atómica que agrega el servicio compartido de clipboard, su cableado de Household/Logs, traducción de fallo, pruebas y esta sección. No cambia datos persistidos ni contratos HTTP.
 
+### QA-HOUSEHOLD.UI-SURFACE.1 · revalidación integral de Hogar
+
+**Fuente revalidada (2026-10-08):** `HouseholdComponent` mantiene estados sin hogar, pestañas de Hogar/Miembros/Permisos/Ajustes, enlace de invitación, creación/unión y salida; `household-tabs.spec.ts` comprueba URL, historial, roles y autorización. Las regresiones vigentes añaden errores/reintentos de creación, unión, compartir, regeneración y salida, clipboard, y hogar secundario. Se evitó sobrescribir las capturas previas de `household-tabs` añadiendo `E2E_SCREENSHOT_DIR` configurable a su helper; sin esa variable conserva su destino histórico.
+
+- [x] Cubrir en Playwright creación, unión válida/incorrecta, invitación copiar/regenerar, miembros/roles, permisos compartidos, salida, múltiples hogares y estado sin hogar.
+- [x] Ejecutar esas rutas en Chromium y Pixel 5 con rate limit activo, SQLite/puertos/semilla aislados y cleanup; comprobar límites responsive, tabs/URL/historial, errores y reintentos.
+- [x] Guardar capturas sintéticas en carpeta única ignorada por Git e inspeccionar PC y móvil para Hogar y Permisos; preservar intactos los artefactos previos.
+
+**Evidencia (2026-10-08):** en PowerShell, `$env:E2E_RATE_LIMIT='on'`, `$env:E2E_CHROME_BIN='C:\Program Files\Google\Chrome\Application\chrome.exe'` y `$env:E2E_SCREENSHOT_DIR='.e2e-screenshots/qa-household-revalidation-35fb7c17dd3b470cb37ad7815cde2f6e'`; después `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/household.spec.ts tests/e2e/household-action-ack.spec.ts tests/e2e/household-clipboard-errors.spec.ts tests/e2e/household-icon-consistency.spec.ts tests/e2e/household-tabs.spec.ts tests/e2e/multi-household-switcher.spec.ts --reporter=dot` — **30/30** en **2 min**, runner confirmó limpieza de SQLite/puertos/semillas. La captura de Hogar escritorio, Hogar móvil, Permisos móvil y estado sin hogar móvil se inspeccionó; no se cambió UI. Capturas actuales: `.e2e-screenshots/qa-household-revalidation-35fb7c17dd3b470cb37ad7815cde2f6e/household-tabs/{chromium,mobile-chrome}/home.png` y `.../mobile-chrome/permissions.png`; la ruta completa está verificada como ignorada por `.gitignore`. `household-tabs.spec.ts` también pasa bajo `pnpm run typecheck:e2e` y Prettier focal.
+
+La evidencia de QA-HOUSEHOLD.API-SURFACE.1 y QA-HOUSEHOLD.CLIPBOARD.1 dejó abierta la casilla general porque cada una declaraba explícitamente no sustituir el recorrido completo de UI; esta revalidación posterior cubre ese alcance y cierra ahora `/household`.
+
 ### QA-ONBOARDING.PANTRY-LINK.1 · Mantener Pantry como fuente de verdad de utensilios
 
 **Fuente revalidada antes de implementar (2026-10-01):** `HOGARIA-SPEC.md` §8c establece paridad: los utensilios se editan en Pantry y el tour solo enlaza. §12C añadió el paso de horarios y §12E documenta el contador `Paso 3 de 6`; prevalece sobre el conteo inicial de cinco de §8b. `ONBOARDING_STEPS` actual contiene `profile, allergies, tastes, goal, meals, kitchen`, como requiere el contrato posterior. Sin embargo, la plantilla actual de `kitchen` renderiza checkboxes que llaman `toggleUtensil()` → `PantryService.updateUtensil()`, mutando inventario desde el tour. La conducta esperada es conservar seis pasos y convertir `kitchen` en un paso informativo con enlace accesible a `/pantry?tab=utensils`; las modificaciones de disponibilidad se hacen allí.
@@ -1434,7 +1446,7 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 ## Siguiente unidad de trabajo
 
-1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code`, `/onboarding`, el shell autenticado y los CTA actuales de `/dashboard` se revalidaron aislados. El dashboard sigue abierto por la discrepancia de alcance Today (vencimientos/lista y presupuesto/cola IA); continuar con `/household` y volver a esa decisión antes de cerrar el dashboard.
+1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code`, `/onboarding`, el shell autenticado, los CTA actuales de `/dashboard` y `/household` se revalidaron aislados. Continuar con `/account`; mantener pendiente la discrepancia de alcance Today del dashboard (vencimientos/lista y presupuesto/cola IA) hasta resolverla antes de cerrar esa ruta.
 2. QA-REC.INGRESS.1 ya está verificada con Nginx real aislado; la siguiente validación de motor pendiente es Safari/iOS real para la hoja de ofertas de QA-04c.1, sin sustituir safe-area/teclado nativos por emulación WebKit/Chromium.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
 4. QA-04c: el gate global frontend en el hook pre-push del commit `db2eeeb` pasó (**90.20/81.39/88.94/91.57 % S/B/F/L**, 1168/1168 tests, 2026-10-08); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.
