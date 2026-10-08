@@ -38,7 +38,7 @@ import {
   extractJsonObject,
   pingDeConexionTransport
 } from './ai-client.js';
-import type { AiConfigRow, AiJobKind, AiMessage } from './ai-client.js';
+import type { AiConfigRow, AiJobKind, AiMessage, AiMessagePart } from './ai-client.js';
 import type { AiResponseFormat } from '../schemas/ai-response-format.js';
 import {
   buildInventarioJson,
@@ -660,35 +660,35 @@ async function correr(
         'FILE_MISSING'
       );
 
-    const { system, user, inventoryContext } = buildTicketPrompt({
-      inventarioJson: buildInventarioJson(inventarioDeLaCasa(db, userId, recibo.household_id)),
+    const inventarioJson = buildInventarioJson(inventarioDeLaCasa(db, userId, recibo.household_id));
+    const { system, user } = buildTicketPrompt({
       esPdf: recibo.file_kind === 'pdf',
       language: recibo.ai_output_language === 'en' ? 'en' : 'es'
     });
-    const contenido =
+    const ticketPart: AiMessagePart =
       recibo.file_kind === 'pdf'
-        ? [
-            { type: 'text', text: user },
-            { type: 'text', text: inventoryContext },
-            {
-              type: 'file',
-              file: {
-                filename: 'ticket.pdf',
-                file_data: `data:application/pdf;base64,${fichero.toString('base64')}`
-              }
+        ? {
+            type: 'file',
+            file: {
+              filename: 'ticket.pdf',
+              file_data: `data:application/pdf;base64,${fichero.toString('base64')}`
             }
-          ]
-        : [
-            { type: 'text', text: user },
-            { type: 'text', text: inventoryContext },
-            {
-              type: 'image_url',
-              image_url: {
-                url: `data:image/${recibo.file_kind === 'jpeg' ? 'jpeg' : recibo.file_kind};base64,${fichero.toString('base64')}`,
-                detail: 'high'
-              }
+          }
+        : {
+            type: 'image_url',
+            image_url: {
+              url: `data:image/${recibo.file_kind === 'jpeg' ? 'jpeg' : recibo.file_kind};base64,${fichero.toString('base64')}`,
+              detail: 'high'
             }
-          ];
+          };
+    const inventarioPart: AiMessagePart = {
+      type: 'file',
+      file: {
+        filename: 'inventario.json',
+        file_data: `data:application/json;base64,${Buffer.from(inventarioJson, 'utf8').toString('base64')}`
+      }
+    };
+    const contenido: AiMessagePart[] = [{ type: 'text', text: user }, ticketPart, inventarioPart];
 
     // El stream va guardando lineas a medida que el modelo las cierra.
     let acumulado = '';
@@ -696,7 +696,7 @@ async function correr(
     let vistasEnStream = 0;
     const mensajes: AiMessage[] = [
       { role: 'system', content: system },
-      { role: 'user', content: contenido as never }
+      { role: 'user', content: contenido }
     ];
     const respuesta = await callAIStreamingWithConfig(
       configuracion,

@@ -2224,6 +2224,12 @@ frontera. El relay de adjuntos, en cambio, extrae `file.file_data`, conserva el 
 `application/json` con extensión `.json`. La petición más reciente aportada por el usuario muestra
 categorías diversas y una nota de línea, pero no acredita que el fichero de catálogo se haya adjuntado.
 
+**Comprobación del registro aportado (2026-10-08):** el archivo tiene 36 líneas y contiene el marcador
+`INVENTARIO_JSON_ACTUAL:`, pero no menciona `inventario.json` ni `application/json`; tampoco contiene
+un estado HTTP identificable. Por tanto, no demuestra el resultado del payload nuevo y es compatible
+con una ejecución anterior que todavía enviaba el catálogo como texto. No se han extraído ni reproducido
+prompts, respuestas o datos privados del registro.
+
 **Decisión:** enviar el catálogo limitado como `inventario.json` real, codificado como parte
 `type: "file"` con MIME `application/json`, y dejar en texto solo las instrucciones para leerlo. El
 adjunto contendrá únicamente tiendas conocidas, categorías y productos/nombre/categoría/unidad vigentes;
@@ -2231,15 +2237,30 @@ no incluirá existencias, precios, historial, secretos ni datos de tickets. Cons
 `image_url` y `response_format` JSON Schema estricto. No editar la WebAPI compartida para ocultar el
 problema ni alterar su configuración.
 
-- [ ] Añadir primero pruebas fallidas de la petición de proveedor para JPEG y PDF: texto invita a leer
+- [x] Añadir primero pruebas fallidas de la petición de proveedor para JPEG y PDF: texto invita a leer
       `inventario.json`, se adjunta exactamente un fichero JSON con la instantánea fresca, el ticket
       mantiene su transporte y se conserva `response_format` estricto; comprobar categoría movida.
-- [ ] Verificar en un contrato aislado con WebAPI que el catálogo se conserva como adjunto `application/json`
+- [x] Verificar en un contrato aislado con WebAPI que el catálogo se conserva como adjunto `application/json`
       legible aunque las instrucciones de usuario se normalicen; usar contenido sintético, sin ticket real.
-- [ ] Ejecutar pruebas focales y suite server requerida, coverage ≥70 % S/B/F/L por archivo afectado,
+- [x] Ejecutar pruebas focales y suite server requerida, coverage ≥70 % S/B/F/L por archivo afectado,
       formato, build/typecheck y E2E apropiada con SQLite temporal; no llamar al proveedor con tickets reales.
 - [ ] Documentar resultados/rollback, commit atómico con hooks completos, push a la rama del PR y comprobar
       todos los jobs CI del SHA publicado; mantener el PR abierto y fuera de Draft como pidió el usuario.
+
+**Evidencia reproducible:** primero, las pruebas focales fallaron antes del cambio (3 fallos esperados)
+y luego `pnpm --filter @hogaria/server exec vitest run src/utils/ai-queue.spec.ts
+src/utils/ticket-prompt.spec.ts --reporter=dot` pasó 33/33. La suite `pnpm --filter
+@hogaria/server run test:coverage` pasó 1234, 1 omitida; `ticket-queue.ts` quedó en
+86.53/80.09/95.23/92.21 % S/B/F/L y `ticket-prompt.ts` en 100 % en las cuatro métricas.
+También pasaron `pnpm --filter @hogaria/server run build`, `pnpm run typecheck:e2e`, Prettier,
+`pnpm run check:ui`, `pnpm run build` y `git diff --check`. El E2E aislado
+`pnpm run test:e2e -- --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/receipts.spec.ts --grep "guarda en cola y durante el análisis" --reporter=line`
+pasó 4/4 con SQLite temporal y proveedor sintético; el runner confirmó limpieza de DB/artefactos.
+En WebAPI pasó la prueba existente `pnpm exec vitest run tests/api/opencode/controller.test.ts -t
+"passes OpenAI image and file data URL parts as executor attachments" --config vitest.config.ts
+--reporter=dot` (1/1), y una petición aislada al router con JSON/JPEG sintéticos entregó ambos bytes
+intactos al ejecutor falso (HTTP 200, 2 adjuntos, 0 llamadas a proveedor). No se usaron tickets reales.
 
 **Rollback:** revertir únicamente la serialización/adjunto `inventario.json`, sus pruebas de cola/contrato
 y esta subunidad; mantener el snapshot de catálogo consultado en memoria y el transporte PDF/JPEG.

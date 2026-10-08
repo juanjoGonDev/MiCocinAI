@@ -3,8 +3,8 @@ import { buildInventarioJson, buildTicketPrompt, TICKET_SHAPE } from './ticket-p
 
 /**
  * El prompt del ticket (## 12aj) se prueba como el de la foto: sin montar un proveedor. Lo que
- * se fija aqui es que el JSON de inventario viaje entero (tiendas, categorias, productos), que
- * las reglas de dinero y de no-inventar esten escritas, y que el PDF se anuncie como PDF.
+ * se fija aqui es que el prompt pida leer el fichero actual del catálogo, que las reglas de dinero
+ * y de no-inventar esten escritas, y que el PDF se anuncie como PDF.
  */
 describe('buildTicketPrompt (## 12aj)', () => {
   const inventario = {
@@ -16,27 +16,21 @@ describe('buildTicketPrompt (## 12aj)', () => {
     productos: [{ categoria: 'dairy', nombre: 'Leche entera', unidad: 'unit' }]
   };
 
-  it('el inventario actual viaja como bloque JSON de texto independiente', () => {
+  it('el prompt pide leer el fichero inventario.json adjunto', () => {
     const json = buildInventarioJson(inventario);
     const parsed = JSON.parse(json);
     expect(parsed.tiendas).toEqual(['Mercadona', 'Lidl']);
     expect(parsed.categorias).toEqual(inventario.categorias);
     expect(parsed.productos).toEqual(inventario.productos);
-    const { user, inventoryContext } = buildTicketPrompt({ inventarioJson: json, esPdf: false });
-    expect(user).toContain('El JSON del inventario viene incluido');
-    expect(user).toContain('no busques un archivo adjunto aparte');
+    const { user } = buildTicketPrompt({ esPdf: false });
+    expect(user).toContain('inventario.json');
+    expect(user).toContain('adjunto');
+    expect(user).toContain('lee');
     expect(user).toContain('respeta su categoria vigente');
-    expect(inventoryContext).toBe(`INVENTARIO_JSON_ACTUAL:\n${json}`);
-    expect(JSON.parse(inventoryContext.slice('INVENTARIO_JSON_ACTUAL:\n'.length))).toEqual(
-      inventario
-    );
   });
 
   it('las reglas que no se pueden romper: centimos, no inventar, tienda, total', () => {
-    const { system } = buildTicketPrompt({
-      inventarioJson: buildInventarioJson(inventario),
-      esPdf: false
-    });
+    const { system } = buildTicketPrompt({ esPdf: false });
     expect(system).toContain('CENTIMOS ENTEROS');
     expect(system).toContain('NO inventes precios');
     expect(system).toContain('lo PAGADO por esa cantidad');
@@ -57,10 +51,7 @@ describe('buildTicketPrompt (## 12aj)', () => {
   });
 
   it('pide tienda/local y fecha impresa sin sustituirla por el momento de subida', () => {
-    const { system } = buildTicketPrompt({
-      inventarioJson: buildInventarioJson(inventario),
-      esPdf: false
-    });
+    const { system } = buildTicketPrompt({ esPdf: false });
 
     expect(system).toContain('`store` es la tienda de la cabecera del ticket');
     expect(system).toContain('el nombre del establecimiento');
@@ -72,11 +63,7 @@ describe('buildTicketPrompt (## 12aj)', () => {
   });
 
   it('localiza los avisos del análisis, sin traducir lo transcrito ni el catálogo', () => {
-    const { system } = buildTicketPrompt({
-      inventarioJson: buildInventarioJson(inventario),
-      esPdf: false,
-      language: 'en'
-    });
+    const { system } = buildTicketPrompt({ esPdf: false, language: 'en' });
 
     expect(system).toContain('English (United Kingdom)');
     expect(system).toContain('warnings');
@@ -84,14 +71,14 @@ describe('buildTicketPrompt (## 12aj)', () => {
   });
 
   it('el PDF se anuncia como PDF y la imagen como imagen', () => {
-    const pdf = buildTicketPrompt({ inventarioJson: '{}', esPdf: true });
-    const imagen = buildTicketPrompt({ inventarioJson: '{}', esPdf: false });
+    const pdf = buildTicketPrompt({ esPdf: true });
+    const imagen = buildTicketPrompt({ esPdf: false });
     expect(pdf.user).toContain('como PDF');
     expect(imagen.user).toContain('como imagen');
   });
 
   it('trata las fotos solapadas de un ticket largo como una sola compra', () => {
-    const { system } = buildTicketPrompt({ inventarioJson: '{}', esPdf: true });
+    const { system } = buildTicketPrompt({ esPdf: true });
 
     expect(system).toContain('las paginas son tramos contiguos o solapados de un unico ticket');
     expect(system).toContain('cuenta cada linea impresa una sola vez');

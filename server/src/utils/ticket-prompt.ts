@@ -1,12 +1,12 @@
 /**
  * El prompt de la lectura de tickets (HOGARIA-SPEC ## 12aj), aparte de la ruta por las mismas
  * razones que `photo-prompt.ts`: se puede leer entero sin buscarlo entre un `try` y un `INSERT`,
- * y se puede probar que menciona lo que tiene que mencionar (el inventario actual como texto
- * separado, los centimos, la tienda, el «no inventes») sin montar un proveedor de IA.
+ * y se puede probar que menciona lo que tiene que mencionar (el fichero de inventario adjunto,
+ * los centimos, la tienda, el «no inventes») sin montar un proveedor de IA.
  *
  * Cada llamada incluye una instantanea JSON generada desde la base actual del hogar con tiendas,
- * categorias de despensa y productos catalogados —asi usa la categoria vigente y evita proponer
- * como nuevos productos o categorias que ya estan registrados.
+ * categorias de despensa y productos catalogados en un fichero independiente —asi usa la categoria
+ * vigente y evita proponer como nuevos productos o categorias que ya estan registrados.
  */
 
 import { aiLocalizedFieldsInstruction, type AiOutputLanguage } from './ai-output-language.js';
@@ -40,18 +40,13 @@ export interface InventarioParaPrompt {
 }
 
 export function buildInventarioJson(inventario: InventarioParaPrompt): string {
-  // Enviar el objeto JSON directo en su bloque de texto evita capas de envoltorio innecesarias.
+  // El fichero se adjunta tal cual; no incluir existencias, precios ni historial de compra.
   return JSON.stringify(inventario);
 }
 
-export function buildTicketPrompt(input: {
-  inventarioJson: string;
-  esPdf: boolean;
-  language?: AiOutputLanguage;
-}): {
+export function buildTicketPrompt(input: { esPdf: boolean; language?: AiOutputLanguage }): {
   system: string;
   user: string;
-  inventoryContext: string;
 } {
   const system = [
     'Eres el lector de tickets de compra de una casa. Tu salida es UN objeto JSON y nada mas: sin markdown, sin prosa antes ni despues, sin comentarios.',
@@ -71,8 +66,8 @@ export function buildTicketPrompt(input: {
   ].join('\n');
 
   const user = [
-    'El JSON del inventario viene incluido en un bloque de texto separado del mismo mensaje. Esta disponible: no busques un archivo adjunto aparte ni digas que falta el inventario.',
-    'Usa las tiendas conocidas, categorias y productos registrados para clasificar y para no proponer como nuevos cosas que ya existen. Si el producto aparece en el JSON, respeta su categoria vigente.',
+    'El fichero inventario.json esta adjunto al mismo mensaje. Abrelo y usa su contenido; no digas que falta ni busques otro archivo.',
+    'Usa las tiendas conocidas, categorias y productos registrados en ese fichero para clasificar. Si el producto aparece en el catalogo, respeta su categoria vigente y no lo propongas como nuevo.',
     '',
     input.esPdf
       ? 'El ticket llega como PDF: lee sus lineas directamente del documento.'
@@ -82,7 +77,5 @@ export function buildTicketPrompt(input: {
     TICKET_SHAPE
   ].join('\n');
 
-  const inventoryContext = `INVENTARIO_JSON_ACTUAL:\n${input.inventarioJson}`;
-
-  return { system, user, inventoryContext };
+  return { system, user };
 }

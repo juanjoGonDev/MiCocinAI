@@ -706,13 +706,23 @@ describe('AI provider queue dispatcher', () => {
       const ticketTextParts = Array.isArray(ticketContent)
         ? ticketContent.filter(({ type }) => type === 'text')
         : [];
-      expect(ticketTextParts).toHaveLength(2);
-      expect(ticketTextParts[0]?.text).toContain('El JSON del inventario viene incluido');
-      expect(ticketTextParts[0]?.text).toContain('no busques un archivo adjunto aparte');
-      const inventoryPart = ticketTextParts[1]?.text ?? '';
-      expect(inventoryPart.startsWith('INVENTARIO_JSON_ACTUAL:\n')).toBe(true);
+      expect(ticketTextParts).toHaveLength(1);
+      expect(ticketTextParts[0]?.text).toContain('inventario.json');
+      expect(ticketTextParts[0]?.text).toContain('adjunto');
+      const ticketParts = Array.isArray(ticketContent) ? ticketContent : [];
+      const inventoryFilePart = ticketParts.find(
+        ({ type, file }) => type === 'file' && file?.filename === 'inventario.json'
+      );
+      expect(inventoryFilePart?.file?.file_data?.startsWith('data:application/json;base64,')).toBe(
+        true
+      );
+      const inventoryBase64 = inventoryFilePart?.file?.file_data?.replace(
+        'data:application/json;base64,',
+        ''
+      );
+      expect(inventoryBase64).toBeTruthy();
       const inventorySnapshot = JSON.parse(
-        inventoryPart.slice('INVENTARIO_JSON_ACTUAL:\n'.length)
+        Buffer.from(inventoryBase64!, 'base64').toString('utf8')
       ) as {
         categorias: { clave: string; nombre: string }[];
         productos: { categoria: string; nombre: string; unidad: string }[];
@@ -723,14 +733,12 @@ describe('AI provider queue dispatcher', () => {
         nombre: 'Leche semidesnatada',
         unidad: 'l'
       });
-      const filePart = Array.isArray(ticketContent)
-        ? ticketContent.find(({ type }) => type === 'file')
-        : undefined;
-      expect(filePart?.file?.filename).toBe('ticket.pdf');
-      expect(filePart?.file?.file_data?.startsWith('data:application/pdf;base64,')).toBe(true);
-      expect(
-        Array.isArray(ticketContent) && ticketContent.some(({ type }) => type === 'image_url')
-      ).toBe(false);
+      const ticketPdfPart = ticketParts.find(
+        ({ type, file }) => type === 'file' && file?.filename === 'ticket.pdf'
+      );
+      expect(ticketPdfPart?.file?.file_data?.startsWith('data:application/pdf;base64,')).toBe(true);
+      expect(ticketParts.filter(({ type }) => type === 'file')).toHaveLength(2);
+      expect(ticketParts.some(({ type }) => type === 'image_url')).toBe(false);
       expect(jobRow(jobId)).toMatchObject({
         kind: 'receipt',
         status: 'done',
@@ -860,13 +868,25 @@ describe('AI provider queue dispatcher', () => {
       const parts = userMessage.content as Array<{
         type?: string;
         text?: string;
+        file?: { filename?: string; file_data?: string };
         image_url?: { url?: string };
       }>;
       const textParts = parts.filter(({ type }) => type === 'text');
-      expect(textParts).toHaveLength(2);
-      expect(textParts[0]?.text).toContain('El JSON del inventario viene incluido');
-      const inventoryText = textParts[1]?.text ?? '';
-      const inventory = JSON.parse(inventoryText.slice('INVENTARIO_JSON_ACTUAL:\n'.length)) as {
+      expect(textParts).toHaveLength(1);
+      expect(textParts[0]?.text).toContain('inventario.json');
+      expect(textParts[0]?.text).toContain('adjunto');
+      const inventoryFilePart = parts.find(
+        ({ type, file }) => type === 'file' && file?.filename === 'inventario.json'
+      );
+      expect(inventoryFilePart?.file?.file_data?.startsWith('data:application/json;base64,')).toBe(
+        true
+      );
+      const inventoryBase64 = inventoryFilePart?.file?.file_data?.replace(
+        'data:application/json;base64,',
+        ''
+      );
+      expect(inventoryBase64).toBeTruthy();
+      const inventory = JSON.parse(Buffer.from(inventoryBase64!, 'base64').toString('utf8')) as {
         productos: { categoria: string; nombre: string; unidad: string }[];
       };
       expect(inventory.productos).toContainEqual({
@@ -874,7 +894,7 @@ describe('AI provider queue dispatcher', () => {
         nombre: 'Leche semidesnatada',
         unidad: 'l'
       });
-      expect(parts.some(({ type }) => type === 'file')).toBe(false);
+      expect(parts.filter(({ type }) => type === 'file')).toHaveLength(1);
       expect(
         parts
           .find(({ type }) => type === 'image_url')
