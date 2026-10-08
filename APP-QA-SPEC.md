@@ -885,6 +885,36 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 
 **Evidencia QA-04c.CORE.PANTRY.1 (2026-10-01):** `pantry.service.spec.ts` cubre contratos HTTP, estados, filtros/paginación, CRUD, utensilios/stats, categorías/productos, impactos/bulk y catálogo. El grupo aislado de servicios ejecutó **65/65**. TDD confirmó que `getIngredient`, `createIngredient` y `updateIngredient` emitían `{data: ...}` pese a declarar `Ingredient|null`; ahora proyectan `data`, mantienen las señales y no insertan `null`. `deleteIngredient` también proyecta éxito como `true` conforme a su tipo. Cobertura de `PantryService`: **100/84.82/100/100 %** (S/B/F/L). La suite completa y el gate se revalidaron en QA-04c.GATE.1 (2026-10-08).
 
+### QA-04c.UI.PANTRY-CATEGORY-LABEL.1 · cobertura del pipe de categorías
+
+**Fuente revalidada (2026-10-08):** `PantryCategoryLabelPipe` se importa en Despensa y su gestor de
+categorías, pero el LCOV de la suite frontend muestra **25/0/0/25 % S/B/F/L** (1/4 sentencias, 0/3
+funciones). `pantryCategoryLabel()` ya tiene pruebas de tabla en
+`features/pantry/pantry-gestor.util.spec.ts` para nombres de fábrica, categorías renombradas y claves
+desconocidas; falta crear el pipe Angular y comprobar su frontera con `I18nService`, incluida la lectura
+de `changeTick()` que mantiene la etiqueta sincronizada con el idioma activo.
+
+**Alcance:** aumentar pruebas del pipe existente, sin cambiar producción si el contrato ya se cumple:
+categoría de fábrica por clave se traduce con el idioma activo; una clave con nombre de fábrica explícito
+también se traduce; un nombre personalizado prevalece sobre el diccionario; clave desconocida, valor nulo o
+ausente se conserva según el helper. El pipe lee `changeTick()` en cada transformación. No modifica datos,
+estructura ni geometría de Despensa.
+
+- [ ] Añadir primero pruebas Angular rojas del pipe real con `I18nService` controlado: factoría del
+      servicio, lectura de `changeTick()` en cada llamada y traducción con el idioma activo; cubrir clave
+      como string, objeto con nombre de fábrica, nombre personalizado, clave desconocida, `null` y
+      `undefined`. No duplicar los casos puros ya cubiertos por `pantry-gestor.util.spec.ts`.
+- [ ] Corregir solo el defecto demostrado por esas pruebas; si no aparece defecto, no cambiar producción.
+- [ ] Medir `pantry-category-label.pipe.ts` y superar ≥70 % en statements/branches/functions/lines; repetir
+      el spec E2E sintético de Despensa/gestor de categorías en Chromium y Pixel 5 para confirmar las
+      etiquetas traducidas existentes, con SQLite/semilla/puertos temporales y cleanup. Sin cambios visuales:
+      capturas N/A.
+- [ ] Ejecutar Karma completo con el gate 80 % en las cuatro métricas, `typecheck:e2e`, `check:ui`, formato,
+      build y `git diff --check`; registrar cobertura focal/global, comandos y rollback. Nunca bajar gates.
+
+**Rollback:** retirar únicamente el spec directo del pipe y este subapartado, sin afectar las pruebas puras
+de categorías ni la lógica de producción.
+
 ### QA-04c.CORE.HOUSEHOLD.1 · cobertura y contratos del hogar (resuelta localmente; gate frontend revalidado)
 
 **Fuente revalidada (2026-10-01):** no existe spec directa; el reporte global mide 2/60 statements (3.33 %), 0/24 branches, 0/34 functions y 1/56 lines (1.78 %). Los callers activos consultan carga/creación/unión, permisos e invitaciones. Las firmas de `previewInvite`, `createHousehold`, `updateSettings` y `regenerateInviteCode` indican emitir `data`/entidad/código, pero los pipes actuales solo usan `tap`; la API real de regenerar devuelve `{data:{inviteCode}}`. Las pruebas fijarán contrato a partir de firma, caller y respuesta server, y cubrirán almacenamiento local corrupto.
@@ -3091,7 +3121,8 @@ padding, márgenes, tipografía e interlineado, validó altura por rango de text
 único y ausencia de overflow. El runner confirmó cleanup tras cerrar la app. Ocho capturas sintéticas
 1440×900 y 393×851 se guardaron e inspeccionaron en
 `.e2e-screenshots/qa-page-headings-20261008/` (cuatro rutas × Chromium y Pixel 5), ignoradas por Git.
-`pnpm run test:client` pasó **1201/1201**; coverage global **90,32/81,46/88,96/91,75 % S/B/F/L**, con
+`pnpm run test:client` pasó **1201/1201**; el hook pre-push repitió **1201/1201** y coverage global
+**90,33/81,46/88,99/91,75 % S/B/F/L**, con
 los gates 80 % intactos. `pnpm run typecheck:e2e`, Prettier focal, `pnpm run check:ui` (**210 ficheros,
 21 reglas, 0 incidencias**), `pnpm run build` de servidor + cliente producción y `git diff --check`
 pasaron. La cobertura instrumentable del cambio es N/A: solo CSS estático y clases de plantilla, medidos
