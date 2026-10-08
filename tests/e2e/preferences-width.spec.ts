@@ -86,18 +86,39 @@ test.describe('ancho responsive de Preferencias', () => {
 
       const geometry = await page.locator('.preferences-page').evaluate((element) => {
         const page = element.getBoundingClientRect();
+        const frame = document.querySelector<HTMLElement>(
+          'main.main app-page-container.page-container'
+        );
+        if (!frame) throw new Error('Falta el contenedor compartido de página');
+        const container = frame.getBoundingClientRect();
+        const frameStyle = getComputedStyle(frame);
         return {
           left: page.left,
           right: page.right,
           documentWidth: document.documentElement.scrollWidth,
-          paddingLeft: Number.parseFloat(getComputedStyle(element).paddingLeft)
+          frameLeft: container.left,
+          frameRight: container.right,
+          framePaddingLeft: Number.parseFloat(frameStyle.paddingLeft),
+          framePaddingRight: Number.parseFloat(frameStyle.paddingRight)
         };
       });
       expect(geometry.left, 'Debe conservar gutter lateral').toBeGreaterThanOrEqual(0);
       expect(
-        geometry.paddingLeft,
+        geometry.framePaddingLeft,
         'Debe conservar padding táctil razonable'
       ).toBeGreaterThanOrEqual(12);
+      expect(
+        geometry.framePaddingRight,
+        'Debe conservar gutter en el borde derecho'
+      ).toBeGreaterThanOrEqual(12);
+      expect(
+        geometry.left,
+        'La página debe respetar el gutter izquierdo compartido'
+      ).toBeGreaterThanOrEqual(geometry.frameLeft + geometry.framePaddingLeft - 1);
+      expect(
+        geometry.right,
+        'La página debe respetar el gutter derecho compartido'
+      ).toBeLessThanOrEqual(geometry.frameRight - geometry.framePaddingRight + 1);
       expect(geometry.right, 'La página debe caber en el viewport').toBeLessThanOrEqual(
         viewport.width
       );

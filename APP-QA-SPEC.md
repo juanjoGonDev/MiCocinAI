@@ -1224,8 +1224,29 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 - [ ] `/dashboard`: estados con/sin datos, resumen, vencimientos, comidas/recetas y cada CTA; verificar los destinos anotados en discrepancias.
 - [x] `/household`: crear hogar, unirse por código, código incorrecto, copiar/regenerar invitación, miembros/roles, permisos para compartir, salir del hogar y estados sin hogar.
 - [x] `/account`: tabs y URL, editar/cancelar nombre, seguridad/cambio de contraseña, cerrar sesión, información de cuenta; avatar: formatos/tamaño permitidos, recorte, zoom, recentrar, cancelar, subir, quitar, error y persistencia.
-- [ ] `/preferences`: tabs/URL y recarga, perfil, alergias, gustos, comidas/horas y objetivos; añadir/quitar opciones personalizadas, guardar/descartar, aviso de cambios sin guardar y enlaces a onboarding/despensa.
+- [x] `/preferences`: tabs/URL y recarga, perfil, alergias, gustos, comidas/horas y objetivos; añadir/quitar opciones personalizadas, guardar/descartar, aviso de cambios sin guardar y enlaces a onboarding/despensa.
 - [x] `/settings`: tema claro/oscuro/sistema, idioma ES/EN, módulos habilitar/deshabilitar, reinicio/persistencia y rutas directas con módulo oculto.
+
+**Revalidación integral de `/preferences` (2026-10-08):** Playwright aislado ejecuta
+`preferences.spec.ts`, `preferences-meals.spec.ts`, `preferences-custom-limits.spec.ts`,
+`preferences-width.spec.ts` y `preferences-end-control-reachability.spec.ts` en Chromium y Pixel 5:
+**25 passed, 3 skips aplicables a proyectos/viewports**, con `E2E_RATE_LIMIT=on`, SQLite/puertos/semillas
+únicos y cleanup confirmado. Cubre URL/recarga de cinco pestañas, nombres y contexto de alergias («La IA lo
+descarta de raíz»), perfil, opciones personalizadas y límites, horas y comidas planificables, parche parcial
+exacto, persistencia, descartar/restaurar, error 503/reintento 200 sin perder cambios ni duplicar el toast,
+objetivos, enlace a despensa y redo de onboarding. En Pixel 5, 320×568, 393×851 y 568×320, valida acceso
+táctil al último tab y al CTA de guardar, hit-test contra navegación fija y ausencia de overflow; desktop
+valida pestañas por teclado y ancho/gutters a 1280/1920 px. TDD reprodujo que el PATCH fallido mostraba dos
+avisos (interceptor + formulario); `TasteProfileService.save()` marca `SILENT_TOAST` y deja el error
+localizado al formulario; Karma focal `taste-profile.service.spec.ts` pasa **10/10**. El primer barrido
+también expuso una aserción obsoleta: el padding horizontal vive en `app-page-container`, no en
+`.preferences-page`; se corrigió la medición para comprobar el frame compartido, sin cambiar el layout.
+`pnpm run typecheck:e2e`, `pnpm run check:ui`, Prettier focal y `git diff --check` pasan. Karma focal
+`taste-profile.service.spec.ts --code-coverage`: **10/10**; `TasteProfileService` **100/100/100/100 %
+S/B/F/L**. Por aislar una sola spec, el grafo parcial da **31.92/19.75/21.09/33.87 % S/B/F/L** y el gate
+global configurado de 80 % falla como corresponde; no se rebajó. El hook pre-push vuelve a ejecutar el
+gate completo. Capturas sintéticas de escritorio/móvil y error inspeccionadas en
+`.e2e-screenshots/qa-preferences-route-20261008/`; artefactos ignorados por Git.
 
 **Evidencia QA-SETTINGS.SURFACE.1 (2026-10-01):** fuente revalidada en `SettingsComponent`, `ThemeService` y `ModulesService`; las preferencias de tema se guardan y recargan desde `localStorage`, y los módulos se persisten mediante el perfil. Playwright aislado `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/settings-theme-i18n.spec.ts tests/e2e/settings-modules.spec.ts`, con rate limit activo, Chrome local y SQLite/puertos/semilla temporales: **34/34**. Comprueba tema claro/oscuro/sistema, idioma inglés con recarga, activación/desactivación, reinicio, error/guardado pendiente, teclado/foco, módulo apagado con navegación directa, límites de 320 px a 1023 px y orientación horizontal 852×393; el runner confirmó cleanup. Karma focal: **30/30**; cobertura por archivo `SettingsComponent` **100/100/100/100**, `ThemeService` **96.66/92.85/87.5/96.66** y `ModulesService` **97.91/90/100/100 % S/B/F/L**. El proceso focal conserva el umbral global de 80 % y sale con error porque el grafo agregado de la suite parcial da **35.09/9.09/26.71/37.98 % S/B/F/L**; no se bajó ningún gate y la casilla global de cobertura completa sigue abierta. Capturas sintéticas revisadas: `.e2e-screenshots/qa-settings-baseline-20261001-220732/settings-desktop.png` y `settings-mobile.png`.
 
@@ -1464,7 +1485,7 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 ## Siguiente unidad de trabajo
 
-1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code`, `/onboarding`, el shell autenticado, `/household` y `/account` se revalidaron aislados; los CTA actuales de `/dashboard` también están probados, pero esa ruta sigue abierta por la discrepancia de Today (vencimientos/lista, presupuesto y cola IA). Continuar con `/preferences`; resolver la discrepancia de Dashboard antes de marcar esa ruta completa.
+1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code`, `/onboarding`, el shell autenticado, `/household`, `/account` y `/preferences` se revalidaron aislados; los CTA actuales de `/dashboard` también están probados, pero esa ruta sigue abierta por la discrepancia de Today (vencimientos/lista, presupuesto y cola IA). Continuar con Dashboard y resolver esa discrepancia antes de marcar la ruta completa.
 2. QA-REC.INGRESS.1 ya está verificada con Nginx real aislado; la siguiente validación de motor pendiente es Safari/iOS real para la hoja de ofertas de QA-04c.1, sin sustituir safe-area/teclado nativos por emulación WebKit/Chromium.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
 4. QA-04c: el gate global frontend en el hook pre-push del commit `db2eeeb` pasó (**90.20/81.39/88.94/91.57 % S/B/F/L**, 1168/1168 tests, 2026-10-08); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.
@@ -2038,15 +2059,18 @@ La vista termina en `.preferences__actions` con el botón accesible «Guardar pr
 ya cubre gutters/overflow y pestañas, pero no mide si la acción final se puede alcanzar y activar sobre
 esa navegación en una altura corta.
 
-- [ ] Añadir una E2E aislada en archivo nuevo, solo para Pixel 5, que mida 320×568, 393×851 y 568×320.
-- [ ] En cada viewport, desplazar hasta «Guardar preferencias», medir que su caja queda completamente
+- [x] Añadir una E2E aislada en archivo nuevo, solo para Pixel 5, que mida 320×568, 393×851 y 568×320.
+- [x] En cada viewport, desplazar hasta «Guardar preferencias», medir que su caja queda completamente
       visible y fuera del rectángulo de `.bottom-nav`, comprobar hit-test/click y esperar confirmación.
-- [ ] Ejecutar la prueba con el runner aislado (SQLite/puertos/semilla propios); no usar la base normal.
+- [x] Ejecutar la prueba con el runner aislado (SQLite/puertos/semilla propios); no usar la base normal.
 
-**Evidencia parcial (2026-10-03):** el archivo E2E está añadido y `pnpm run typecheck:e2e`, Prettier
-focal del test y `git diff --check` pasan. El intento de ejecución mediante el runner aislado terminó
-con `spawn EPERM` antes de iniciar Playwright; no hay resultado E2E ni se usó la base/servidor normal.
-Los criterios siguen abiertos hasta una ejecución real.
+**Evidencia de cierre (2026-10-08):** `node scripts/run-isolated-playwright.mjs --workers=1
+--project=mobile-chrome tests/e2e/preferences-end-control-reachability.spec.ts --reporter=dot` pasa
+**1/1** con el rate limit activo, Chrome local, SQLite/puertos/semilla temporales y cleanup confirmado.
+En Pixel 5 valida 320×568, 393×851 y 568×320: tras scroll, «Guardar preferencias» queda íntegramente
+visible sobre `.bottom-nav` fija, recibe el hit-test central, se puede pulsar y espera el PATCH exitoso
+y la confirmación. No se usó la base/servidor normal. E2E typecheck, Prettier focal y `git diff --check`
+se reejecutan junto con la unidad activa de Preferencias.
 
 **Rollback:** quitar el archivo E2E nuevo y este subapartado; no modifica producción ni datos normales.
 

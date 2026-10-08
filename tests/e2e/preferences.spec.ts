@@ -30,6 +30,10 @@ test.describe('Preferencias', () => {
 
     await page.goto('/preferences');
     await expect(page.locator('.preferences__title')).toContainText('Preferencias');
+    const redoOnboarding = page.locator('.preferences__redo');
+    await expect(redoOnboarding).toHaveAccessibleName('Rehacer la configuración inicial');
+    await redoOnboarding.click();
+    await expect(page).toHaveURL(/\/onboarding$/);
   });
 
   test('una pestaña por asunto, reflejada en la URL', async ({ page }) => {
@@ -48,6 +52,13 @@ test.describe('Preferencias', () => {
 
     await page.locator('.tab', { hasText: 'Alergias' }).click();
     await expect(page).toHaveURL(/[?&]tab=allergies/);
+    await expect(page.locator('.preferences__panel-title')).toHaveText(
+      '¿Alergias o intolerancias?'
+    );
+    await expect(page.locator('.preferences__panel-hint')).toContainText(
+      'La IA lo descarta de raíz'
+    );
+    await expect(page.locator('.chip-select__chip', { hasText: 'Gluten' })).toContainText('🌾');
 
     await page.locator('.tab', { hasText: 'Gustos' }).click();
     await expect(page).toHaveURL(/[?&]tab=tastes/);
@@ -98,7 +109,10 @@ test.describe('Preferencias', () => {
 
     // Cambiar el nivel aqui no toca los modulos de Configuracion
     await page.goto('/settings');
-    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute('aria-checked', 'true');
+    await expect(page.locator('[data-module-switch="meals"]')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
   });
 
   test('lo marcado en una pestaña no se pierde al cambiar y se guarda junto', async ({ page }) => {
@@ -132,7 +146,9 @@ test.describe('Preferencias', () => {
     await expect(page.locator('.tab', { hasText: 'Gustos' })).toContainText('1');
   });
 
-  test('permite combinar objetivos y texto personalizado, y los conserva al recargar', async ({ page }) => {
+  test('permite combinar objetivos y texto personalizado, y los conserva al recargar', async ({
+    page
+  }) => {
     await registerAndGoto(page, '/preferences?tab=goal', 'prefs-multiple-goals');
 
     const weightLoss = page.locator('.preferences__goal', { hasText: 'Perder peso' });
@@ -169,7 +185,6 @@ test.describe('Preferencias', () => {
     await expect(page.locator('.chip-select__chip--on')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Descartar cambios' })).toHaveCount(0);
   });
-
 
   test('lo que falta en la cocina se sigue marcando en la despensa', async ({ page }) => {
     await registerAndGoto(page, '/preferences?tab=goal', 'prefs-kitchen');

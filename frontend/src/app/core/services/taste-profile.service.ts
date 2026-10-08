@@ -1,5 +1,5 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpContext } from '@angular/common/http';
 import { Observable, finalize, map, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
@@ -13,6 +13,7 @@ import {
 } from '../../shared/models/taste-profile';
 import { MealPlan, MealTimes, resolveMealPlan, resolveMealTimes } from '../meal-times';
 import { MealType } from '../../shared/models/calendar.model';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 import {
   DEFAULT_HOME_PROFILE,
   HomeModule,
@@ -91,14 +92,22 @@ export class TasteProfileService {
     this.isLoading.set(true);
 
     return this.http
-      .patch<any>(this.apiUrl, {
-        taste,
-        ...(onboardingStatus ? { onboardingStatus } : {}),
-        ...(profile?.cookingLevel ? { cookingLevel: profile.cookingLevel } : {}),
-        ...(profile?.modules ? { modules: profile.modules } : {}),
-        ...(mealTimes ? { mealTimes } : {}),
-        ...(mealPlan ? { mealPlan } : {})
-      })
+      .patch<any>(
+        this.apiUrl,
+        {
+          taste,
+          ...(onboardingStatus ? { onboardingStatus } : {}),
+          ...(profile?.cookingLevel ? { cookingLevel: profile.cookingLevel } : {}),
+          ...(profile?.modules ? { modules: profile.modules } : {}),
+          ...(mealTimes ? { mealTimes } : {}),
+          ...(mealPlan ? { mealPlan } : {})
+        },
+        {
+          // Preferences y onboarding traducen y conservan el error en su propio formulario.
+          // El toast genérico del interceptor duplicaría esa respuesta.
+          context: new HttpContext().set(SILENT_TOAST, true)
+        }
+      )
       .pipe(
         map((response) => response.data as TasteResponse),
         tap((data) => this.apply(data)),

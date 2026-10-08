@@ -4,6 +4,7 @@ import { MealPlan, MealTimes } from '../meal-times';
 import { emptyTasteProfile, TasteResponse } from '../../shared/models/taste-profile';
 import { environment } from '../../../environments/environment';
 import { TasteProfileService } from './taste-profile.service';
+import { SILENT_TOAST } from '../interceptors/error.interceptor';
 
 const TASTE_URL = `${environment.apiUrl}/auth/taste`;
 
@@ -203,6 +204,7 @@ describe('TasteProfileService', () => {
     const request = httpMock.expectOne(TASTE_URL);
     expect(request.request.method).toBe('PATCH');
     expect(request.request.body).toEqual({ taste });
+    expect(request.request.context.get(SILENT_TOAST)).toBeTrue();
 
     const saved = completeResponse({
       taste: { ...emptyTasteProfile(), notes: 'Sin cilantro' }
