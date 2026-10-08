@@ -55,6 +55,22 @@ describe('AiService', () => {
     expect(service.configs()).toEqual([CONFIG]);
   });
 
+  it('returns the scoped config snapshot and uses null only when its request fails', async () => {
+    let result: AIProviderConfig[] | null | undefined;
+    service.loadConfigsSnapshot().subscribe((configs) => (result = configs));
+    expect(service.configsLoading()).toBeTrue();
+    http.expectOne('/api/ai/configs').flush({ data: [CONFIG] });
+    expect(result).toEqual([CONFIG]);
+    expect(service.configs()).toEqual([CONFIG]);
+    expect(service.configsLoading()).toBeFalse();
+
+    service.loadConfigsSnapshot().subscribe((configs) => (result = configs));
+    http.expectOne('/api/ai/configs').flush({}, { status: 503, statusText: 'Unavailable' });
+    expect(result).toBeNull();
+    expect(service.configsError()).toBeTrue();
+    expect(service.configs()).toEqual([CONFIG]);
+  });
+
   it('ignores stale overlapping loads and leaves loading owned by the newest request', () => {
     const firstResult = { ...CONFIG, name: 'Older response' };
     const latestResult = { ...CONFIG, id: 'latest', name: 'Latest response' };

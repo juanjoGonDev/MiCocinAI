@@ -1,4 +1,4 @@
-import { Component, computed, inject, OnDestroy, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -8,12 +8,16 @@ import { CalendarService } from '../../core/services/calendar.service';
 import { HouseholdService } from '../../core/services/household.service';
 import { I18nService } from '../../core/services/i18n.service';
 import { DashboardPreferencesService } from '../../core/services/dashboard-preferences.service';
+import { AiService } from '../../core/services/ai.service';
+import { AiQueueService } from '../../core/services/ai-queue.service';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import type { TranslationKey } from '../../core/i18n';
 import type { CalendarMeal, MealType } from '../../shared/models/calendar.model';
+import type { AIProviderConfig } from '../../shared/models/ai-config.model';
+import type { AiQueueJob } from '../../shared/models/ai-queue.model';
 import type { CaducidadRow } from '../../shared/models/caducidades.model';
 import { formatShortDay } from '../../core/time';
 import { Subscription } from 'rxjs';
@@ -39,6 +43,16 @@ interface SuggestedRecipe {
   time: number;
   difficulty: string;
   image?: string;
+}
+
+interface DashboardAiQueueRow {
+  configId: string;
+  providerName: string;
+  queued: number;
+  running: number;
+  failed: number;
+  loading: boolean;
+  error: boolean;
 }
 
 @Component({
@@ -169,6 +183,104 @@ interface SuggestedRecipe {
             <span class="expiry-card__name">{{ item.name }}</span>
             <span class="expiry-card__status">{{ expiryStatus(item.daysLeft) }}</span>
           </article>
+        </div>
+      </section>
+
+      <!-- Pending AI jobs (only for personal users and household settings managers) -->
+      <section
+        *ngIf="aiQueueSectionVisible()"
+        class="dashboard__section"
+        data-test="dashboard-ai-queue"
+        [attr.aria-busy]="aiQueueBusy()"
+      >
+        <div class="dashboard__section-header">
+          <h2 class="dashboard__section-title">{{ 'dashboard.aiQueueTitle' | t }}</h2>
+        </div>
+
+        <p
+          *ngIf="aiQueueConfigLoading()"
+          class="meal-status"
+          role="status"
+          data-test="dashboard-ai-queue-config-loading"
+        >
+          {{ 'dashboard.aiQueueLoading' | t }}
+        </p>
+
+        <div
+          *ngIf="aiQueueConfigError()"
+          class="expiry-preview__error"
+          role="alert"
+          data-test="dashboard-ai-queue-config-error"
+        >
+          <p>{{ 'dashboard.aiQueueLoadError' | t }}</p>
+          <button
+            class="meal-error__retry"
+            type="button"
+            data-test="dashboard-ai-queue-config-retry"
+            (click)="retryAiQueueSummary()"
+          >
+            {{ 'dashboard.aiQueueRetry' | t }}
+          </button>
+        </div>
+
+        <div class="expiry-list">
+          <ng-container *ngFor="let row of aiQueueRows()">
+            <a
+              *ngIf="row.queued + row.running + row.failed > 0"
+              class="expiry-card ai-queue-card"
+              [routerLink]="['/ai-config', row.configId, 'queue']"
+              [attr.aria-label]="
+                'dashboard.aiQueueProviderSummary'
+                  | t
+                    : {
+                        provider: row.providerName,
+                        queued: row.queued,
+                        running: row.running,
+                        failed: row.failed
+                      }
+              "
+              data-test="dashboard-ai-queue-link"
+            >
+              <span class="expiry-card__icon">
+                <app-icon name="schedule" [size]="20" [label]="null" />
+              </span>
+              <span class="ai-queue-card__content">
+                <span class="expiry-card__name">{{ row.providerName }}</span>
+                <span class="expiry-card__status">
+                  {{
+                    'dashboard.aiQueueCounts'
+                      | t: { queued: row.queued, running: row.running, failed: row.failed }
+                  }}
+                </span>
+              </span>
+            </a>
+
+            <p
+              *ngIf="row.loading && row.queued + row.running + row.failed === 0"
+              class="meal-status"
+              role="status"
+              data-test="dashboard-ai-queue-provider-loading"
+            >
+              {{ 'dashboard.aiQueueProviderLoading' | t: { provider: row.providerName } }}
+            </p>
+
+            <div
+              *ngIf="row.error"
+              class="expiry-preview__error"
+              role="alert"
+              data-test="dashboard-ai-queue-provider-error"
+            >
+              <p>{{ 'dashboard.aiQueueProviderLoadError' | t: { provider: row.providerName } }}</p>
+              <button
+                class="meal-error__retry"
+                type="button"
+                [attr.data-test]="'dashboard-ai-queue-provider-retry-' + row.configId"
+                (click)="retryAiQueueProvider(row.configId)"
+              >
+                {{ 'dashboard.aiQueueRetry' | t }}
+              </button>
+            </div>
+          </ng-container>
         </div>
       </section>
 
@@ -561,6 +673,34 @@ interface SuggestedRecipe {
         white-space: nowrap;
       }
 
+      .ai-queue-card {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        text-decoration: none;
+      }
+
+      .ai-queue-card:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+
+      .ai-queue-card .expiry-card__icon {
+        grid-row: 1;
+      }
+
+      .ai-queue-card__content {
+        display: flex;
+        min-width: 0;
+        flex-direction: column;
+        gap: var(--space-1);
+      }
+
+      .ai-queue-card .expiry-card__status {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
+
       .expiry-preview__error {
         display: flex;
         align-items: center;
@@ -819,9 +959,59 @@ export class DashboardComponent implements OnDestroy, OnInit {
   private dashboardPreferences = inject(DashboardPreferencesService);
   private calendarService = inject(CalendarService);
   private householdService = inject(HouseholdService);
+  private aiService = inject(AiService);
+  private aiQueueService = inject(AiQueueService);
   private i18n = inject(I18nService);
   private nextMealSubscription: Subscription | null = null;
   private nextMealRequestId = 0;
+  private aiQueueMembershipSubscription: Subscription | null = null;
+  private aiQueueConfigsSubscription: Subscription | null = null;
+  private aiQueueRetrySubscriptions: Subscription[] = [];
+  private aiQueueWatchStops: Array<() => void> = [];
+  private aiQueueGeneration = 0;
+  private aiQueueProviders = signal<AIProviderConfig[]>([]);
+  private aiQueueAccessAllowed = signal(false);
+  private aiQueueContextRevision = signal<number | null>(null);
+  readonly aiQueueConfigLoading = signal(false);
+  readonly aiQueueConfigError = signal(false);
+  readonly aiQueueRows = computed<DashboardAiQueueRow[]>(() => {
+    if (
+      !this.aiQueueAccessAllowed() ||
+      this.aiQueueContextRevision() !== this.householdService.contextRevision()
+    ) {
+      return [];
+    }
+    return this.aiQueueProviders()
+      .map((config) => {
+        const state = this.aiQueueService.stateFor(config.id)();
+        const jobs: AiQueueJob[] = state.snapshot?.jobs ?? [];
+        return {
+          configId: config.id,
+          providerName: config.name,
+          queued: jobs.filter((job) => job.status === 'queued').length,
+          running: jobs.filter((job) => job.status === 'running').length,
+          failed: jobs.filter((job) => job.status === 'failed').length,
+          loading: state.loading,
+          error: state.loadError
+        };
+      })
+      .filter((row) => row.queued + row.running + row.failed > 0 || row.loading || row.error);
+  });
+  readonly aiQueueBusy = computed(
+    () => this.aiQueueConfigLoading() || this.aiQueueRows().some((row) => row.loading)
+  );
+  readonly aiQueueSectionVisible = computed(
+    () =>
+      this.aiQueueAccessAllowed() &&
+      (this.aiQueueConfigLoading() || this.aiQueueConfigError() || this.aiQueueRows().length > 0)
+  );
+  private readonly aiQueueContextEffect = effect(() => {
+    const currentRevision = this.householdService.contextRevision();
+    const loadedRevision = this.aiQueueContextRevision();
+    if (loadedRevision !== null && loadedRevision !== currentRevision) {
+      this.loadAiQueueSummary();
+    }
+  });
 
   userName = signal('');
 
@@ -911,6 +1101,7 @@ export class DashboardComponent implements OnDestroy, OnInit {
   ngOnInit(): void {
     this.userName.set(this.authService.userName() || 'Chef');
     this.loadDashboardData();
+    this.loadAiQueueSummary();
   }
 
   private loadDashboardData(): void {
@@ -954,6 +1145,35 @@ export class DashboardComponent implements OnDestroy, OnInit {
     this.nextMealRequestId += 1;
     this.nextMealSubscription?.unsubscribe();
     this.nextMealSubscription = null;
+    this.aiQueueGeneration += 1;
+    this.aiQueueMembershipSubscription?.unsubscribe();
+    this.aiQueueMembershipSubscription = null;
+    this.aiQueueConfigsSubscription?.unsubscribe();
+    this.aiQueueConfigsSubscription = null;
+    this.releaseAiQueueWatchers();
+    this.aiQueueRetrySubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.aiQueueRetrySubscriptions = [];
+  }
+
+  retryAiQueueSummary(): void {
+    if (!this.aiQueueAccessAllowed()) return;
+    this.loadAiQueueConfigs(this.aiQueueGeneration, this.householdService.contextRevision());
+  }
+
+  retryAiQueueProvider(configId: string): void {
+    if (
+      !this.aiQueueAccessAllowed() ||
+      this.aiQueueContextRevision() !== this.householdService.contextRevision() ||
+      !this.aiQueueProviders().some((provider) => provider.id === configId)
+    ) {
+      return;
+    }
+    const generation = this.aiQueueGeneration;
+    const contextRevision = this.householdService.contextRevision();
+    const subscription = this.aiQueueService.refreshQueue(configId).subscribe(() => {
+      if (!this.isCurrentAiQueueRead(generation, contextRevision)) return;
+    });
+    this.aiQueueRetrySubscriptions.push(subscription);
   }
 
   private loadNextMealPreview(): void {
@@ -980,6 +1200,73 @@ export class DashboardComponent implements OnDestroy, OnInit {
           this.nextMealLoading.set(false);
         }
       });
+  }
+
+  private loadAiQueueSummary(): void {
+    const generation = ++this.aiQueueGeneration;
+    this.aiQueueMembershipSubscription?.unsubscribe();
+    this.aiQueueConfigsSubscription?.unsubscribe();
+    this.aiQueueRetrySubscriptions.forEach((subscription) => subscription.unsubscribe());
+    this.aiQueueRetrySubscriptions = [];
+    this.releaseAiQueueWatchers();
+    this.aiQueueProviders.set([]);
+    this.aiQueueAccessAllowed.set(false);
+    this.aiQueueConfigLoading.set(false);
+    this.aiQueueConfigError.set(false);
+    this.aiQueueContextRevision.set(this.householdService.contextRevision());
+
+    this.aiQueueMembershipSubscription = this.householdService
+      .loadMemberships()
+      .subscribe((memberships) => {
+        if (generation !== this.aiQueueGeneration) return;
+        const contextRevision = this.householdService.contextRevision();
+        this.aiQueueContextRevision.set(contextRevision);
+        if (this.householdService.membershipsFailed()) return;
+
+        const activeHouseholdId = this.householdService.activeHouseholdId();
+        const allowed =
+          memberships.length === 0
+            ? activeHouseholdId === null
+            : memberships.some(
+                (membership) =>
+                  membership.id === activeHouseholdId && membership.permissions?.settings === true
+              );
+        if (!allowed) return;
+
+        this.aiQueueAccessAllowed.set(true);
+        this.loadAiQueueConfigs(generation, contextRevision);
+      });
+  }
+
+  private loadAiQueueConfigs(generation: number, contextRevision: number): void {
+    this.aiQueueConfigsSubscription?.unsubscribe();
+    this.aiQueueConfigLoading.set(true);
+    this.aiQueueConfigError.set(false);
+    this.aiQueueConfigsSubscription = this.aiService.loadConfigsSnapshot().subscribe((configs) => {
+      if (!this.isCurrentAiQueueRead(generation, contextRevision)) return;
+      this.aiQueueConfigLoading.set(false);
+      if (!configs) {
+        this.aiQueueConfigError.set(true);
+        return;
+      }
+
+      const providers = configs.filter((config) => Number(config.concurrency) > 0);
+      this.aiQueueProviders.set(providers);
+      this.aiQueueWatchStops = providers.map((provider) => this.aiQueueService.watch(provider.id));
+    });
+  }
+
+  private isCurrentAiQueueRead(generation: number, contextRevision: number): boolean {
+    return (
+      generation === this.aiQueueGeneration &&
+      contextRevision === this.householdService.contextRevision() &&
+      contextRevision === this.aiQueueContextRevision()
+    );
+  }
+
+  private releaseAiQueueWatchers(): void {
+    this.aiQueueWatchStops.forEach((stop) => stop());
+    this.aiQueueWatchStops = [];
   }
 
   retryExpiries(): void {

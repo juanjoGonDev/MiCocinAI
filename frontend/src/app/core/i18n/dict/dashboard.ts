@@ -7,6 +7,15 @@
  * de compilacion** en lugar de una pantalla medio en espanol.
  */
 export const dashboardEs = {
+  'dashboard.aiQueueCounts': 'En espera: {queued} · En curso: {running} · Fallidos: {failed}',
+  'dashboard.aiQueueLoadError': 'No se pudieron cargar los trabajos de IA.',
+  'dashboard.aiQueueLoading': 'Cargando los trabajos de IA…',
+  'dashboard.aiQueueProviderLoadError': 'No se pudo cargar la cola de {provider}.',
+  'dashboard.aiQueueProviderLoading': 'Cargando la cola de {provider}…',
+  'dashboard.aiQueueProviderSummary':
+    '{provider}: en espera {queued}, en curso {running} y fallidos {failed}',
+  'dashboard.aiQueueRetry': 'Reintentar',
+  'dashboard.aiQueueTitle': 'Trabajos de IA',
   'dashboard.minutes_short': '{time} min',
   'dashboard.cooked': 'Cocinadas',
   'dashboard.expiryCountShown': 'Vista previa: {count}',
@@ -38,6 +47,15 @@ export const dashboardEs = {
 } as const;
 
 export const dashboardEn: Record<keyof typeof dashboardEs, string> = {
+  'dashboard.aiQueueCounts': 'Waiting: {queued} · Running: {running} · Failed: {failed}',
+  'dashboard.aiQueueLoadError': 'Could not load AI jobs.',
+  'dashboard.aiQueueLoading': 'Loading AI jobs…',
+  'dashboard.aiQueueProviderLoadError': 'Could not load the {provider} queue.',
+  'dashboard.aiQueueProviderLoading': 'Loading the {provider} queue…',
+  'dashboard.aiQueueProviderSummary':
+    '{provider}: {queued} waiting, {running} running, {failed} failed',
+  'dashboard.aiQueueRetry': 'Retry',
+  'dashboard.aiQueueTitle': 'AI jobs',
   'dashboard.minutes_short': '{time} min',
   'dashboard.cooked': 'Cooked',
   'dashboard.expiryCountShown': 'Preview: {count}',

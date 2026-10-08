@@ -40,15 +40,23 @@ export class AiService {
   // ═══════════════════════════════════════════════════════════════
 
   loadConfigs(): void {
+    this.loadConfigsSnapshot().subscribe();
+  }
+
+  /** Return the scoped provider list to callers that must sequence work after its authorization. */
+  loadConfigsSnapshot(): Observable<AIProviderConfig[] | null> {
     const generation = ++this.configLoadGeneration;
     this.configsLoadingSignal.set(true);
     this.configsErrorSignal.set(false);
-    this.http
-      .get<any>(`${this.apiUrl}/configs`, { context: this.silentContext() })
+    return this.http
+      .get<{ data?: AIProviderConfig[] }>(`${this.apiUrl}/configs`, {
+        context: this.silentContext()
+      })
       .pipe(
-        tap((response) => {
+        map((response) => (Array.isArray(response?.data) ? response.data : [])),
+        tap((configs) => {
           if (generation === this.configLoadGeneration) {
-            this.configsSignal.set(response.data);
+            this.configsSignal.set(configs);
           }
         }),
         catchError(() => {
@@ -62,8 +70,7 @@ export class AiService {
             this.configsLoadingSignal.set(false);
           }
         })
-      )
-      .subscribe();
+      );
   }
 
   createConfig(config: Partial<AIProviderConfig>): Observable<AIProviderConfig | null> {
