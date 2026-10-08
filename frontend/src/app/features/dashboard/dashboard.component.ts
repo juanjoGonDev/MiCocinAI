@@ -891,21 +891,24 @@ interface DashboardAiQueueRow {
         color: var(--text-secondary);
       }
       .recipe-card__content {
-        padding: var(--space-3);
+        padding: var(--space-4);
       }
 
       .recipe-card__name {
-        font-size: var(--text-sm);
-        font-weight: var(--font-medium);
+        font-family: var(--font-display);
+        font-size: var(--text-base);
+        font-weight: var(--font-semibold);
         color: var(--text-primary);
         display: block;
-        margin-bottom: var(--space-2);
+        margin-bottom: var(--space-1);
       }
 
       .recipe-card__meta {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        gap: var(--space-3);
+        font-size: var(--text-xs);
       }
 
       .recipe-card__time {

@@ -3349,9 +3349,12 @@ regresión E2E y esta subunidad; no revertir el contrato de los títulos ni otro
 comparten radio XL, borde, fondo e imagen 16:10, pero el estilo local varía: Dashboard usa padding de
 contenido `--space-3`, nombre `--text-sm`/`--font-medium` y margen inferior `--space-2`; el catálogo usa
 `--space-4`, `--font-display`/`--text-base`/`--font-semibold` y margen `--space-1`. La meta de Dashboard
-no fija tamaño de fuente, mientras que el catálogo fija `--text-xs`. El Dashboard omite descripción,
-porciones y favorito; el catálogo los incorpora. Esos datos opcionales y las anchuras de grid no deben
-forzar altura/ancho iguales, pero no justifican estilos tipográficos distintos para el mismo título/cuerpo.
+no fija tamaño de fuente (16 px frente a 12 px), line-height (24 px frente a 18 px) ni gap (normal frente
+a 12 px), mientras que el catálogo fija `--text-xs` y `--space-3`. El título del Dashboard mide 14 px,
+500 y 21 px de line-height, frente a 16 px, 600 y 24 px en catálogo; también difiere su margen inferior
+(8 px frente a 4 px). El Dashboard omite descripción, porciones y favorito; el catálogo los incorpora.
+Esos datos opcionales y las anchuras de grid no deben forzar altura/ancho iguales, pero no justifican
+estilos tipográficos distintos para el mismo título/cuerpo.
 
 **Contrato:** ambas rutas comparten borde, radio, fondo, relación 16:10 de la imagen, padding del cuerpo
 `--space-4`, título display `--text-base`/semibold con margen `--space-1` y meta `--text-xs`; las cajas
@@ -3359,20 +3362,39 @@ respetan contenido y grid fluidos. Se mantienen el anchor clicable del Dashboard
 favorito del catálogo, así como descripción y metadatos exclusivos de cada vista. La prueba compara solo
 propiedades compartidas y ratio de imagen, no anchuras ni alturas afectadas por contenido opcional.
 
-- [ ] Añadir primero una regresión Playwright roja con receta sintética presente en ambas rutas; medir
+- [x] Añadir primero una regresión Playwright roja con receta sintética presente en ambas rutas; medir
       estilos comunes de card, imagen, cuerpo, título y meta a 320, 393, 568×320, 767/768/769,
-      1023/1024/1025 y 1440 px. El baseline debe localizar las diferencias de padding y título, con
-      tolerancia ≤1 CSS px para medidas calculadas.
-- [ ] Alinear solo los estilos de Dashboard con el contrato compartido; no retirar descripción,
+      1023/1024/1025 y 1440 px. El baseline Chromium y Pixel 5 reprodujo padding 12/16 px, diferencias
+      de familia/tamaño/peso/line-height/margen del título y meta 16/12 px, line-height 24/18 px y gap
+      normal/12 px; las medidas se comparan con tolerancia ≤1 CSS px.
+- [x] Alinear solo los estilos de Dashboard con el contrato compartido; no retirar descripción,
       favorito, porciones, badges, deep links ni comportamiento de cada card.
-- [ ] Repetir con Chromium y Pixel 5, asegurar ratios 16:10, sin overflow, tarjeta/receta legible y
+- [x] Repetir con Chromium y Pixel 5, asegurar ratios 16:10, sin overflow, tarjeta/receta legible y
       deep link conservado; no escribir fuera de fixtures/SQLite temporal.
-- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil de ambas rutas y ejecutar prueba focal,
+- [x] Guardar e inspeccionar capturas sintéticas PC/móvil de ambas rutas y ejecutar prueba focal,
       `typecheck:e2e`, `check:ui`, Prettier, build y `git diff --check`; documentar cobertura por archivo
       ≥70 % S/B/F/L si cambia lógica instrumentable, warnings y rollback.
 
+**Evidencia (2026-10-08):** TDD: la regresión aislada falló en Chromium y Pixel 5 antes del cambio,
+localizando las diferencias descritas en los diez viewports declarados (320×568, 393×851, 568×320,
+767/768/769×1024, 1023/1024/1025×768 y 1440×900). Se ajustaron únicamente las reglas CSS de la card
+del Dashboard: padding `--space-4`, título display `--text-base`/semibold con margen `--space-1`, y meta
+`--text-xs`/gap `--space-3`; se conservaron superficies, estructura, enlaces, dificultad y el layout
+específico de cada ruta. `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium
+--project=mobile-chrome tests/e2e/recipe-card-geometry.spec.ts tests/e2e/dashboard-recipe-links.spec.ts
+--reporter=line` pasó **8/8**. La regresión recorre los diez tamaños en ambos proyectos, verifica estilos
+compartidos/ratio 16:10 y ausencia de overflow en ambas rutas; el test de enlaces confirma el deep link.
+Se guardaron e inspeccionaron capturas sintéticas en
+`.e2e-screenshots/qa-recipe-card-parity-20261008/` (`dashboard/recipes` × PC/móvil). Pasaron
+`pnpm run typecheck:e2e`, `pnpm run check:ui` (210 ficheros, 21 reglas, sin incidencias),
+`pnpm run build` (servidor y frontend de producción), Prettier focal y `git diff --check`. El build
+mantiene avisos de budgets de bundle/estilos e imports/plantillas no usados fuera del alcance; no se
+alteraron gates. Coverage: N/A, solo CSS estático sin nueva lógica instrumentable. El runner usó SQLite
+aislado/fixture sintética y limpió su DB y artefactos temporales propios.
+
 **Rollback focal:** restaurar las declaraciones de geometría originales solo en las tarjetas del
-Dashboard, retirar la regresión y esta subunidad; conservar la paridad de métricas y títulos.
+Dashboard (`--space-3`, título sm/medium con margen `--space-2`, meta sin tamaño/gap explícitos), retirar
+la regresión y esta subunidad; conservar la paridad de métricas y títulos.
 
 ### Subunidad QA-CALENDAR.EARLY-HOURS.1 · hora actual visible en la rejilla
 
