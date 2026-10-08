@@ -3343,6 +3343,37 @@ rojo en su carpeta propia `hogaria-e2e-*`; no se usó ni modificó la DB normal.
 **Rollback focal:** restaurar el padding vertical previo solo en `.stat-card` de Despensa, retirar la
 regresión E2E y esta subunidad; no revertir el contrato de los títulos ni otros componentes de resumen.
 
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.RECIPE-CARDS.1 · tarjeta de receta entre rutas
+
+**Fuente revalidada (2026-10-08):** Dashboard y `/recipes` renderizan la misma familia `.recipe-card` y
+comparten radio XL, borde, fondo e imagen 16:10, pero el estilo local varía: Dashboard usa padding de
+contenido `--space-3`, nombre `--text-sm`/`--font-medium` y margen inferior `--space-2`; el catálogo usa
+`--space-4`, `--font-display`/`--text-base`/`--font-semibold` y margen `--space-1`. La meta de Dashboard
+no fija tamaño de fuente, mientras que el catálogo fija `--text-xs`. El Dashboard omite descripción,
+porciones y favorito; el catálogo los incorpora. Esos datos opcionales y las anchuras de grid no deben
+forzar altura/ancho iguales, pero no justifican estilos tipográficos distintos para el mismo título/cuerpo.
+
+**Contrato:** ambas rutas comparten borde, radio, fondo, relación 16:10 de la imagen, padding del cuerpo
+`--space-4`, título display `--text-base`/semibold con margen `--space-1` y meta `--text-xs`; las cajas
+respetan contenido y grid fluidos. Se mantienen el anchor clicable del Dashboard y el botón de detalle/
+favorito del catálogo, así como descripción y metadatos exclusivos de cada vista. La prueba compara solo
+propiedades compartidas y ratio de imagen, no anchuras ni alturas afectadas por contenido opcional.
+
+- [ ] Añadir primero una regresión Playwright roja con receta sintética presente en ambas rutas; medir
+      estilos comunes de card, imagen, cuerpo, título y meta a 320, 393, 568×320, 767/768/769,
+      1023/1024/1025 y 1440 px. El baseline debe localizar las diferencias de padding y título, con
+      tolerancia ≤1 CSS px para medidas calculadas.
+- [ ] Alinear solo los estilos de Dashboard con el contrato compartido; no retirar descripción,
+      favorito, porciones, badges, deep links ni comportamiento de cada card.
+- [ ] Repetir con Chromium y Pixel 5, asegurar ratios 16:10, sin overflow, tarjeta/receta legible y
+      deep link conservado; no escribir fuera de fixtures/SQLite temporal.
+- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil de ambas rutas y ejecutar prueba focal,
+      `typecheck:e2e`, `check:ui`, Prettier, build y `git diff --check`; documentar cobertura por archivo
+      ≥70 % S/B/F/L si cambia lógica instrumentable, warnings y rollback.
+
+**Rollback focal:** restaurar las declaraciones de geometría originales solo en las tarjetas del
+Dashboard, retirar la regresión y esta subunidad; conservar la paridad de métricas y títulos.
+
 ### Subunidad QA-CALENDAR.EARLY-HOURS.1 · hora actual visible en la rejilla
 
 **Fuente revalidada antes de implementar (2026-10-04):** el contrato histórico vigente de `HOGARIA-SPEC.md §8f`
