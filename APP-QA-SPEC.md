@@ -1273,6 +1273,20 @@ gate completo. Capturas sintéticas de escritorio/móvil y error inspeccionadas 
 
 **Pendiente de producto, mantiene abierta la casilla general `/dashboard`:** decidir/implementar las superficies Today de vencimientos, lista abierta/presupuesto y cola IA del contrato activo; esta auditoría solo cubre la pantalla que existe actualmente.
 
+### QA-DASHBOARD.EXPIRY-WINDOW.1 · vencimientos próximos configurables
+
+**Fuente y alcance revalidados (2026-10-08):** HOGARIA-SPEC §2/P5 exige ver en Today los productos que vencen dentro de N días y que N se configure en Settings. `GET /api/pantry/expiry` ya devuelve `daysLeft` (negativo = caducado; `null` = sin fecha conocida) y orden por urgencia; el endpoint de estadísticas de despensa conserva una ventana histórica de tres días. Settings hoy persiste tema e idioma en el navegador y los módulos en el perfil. No existe preferencia de horizonte.
+
+**Decisión de alcance:** añadir en Settings una preferencia local de 1–30 días, con valor inicial de 3 para conservar el umbral vigente de «por caducar». Es una preferencia de visualización, no modifica datos ni el API. Dashboard incluye caducados y los que vencen hoy o dentro de N días; omite fechas desconocidas y ofrece enlace a Caducidades. El presupuesto de compra, la próxima comida planificada y la cola IA son unidades Today separadas; no quedan implícitamente resueltas por este cambio.
+
+- [ ] Añadir primero una E2E roja con despensa sintética que verifique límite inclusivo N, producto ya caducado, N+1 días, fecha desconocida y lista vacía; probar 3 → 5 días desde Settings y persistencia tras recarga.
+- [ ] Implementar la preferencia accesible ES/EN en Settings, persistida con el patrón local de tema/idioma, rango 1–30 y default 3; entrada inválida no debe alterar el último valor válido.
+- [ ] Mostrar en Dashboard la cantidad y nombres de hasta cinco próximos/caducados, correctamente ordenados; añadir estados loading, vacío, error y reintento, y enlace funcional a `/pantry/caducidades`.
+- [ ] Verificar Chromium escritorio y Pixel 5, desktop 1440×900, móvil 393×851 y mínimo 320×568, rotación 568×320, sin overflow/solapamiento con navegación fija; guardar e inspeccionar capturas sintéticas PC/móvil.
+- [ ] Ejecutar regresión roja→verde, Karma/unitarios, E2E aislada con rate limit activo y SQLite/puerto/semilla temporales, cobertura ≥70 % S/B/F/L por archivo instrumentable, `typecheck:e2e`, `check:ui`, formato, build y `git diff --check`; documentar comandos y rollback.
+
+**Rollback de unidad:** retirar la preferencia de horizonte, su control Settings, el resumen de caducidades Dashboard, las pruebas y este subapartado; no cambiar la lista completa de Caducidades ni el umbral del API.
+
 ### QA-AUTH.LOGIN.DOUBLE-SUBMIT.1 · Evitar envíos concurrentes del login
 
 **Fuente revalidada (2026-10-01):** `LoginComponent.onSubmit()` comprueba campos vacíos y activa `isLoading`, pero no consulta ese estado antes de volver a enviar. El botón compartido queda `disabled` durante la carga, pero el formulario sigue teniendo un único listener `ngSubmit`; falta una prueba runtime que compruebe si una segunda petición de submit mientras la primera está pendiente genera otra llamada. Si el login lleva `?code=`, el éxito continúa con `HouseholdService.joinByCode()` y navega a `/household`; el fallo de login limpia `isLoading` y permite reintentar. La solución solo se aplicará si la regresión se reproduce.
