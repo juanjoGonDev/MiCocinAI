@@ -2706,6 +2706,15 @@ servicio siguió listo; no se tocaron ajustes ni procesos de WebAPI. El coordina
 limpiar el token propio y no quedaron directorios temporales del runner recientes; ninguna compra se
 confirmó ni se guardó en la despensa/inventario real. No se generaron capturas, traces ni vídeos.
 
+**Revalidación posterior solicitada (2026-10-09; diagnóstico, sin reenvío):** se inspeccionaron de
+nuevo checkout/proceso, readiness y logs redacted de WebAPI antes de repetir documentos. El servicio
+seguía listo, pero el registro del intento previo conservaba `attachment_upload_failed` HTTP 504 /
+timeout, dos adjuntos parciales y cierre de página en cleanup; el timeout ocurrió a los 50,5 s frente
+al límite de readiness de subida de 45 s. No hay evidencia de `prompt_submitted` ni de
+`response_completed`. Como el upload no está confirmado, no se volvió a invocar la IA ni se reenvió
+ningún ticket. Este chequeo no constituye un tercer smoke: solo confirma que la limitación anterior
+sigue sin resolverse y que la unidad debe continuar abierta.
+
 El mismo 504 persiste en el límite de subida de WebAPI pese al fix y a la cobertura sintética. No
 reenviar tickets ni declarar esta validación completa hasta que WebAPI/provider resuelva este fallo.
 El usuario concedió autorización permanente para la IA, así que no hace falta pedir consentimiento
