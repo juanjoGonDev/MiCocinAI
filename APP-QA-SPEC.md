@@ -2664,8 +2664,32 @@ intentó subir, pero el upload falló. Se observaron **2 requests HTTP, 0 respue
 no hubo duplicados evaluables, revisión/historial ni escritura de compra. El runner de aplicación,
 SQLite y uploads fue temporal; no quedaban carpetas `hogaria-e2e-*` recientes al verificar después,
 y el coordinador no reportó fallo al limpiar su token propio. WebAPI permaneció arriba, sin cambios.
-No repetir ni reenviar ninguno de los tickets hasta resolver el 504 y recibir nueva autorización o
-instrucción explícita sobre una nueva prueba.
+En ese momento se detuvo aquí; posteriormente el usuario autorizó explícitamente un nuevo intento,
+documentado a continuación.
+
+**Segundo intento real (2026-10-09; autorizado por el usuario, unidad aún incompleta):** se revalidó
+que `D:\projects\webApi` seguía limpio en `7c1e52e9`, que incluye el fix `e679f44d` y que el
+listener existente PID 43088 arrancó después de ese commit. La E2E sintética WebAPI volvió a pasar
+**18/18**; el preflight live volvió a confirmar identidad, readiness, privacidad, modelo `gpt-5` y
+limpieza verificada del token temporal, con **0 requests de completion**. Antes del envío se comprobó
+por nombre (sin registrarlo) que la JPEG preferida ahora ocupa el ordinal 4; el plan cerrado quedó en
+dos tickets `[1,3]` (JPEG individual y PDF de tres páginas), sin leer los dos PDF individuales.
+
+El contrato del proxy exigió `response_format` JSON Schema estricto y exactamente un `inventario.json`
+más un ticket en cada petición; ambas solicitudes reenviadas cumplieron esa validación. El ticket JPEG
+produjo HTTP **400** en streaming y solo se intentó el fallback no-stream permitido, que terminó en
+HTTP **504**. Se registraron **2/4 requests, 0 respuestas 2xx/completadas**; el coordinador detuvo el
+flujo y no envió el PDF largo ni volvió a intentar la JPEG. Los logs redacted del PID 43088 muestran
+fallo `attachment_upload_failed`/timeout 504 durante la subida, sin eventos `prompt_submitted` ni
+`response_completed`; el upload de ambos adjuntos no se considera exitoso ni se afirma que el modelo
+los recibiera. La suite no pudo evaluar extracción, categorías, duplicados, edición o historial. El
+servicio siguió listo; no se tocaron ajustes ni procesos de WebAPI. El coordinador no informó fallo al
+limpiar el token propio y no quedaron directorios temporales del runner recientes; ninguna compra se
+confirmó ni se guardó en la despensa/inventario real. No se generaron capturas, traces ni vídeos.
+
+El mismo 504 persiste en el límite de subida de WebAPI pese al fix y a la cobertura sintética. No
+reenviar tickets ni declarar esta validación completa hasta que WebAPI/provider resuelva este fallo y
+haya una nueva autorización para probar de nuevo.
 
 Por tanto, quedan sin marcar las casillas de validación de los tickets y cierre completo; la respuesta
 real no llegó al modelo y no se puede declarar esta subunidad ni la spec completa.
