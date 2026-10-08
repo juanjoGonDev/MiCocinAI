@@ -2688,8 +2688,11 @@ limpiar el token propio y no quedaron directorios temporales del runner reciente
 confirmó ni se guardó en la despensa/inventario real. No se generaron capturas, traces ni vídeos.
 
 El mismo 504 persiste en el límite de subida de WebAPI pese al fix y a la cobertura sintética. No
-reenviar tickets ni declarar esta validación completa hasta que WebAPI/provider resuelva este fallo y
-haya una nueva autorización para probar de nuevo.
+reenviar tickets ni declarar esta validación completa hasta que WebAPI/provider resuelva este fallo.
+El usuario concedió autorización permanente para la IA, así que no hace falta pedir consentimiento
+otra vez tras corregirlo; antes de retomar, revalidar readiness/logs y continuar solo con fuentes cuyo
+estado siga siendo inequívocamente no completado. Detenerse si una llamada pudiera haberse completado
+o duplicado.
 
 Por tanto, quedan sin marcar las casillas de validación de los tickets y cierre completo; la respuesta
 real no llegó al modelo y no se puede declarar esta subunidad ni la spec completa.
