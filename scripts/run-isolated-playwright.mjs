@@ -194,6 +194,10 @@ async function startNginxIngress(appPort) {
         source: ${yamlString(dockerPath(join(root, 'nginx', 'nginx.conf')))}
         target: /etc/nginx/nginx.conf
         read_only: true
+      - type: bind
+        source: ${yamlString(dockerPath(join(root, 'nginx', 'proxy-api-common.conf')))}
+        target: /etc/nginx/proxy-api-common.conf
+        read_only: true
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/api/health"]
       interval: 2s
