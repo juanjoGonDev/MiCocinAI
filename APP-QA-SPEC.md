@@ -2531,6 +2531,65 @@ aislado en `scripts/ai-live-receipt-inputs.mjs`, `ai-live-receipt-inputs.d.mts`,
 subunidad. No hay migración ni cambio de settings/datos de WebAPI; mantener separados los tests
 sintéticos y el smoke general preexistente.
 
+### QA-AI.RECEIPT.RESUME-SAFE-SELECTION.1 · reanudar solo las fuentes no completadas
+
+**Fuente revalidada (2026-10-09):** la corrección de WebAPI ya existe en `D:\projects\webApi`: el
+HEAD local `7c1e52e9` incluye `e679f44d fix(chatgpt): recover partial attachment uploads`, con rollback
+verificado, reset seguro del composer, preservación del error original y prohibición de repetir un
+upload ambiguo. El listener `127.0.0.1:3001` (PID 43088) ejecuta `src/main.ts` desde
+`D:\projects\webApi`, inició a las 21:48 UTC después del commit del fix (21:42 UTC) y
+`/health/ready` devuelve 200. La E2E sintética local de WebAPI `tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts`
+pasó **18/18**, incluidos upload de foto+JSON, fallo parcial, reset y ausencia de replay. No se
+modificó ni reinició el servicio. WebAPI no publica el SHA cargado por HTTP; el origen y timestamp del
+proceso, checkout limpio y test del fix vinculan el runtime con el checkout corregido, sin afirmar un
+endpoint de versión inexistente.
+
+MiCocinAI aún no puede reanudar con seguridad: `loadAiLiveReceiptPlan()` devuelve los cuatro tickets
+en orden (incluidos los dos PDF cuyos fallbacks anteriores fueron HTTP 200), y
+`tests/e2e/ai-real-smoke.spec.ts` los sube todos en un `for` fijo; el coordinador reserva ocho
+completions y solo considera éxito cuatro tickets. El modo actual reenviaría dos peticiones con
+resultado potencialmente completado, lo que el usuario prohibió. La JPEG preferida falló antes de
+`prompt_submitted` y el PDF largo de tres fotos no se llegó a enviar; son las únicas dos fuentes que
+pueden volver a probarse.
+
+**Contrato:** añadir a la harness live una selección explícita y cerrada `unsubmitted-only`, distinta
+del lote completo histórico. Debe construir únicamente la JPEG preferida y un PDF multipágina con las
+otras tres fotos, en ese orden; no leer/subir los PDF individuales ni aceptar otra selección en este
+reintento. Concurrencia 1, parada en el primer fallo y techo de cuatro requests HTTP: por cada ticket
+una petición streaming y, únicamente si devuelve HTTP 400 sin respuesta utilizable, un fallback
+no-stream. No reintentar timeout/5xx ni una llamada ambigua. Cada ticket debe llevar el snapshot fresco
+`inventario.json` como adjunto y `response_format` estricto. Usar exclusivamente runner/SQLite/uploads
+temporales; verificar respuesta contra schema, detectar duplicados en el ticket largo, confirmar dos
+filas revisables/editables e historial, no confirmar compras ni escribir en despensa/inventario real.
+No guardar nombres/contenido real en logs, screenshots, traces, videos, reportes o Git.
+
+- [ ] Añadir primero pruebas rojas de loader/coordinador que prueben que `unsubmitted-only` devuelve
+      solo JPEG + PDF multipágina, no lee los dos PDF originales, rechaza selecciones inválidas y
+      limita el total a cuatro requests sin avanzar al segundo ticket tras un fallo inesperado.
+- [ ] Implementar la selección explícita en loader, ambiente aislado y E2E; conservar la selección
+      completa únicamente donde sea necesaria para probar el agrupamiento, pero el coordinador live
+      solo permite el modo no reenviable definido arriba y deriva el presupuesto del número de tickets.
+- [ ] Ejecutar unitarias focales, typecheck E2E, `check:ui`, formato, build y regresión loopback
+      sintética; confirmar antes de tickets que proceso/checkout WebAPI siguen en estado corregido,
+      readiness, privacidad y redacción de logs son seguros.
+- [ ] Con el preflight verde, subir solo la JPEG preferida y el PDF largo al proveedor mediante UI
+      aislada, con `inventario.json` y `response_format`; validar cada respuesta, categorías, ausencia
+      de duplicados, edición e historial. Nunca reenviar los PDF individuales ni guardar resultados
+      fuera de la base temporal.
+- [ ] Confirmar cleanup, registrar únicamente evidencia agregada, marcar la unidad con resultados
+      reales, commits atómicos/hooks/push y CI verde para el head del PR; dejarlo listo y sin merge.
+
+**Evidencia de preflight (2026-10-09):** `pnpm exec vitest run --config
+vitest.clipboard-e2e.config.ts tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts
+--reporter=dot` en `D:\projects\webApi`: **18/18** con PNG/JSON sintéticos, sin completion, ticket
+real, base de datos de MiCocinAI ni reinicio del listener. El live preflight previo a abrir cualquier
+archivo debe volver a comprobar runtime y privacidad; si un criterio no puede verificarse, no se
+ejecuta el ticket real.
+
+**Rollback:** revertir únicamente la selección live `unsubmitted-only`, sus pruebas y esta subunidad;
+mantener el cargador general de fixtures sintéticas, adjuntos de inventario ya probados y el código de
+WebAPI en su repositorio.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
