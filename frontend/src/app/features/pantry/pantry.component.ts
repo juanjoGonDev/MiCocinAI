@@ -628,8 +628,15 @@ const PANTRY_TABS = ['ingredients', 'utensils'] as const;
             ></app-input>
 
             <div class="form-field">
-              <label class="form-label">{{ 'pantry.unidad' | t }}</label>
-              <select [(ngModel)]="formData.unit" name="unit" class="form-select">
+              <label class="form-label" for="pantry-ingredient-unit">{{
+                'pantry.unidad' | t
+              }}</label>
+              <select
+                id="pantry-ingredient-unit"
+                [(ngModel)]="formData.unit"
+                name="unit"
+                class="form-select"
+              >
                 <option value="g">{{ 'pantry.gramos_g' | t }}</option>
                 <option value="kg">{{ 'pantry.kilogramos_kg' | t }}</option>
                 <option value="ml">{{ 'pantry.mililitros_ml' | t }}</option>

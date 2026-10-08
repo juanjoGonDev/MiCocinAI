@@ -83,6 +83,39 @@ describe('PantryComponent add action', () => {
     expect(component.formData.name).toBe('harina');
   });
 
+  it('opens the edit form with the ingredient amount and unit', () => {
+    const component = createComponent();
+    const ingredient = {
+      id: 'ingredient-edit',
+      name: 'Harina',
+      quantity: 500,
+      unit: 'g',
+      category: 'grains',
+      location: 'pantry',
+      notes: 'Integral',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z')
+    } as Ingredient;
+
+    component.editIngredient(ingredient);
+
+    expect(component.editingIngredient()).toBe(ingredient);
+    expect(component.isIngredientModalOpen()).toBeTrue();
+    expect(component.formData).toEqual({
+      name: 'Harina',
+      quantity: 500,
+      unit: 'g',
+      category: 'grains',
+      location: 'pantry',
+      expirationDate: '',
+      notes: 'Integral'
+    });
+
+    component.editIngredient({ ...ingredient, notes: undefined });
+
+    expect(component.formData.notes).toBe('');
+  });
+
   it('keeps a failed inventory refresh recoverable without loading stale stats', async () => {
     const component = createComponent();
     pantryService.cargarInventarioCompleto.and.rejectWith(new Error('Synthetic 503'));

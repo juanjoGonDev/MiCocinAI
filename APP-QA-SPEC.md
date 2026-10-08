@@ -550,10 +550,16 @@ Typecheck `tsc -p tsconfig.e2e.json --noEmit`, build production a `%TEMP%`, Pret
 
 **Contrato:** desde una fila real de `/pantry`, editar mantiene el nombre y guarda cantidad/unidad; tras recargar siguen mostrándose los valores persistidos. La unidad del editor tiene nombre accesible localizado. Borrar individualmente exige confirmación: Escape conserva la fila; confirmar la quita de la despensa y sigue ausente después de recargar. Solo se usan filas sintéticas de SQLite aislada; sin IA/WebAPI ni cambios de catálogo ajenos.
 
-- [ ] Añadir primero una regresión Playwright roja: el editor de una fila no expone la unidad con el nombre accesible «Unidad»; después probar el guardado de cantidad/unidad y el borrado individual cancelar/confirmar desde la tabla.
-- [ ] Asociar correctamente label y `<select>` de unidad sin cambiar su geometría ni el resto del contrato visual del formulario.
-- [ ] Comprobar cantidad/unidad por UI, fila y recarga; verificar que Escape no envía DELETE y confirmar elimina únicamente la fila sintética, también tras recargar.
-- [ ] Ejecutar en Chromium escritorio y Pixel 5 con runner/SQLite/semilla/puertos aislados, typecheck, prueba unitaria focal, `check:ui`, formato, build y suites/gates vigentes; mantener ≥70 % S/B/F/L por archivo instrumentable. Guardar e inspeccionar capturas sintéticas PC/móvil y confirmar cleanup.
+- [x] Añadir primero una regresión Playwright roja: el editor de una fila no expone la unidad con el nombre accesible «Unidad»; después probar el guardado de cantidad/unidad y el borrado individual cancelar/confirmar desde la tabla. Baseline: Chromium y Pixel 5 no encontraron el `combobox` accesible.
+- [x] Asociar correctamente label y `<select>` de unidad sin cambiar su geometría ni el resto del contrato visual del formulario.
+- [x] Comprobar cantidad/unidad por UI, fila y recarga; verificar que Escape no envía DELETE y confirmar elimina únicamente la fila sintética, también tras recargar.
+- [x] Ejecutar en Chromium escritorio y Pixel 5 con runner/SQLite/semilla/puertos aislados, typecheck, prueba unitaria focal, `check:ui`, formato, build y suites/gates vigentes; mantener ≥70 % S/B/F/L por archivo instrumentable. Guardar e inspeccionar capturas sintéticas PC/móvil y confirmar cleanup.
+
+**Evidencia (2026-10-08):** TDD rojo: el test falló en ambos proyectos al no encontrar el `combobox` con nombre «Unidad». `pantry.component.ts` ahora asocia `for="pantry-ingredient-unit"` con el `id` del selector. Karma focal `pantry.component.spec.ts`: **14/14**; `editIngredient()` queda en **100/100/100/100 % S/B/F/L** dentro del alcance (3/3 sentencias y líneas, 2/2 ramas y 1/1 función, incluido el fallback de notas). El run focal con `--code-coverage` devuelve exit 1 por el gate global de 80 % aplicado al subconjunto (**16.69/4.47/7.38/18.64 %**); sin coverage, las 14 pruebas terminan con exit 0. No se relajó el gate. La suite completa actual `pnpm run test:client` pasa **1209/1209**, **90.41/81.58/89.12/91.84 % S/B/F/L**.
+
+La E2E aislada `pnpm run test:e2e -- --workers=1 --project=chromium --project=mobile-chrome tests/e2e/pantry-root-crud.spec.ts --reporter=line` pasó **2/2**. Comprueba PATCH, persistencia tras reload, Escape sin DELETE, un único DELETE al confirmar, ausencia tras reload y cero `pageerror`; prueba escritorio 1023/1024/1440 px y Pixel 5 a 320×568, 393×851, 568×320, 719×851, 720×851 y 851×393 sin overflow. Runner confirmó cleanup de la app aislada y SQLite. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-pantry-root-crud-1-final/{chromium,mobile-chrome}/edit-dialog.png`, ignoradas por Git. También pasan `pnpm run typecheck:e2e`, `pnpm run check:ui` (**210 ficheros/21 reglas**), `pnpm run build:client`, Prettier y `git diff --check`. Build exitoso con warnings existentes de bundle, presupuestos e imports; no cambia geometría.
+
+La casilla agregada `/pantry` sigue abierta: falta validar la vista vacía real sin catálogo y cerrar su matriz general; este lote solo completa edición/borrado individual.
 
 **Rollback previsto:** revertir la asociación de etiqueta, la E2E y esta subunidad; sin cambios de esquema ni APIs.
 
