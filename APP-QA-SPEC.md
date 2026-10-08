@@ -3846,7 +3846,7 @@ editables. La coordinación debe seguir basada en estado/respuesta observable, n
       proveedor; verificar la fila de historial y los campos EN tras navegación/recarga.
 - [x] Ejecutar la regresión focal, `receipts.spec.ts` en Chromium y Pixel 5 emulado, typecheck E2E,
       formato, `check:ui`, build y `git diff --check`; sin fixture/proveedor real ni base compartida.
-- [ ] Actualizar esta evidencia, crear commits atómicos con hooks completos y push a la rama; esperar
+- [x] Actualizar esta evidencia, crear commits atómicos con hooks completos y push a la rama; esperar
       CI verde para el SHA actual del PR sin mergearlo.
 
 **Evidencia (2026-10-08):** CI `37847039744` confirmó el rojo en shard 3: 98 pasaron, 6 omitidas
@@ -3863,6 +3863,11 @@ semilla y cleanup temporales; sin proveedor real ni cambios de producción. `pnp
 `pnpm run check:ui` (**210 archivos, 21 reglas**), Prettier focal, `pnpm run build` y
 `git diff --check` pasan. La compilación conserva warnings de bundle/imports/optional chaining y budgets
 en otros componentes. Cobertura de producción: N/A, porque el cambio es solo de E2E/spec.
+
+**Cierre (2026-10-08):** spec-first `2a948e2` y corrección atómica `997c845`, ambos publicados con
+hooks completos (sin omitir ninguno). CI del código `997c845`, run `37849230117`, terminó **9/9 jobs
+verdes**, incluidos los cuatro shards E2E y Full-stack E2E. PR #41 sigue abierto y no-Draft; no se
+mergeó.
 
 **Rollback:** retirar solo la barrera/sincronización E2E y esta subunidad; no cambiar la política del
 historial ni los estados de producción.
