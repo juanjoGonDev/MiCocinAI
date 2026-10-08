@@ -1156,7 +1156,10 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 **Revalidación funcional (2026-10-08):** Vitest `pnpm --filter @hogaria/server exec vitest run src/routes/auth-forgot-password.spec.ts --coverage --coverage.include=src/routes/forgot-password.routes.ts`: **2/2**, ruta **100/100/100/100 % S/B/F/L**; Chromium Headless focal (`forgot-password.component.spec.ts` + `auth.service.spec.ts`): **34/34**; Playwright aislado `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/auth-forgot-password.spec.ts`, `E2E_RATE_LIMIT=on`: **4/4**. Verificado: vacío/malformado sin POST, mismo 200/cuerpo para cuenta conocida y desconocida, aviso honesto, 503 no duplica toast, carga deshabilita CTA y el retry conserva email. El runner aisló SQLite/puertos/semilla y confirmó cleanup; los viewports fueron 1440×900 y 393×851. No se implementa envío de correo porque el servicio sigue sin estar disponible.
 
-- [ ] `/invite/:code`: código válido, inválido o invalidado al regenerar (sin expiración temporal en el modelo actual), invitación repetida, ya pertenece al hogar, aceptar/rechazar con sesión y entrada por registro/login preservando el código.
+- [x] `/invite/:code`: código válido, inválido o invalidado al regenerar (sin expiración temporal en el modelo actual), invitación repetida, ya pertenece al hogar, aceptar/rechazar con sesión y entrada por registro/login preservando el código.
+
+**Revalidación integral de `/invite/:code` (2026-10-08):** Playwright aislado `invite-actions.spec.ts` + `auth-onboarding-icons.spec.ts`: **12/12** en Chromium y Pixel 5; cubre aceptación con retry tras 503, rechazo sin unión, código invalidado al regenerar, estado ya-miembro y enlaces ES/EN, teclado, CTA táctiles ≥44 px y 320×568 / 393×851 / 568×320 / 1440×900. `household.routes.spec.ts` (SQLite `:memory:`): **25/25**, incluida membresía duplicada 409 sin escrituras. `login-double-submit.spec.ts` full-stack: **2/2**; `register-invite.spec.ts` full-stack: **2/2**, preservan código y unen una sola vez. Runs E2E con rate limit y runner aislado; cleanup confirmado. Sin datos reales ni proveedor IA.
+
 - [ ] `/onboarding`: validar los seis pasos de §12C/§12E; Pantry conserva la edición de utensilios y `kitchen` solo enlaza según §8c. Probar perfil, alergias/gustos/objetivos, horario, siguiente/anterior, omitir, persistencia, salida, recarga y reanudación.
 
 ### Navegación y superficies de hogar
@@ -1416,7 +1419,7 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 ## Siguiente unidad de trabajo
 
-1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password` y `/auth/register` ya se revalidaron con Playwright aislado. Completar la revalidación de `/invite/:code` antes de avanzar a onboarding.
+1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register` y `/invite/:code` se revalidaron en pruebas aisladas. La siguiente ruta por cerrar es `/onboarding`.
 2. QA-REC.INGRESS.1 ya está verificada con Nginx real aislado; la siguiente validación de motor pendiente es Safari/iOS real para la hoja de ofertas de QA-04c.1, sin sustituir safe-area/teclado nativos por emulación WebKit/Chromium.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
 4. QA-04c: el gate global frontend en el hook pre-push del commit `db2eeeb` pasó (**90.20/81.39/88.94/91.57 % S/B/F/L**, 1168/1168 tests, 2026-10-08); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.
