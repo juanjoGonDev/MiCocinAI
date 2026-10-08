@@ -2199,9 +2199,10 @@ logs locales acotados. La lectura sin mutaciones de los controles confirma `maxB
 se repetirá el preflight con ese opt-in, sin capturar cuerpos, cabeceras ni sesiones. El fallo de setup
 consumió **0/8 completions** y no llamó al proveedor.
 
-**Revalidación limitada del payload actualizado (2026-10-08):** como el cambio posterior ahora envía
-el inventario fresco como texto JSON aparte, fuerza la decisión de categoría y transporta el PDF como
-`file`, se autoriza una única corrida nueva de los mismos cuatro tickets para validar esa versión. Esta
+**Revalidación limitada del payload actualizado (2026-10-08):** como el cambio posterior ahora adjunta
+el inventario fresco como `inventario.json` (`application/json`), fuerza la decisión de categoría y
+transporta el PDF como `file`, se autoriza una única corrida nueva de los mismos cuatro tickets para
+validar esa versión. Esta
 corrida conserva el techo de **8 completions**, concurrencia 1, `retryAttempts: 0` y parada en el primer
 fallo; no habrá reintento individual ni tercera repetición del lote si esta validación vuelve a fallar.
 El primer setup fallido no consumió el presupuesto ni alcanzó archivos/proveedor; solo se ejecutará el
@@ -2211,6 +2212,16 @@ cleanup ya existente.
 - [ ] Repetir una sola vez el lote exacto de seis archivos/cuatro tickets sobre el payload actualizado;
       marcar como validado solo si termina la revisión, edición/guardado/historial en UI y cleanup, sin
       duplicados en las tres fotos solapadas. Si falla, conservar el fallo y no ampliar el presupuesto.
+
+**Registro de fallo aportado (2026-10-08):** OpenCode recibió un mensaje con el marcador antiguo
+`INVENTARIO_JSON_ACTUAL:` vacío y `attachmentCount: 1`; la versión actual de MiCocinAI pide leer el
+fichero `inventario.json` y adjunta PDF + JSON, así que este registro no acredita el payload nuevo.
+Además, la WebAPI observó HTTP 200 y 69 fragmentos de `/backend-api/f/conversation`, pero no detectó
+cierre (`terminalRequestCount: 0`) y agotó 120 s de inactividad (`validated_output_timeout`). El código
+local de WebAPI tiene recuperación acotada en `stream-reply-flow.ts`, sin evento de refresh en el
+extracto aportado; queda por distinguir fallo del ciclo de vida vs. runtime desplegado desactualizado.
+No repetir tickets reales hasta resolver esta recuperación y comprobar que la petición nueva llega con
+los dos adjuntos esperados.
 
 ### Subunidad QA-AI.RECEIPT-INVENTORY-ATTACHMENT.1 · adjuntar el catálogo visible
 
