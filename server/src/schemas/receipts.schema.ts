@@ -49,9 +49,9 @@ export const ticketAnswerSchema = z.object({
           name: z.string().trim().min(2).max(120),
           quantity: formDefault(z.coerce.number().positive().max(10000), 1),
           unit: formField(z.string().trim().max(24)),
-          /** Clave del catalogo de la despensa de la casa (la que viaja en inventario.json). */
-          category: formField(z.string().trim().max(64)),
-          createCategory: formField(z.boolean()),
+          /** La IA clasifica cada línea legible o propone expresamente una categoría nueva. */
+          category: z.string().trim().min(1).max(64),
+          createCategory: z.boolean(),
           priceMinor: formField(z.coerce.number().int().min(0).max(100_000_000)),
           offer: offerTicket,
           confidence: formDefault(z.coerce.number().min(0).max(1), 0.5),

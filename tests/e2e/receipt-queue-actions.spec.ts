@@ -57,7 +57,7 @@ class SyntheticReceiptProvider {
               {
                 delta: {
                   content:
-                    '{"lines":[{"name":"Partial synthetic product","quantity":1,"unit":"unit","category":"other","createCategory":null,"priceMinor":100,"offer":null,"confidence":1,"note":null},' +
+                    '{"lines":[{"name":"Partial synthetic product","quantity":1,"unit":"unit","category":"other","createCategory":false,"priceMinor":100,"offer":null,"confidence":1,"note":null},' +
                     ' '.repeat(64)
                 }
               }
@@ -74,7 +74,7 @@ class SyntheticReceiptProvider {
             quantity: 1,
             unit: 'unit',
             category: 'other',
-            createCategory: null,
+            createCategory: false,
             priceMinor: 200,
             offer: null,
             confidence: 1,

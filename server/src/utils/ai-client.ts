@@ -16,6 +16,7 @@ import type { AiResponseFormat } from '../schemas/ai-response-format.js';
 
 export type AiMessagePart =
   | { type: 'text'; text: string }
+  | { type: 'file'; file: { filename: string; file_data: string } }
   | { type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } };
 
 export type AiMessage = {

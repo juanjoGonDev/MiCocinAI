@@ -1,6 +1,7 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
 - **Estado (2026-10-08):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La última suite frontend local pasó **1201/1201** con coverage **90.32/81.46/88.96/91.75 % S/B/F/L**; el workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **IA / tickets reales (2026-10-08):** el smoke autorizado consumió el presupuesto de 8/8 completions; la última respondió HTTP 504 y la E2E acabó en fallo antes de la fase «cuatro tickets verificados». No se hizo un reintento manual. El runner aislado y su carpeta temporal se cerraron/eliminaron; QA-AI.REAL-INTEGRATIONS.1 permanece abierta.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1201/1201 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-08
 
@@ -2108,11 +2109,39 @@ latencias/uso/coste agregados, sin tienda, artículos, importes ni fechas person
       pasos utilizables y contenido `basic`/`intermediate`/`expert` no vacío. La receta múltiple recibe
       ingredientes variados y devuelve 2 borradores distintos; la planificación transmite más de un
       objetivo y texto custom cuando están seleccionados, sin reducirlos a una sola preferencia.
-- [ ] En unidad separada, procesar los seis tickets solicitados (PDF/JPEG, priorizar el marcado “mejor”),
-      solo después de verificar que captura de cuerpos/sesiones está apagada; validar resultado/edición/
-      historial desde UI aislada y no guardar datos personales, capturas, prompts ni respuestas.
-      Mantener presupuesto/concurrencia acotados, comenzar por el ticket señalado como mejor y abortar
-      si privacidad/redacción o cleanup no quedan verificados.
+- [ ] Admitir exactamente los seis archivos PDF/JPEG de la carpeta indicada (dos PDF y cuatro JPEG),
+      comprobar firma real y límite de 10 MiB antes de subir; no seguir enlaces ni leer carpetas hijas.
+- [ ] Tratar los dos PDF como tickets independientes y la JPEG que el usuario identifica como más clara
+      por separado; agrupar las tres fotos restantes, ordenadas por nombre, en un PDF multipágina temporal
+      en memoria para analizarlas como un único ticket largo. Así se prueba el solape entre tramos sin
+      crear tickets o productos repetidos por procesar cada foto de forma independiente.
+- [ ] Procesar los cuatro tickets secuencialmente desde UI aislada, con concurrencia 1 y
+      `retryAttempts: 0`; techo duro de 8 completions (una por ticket y, como máximo, un fallback
+      no-stream por ticket), sin reintentos manuales y parada al fallar.
+- [ ] En PDFs multipágina, instruir al modelo para tratar todas las páginas como un mismo ticket y no
+      repetir líneas visibles en páginas/fotos solapadas; deduplicar defensivamente líneas equivalentes
+      conservando orden y filas de mismo producto con cantidad/precio distintos. Verificar que el ticket
+      largo no persiste artículos duplicados.
+- [x] En cada lectura, generar una instantánea actual del hogar con categorías y productos registrados
+      (incluida la categoría vigente tras movimientos manuales) y enviarla como una parte de texto JSON
+      claramente identificada junto con el ticket; no cargar un JSON obsoleto ni incluir existencias,
+      precios o historial de compras. El prompt debe decir que el inventario viene incluido en el mensaje,
+      no pedir un archivo adjunto aparte. El JSON Schema estricto exige `category` no vacía y
+      `createCategory` booleano en cada línea; no admite `null`. Verificarlo en la petición de PDF y JPEG
+      con datos sintéticos.
+- [x] Enviar PDFs a Chat Completions como parte `type: "file"` con `filename` genérico y
+      `file_data: data:application/pdf;base64,...`, nunca como `image_url`; las fotos JPEG siguen como
+      `image_url`. El JSON del inventario viaja como parte `type: "text"` (Chat Completions admite como
+      parte `type: "file"` únicamente documentos PDF); mantener el `response_format` JSON Schema estricto
+      en ambos transportes. Contratos del proveedor: [File inputs](https://developers.openai.com/api/docs/guides/file-inputs)
+      y [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
+- [ ] Verificar en UI aislada estado/reconocimiento, campos editables, guardado y aparición en historial;
+      no confirmar los tickets ni tocar despensa/inventario. Usar nombres genéricos al subir.
+- [ ] Mantener cuerpos/sesiones/diagnóstico sin captura, Playwright sin screenshot/trace/video/reportes
+      con contenido, y stdout/errores limitados a estado y métricas agregadas; no conservar nombres,
+      tiendas, artículos, importes, fechas, imágenes, prompts ni respuestas.
+- [ ] Confirmar cierre de app/procesos/puertos, borrado de token propio y limpieza de SQLite/uploads/
+      artefactos temporales antes de marcar verde; abortar ante privacidad insegura o cleanup no verificado.
 
 **Evidencia QA-AI.REAL-INTEGRATIONS.1 (2026-10-08):** `node --test scripts/ai-live-existing-webapi.test.mjs
 scripts/run-ai-real-smoke.test.mjs scripts/ai-live-smoke-safety.test.mjs scripts/ai-live-smoke-runner-control.test.mjs`
@@ -2123,8 +2152,56 @@ latencias agregadas en ms `[146487, 15872, 152151, 117259, 19133, 22275, 19050, 
 la llamada 9 de `receipt` devolvió 400 al pedir stream y el fallback no-stream devolvió 200. El proceso
 confirmó cleanup del runner y borrado/verificación del token propio. No se pasó un ticket real.
 
-**Rollback:** retirar este modo/fixture E2E y esta subunidad sin tocar el comportamiento de proveedor
-existente; las pruebas sintéticas y el smoke anterior opt-in deben seguir explícitos y separados.
+**Inventario fresco para tickets (2026-10-08):** TDD reprodujo primero que la petición contenía solo
+una parte de texto y describía falsamente el inventario como archivo adjunto. La implementación ahora
+consulta categorías/productos del hogar por ticket y envía la instantánea como una segunda parte
+`type: "text"`, etiquetada `INVENTARIO_JSON_ACTUAL`; el prompt aclara que está incluida en el mensaje y
+que debe usarse su categoría vigente. Las pruebas de `ai-queue.spec.ts` mueven un producto sintético de
+categoría antes de cargarlo y comprueban que tanto el payload PDF como el JPEG contienen la categoría
+nueva, el producto y el `response_format` estricto; cantidades/precios de existencias no forman parte de
+la instantánea. La respuesta estricta también obliga a tomar una decisión de categoría no nula para cada
+línea; el prompt manda reutilizar la categoría actual del producto y usar `other`/proponer categoría solo
+cuando corresponda. El TDD de categoría primero falló en los dos casos `missing`/`null`; el contrato
+estricto ahora los rechaza. Regresión focal de schemas/cola/prompt: **59/59**; schemas de receipt y
+prompt: **22/22** con cobertura **100/100/100/100 % S/B/F/L**. Suite completa del server:
+**1234/1234** tests no omitidos (1 skip explícito), cobertura global **91.72/83.23/96.05/94.23 %**.
+La E2E de acciones de cola pasa **2/2**, la E2E sintética loopback **1/1**, ambas con cleanup del
+runner y sin llamadas a proveedor. Comandos reproducibles: `pnpm --filter @hogaria/server exec vitest
+run src/schemas/receipts.schema.spec.ts src/schemas/ai-response-format.spec.ts
+src/utils/ai-queue.spec.ts src/utils/ticket-prompt.spec.ts --reporter=dot` (59/59);
+`pnpm --filter @hogaria/server exec vitest run src/schemas/receipts.schema.spec.ts
+src/utils/ticket-prompt.spec.ts --coverage.enabled --coverage.include=src/schemas/receipts.schema.ts
+--coverage.include=src/utils/ticket-prompt.ts --reporter=dot` (22/22, 100 % focal);
+`node --test scripts/ai-live-existing-webapi.test.mjs scripts/run-ai-real-smoke.test.mjs
+scripts/ai-live-smoke-safety.test.mjs scripts/ai-live-smoke-runner-control.test.mjs
+scripts/ai-live-smoke-contract.test.mjs scripts/ai-live-receipt-inputs.test.mjs` (57/57);
+`node scripts/run-isolated-playwright.mjs --project=chromium
+tests/e2e/receipt-queue-actions.spec.ts --reporter=dot` (2/2); y
+`node scripts/run-isolated-playwright.mjs --config=playwright.ai-real-smoke.config.ts
+--project=chromium-ai-real-smoke tests/e2e/ai-real-smoke.spec.ts --grep "cubre los ocho AiJobKind
+con fixtures de proveedor loopback" --reporter=dot` (1/1).
+
+**Revalidación del lote real de tickets (2026-10-08):** el opt-in procesó la carpeta autorizada como
+cuatro tickets secuenciales y llegó al techo de **8/8 completions**. Las llamadas de formato streaming
+recibieron HTTP 400 y sus fallbacks no-stream previos devolvieron HTTP 200; el fallback de la última
+solicitud devolvió HTTP 504, Playwright acabó en rojo y no se alcanzó la fase final «cuatro tickets
+verificados». Se detuvo sin reintento manual según el presupuesto/stop-on-failure vigente. El
+coordinador no reportó fallo al borrar el token propio; la aplicación aislada paró y no quedó carpeta
+temporal `hogaria-e2e-*` reciente. Esta corrida es anterior al nuevo bloque textual del inventario y al
+schema que exige categoría no nula, así que no valida esos cambios ni cierra el lote; el resultado live
+queda fallido y la unidad continúa abierta.
+
+**Rollback:** revertir la ruta de tickets en `server/src/utils/ai-client.ts`, `ticket-queue.ts`,
+`ticket-prompt.ts`, `ticket-lines-dedup.ts` y `server/src/schemas/receipts.schema.ts`, sus specs
+`ai-client.spec.ts`, `ai-queue.spec.ts`, `ticket-prompt.spec.ts`, `ticket-lines-dedup.spec.ts`,
+`receipts.schema.spec.ts`, `ai-response-format.spec.ts`, `server/vitest.config.ts`, el modo de lote
+aislado en `scripts/ai-live-receipt-inputs.mjs`, `ai-live-receipt-inputs.d.mts`,
+`ai-live-receipt-inputs.test.mjs`, `scripts/ai-live-smoke-runner-control.mjs`,
+`ai-live-smoke-runner-control.test.mjs`, `ai-live-smoke-safety.mjs`, `ai-live-smoke-safety.test.mjs`,
+`scripts/run-ai-real-smoke.mjs`, `run-ai-real-smoke.test.mjs`, la regresión de
+`tests/e2e/receipt-queue-actions.spec.ts` y el flujo de `tests/e2e/ai-real-smoke.spec.ts` junto con esta
+subunidad. No hay migración ni cambio de settings/datos de WebAPI; mantener separados los tests
+sintéticos y el smoke general preexistente.
 
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 

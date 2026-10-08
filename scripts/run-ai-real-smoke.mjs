@@ -1,8 +1,11 @@
 import {
+  AI_LIVE_RECEIPT_SMOKE_COMPLETION_BUDGET,
+  AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES,
   AI_LIVE_SMOKE_COMPLETION_BUDGET,
   createAiLiveSmokeRunnerEnvironment,
   createAiLiveProxy,
   isSuccessfulAiLiveSmokeResult,
+  validateAiLiveReceiptSmokeRequest,
   validateAiLiveSmokeOptIn
 } from './ai-live-smoke-safety.mjs';
 import { prepareExistingAiLiveSmokeSession } from './ai-live-existing-webapi.mjs';
@@ -46,6 +49,10 @@ export async function runAiLiveSmoke({
   writeSuccess = (message) => console.log(message)
 } = {}) {
   validateAiLiveSmokeOptIn(env);
+  const receiptsOnly = validateAiLiveReceiptSmokeRequest(env);
+  const completionBudget = receiptsOnly
+    ? AI_LIVE_RECEIPT_SMOKE_COMPLETION_BUDGET
+    : AI_LIVE_SMOKE_COMPLETION_BUDGET;
   assertAiLiveSmokeDeadlineContract();
   signal?.throwIfAborted();
 
@@ -62,24 +69,19 @@ export async function runAiLiveSmoke({
       token: session.token,
       model: session.model,
       targetOrigin: session.origin,
-      maxCalls: AI_LIVE_SMOKE_COMPLETION_BUDGET,
+      maxCalls: completionBudget,
+      ...(receiptsOnly ? { maxRequestBytes: AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES } : {}),
       timeoutMs: AI_LIVE_SMOKE_DEADLINES.proxyMs,
       onRequest: ({ ordinal }) => {
-        if (
-          Number.isInteger(ordinal) &&
-          ordinal > 0 &&
-          ordinal <= AI_LIVE_SMOKE_COMPLETION_BUDGET
-        ) {
-          writeProgress(
-            `Solicitud IA ${ordinal}/${AI_LIVE_SMOKE_COMPLETION_BUDGET} enviada al servicio local.`
-          );
+        if (Number.isInteger(ordinal) && ordinal > 0 && ordinal <= completionBudget) {
+          writeProgress(`Solicitud IA ${ordinal}/${completionBudget} enviada al servicio local.`);
         }
       },
       onCompletion: ({ ordinal, status, responseFormat }) => {
         if (
           Number.isInteger(ordinal) &&
           ordinal > 0 &&
-          ordinal <= AI_LIVE_SMOKE_COMPLETION_BUDGET &&
+          ordinal <= completionBudget &&
           Number.isInteger(status)
         ) {
           const responseShape =
@@ -103,7 +105,7 @@ export async function runAiLiveSmoke({
             ? responseFormat.finishReason
             : 'no disponible';
           writeProgress(
-            `Respuesta IA ${ordinal}/${AI_LIVE_SMOKE_COMPLETION_BUDGET} completada (HTTP ${status}; ${responseShape}; cierre ${finishReason}).`
+            `Respuesta IA ${ordinal}/${completionBudget} completada (HTTP ${status}; ${responseShape}; cierre ${finishReason}).`
           );
         }
       }
@@ -146,7 +148,8 @@ export async function runAiLiveSmoke({
   const liveSuccess = dependencies.isSuccessfulAiLiveSmokeResult({
     runnerExit,
     cleanupFailed,
-    calls
+    calls,
+    receiptsOnly
   });
   if (!liveSuccess) {
     writeError(
@@ -156,12 +159,36 @@ export async function runAiLiveSmoke({
           ? 'Smoke real cancelado; se intentó cerrar el runner y limpiar los recursos propios.'
           : runnerExit.timedOut
             ? 'Smoke real fallido: se agotó el límite de tiempo; se intentó cerrar y limpiar.'
-            : `Smoke real fallido: resultado del runner=${runnerExit.code}, llamadas=${calls.length}/${AI_LIVE_SMOKE_COMPLETION_BUDGET} (mínimo permitido 9).`
+            : `Smoke real fallido: resultado del runner=${runnerExit.code}, llamadas=${calls.length}/${completionBudget} (mínimo permitido ${receiptsOnly ? 4 : 9}).`
     );
     return 1;
   }
 
   const usage = safeMetrics(calls);
+  if (receiptsOnly) {
+    writeSuccess(
+      JSON.stringify({
+        result: 'passed',
+        provider: 'local WebAPI :3001',
+        model: session.model,
+        sourceCount: 6,
+        tickets: 4,
+        completions: calls.length,
+        elapsedMs: calls.reduce((sum, call) => sum + (call.elapsedMs ?? 0), 0),
+        recoveredFallbacks: calls.filter(
+          (call, index) =>
+            call.status === 400 &&
+            call.stream === true &&
+            call.schemaName === 'receipt' &&
+            calls[index + 1]?.status >= 200 &&
+            calls[index + 1]?.status < 300
+        ).length,
+        ...(usage ? { usage } : {})
+      })
+    );
+    return 0;
+  }
+
   const failedReceiptStreamIndex = calls.findIndex(
     (call) => call.status === 400 && call.stream === true && call.schemaName === 'receipt'
   );

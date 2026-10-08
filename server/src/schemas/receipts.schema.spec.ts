@@ -10,7 +10,7 @@ const ticketAnswer = (metadata: Record<string, unknown> = {}) => ({
   ...metadata
 });
 
-describe('ticketAnswerSchema purchase metadata', () => {
+describe('ticketAnswerSchema model output', () => {
   it('keeps a detected store/local and accepts a real YYYY-MM-DD purchase date', () => {
     const result = ticketAnswerSchema.parse(
       ticketAnswer({ store: 'Mercadona Centro', purchaseDate: '2024-02-29' })
@@ -36,7 +36,15 @@ describe('ticketAnswerSchema purchase metadata', () => {
     const result = ticketAnswerSchema.parse(
       ticketAnswer({
         purchaseDate: null,
-        lines: [{ name: 'Leche entera', quantity: 1, offer: { buy: 2, take: 1 } }]
+        lines: [
+          {
+            name: 'Leche entera',
+            quantity: 1,
+            category: 'dairy',
+            createCategory: false,
+            offer: { buy: 2, take: 1 }
+          }
+        ]
       })
     );
 
@@ -46,6 +54,20 @@ describe('ticketAnswerSchema purchase metadata', () => {
       offer: { buy: 2, take: 1 }
     });
   });
+
+  it.each([{}, { category: null, createCategory: null }])(
+    'rejects a model line without an explicit category decision (%j)',
+    (categoryFields) => {
+      const result = ticketAnswerSchema.safeParse(
+        ticketAnswer({
+          purchaseDate: null,
+          lines: [{ name: 'Leche entera', ...categoryFields }]
+        })
+      );
+
+      expect(result.success).toBe(false);
+    }
+  );
 
   it('rejects a multi-buy offer that gives away nothing', () => {
     const result = ticketAnswerSchema.safeParse(

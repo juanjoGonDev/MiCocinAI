@@ -35,18 +35,21 @@ const TASK_FORMATS = [
 ];
 
 describe('createAiResponseFormat', () => {
-  it.each(TASK_FORMATS)('$json_schema.name genera un contrato estricto y sin defaults', (format) => {
-    expect(format.type).toBe('json_schema');
-    expect(format.json_schema.strict).toBe(true);
-    for (const node of findObjects(format.json_schema.schema)) {
-      expect(node.default).toBeUndefined();
-      if (node.type === 'object' || node.properties) {
-        const properties = node.properties as Record<string, unknown>;
-        expect(node.additionalProperties).toBe(false);
-        expect(node.required).toEqual(Object.keys(properties));
+  it.each(TASK_FORMATS)(
+    '$json_schema.name genera un contrato estricto y sin defaults',
+    (format) => {
+      expect(format.type).toBe('json_schema');
+      expect(format.json_schema.strict).toBe(true);
+      for (const node of findObjects(format.json_schema.schema)) {
+        expect(node.default).toBeUndefined();
+        if (node.type === 'object' || node.properties) {
+          const properties = node.properties as Record<string, unknown>;
+          expect(node.additionalProperties).toBe(false);
+          expect(node.required).toEqual(Object.keys(properties));
+        }
       }
     }
-  });
+  );
 
   it('hace requeridos los campos con default de Zod sin enviar la palabra default', () => {
     const format = createAiResponseFormat(
@@ -60,6 +63,29 @@ describe('createAiResponseFormat', () => {
       additionalProperties: false
     });
     expect(JSON.stringify(format)).not.toContain('"default"');
+  });
+
+  it('requires a non-empty category decision for every receipt line', () => {
+    const schema = RECEIPT_RESPONSE_FORMAT.json_schema.schema as {
+      properties: {
+        lines: {
+          items: {
+            properties: {
+              category: Record<string, unknown>;
+              createCategory: Record<string, unknown>;
+            };
+          };
+        };
+      };
+    };
+
+    expect(schema.properties.lines.items.properties.category).toMatchObject({
+      type: 'string',
+      minLength: 1
+    });
+    expect(schema.properties.lines.items.properties.createCategory).toMatchObject({
+      type: 'boolean'
+    });
   });
 
   it('crea los esquemas de recomendaciones y plan semanal con el tamaño/comidas de la petición', () => {
@@ -90,6 +116,8 @@ describe('createAiResponseFormat', () => {
     expect(() => createAiResponseFormat('name with spaces', z.object({ ok: z.boolean() }))).toThrow(
       /schema name/i
     );
-    expect(() => createAiResponseFormat('array', z.array(z.string()))).toThrow(/root must be an object/i);
+    expect(() => createAiResponseFormat('array', z.array(z.string()))).toThrow(
+      /root must be an object/i
+    );
   });
 });

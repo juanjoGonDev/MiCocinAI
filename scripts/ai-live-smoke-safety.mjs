@@ -1,5 +1,6 @@
 import { createServer, request as httpRequest } from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { isAbsolute } from 'node:path';
 import {
   AI_LIVE_SMOKE_DEADLINES,
   assertAiLiveSmokeDeadlineContract
@@ -18,13 +19,50 @@ export const AI_LIVE_SMOKE_ENV = Object.freeze({
   requestTimeoutMs: 'HOGARIA_AI_REAL_SMOKE_REQUEST_TIMEOUT_MS',
   testTimeoutMs: 'HOGARIA_AI_REAL_SMOKE_TEST_TIMEOUT_MS',
   globalTimeoutMs: 'HOGARIA_AI_REAL_SMOKE_GLOBAL_TIMEOUT_MS',
-  receiptPath: 'HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH'
+  receiptPath: 'HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH',
+  receiptsOnly: 'HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY',
+  receiptDirectory: 'HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY',
+  preferredJpegOrdinal: 'HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL'
 });
 
 export const AI_LIVE_SMOKE_KEY_MARKER = '__HOGARIA_AI_REAL_SMOKE_PROVIDER_KEY__';
 export const WEB_API_ORIGIN = 'http://127.0.0.1:3001';
 export const AI_LIVE_SMOKE_MIN_COMPLETIONS = 9;
 export const AI_LIVE_SMOKE_COMPLETION_BUDGET = 10;
+export const AI_LIVE_RECEIPT_SMOKE_COMPLETION_BUDGET = 8;
+export const AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS = 4;
+export const AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES = 15 * 1024 * 1024;
+
+export function validateAiLiveReceiptSmokeRequest(env = process.env) {
+  const requested = env[AI_LIVE_SMOKE_ENV.receiptsOnly];
+  if (requested === undefined || requested === '0' || requested === '') {
+    if (
+      env[AI_LIVE_SMOKE_ENV.receiptDirectory] !== undefined ||
+      env[AI_LIVE_SMOKE_ENV.preferredJpegOrdinal] !== undefined
+    ) {
+      throw new Error('Receipt-only source inputs require receipt-only mode.');
+    }
+    return false;
+  }
+  if (requested !== '1') throw new Error('Invalid receipt-only mode for the AI smoke runner.');
+
+  const directory = env[AI_LIVE_SMOKE_ENV.receiptDirectory];
+  if (typeof directory !== 'string' || !isAbsoluteLocalPath(directory)) {
+    throw new Error('Receipt-only mode requires an absolute local receipt directory.');
+  }
+  const ordinal = env[AI_LIVE_SMOKE_ENV.preferredJpegOrdinal];
+  if (typeof ordinal !== 'string' || !/^[1-4]$/.test(ordinal)) {
+    throw new Error('Receipt-only mode requires a preferred JPEG index from 1 to 4.');
+  }
+  if (env[AI_LIVE_SMOKE_ENV.receiptPath]) {
+    throw new Error('Receipt-only mode cannot be combined with a single receipt path.');
+  }
+  return true;
+}
+
+function isAbsoluteLocalPath(value) {
+  return isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value);
+}
 
 export function validateAiLiveSmokeOptIn(env = process.env) {
   if (env[AI_LIVE_SMOKE_ENV.optIn] !== '1') {
@@ -43,6 +81,7 @@ export function validateAiLiveSmokeRunner(env, args) {
     return false;
   }
   validateAiLiveSmokeOptIn(env);
+  validateAiLiveReceiptSmokeRequest(env);
   if (env[AI_LIVE_SMOKE_ENV.providerToken]) {
     throw new Error('The WebAPI bearer must remain in the smoke coordinator process memory.');
   }
@@ -492,6 +531,14 @@ export function isolatedProcessEnvironments(env) {
   delete playwright[AI_LIVE_SMOKE_ENV.providerToken];
   delete server[AI_LIVE_SMOKE_ENV.receiptPath];
   delete browser[AI_LIVE_SMOKE_ENV.receiptPath];
+  for (const key of [
+    AI_LIVE_SMOKE_ENV.receiptsOnly,
+    AI_LIVE_SMOKE_ENV.receiptDirectory,
+    AI_LIVE_SMOKE_ENV.preferredJpegOrdinal
+  ]) {
+    delete server[key];
+    delete browser[key];
+  }
   delete browser[AI_LIVE_SMOKE_ENV.proxyToken];
   delete playwright[AI_LIVE_SMOKE_ENV.proxyToken];
   return { server, browser, playwright };
@@ -516,7 +563,10 @@ export function createAiLiveSmokeRunnerEnvironment(
     'HOME',
     'PLAYWRIGHT_BROWSERS_PATH',
     'E2E_CHROME_BIN',
-    AI_LIVE_SMOKE_ENV.receiptPath
+    AI_LIVE_SMOKE_ENV.receiptPath,
+    AI_LIVE_SMOKE_ENV.receiptsOnly,
+    AI_LIVE_SMOKE_ENV.receiptDirectory,
+    AI_LIVE_SMOKE_ENV.preferredJpegOrdinal
   ];
   const env = Object.fromEntries(
     allowedInherited
@@ -540,7 +590,24 @@ export function createAiLiveSmokeRunnerEnvironment(
   };
 }
 
-export function isSuccessfulAiLiveSmokeResult({ runnerExit, cleanupFailed, calls }) {
+export function isSuccessfulAiLiveSmokeResult({
+  runnerExit,
+  cleanupFailed,
+  calls,
+  receiptsOnly = false
+}) {
+  if (receiptsOnly) {
+    const validReceiptRun = isSuccessfulReceiptOnlyRun(calls);
+    return (
+      runnerExit?.code === 0 &&
+      runnerExit.cancelled !== true &&
+      runnerExit.timedOut !== true &&
+      runnerExit.runnerCleaned === true &&
+      cleanupFailed !== true &&
+      validReceiptRun
+    );
+  }
+
   const unsuccessfulIndexes = Array.isArray(calls)
     ? calls.reduce((indexes, call, index) => {
         if (!Number.isInteger(call?.status) || call.status < 200 || call.status >= 300) {
@@ -573,6 +640,43 @@ export function isSuccessfulAiLiveSmokeResult({ runnerExit, cleanupFailed, calls
     calls.length <= AI_LIVE_SMOKE_COMPLETION_BUDGET &&
     (unsuccessfulIndexes.length === 0 || onlySuccessfulReceiptFallbackFailed)
   );
+}
+
+function isSuccessfulReceiptOnlyRun(calls) {
+  if (
+    !Array.isArray(calls) ||
+    calls.length < AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS ||
+    calls.length > AI_LIVE_RECEIPT_SMOKE_COMPLETION_BUDGET
+  ) {
+    return false;
+  }
+
+  let index = 0;
+  let completedTickets = 0;
+  while (index < calls.length) {
+    const call = calls[index];
+    if (call?.schemaName !== 'receipt') return false;
+    if (call.status >= 200 && call.status < 300) {
+      completedTickets += 1;
+      index += 1;
+      continue;
+    }
+
+    const fallback = calls[index + 1];
+    if (
+      call.status !== 400 ||
+      call.stream !== true ||
+      fallback?.schemaName !== 'receipt' ||
+      fallback.status < 200 ||
+      fallback.status >= 300 ||
+      fallback.stream !== false
+    ) {
+      return false;
+    }
+    completedTickets += 1;
+    index += 2;
+  }
+  return completedTickets === 4;
 }
 
 function validateLoopbackOrigin(value) {

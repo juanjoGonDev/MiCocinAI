@@ -144,6 +144,13 @@ const SAFE_RUNNER_PROGRESS = Object.freeze({
     'Último hito E2E: historial del ticket verificado.',
   'test-phase:real-receipt-extracted':
     'Último hito E2E: ticket real sintético de prueba procesado.',
+  'test-phase:real-receipts-inputs-validated':
+    'Último hito E2E: seis fuentes validadas y cuatro tickets preparados en memoria.',
+  'test-phase:real-receipts-started': 'Último hito E2E: comenzó el smoke privado de tickets.',
+  'test-phase:real-receipt-ticket-verified':
+    'Último hito E2E: ticket procesado, revisado y guardado en historial.',
+  'test-phase:real-receipts-all-verified':
+    'Último hito E2E: los cuatro tickets y su revisión quedaron verificados.',
   'runner-error': 'Falló una fase del entorno E2E; se está limpiando.'
 });
 

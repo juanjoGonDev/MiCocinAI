@@ -46,6 +46,7 @@ import {
   type InventarioParaPrompt
 } from './ticket-prompt.js';
 import { lineasNuevas } from './ticket-lines-stream.js';
+import { deduplicateTicketLines } from './ticket-lines-dedup.js';
 import { ticketAnswerSchema } from '../schemas/receipts.schema.js';
 import { RECEIPT_RESPONSE_FORMAT } from '../schemas/ai-generated-output.schema.js';
 import { leerTicket } from './ticket-files.js';
@@ -659,7 +660,7 @@ async function correr(
         'FILE_MISSING'
       );
 
-    const { system, user } = buildTicketPrompt({
+    const { system, user, inventoryContext } = buildTicketPrompt({
       inventarioJson: buildInventarioJson(inventarioDeLaCasa(db, userId, recibo.household_id)),
       esPdf: recibo.file_kind === 'pdf',
       language: recibo.ai_output_language === 'en' ? 'en' : 'es'
@@ -668,13 +669,18 @@ async function correr(
       recibo.file_kind === 'pdf'
         ? [
             { type: 'text', text: user },
+            { type: 'text', text: inventoryContext },
             {
-              type: 'image_url',
-              image_url: { url: `data:application/pdf;base64,${fichero.toString('base64')}` }
+              type: 'file',
+              file: {
+                filename: 'ticket.pdf',
+                file_data: `data:application/pdf;base64,${fichero.toString('base64')}`
+              }
             }
           ]
         : [
             { type: 'text', text: user },
+            { type: 'text', text: inventoryContext },
             {
               type: 'image_url',
               image_url: {
@@ -741,7 +747,7 @@ async function correr(
       if (!sigueActivo) return;
       db.prepare('DELETE FROM receipt_items WHERE receipt_id = ?').run(recibo.id);
       let posicion = 0;
-      for (const linea of validado.data.lines) {
+      for (const linea of deduplicateTicketLines(validado.data.lines)) {
         insertarLinea(db, recibo.id, linea as unknown as Record<string, unknown>, posicion);
         posicion += 1;
       }

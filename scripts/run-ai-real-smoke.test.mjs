@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { runAiLiveSmoke } from './run-ai-real-smoke.mjs';
-import { AI_LIVE_SMOKE_ENV } from './ai-live-smoke-safety.mjs';
+import {
+  AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES,
+  AI_LIVE_SMOKE_ENV
+} from './ai-live-smoke-safety.mjs';
 import { AI_LIVE_SMOKE_DEADLINES } from './ai-live-smoke-contract.mjs';
 
 function createGuardedDependencies(calls) {
@@ -38,6 +41,21 @@ test('coordinator rejects CI before any live setup', async () => {
       dependencies: createGuardedDependencies(calls)
     }),
     /forbidden in CI/
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('coordinator rejects an incomplete receipt-only request before any live setup', async () => {
+  const calls = [];
+  await assert.rejects(
+    runAiLiveSmoke({
+      env: {
+        [AI_LIVE_SMOKE_ENV.optIn]: '1',
+        [AI_LIVE_SMOKE_ENV.receiptsOnly]: '1'
+      },
+      dependencies: createGuardedDependencies(calls)
+    }),
+    /absolute local receipt directory/i
   );
   assert.deepEqual(calls, []);
 });
@@ -219,6 +237,91 @@ test('live coordinator uses the existing WebAPI and never starts the legacy supe
     successMessages[0],
     /"usage":\{"promptTokens":27,"completionTokens":18,"totalTokens":45,"costUsd":0\.09\}/
   );
+});
+
+test('receipt-only coordinator enforces an eight-call ceiling and emits aggregate-only evidence', async () => {
+  const calls = [];
+  const successMessages = [];
+  const errors = [];
+  const progressMessages = [];
+  const sourceDirectory = 'C:/Users/private/tickets';
+  const usage = { promptTokens: 3, completionTokens: 2, totalTokens: 5, costUsd: 0.01 };
+  const receiptCalls = [
+    { status: 200, stream: true, schemaName: 'receipt', elapsedMs: 20, usage },
+    { status: 400, stream: true, schemaName: 'receipt', elapsedMs: 30, usage },
+    { status: 200, stream: false, schemaName: 'receipt', elapsedMs: 40, usage },
+    { status: 200, stream: true, schemaName: 'receipt', elapsedMs: 50, usage },
+    { status: 200, stream: true, schemaName: 'receipt', elapsedMs: 60, usage }
+  ];
+
+  const result = await runAiLiveSmoke({
+    env: {
+      [AI_LIVE_SMOKE_ENV.optIn]: '1',
+      [AI_LIVE_SMOKE_ENV.receiptsOnly]: '1',
+      [AI_LIVE_SMOKE_ENV.receiptDirectory]: sourceDirectory,
+      [AI_LIVE_SMOKE_ENV.preferredJpegOrdinal]: '2'
+    },
+    dependencies: {
+      prepareExistingAiLiveSmokeSession: async () => ({
+        origin: 'http://127.0.0.1:3001',
+        token: 'synthetic-existing-webapi-token',
+        model: 'gpt-5',
+        cleanup: async () => calls.push('session:cleanup')
+      }),
+      createAiLiveProxy: async ({ maxCalls, maxRequestBytes, onRequest, onCompletion }) => {
+        calls.push('proxy:create');
+        assert.equal(maxCalls, 8);
+        assert.equal(maxRequestBytes, AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES);
+        onRequest({ ordinal: 1 });
+        onCompletion({ ordinal: 1, status: 200, elapsedMs: 20, responseFormat: {} });
+        return {
+          clientToken: 'synthetic-proxy-token',
+          baseUrl: 'http://127.0.0.1:43210/v1',
+          metrics: { calls: receiptCalls },
+          close: async () => calls.push('proxy:close')
+        };
+      },
+      createAiLiveSmokeRunnerEnvironment: (parentEnv) => {
+        calls.push('runner:environment');
+        assert.equal(parentEnv[AI_LIVE_SMOKE_ENV.receiptDirectory], sourceDirectory);
+        return { runnerOnly: true };
+      },
+      runAiLiveSmokeRunner: async () => {
+        calls.push('runner:start');
+        return { code: 0, cancelled: false, timedOut: false, runnerCleaned: true };
+      },
+      isSuccessfulAiLiveSmokeResult: ({ receiptsOnly, calls: actualCalls }) =>
+        receiptsOnly === true && actualCalls.length === receiptCalls.length
+    },
+    writeError: (message) => errors.push(message),
+    writeProgress: (message) => progressMessages.push(message),
+    writeSuccess: (message) => successMessages.push(message)
+  });
+
+  assert.equal(result, 0);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(calls, [
+    'proxy:create',
+    'runner:environment',
+    'runner:start',
+    'proxy:close',
+    'session:cleanup'
+  ]);
+  assert.equal(successMessages.length, 1);
+  const summary = JSON.parse(successMessages[0]);
+  assert.deepEqual(summary, {
+    result: 'passed',
+    provider: 'local WebAPI :3001',
+    model: 'gpt-5',
+    sourceCount: 6,
+    tickets: 4,
+    completions: 5,
+    elapsedMs: 200,
+    recoveredFallbacks: 1,
+    usage: { promptTokens: 15, completionTokens: 10, totalTokens: 25, costUsd: 0.05 }
+  });
+  assert.equal(successMessages[0].includes(sourceDirectory), false);
+  assert.equal(progressMessages.includes('Solicitud IA 1/8 enviada al servicio local.'), true);
 });
 
 test('coordinator fails without creating proxy or runner when existing-WebAPI preflight fails', async () => {

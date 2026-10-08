@@ -30,6 +30,20 @@ function jobRow(id: string) {
   return db.prepare('SELECT * FROM ai_jobs WHERE id = ?').get(id) as Record<string, any>;
 }
 
+function seedMovedInventoryProduct(): void {
+  db.prepare(
+    `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color, position)
+     VALUES ('category-drinks', ?, NULL, 'drinks', 'Bebidas', '#123456', 1),
+            ('category-dairy', ?, NULL, 'dairy', 'Lácteos', '#654321', 2)`
+  ).run(userId, userId);
+  db.prepare(
+    `INSERT INTO ingredients (id, user_id, household_id, name, category, quantity, unit)
+     VALUES ('catalog-milk', ?, NULL, 'Leche semidesnatada', 'drinks', 1, 'l')`
+  ).run(userId);
+  // A manual category move immediately before upload must be reflected in the prompt snapshot.
+  db.prepare("UPDATE ingredients SET category = 'dairy' WHERE id = 'catalog-milk'").run();
+}
+
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => (resolve = done));
@@ -53,7 +67,7 @@ beforeEach(async () => {
   const { stopWorker } = await import('./ticket-queue.js');
   stopWorker();
   db.exec(
-    'DELETE FROM household_members; DELETE FROM ai_jobs; DELETE FROM ai_configs; UPDATE users SET household_id = NULL; DELETE FROM households; DELETE FROM users;'
+    'DELETE FROM household_members; DELETE FROM ai_jobs; DELETE FROM ai_configs; DELETE FROM ingredients; DELETE FROM pantry_categories; UPDATE users SET household_id = NULL; DELETE FROM households; DELETE FROM users;'
   );
   db.prepare('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)').run(
     userId,
@@ -613,10 +627,9 @@ describe('AI provider queue dispatcher', () => {
     const { encolarTicket, stopWorker } = await import('./ticket-queue.js');
     try {
       process.env.DATABASE_PATH = join(isolatedDirectory, 'database.sqlite');
-      const { parseImageDataUrl, storeImage, uploadsRoot } = await import('./uploads.js');
-      const image = parseImageDataUrl('data:image/png;base64,iVBORw0KGgo=');
-      expect(image).not.toBeNull();
-      const fileUrl = storeImage('receipts', 'synthetic-queue-ticket', image!, uploadsRoot());
+      const { storeTicket, uploadsRoot } = await import('./uploads.js');
+      const pdf = Buffer.from('%PDF-1.7 synthetic queue ticket');
+      const fileUrl = storeTicket('synthetic-queue-ticket', pdf, 'pdf', uploadsRoot());
       const receiptId = 'synthetic-queue-receipt';
       const finalAnswer = {
         lines: [
@@ -625,12 +638,24 @@ describe('AI provider queue dispatcher', () => {
             quantity: 2,
             unit: 'kg',
             category: 'vegetables',
+            createCategory: false,
             priceMinor: 500,
             offer: { buy: 2, take: 1 },
             confidence: 0.9,
             note: 'synthetic line'
           },
-          { name: 'Pan', priceMinor: 150 }
+          {
+            name: 'Tomáte',
+            quantity: 2,
+            unit: 'kg',
+            category: 'vegetables',
+            createCategory: false,
+            priceMinor: 500,
+            offer: { buy: 2, take: 1 },
+            confidence: 0.7,
+            note: ''
+          },
+          { name: 'Pan', category: 'other', createCategory: false, priceMinor: 150 }
         ],
         store: 'Mercado sintético',
         purchaseDate: '2024-02-29',
@@ -643,6 +668,7 @@ describe('AI provider queue dispatcher', () => {
         `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(finalAnswer) } }] })}\n\n`,
         'data: [DONE]\n\n'
       ].join('');
+      seedMovedInventoryProduct();
       vi.mocked(fetch).mockResolvedValueOnce(
         new Response(
           new ReadableStream<Uint8Array>({
@@ -656,15 +682,55 @@ describe('AI provider queue dispatcher', () => {
       );
       db.prepare(
         `INSERT INTO receipts (id, user_id, status, file_url, file_kind, ai_output_language)
-         VALUES (?, ?, 'queued', ?, 'png', 'en')`
+         VALUES (?, ?, 'queued', ?, 'pdf', 'en')`
       ).run(receiptId, userId, fileUrl);
 
       const jobId = encolarTicket(db, userId, receiptId);
       await waitFor(() => jobRow(jobId).status === 'done');
-      const providerMessages = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body))
-        .messages as { role: string; content: string }[];
+      const providerRequest = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
+      const providerMessages = providerRequest.messages as {
+        role: string;
+        content:
+          | string
+          | Array<{
+              type?: string;
+              text?: string;
+              file?: { filename?: string; file_data?: string };
+            }>;
+      }[];
+      expect(providerRequest.response_format).toEqual(RECEIPT_RESPONSE_FORMAT);
       expect(providerMessages[0]?.content).toContain('English (United Kingdom)');
       expect(providerMessages[0]?.content).toContain('warnings');
+      const ticketContent = providerMessages.find(({ role }) => role === 'user')?.content;
+      expect(Array.isArray(ticketContent)).toBe(true);
+      const ticketTextParts = Array.isArray(ticketContent)
+        ? ticketContent.filter(({ type }) => type === 'text')
+        : [];
+      expect(ticketTextParts).toHaveLength(2);
+      expect(ticketTextParts[0]?.text).toContain('El JSON del inventario viene incluido');
+      expect(ticketTextParts[0]?.text).toContain('no busques un archivo adjunto aparte');
+      const inventoryPart = ticketTextParts[1]?.text ?? '';
+      expect(inventoryPart.startsWith('INVENTARIO_JSON_ACTUAL:\n')).toBe(true);
+      const inventorySnapshot = JSON.parse(
+        inventoryPart.slice('INVENTARIO_JSON_ACTUAL:\n'.length)
+      ) as {
+        categorias: { clave: string; nombre: string }[];
+        productos: { categoria: string; nombre: string; unidad: string }[];
+      };
+      expect(inventorySnapshot.categorias).toContainEqual({ clave: 'dairy', nombre: 'Lácteos' });
+      expect(inventorySnapshot.productos).toContainEqual({
+        categoria: 'dairy',
+        nombre: 'Leche semidesnatada',
+        unidad: 'l'
+      });
+      const filePart = Array.isArray(ticketContent)
+        ? ticketContent.find(({ type }) => type === 'file')
+        : undefined;
+      expect(filePart?.file?.filename).toBe('ticket.pdf');
+      expect(filePart?.file?.file_data?.startsWith('data:application/pdf;base64,')).toBe(true);
+      expect(
+        Array.isArray(ticketContent) && ticketContent.some(({ type }) => type === 'image_url')
+      ).toBe(false);
       expect(jobRow(jobId)).toMatchObject({
         kind: 'receipt',
         status: 'done',
@@ -735,6 +801,85 @@ describe('AI provider queue dispatcher', () => {
       expect(
         db.prepare('SELECT COUNT(*) AS n FROM stores WHERE name = ?').get('Tienda inventada por IA')
       ).toEqual({ n: 0 });
+    } finally {
+      stopWorker();
+      process.env.DATABASE_PATH = originalDatabasePath ?? ':memory:';
+      rmSync(isolatedDirectory, { recursive: true, force: true });
+    }
+  });
+
+  it('includes the fresh household inventory as JSON beside JPEG input', async () => {
+    const originalDatabasePath = process.env.DATABASE_PATH;
+    const isolatedDirectory = mkdtempSync(join(tmpdir(), 'hogaria-ai-queue-jpeg-inventory-'));
+    const { encolarTicket, stopWorker } = await import('./ticket-queue.js');
+    try {
+      process.env.DATABASE_PATH = join(isolatedDirectory, 'database.sqlite');
+      seedMovedInventoryProduct();
+      const { storeTicket, uploadsRoot } = await import('./uploads.js');
+      const fileUrl = storeTicket(
+        'synthetic-jpeg-inventory-ticket',
+        Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+        'jpeg',
+        uploadsRoot()
+      );
+      const receiptId = 'synthetic-jpeg-inventory-receipt';
+      const answer = {
+        lines: [],
+        store: null,
+        purchaseDate: null,
+        currency: 'EUR',
+        totalMinor: null,
+        warnings: []
+      };
+      const encoder = new TextEncoder();
+      const frames = [
+        `data: ${JSON.stringify({ choices: [{ delta: { content: JSON.stringify(answer) } }] })}\n\n`,
+        'data: [DONE]\n\n'
+      ].join('');
+      vi.mocked(fetch).mockResolvedValueOnce(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(encoder.encode(frames));
+              controller.close();
+            }
+          }),
+          { status: 200, headers: { 'content-type': 'text/event-stream' } }
+        )
+      );
+      db.prepare(
+        `INSERT INTO receipts (id, user_id, status, file_url, file_kind)
+         VALUES (?, ?, 'queued', ?, 'jpeg')`
+      ).run(receiptId, userId, fileUrl);
+
+      const jobId = encolarTicket(db, userId, receiptId);
+      await waitFor(() => jobRow(jobId).status === 'done');
+      const request = JSON.parse(String(vi.mocked(fetch).mock.calls[0]?.[1]?.body));
+      expect(request.response_format).toEqual(RECEIPT_RESPONSE_FORMAT);
+      const userMessage = request.messages.find(({ role }: { role: string }) => role === 'user');
+      const parts = userMessage.content as Array<{
+        type?: string;
+        text?: string;
+        image_url?: { url?: string };
+      }>;
+      const textParts = parts.filter(({ type }) => type === 'text');
+      expect(textParts).toHaveLength(2);
+      expect(textParts[0]?.text).toContain('El JSON del inventario viene incluido');
+      const inventoryText = textParts[1]?.text ?? '';
+      const inventory = JSON.parse(inventoryText.slice('INVENTARIO_JSON_ACTUAL:\n'.length)) as {
+        productos: { categoria: string; nombre: string; unidad: string }[];
+      };
+      expect(inventory.productos).toContainEqual({
+        categoria: 'dairy',
+        nombre: 'Leche semidesnatada',
+        unidad: 'l'
+      });
+      expect(parts.some(({ type }) => type === 'file')).toBe(false);
+      expect(
+        parts
+          .find(({ type }) => type === 'image_url')
+          ?.image_url?.url?.startsWith('data:image/jpeg;base64,')
+      ).toBe(true);
     } finally {
       stopWorker();
       process.env.DATABASE_PATH = originalDatabasePath ?? ':memory:';

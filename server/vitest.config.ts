@@ -48,6 +48,7 @@ const COVERED = [
   'src/utils/ai-client.ts',
   'src/utils/ai-output-language.ts',
   'src/utils/ticket-queue.ts',
+  'src/utils/ticket-lines-dedup.ts',
   'src/utils/ticket-prompt.ts',
   'src/routes/receipts.routes.ts',
   'src/config/database.ts',

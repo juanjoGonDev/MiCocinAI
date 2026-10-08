@@ -55,6 +55,48 @@ test('dedicated runner accepts only the opt-in isolated config/spec and can rout
   assert.equal(validateAiLiveSmokeRunner({}, ['tests/e2e/ai-real-smoke.spec.ts']), false);
 });
 
+test('receipt-only runner requires a private source directory and selected JPEG ordinal', () => {
+  const args = ['--config=playwright.ai-real-smoke.config.ts', 'tests/e2e/ai-real-smoke.spec.ts'];
+  const env = {
+    HOGARIA_AI_REAL_SMOKE: '1',
+    HOGARIA_AI_REAL_SMOKE_RUNNER: '1',
+    HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN: 'synthetic-local-proxy-token',
+    HOGARIA_AI_REAL_SMOKE_PROXY_URL: 'http://127.0.0.1:41000/v1',
+    HOGARIA_AI_REAL_SMOKE_MODEL: 'gpt-5',
+    HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1',
+    HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/Users/example/tickets',
+    HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '2',
+    CI: ''
+  };
+
+  assert.equal(validateAiLiveSmokeRunner(env, args), true);
+  assert.throws(
+    () =>
+      validateAiLiveSmokeRunner(
+        { ...env, HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '5' },
+        args
+      ),
+    /JPEG.*index/i
+  );
+  assert.throws(
+    () =>
+      validateAiLiveSmokeRunner(
+        { ...env, HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: undefined },
+        args
+      ),
+    /receipt directory/i
+  );
+  assert.throws(
+    () => validateAiLiveSmokeRunner({ ...env, HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: 'true' }, args),
+    /receipt-only mode/i
+  );
+  assert.throws(
+    () =>
+      validateAiLiveSmokeRunner({ ...env, HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: undefined }, args),
+    /source inputs require receipt-only mode/i
+  );
+});
+
 test('disables all WebAPI prompt capture before token/model setup and restores temporary settings', async () => {
   const originalSettings = {
     captureDetails: true,
@@ -401,6 +443,9 @@ test('keeps the WebAPI bearer out of browser and Playwright environments', () =>
     HOGARIA_AI_REAL_SMOKE_PROVIDER_TOKEN: 'sentinel-private-token',
     HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN: 'sentinel-local-proxy-token',
     HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH: 'C:/Downloads/private-ticket.jpeg',
+    HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/Downloads/private-tickets',
+    HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '2',
+    HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1',
     HOGARIA_AI_REAL_SMOKE: '1',
     E2E_BASE_URL: 'http://127.0.0.1:45678'
   };
@@ -414,10 +459,22 @@ test('keeps the WebAPI bearer out of browser and Playwright environments', () =>
   assert.equal('HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN' in separated.playwright, false);
   assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH' in separated.server, false);
   assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH' in separated.browser, false);
+  assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY' in separated.server, false);
+  assert.equal('HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL' in separated.server, false);
+  assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY' in separated.server, false);
+  assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY' in separated.browser, false);
+  assert.equal('HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL' in separated.browser, false);
+  assert.equal('HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY' in separated.browser, false);
   assert.equal(
     separated.playwright.HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH,
     'C:/Downloads/private-ticket.jpeg'
   );
+  assert.equal(
+    separated.playwright.HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY,
+    'C:/Downloads/private-tickets'
+  );
+  assert.equal(separated.playwright.HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL, '2');
+  assert.equal(separated.playwright.HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY, '1');
   assert.equal(separated.browser.E2E_BASE_URL, source.E2E_BASE_URL);
 });
 
@@ -429,7 +486,9 @@ test('builds a minimal live-runner environment without inherited provider creden
       TEMP: 'C:/Temp',
       PLAYWRIGHT_BROWSERS_PATH: 'C:/pw-browsers',
       E2E_CHROME_BIN: 'C:/Chrome/chrome.exe',
-      HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH: 'C:/Downloads/private-ticket.jpeg',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/Downloads/private-tickets',
+      HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '2',
+      HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1',
       HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS: '1',
       CI: 'true',
       OPENAI_API_KEY: 'sentinel-openai-secret',
@@ -448,7 +507,9 @@ test('builds a minimal live-runner environment without inherited provider creden
   assert.equal(env.CI, '');
   assert.equal(env.PLAYWRIGHT_BROWSERS_PATH, 'C:/pw-browsers');
   assert.equal(env.E2E_CHROME_BIN, 'C:/Chrome/chrome.exe');
-  assert.equal(env.HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH, 'C:/Downloads/private-ticket.jpeg');
+  assert.equal(env.HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY, 'C:/Downloads/private-tickets');
+  assert.equal(env.HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL, '2');
+  assert.equal(env.HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY, '1');
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN, 'synthetic-local-proxy-token');
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_RECIPE_MAX_TOKENS, '4096');
   assert.equal(env.HOGARIA_AI_REAL_SMOKE_CONFIG_TIMEOUT_MS, '240000');
@@ -522,6 +583,72 @@ test('accepts only a fully successful run with nine or ten live completions', ()
   );
   assert.equal(
     isSuccessfulAiLiveSmokeResult({ runnerExit, cleanupFailed: true, calls: calls(9) }),
+    false
+  );
+});
+
+test('accepts four receipt jobs with at most one immediate stream fallback each', () => {
+  const runnerExit = { code: 0, timedOut: false, cancelled: false, runnerCleaned: true };
+  const receipts = Array.from({ length: 4 }, () => ({
+    status: 200,
+    stream: true,
+    schemaName: 'receipt'
+  }));
+  const withFallback = [
+    ...receipts.slice(0, 2),
+    { status: 400, stream: true, schemaName: 'receipt' },
+    { status: 200, stream: false, schemaName: 'receipt' },
+    ...receipts.slice(3)
+  ];
+
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: receipts,
+      receiptsOnly: true
+    }),
+    true
+  );
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: withFallback,
+      receiptsOnly: true
+    }),
+    true
+  );
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: receipts.slice(0, 3),
+      receiptsOnly: true
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: [
+        ...receipts.slice(0, 1),
+        { status: 400, stream: true, schemaName: 'receipt' },
+        { status: 500, stream: false, schemaName: 'receipt' },
+        ...receipts.slice(1)
+      ],
+      receiptsOnly: true
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: [...receipts, { status: 200, schemaName: 'recipe' }],
+      receiptsOnly: true
+    }),
     false
   );
 });

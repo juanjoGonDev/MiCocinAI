@@ -5,6 +5,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
+import { loadAiLiveReceiptPlan } from '../../scripts/ai-live-receipt-inputs.mjs';
 
 const TOKEN_KEY = 'hogar:v1:auth_token';
 const PROVIDER_KEY_MARKER = '__HOGARIA_AI_REAL_SMOKE_PROVIDER_KEY__';
@@ -41,6 +42,7 @@ const LIVE_REQUEST_TIMEOUT_MS = smokeLimit('HOGARIA_AI_REAL_SMOKE_REQUEST_TIMEOU
 const LIVE_TEST_TIMEOUT_MS = smokeLimit('HOGARIA_AI_REAL_SMOKE_TEST_TIMEOUT_MS', 20 * 60_000);
 const LIVE_SMOKE_ENABLED =
   process.env.HOGARIA_AI_REAL_SMOKE === '1' && process.env.HOGARIA_AI_REAL_SMOKE_RUNNER === '1';
+const LIVE_RECEIPTS_ONLY = process.env.HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY === '1';
 const LIVE_SMOKE_PHASE_FILE = process.env.E2E_RUN_DIR
   ? join(process.env.E2E_RUN_DIR, 'ai-live-smoke-phase')
   : undefined;
@@ -103,6 +105,66 @@ function normalizeRecipeText(value: string): string {
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .replace(/\s+/g, ' ');
+}
+
+function hasEquivalentReceiptLine(lines: ReceiptLineForDeduplication[]): boolean {
+  const seen = new Map<string, ReceiptLineForDeduplication[]>();
+  for (const line of lines) {
+    const name = line.name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
+    const quantity = Number(line.quantity ?? 1);
+    const unit = normalizeReceiptUnit(line.unit ?? '');
+    const identity = JSON.stringify([name, Number.isFinite(quantity) ? quantity : 1, unit]);
+    const candidates = seen.get(identity) ?? [];
+    if (candidates.some((candidate) => equivalentReceiptLines(candidate, line))) return true;
+    candidates.push(line);
+    seen.set(identity, candidates);
+  }
+  return false;
+}
+
+type ReceiptLineForDeduplication = {
+  name: string;
+  quantity?: number | null;
+  unit?: string | null;
+  priceMinor?: number | null;
+  offer?: { buy?: number | null; take?: number | null } | null;
+};
+
+function normalizeReceiptUnit(input: string): string {
+  const value = input
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+  return value
+    .replace(/\b(?:kilogramos?|kilos?|kgs?)\b/g, 'kg')
+    .replace(/\b(?:gramos?|grs?)\b/g, 'g')
+    .replace(/\b(?:litros?|lts?|ls)\b/g, 'l')
+    .replace(/\b(?:mililitros?|mls?)\b/g, 'ml')
+    .replace(/\b(?:unidades?|uds?|pzas?)\b/g, 'ud')
+    .replace(/\s+/g, ' ');
+}
+
+function equivalentReceiptLines(
+  left: ReceiptLineForDeduplication,
+  right: ReceiptLineForDeduplication
+): boolean {
+  if (
+    left.priceMinor != null &&
+    right.priceMinor != null &&
+    Number(left.priceMinor) !== Number(right.priceMinor)
+  ) {
+    return false;
+  }
+  const offerKey = (offer: ReceiptLineForDeduplication['offer']) =>
+    offer?.buy != null && offer?.take != null ? JSON.stringify([offer.buy, offer.take]) : null;
+  return offerKey(left.offer) === offerKey(right.offer);
 }
 
 function expectComplexRecipe(recipe: SmokeRecipe): void {
@@ -455,8 +517,115 @@ async function selectShelfPhotoMode(page: Parameters<typeof registerAndGoto>[0])
   await expect(picker.locator('.picker__trigger')).toContainText('Estanteria');
 }
 
+test('procesa cuatro tickets privados y verifica la revisión sin confirmar', async ({ page }) => {
+  test.skip(
+    !LIVE_SMOKE_ENABLED || !LIVE_RECEIPTS_ONLY,
+    'El lote real de tickets solo corre con opt-in específico.'
+  );
+  test.setTimeout(LIVE_TEST_TIMEOUT_MS);
+  page.setDefaultTimeout(LIVE_REQUEST_TIMEOUT_MS);
+
+  const directory = process.env.HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY ?? '';
+  const preferredJpegOrdinal = Number(process.env.HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL);
+  const plan = await loadAiLiveReceiptPlan({ directory, preferredJpegOrdinal });
+  expect(plan.sourceCount).toBe(6);
+  expect(plan.ticketCount).toBe(4);
+  expect(plan.tickets.map(({ sourceFileCount }) => sourceFileCount)).toEqual([1, 1, 1, 3]);
+  reportLiveSmokePhase('real-receipts-inputs-validated');
+
+  await registerAndGoto(page, '/receipts', 'ai-live-receipts-only');
+  const token = await authToken(page);
+  await saveLiveAiConfig(page, token);
+  reportLiveSmokePhase('real-receipts-started');
+
+  for (const [index, ticket] of plan.tickets.entries()) {
+    const extension = ticket.kind === 'pdf' ? 'pdf' : 'jpeg';
+    const uploadResponse = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === '/api/receipts' &&
+        response.request().method() === 'POST'
+    );
+    await page.setInputFiles('input[name="ticketFile"]', {
+      name: `hogaria-smoke-ticket-${index + 1}.${extension}`,
+      mimeType: ticket.mimeType,
+      buffer: ticket.buffer
+    });
+    const uploaded = await uploadResponse;
+    expect(uploaded.status()).toBe(201);
+    const uploadedBody = (await uploaded.json()) as { data?: { id?: string } };
+    const receiptId = uploadedBody.data?.id;
+    expect(typeof receiptId === 'string' && receiptId.length > 0).toBe(true);
+    if (!receiptId) throw new Error('An isolated receipt upload returned no identifier.');
+
+    const detailPath = `/api/receipts/${receiptId}`;
+    const isReadyForReview = async () => {
+      const response = await page.request.get(detailPath, {
+        headers: { authorization: `Bearer ${token}` }
+      });
+      if (!response.ok()) return false;
+      const receipt = (await response.json()).data as {
+        status?: unknown;
+        lines?: unknown;
+      };
+      return (
+        receipt?.status === 'review' && Array.isArray(receipt.lines) && receipt.lines.length > 0
+      );
+    };
+    await expect
+      .poll(isReadyForReview, { timeout: LIVE_REQUEST_TIMEOUT_MS, intervals: [500, 1000, 2000] })
+      .toBe(true);
+
+    const detailResponse = await page.request.get(detailPath, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect(detailResponse.ok()).toBe(true);
+    const receipt = (await detailResponse.json()).data as {
+      lines: ReceiptLineForDeduplication[];
+    };
+    if (index === 3) {
+      expect(
+        hasEquivalentReceiptLine(receipt.lines),
+        'el ticket largo no debe persistir líneas equivalentes repetidas'
+      ).toBe(false);
+    }
+
+    await page.goto(`/receipts/${receiptId}`);
+    const storeField = page.locator('#ticket-tienda');
+    const dateField = page.locator('#ticket-fecha-compra');
+    await expect(storeField).toBeVisible();
+    await expect(dateField).toBeVisible();
+    const rows = page.getByRole('row');
+    expect(await rows.count()).toBeGreaterThan(1);
+    const qaStore = `Hogar QA ticket ${index + 1}`;
+    await storeField.fill(qaStore);
+    await dateField.fill('2024-03-01');
+    const saved = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === detailPath && response.request().method() === 'PATCH'
+    );
+    await page.locator('[data-test="save-receipt-metadata"]').click();
+    expect((await saved).status()).toBe(200);
+    await expect(page.locator('.ficha__metadatos-estado')).toContainText('Cambios guardados');
+    await page.reload();
+    await expect(storeField).toHaveValue(qaStore);
+    await expect(dateField).toHaveValue('2024-03-01');
+    await page.getByRole('link', { name: 'Volver a tickets' }).click();
+    const historyRow = page
+      .locator('[data-test="receipt-history"] [data-test="ticket-history-item"]')
+      .filter({ hasText: qaStore });
+    await expect(historyRow).toHaveCount(1);
+    await expect(historyRow.locator('.ticket__meta')).toContainText('1/3/24');
+    reportLiveSmokePhase('real-receipt-ticket-verified');
+  }
+
+  reportLiveSmokePhase('real-receipts-all-verified');
+});
+
 test('recorre los ocho AiJobKind con WebAPI real y ticket sintético editable', async ({ page }) => {
-  test.skip(!LIVE_SMOKE_ENABLED, 'El flujo real solo corre con opt-in explícito.');
+  test.skip(
+    !LIVE_SMOKE_ENABLED || LIVE_RECEIPTS_ONLY,
+    'El flujo general no corre en el smoke de tickets.'
+  );
   test.setTimeout(LIVE_TEST_TIMEOUT_MS);
   page.setDefaultTimeout(LIVE_REQUEST_TIMEOUT_MS);
   reportLiveSmokePhase('register-start');
