@@ -2122,18 +2122,19 @@ latencias/uso/coste agregados, sin tienda, artículos, importes ni fechas person
       repetir líneas visibles en páginas/fotos solapadas; deduplicar defensivamente líneas equivalentes
       conservando orden y filas de mismo producto con cantidad/precio distintos. Verificar que el ticket
       largo no persiste artículos duplicados.
-- [x] En cada lectura, generar una instantánea actual del hogar con categorías y productos registrados
-      (incluida la categoría vigente tras movimientos manuales) y enviarla como una parte de texto JSON
-      claramente identificada junto con el ticket; no cargar un JSON obsoleto ni incluir existencias,
-      precios o historial de compras. El prompt debe decir que el inventario viene incluido en el mensaje,
-      no pedir un archivo adjunto aparte. El JSON Schema estricto exige `category` no vacía y
-      `createCategory` booleano en cada línea; no admite `null`. Verificarlo en la petición de PDF y JPEG
-      con datos sintéticos.
+- [ ] En cada lectura, generar una instantánea actual del hogar con categorías y productos registrados
+      (incluida la categoría vigente tras movimientos manuales) y adjuntarla como fichero independiente
+      `inventario.json` junto al ticket; no cargar un JSON obsoleto ni incluir existencias, precios o
+      historial de compras. El prompt debe pedir leer el fichero adjunto. El JSON Schema estricto exige
+      `category` no vacía y `createCategory` booleano en cada línea; no admite `null`. Verificar en las
+      peticiones JPEG y PDF que el fichero tiene MIME/nombre/contenido correctos y que la ruta WebAPI lo
+      reenvía como adjunto legible.
 - [x] Enviar PDFs a Chat Completions como parte `type: "file"` con `filename` genérico y
       `file_data: data:application/pdf;base64,...`, nunca como `image_url`; las fotos JPEG siguen como
-      `image_url`. El JSON del inventario viaja como parte `type: "text"` (Chat Completions admite como
-      parte `type: "file"` únicamente documentos PDF); mantener el `response_format` JSON Schema estricto
-      en ambos transportes. Contratos del proveedor: [File inputs](https://developers.openai.com/api/docs/guides/file-inputs)
+      `image_url`. Mantener el `response_format` JSON Schema estricto en ambos transportes. La compatibilidad
+      del fichero JSON como adjunto se valida contra el relay de la WebAPI existente, que recibe partes
+      `type: "file"` y MIME explícito; no se asume soporte equivalente en un endpoint OpenAI directo.
+      Contratos del proveedor: [File inputs](https://developers.openai.com/api/docs/guides/file-inputs)
       y [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs).
 - [ ] Verificar en UI aislada estado/reconocimiento, campos editables, guardado y aparición en historial;
       no confirmar los tickets ni tocar despensa/inventario. Usar nombres genéricos al subir.
@@ -2210,6 +2211,38 @@ cleanup ya existente.
 - [ ] Repetir una sola vez el lote exacto de seis archivos/cuatro tickets sobre el payload actualizado;
       marcar como validado solo si termina la revisión, edición/guardado/historial en UI y cleanup, sin
       duplicados en las tres fotos solapadas. Si falla, conservar el fallo y no ampliar el presupuesto.
+
+### Subunidad QA-AI.RECEIPT-INVENTORY-ATTACHMENT.1 · adjuntar el catálogo visible
+
+**Fuente revalidada (2026-10-08):** la captura que aportó el usuario muestra el prompt con el marcador
+`INVENTARIO_JSON_ACTUAL:` pero sin el JSON a continuación ni un segundo fichero adjunto. Las pruebas
+anteriores solo comprobaron el body HTTP saliente de MiCocinAI, no lo que recibía la UI/modelo a través
+de la WebAPI. En la fuente local de WebAPI, `controller.ts` arma el texto recorriendo solo `part.text`;
+además, `sanitizeOpenAiMessageText` descarta cada línea cuyo primer carácter sea `{` o `[`. La
+instantánea minificada, al viajar como bloque de texto separado, empieza por `{` y se pierde en esa
+frontera. El relay de adjuntos, en cambio, extrae `file.file_data`, conserva el MIME y resuelve
+`application/json` con extensión `.json`. La petición más reciente aportada por el usuario muestra
+categorías diversas y una nota de línea, pero no acredita que el fichero de catálogo se haya adjuntado.
+
+**Decisión:** enviar el catálogo limitado como `inventario.json` real, codificado como parte
+`type: "file"` con MIME `application/json`, y dejar en texto solo las instrucciones para leerlo. El
+adjunto contendrá únicamente tiendas conocidas, categorías y productos/nombre/categoría/unidad vigentes;
+no incluirá existencias, precios, historial, secretos ni datos de tickets. Conservar PDF `file`/JPEG
+`image_url` y `response_format` JSON Schema estricto. No editar la WebAPI compartida para ocultar el
+problema ni alterar su configuración.
+
+- [ ] Añadir primero pruebas fallidas de la petición de proveedor para JPEG y PDF: texto invita a leer
+      `inventario.json`, se adjunta exactamente un fichero JSON con la instantánea fresca, el ticket
+      mantiene su transporte y se conserva `response_format` estricto; comprobar categoría movida.
+- [ ] Verificar en un contrato aislado con WebAPI que el catálogo se conserva como adjunto `application/json`
+      legible aunque las instrucciones de usuario se normalicen; usar contenido sintético, sin ticket real.
+- [ ] Ejecutar pruebas focales y suite server requerida, coverage ≥70 % S/B/F/L por archivo afectado,
+      formato, build/typecheck y E2E apropiada con SQLite temporal; no llamar al proveedor con tickets reales.
+- [ ] Documentar resultados/rollback, commit atómico con hooks completos, push a la rama del PR y comprobar
+      todos los jobs CI del SHA publicado; mantener el PR abierto y fuera de Draft como pidió el usuario.
+
+**Rollback:** revertir únicamente la serialización/adjunto `inventario.json`, sus pruebas de cola/contrato
+y esta subunidad; mantener el snapshot de catálogo consultado en memoria y el transporte PDF/JPEG.
 
 **Rollback:** revertir la ruta de tickets en `server/src/utils/ai-client.ts`, `ticket-queue.ts`,
 `ticket-prompt.ts`, `ticket-lines-dedup.ts` y `server/src/schemas/receipts.schema.ts`, sus specs
