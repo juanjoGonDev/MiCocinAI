@@ -198,4 +198,41 @@ test.describe('authenticated mobile navigation drawer', () => {
       }
     }
   });
+
+  test('mobile and desktop navigation preserve direct routes and browser history', async ({
+    page
+  }) => {
+    await page.setViewportSize({ width: 393, height: 851 });
+    await registerAndGoto(page, '/dashboard', 'Shell browser history');
+
+    const mobileRecipes = page.locator('.bottom-nav__item[href="/recipes"]');
+    await expect(mobileRecipes).toBeVisible();
+    await mobileRecipes.click();
+    await expect(page).toHaveURL(/\/recipes$/);
+    await expect(page.locator('app-recipes')).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.locator('app-dashboard')).toBeVisible();
+    await page.goForward();
+    await expect(page).toHaveURL(/\/recipes$/);
+    await expect(page.locator('app-recipes')).toBeVisible();
+
+    // Deep links and the desktop sidebar must reach the same routed views.
+    await page.goto('/dashboard');
+    await expect(page.locator('app-dashboard')).toBeVisible();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const desktopPantry = page.locator('.sidebar__nav .sidebar__item[href="/pantry"]');
+    await expect(desktopPantry).toBeVisible();
+    await desktopPantry.click();
+    await expect(page).toHaveURL(/\/pantry$/);
+    await expect(page.locator('app-pantry')).toBeVisible();
+
+    await page.goBack();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.locator('app-dashboard')).toBeVisible();
+    await page.goForward();
+    await expect(page).toHaveURL(/\/pantry$/);
+    await expect(page.locator('app-pantry')).toBeVisible();
+  });
 });

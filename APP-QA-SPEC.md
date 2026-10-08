@@ -1166,7 +1166,9 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 ### Navegación y superficies de hogar
 
-- [ ] Shell autenticado: redirección de ruta privada sin sesión; menú lateral, overlay, botón cerrar, Escape, bottom-nav, sidebar de escritorio, cuenta/avatar, cerrar sesión y cola de tickets; verificar ruta directa y atrás/adelante.
+- [x] Shell autenticado: redirección de ruta privada sin sesión; menú lateral, overlay, botón cerrar, Escape, bottom-nav, sidebar de escritorio, cuenta/avatar, cerrar sesión y cola de tickets; verificar ruta directa y atrás/adelante.
+
+**Revalidación integral del shell autenticado (2026-10-08):** `auth.spec.ts`, `main-layout-drawer.spec.ts`, `account.spec.ts` y `receipt-queue-panel-layout.spec.ts`: **40/40** en Chromium y Pixel 5 con rate limit activo; cubren guard privado, drawer/overlay/Escape/foco, bottom-nav/sidebar, perfil/avatar/logout y cola vacía/scroll. `main-layout-drawer.spec.ts` añade una E2E de bottom-nav/sidebar con rutas directas y `goBack`/`goForward`; pasa **2/2** en escritorio y móvil. `route-baseline.spec.ts`, separado con `E2E_RATE_LIMIT=off` por su barrido de alto volumen: **2/2**, 28 rutas y 140 mediciones por proyecto en 320×568, 393×851, 768×1024, 1024×768 y 1440×900; cero errores de página/consola/origen, navegación, componentes ausentes, respuestas HTTP no-2xx inesperadas u overflow. En un primer intento lo mezclé con el rate limit activo y el recorrido agotó el cupo; el guard de `/ai-config` redirigió tras recibir 429. Repetido con el perfil aislado documentado, pasó sin cambios de producto. SQLite/puertos/semillas temporales y cleanup confirmados. No se cambió UI; las capturas sintéticas PC/móvil previas del drawer/cuenta siguen inspeccionadas.
 
 ### QA-SHELL.DRAWER.ESCAPE.1 · Escape y foco del menú móvil (resuelta)
 
@@ -1421,7 +1423,7 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 ## Siguiente unidad de trabajo
 
-1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code` y `/onboarding` se revalidaron en pruebas aisladas. Continuar con `Shell autenticado` y después el resto de acciones por pantalla.
+1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code`, `/onboarding` y el shell autenticado se revalidaron en pruebas aisladas. Continuar con `/dashboard` y después el resto de acciones por pantalla.
 2. QA-REC.INGRESS.1 ya está verificada con Nginx real aislado; la siguiente validación de motor pendiente es Safari/iOS real para la hoja de ofertas de QA-04c.1, sin sustituir safe-area/teclado nativos por emulación WebKit/Chromium.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
 4. QA-04c: el gate global frontend en el hook pre-push del commit `db2eeeb` pasó (**90.20/81.39/88.94/91.57 % S/B/F/L**, 1168/1168 tests, 2026-10-08); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.
