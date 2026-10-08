@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Page, expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 import { shoppingNewListAction } from './helpers/shopping-ui';
@@ -229,6 +229,155 @@ test.describe('Mi cuenta', () => {
     await expect(
       page.locator('.toast--success').filter({ hasText: 'Imagen quitada' })
     ).toBeVisible();
+  });
+
+  test('los errores de avatar quedan visibles y permiten reintentar la subida', async ({
+    page
+  }, testInfo) => {
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(`${error.name}: ${error.message}`));
+    await registerAndGoto(page, '/account', 'acct-photo-retry');
+    const avatarPng = await syntheticAvatarPng(page);
+    await page.locator('[data-test="account-avatar-button"]').click();
+
+    let avatarAttempts = 0;
+    await page.route('**/api/auth/avatar', async (route) => {
+      avatarAttempts += 1;
+      if (avatarAttempts === 1) {
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: false, message: 'UPLOAD_WRITE_FAILED' })
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    // Formato y tamaño se validan antes de entrar al editor: el error es accionable y ninguno de
+    // los dos archivos inválidos debe salir del dispositivo.
+    await page.locator('[data-test="account-photo"]').setInputFiles({
+      name: 'foto.svg',
+      mimeType: 'image/svg+xml',
+      buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    });
+    await expect(page.locator('[data-test="account-photo-error"]')).toContainText(
+      'Puede ser JPEG, PNG o WebP.'
+    );
+    await expect(page.locator('[data-test="avatar-stage"]')).toHaveCount(0);
+    await expect(page.locator('[data-test="account-photo-error"]')).toHaveAttribute(
+      'role',
+      'alert'
+    );
+
+    await page.locator('[data-test="account-photo"]').setInputFiles({
+      name: 'demasiado-grande.jpg',
+      mimeType: 'image/jpeg',
+      buffer: Buffer.alloc(4 * 1024 * 1024 + 1)
+    });
+    await expect(page.locator('[data-test="account-photo-error"]')).toContainText('pesa demasiado');
+    await expect(page.locator('[data-test="avatar-stage"]')).toHaveCount(0);
+    expect(avatarAttempts).toBe(0);
+
+    const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR
+      ? resolve(process.env.E2E_SCREENSHOT_DIR)
+      : null;
+    const captureAvatarState = async (state: 'editor' | 'upload-error') => {
+      if (!screenshotDirectory) return;
+      const viewport =
+        testInfo.project.name === 'chromium'
+          ? { width: 1440, height: 900 }
+          : { width: 393, height: 851 };
+      await page.setViewportSize(viewport);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      mkdirSync(screenshotDirectory, { recursive: true });
+      await page.screenshot({
+        path: join(screenshotDirectory, `account-avatar-${state}-${testInfo.project.name}.png`),
+        animations: 'disabled'
+      });
+    };
+
+    await page.locator('[data-test="account-photo"]').setInputFiles({
+      name: 'foto.png',
+      mimeType: 'image/png',
+      buffer: avatarPng
+    });
+    await expect(page.locator('[data-test="avatar-stage"]')).toBeVisible();
+    await captureAvatarState('editor');
+    const firstUpload = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/auth/avatar') && response.request().method() === 'POST'
+    );
+    await page.locator('[data-test="avatar-editor-use"]').click();
+    expect((await firstUpload).status()).toBe(500);
+
+    // Un fallo de red/servidor no debe ocultarse dentro del paso de recorte: conserva el recorte
+    // para que la misma acción pueda reintentarse sin volver a elegir ni encuadrar la foto.
+    await expect(page.locator('[data-test="account-photo-error"]')).toContainText(
+      'No se pudo subir la foto'
+    );
+    await expect(page.locator('[data-test="account-photo-error"]')).toHaveAttribute(
+      'role',
+      'alert'
+    );
+    await expect(page.locator('[data-test="avatar-stage"]')).toBeVisible();
+    await captureAvatarState('upload-error');
+
+    // El error está en el contenido desplazable del modal: que siga dentro del viewport aunque
+    // el editor ocupe más que una pantalla en vertical/horizontal o en un breakpoint de shell.
+    for (const viewport of [
+      { width: 320, height: 568 },
+      { width: 393, height: 851 },
+      { width: 559, height: 568 },
+      { width: 560, height: 568 },
+      { width: 561, height: 568 },
+      { width: 568, height: 320 },
+      { width: 1023, height: 768 },
+      { width: 1024, height: 768 },
+      { width: 1025, height: 768 }
+    ]) {
+      await page.setViewportSize(viewport);
+      const modalBody = page.locator('.modal__body');
+      await modalBody.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await expect(page.locator('[data-test="account-photo-error"]')).toBeInViewport();
+      const layout = await page.evaluate(() => {
+        const body = document.querySelector<HTMLElement>('.modal__body')!;
+        const error = document.querySelector<HTMLElement>('[data-test="account-photo-error"]')!;
+        const bodyRect = body.getBoundingClientRect();
+        const errorRect = error.getBoundingClientRect();
+        return {
+          viewportWidth: window.innerWidth,
+          documentWidth: document.documentElement.scrollWidth,
+          bodyLeft: bodyRect.left,
+          bodyRight: bodyRect.right,
+          bodyTop: bodyRect.top,
+          bodyBottom: bodyRect.bottom,
+          errorLeft: errorRect.left,
+          errorRight: errorRect.right,
+          errorTop: errorRect.top,
+          errorBottom: errorRect.bottom
+        };
+      });
+      expect(layout.documentWidth).toBeLessThanOrEqual(layout.viewportWidth);
+      expect(layout.errorLeft).toBeGreaterThanOrEqual(layout.bodyLeft);
+      expect(layout.errorRight).toBeLessThanOrEqual(layout.bodyRight);
+      expect(layout.errorTop).toBeGreaterThanOrEqual(layout.bodyTop);
+      expect(layout.errorBottom).toBeLessThanOrEqual(layout.bodyBottom);
+    }
+
+    const retryUpload = page.waitForResponse(
+      (response) =>
+        response.url().includes('/api/auth/avatar') && response.request().method() === 'POST'
+    );
+    await page.locator('[data-test="avatar-editor-use"]').click();
+    expect((await retryUpload).status()).toBe(200);
+    await expect(page.locator('[data-test="account-photo-error"]')).toHaveCount(0);
+    await expect(page.locator('[data-test="avatar-editor-use"]')).toHaveCount(0);
+    await expect(page.locator('[data-test="account-avatar"] img')).toBeVisible();
+    expect(avatarAttempts).toBe(2);
+    expect(pageErrors).toEqual([]);
   });
 
   test('la contrasena se cambia aqui, y Cancelar limpia los tres campos', async ({

@@ -358,6 +358,14 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
             (cancelled)="backToChoose()"
             (applied)="onCropped($event)"
           />
+          <p
+            class="account__error"
+            *ngIf="photoError()"
+            role="alert"
+            data-test="account-photo-error"
+          >
+            {{ photoError() }}
+          </p>
         } @else {
           <div class="avatar-choose">
             <div class="avatar-choose__preview">
@@ -400,7 +408,12 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
                 {{ 'account.quitar_la_foto' | t }}
               </app-button>
             </div>
-            <p class="account__error" *ngIf="photoError()" data-test="account-photo-error">
+            <p
+              class="account__error"
+              *ngIf="photoError()"
+              role="alert"
+              data-test="account-photo-error"
+            >
               {{ photoError() }}
             </p>
             <p class="avatar-choose__busy" *ngIf="uploading()">

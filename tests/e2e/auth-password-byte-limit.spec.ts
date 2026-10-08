@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 import { waitForStableView } from './helpers/recipe-fixtures';
@@ -26,9 +26,7 @@ async function capturePasswordError(
 ): Promise<void> {
   const error = page.locator(name);
   const directory = join(
-    process.cwd(),
-    '.e2e-screenshots',
-    'qa-auth-pw-limit-1',
+    resolve(process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-auth-pw-limit-1'),
     testInfo.project.name
   );
   mkdirSync(directory, { recursive: true });

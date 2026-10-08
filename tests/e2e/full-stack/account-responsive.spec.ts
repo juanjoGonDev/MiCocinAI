@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../fixtures';
 import { registerUser } from '../helpers/auth';
@@ -53,9 +53,7 @@ test('Cuenta no desborda en móvil estrecho', async ({ page }, testInfo) => {
 
   if (testInfo.project.name === 'chromium') {
     const screenshotDir = join(
-      process.cwd(),
-      '.e2e-screenshots',
-      'qa-account-responsive-20261001',
+      resolve(process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-account-responsive-20261001'),
       'final-desktop'
     );
     mkdirSync(screenshotDir, { recursive: true });
@@ -73,9 +71,7 @@ test('Cuenta no desborda en móvil estrecho', async ({ page }, testInfo) => {
   await expect(page.locator('[data-test="account-tabs"]')).toBeVisible();
   if (testInfo.project.name === 'mobile-chrome') {
     const screenshotDir = join(
-      process.cwd(),
-      '.e2e-screenshots',
-      'qa-account-responsive-20261001',
+      resolve(process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-account-responsive-20261001'),
       'final-mobile'
     );
     const screenshotPath = join(screenshotDir, 'account-320x568.png');

@@ -394,6 +394,24 @@ El harness usa el `Referer` same-origin para asociar el request a la ruta origen
 
 **Capturas sintéticas inspeccionadas:** `.e2e-screenshots/qa-account-name-draft/chromium/name-draft-1440x900.png`, `.e2e-screenshots/qa-account-name-draft/mobile-chrome/name-draft-320x568.png` y `name-draft-568x320.png` (ignoradas por Git). Rollback de esta revalidación: revertir su commit elimina solo la regresión E2E de normalización y sus correcciones de descripción/evidencia; el fix de concurrencia permanece. Rollback de la implementación inicial: revertir la unidad atómica de Cuenta restaura `account.component.ts` y elimina `account-name-draft.ts`, sus pruebas y esta sección E2E/spec, sin tocar unidades ajenas.
 
+### QA-ACCOUNT.AVATAR-RETRY.1 · error de subida visible y reintentable (resuelta)
+
+**Fuente revalidada (2026-10-08):** `AccountComponent.onPhotoPicked()` valida tipo y 4 MiB antes de entrar al recorte; `onCropped()` conserva el editor al fallar y prepara `photoError()` para que se pueda reintentar. El template solo mostraba ese error en la vista de selección; por ello, un HTTP 500 dejaba el modal en el recorte, sin aviso inline accesible aunque el borrador de imagen siguiera disponible.
+
+**Conducta esperada:** formatos no admitidos y archivos vacíos/demasiado grandes se rechazan localmente; si falla la subida, el aviso accesible aparece en el paso de recorte, se conserva el encuadre y el usuario puede reintentar o cancelar. Un segundo envío exitoso persiste y permite quitar el avatar.
+
+- [x] Añadir primero E2E de error + retry: el baseline Chromium y Pixel 5 falla en el aviso ausente tras HTTP 500; usar runner aislado, sin tocar servidor/datos normales ni invocar IA/proveedores.
+- [x] Anunciar los errores de avatar mediante `role="alert"` tanto en selección como en recorte, manteniendo el fichero/encuadre y los controles existentes.
+- [x] Probar SVG y JPEG >4 MiB sin abrir recorte ni enviar POST; PNG sintético aceptado; primera subida HTTP 500 con alerta visible y recorte conservado; retry HTTP 200, persistencia tras recarga y quitar foto.
+- [x] Medir alerta/modal en 320×568, 393×851, 559/560/561×568, 568×320 y 1023/1024/1025×768 en Chromium + Pixel 5: alerta desplazable dentro del modal, `scrollWidth` sin desbordar y `pageerror` vacío. Capturar e inspeccionar baseline y error PC/móvil.
+- [x] Revalidar nombre concurrente, límites bcrypt, pestañas/URL, contraseña/cancelación, logout e información en E2E real; comprobar typecheck, `check-ui`, Prettier, Karma focal y build de producción. Sin ramas/funciones nuevas de TypeScript; el cambio de producción solo muestra el estado del template.
+
+**TDD rojo y corrección:** la primera ejecución aislada mostró el error reproducible en Chromium y Pixel 5: falta `[data-test="account-photo-error"]` después del 500 (2/2 rojos), aunque `photoError()` ya estaba guardado. El cambio mínimo pinta esa señal en la rama de recorte y hace que el error de selección también sea un alert.
+
+**Evidencia verde (2026-10-08):** `account.spec.ts`, `account-name-draft.spec.ts` y `auth-password-byte-limit.spec.ts`, runner aislado con `E2E_RATE_LIMIT=on`, SQLite/puertos/semillas temporales y cleanup: **30/30** en Chromium + Pixel 5; tras añadir la matriz del estado de error, la prueba focal final da **2/2** con nueve tamaños/orientaciones por proyecto, sin overflow ni `pageerror`. `tests/e2e/full-stack/account-responsive.spec.ts` contra build de producción y limitador activo: **2/2**, 21 combinaciones de viewport/estado por proyecto; Karma `avatar-image.spec.ts`: **4/4**. `typecheck:e2e`, `check-ui` (**208 ficheros/21 reglas**), Prettier focal, `git diff --check` y build pasan. No se bajó el gate frontend global existente.
+
+**Capturas sintéticas comparables, inspeccionadas e ignoradas por Git:** baseline Cuenta `.e2e-screenshots/qa-account-route-c50c625a24df4348b1ee0ff9582ea832/final-desktop/account-1440x900.png` y `final-mobile/account-320x568.png`; estado del editor/error `.e2e-screenshots/qa-account-avatar-matrix-7e5e21610c614ca18b8c9b3f224dce94/account-avatar-{editor,upload-error}-{chromium,mobile-chrome}.png`. Se verificó `.gitignore`. Rollback: revertir el commit atómico de QA-ACCOUNT.AVATAR-RETRY.1 elimina el alert en recorte, la regresión E2E y el ajuste para dirigir capturas a carpeta de ejecución; no revierte avatar/crop ni cambios previos de Cuenta.
+
 ## Unidad QA-PANTRY.1 · alta manual accesible en móvil (resuelta)
 
 **Fuente revalidada antes de implementar:** el comentario y `(onClick)="openAddModal()"` de `PantryComponent` definen «+ Agregar» como la acción que abre el modal de alta de la pestaña activa. `.pantry__header` distribuye título y `.pantry__header-acciones` con `flex`, pero la fila de acciones no declara `flex-wrap` ni un reflujo móvil; hay breakpoints cercanos en 480, 600, 768 y 1023 px que deben volver a comprobarse antes de tocar estilos. En Playwright Pixel 5, la prueba existente de Dashboard expiró al pulsar «+ Agregar»; el registro muestra interceptación alternada por `pantry-anadir-catalogo` y el botón de la cola de tickets en `header`. La captura sintética del fallo muestra la fila superior cortada/desplazada. Esto acredita un fallo de interacción real, pero todavía hay que medir límites y solapamientos en viewport, no inferir su geometría solo por la captura.
@@ -1205,7 +1223,7 @@ En cada flujo probar: camino válido, validación/límites, doble envío, carga,
 
 - [ ] `/dashboard`: estados con/sin datos, resumen, vencimientos, comidas/recetas y cada CTA; verificar los destinos anotados en discrepancias.
 - [x] `/household`: crear hogar, unirse por código, código incorrecto, copiar/regenerar invitación, miembros/roles, permisos para compartir, salir del hogar y estados sin hogar.
-- [ ] `/account`: tabs y URL, editar/cancelar nombre, seguridad/cambio de contraseña, cerrar sesión, información de cuenta; avatar: formatos/tamaño permitidos, recorte, zoom, recentrar, cancelar, subir, quitar, error y persistencia.
+- [x] `/account`: tabs y URL, editar/cancelar nombre, seguridad/cambio de contraseña, cerrar sesión, información de cuenta; avatar: formatos/tamaño permitidos, recorte, zoom, recentrar, cancelar, subir, quitar, error y persistencia.
 - [ ] `/preferences`: tabs/URL y recarga, perfil, alergias, gustos, comidas/horas y objetivos; añadir/quitar opciones personalizadas, guardar/descartar, aviso de cambios sin guardar y enlaces a onboarding/despensa.
 - [x] `/settings`: tema claro/oscuro/sistema, idioma ES/EN, módulos habilitar/deshabilitar, reinicio/persistencia y rutas directas con módulo oculto.
 
@@ -1446,7 +1464,7 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 ## Siguiente unidad de trabajo
 
-1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code`, `/onboarding`, el shell autenticado, los CTA actuales de `/dashboard` y `/household` se revalidaron aislados. Continuar con `/account`; mantener pendiente la discrepancia de alcance Today del dashboard (vencimientos/lista y presupuesto/cola IA) hasta resolverla antes de cerrar esa ruta.
+1. QA-AUTH.PW-LIMIT.ALERT-LANDSCAPE.1 y QA-AUTH.REGISTER.FORM.1 están cerradas; `/auth/forgot-password`, `/auth/register`, `/invite/:code`, `/onboarding`, el shell autenticado, `/household` y `/account` se revalidaron aislados; los CTA actuales de `/dashboard` también están probados, pero esa ruta sigue abierta por la discrepancia de Today (vencimientos/lista, presupuesto y cola IA). Continuar con `/preferences`; resolver la discrepancia de Dashboard antes de marcar esa ruta completa.
 2. QA-REC.INGRESS.1 ya está verificada con Nginx real aislado; la siguiente validación de motor pendiente es Safari/iOS real para la hoja de ofertas de QA-04c.1, sin sustituir safe-area/teclado nativos por emulación WebKit/Chromium.
 3. Cubrir la matriz responsive global: breakpoints B−1/B/B+1, orientación, scroll, teclado, safe-area, tablet y navegadores emulados además de Chromium.
 4. QA-04c: el gate global frontend en el hook pre-push del commit `db2eeeb` pasó (**90.20/81.39/88.94/91.57 % S/B/F/L**, 1168/1168 tests, 2026-10-08); mantenerlo al añadir cobertura focal ≥70 % en cada nueva unidad y revalidar la fuente antes de cada lote. No rebajar gates superiores existentes.

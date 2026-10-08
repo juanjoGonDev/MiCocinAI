@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 
@@ -66,9 +66,7 @@ test.describe('Borrador del nombre en Cuenta', () => {
         await expect(cancelButton).toBeVisible();
 
         const screenshotDirectory = join(
-          process.cwd(),
-          '.e2e-screenshots',
-          'qa-account-name-draft',
+          resolve(process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-account-name-draft'),
           testInfo.project.name
         );
         mkdirSync(screenshotDirectory, { recursive: true });
