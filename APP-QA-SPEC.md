@@ -2960,21 +2960,36 @@ Tab y Enter; la página no adquiere overflow. Todas las pestañas conservan un o
 desktop y móvil. El foco/selección no altera la geometría. Las diferencias de contenido (tres frente a
 cinco secciones) se conservan.
 
-- [ ] Añadir primero una regresión Playwright real aislada para Account y Preferences; comparar medidas,
+- [x] Añadir primero una regresión Playwright real aislada para Account y Preferences; comparar medidas,
       padding, gap, fuente, borde y radio con tolerancia ≤1 CSS px en 320, 393, 568×320, 559/560/561,
       767/768/769, 1023/1024/1025 y 1440 px; exigir targets ≥44×44. El baseline debe fallar por wrap de
       Cuenta ≤560 px y por altura táctil de 43 px.
-- [ ] Normalizar el grupo móvil de Cuenta al contrato desplazable/no encogible de Preferencias y fijar
+- [x] Normalizar el grupo móvil de Cuenta al contrato desplazable/no encogible de Preferencias y fijar
       mínimo 44 px a los controles equivalentes en ambas rutas; no alterar rutas/query, contenido ni color.
-- [ ] Repetir en Chromium escritorio y Pixel 5; probar selección normal/foco, scroll hasta la última tab
+- [x] Repetir en Chromium escritorio y Pixel 5; probar selección normal/foco, scroll hasta la última tab
       con toque y teclado, estados activos sin cambio de caja y ausencia de overflow global.
-- [ ] Guardar e inspeccionar capturas sintéticas comparables PC/móvil de ambas rutas. Ejecutar typecheck,
+- [x] Guardar e inspeccionar capturas sintéticas comparables PC/móvil de ambas rutas. Ejecutar typecheck,
       `check:ui`, Prettier, build y `git diff --check`; coverage instrumentable S/B/F/L: N/A si el cambio
       queda en CSS estático, documentando la razón. Mantener abierta la auditoría visual global.
 
+**Evidencia (2026-10-08):** TDD aislado en Chromium y Pixel 5 falló antes de los cambios: Cuenta envolvía
+sus tabs en dos filas a 320 px; tras normalizar el scroll, la medición E2E detectó 43 px de alto en la
+primera tab de Cuenta (debajo del target táctil; Preferencias compartía padding y tipografía). El arreglo
+conserva los tabs en una fila desplazable hasta 560 px y fija `min-height: 44px` en Cuenta y Preferencias.
+`node scripts/run-isolated-playwright.mjs
+--workers=1 --project=chromium --project=mobile-chrome tests/e2e/settings-tabs-geometry.spec.ts
+--reporter=line` pasó **2/2**: contrasta propiedades calculadas en los 13 viewports de la lista (incluidos
+559/560/561 y B−1/B/B+1), controla selección/foco y targets ≥44×44, alcanza la última pestaña con toque
+Pixel 5 y Tab/Enter, sin overflow global ni errores de consola/JS. Se desactivó solo la transición durante
+la medición para comparar el estado geométrico asentado. Karma frontend pasó **1201/1201** con
+90,32/81,46/88,96/91,75 % S/B/F/L; `typecheck:e2e`, `check:ui` (210 archivos/21 reglas, 0 incidencias),
+Prettier focal, build Angular de producción y `git diff --check` pasan. Coverage focal instrumentable:
+N/A, cambio solo CSS estático validado con E2E; no se rebajó gate. Capturas sintéticas PC/móvil de ambas
+rutas inspeccionadas en `.e2e-screenshots/qa-settings-tabs-final-20261008/` (ignoradas por Git).
+
 **Rollback focal:** restaurar únicamente el comportamiento de wrap/overflow de las pestañas en
-`AccountComponent`, retirar su regresión Playwright y este subapartado; preservar la familia compartida y
-las demás vistas de Cuenta y Preferencias.
+`AccountComponent` y `min-height` de las pestañas en `AccountComponent` y `PreferencesComponent`, retirar
+su regresión Playwright y este subapartado; preservar las demás vistas de Cuenta y Preferencias.
 
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.TEXT-FIELDS.1 · campos de texto de una línea
 

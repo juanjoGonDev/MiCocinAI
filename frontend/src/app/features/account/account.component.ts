@@ -463,6 +463,7 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
         border-bottom: 1px solid var(--border-default);
       }
       .tab {
+        min-height: 44px;
         background: none;
         border: none;
         padding: var(--space-3) var(--space-4);
@@ -739,7 +740,17 @@ const ACCOUNT_TABS = ['account', 'security', 'info'] as const;
 
       @media (max-width: 560px) {
         .account__tabs {
-          flex-wrap: wrap;
+          min-width: 0;
+          max-width: 100%;
+          flex-wrap: nowrap;
+          overflow-x: auto;
+          overflow-y: hidden;
+          overscroll-behavior-inline: contain;
+          scrollbar-width: thin;
+        }
+        .tab {
+          flex: 0 0 auto;
+          white-space: nowrap;
         }
         .account__fact {
           grid-template-columns: 1fr;

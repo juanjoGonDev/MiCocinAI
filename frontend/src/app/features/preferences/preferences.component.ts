@@ -320,6 +320,7 @@ const PREFERENCES_TABS = ['profile', 'allergies', 'tastes', 'meals', 'goal'] as 
         scrollbar-width: thin;
       }
       .tab {
+        min-height: 44px;
         flex: 0 0 auto;
         white-space: nowrap;
         background: none;
@@ -597,10 +598,12 @@ export class PreferencesComponent implements OnInit {
 
   /** El objetivo en palabras, para que la pestaña no muestre el valor interno. */
   goalLabel(): string {
-    return this.goalOptions
-      .filter((option) => this.taste.goals.includes(option.value))
-      .map((option) => this.i18n.t(option.labelKey))
-      .join(' · ') || '—';
+    return (
+      this.goalOptions
+        .filter((option) => this.taste.goals.includes(option.value))
+        .map((option) => this.i18n.t(option.labelKey))
+        .join(' · ') || '—'
+    );
   }
 
   toggleGoal(goal: TasteProfile['goals'][number]): void {
