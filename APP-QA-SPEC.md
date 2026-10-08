@@ -2090,9 +2090,11 @@ que contenga una credencial real.
 - [x] Redactar los diagnósticos de generación, conexión y lectura de tickets antes de que alcancen la
       UI, base de datos o logs; conservar solo información de transporte/estado que no incluya secretos
       ni payloads arbitrarios.
-- [ ] Separar la limpieza del smoke con credencial del runner general: salida/trace/video/screenshot
-      desactivados, 1 worker, reintentos apagados y limpieza garantizada de SQLite, uploads y artefactos
-      incluso si el proceso falla; demostrar que la suite normal nunca usa red exterior.
+- [x] Separar el smoke con credencial del runner general: salida/trace/video/screenshot
+      desactivados, 1 worker y cero reintentos. Borrar solo SQLite, uploads y artefactos propios tras
+      confirmar que el proceso y los puertos aislados cerraron; si no se puede verificar, conservar
+      temporales y fallar en vez de reportar éxito. Demostrar que la suite normal usa proveedores
+      sintéticos/loopback y excluye el smoke live.
 
 **Evidencia TDD (2026-10-03):** las pruebas se añadieron antes del endurecimiento y fallaron con
 sentinels en errores HTTP/transporte, respuesta JSON válida/malformada, eco de clave corta, streaming,
@@ -2104,8 +2106,8 @@ respuesta de conexión, API de receta y fila/consulta de ticket. Con `DATABASE_P
 
 Las respuestas upstream de estas pruebas son simuladas, sin llamadas externas. `shopping.routes.ts`
 ya fallaba `prettier --check` en el `HEAD` inicial; se conservaron sus líneas ajenas al cambio sin
-reformatear el archivo entero. El manejo del runner con secretos y la verificación explícita de red
-quedan pendientes; no se hizo ninguna llamada real a proveedor.
+reformatear el archivo entero. En esta revalidación histórica aún quedaban pendientes el manejo del
+runner con secretos y la verificación explícita de red.
 
 **Revalidación de CI (2026-10-08):** el run `37711377694` falló porque el test comprobaba que la
 respuesta no contuviera el prefijo genérico `sk-`; un ID aleatorio de configuración coincidió por
@@ -2114,6 +2116,30 @@ sintético que contiene el prefijo: la assertion antigua falla; la nueva verific
 campos (`api_key`/`apiKey`) y del valor sintético completo enviado como clave, conservando el ID.
 El test dirigido pasó **1/1** y `ai.routes.spec.ts` **57/57**, sin modificar producción ni llamar al
 proveedor.
+
+**Revalidación del runner (2026-10-08):** `playwright.ai-real-smoke.config.ts` mantiene reporter de
+consola, `retries: 0`, `workers: 1` y `screenshot`/`trace`/`video` apagados; `outputDir` queda dentro
+del directorio de aislamiento temporal. El coordinador reduce el entorno heredado, excluye el bearer
+de WebAPI del runner/navegador y solo informa hitos allowlistados. El runner detiene la app antes de
+comprobar puertos y borrar su propio directorio (DB, uploads y artefactos); ante cierre o limpieza no
+verificables devuelve fallo y conserva el temporal en lugar de borrarlo mientras pueda estar en uso.
+Las pruebas de cleanup/cancelación son deterministas y el coordinador solo acepta éxito cuando recibe
+`runnerCleaned: true`.
+
+`node --test scripts/ai-live-existing-webapi.test.mjs scripts/ai-live-smoke-safety.test.mjs
+scripts/ai-live-smoke-runner-control.test.mjs scripts/ai-live-smoke-contract.test.mjs
+scripts/run-ai-real-smoke.test.mjs`: **48/48**. Smoke E2E dedicado con
+`node scripts/run-isolated-playwright.mjs --config=playwright.ai-real-smoke.config.ts
+--project=chromium-ai-real-smoke tests/e2e/ai-real-smoke.spec.ts`, rate limit activo y Chrome local:
+**1 pasada, 1 escenario live omitido por falta de opt-in**, cleanup confirmado; la pasada usa solo el
+proveedor loopback sintético. Las suites normales se revalidaron en SQLite/puertos temporales con
+`node scripts/run-isolated-playwright.mjs --project=chromium tests/e2e/ai-config.spec.ts
+tests/e2e/ai-provider-queue.spec.ts tests/e2e/recipes-ai-generation.spec.ts`, `E2E_RATE_LIMIT=on`:
+**41/41**. El censo de llamadas de IA confirma configuración interceptada, proveedores locales
+loopback o fixtures sintéticas; `playwright.config.ts` excluye explícitamente el smoke live y
+`playwright.full-stack.config.ts` solo carga `tests/e2e/full-stack/`. No se usaron claves reales ni
+proveedor exterior. La E2E real del runner usa SQLite/puertos temporales y reporta que eliminó
+DB/artefactos tras detener su app aislada.
 
 ## Unidad QA-LAYOUT.CONTENT-GUTTERS.1 · márgenes homogéneos en las vistas
 
