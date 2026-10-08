@@ -300,6 +300,44 @@ test('cancellation before preflight does not touch the local service', async () 
   assert.equal(requests, 0);
 });
 
+test('cancellation after owned token creation cleans it before model catalog access', async () => {
+  const controller = new AbortController();
+  const { calls, fetchImpl: baseFetch } = createWebApi();
+  const fetchImpl = async (input, options = {}) => {
+    const response = await baseFetch(input, options);
+    if ((options.method ?? 'GET') === 'POST' && new URL(input).pathname === '/admin/api/tokens') {
+      controller.abort();
+    }
+    return response;
+  };
+
+  await assert.rejects(
+    prepareExistingAiLiveSmokeSession({ env: {}, signal: controller.signal, fetchImpl }),
+    /smoke was cancelled/
+  );
+
+  const pathFor = (call) => new URL(call.url).pathname;
+  const tokenCreateIndex = calls.findIndex(
+    (call) => call.method === 'POST' && pathFor(call) === '/admin/api/tokens'
+  );
+  const tokenDeleteIndex = calls.findIndex(
+    (call) => call.method === 'DELETE' && pathFor(call) === `/admin/api/tokens/${OWNED_TOKEN_ID}`
+  );
+  const tokenVerificationIndex = calls.findIndex(
+    (call, index) =>
+      index > tokenDeleteIndex && call.method === 'GET' && pathFor(call) === '/admin/api/tokens'
+  );
+
+  assert.notEqual(tokenCreateIndex, -1);
+  assert.ok(tokenDeleteIndex > tokenCreateIndex);
+  assert.ok(tokenVerificationIndex > tokenDeleteIndex);
+  assert.equal(calls.filter((call) => pathFor(call) === '/v1/models').length, 0);
+  assert.equal(
+    calls.some((call) => call.method === 'PATCH'),
+    false
+  );
+});
+
 test('uses a securely supplied bearer only for strict gpt-5 model validation', async () => {
   const { calls, fetchImpl } = createWebApi();
   const session = await prepareExistingAiLiveSmokeSession({

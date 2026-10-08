@@ -1849,22 +1849,14 @@ la prueba real de navegación/persistencia para cerrar la brecha de interacción
 
 ## Unidad QA-AI.REAL-INTEGRATIONS.1 · smoke real de proveedores IA
 
-**Fuente revalidada (2026-10-03):** `server/src/utils/ai-client.ts` declara ocho `AiJobKind` y sus
-rutas están repartidas entre `ai.routes.ts`, `pantry.routes.ts`, `shopping.routes.ts` y
-`receipts.routes.ts`. `tests/e2e/ai-real-smoke.spec.ts` ya define aserciones para los ocho flujos
-(incluye Calendar/Pantry tras persistencia, tienda/fecha del ticket e historial/edición); además,
-hay suites sintéticas loopback para los contratos UI/API. Hallazgo: ambos usos de `shopping_photo`
-reutilizan `syntheticReceiptPng` y dejan el modo `auto`, así que el test no comprueba una foto
-de estantería ni el contrato de extracción por modo. Separar el fixture, elegir `shelf` por UI y
-comprobar el payload; la corrida real debe reconocer al menos un producto etiquetado. Ninguna corrida real está demostrada por
-esos fixtures. `run-ai-real-smoke.mjs` valida opt-in/CI y ejecuta una pila E2E con base temporal; el
-coordinador actual usa la WebAPI existente, verifica controles de privacidad sin cambiarlos y limpia
-su token propio, si lo crea, al terminar. Todavía falta prueba del coordinador de que omitir opt-in o
-usar `CI=true` no inicie sesión, proxy ni Playwright, y evidencia determinista de cleanup ante
-cancelación. El usuario autoriza el perfil local de WebAPI y sus llamadas reales; el proveedor objetivo será solo el modelo activo
-disponible en esa WebAPI, sin afirmar cobertura de vendors no configurados. El harness actual todavía
-usa solo `Tomate` en recetas, recetas múltiples, recomendaciones y planificación; no demuestra receta
-compleja ni salida live, por lo que esa evidencia sigue pendiente.
+**Fuente revalidada (2026-10-08):** `server/src/utils/ai-client.ts` declara ocho `AiJobKind` y sus
+rutas siguen en `ai.routes.ts`, `pantry.routes.ts`, `shopping.routes.ts` y `receipts.routes.ts`.
+`tests/e2e/ai-real-smoke.spec.ts` cubre los ocho flujos, receta compleja, dos recetas distintas y una
+foto sintética de estantería con modo `shelf`. El coordinador valida opt-in/CI, usa la WebAPI ya
+levantada, ejecuta la aplicación con SQLite/puertos temporales y solo limpia los recursos que crea.
+Una corrida live autorizada ya validó `gpt-5` texto+imagen y los ocho flujos: 10 completions, incluida
+la recuperación de `receipt` de streaming HTTP 400 a no-stream HTTP 200. No se usaron tickets reales.
+El alcance live solo prueba el modelo activo de esa WebAPI; no afirma cobertura de otros proveedores.
 
 | `AiJobKind`        | Ruta de la aplicación                        | Aserción real mínima con fixture sintética                                                                        |
 | ------------------ | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
@@ -1891,20 +1883,23 @@ intento si el stream cae antes del primer fragmento. Por tanto, el proxy aplica 
 acepta 9–10 respuestas 2xx y falla ante cualquier exceso, ruta ausente, veredicto inválido o error
 de limpieza. Concurrencia 1; parar en el primer fallo; no hacer reintentos manuales.
 
-**Privacidad y aislamiento obligatorio:** el puerto 3001 no tenía listener durante la revalidación y
-`AGENTA_ENABLED=false`, `AGENTA_CAPTURE_CONTENT=false`, `AGENTA_API_KEY=''` anulan el `.env` de
-WebAPI en un preflight de proceso que verificó esas tres condiciones sin leer/imprimir la credencial;
-`DATABASE_PATH=:memory:` también se resolvió como se esperaba. La ejecución live debe iniciar solo
-un proceso propio en `127.0.0.1:3001`, si el puerto sigue libre, con DB/backup/log/artifacts temporales
-y las tres anulaciones; un bootstrap en ese mismo proceso comprueba flags y rutas antes de importar
-`main.ts`. Si falla la attestation o el puerto está ocupado, no inicia ni contacta al proveedor. No
-edita `.env`/fuentes WebAPI ni inicia el servidor con su configuración normal. Captura de cuerpos,
-Agenta/tracing y otros destinos de telemetría de contenido quedan desactivados; se detiene únicamente
-el PID propio y se eliminan solo los temporales creados por el smoke.
+**Privacidad y aislamiento obligatorio (contrato vigente):** usar solo la WebAPI ya levantada en
+`127.0.0.1:3001`; el smoke no inicia, detiene ni reconfigura ese servicio, sus logs, su perfil o su
+base. El preflight es de solo lectura y valida identidad/readiness, ajustes de registro, grabación de
+sesión, HTML diagnóstico y modelo. En la corrida autorizada el registro local estaba habilitado,
+pero `maxBodyChars`, `maxHeaderValueChars` y `maxHeaders` eran 0; grabación de sesión y HTML
+diagnóstico estaban desactivados. El permiso explícito `HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS=1`
+acepta ese perfil acotado sin cambiarlo. Si la attestation falla, no se envía ninguna completion.
+Cuando no hay bearer seguro en el entorno, se crea un único token propio, nunca expira y se borra y
+verifica por ID al terminar; tokens preexistentes no se modifican. El bearer solo permanece en
+coordinador/proxy, nunca en el runner. La app usa SQLite, puertos, semilla y artefactos temporales
+aislados, con cleanup confirmado. Las imágenes y ticket usados son fixtures sintéticas; no se han
+procesado tickets personales/reales.
 
-El bearer WebAPI será temporal, caducará y se borrará en `finally`; solo reside en el coordinador y el
-proxy local que lo presenta a WebAPI. No se entrega al runner Playwright ni al backend E2E: ese backend
-solo recibe una credencial aleatoria y limitada al proxy, que no sirve para autenticarse en WebAPI.
+El bearer WebAPI solo reside en memoria del coordinador y el proxy local que lo presenta a WebAPI;
+si se crea para el smoke, no expira, pero se borra y verifica por ID al terminar. No se entrega al
+runner Playwright ni al backend E2E: ese backend solo recibe una credencial aleatoria y limitada al
+proxy, que no sirve para autenticarse en WebAPI.
 Ninguna credencial aparece en argumentos, navegador, fuentes, specs, logs, capturas, traces, fixtures,
 SQLite ni memoria persistente. El proxy solo reenvía a `127.0.0.1:3001`, rechaza redirects/hosts/rutas
 ajenos, no guarda prompt/respuesta y expone únicamente estado, modelo, duración y uso/coste si WebAPI
@@ -1912,14 +1907,14 @@ los devuelve. El smoke es opt-in, prohibido en CI y excluido de la suite normal;
 nunca se reporta como verde. Una E2E sintética independiente seguirá comprobando que la suite normal
 no contacta la red exterior.
 
-- [ ] Mantener la tabla exhaustiva alineada con el enum y rutas vigentes; comprobar modelo activo/texto+imagen sin leer ni imprimir bearer.
-- [ ] Automatizar la attestation del proceso WebAPI aislado, el veto por puerto ocupado/Agenta activo, DB/log/artifacts temporales y cleanup del PID/directorio propio.
-- [ ] Completar el smoke opt-in con los ocho `AiJobKind`, presupuesto 9–10, una sola configuración activa, concurrencia 1, `retryAttempts: 0` al crear y parada ante el primer fallo.
-- [ ] Hacer que la E2E valide los contratos de cada resultado; para ticket verificar tienda/fecha reales de la imagen sintética, edición UI, persistencia tras recarga e historial.
-- [ ] Para `shopping_photo`, usar fixture de estantería sintética distinta del ticket, elegir `shelf` desde el picker, verificar el payload y que el modelo devuelva al menos un producto etiquetado editable antes de aplicar.
+- [x] Mantener la tabla exhaustiva alineada con el enum y rutas vigentes; el preflight live validó el modelo activo `gpt-5` con entrada texto+imagen sin imprimir bearer.
+- [x] Usar attestation de solo lectura para la WebAPI existente; no iniciar/parar ni cambiar settings. Aislar DB/puertos/artifacts del runner y limpiar token/proxy/runner propios.
+- [x] Completar el smoke opt-in con los ocho `AiJobKind`, presupuesto duro 10, una configuración activa, concurrencia 1, `retryAttempts: 0` al crear y parada ante el primer fallo.
+- [x] Hacer que la E2E valide los contratos de cada resultado; el ticket sintético reconoció tienda/fecha, permitió edición UI y persistió historial tras recarga.
+- [x] Para `shopping_photo`, usar fixture de estantería sintética distinta del ticket, elegir `shelf` desde el picker, verificar el payload y devolver un producto etiquetado editable antes de aplicar.
 - [x] Mantener `server/src/routes/ai.routes.ts` con cobertura focal ≥70 % en statements, branches, functions y lines; incluir recomendaciones, persistencia de plan semanal y comparador de recetas con varios ingredientes.
-- [ ] Probar setup, opt-in/CI, allowlist, redacción, cancelación, exceso de presupuesto y cleanup; ejecutar suites sintéticas fuera de red y verificar que omisión/fallo del smoke es rojo, no verde. Incluir una prueba del coordinador que rechace sin opt-in o con `CI=true` antes de invocar supervisor, sesión, proxy o runner.
-- [ ] Ejecutar una corrida live autorizada en el modelo activo; registrar solo modelo, resultado, recuento/latencia/uso y coste si está disponible. Mantenerla manual y fuera de CI.
+- [x] Probar setup, opt-in/CI, allowlist, redacción, cancelación, exceso de presupuesto y cleanup; las suites sintéticas no contactan proveedor exterior y omisión/fallo es rojo.
+- [x] Ejecutar una corrida live autorizada en el modelo activo; registrar solo modelo, resultado, recuento/latencia/uso y coste si está disponible. Mantenerla manual y fuera de CI.
 
 **Evidencia focal de rutas AI (2026-10-03):** el baseline con las pruebas anteriores pasó **17/17**, pero `ai.routes.ts` quedó bajo el gate: **66.16/65/72.41/66.15 % S/B/F/L**. Se añadieron pruebas de recomendaciones con preferencias/comidas recientes, planificación semanal con persistencia y comidas bloqueadas, y una segunda receta con varios ingredientes para ejecutar el comparador. Con `DATABASE_PATH=:memory:`, el run final `pnpm --filter @hogaria/server exec vitest run --coverage.enabled --coverage.reportsDirectory=$report --coverage.include=src/routes/ai.routes.ts src/routes/ai.routes.spec.ts` pasó **20/20**; cobertura focal **83.83/72.50/96.55/83.58 % S/B/F/L**. El informe quedó en `%TEMP%\hogaria-ai-routes-coverage-20261003-r5`; `pnpm --filter @hogaria/server run build`, Prettier focal y `git diff --check` pasan. `fetch` del proveedor se sustituyó por fixture; sin llamadas externas.
 
@@ -1930,33 +1925,28 @@ cancelación del runner y cleanup del proceso propio. `tests/e2e/ai-real-smoke.s
 su prueba loopback de seis tipos con fixture sintética (sin bearer/proveedor exterior), aislada con
 `--config=playwright.ai-real-smoke.config.ts` y Chromium: **1/1**, DB/puertos temporales limpiados.
 La configuración Playwright estándar excluye este archivo, por lo que se requiere la configuración
-focal. Estas pruebas no ejecutan el coordinador con opt-in ausente/CI ni sustituyen el smoke real;
-la corrida live sigue pendiente.
+focal. Estas pruebas no ejecutaban entonces el coordinador con opt-in ausente/CI ni sustituían el
+smoke real; la corrida live se completó en la revalidación posterior del 2026-10-08.
 
-**Estado local revalidado (2026-10-04):** `Get-NetTCPConnection` no muestra listener en `3001`, pero
-un `fetch` anónimo de Node a `/health/ready` devolvió **200** y otro a `/` devolvió **200** con identidad
-`web-api`. Por tanto el proceso coordinador sí alcanza el servicio; la discrepancia con la tabla de
-sockets puede ser de forwarding/namespace y no permite atribuir dueño al proceso. El `401` observado
-por MCP Browser en `/api/health` pertenece a otra ruta/contexto. Ninguna de estas respuestas valida
-bearer ni modelo. No hay bearer aprobado en el entorno; no se leyó el portapapeles/token, no se llamó
-a un endpoint autenticado ni hubo completions live; tampoco se inició/reconfiguró WebAPI ni se
-procesaron tickets de Descargas. El runner actual inicia una WebAPI propia, crea un bearer de 30 min
-y modifica ajustes de logging, contrario a la instrucción de usar la instancia existente; el resultado
-live sigue pendiente y nunca se declara verde.
+**Nota histórica (2026-10-04, sustituida por la revalidación del 2026-10-08):** `Get-NetTCPConnection`
+no mostraba listener en `3001`, aunque los probes de Node alcanzaban `web-api`; no se podía atribuir
+dueño al proceso ni validar bearer/modelo. En ese momento no hubo completions live y el runner aún
+iniciaba/reconfiguraba una WebAPI propia. Esa ruta quedó sustituida: la implementación vigente usa la
+instancia existente, no cambia su configuración y la corrida real queda documentada arriba.
 
 ### Subunidad QA-AI.EXISTING-WEBAPI.1 · usar la instancia local autorizada
 
-**Fuente revalidada (2026-10-04):** la instrucción activa del usuario pide la WebAPI existente en
+**Fuente revalidada (2026-10-08):** la instrucción activa del usuario pide la WebAPI existente en
 `localhost:3001`, configuración `webapi / Custom / gpt-5 / concurrencia 1`, usar el token local
 autorizado y, si no está disponible desde una fuente segura, permite crear uno para las pruebas. El
 usuario había especificado que ese token no caducara; el smoke debe borrarlo al terminar. El harness
 actual usa la WebAPI existente, admite bearer efímero de entorno o crea un token propio con
 `expiresAt: null` y borra/verifica solo ese token al terminar; no inicia ni reconfigura el servicio y
-aborta antes de usar el modelo si no puede verificar que request-body/session/diagnostic capture ya
-están desactivados. Las pruebas focales de sus módulos pasan, pero el smoke live sigue sin ejecutarse
-y el caso actual de receta usa un ingrediente. Ningún token ha sido leído ni ninguna completion real se
-ha realizado en esta sesión. Esta subunidad reemplaza instrucciones anteriores incompatibles de iniciar
-otra WebAPI, cambiar privacidad o usar un token corto.
+aborta antes de usar el modelo si los ajustes observados no satisfacen el perfil permitido. El smoke
+live ejecutado el 2026-10-08 completó 10 requests con `gpt-5`; la E2E incluye receta con 11
+ingredientes y tres niveles, dos recetas distintas y foto `shelf`. Esta subunidad reemplaza
+instrucciones anteriores incompatibles de iniciar otra WebAPI, cambiar privacidad o usar un token
+corto.
 
 **Contrato único para el smoke live:** modo manual independiente y opt-in contra la instancia ya
 existente. Nunca iniciar, parar o reconfigurar WebAPI; no cambiar sus settings de privacidad/logs,
@@ -1983,16 +1973,16 @@ latencias/uso/coste agregados, sin tienda, artículos, importes ni fechas person
 
 - [x] Confirmar desde Node coordinador `GET /health/ready` y `/` sin Authorization (200/200, identidad
       `web-api`); esto solo prueba conectividad/identidad, no autoriza modelo ni bearer.
-- [ ] Implementar fuente efímera del bearer para `existing-webapi`, incluida creación opcional del token
+- [x] Implementar fuente efímera del bearer para `existing-webapi`, incluida creación opcional del token
       propio autorizado y su borrado/verificación; probar opt-in/CI, servicio ausente, 401, modelo
       incorrecto, redacción, allowlist y que no toca settings/perfil/tokens preexistentes.
-- [ ] Añadir primero E2E/test de coordinador con mocks loopback: secreto nunca entra al runner, artefactos,
+- [x] Añadir primero E2E/test de coordinador con mocks loopback: secreto nunca entra al runner, artefactos,
       SQLite o logs; budget y concurrency siguen limitados; la ruta antigua no se activa como fallback.
-- [ ] Verificar de solo lectura redacción/captura de request y session logs desde el servicio ya
+- [x] Verificar de solo lectura redacción/captura de request y session logs desde el servicio ya
       levantado; si no es verificable, no enviar tickets reales ni completar smoke live.
-- [ ] Ejecutar los ocho flujos reales opt-in con `gpt-5`, stop-on-first-failure y métricas agregadas; sin
+- [x] Ejecutar los ocho flujos reales opt-in con `gpt-5`, stop-on-first-failure y métricas agregadas; sin
       reintentos/manual retries, conservar DB/artifacts solo mientras se demuestra cleanup.
-- [ ] En el mismo presupuesto estricto, probar generación real con al menos 8 ingredientes sintéticos
+- [x] En el mismo presupuesto estricto, probar generación real con al menos 8 ingredientes sintéticos
       variados y una preparación de varias fases; validar ingredientes presentes una sola vez en el JSON,
       pasos utilizables y contenido `basic`/`intermediate`/`expert` no vacío. La receta múltiple recibe
       ingredientes variados y devuelve 2 borradores distintos; la planificación transmite más de un
@@ -2003,27 +1993,40 @@ latencias/uso/coste agregados, sin tienda, artículos, importes ni fechas person
       Mantener presupuesto/concurrencia acotados, comenzar por el ticket señalado como mejor y abortar
       si privacidad/redacción o cleanup no quedan verificados.
 
+**Evidencia QA-AI.REAL-INTEGRATIONS.1 (2026-10-08):** `node --test scripts/ai-live-existing-webapi.test.mjs
+scripts/run-ai-real-smoke.test.mjs scripts/ai-live-smoke-safety.test.mjs scripts/ai-live-smoke-runner-control.test.mjs`
+y `node --test scripts/ai-live-smoke-contract.test.mjs` pasaron en conjunto **48/48** tras añadir la
+regresión de cancelación descrita abajo. La E2E sintética loopback pasó **1/1** con proyecto
+`chromium-ai-real-smoke`; usa SQLite/puertos temporales. Smoke live autorizado: `gpt-5`, 10 completions,
+latencias agregadas en ms `[146487, 15872, 152151, 117259, 19133, 22275, 19050, 30608, 15, 39796]`;
+la llamada 9 de `receipt` devolvió 400 al pedir stream y el fallback no-stream devolvió 200. El proceso
+confirmó cleanup del runner y borrado/verificación del token propio. No se pasó un ticket real.
+
 **Rollback:** retirar este modo/fixture E2E y esta subunidad sin tocar el comportamiento de proveedor
 existente; las pruebas sintéticas y el smoke anterior opt-in deben seguir explícitos y separados.
 
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
-**Fuente revalidada (2026-10-03):** el coordinador instala `SIGINT`/`SIGTERM` antes de invocar el
-flujo, propaga `AbortSignal` al supervisor/setup y termina el runner Playwright mediante su protocolo
-IPC de limpieza. Los `finally` intentan rollback de token/ajustes de privacidad y parada de la WebAPI;
-el supervisor conserva temporales si no puede confirmar proceso detenido y puerto cerrado. Falta
-prueba determinista del orden de cleanup en cada fase, especialmente si la cancelación ocurre durante
-startup/attestation o antes de que el coordinador reciba el handle del proceso. El contrato de
-seguridad exige apagar únicamente procesos propios y no eliminar datos bajo un proceso/listener activo.
+**Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
+debe parar/reiniciar el servicio ni revertir settings. `prepareExistingAiLiveSmokeSession` propaga
+`AbortSignal` antes y durante requests normales; su ruta de limpieza ignora la señal para borrar y
+verificar solo el token propio. El coordinador cierra primero el proxy y luego limpia la sesión; el
+runner Playwright solicita cierre por IPC y confirma procesos/puertos antes de limpiar SQLite y
+temporales. Tests ya cubrían cancelación antes del preflight, del runner, durante E2E y cleanup del
+coordinador; se añade cobertura del instante posterior a crear el token y anterior a consultar modelo.
+Los deadlines vigentes en `ai-live-smoke-contract.mjs` son 270 s/request, 20 min/test, 21 min/global
+y 22 min/watchdog. La corrida live alcanzó 152 s en la completion más lenta, por lo que el antiguo
+límite de 90 s no representa la latencia del modelo activo; el plazo de 270 s conserva margen sin
+elevar el techo de 10 completions ni permitir retries/hard-stop.
 
-- [ ] Propagar cancelación en startup WebAPI, preparación de sesión y ejecución E2E; responder con fallo
-      seguro después de intentar restaurar settings/quitar token y apagar únicamente procesos propios.
-- [ ] El runner E2E debe confirmar cierre de procesos y puertos antes de limpiar sus temporales; ante
-      cierre no verificable, preservar los datos para no borrar bajo un proceso activo.
-- [ ] Cubrir cancelación antes/durante startup, durante setup posterior a cambios de privacidad y durante
-      E2E con pruebas deterministas sin proveedor; comprobar orden de cleanup y ausencia de secretos.
-- [ ] Dar a las 9–10 completions secuenciales hasta 90 s cada una más margen de setup/cleanup; alinear
-      timeout E2E/global/watchdog y TTL del token sin recurrir a un hard-stop que omita cleanup.
+- [x] Propagar cancelación en preparación de sesión y ejecución E2E; responder con fallo seguro,
+      limpiar el token propio y cerrar el proxy sin modificar/parar la WebAPI existente.
+- [x] Confirmar cierre de procesos y puertos del runner antes de limpiar temporales; ante cierre no
+      verificable, preservar datos para no borrar bajo un proceso activo.
+- [x] Cubrir cancelación antes/durante setup tras creación del token y durante E2E con pruebas
+      deterministas sin proveedor; comprobar orden de cleanup y no imprimir secretos.
+- [x] Alinear límite a 270 s por request, 20 min/test, 21 min/global y 22 min/watchdog; respetar
+      el presupuesto duro de 10 completions y no recurrir a retries ni hard-stop.
 
 ### Subunidad QA-AI.SECRET-REDACTION.1 · proteger credenciales y datos en errores upstream
 
