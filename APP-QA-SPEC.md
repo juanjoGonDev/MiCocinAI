@@ -3299,6 +3299,35 @@ imports/plantillas no relacionados; no se modificaron budgets. La auditoría vis
 **Rollback focal:** retirar la clase/estilo compartido de estos cuatro títulos, restaurar sus reglas
 locales y quitar esta regresión y subunidad; mantener intactos los encabezados de otras jerarquías.
 
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.STAT-CARDS.1 · métricas de Dashboard y Despensa
+
+**Fuente revalidada (2026-10-08):** las tarjetas de resumen de Dashboard y Despensa comparten la misma
+clase `.stat-card`, la misma separación de icono (`--space-3`) y tipografía de valor/etiqueta. El bloque de
+Dashboard declara `padding: var(--space-4)` (16 px); el de Despensa declara `var(--space-3) var(--space-4)`
+(12 px arriba/abajo). Esta discrepancia geométrica no figura como excepción. La superficie externa sí es
+funcionalmente distinta: Dashboard dibuja tarjetas independientes; Despensa agrupa tres celdas en una
+superficie continua con separadores y apila esas celdas en móvil. Ese tratamiento de borde/radio/fondo se
+conserva y no justifica cambiar el padding del contenido.
+
+**Contrato:** los `.stat-card` de ambas vistas comparten padding de 16 px en los cuatro lados, gap,
+alineación y tipografía de valor/etiqueta; anchos dependen del grid contenedor y no se fuerzan iguales.
+Despensa conserva `font-variant-numeric: tabular-nums`; superficies/divisores del contenedor siguen sus
+variantes funcionales actuales. Sin cambio de datos, etiquetas, orden ni acciones.
+
+- [ ] Añadir primero una E2E roja con usuario sintético vacío que mida todas las `.stat-card` en
+      `/dashboard` y `/pantry`: padding, gap, alineación y tipografía de valor/etiqueta deben coincidir
+      con tolerancia ≤1 CSS px; el baseline reproduce 12 px frente a 16 px de padding vertical.
+- [ ] Cambiar solo el padding interno de Despensa al contrato compartido; preservar wrapper continuo,
+      separadores, colores, anchuras responsivas y números tabulares.
+- [ ] Repetir Chromium y Pixel 5 en 320×568, 393×851, 600/601 y 1440×900; validar todas las tarjetas,
+      ausencia de overflow y persistencia/estado vacío estable, sin escrituras a DB normal.
+- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil de las dos rutas; ejecutar `typecheck:e2e`,
+      `check:ui`, Prettier, build, pruebas focales, `git diff --check` y coverage ≥70 % S/B/F/L si
+      aparece lógica instrumentable. Registrar evidencia y rollback antes de cerrar.
+
+**Rollback focal:** restaurar el padding vertical previo solo en `.stat-card` de Despensa, retirar la
+regresión E2E y esta subunidad; no revertir el contrato de los títulos ni otros componentes de resumen.
+
 ### Subunidad QA-CALENDAR.EARLY-HOURS.1 · hora actual visible en la rejilla
 
 **Fuente revalidada antes de implementar (2026-10-04):** el contrato histórico vigente de `HOGARIA-SPEC.md §8f`
