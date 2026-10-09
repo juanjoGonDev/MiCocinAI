@@ -4138,6 +4138,20 @@ peticiones que pudieron completarse. No hay grupo real no enviado que pueda proc
 respuesta, categorías y deduplicación siguen sin validar. Para cerrar la unidad hace falta una nueva fuente
 no enviada o que el usuario cambie expresamente el criterio de no reenvío.
 
+**Revalidación tras indicar el usuario que WebAPI ya debería funcionar (2026-10-09, 20:58):**
+`D:\projects\webApi` está en `feat/session-attachment-previews`, HEAD `7eee7c7c`; su árbol
+conserva el cambio ajeno `tools.txt` sin tocarlo. El fix de producción `fc324f07` es anterior al
+listener actual (PID 50248, iniciado 13:10:59Z); `GET /health/ready` responde `ready=true`,
+`storage=ready`. La regresión local
+`pnpm exec vitest run --config vitest.clipboard-e2e.config.ts
+tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts --reporter=dot` pasó **18/18**.
+Es cobertura de browser con páginas/archivos sintéticos locales: no consulta al proveedor ni prueba
+la petición live de MiCocinAI. No se reinició WebAPI ni se leyeron logs administrativos. Sigue sin
+haber fuente real segura para reenviar: los PDF individuales ya respondieron, y la JPEG y el PDF de
+tres fotos pudieron llegar al modelo en intentos anteriores. No se repitió ningún ticket; la
+extracción real, schema/categorías y deduplicación permanecen pendientes hasta recibir una fuente
+nueva no enviada o autorización explícita para cambiar la regla de no repetición.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
