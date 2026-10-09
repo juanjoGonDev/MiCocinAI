@@ -4,7 +4,7 @@
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1242/1242 con cobertura 91.50/82.44/90.03/92.94 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
-- **IA / tickets reales (2026-10-09, vigente):** WebAPI sigue en HEAD `a6105c20` con cambios locales no confirmados; PID 59588 está listo y arrancó después de las modificaciones de producción. El smoke sintético directo WebAPI pasó con ambos marcadores. El reintento aislado de MiCocinAI validó el contrato de los adjuntos y `response_format`, pero falló en el primer ticket (stream HTTP 400, fallback HTTP 502; cero respuestas 2xx) y se detuvo antes del PDF largo; no se reenvían los PDF potencialmente completados. QA-AI.REAL-INTEGRATIONS.1 sigue abierto.
+- **IA / tickets reales (2026-10-09, vigente):** el listener WebAPI respondió listo y el único smoke admisible (las tres fotos como un ticket) subió ticket + inventario, comprobó `response_format` estricto y envió el prompt; no llegó una respuesta final (stream HTTP 400, fallback HTTP 504 tras timeout esperando el reply). El ticket queda excluido de cualquier reintento; parsing/schema, deduplicación y revisión no validados. El token temporal propio se revocó, pero quedó pendiente eliminar un directorio temporal aislado porque Windows bloqueó su limpieza. QA-AI.REAL-INTEGRATIONS.1 sigue abierto.
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -3249,17 +3249,17 @@ por lo que no invalidan esta reproducción. El resultado sintético previo que s
 marcadores tampoco demuestra que ChatGPT recibiera dos tarjetas: el JSON puede provenir del contexto
 inline. La spec vigente de WebAPI deja sin marcar la clasificación del nombre staged y el fallo cerrado.
 
-No se ejecutó otra llamada live: la causa se reprodujo antes de tocar el proveedor. No se abrió ni se
-reenvió ningún ticket real; la solicitud JPEG anterior, potencialmente ambigua, y los PDF individuales
-siguen excluidos, y no se envió el PDF largo. La validación de extracción/schema, categorías,
-deduplicación, revisión e historial continúa pendiente. Para retomar, WebAPI debe reconocer el prefijo
-multipart numérico, fallar cerrado para el inventario requerido y demostrar con evidencia de upload
-(no solo marcadores) que ambos ficheros llegaron al modelo.
+**Situación antes del nuevo smoke (2026-10-09, 10:02):** no se envió otra llamada live: la causa de
+upload se reprodujo antes de tocar el proveedor. La JPEG anterior, potencialmente ambigua, y los PDF
+individuales seguían excluidos; el PDF largo todavía no se había enviado. Para retomar, WebAPI debía
+reconocer el prefijo multipart numérico, fallar cerrado para el inventario requerido y demostrar con
+evidencia de upload (no solo marcadores) que ambos ficheros llegaron al modelo.
 
-**Revalidación del arreglo WebAPI (2026-10-09; sin reenviar tickets):** la rama local
-`D:\projects\webApi` está ahora en `b55f958`; el fix de producción está en `246291eb` y el commit
-posterior registra la aceptación live sintética. El smoke sintético pasó contra PID 47764, que inició
-después del fix. El listener actual es PID 23540, iniciado a las 10:02:01, también después del fix;
+**Revalidación del arreglo WebAPI antes del nuevo smoke (2026-10-09, 10:02; sin reenviar tickets):**
+el checkout observado entonces en `D:\projects\webApi` estaba en `b55f958`; el fix de producción
+estaba en `246291eb` y el commit posterior registraba la aceptación live sintética. El smoke sintético
+pasó contra PID 47764, que inició después del fix. El listener observado entonces era PID 23540,
+iniciado a las 10:02:01, después del fix;
 `/health/ready` devuelve `ready=true`, `storage=ready`. El SHA-256 del executor en el checkout
 (`138A09D6…BBC5F38`) coincide con el valor documentado por la spec de WebAPI. Esa spec registra el
 smoke live con dos ficheros sintéticos: `uploadAttachmentCount=2`,
@@ -3268,16 +3268,37 @@ smoke live con dos ficheros sintéticos: `uploadAttachmentCount=2`,
 repetidas aquí, sin proveedor, pasaron **33/33** con el comando registrado arriba. No repetí la prueba
 live sintética ni envié tickets reales en esta revalidación.
 
-La JPEG preferida continúa excluida: el intento previo acabó en HTTP 400/502 sin respuesta 2xx y el
-log disponible no permite probar que el turno no se completara. El PDF largo formado por las otras
-tres fotos nunca se envió y es el único input real elegible. El harness actual solo permite selección
-`unsubmitted-only`, que volvería a incluir la JPEG ambigua. El harness ya tiene selección
-`long-ticket-only`: su prueba sintética confirma un PDF de tres páginas y que solo se leen las tres
-JPEG no preferidas (ni la JPEG ambigua ni los PDF originales); el coordinador limita esa corrida a un
-ticket y dos peticiones como máximo. Las pruebas focales de este cambio pasaron **42/42** y
-`pnpm run typecheck:e2e` pasó. La carpeta de fuente contiene seis ficheros regulares (2 PDF/4 JPEG) y
-la JPEG preferida sigue siendo el ordinal 4 según el orden del cargador. Aún no se ha enviado el PDF
-largo; extracción/schema, categorías, deduplicación, revisión e historial siguen sin validar.
+La JPEG preferida continúa excluida: el intento previo pudo completar upstream pese al HTTP 400/502,
+por lo que no se reenvía. El único input elegible era el ticket largo formado por las otras tres fotos.
+El harness `long-ticket-only` confirma sintéticamente que se genera un PDF de tres páginas y solo se
+leen esas tres JPEG (no la JPEG preferida ni los PDF originales); el coordinador limita la ejecución a
+un ticket y a su request streaming más un único fallback. Las pruebas focales del harness pasaron
+**42/42** y `pnpm run typecheck:e2e` pasó. La carpeta de fuente contenía seis ficheros regulares
+(2 PDF/4 JPEG), y la JPEG preferida era el ordinal 4 según el orden del cargador.
+
+**Ejecución live del ticket largo (2026-10-09, 10:12; aislada):** tras preflight se envió una única
+petición con el PDF temporal de las tres fotos y el inventario JSON; los PDF individuales y la JPEG
+preferida no se leyeron ni reenviaron. El proxy del smoke observó `response_format` de tipo
+`json_schema` estricto y exactamente un adjunto JSON de inventario junto con el adjunto del ticket.
+En los logs correlacionados de WebAPI: `attachmentCount=2`, `requiredInventoryAttachmentCount=1`,
+`inventorySnapshotUploadCount=1`, `inlineContextCount=0`; la preparación terminó correctamente y la
+verificación de ChatGPT registró `expectedCount=2`, `visibleCount=2`, dos nombres coincidentes,
+`pending=false`, `rejected=false`. `Prompt submitted` ocurrió a las 10:12:46.
+
+No se recibió un reply final: el stream devolvió eventos de actividad, pero `wait_for_reply` terminó
+con `timeoutMs=120000` y `OpenCodeHttpError`; el log seguro registró `responseCompleted=false` y no
+apareció `Reply detected` ni una respuesta validada. MiCocinAI observó stream HTTP 400 y el único
+fallback permitido acabó en HTTP 504. El smoke se detuvo
+sin reenviar otro ticket; este ticket largo también queda excluido de reintentos porque pudo avanzar
+upstream. No se validaron extracción, `response_format` en la respuesta, categorías, deduplicación,
+revisión ni historial. Por tanto esta unidad **sigue incompleta**.
+
+El runner usó una SQLite y directorio de subida temporales, sin escribir en el inventario real; el
+token temporal de este run se eliminó y se comprobó ausente, y ya no queda proceso del smoke. La
+limpieza automática del directorio `C:\Users\juanj\AppData\Local\Temp\hogaria-e2e-rROpSo` fue
+bloqueada por la política del entorno: aún contiene el artefacto temporal y debe eliminarse después
+de cerrar esta revisión. La inspección posterior mostró que el checkout de WebAPI ya estaba en otra
+rama y tenía un cambio staged; no se modificó ni se usó para atribuir el resultado live.
 
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
