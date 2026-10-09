@@ -107,6 +107,9 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
     await expect(serviceUnavailable).toBeVisible();
     await expect.poll(() => reopenFailures).toBe(1);
     await expect(doneRow).toBeVisible();
+    await serviceUnavailable.evaluate(async (alert) => {
+      await Promise.all(alert.getAnimations().map((animation) => animation.finished));
+    });
     await waitForPaint(page);
     await captureIfRequested(page, testInfo, 'shopping-list-reopen-503.png');
     const originalViewport = page.viewportSize();
@@ -141,6 +144,8 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
           alertBox.x + alertBox.width,
           `alerta fuera del viewport ${viewport.width}×${viewport.height}`
         ).toBeLessThanOrEqual(viewport.width);
+        const rightInset = viewport.width - (alertBox.x + alertBox.width);
+        expect(Math.abs(rightInset - 16)).toBeLessThanOrEqual(1);
         expect(alertBox.width).toBeLessThanOrEqual(Math.min(400, viewport.width - 32) + 1);
       }
       await captureIfRequested(page, testInfo, fileName);

@@ -2567,8 +2567,9 @@ frente a 320 px (retry: 339,5 px); localmente llegó a 536,95 px frente a 320 px
 lo detecta; el cierre anterior solo había comprobado el `scrollWidth` del documento y no el rectángulo del aviso.
 
 **Contrato:** la única alerta 503 sigue visible, accesible y completamente dentro del viewport a 320×568 y
-568×320; su borde izquierdo es ≥0 y el derecho no supera el ancho solicitado. La página tampoco adquiere
-overflow horizontal. En escritorio el aviso conserva la anchura máxima compartida de 400 px.
+568×320 una vez terminada la animación de entrada; su borde izquierdo es ≥0 y conserva un margen derecho de
+16 px (tolerancia 1 px). La página tampoco adquiere overflow horizontal. En escritorio el aviso conserva la
+anchura máxima compartida de 400 px.
 
 **TDD rojo:** CI `37968280085` falló en la aserción del rectángulo; la repetición local aislada también falló
 (**1/1**) antes del arreglo:
@@ -2581,8 +2582,9 @@ node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium tests/e2
 - [x] Revalidar el E2E, aislar el rectángulo del aviso como causa y reproducir el fallo con Playwright real,
       rate limit activo y SQLite/puertos/semilla aislados.
 
-- [x] Ajustar la geometría del contenedor superior con ancho `min(400px, calc(100vw - 2 × margen))`;
-      el cambio no altera estados, texto, persistencia ni avisos de acción inferiores.
+- [x] Ajustar el contenedor superior con `left: auto` y ancho `min(400px, calc(100vw - 2 × margen))`;
+      así conserva 16 px a la derecha también en móvil y al cruzar 480/481 px. No altera estados, texto,
+      persistencia ni avisos de acción inferiores.
 - [x] Reejecutar Chromium y Pixel 5 en escritorio (1440×900), móvil (390×844, 320×740, 320×568),
       horizontal (568×320) y en el borde del breakpoint (480/481 px). La alerta sigue visible, tiene rol `alert`, queda dentro del viewport,
       no genera overflow ni `pageerror`; guardar e inspeccionar capturas sintéticas comparables.
@@ -2591,9 +2593,16 @@ node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium tests/e2
       lógica TypeScript de producción.
 - [ ] Registrar evidencia y rollback en el commit atómico, ejecutar hooks completos, push y confirmar CI verde.
 
+**Ajuste detectado por CI (run `37972650590`, shard 4):** el navegador remoto midió la alerta a 1440×900
+antes de que terminara `slideInRight` (borde derecho 1647,3 px); la captura mostraba el desplazamiento
+transitorio de entrada, no el estado final. La repetición local no lo reprodujo porque la animación ya había
+acabado antes de la medición. El contrato y la regresión esperan ahora a que terminen las animaciones activas
+del aviso antes de medir la geometría; producción no cambia en esta segunda corrección.
+
 **Evidencia local (2026-10-09):** el E2E aislado con `$env:E2E_RATE_LIMIT='on'` y la base/puertos/semilla
 temporales pasó **2/2** (Chromium y Pixel 5). En cada proyecto el aviso no supera `min(400px, ancho − 32px)`;
-los cinco viewports cumplen límites del rectángulo y `scrollWidth <= innerWidth`, sin errores de página.
+queda a 16 px del borde derecho (±1 px) en los siete viewports y `scrollWidth <= innerWidth`, sin errores
+de página.
 Capturas sintéticas guardadas en `%TEMP%\hogaria-toast-bounds-20261009\{chromium,mobile-chrome}\` con
 los siete anchos/altos indicados y revisadas visualmente en escritorio, 320×568 y 568×320. No se guardaron
 artefactos en Git. `check:ui`, typecheck, Prettier y diff check pasaron; build, unitarias y hooks quedan

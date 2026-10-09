@@ -127,6 +127,7 @@ import type { IconName } from '../icon/icon-paths';
 
     .toast-container--top {
       top: var(--space-4);
+      left: auto;
       width: min(400px, calc(100vw - var(--space-4) - var(--space-4)));
       align-items: flex-end;
     }
