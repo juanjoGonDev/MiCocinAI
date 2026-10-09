@@ -874,6 +874,37 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 
 **Rollback:** retirar solo el nuevo spec y este bloque; no hay cambios de producción ni datos.
 
+### QA-04c.SHOPPING-SUGGESTED.COMPONENT.1 · contrato del modal de compra sugerida
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md §12al` define el botón minimalista, el modal con
+motivo/tienda/precio y las acciones distintas de crear o actualizar. La E2E
+`tests/e2e/shopping-suggested.spec.ts` verifica ya el flujo real de extremo a extremo, incluida la
+preservación de líneas compradas al actualizar; faltaba una prueba unitaria directa de
+`ShoppingSuggestedComponent`, que calcula estados/total, asigna variante a cada motivo y orquesta
+loading, toast, cierre y evento. El último LCOV completo disponible (HEAD `13ed97c`) mide el renderer
+en **9.68/0/0/9.68 % S/B/F/L** (3/31 sentencias/líneas, 0/12 ramas, 0/12 funciones). Esta unidad añade
+pruebas de la frontera Angular con servicios sintéticos controlables; no cambia producción ni duplica
+la prueba del motor/almacenamiento del servidor.
+
+**Contrato de pruebas:** una sugerencia con lista abierta mantiene la entrada visible aunque no haya
+filas; sin filas ni lista no se ofrece acción. Abrir vuelve a cargar y abre el modal; cerrar lo oculta.
+Las cuatro causas asignan variantes declaradas; el total suma solo precios conocidos y el formato de
+euros conserva coma decimal. `aplicar()` no duplica solicitudes mientras trabaja; un resultado fallido
+no muestra éxito, cierra ni emite; crear y actualizar muestran el copy correcto, cierran y emiten una vez.
+Usar reloj/promesas y señales controladas, sin red, IA ni almacenamiento real.
+
+- [ ] Añadir primero tests del componente real para visibilidad/estados del modal, los cuatro motivos,
+      total/precios opcionales, carga al iniciar/abrir y cierre.
+- [ ] Cubrir aplicación exitosa nueva/actualización, resultado fallido y doble invocación concurrente;
+      comprobar toast localizado, cierre y emisión exactamente una vez.
+- [ ] Superar ≥70 % en statements/branches/functions/lines del componente y mantener ≥80 % global en
+      la suite frontend; ejecutar la E2E existente de compra sugerida en Chromium y Pixel 5 aislados.
+- [ ] Ejecutar build, typecheck, `check:ui`, formato y `git diff --check`; registrar rollback, hooks,
+      commit, push y CI sin bypass. Sin cambio visual: capturas nuevas N/A.
+
+**Rollback:** retirar solo `shopping-suggested.component.spec.ts` y esta subunidad; no se toca el
+componente ni el flujo persistido.
+
 ### QA-04c.AVATAR-IMAGE.1 · cubrir decodificación, canvas y cleanup de la foto de perfil
 
 **Fuente revalidada (2026-10-09, HEAD `f4b8462`):** `HOGARIA-SPEC.md` §12j exige aceptar JPEG/PNG/WebP hasta 4 MiB, recortar una región cuadrada y re-encodear a JPEG de 128 px desde el dispositivo. `avatar-image.spec.ts` prueba ahora la validación pura, `squareCrop`, la decodificación real/fallback, canvas y liberación; producción permanece sin cambios. El baseline antes de esta unidad era **34.78/26.32/25.00/34.78 % S/B/F/L** (16/46 líneas, 5/19 ramas, 3/12 funciones), archivado en `%TEMP%\hogaria-coverage-avatar-image-baseline-a09d4e9-20261009.lcov`.
