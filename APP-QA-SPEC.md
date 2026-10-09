@@ -1388,7 +1388,7 @@ cambio visual, las capturas son N/A.
 **Rollback:** retirar únicamente el spec directo del pipe y este subapartado, sin afectar las pruebas puras
 de categorías ni la lógica de producción.
 
-### QA-04c.UI.PRICE-CHART.1 · cobertura del renderer SVG del historial de precios (en curso)
+### QA-04c.UI.PRICE-CHART.1 · cobertura del renderer SVG del historial de precios (cerrada)
 
 **Fuente revalidada (2026-10-09):** `PriceChartComponent` presenta la leyenda y el SVG desde las
 series de `precio-chart.util.ts`, cuya lógica pura ya tiene spec propia. La página real de detalle
@@ -1423,6 +1423,11 @@ rate limit activo y runner aislado: **12/12**, cleanup de SQLite/artefactos conf
 `pnpm run build` (preserva warnings de budget/imports existentes), `pnpm run typecheck:e2e`,
 `pnpm run check:ui` (**211 archivos/21 reglas**), Prettier y `git diff --check`. El test solo
 añade cobertura del renderer; la interfaz/product code no cambia.
+
+**Cierre (2026-10-09):** `test(pantry): cover price chart renderer` (`b5729fe`) está publicado y su CI
+#601 (`37885783378`) pasó. La ejecución pre-push de la rama vigente en `06ca504` volvió a pasar build,
+typecheck, configuración, Karma completa y server tests, incluyendo este renderer; los hooks locales
+se ejecutaron sin bypass. No requiere más cambios.
 
 **Rollback:** retirar solo `price-chart.component.spec.ts` y este bloque; no hay cambio productivo.
 
