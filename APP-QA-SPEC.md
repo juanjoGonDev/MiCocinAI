@@ -920,6 +920,40 @@ y server **1236 pasadas/1 omitida**. Push completado sin bypass; CI run **#636 (
 **Rollback:** retirar solo `shopping-suggested.component.spec.ts` y esta subunidad; no se toca el
 componente ni el flujo persistido.
 
+### QA-04c.HOME-PROFILE-PICKER.1 · cobertura directa del selector de perfil
+
+**Fuente revalidada (2026-10-09, HEAD `21ce551`):** `HOGARIA-SPEC.md §8b` fija el mismo control de
+nivel de cocina y módulos para el tour y Preferencias: selección compartida, nivel con efecto sobre
+el detalle inicial de receta, módulos todavía no disponibles marcados «pronto» y valores por defecto
+traducidos que admiten overrides por pantalla. `home-profile.spec.ts` ya cubre el modelo y
+`tests/e2e/onboarding.spec.ts` y `tests/e2e/preferences.spec.ts` recorren persistencia real; no hay
+una spec directa del componente, así que sus ramas de presentación/outputs quedan sin contrato
+unitario. El LCOV completo mide `home-profile-picker.component.ts` **70.59/66.67/60/70.59 % S/B/F/L**
+(12/17 líneas, 8/12 ramas, 6/10 funciones). Alcance test-only: no alterar el componente ni el
+guardado de perfil.
+
+**Contrato de pruebas:** defaults de etiquetas provienen de `I18nService` al leer y cada `@Input`
+explícito los reemplaza; cambiar nivel o marcar/desmarcar módulo emite un perfil completo preservando
+el otro campo. Renderizar selección actual, indicación «pronto» del módulo no disponible y los modos
+`askForLevel`/`askForModules` sin controles ajenos; la pista opcional de nivel solo aparece si se pasa.
+Usar I18n y perfil deterministas, sin API/storage reales.
+
+- [ ] Añadir pruebas Angular directas del componente para getters traducidos/overrides, opciones,
+      selección, hint opcional, marcas pronto y visibilidad configurable de secciones.
+- [ ] Probar clicks/cambios de nivel y módulos, outputs completos y preservación del estado no editado;
+      alcanzar ≥70 % S/B/F/L del componente y mantener ≥80 % global en Karma.
+- [ ] Repetir `tests/e2e/onboarding.spec.ts` y `tests/e2e/preferences.spec.ts` en Chromium/Pixel 5 con
+      `node scripts/run-isolated-playwright.mjs`;
+      typecheck/build/check-ui/formato/diff-check, rollback, hooks, commit, push y CI sin bypass.
+      Sin cambios visuales: capturas adicionales N/A.
+
+**Validación de esta especificación (2026-10-09):** contrato revalidado en fuentes vigentes;
+`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. Harness de runtime: N/A,
+este commit solo define la unidad; ejecutar interacción cuando la spec esté publicada.
+
+**Rollback:** retirar solo `home-profile-picker.component.spec.ts` y esta subunidad; no se cambia el
+componente compartido, el modelo ni persistencia.
+
 ### QA-04c.AVATAR-IMAGE.1 · cubrir decodificación, canvas y cleanup de la foto de perfil
 
 **Fuente revalidada (2026-10-09, HEAD `f4b8462`):** `HOGARIA-SPEC.md` §12j exige aceptar JPEG/PNG/WebP hasta 4 MiB, recortar una región cuadrada y re-encodear a JPEG de 128 px desde el dispositivo. `avatar-image.spec.ts` prueba ahora la validación pura, `squareCrop`, la decodificación real/fallback, canvas y liberación; producción permanece sin cambios. El baseline antes de esta unidad era **34.78/26.32/25.00/34.78 % S/B/F/L** (16/46 líneas, 5/19 ramas, 3/12 funciones), archivado en `%TEMP%\hogaria-coverage-avatar-image-baseline-a09d4e9-20261009.lcov`.
