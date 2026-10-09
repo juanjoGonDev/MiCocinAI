@@ -2600,6 +2600,18 @@ readiness/logs: no abrió, leyó ni subió tickets y no creó requests/completio
 No reintentar el PDF que pudo completarse; dejar el smoke real abierto hasta que la subida sin 504 y la
 entrega de ambos adjuntos queden verificadas sin repetir peticiones ambiguas.
 
+**Recomprobación tras el cambio anunciado (2026-10-09):** `git fetch --all` no encontró un commit nuevo:
+WebAPI sigue limpia en `7c1e52e9` y el proceso de `3001` sigue siendo PID `43088`. La prueba sintética
+`pnpm exec vitest run --config vitest.clipboard-e2e.config.ts
+tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts --reporter=dot` pasó **18/18**; esto
+confirma limpieza simulada, no entrega real al proveedor. El último intento real ya registrado en el log
+del proceso, posterior al fix, termina en `chatgpt_attachment_upload`/`upload_failed`, HTTP **504**, con
+dos adjuntos y timeout de 45 s; la recuperación se limpió con `page_closed`, pero nunca llegó a
+`prompt_submitted`/`response_completed`. Por la instrucción vigente de no reenviar mientras el fallo
+persista, esta comprobación no hizo POST, no reabrió los tickets y no generó completions/escrituras
+reales. El fix resuelve el cleanup parcial; el bloqueo actual es que el upload real no termina. No
+declarar validación de IA ni procesamiento/deduplicación completos hasta demostrar entrega sin 504.
+
 **Rollback del registro:** revertir solo este bloque diagnóstico/preparación y la actualización de
 checklist; no alterar el transporte probado ni los datos reales.
 
