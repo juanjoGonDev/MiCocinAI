@@ -1520,6 +1520,39 @@ sin overflow. El flujo solo usa API local aislada y fotos sintéticas intercepta
 `frontend/src/app/core/i18n/dict/recipes.ts`, `tests/e2e/recipe-cook-action.spec.ts` y este bloque.
 La cobertura general de `/recipes` permanece abierta por sus otras acciones/filtros.
 
+### QA-RECIPES.QUICK-FILTERS.1 · verificar resultados y persistencia de filtros rápidos
+
+**Fuente revalidada (2026-10-09):** `recipes.component.ts` presenta `Todas`, `Favoritas`, `Rápidas`
+y `IA`; `setFilter()` mapea favoritas a `isFavorite=true`, rápidas a `maxTime=30` e IA a
+`author=ai`. `GET /api/recipes` ya filtra esos campos, pero `recipes.spec.ts` solo verifica las
+etiquetas/estado seleccionado y una pulsación de Favoritas, no la pertenencia de las recetas a cada
+resultado. Además, `saveGeneratedRecipe()` no envía el origen IA y el `POST /api/recipes` guarda siempre
+`author='user'`, por lo que una receta recién generada no coincide con el filtro `author=ai`. HOGARIA
+§12au garantiza que las recetas generadas sigan perteneciendo al usuario, pero no define esa
+clasificación.
+
+**Decisión de prueba (inferencia explícita):** el filtro `IA` debe mostrar las recetas generadas por IA
+guardadas por el hogar/usuario actual; la marca `author='ai'` clasifica el origen, mientras
+`author_id` mantiene propiedad y edición personales. `Rápidas` significa duración total ≤30 minutos;
+`Favoritas` usa el estado individual del usuario; `Todas` elimina únicamente esos filtros rápidos y
+conserva búsqueda/libro. La URL, navegación atrás/adelante y recarga reflejan la pestaña activa. El
+cliente no puede asignar el autor editorial `catalog`.
+
+- [ ] Añadir primero una E2E roja con usuario/DB aislados y proveedor IA sintético: guardar una receta
+      manual rápida, otra manual >30 min y otra generada; demostrar miembros exactos de Todas,
+      Favoritas, Rápidas e IA, sin filtraciones ni duplicados.
+- [ ] Persistir el origen IA de las recetas generadas sin perder `author_id`, favoritos, permisos de
+      edición ni contratos de recipes manuales; mantener `catalog` solo en contenido editorial.
+- [ ] Cubrir API/servicio/componente con generación, persistencia y filtros combinados; ≥70 % S/B/F/L
+      en cada fichero instrumentable y no rebajar gates.
+- [ ] Verificar pestañas, resultado real, URL, atrás/adelante y recarga en Chromium desktop y Pixel 5;
+      comprobar estado vacío/error, viewport mínimo 320, cero overflow y cero llamadas IA real.
+- [ ] Registrar prueba roja/verde, cleanup, coverage y rollback por archivo; mantener abierta `/recipes`
+      hasta cubrir las otras acciones listadas.
+
+**Rollback:** revertir solo la clasificación de origen al guardar recetas IA, sus tests/fixtures y este
+bloque; conservar los filtros vigentes y la propiedad personal de recetas.
+
 ## QA-AUTH.FORGOT.1 · resultado honesto y no enumeración en recuperación (spec-first)
 
 **Fuente revalidada (2026-10-01):** `POST /api/auth/forgot-password` valida formato en API y responde 200 indistinguible para cuenta existente/inexistente, pero solo consulta la cuenta; no hay servicio/configuración de email ni generación de enlaces en el repo. La pantalla, su CTA y la respuesta API afirman falsamente que se envió un enlace. `ForgotPasswordComponent.onSubmit()` valida vacío pero no formato; el input es un `ControlValueAccessor` y el `ngSubmit` permite enviar `type=email` inválido. Playwright aislado reprodujo que `not-an-email` hace POST/400. La solicitud tampoco tiene contexto `SILENT_TOAST`, por lo que un error 5xx genera el toast global genérico además del mensaje local; actualmente la rama `error` también llama `toastService.success()`. El mismo E2E midió un CTA de 42 px, por debajo del objetivo táctil de 44 px. Mantener no enumeración, copy honesto en formulario/CTA/API/aviso de que recuperación por correo aún no está disponible, validación local de email y error contextual recuperable sin duplicar toast; botón accesible ≥44 px. El endpoint se aislará en un módulo pequeño para aplicar el gate de cobertura por fichero sin cambiar los gates; no se implementa proveedor de correo sin credenciales/decisión de producto.
