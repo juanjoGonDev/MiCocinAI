@@ -2737,12 +2737,12 @@ El primer setup fallido no consumió el presupuesto ni alcanzó archivos/proveed
 lote cuando pase el preflight de privacidad. Solo se registrarán estado y métricas agregadas, con el
 cleanup ya existente.
 
-- [ ] Completar la validación real pendiente: solo se podrá reanudar si WebAPI demuestra primero que
-      corrigió la limpieza de adjuntos. No reenviar los dos PDF individuales: sus fallbacks no-stream
-      devolvieron HTTP 200 en el intento previo y podrían haber completado. Si se corrige WebAPI, validar
-      únicamente la JPEG preferida y el PDF largo de las otras tres fotos como un solo ticket, con
-      `inventario.json` y `response_format`, UI/DB temporal, respuesta validada y sin duplicados.
-      Detenerse ante el primer fallo y no repetir ninguna petición ya completada o posiblemente completada.
+- [ ] Completar la validación real pendiente solo tras probar con evidencia live sintética que WebAPI
+      sube ambos adjuntos. No reenviar los dos PDF individuales ni la JPEG preferida: sus intentos
+      previos siguen siendo potencialmente completados. Ejecutar únicamente el PDF temporal que agrupa
+      las otras tres fotos, nunca enviado, con `inventario.json` y `response_format`, UI/DB temporal,
+      respuesta validada y sin líneas equivalentes duplicadas. Detenerse ante el primer fallo y no
+      repetir ninguna petición ya completada o posiblemente completada.
 
 **Diagnóstico seguro del intento único (2026-10-08):** el preflight y los ajustes de privacidad volvieron
 a pasar; se leyó el log local con extracción allowlist, sin volcar cuerpos, prompts, respuestas, nombres
@@ -3255,6 +3255,25 @@ siguen excluidos, y no se envió el PDF largo. La validación de extracción/sch
 deduplicación, revisión e historial continúa pendiente. Para retomar, WebAPI debe reconocer el prefijo
 multipart numérico, fallar cerrado para el inventario requerido y demostrar con evidencia de upload
 (no solo marcadores) que ambos ficheros llegaron al modelo.
+
+**Revalidación del arreglo WebAPI (2026-10-09; sin reenviar tickets):** la rama local
+`D:\projects\webApi` está ahora en `b55f958`; el fix de producción está en `246291eb` y el commit
+posterior registra la aceptación live sintética. El proceso activo PID 47764 inició a las 09:57:48,
+después del fix, `/health/ready` devuelve `ready=true`, `storage=ready`. El SHA-256 del archivo del
+executor en el checkout (`138A09D6…BBC5F38`) coincide con el valor documentado por la spec de WebAPI.
+Esa spec documenta el smoke contra el proceso activo con dos ficheros sintéticos: `uploadAttachmentCount=2`,
+`inventorySnapshotUploadCount=1`, `inlineContextCount=0`, readiness `expectedCount=2` /
+`visibleCount=2` y ambos marcadores; el token temporal de ese smoke fue revocado. Las pruebas focales
+repetidas aquí, sin proveedor, pasaron **33/33** con el comando registrado arriba. No repetí la prueba
+live sintética ni envié tickets reales en esta revalidación.
+
+La JPEG preferida continúa excluida: el intento previo acabó en HTTP 400/502 sin respuesta 2xx y el
+log disponible no permite probar que el turno no se completara. El PDF largo formado por las otras
+tres fotos nunca se envió y es el único input real elegible. El harness actual solo permite selección
+`unsubmitted-only`, que volvería a incluir la JPEG ambigua; antes del smoke se debe añadir una selección
+aislada de solo-ticket-largo que lea/empaquete las tres fotos en memoria y valide exactamente una
+petición. Aún no se ha enviado el PDF largo; extracción/schema, categorías, deduplicación, revisión e
+historial siguen sin validar.
 
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
