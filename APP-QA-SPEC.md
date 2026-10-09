@@ -1012,6 +1012,32 @@ porque esta unidad solo añade cobertura unitaria y no altera UI/geometría.
 **Rollback:** retirar solo las pruebas directas nuevas y este subapartado; no cambia el helper, el pipe,
 el diccionario ni la persistencia.
 
+### QA-04c.ICON-FALLBACK.1 · fallback seguro ante nombres de icono desconocidos
+
+**Fuente revalidada (2026-10-09, HEAD `b3d1925`):** `HOGARIA-SPEC.md §8f` mantiene los iconos como
+SVG locales, sin dependencia de red, y exige nombres/etiquetas accesibles según su uso. `IconComponent`
+acepta en TypeScript solo `IconName`, pero el getter verifica `hasIcon()` en runtime y devuelve `null`
+para entradas inesperadas; el SVG conserva un `viewBox` por defecto y no renderiza paths. La spec actual
+cubre formas conocidas, estado decorativo/etiquetado y tamaño relativo, pero no esa rama defensiva.
+LCOV vigente de `icon.component.ts`: **100/50/100/100 % S/B/F/L** (5/5 líneas y 1/2 ramas).
+
+**Contrato:** si en runtime llega un nombre obsoleto o desconocido, el componente no lanza error, produce
+el SVG vacío con `viewBox="0 0 24 24"` y mantiene la semántica decorativa (`role="presentation"`,
+`aria-hidden="true"`). Alcance test-only; no cambiar el registry, los tipos ni los templates de producción.
+
+- [ ] Añadir una prueba Angular directa con nombre desconocido en runtime; comprobar fallback visual
+      vacío, accesibilidad decorativa y ausencia de excepción.
+- [ ] Cubrir ≥70 % S/B/F/L en `icon.component.ts` y mantener ≥80 % en las cuatro métricas globales.
+- [ ] Ejecutar prueba focal y Karma completo, build/typecheck/check-ui/formato/diff-check; no modifica
+      UI/geometría, así que E2E/capturas nuevas N/A. Registrar rollback, hooks, commit, push y CI.
+
+**Validación spec-first (2026-10-09):** el contrato de §8f y la rama actual del getter se verificaron;
+el baseline procede de la suite Karma completa **1274/1274**, **92.16/83.40/90.92/93.59 % S/B/F/L**.
+`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. No comenzar implementación hasta
+publicar esta subunidad.
+
+**Rollback:** retirar solo la nueva prueba y este subapartado; no cambia el registry ni el renderizado.
+
 ### QA-04c.AVATAR-IMAGE.1 · cubrir decodificación, canvas y cleanup de la foto de perfil
 
 **Fuente revalidada (2026-10-09, HEAD `f4b8462`):** `HOGARIA-SPEC.md` §12j exige aceptar JPEG/PNG/WebP hasta 4 MiB, recortar una región cuadrada y re-encodear a JPEG de 128 px desde el dispositivo. `avatar-image.spec.ts` prueba ahora la validación pura, `squareCrop`, la decodificación real/fallback, canvas y liberación; producción permanece sin cambios. El baseline antes de esta unidad era **34.78/26.32/25.00/34.78 % S/B/F/L** (16/46 líneas, 5/19 ramas, 3/12 funciones), archivado en `%TEMP%\hogaria-coverage-avatar-image-baseline-a09d4e9-20261009.lcov`.
