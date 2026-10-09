@@ -2591,7 +2591,8 @@ node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium tests/e2
 - [x] Ejecutar `pnpm run typecheck:e2e`, `pnpm run check:ui` (212 ficheros/21 reglas), Prettier y
       `git diff --check`. La cobertura es N/A: solo cambia CSS de producción y la aserción E2E; no cambia
       lógica TypeScript de producción.
-- [ ] Registrar evidencia y rollback en el commit atómico, ejecutar hooks completos, push y confirmar CI verde.
+- [x] Registrar evidencia y rollback en commits atómicos; todos los hooks pasaron, los commits se publicaron
+      y CI quedó verde para el cambio de producción.
 
 **Ajuste detectado por CI (run `37972650590`, shard 4):** el navegador remoto midió la alerta a 1440×900
 antes de que terminara `slideInRight` (borde derecho 1647,3 px); la captura mostraba el desplazamiento
@@ -2604,9 +2605,14 @@ temporales pasó **2/2** (Chromium y Pixel 5). En cada proyecto el aviso no supe
 queda a 16 px del borde derecho (±1 px) en los siete viewports y `scrollWidth <= innerWidth`, sin errores
 de página.
 Capturas sintéticas guardadas en `%TEMP%\hogaria-toast-bounds-20261009\{chromium,mobile-chrome}\` con
-los siete anchos/altos indicados y revisadas visualmente en escritorio, 320×568 y 568×320. No se guardaron
-artefactos en Git. `check:ui`, typecheck, Prettier y diff check pasaron; build, unitarias y hooks quedan
-para la verificación de push.
+los siete anchos/altos indicados y revisadas visualmente en escritorio, 320×568, 480/481×800 y 568×320.
+No se guardaron artefactos en Git. La primera corrida CI `37972650590` reveló la medición antes del fin de
+`slideInRight`; se esperó el fin de la animación y se alineó la geometría en todos los breakpoints. El E2E
+aislado final pasó 2/2. Hooks completos en `6ee77d9`, `fb963f8` y `7f89ecb`: Prettier, `check:ui` (212/21),
+build, typecheck E2E y suites (11 config, 1285/1285 cliente con cobertura 92.22/83.54/90.97/93.64 % S/B/F/L,
+1236 pasadas/1 omitida servidor). CI `37974621196` pasó **9/9 jobs** para `7f89ecb`. Cobertura focal N/A:
+el cambio de producción es CSS solamente. Rollback: revertir en orden inverso `7f89ecb`, `fb963f8` y
+`6ee77d9`; el arreglo 503 previo permanece en `0af4741`.
 
 **Rollback:** revertir el ajuste geométrico y la regresión/cierre de esta subunidad; conservar el manejo 503
 de `shopping.service.ts` y su alerta localizada.
