@@ -2300,11 +2300,11 @@ La evidencia de QA-HOUSEHOLD.API-SURFACE.1 y QA-HOUSEHOLD.CLIPBOARD.1 dejó abie
 - [x] `/pantry/inventario/:id` y `/editar`: ficha válida/no encontrada, atributos, historial/precios, editar/cancelar/guardar, aliases/código de barras, error y borrar observación con confirmación; evidencia QA-PANTRY.ITEM.ROUTE.1.
 - [x] `/pantry/categories[/:id]` y `/pantry/products[/:id]`: buscar/filtrar/ordenar, alta/edición, padres/aliases, selección y acciones por lote, protección de registros en uso, validación y confirmaciones; evidencia QA-PANTRY.MANAGERS.ROUTES.1.
 - [x] `/pantry/catalogo`: búsqueda, pasillos/categorías, query string, filtros/paginación, alta individual y por lote, ya existente/en inventario, quitar con confirmación y persistencia al volver; evidencia QA-PANTRY.CATALOG.ROUTE.1.
-- [ ] `/recipes`: filtros/tabs, favoritos, detalle, cocinar, temporizadores y vuelta; generar 1/3 recetas, ingredientes/utensilios, restricciones/dificultad/raciones/detalle, error/vacío, guardar y cancelar.
+- [x] `/recipes`: filtros/tabs, favoritos, detalle, cocinar, temporizadores y vuelta; generar 1/3 recetas, ingredientes/utensilios, restricciones/dificultad/raciones/detalle, error/vacío, guardar y cancelar. Evidencia QA-RECIPES.ROUTES.1.
 - [ ] `/calendar`: día/semana/mes, anterior/siguiente/hoy/salto a fecha, filtros, recarga/error; alta/edición/borrado de comidas y eventos, recurrencia/instancia, invitados, horarios, completado y confirmación.
 - [ ] Planificación IA desde calendario: objetivo/fechas/tipos de comida/exclusiones/preferencias, loading/error/reintento, aplicar o cancelar y cambios persistidos sin duplicar comidas.
 
-**Evidencia local `/recipes` (2026-10-09; pendiente de hooks/CI):** el grupo Playwright aislado
+**Evidencia QA-RECIPES.ROUTES.1 (2026-10-09):** el grupo Playwright aislado
 de 15 archivos de Recetas/Dashboard terminó **94 pasadas, 2 skips intencionales, 0 fallos** en 5,3 min.
 Comando reproducible (SQLite/puertos/semilla temporales del runner):
 
@@ -2336,8 +2336,12 @@ node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --projec
 Runner con rate limit, SQLite/puertos/semilla temporales; no hubo IA real ni escritura a datos normales.
 `pnpm run typecheck:e2e` y
 `pnpm run check:ui` pasan (212 ficheros, 21 reglas). No cambia código de producción; coverage N/A.
-No se cierra la ruta hasta superar hooks, push y CI para el SHA corregido. Rollback: revertir la espera
-del catálogo en `tests/e2e/recipe-book.spec.ts` y retirar esta evidencia; no hay cambio productivo.
+Los hooks pre-commit/pre-push se ejecutaron sin bypass; el pre-push en `06ca504` aprobó formato,
+`check:ui`, build, typecheck, suite de configuración, Karma y server tests. El fix de espera en
+`tests/e2e/recipe-book.spec.ts` (`5d88b55`) está publicado; el CI #648 (`37948562809`) del head
+`53a8c49` pasó **9/9** jobs, incluidos los shards E2E. La ruta queda cerrada; no hubo IA real. Rollback:
+revertir la espera del catálogo en `tests/e2e/recipe-book.spec.ts` y retirar esta evidencia; no hay
+cambio productivo.
 
 **Evidencia QA-PANTRY.ROOT-ROUTE.1 (2026-10-09):** Playwright aislado con rate limit activo —`$env:E2E_RATE_LIMIT='on'; $env:E2E_SCREENSHOT_DIR=Join-Path $env:TEMP 'hogaria-pantry-route-rerun-20261009'; node scripts/run-isolated-playwright.mjs --workers=2 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/pantry.spec.ts tests/e2e/utensils.spec.ts tests/e2e/pantry-root-crud.spec.ts tests/e2e/pantry-inventory-load-error.spec.ts --reporter=line`— pasó **48 pruebas**; 6 skips son intencionales: los filtros/orden del encabezado solo se ejercitan en Chromium y la hoja móvil solo en Pixel 5. Cubre CRUD del inventario, búsqueda/categoría/columna, orden/paginación/selección/lote/stepper/sugerencias, controles de utensilios, sin resultados, error/reintento y recarga. La E2E full-stack de estado vacío —`$env:E2E_RATE_LIMIT='on'; $env:E2E_SCREENSHOT_DIR=Join-Path $env:TEMP 'hogaria-pantry-empty-fullstack-20261009'; pnpm run test:e2e:full-stack -- --workers=1 --project=chromium --project=mobile-chrome tests/e2e/full-stack/pantry-empty-state.spec.ts --reporter=line`— pasó **2/2** sobre build de producción y SQLite/puertos sintéticos; runner y datos temporales limpiados. Cancelar el alta no crea datos. Capturas sintéticas PC/móvil inspeccionadas: `%TEMP%\hogaria-pantry-empty-fullstack-20261009\chromium\pantry-empty-1440x900.png` y `%TEMP%\hogaria-pantry-empty-fullstack-20261009\mobile-chrome\pantry-empty-393x851.png`; también diálogo/error/reintento/recuperación en `%TEMP%\hogaria-pantry-route-rerun-20261009\{chromium,mobile-chrome}\`. Coverage N/A: no cambió código de producción. Rollback: retirar esta casilla/evidencia; no hay cambios productivos.
 
