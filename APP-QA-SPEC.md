@@ -2504,6 +2504,27 @@ hasta el final y requiere volver a preguntarlo al usuario.
 `@angular-eslint/builder:lint` referenciado en `frontend/angular.json` no está declarado en
 `frontend/package.json` ni disponible localmente. No se añadió una dependencia fuera de alcance.
 
+#### QA-SHOPPING.TRAY-STORE-FILTER.1 · filtro de tienda con enlace recuperable
+
+**Fuente revalidada (2026-10-09):** `ShoppingListsComponent` obtiene las opciones del servicio de tiendas,
+presenta el selector «Tienda», actualiza `store` en la URL y carga de nuevo la bandeja; `readUrl()` restaura el
+filtro. Las pruebas de `shopping-round6.spec.ts` validan la búsqueda por producto, el orden y la paginación,
+pero no seleccionar una tienda ni recuperar ese filtro tras una recarga. La prueba de componente cubre cambios
+de estado con spies, no el resultado del endpoint real.
+
+**Contrato:** crear dos listas sintéticas de tiendas distintas; seleccionar una tienda debe dejar visible solo
+su lista y reflejar `store` en la URL. Tras recargar, deben conservarse el selector y el resultado. Quitar el
+filtro debe restaurar ambas listas. No se cambia backend ni se contacta a proveedores externos.
+
+- [x] Revalidar template, `storeOptions`/`setStore`/`readUrl`, E2E actuales de la bandeja y brecha concreta.
+- [ ] Añadir primero E2E aislada de `/shopping` que cree las dos listas, filtre por tienda, compruebe el enlace,
+      recargue y quite el filtro.
+- [ ] Ejecutar Chromium desktop y Pixel 5 con rate limit activo, SQLite/puertos/semilla temporales y cleanup;
+      guardar e inspeccionar capturas sintéticas PC/móvil del filtro aplicado, confirmar accesibilidad y ausencia
+      de overflow. Si no hay cambio de producción, cobertura de código: N/A.
+- [ ] Registrar comandos/resultados y rollback (solo la regresión E2E y esta subunidad si producción no cambia);
+      ejecutar hooks completos, push y CI verde.
+
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
 - [ ] `/receipts`: elegir/arrastrar archivo, validar formatos y borde de 10 MiB a través del ingress de producción, rechazar inválidos, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
