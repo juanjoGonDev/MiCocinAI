@@ -946,9 +946,9 @@ API/storage reales.
       y actualización de la pista de efecto; si falla, corregir mínimamente el selector. Alcanzar
       ≥70 % S/B/F/L del componente y mantener ≥80 % global en Karma.
 - [ ] Repetir `tests/e2e/onboarding.spec.ts` y `tests/e2e/preferences.spec.ts` en Chromium/Pixel 5 con
-      `node scripts/run-isolated-playwright.mjs`;
-      typecheck/build/check-ui/formato/diff-check, rollback, hooks, commit, push y CI sin bypass.
-      Sin cambios visuales: capturas adicionales N/A.
+      `node scripts/run-isolated-playwright.mjs`; guardar e inspeccionar el selector antes/después del
+      cambio en ambos proyectos, con perfil sintético y sin datos personales. Typecheck/build/check-ui/
+      formato/diff-check, rollback, hooks, commit, push y CI sin bypass.
 
 **Validación de esta especificación (2026-10-09):** contrato revalidado en fuentes vigentes;
 `pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. Harness de runtime: N/A,
