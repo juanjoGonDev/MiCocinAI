@@ -859,6 +859,19 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 Candidatos del informe previo al lote (histórico; orden statements/branches/functions/lines): `auth.service.ts` 100/81.82/94.59/100 %, `theme.service.ts` 96.67/92.86/87.50/96.67 %, `shopping.model.ts` 79.22/62.40/66.67/79.22 %, `error.interceptor.ts` 7.89/0/0/7.89 %, `swipe-row.directive.ts` 10.09/11.11/11.76/10.09 %, `core/time.ts` 86.75/57.83/95/86.75 %, `data-table.util.ts` 95.86/78.77/100/95.86 %, `i18n.service.ts` 61.70/23.68/61.54/61.70 %, `household.service.ts` 1.79/0/0/1.79 % y `taste-profile.service.ts` 3.33/0/0/3.33 %.
 
+### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md §12t-R` fija `I18nService` como responsable de resolver `es/en/auto`, actualizar el locale de fechas/números al cambiar idioma y componer frases localizadas; `i18n.service.ts` implementa además selección persistida, `languagechange`, fallback de diccionario, interpolación, plurales y tiempos relativos. No existe `i18n.service.spec.ts`; el uso indirecto en otras pruebas deja este servicio en **69.23/31.58/69.23/72.34 % S/B/F/L** (36/52 sentencias, 12/38 ramas, 9/13 funciones, 34/47 líneas). La cobertura baja no prueba un fallo de producto: faltan pruebas unitarias directas de rutas existentes. Alcance test-only, sin cambiar traducciones, producción, preferencias ajenas ni llamadas externas.
+
+**Contrato de esta unidad:** probar selección persistida válida/inválida y detección del navegador; que `auto` reaccione a `languagechange` y los idiomas explícitos no, que el efecto alinee `<html lang>` y `dateLocale()`, y que los cambios se guarden en `STORAGE_KEYS.language`. Cubrir traducción disponible/fallback/clave ausente, advertencia solo en desarrollo, sustitución de parámetros repetidos y `null`, plural singular/plural y todas las formas de `relativeTime()` (vacío, ahora, unidades pasadas/futuras y fechas con/sin año). Cada spec restaura storage, idioma global y locale para aislar la suite.
+
+- [ ] Añadir primero `i18n.service.spec.ts` y cubrir las rutas del contrato contra la implementación actual; no cambiar producción si las expectativas pasan.
+- [ ] Cubrir ramas auto/explicit y los estados de `languagechange`, fallback de locale/diccionario, advertencia, parámetros/plural y clases de tiempo relativo con reloj controlado.
+- [ ] Elevar `i18n.service.ts` a ≥70 % en statements/branches/functions/lines; repetir suite completa ≥80 % global, build, `typecheck:e2e`, `check:ui`, formato y `git diff --check` sin alterar gates.
+- [ ] Registrar evidencia reproducible y rollback; ejecutar hooks completos, commit atómico, push y CI del SHA de implementación.
+
+**Rollback:** retirar solo el nuevo spec y este bloque; no hay cambios de producción ni datos.
+
 ### QA-04c.AVATAR-IMAGE.1 · cubrir decodificación, canvas y cleanup de la foto de perfil
 
 **Fuente revalidada (2026-10-09, HEAD `f4b8462`):** `HOGARIA-SPEC.md` §12j exige aceptar JPEG/PNG/WebP hasta 4 MiB, recortar una región cuadrada y re-encodear a JPEG de 128 px desde el dispositivo. `avatar-image.spec.ts` prueba ahora la validación pura, `squareCrop`, la decodificación real/fallback, canvas y liberación; producción permanece sin cambios. El baseline antes de esta unidad era **34.78/26.32/25.00/34.78 % S/B/F/L** (16/46 líneas, 5/19 ramas, 3/12 funciones), archivado en `%TEMP%\hogaria-coverage-avatar-image-baseline-a09d4e9-20261009.lcov`.
