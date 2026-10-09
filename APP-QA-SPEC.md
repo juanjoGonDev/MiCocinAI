@@ -2865,9 +2865,10 @@ La lectura allowlist de `GET /admin/api/logs?lines=2000` devolvió 550 líneas, 
 proceso hay dos flujos con `attachmentCount=2`, un snapshot de inventario, readiness correcta
 (`expectedCount=2`, `visibleCount=2`), `upload_completed` y `prompt_submitted`; hay dos limpiezas
 completadas y cero `cleanup_failed`. Por tanto, la subida/limpieza que antes acababa en 504 ya no es
-el bloqueo observado. Sin embargo, uno de esos flujos terminó en `wait_for_reply`/`turn_failed` a los
-120 s y el tail no contiene `response_completed`. Los logs no incluyen nombres ni permiten asignar
-esas solicitudes a un grupo de ticket; dado que ambas llegaron a `prompt_submitted` y podrían haberse
+el bloqueo observado. Sin embargo, uno de esos flujos terminó en `wait_for_reply`/`turn_failed` con
+`errorName=OpenCodeHttpError`, `timeoutMs=120000` y `durationMs=132096`; el tail no contiene
+`response_completed` ni un status HTTP seguro para distinguir el detalle. Los logs no incluyen nombres ni
+permiten asignar esas solicitudes a un grupo de ticket; dado que ambas llegaron a `prompt_submitted` y podrían haberse
 completado, no se reenvía ninguna ni se abren otros tickets en esta comprobación. Solo se hicieron
 lecturas locales y GET de readiness/logs: **0 archivos abiertos/subidos, 0 nuevas completions y 0
 escrituras** en esta pasada. La validación de respuesta, schema y deduplicación sigue pendiente; no
