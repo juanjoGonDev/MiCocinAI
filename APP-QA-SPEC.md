@@ -1,7 +1,7 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
 - **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La última suite frontend local pasó **1219/1219** con cobertura **90.69/81.87/89.35/92.15 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
-- **IA / tickets reales (2026-10-09):** la validación de tickets sigue abierta. WebAPI está listo, pero el último intento registrado falló al subir adjuntos con HTTP 504 antes de `prompt_submitted`; el preflight más reciente confirmó que el fallo sigue en los logs. No se reenviaron tickets porque no existe confirmación de que el proveedor no los recibiera.
+- **IA / tickets reales (2026-10-09):** la validación de tickets sigue abierta. El nuevo código de WebAPI sí deja la limpieza de adjuntos en estado correcto, pero sus logs posteriores al cambio aún registran cuatro subidas con HTTP 504 antes de `prompt_submitted`; no se reenviaron tickets.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1219/1219 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
 
@@ -2530,6 +2530,21 @@ Por la condición explícita de no enviar si el fallo continúa, **no se abriero
 sigue incompleta; no se afirma que WebAPI envíe ambos adjuntos al modelo ni que la respuesta/deduplicación
 sean correctas. Reanudar únicamente tras demostrar la recuperación de adjuntos en WebAPI y sin volver a
 enviar los PDF que podrían haber completado.
+
+**Reintento de preflight (2026-10-09, solicitado por el usuario):** el checkout local de WebAPI está
+limpio en `fix/partial-attachment-cleanup`, HEAD `7c1e52e9`; el cambio `e679f44d` (`recover partial
+attachment uploads`) está incluido. El PID activo `43088` escucha en `3001` y arrancó a las 23:48,
+después del commit del cambio a las 23:42; `/health/ready` sigue indicando `ready=true`. La API no
+expone el SHA del runtime, así que esa relación temporal es evidencia indirecta, no atestación de build.
+Leí `GET /admin/api/logs?lines=2000` sin imprimir líneas: 411 líneas, sin truncar; cuatro eventos
+terminales `upload_failed`, todos `errorStatus=504`, `cleanupOutcome=success` y `cleanupMethod=page_closed`;
+los cuatro intentos parciales previos también acabaron en cleanup exitoso. En total constan ocho
+`cleanup_completed`, cero `cleanup_failed`, cero `prompt_submitted` y cero `response_completed` en el
+tail. La recuperación de estado tras el fallo parece corregida en ejecución, pero la subida todavía no
+completa: HTTP 504 impide que PDF/foto + inventario alcancen el prompt. Este preflight hizo solo GET de
+readiness/logs: no abrió, leyó ni subió tickets y no creó requests/completions ni escrituras nuevas.
+No reintentar el PDF que pudo completarse; dejar el smoke real abierto hasta que la subida sin 504 y la
+entrega de ambos adjuntos queden verificadas sin repetir peticiones ambiguas.
 
 **Rollback del registro:** revertir solo este bloque diagnóstico/preparación y la actualización de
 checklist; no alterar el transporte probado ni los datos reales.
