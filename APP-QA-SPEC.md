@@ -3900,21 +3900,23 @@ los tests y correcciones geométricas de producto ya validadas.
 
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.MODAL-SHELL.1 · shell modal compartido
 
-**Fuente revalidada (2026-10-09):** `ModalComponent` (`app-modal`) sirve los diálogos del Calendario,
-Configuración IA y otras vistas. Define overlay fijo con padding `--space-4`, variantes explícitas
-`sm/md/lg/xl/full`, límite de altura, header/body compartidos y botón de cierre de 44×44 px. El evento de
-Calendario usa `md`; el alta de Configuración IA usa `lg`. El inventario visual de rutas no abre diálogos,
-y las E2E existentes revisan cada flujo por separado, pero no comparan el shell común entre rutas. La
-diferencia de ancho por `size` es intencional; el resto del shell debe conservar las mismas medidas y tokens.
+**Fuente revalidada (2026-10-09):** `ModalComponent` (`app-modal`) sirve los diálogos de objetivos del
+Calendario y el alta de Configuración IA. Define overlay fijo con padding `--space-4`, variantes explícitas
+`sm/md/lg/xl/full`, límite de altura, header/body compartidos y botón de cierre de 44×44 px. Objetivos usa
+`md`; alta de Configuración IA usa `lg`. El inventario visual de rutas no abre diálogos, y las E2E existentes
+revisan cada flujo por separado, pero no comparan el shell común entre rutas. El modal de evento del
+Calendario es una excepción funcional deliberada (popup anclado en escritorio/hoja inferior en móvil) con
+overrides de overlay y caja en `styles.scss`; queda fuera de la comparación del shell estándar y no se
+normalizará con una modal centrada.
 
-**Contrato:** comparar el overlay, header, body, título y cierre de los dos diálogos `md/lg` en 320×568,
+**Contrato:** comparar el overlay, header, body, título y cierre de los dos diálogos estándar `md/lg` en 320×568,
 393×851, 568×320, 767/768/769 y 1440×900; verificar caja contenida, ausencia de overflow global,
 padding/radio comunes, cierre táctil ≥44×44 y body desplazable cuando su contenido supera la altura. El
 diálogo debe tener nombre/rol accesibles, mover y atrapar el foco, cerrar con Escape y devolver el foco al
 disparador. Capturas solo con identidad y contenido sintéticos (PC y móvil); no usar datos personales ni
 ejecutar llamadas al proveedor IA.
 
-- [ ] Añadir primero una E2E Playwright aislada que abra el evento sintético de Calendario y el alta de
+- [ ] Añadir primero una E2E Playwright aislada que abra Objetivos del Calendario y el alta de
       Configuración IA; comparar propiedades calculadas del shell sin tratar `md` y `lg` como el mismo ancho.
 - [ ] Validar Chromium y Pixel 5 en los viewports del contrato, navegación/foco/Escape, dimensiones y
       scroll del modal, hit-target del cierre y ausencia de overflow; guardar e inspeccionar capturas PC/móvil.
