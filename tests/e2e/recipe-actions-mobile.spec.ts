@@ -213,7 +213,13 @@ test('el detalle a página completa conserva scroll y teclado; el formulario IA 
         await waitForStableView(page);
         await expectModalTitleDoesNotOverlapClose(page, 'Generar Receta con IA', viewport.width);
         await expectAiFormScrolls(page);
+        await expect(page.locator('[data-test="recipe-ai-step-1"]')).toBeVisible();
+        await page.locator('[data-test="recipe-ai-next"]').click();
+        await expect(page.locator('[data-test="recipe-ai-step-2"]')).toBeVisible();
+        await page.locator('[data-test="recipe-ai-next"]').click();
+        await expect(page.locator('[data-test="recipe-ai-step-3"]')).toBeVisible();
         await expectActionsFit(page, '.ai-form__actions', [
+          /Anterior/,
           /Generar 1 receta/,
           /Generar 3 opciones/
         ]);

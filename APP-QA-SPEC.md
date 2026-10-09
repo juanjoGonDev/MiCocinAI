@@ -3210,6 +3210,13 @@ pasó **4/4** en 1,7 min; cada proyecto recorrió 39 casos × 49 viewports. La p
 comprobó deep link, foco inicial, scroll, acciones, Tab/Shift+Tab, Escape/cierre, query y gap geométrico
 ≥8 px. También comprobó el modal IA en 320/393 px sin requests reales al endpoint IA.
 
+**Revalidación de la E2E móvil (2026-10-09):** el baseline aislado reprodujo un fallo porque la
+prueba buscaba los dos botones de generación mientras el wizard seguía en el paso 1; esos controles
+solo existen en el paso 3. La E2E ahora avanza y verifica los pasos 1→2→3, y mide los tres botones
+finales («Anterior», «Generar 1 receta» y «Generar 3 opciones»). La focal en Pixel 5 pasó **1/1** y
+el grupo aislado de regresión de recetas pasó **26/26** en Chromium y Pixel 5 (`E2E_RATE_LIMIT=on`);
+el test confirma que no se llama al endpoint IA. Es corrección de la prueba, sin cambio de producto.
+
 Capturas sintéticas revisadas: `.e2e-screenshots/qa-layout-recipe-current/recipe-actions-detail-1440.png`,
 `recipe-actions-detail-320.png`, `recipe-actions-detail-393.png`, `recipe-actions-ai-320.png` y
 `recipe-actions-ai-393.png`. `pnpm run typecheck:e2e`, Prettier focal y `git diff --check` pasan.
