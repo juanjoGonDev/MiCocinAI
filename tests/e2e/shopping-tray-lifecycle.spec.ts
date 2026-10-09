@@ -101,6 +101,8 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
     const serviceUnavailable = page
       .getByRole('alert')
       .filter({ hasText: 'Servicio no disponible' });
+    const pageErrors: string[] = [];
+    page.on('pageerror', (error) => pageErrors.push(error.name));
     await expect(serviceUnavailable).toHaveCount(1);
     await expect(serviceUnavailable).toBeVisible();
     await expect.poll(() => reopenFailures).toBe(1);
@@ -109,16 +111,22 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
     await captureIfRequested(page, testInfo, 'shopping-list-reopen-503.png');
     const originalViewport = page.viewportSize();
     if (!originalViewport) throw new Error('El contexto Playwright no informa el viewport');
-    for (const viewport of [
-      { width: 320, height: 568 },
-      { width: 568, height: 320 }
-    ]) {
-      await page.setViewportSize(viewport);
+    const viewports = [
+      { width: 1440, height: 900, fileName: 'shopping-toast-503-1440x900.png' },
+      { width: 390, height: 844, fileName: 'shopping-toast-503-390x844.png' },
+      { width: 320, height: 740, fileName: 'shopping-toast-503-320x740.png' },
+      { width: 320, height: 568, fileName: 'shopping-toast-503-320x568.png' },
+      { width: 568, height: 320, fileName: 'shopping-toast-503-568x320.png' }
+    ];
+    for (const viewport of viewports) {
+      const { fileName, ...size } = viewport;
+      await page.setViewportSize(size);
       await expect(serviceUnavailable).toBeVisible();
       const dimensions = await page.evaluate(() => ({
         viewport: innerWidth,
         document: document.documentElement.scrollWidth
       }));
+      expect(dimensions.viewport).toBe(viewport.width);
       expect(
         dimensions.document,
         `desbordamiento horizontal a ${viewport.width}px`
@@ -127,9 +135,15 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
       expect(alertBox).not.toBeNull();
       if (alertBox) {
         expect(alertBox.x).toBeGreaterThanOrEqual(0);
-        expect(alertBox.x + alertBox.width).toBeLessThanOrEqual(viewport.width);
+        expect(
+          alertBox.x + alertBox.width,
+          `alerta fuera del viewport ${viewport.width}×${viewport.height}`
+        ).toBeLessThanOrEqual(viewport.width);
+        expect(alertBox.width).toBeLessThanOrEqual(Math.min(400, viewport.width - 32) + 1);
       }
+      await captureIfRequested(page, testInfo, fileName);
     }
+    expect(pageErrors).toEqual([]);
     await page.setViewportSize(originalViewport);
     await expect(page.locator('.toast__title').filter({ hasText: 'Lista reabierta' })).toHaveCount(
       0

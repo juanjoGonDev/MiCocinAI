@@ -90,6 +90,8 @@ import type { IconName } from '../icon/icon-paths';
       </div>
     </div>
   `,
+  // Conserva la hoja de estilos inline maquetada a mano sin reflujo al guardar.
+  // prettier-ignore
   styles: [`  /*
      * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
      *
@@ -125,6 +127,7 @@ import type { IconName } from '../icon/icon-paths';
 
     .toast-container--top {
       top: var(--space-4);
+      width: min(400px, calc(100vw - var(--space-4) - var(--space-4)));
       align-items: flex-end;
     }
 
@@ -298,11 +301,11 @@ export class ToastComponent {
 
   /** Dos pilas separadas: arriba informa, abajo deja actuar con el pulgar. */
   topToasts(): Toast[] {
-    return this.toastService.toasts().filter(toast => toast.position !== 'bottom');
+    return this.toastService.toasts().filter((toast) => toast.position !== 'bottom');
   }
 
   bottomToasts(): Toast[] {
-    return this.toastService.toasts().filter(toast => toast.position === 'bottom');
+    return this.toastService.toasts().filter((toast) => toast.position === 'bottom');
   }
 
   trackById(_index: number, toast: Toast): string {
