@@ -67,6 +67,25 @@ test.describe('El catálogo del supermercado', () => {
     await expect(filaDe(page, nombre)).toBeVisible();
   });
 
+  test('la paginacion mueve el catalogo completo entre paginas', async ({ page }) => {
+    await page.goto('/pantry/catalogo');
+    const tabla = page.locator('[data-test="catalogo-tabla"]');
+    const filas = tabla.locator('[data-test^="tabla-fila-"]');
+    const rango = tabla.locator('[data-test="tabla-rango"]');
+
+    await expect(filas).toHaveCount(24);
+    await expect(rango).toContainText('1-24 de');
+    const primeraPagina = (await filas.first().innerText()).trim();
+
+    await tabla.locator('[data-test="tabla-siguiente"]').click();
+    await expect(rango).toContainText('25-48 de');
+    await expect(filas).toHaveCount(24);
+    expect((await filas.first().innerText()).trim()).not.toBe(primeraPagina);
+
+    await tabla.locator('[data-test="tabla-anterior"]').click();
+    await expect(rango).toContainText('1-24 de');
+  });
+
   test('la seleccion multiple anade un lote sin confirmacion (no es destructivo)', async ({
     page
   }) => {
