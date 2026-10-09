@@ -64,28 +64,30 @@ export const recipeStepIllustrationSchema = z
   })
   .strict();
 
-const recipeStepSchema = z.object({
-  stepNumber: z.number().int().positive(),
-  instruction: z.string().min(1),
-  duration: formField(z.number().int().positive()),
-  temperature: formField(temperatureSchema),
-  timerRequired: formDefault(z.boolean(), false),
-  timerDuration: formField(z.number().int().positive()),
-  tips: formField(z.string()),
-  warning: formField(z.string()),
-  image: formField(recipeImageReferenceSchema),
-  /** Candidate returned by the bounded photo search; the route replaces it with a local asset path. */
-  imagePhotoId: formField(z.string().regex(/^[a-f0-9]{24}$/)),
-  illustration: formField(recipeStepIllustrationSchema)
-}).superRefine((step, context) => {
-  if (step.imagePhotoId && step.image !== undefined) {
-    context.addIssue({
-      code: 'custom',
-      path: ['imagePhotoId'],
-      message: 'Choose a searched step photo or provide an image URL, not both'
-    });
-  }
-});
+const recipeStepSchema = z
+  .object({
+    stepNumber: z.number().int().positive(),
+    instruction: z.string().min(1),
+    duration: formField(z.number().int().positive()),
+    temperature: formField(temperatureSchema),
+    timerRequired: formDefault(z.boolean(), false),
+    timerDuration: formField(z.number().int().positive()),
+    tips: formField(z.string()),
+    warning: formField(z.string()),
+    image: formField(recipeImageReferenceSchema),
+    /** Candidate returned by the bounded photo search; the route replaces it with a local asset path. */
+    imagePhotoId: formField(z.string().regex(/^[a-f0-9]{24}$/)),
+    illustration: formField(recipeStepIllustrationSchema)
+  })
+  .superRefine((step, context) => {
+    if (step.imagePhotoId && step.image !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        path: ['imagePhotoId'],
+        message: 'Choose a searched step photo or provide an image URL, not both'
+      });
+    }
+  });
 
 const nutritionInfoSchema = z.object({
   calories: z.number(),
@@ -148,18 +150,24 @@ const createRecipeFieldsSchema = z.object({
 });
 
 // A recipe stores either its historical flat `steps` list or all generated variants, never both.
-export const createRecipeSchema = createRecipeFieldsSchema.superRefine((recipe, context) => {
-  const hasLegacySteps = Array.isArray(recipe.steps);
-  const hasInstructionLevels = recipe.instructionsByLevel != null;
+export const createRecipeSchema = createRecipeFieldsSchema
+  .extend({
+    // The origin is informational; ownership remains the authenticated author_id.
+    // Editorial catalog rows can only be created by the seed/import path.
+    author: formDefault(z.enum(['ai', 'user']), 'user')
+  })
+  .superRefine((recipe, context) => {
+    const hasLegacySteps = Array.isArray(recipe.steps);
+    const hasInstructionLevels = recipe.instructionsByLevel != null;
 
-  if (hasLegacySteps === hasInstructionLevels) {
-    context.addIssue({
-      code: 'custom',
-      path: ['steps'],
-      message: 'Provide either legacy steps or all detail-level instructions, but not both'
-    });
-  }
-});
+    if (hasLegacySteps === hasInstructionLevels) {
+      context.addIssue({
+        code: 'custom',
+        path: ['steps'],
+        message: 'Provide either legacy steps or all detail-level instructions, but not both'
+      });
+    }
+  });
 
 // Update recipe schema
 export const updateRecipeSchema = formPartial(createRecipeFieldsSchema)

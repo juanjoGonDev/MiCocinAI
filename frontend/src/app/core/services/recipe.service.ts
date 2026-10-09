@@ -38,13 +38,16 @@ export class RecipeService {
   private recipesSignal = signal<Recipe[]>([]);
   private currentRecipeSignal = signal<Recipe | null>(null);
   private isLoadingSignal = signal(false);
+  private recipesLoadErrorSignal = signal(false);
   private totalSignal = signal(0);
   private currentFilter: RecipeFilter | undefined;
+  private retryFilter: RecipeFilter | undefined;
   private readonly listRequests = new LatestRequest();
 
   readonly recipes = this.recipesSignal.asReadonly();
   readonly currentRecipe = this.currentRecipeSignal.asReadonly();
   readonly isLoading = this.isLoadingSignal.asReadonly();
+  readonly recipesLoadError = this.recipesLoadErrorSignal.asReadonly();
   readonly total = this.totalSignal.asReadonly();
 
   searchStepPhoto(scene: RecipeStepPhotoScene): Observable<RecipeStepPhoto | null> {
@@ -138,7 +141,9 @@ export class RecipeService {
 
   loadRecipes(filter?: RecipeFilter): void {
     const requestId = this.listRequests.begin();
+    this.retryFilter = filter;
     this.isLoadingSignal.set(true);
+    this.recipesLoadErrorSignal.set(false);
 
     let params = new HttpParams();
     if (filter?.search) params = params.set('search', filter.search);
@@ -158,21 +163,32 @@ export class RecipeService {
     if (filter?.sortOrder) params = params.set('sortOrder', filter.sortOrder);
 
     this.http
-      .get<any>(this.apiUrl, { params })
+      .get<any>(this.apiUrl, {
+        params,
+        context: new HttpContext().set(SILENT_TOAST, true)
+      })
       .pipe(
         tap((response) => {
           if (!this.listRequests.isCurrent(requestId)) return;
           this.currentFilter = filter;
+          this.retryFilter = filter;
           this.recipesSignal.set(response.data.recipes.map(normalizeRecipe));
           this.totalSignal.set(response.data.total);
           this.isLoadingSignal.set(false);
         }),
         catchError(() => {
-          if (this.listRequests.isCurrent(requestId)) this.isLoadingSignal.set(false);
+          if (this.listRequests.isCurrent(requestId)) {
+            this.recipesLoadErrorSignal.set(true);
+            this.isLoadingSignal.set(false);
+          }
           return of(null);
         })
       )
       .subscribe();
+  }
+
+  retryLoadRecipes(): void {
+    this.loadRecipes(this.retryFilter);
   }
 
   getRecipe(id: string): Observable<Recipe | null> {
@@ -187,6 +203,7 @@ export class RecipeService {
     return this.http.post<{ data: Recipe }>(this.apiUrl, recipe).pipe(
       map((response) => normalizeRecipe(response.data)),
       tap((created) => {
+        this.recipesLoadErrorSignal.set(false);
         this.recipesSignal.update((list) => [created, ...list]);
       }),
       catchError(() => of(null))

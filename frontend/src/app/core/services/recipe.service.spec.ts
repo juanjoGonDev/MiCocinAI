@@ -72,6 +72,34 @@ describe('RecipeService', () => {
     service.loadRecipes();
     http.expectOne('/api/recipes').flush({}, { status: 500, statusText: 'Server Error' });
     expect(service.isLoading()).toBeFalse();
+    expect(service.recipesLoadError()).toBeTrue();
+    expect(service.recipes()).toEqual([]);
+  });
+
+  it('clears stale results on a filter error and retries the same filter without a duplicate toast', () => {
+    const stale = makeRecipe({ id: 'stale', name: 'Filtro anterior' });
+    service.loadRecipes({ search: 'anterior' });
+    http.expectOne('/api/recipes?search=anterior').flush({ data: { recipes: [stale], total: 1 } });
+
+    service.loadRecipes({ search: 'reciente', author: 'ai' });
+    const failed = http.expectOne('/api/recipes?search=reciente&author=ai');
+    expect(failed.request.context.get(SILENT_TOAST)).toBeTrue();
+    failed.flush({ message: 'Synthetic failure' }, { status: 503, statusText: 'Unavailable' });
+
+    expect(service.isLoading()).toBeFalse();
+    expect(service.recipesLoadError()).toBeTrue();
+    expect(service.recipes()).toEqual([stale]);
+    expect(service.total()).toBe(1);
+
+    const recovered = makeRecipe({ id: 'ai', name: 'Receta IA' });
+    service.retryLoadRecipes();
+    const retry = http.expectOne('/api/recipes?search=reciente&author=ai');
+    expect(retry.request.context.get(SILENT_TOAST)).toBeTrue();
+    retry.flush({ data: { recipes: [recovered], total: 1 } });
+
+    expect(service.recipesLoadError()).toBeFalse();
+    expect(service.recipes()).toEqual([recovered]);
+    expect(service.total()).toBe(1);
   });
 
   it('sends country, multiple meal types, catalog scope and pagination to the recipe-book API', () => {
@@ -290,6 +318,7 @@ describe('RecipeService', () => {
     http
       .expectOne('/api/recipes?isFavorite=true')
       .flush({}, { status: 500, statusText: 'Server Error' });
+    expect(service.recipesLoadError()).toBeTrue();
     expect(service.recipes()).toEqual([first, second]);
 
     service.toggleFavorite(first.id);

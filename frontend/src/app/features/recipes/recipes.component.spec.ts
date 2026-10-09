@@ -734,6 +734,7 @@ describe('RecipesComponent', () => {
     component.openAiModal();
     component.saveGeneratedRecipe(multi, 'expert');
     const payload = recipes.createRecipe.calls.mostRecent().args[0] as any;
+    expect(payload.author).toBe('ai');
     expect(payload.instructionsByLevel.basic[0]).toEqual(
       jasmine.objectContaining({
         instruction: 'Paso básico',

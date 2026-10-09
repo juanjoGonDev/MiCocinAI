@@ -203,6 +203,25 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
           [message]="'recipes.loading' | t"
         ></app-loading>
 
+        <div
+          *ngIf="recipeService.recipesLoadError()"
+          class="recipes__load-error"
+          data-test="recipes-load-error"
+          role="alert"
+          aria-atomic="true"
+        >
+          <span>{{ 'recipes.list_load_error' | t }}</span>
+          <app-button
+            variant="outline"
+            size="sm"
+            type="button"
+            data-test="recipes-retry-load"
+            (onClick)="recipeService.retryLoadRecipes()"
+          >
+            {{ 'recipes.retry_list_load' | t }}
+          </app-button>
+        </div>
+
         <!-- Recipes Grid -->
         <div class="recipes__grid" *ngIf="!recipeService.isLoading()">
           <article
@@ -268,7 +287,10 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
           </article>
 
           <!-- Empty State -->
-          <div *ngIf="recipeService.recipes().length === 0" class="empty-state">
+          <div
+            *ngIf="recipeService.recipes().length === 0 && !recipeService.recipesLoadError()"
+            class="empty-state"
+          >
             <span class="empty-state__icon"
               ><app-icon name="menu_book" [size]="64" [label]="null"
             /></span>
@@ -1408,6 +1430,19 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
         gap: var(--space-4);
+      }
+
+      .recipes__load-error {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--error-subtle);
+        color: var(--color-error-700);
       }
 
       /* Recipe Card */
@@ -3198,6 +3233,7 @@ export class RecipesComponent implements OnInit {
     this.recipeService
       .createRecipe({
         name: recipe.name,
+        author: 'ai',
         description: recipe.description,
         difficulty: recipe.difficulty as Difficulty,
         cuisine: recipe.cuisine,

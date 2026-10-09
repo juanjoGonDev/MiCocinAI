@@ -97,6 +97,66 @@ beforeEach(() => {
 afterAll(() => closeDatabase?.());
 
 describe('POST /api/recipes recipe instruction storage', () => {
+  it('persists the allowed recipe origin without changing personal ownership', async () => {
+    const manual = await call('POST', '', {
+      name: 'Origen QA manual',
+      ingredients: [{ name: 'Ingrediente', quantity: 1, unit: 'unit' }],
+      steps: [{ stepNumber: 1, instruction: 'Preparar.' }]
+    });
+    const generated = await call('POST', '', {
+      name: 'Origen QA IA',
+      author: 'ai',
+      ingredients: [{ name: 'Ingrediente', quantity: 1, unit: 'unit' }],
+      steps: [{ stepNumber: 1, instruction: 'Preparar.' }]
+    });
+    const catalog = await call('POST', '', {
+      name: 'Origen QA editorial no permitido',
+      author: 'catalog',
+      ingredients: [{ name: 'Ingrediente', quantity: 1, unit: 'unit' }],
+      steps: [{ stepNumber: 1, instruction: 'Preparar.' }]
+    });
+
+    expect(manual.status).toBe(201);
+    expect(manual.payload.data).toMatchObject({ author: 'user', authorId: userId });
+    expect(generated.status).toBe(201);
+    expect(generated.payload.data).toMatchObject({ author: 'ai', authorId: userId });
+    expect(catalog.status).toBe(400);
+
+    const favorite = await call('POST', `/${generated.payload.data.id}/favorite`);
+    const aiFavorites = await call('GET', '?author=ai&isFavorite=true&pageSize=100');
+    const otherAiFavorites = await callAs(
+      otherToken,
+      'GET',
+      '?author=ai&isFavorite=true&pageSize=100'
+    );
+    const edited = await call('PATCH', `/${generated.payload.data.id}`, {
+      name: 'Origen QA IA editable',
+      author: 'catalog'
+    });
+    const otherRecipe = await callAs(otherToken, 'GET', `/${generated.payload.data.id}`);
+
+    expect(favorite.payload.data.isFavorite).toBe(true);
+    expect(aiFavorites.payload.data.recipes.map((recipe: any) => recipe.id)).toContain(
+      generated.payload.data.id
+    );
+    expect(otherAiFavorites.payload.data.recipes.map((recipe: any) => recipe.id)).not.toContain(
+      generated.payload.data.id
+    );
+    expect(edited.status).toBe(200);
+    expect(edited.payload.data).toMatchObject({
+      name: 'Origen QA IA editable',
+      author: 'ai',
+      authorId: userId,
+      isFavorite: true
+    });
+    expect(otherRecipe.status).toBe(404);
+
+    const persisted = db
+      .prepare('SELECT author, author_id FROM recipes WHERE id = ?')
+      .get(generated.payload.data.id) as { author: string; author_id: string };
+    expect(persisted).toEqual({ author: 'ai', author_id: userId });
+  });
+
   it('stores one canonical map and returns it after reloading the recipe', async () => {
     const created = await call('POST', '', {
       name: 'Crema sintética',
@@ -204,6 +264,51 @@ describe('POST /api/recipes recipe instruction storage', () => {
 });
 
 describe('GET /api/recipes filters for the recipe book', () => {
+  it('filters fast, favorite and AI recipes by real persisted membership', async () => {
+    const fast = await call('POST', '', {
+      name: 'QA filtros rápidos manual',
+      totalTime: 15,
+      ingredients: [{ name: 'Ingrediente QA filtro', quantity: 1, unit: 'unit' }],
+      steps: [{ stepNumber: 1, instruction: 'Preparar.' }]
+    });
+    const slow = await call('POST', '', {
+      name: 'QA filtros lentos manual',
+      totalTime: 60,
+      ingredients: [{ name: 'Ingrediente QA filtro', quantity: 1, unit: 'unit' }],
+      steps: [{ stepNumber: 1, instruction: 'Preparar.' }]
+    });
+    const generated = await call('POST', '', {
+      name: 'QA filtros rápidos IA',
+      author: 'ai',
+      totalTime: 30,
+      ingredients: [{ name: 'Ingrediente QA filtro', quantity: 1, unit: 'unit' }],
+      steps: [{ stepNumber: 1, instruction: 'Preparar.' }]
+    });
+    await call('POST', `/${fast.payload.data.id}/favorite`);
+
+    const query = 'search=QA%20filtros';
+    const all = await call('GET', `?${query}&pageSize=100`);
+    const favorites = await call('GET', `?${query}&isFavorite=true&pageSize=100`);
+    const quick = await call('GET', `?${query}&maxTime=30&pageSize=100`);
+    const ai = await call('GET', `?${query}&author=ai&pageSize=100`);
+
+    const ids = (result: typeof all) => result.payload.data.recipes.map((recipe: any) => recipe.id);
+    expect(ids(all)).toEqual(
+      expect.arrayContaining([
+        fast.payload.data.id,
+        slow.payload.data.id,
+        generated.payload.data.id
+      ])
+    );
+    expect(ids(favorites)).toEqual([fast.payload.data.id]);
+    expect(ids(quick)).toEqual(
+      expect.arrayContaining([fast.payload.data.id, generated.payload.data.id])
+    );
+    expect(ids(quick)).not.toContain(slow.payload.data.id);
+    expect(ids(ai)).toEqual([generated.payload.data.id]);
+    expect(generated.payload.data.authorId).toBe(userId);
+  });
+
   it('filters by explicit country and any selected meal type, and searches ingredients', async () => {
     const result = await call(
       'GET',
@@ -403,7 +508,9 @@ describe('catálogo editorial y datos personales', () => {
       sourceUrl: 'https://commons.wikimedia.org/wiki/File:Tortilla.jpg'
     };
     const photoProvider = await import('../utils/recipe-step-photos.js');
-    const getPhoto = vi.spyOn(photoProvider.recipeStepPhotoProvider, 'getPhoto').mockReturnValue(photo);
+    const getPhoto = vi
+      .spyOn(photoProvider.recipeStepPhotoProvider, 'getPhoto')
+      .mockReturnValue(photo);
     const getImage = vi.spyOn(photoProvider.recipeStepPhotoProvider, 'getImage').mockResolvedValue({
       bytes: new Uint8Array([0xff, 0xd8, 0xff, 0xd9]),
       mimeType: 'image/jpeg'
@@ -430,7 +537,9 @@ describe('catálogo editorial y datos personales', () => {
         }
       });
       expect(
-        db.prepare('SELECT image_data, mime_type, author FROM recipe_image_assets WHERE id = ?').get(photoId)
+        db
+          .prepare('SELECT image_data, mime_type, author FROM recipe_image_assets WHERE id = ?')
+          .get(photoId)
       ).toMatchObject({
         image_data: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
         mime_type: 'image/jpeg',
@@ -487,8 +596,14 @@ describe('catálogo editorial y datos personales', () => {
       });
       expect(updated.payload.data.instructionsByLevel.basic[0]).not.toHaveProperty('imagePhotoId');
       expect(
-        db.prepare('SELECT image_data, mime_type, author FROM recipe_image_assets WHERE id = ?').get(photoId)
-      ).toMatchObject({ image_data: Buffer.from([0xff, 0xd8, 0xff, 0xd9]), mime_type: 'image/jpeg', author: 'María' });
+        db
+          .prepare('SELECT image_data, mime_type, author FROM recipe_image_assets WHERE id = ?')
+          .get(photoId)
+      ).toMatchObject({
+        image_data: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+        mime_type: 'image/jpeg',
+        author: 'María'
+      });
       expect(getPhoto).toHaveBeenCalledWith(photoId);
       expect(getImage).toHaveBeenCalledWith(photoId);
     } finally {
@@ -522,7 +637,9 @@ describe('catálogo editorial y datos personales', () => {
       const unchanged = await call('GET', `/${id}`);
       expect(unchanged.payload.data.name).toBe('Receta sin modificar');
       expect(unchanged.payload.data.instructionsByLevel.basic[0]).not.toHaveProperty('image');
-      expect(db.prepare('SELECT 1 FROM recipe_image_assets WHERE id = ?').get(photoId)).toBeUndefined();
+      expect(
+        db.prepare('SELECT 1 FROM recipe_image_assets WHERE id = ?').get(photoId)
+      ).toBeUndefined();
       expect(getPhoto).toHaveBeenCalledWith(photoId);
       expect(getImage).not.toHaveBeenCalled();
     } finally {
@@ -599,7 +716,15 @@ describe('catálogo editorial y datos personales', () => {
         tipsAndVariations: ['Sirve con queso fresco.']
       },
       instructionsByLevel: replacementInstructions,
-      nutrition: { calories: 420, protein: 12, carbs: 62, fat: 14, fiber: 6, sugar: 4, sodium: 190 },
+      nutrition: {
+        calories: 420,
+        protein: 12,
+        carbs: 62,
+        fat: 14,
+        fiber: 6,
+        sugar: 4,
+        sodium: 190
+      },
       storage: {
         method: 'Refrigerar una vez frías',
         container: 'Recipiente hermético',
@@ -646,7 +771,15 @@ describe('catálogo editorial y datos personales', () => {
         tipsAndVariations: ['Sirve con queso fresco.']
       },
       instructionsByLevel: replacementInstructions,
-      nutrition: { calories: 420, protein: 12, carbs: 62, fat: 14, fiber: 6, sugar: 4, sodium: 190 },
+      nutrition: {
+        calories: 420,
+        protein: 12,
+        carbs: 62,
+        fat: 14,
+        fiber: 6,
+        sugar: 4,
+        sodium: 190
+      },
       storage: {
         method: 'Refrigerar una vez frías',
         container: 'Recipiente hermético',
@@ -662,8 +795,11 @@ describe('catálogo editorial y datos personales', () => {
     });
     expect(updated.payload.data).not.toHaveProperty('steps');
     expect(
-      (db.prepare('SELECT COUNT(*) AS total FROM recipes WHERE author_id = ?').get(userId) as { total: number })
-        .total
+      (
+        db.prepare('SELECT COUNT(*) AS total FROM recipes WHERE author_id = ?').get(userId) as {
+          total: number;
+        }
+      ).total
     ).toBe(1);
   });
 

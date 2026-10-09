@@ -11,6 +11,7 @@ export interface SyntheticRecipe {
 
 export interface SyntheticRecipeOptions {
   name?: string;
+  totalTime?: number;
   tips?: string;
   warning?: string;
   servings?: number;
@@ -68,7 +69,7 @@ export async function createSyntheticRecipe(
       name,
       description: 'Fixture sintético para comprobar navegación y deep links.',
       difficulty: 'easy',
-      totalTime: 15,
+      totalTime: options.totalTime ?? 15,
       prepTime: 5,
       cookTime: 10,
       servings: options.servings ?? 2,

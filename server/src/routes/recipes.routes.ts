@@ -81,10 +81,9 @@ type StoredRecipePhoto = {
 
 type PhotoResolutionError = 'expired' | 'unavailable' | 'limit';
 
-async function resolveStepPhotoSelections(instructionData: unknown): Promise<
-  | { data: unknown; assets: StoredRecipePhoto[] }
-  | { error: PhotoResolutionError }
-> {
+async function resolveStepPhotoSelections(
+  instructionData: unknown
+): Promise<{ data: unknown; assets: StoredRecipePhoto[] } | { error: PhotoResolutionError }> {
   const assets = new Map<string, StoredRecipePhoto>();
   let totalBytes = 0;
 
@@ -145,9 +144,7 @@ async function resolveStepPhotoSelections(instructionData: unknown): Promise<
 
   if (Array.isArray(instructionData)) {
     const data = await resolveSteps(instructionData);
-    return typeof data === 'string'
-      ? { error: data }
-      : { data, assets: [...assets.values()] };
+    return typeof data === 'string' ? { error: data } : { data, assets: [...assets.values()] };
   }
   if (!instructionData || typeof instructionData !== 'object') {
     return { data: instructionData, assets: [] };
@@ -189,12 +186,19 @@ function attachStepPhotoAttribution(storedSteps: unknown): unknown {
     : storedSteps && typeof storedSteps === 'object'
       ? Object.values(storedSteps).filter(Array.isArray)
       : [];
-  const ids = [...new Set(groups.flatMap((steps) => steps.flatMap((step) => {
-    if (!step || typeof step !== 'object' || Array.isArray(step)) return [];
-    const image = (step as Record<string, unknown>).image;
-    const match = typeof image === 'string' ? /^\/api\/recipe-images\/([a-f0-9]{24})$/.exec(image) : null;
-    return match ? [match[1]] : [];
-  })))];
+  const ids = [
+    ...new Set(
+      groups.flatMap((steps) =>
+        steps.flatMap((step) => {
+          if (!step || typeof step !== 'object' || Array.isArray(step)) return [];
+          const image = (step as Record<string, unknown>).image;
+          const match =
+            typeof image === 'string' ? /^\/api\/recipe-images\/([a-f0-9]{24})$/.exec(image) : null;
+          return match ? [match[1]] : [];
+        })
+      )
+    )
+  ];
   const attributions = new Map<string, Record<string, string>>();
   if (ids.length) {
     const placeholders = ids.map(() => '?').join(', ');
@@ -215,21 +219,25 @@ function attachStepPhotoAttribution(storedSteps: unknown): unknown {
     }
   }
 
-  const decorate = (steps: unknown[]): unknown[] => steps.map((value) => {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
-    const { imageAttribution: _untrustedAttribution, ...step } = value as Record<string, unknown>;
-    const image = step.image;
-    const match = typeof image === 'string' ? /^\/api\/recipe-images\/([a-f0-9]{24})$/.exec(image) : null;
-    const attribution = match ? attributions.get(match[1]) : undefined;
-    return attribution ? { ...step, imageAttribution: attribution } : step;
-  });
+  const decorate = (steps: unknown[]): unknown[] =>
+    steps.map((value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+      const { imageAttribution: _untrustedAttribution, ...step } = value as Record<string, unknown>;
+      const image = step.image;
+      const match =
+        typeof image === 'string' ? /^\/api\/recipe-images\/([a-f0-9]{24})$/.exec(image) : null;
+      const attribution = match ? attributions.get(match[1]) : undefined;
+      return attribution ? { ...step, imageAttribution: attribution } : step;
+    });
 
   if (Array.isArray(storedSteps)) return decorate(storedSteps);
   if (!storedSteps || typeof storedSteps !== 'object') return storedSteps;
-  return Object.fromEntries(Object.entries(storedSteps).map(([level, steps]) => [
-    level,
-    Array.isArray(steps) ? decorate(steps) : steps
-  ]));
+  return Object.fromEntries(
+    Object.entries(storedSteps).map(([level, steps]) => [
+      level,
+      Array.isArray(steps) ? decorate(steps) : steps
+    ])
+  );
 }
 
 // Helper to convert snake_case DB row to camelCase API object
@@ -519,11 +527,12 @@ recipeRoutes.post('/', async (c) => {
     return c.json(
       {
         success: false,
-        message: resolvedPhotos.error === 'expired'
-          ? 'A selected photo expired; search again'
-          : resolvedPhotos.error === 'limit'
-            ? 'The recipe has too many or too-large selected photos'
-            : 'A selected photo is unavailable; search again'
+        message:
+          resolvedPhotos.error === 'expired'
+            ? 'A selected photo expired; search again'
+            : resolvedPhotos.error === 'limit'
+              ? 'The recipe has too many or too-large selected photos'
+              : 'A selected photo is unavailable; search again'
       },
       status
     );
@@ -531,7 +540,7 @@ recipeRoutes.post('/', async (c) => {
 
   db.transaction(() => {
     db.prepare(
-    `
+      `
     INSERT INTO recipes (id, name, description, difficulty, cuisine, country_code, meal_type, total_time, prep_time, cook_time, rest_time, servings, calories, image, ingredients, utensils, steps, recipe_guidance, nutrition, storage, author, author_id, tags, is_public)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
@@ -556,7 +565,7 @@ recipeRoutes.post('/', async (c) => {
       input.guidance ? JSON.stringify(input.guidance) : null,
       input.nutrition ? JSON.stringify(input.nutrition) : null,
       input.storage ? JSON.stringify(input.storage) : null,
-      'user',
+      input.author,
       userId,
       JSON.stringify(input.tags),
       input.isPublic ? 1 : 0
@@ -605,11 +614,12 @@ recipeRoutes.patch('/:id', async (c) => {
       return c.json(
         {
           success: false,
-          message: resolved.error === 'expired'
-            ? 'A selected photo expired; search again'
-            : resolved.error === 'limit'
-              ? 'The recipe has too many or too-large selected photos'
-              : 'A selected photo is unavailable; search again'
+          message:
+            resolved.error === 'expired'
+              ? 'A selected photo expired; search again'
+              : resolved.error === 'limit'
+                ? 'The recipe has too many or too-large selected photos'
+                : 'A selected photo is unavailable; search again'
         },
         status
       );
@@ -619,7 +629,11 @@ recipeRoutes.patch('/:id', async (c) => {
   }
 
   let selectedPhoto:
-    | { id: string; image: { bytes: Uint8Array; mimeType: string }; attribution: Record<string, string> }
+    | {
+        id: string;
+        image: { bytes: Uint8Array; mimeType: string };
+        attribution: Record<string, string>;
+      }
     | undefined;
   const imagePhotoId = typeof input.imagePhotoId === 'string' ? input.imagePhotoId : undefined;
   if (imagePhotoId) {
@@ -653,7 +667,7 @@ recipeRoutes.patch('/:id', async (c) => {
   for (const [key, column] of Object.entries(RECIPE_EDIT_COLUMNS)) {
     const value =
       key === 'steps' || key === 'instructionsByLevel'
-        ? resolvedInstructionData ?? (input as Record<string, unknown>)[key]
+        ? (resolvedInstructionData ?? (input as Record<string, unknown>)[key])
         : (input as Record<string, unknown>)[key];
     if (value === undefined) continue;
     updates.push(`${column} = ?`);

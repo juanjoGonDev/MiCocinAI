@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1225/1225** con cobertura **90.83/81.94/89.42/92.27 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
-- **IA / tickets reales (2026-10-09):** la validación de tickets sigue abierta. La corrección de WebAPI hace que la limpieza tras un upload parcial termine correctamente, pero el upload real de los dos adjuntos aún expira con HTTP 504 antes de `prompt_submitted`. No se repiten tickets mientras ese fallo persista.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1225/1225 con cobertura 90.83/81.94/89.42/92.27 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1226/1226** con cobertura **90.83/81.94/89.42/92.28 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **IA / tickets reales (2026-10-09, revalidado):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. `GET /admin/api/logs?lines=2000` devuelve 649 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; correlación `kaamY`, `attachmentCount=2`, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. El servicio está listo, pero el fallo de upload sigue presente; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1226/1226 con cobertura 90.83/81.94/89.42/92.28 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -1538,20 +1538,56 @@ guardadas por el hogar/usuario actual; la marca `author='ai'` clasifica el orige
 conserva búsqueda/libro. La URL, navegación atrás/adelante y recarga reflejan la pestaña activa. El
 cliente no puede asignar el autor editorial `catalog`.
 
-- [ ] Añadir primero una E2E roja con usuario/DB aislados y proveedor IA sintético: guardar una receta
+- [x] Añadir primero una E2E roja con usuario/DB aislados y proveedor IA sintético: guardar una receta
       manual rápida, otra manual >30 min y otra generada; demostrar miembros exactos de Todas,
       Favoritas, Rápidas e IA, sin filtraciones ni duplicados.
-- [ ] Persistir el origen IA de las recetas generadas sin perder `author_id`, favoritos, permisos de
+- [x] Persistir el origen IA de las recetas generadas sin perder `author_id`, favoritos, permisos de
       edición ni contratos de recipes manuales; mantener `catalog` solo en contenido editorial.
-- [ ] Cubrir API/servicio/componente con generación, persistencia y filtros combinados; ≥70 % S/B/F/L
+- [x] Cubrir API/servicio/componente con generación, persistencia y filtros combinados; ≥70 % S/B/F/L
       en cada fichero instrumentable y no rebajar gates.
-- [ ] Verificar pestañas, resultado real, URL, atrás/adelante y recarga en Chromium desktop y Pixel 5;
+- [x] Verificar pestañas, resultado real, URL, atrás/adelante y recarga en Chromium desktop y Pixel 5;
       comprobar estado vacío/error, viewport mínimo 320, cero overflow y cero llamadas IA real.
-- [ ] Registrar prueba roja/verde, cleanup, coverage y rollback por archivo; mantener abierta `/recipes`
+- [x] Registrar prueba roja/verde, cleanup, coverage y rollback por archivo; mantener abierta `/recipes`
       hasta cubrir las otras acciones listadas.
 
-**Rollback:** revertir solo la clasificación de origen al guardar recetas IA, sus tests/fixtures y este
-bloque; conservar los filtros vigentes y la propiedad personal de recetas.
+**TDD rojo (2026-10-09):** la E2E aislada falló al esperar `author=ai` (recibía `user`). Las dos
+pruebas de API fallaron: el POST guardaba siempre `user` y el filtro IA devolvía vacío. La E2E
+reprodujo además que, ante 503 del filtro, faltaban un error accesible y reintento y la UI conservaba
+resultados sin indicar que podían estar desactualizados.
+
+**Implementación/evidencia verde (2026-10-09):** el POST acepta solo origen `ai`/`user` y mantiene
+`author_id` ligado a la persona autenticada; los manuales siguen por defecto como `user`, `catalog`
+no se acepta desde el cliente, y favoritos/edición/privacidad de una receta IA siguen personales.
+La lista conserva los resultados anteriores si falla la carga, muestra un aviso accesible de posible
+desactualización (sin toast duplicado ni falso estado vacío) y permite reintentar el mismo filtro.
+API focal `pnpm --filter @hogaria/server exec vitest run src/routes/recipes.routes.spec.ts
+--reporter=dot`: 20/20; servicio Karma focal 20/20; componente Karma focal 14/14; Playwright aislado
+con SQLite/puerto/usuario únicos, `E2E_RATE_LIMIT=on`, proveedor sintético local y cleanup: 2/2
+(Chromium 1440×900, Pixel 5 393×851; error/overflow también a 320×568 y 568×320). La E2E verifica
+miembros exactos de las cuatro pestañas, búsqueda preservada, query string, atrás/adelante/recarga,
+estado vacío, 503 y reintento. No se llama a IA real. `pnpm run typecheck:e2e` pasa. Capturas
+sintéticas inspeccionadas en `.e2e-screenshots/qa-recipe-quick-filters-20261009-final/`
+(`chromium-…1440x900`, `mobile-chrome-…393x851`, `…320x568` y `…568x320`, resultado IA y error).
+Coverage Karma focal por fichero: `recipe.service.ts` 90.68/79.06/92.59/92.18 % S/B/F/L y
+`recipes.component.ts` 94.55/89.14/92.30/95.15 %; ambos superan 70 % en las cuatro métricas.
+El comando focal con solo esos dos specs ejecuta los 34 tests, pero retorna código 1 porque el
+gate global existente evalúa también todo el código de la aplicación (29.55/21.88/23.57/30.04 %
+S/B/F/L); no se cambió el gate. La suite completa `pnpm run test` pasa con 1226/1226 Karma y el
+umbral global intacto. Server focal `recipes.routes.ts` 87.69/77.50/93.93/89.07 % S/B/F/L y
+schema 100 %; suite completa de server: 1236 tests, 1 skipped. E2E amplia de recetas: 58/58 en
+Chromium y Pixel 5.
+`pnpm run build` (server TypeScript + producción Angular), `pnpm run typecheck:e2e`,
+`pnpm run check:ui`, Prettier focal y `git diff --check` pasan. Build conserva los warnings
+preexistentes de budgets y componentes/imports no usados; no se rebajó ninguna regla.
+
+**Rollback:** revertir solo `server/src/schemas/recipe.schema.ts`,
+`server/src/routes/recipes.routes.ts`, `server/src/routes/recipes.routes.spec.ts`,
+`frontend/src/app/features/recipes/recipes.component.ts`,
+`frontend/src/app/features/recipes/recipes.component.spec.ts`,
+`frontend/src/app/core/services/recipe.service.ts`, `frontend/src/app/core/services/recipe.service.spec.ts`,
+`frontend/src/app/core/i18n/dict/recipes.ts`, `tests/e2e/recipes-ai-generation.spec.ts`,
+`tests/e2e/helpers/recipe-fixtures.ts` y este bloque; conservar los filtros vigentes y la propiedad
+personal de recetas.
 
 ## QA-AUTH.FORGOT.1 · resultado honesto y no enumeración en recuperación (spec-first)
 

@@ -5,6 +5,11 @@ import { join } from 'node:path';
 import { expect, test as baseTest } from './fixtures';
 import { expectAiParticipantsSafetyNoteGeometry } from './helpers/ai-participants';
 import { registerAndGoto, registerWithHousehold } from './helpers/auth';
+import {
+  createSyntheticRecipe,
+  deleteSyntheticRecipe,
+  type SyntheticRecipe
+} from './helpers/recipe-fixtures';
 import { mockRecipeStepPhotos } from './helpers/recipe-step-photos';
 
 type ProviderResponse = { status?: number; content?: unknown; delayMs?: number };
@@ -320,6 +325,211 @@ async function advanceRecipeWizardToOptions(page: Parameters<typeof registerAndG
 }
 
 test.describe('Generación de recetas IA', () => {
+  test('los filtros rápidos muestran resultados reales y conservan la pestaña en URL e historial', async ({
+    page,
+    syntheticProvider
+  }, testInfo) => {
+    const viewport = testInfo.project.name === 'chromium' ? VIEWPORTS[0] : VIEWPORTS[1];
+    const searchStem = `Filtro recetas QA ${Date.now()}`;
+    const quickName = `${searchStem} manual rápida`;
+    const slowName = `${searchStem} manual lenta`;
+    const aiName = `${searchStem} generada IA`;
+    syntheticProvider.enqueue({ content: { ...singleRecipe, name: aiName } });
+
+    let quickRecipe: SyntheticRecipe | undefined;
+    let slowRecipe: SyntheticRecipe | undefined;
+    let aiRecipe: SyntheticRecipe | undefined;
+
+    try {
+      await openGenerator(page, viewport, syntheticProvider.baseUrl);
+      quickRecipe = await createSyntheticRecipe(page, { name: quickName, totalTime: 15 });
+      slowRecipe = await createSyntheticRecipe(page, { name: slowName, totalTime: 60 });
+      const favoriteResponse = await page.request.post(`/api/recipes/${quickRecipe.id}/favorite`, {
+        headers: { authorization: `Bearer ${quickRecipe.token}` }
+      });
+      expect(favoriteResponse.status()).toBe(200);
+
+      const generatedResponse = page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/ai/generate-recipe') &&
+          response.request().method() === 'POST'
+      );
+      await page.getByRole('button', { name: 'Generar 1 receta' }).click();
+      expect((await generatedResponse).status()).toBe(200);
+
+      const saveResponse = page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/recipes') && response.request().method() === 'POST'
+      );
+      await page.getByRole('button', { name: 'Guardar receta' }).click();
+      const savedResponse = await saveResponse;
+      expect(savedResponse.status()).toBe(201);
+      const savedPayload = (await savedResponse.json()) as {
+        data: { id: string; name: string; author: string; authorId: string };
+      };
+      aiRecipe = {
+        id: savedPayload.data.id,
+        name: savedPayload.data.name,
+        token: quickRecipe.token
+      };
+      expect(savedPayload.data.author).toBe('ai');
+      expect(savedPayload.data.authorId).toBeTruthy();
+      expect(savedPayload.data.name).toBe(aiName);
+      expect(syntheticProvider.requests).toHaveLength(1);
+
+      await page.goto(`/recipes?search=${encodeURIComponent(searchStem)}`);
+      const matchingCards = page.locator('.recipe-card');
+      const quickCard = matchingCards.filter({ hasText: quickName });
+      const slowCard = matchingCards.filter({ hasText: slowName });
+      const aiCard = matchingCards.filter({ hasText: aiName });
+      await expect(matchingCards).toHaveCount(3);
+      await expect(quickCard).toHaveCount(1);
+      await expect(slowCard).toHaveCount(1);
+      await expect(aiCard).toHaveCount(1);
+
+      const favoritesTab = page.getByRole('button', { name: 'Favoritas', exact: true });
+      await favoritesTab.click();
+      await expect(favoritesTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(matchingCards).toHaveCount(1);
+      await expect(quickCard).toBeVisible();
+      await expect(slowCard).toHaveCount(0);
+      await expect(aiCard).toHaveCount(0);
+      expect(new URL(page.url()).searchParams.get('isFavorite')).toBe('true');
+
+      const quickTab = page.getByRole('button', { name: 'Rápidas', exact: true });
+      await quickTab.click();
+      await expect(quickTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(matchingCards).toHaveCount(2);
+      await expect(quickCard).toBeVisible();
+      await expect(aiCard).toBeVisible();
+      await expect(slowCard).toHaveCount(0);
+      expect(new URL(page.url()).searchParams.get('maxTime')).toBe('30');
+      expect(new URL(page.url()).searchParams.get('isFavorite')).toBeNull();
+
+      const aiTab = page.getByRole('button', { name: 'IA', exact: true });
+      await aiTab.click();
+      await expect(aiTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(matchingCards).toHaveCount(1);
+      await expect(aiCard).toBeVisible();
+      await expect(quickCard).toHaveCount(0);
+      await expect(slowCard).toHaveCount(0);
+      expect(new URL(page.url()).searchParams.get('author')).toBe('ai');
+      expect(new URL(page.url()).searchParams.get('search')).toBe(searchStem);
+      await captureScreenshot(page, 'recipe-quick-filter-ai', viewport, testInfo.project.name);
+
+      await page.goBack();
+      await expect(quickTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(matchingCards).toHaveCount(2);
+      await page.goForward();
+      await expect(aiTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(matchingCards).toHaveCount(1);
+      await page.reload();
+      await expect(aiTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(aiCard).toHaveCount(1);
+
+      for (const responsiveViewport of VIEWPORTS.slice(2)) {
+        await page.setViewportSize(responsiveViewport);
+        await expect(aiTab).toHaveAttribute('aria-pressed', 'true');
+        await expect(aiCard).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+          responsiveViewport.width
+        );
+        if (testInfo.project.name === 'mobile-chrome') {
+          await captureScreenshot(
+            page,
+            'recipe-quick-filter-ai',
+            responsiveViewport,
+            testInfo.project.name
+          );
+        }
+      }
+      await page.setViewportSize(viewport);
+
+      const allTab = page.getByRole('button', { name: 'Todas', exact: true });
+      await allTab.click();
+      await expect(allTab).toHaveAttribute('aria-pressed', 'true');
+      await expect(matchingCards).toHaveCount(3);
+      const query = new URL(page.url()).searchParams;
+      expect(query.get('search')).toBe(searchStem);
+      expect(query.get('isFavorite')).toBeNull();
+      expect(query.get('author')).toBeNull();
+      expect(query.get('maxTime')).toBeNull();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        viewport.width
+      );
+
+      await page.route('**/api/recipes**', async (route) => {
+        const requestUrl = new URL(route.request().url());
+        if (
+          requestUrl.pathname.endsWith('/api/recipes') &&
+          requestUrl.searchParams.get('search') === searchStem &&
+          requestUrl.searchParams.get('author') === 'ai'
+        ) {
+          await route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({ success: false, message: 'Synthetic list failure' })
+          });
+          return;
+        }
+        await route.continue();
+      });
+      const failedFilterResponse = page.waitForResponse(
+        (response) =>
+          response.url().includes('/api/recipes?') &&
+          response.url().includes('author=ai') &&
+          response.status() === 503
+      );
+      await aiTab.click();
+      expect((await failedFilterResponse).status()).toBe(503);
+      await expect(aiTab).toHaveAttribute('aria-pressed', 'true');
+      expect(new URL(page.url()).searchParams.get('author')).toBe('ai');
+      const loadError = page.locator('[data-test="recipes-load-error"]');
+      await expect(loadError).toBeVisible();
+      await expect(loadError).toContainText('desfasados');
+      await expect(matchingCards).toHaveCount(3);
+      await expect(page.locator('.empty-state')).toHaveCount(0);
+      const retryButton = page.getByRole('button', { name: 'Reintentar', exact: true });
+      await captureScreenshot(
+        page,
+        'recipe-quick-filter-load-error',
+        viewport,
+        testInfo.project.name
+      );
+      for (const errorViewport of VIEWPORTS.slice(2)) {
+        await page.setViewportSize(errorViewport);
+        await expect(loadError).toBeVisible();
+        await expect(matchingCards).toHaveCount(3);
+        await retryButton.scrollIntoViewIfNeeded();
+        await expect(retryButton).toBeInViewport();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+          errorViewport.width
+        );
+        if (testInfo.project.name === 'mobile-chrome') {
+          await captureScreenshot(
+            page,
+            'recipe-quick-filter-load-error',
+            errorViewport,
+            testInfo.project.name
+          );
+        }
+      }
+      await page.setViewportSize(viewport);
+      await page.unroute('**/api/recipes**');
+      await retryButton.click();
+      await expect(aiCard).toBeVisible();
+      await expect(page.locator('[data-test="recipes-load-error"]')).toHaveCount(0);
+
+      await page.goto(`/recipes?search=${encodeURIComponent(`${searchStem} sin coincidencias`)}`);
+      await expect(page.locator('.recipe-card')).toHaveCount(0);
+      await expect(page.locator('.empty-state')).toBeVisible();
+    } finally {
+      if (aiRecipe) await deleteSyntheticRecipe(page, aiRecipe);
+      if (slowRecipe) await deleteSyntheticRecipe(page, slowRecipe);
+      if (quickRecipe) await deleteSyntheticRecipe(page, quickRecipe);
+    }
+  });
+
   for (const viewport of VIEWPORTS.slice(0, 2)) {
     test(`wizard, filtros de ingredientes y preferencias de invitado (${viewport.width}×${viewport.height})`, async ({
       page,
