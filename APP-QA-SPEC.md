@@ -975,7 +975,7 @@ la corrección mínima del selector; no se cambia el modelo ni persistencia.
 
 ### QA-04c.CATALOG-LABEL-PIPE.1 · contrato de traducción del pipe de catálogo
 
-**Fuente revalidada (2026-10-09, HEAD `b585e5e`):** `catalog-label.pipe.ts` deja el dato persistido
+**Fuente revalidada (2026-10-09, HEAD `aeffa17`):** `catalog-label.pipe.ts` deja el dato persistido
 intacto y traduce solo nombres sembrados; el pipe impuro consulta `changeTick()` antes de resolver la
 etiqueta para seguir cambios de idioma. `catalog-label.spec.ts` cubre el helper puro, pero no hay
 pruebas directas de `CatalogLabelPipe` ni de su integración con `I18nService`. LCOV completo vigente:
@@ -990,20 +990,24 @@ diccionarios globales ni datos reales.
       clave/traducción y lectura de `changeTick()`.
 - [x] Cubrir nombres personalizados y valores ausentes/vacíos, sin llamar `t` cuando no hay clave;
       lograr ≥70 % S/B/F/L del pipe y mantener ≥80 % global en Karma.
-- [ ] Ejecutar Karma focal y suite completa, build/typecheck/check-ui/formato/diff-check; no cambia
+- [x] Ejecutar Karma focal y suite completa, build/typecheck/check-ui/formato/diff-check; no cambia
       UI ni geometría, así que E2E/capturas nuevas N/A. Registrar rollback, hooks, commit, push y CI.
 
-**Evidencia de cobertura (2026-10-09; cierre de hooks/CI pendiente):** `catalog-label.pipe.spec.ts`
+**Evidencia de cobertura (2026-10-09):** `catalog-label.pipe.spec.ts`
 focal pasa **2/2**; junto con `catalog-label.spec.ts`, el run instrumentado pasa **7/7**. El proceso
 focal instrumentado devuelve exit 1 solo por aplicar el gate global a ese subconjunto (**29.12/4.76/
 11.11/31.73 % S/B/F/L**); no se alteró el umbral. LCOV focal de `catalog-label.pipe.ts`:
 **100/100/100/100 % S/B/F/L**. La suite completa pasa **1274/1274**, global
 **92.16/83.40/90.92/93.59 % S/B/F/L**; LCOV archivado fuera de Git en
 `%TEMP%\hogaria-catalog-label-pipe-full-20261009\lcov.info`. No se cambió producción, UI ni storage.
+El pre-commit aprobó Prettier y `check:ui` (212 archivos/21 reglas); el pre-push aprobó formato,
+`check:ui`, build, `typecheck:e2e`, configuración **11/11**, Karma **1274/1274** y Vitest server
+**1236 pasadas/1 omitida**, sin saltar hooks. Commit `aeffa17` (`test(i18n): cover catalog label pipe`)
+publicado; CI #644 (`37943374621`) pasó **9/9** jobs.
 
 **Validación spec-first (2026-10-09):** el contrato y el baseline se contrastaron con el código actual;
-`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. Sigue pendiente registrar los
-gates finales, hooks, commit/push y CI.
+`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. No se requieren E2E ni capturas
+porque esta unidad solo añade cobertura unitaria y no altera UI/geometría.
 
 **Rollback:** retirar solo las pruebas directas nuevas y este subapartado; no cambia el helper, el pipe,
 el diccionario ni la persistencia.
