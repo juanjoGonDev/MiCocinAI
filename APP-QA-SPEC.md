@@ -2558,6 +2558,39 @@ desbordamiento horizontal a 320×568/568×320. Las capturas sintéticas del avis
 unitaria/E2E, junto con esta subsección; no retirar otras conductas de Compra. Fix publicado en `0af4741`;
 hooks completos y CI `37966484202` están verdes para el código final.
 
+#### QA-SHOPPING.TRAY-503.ALERT-BOUNDS.1 · aviso sin recorte en móvil
+
+**Fuente revalidada (2026-10-09):** CI `37968280085`, shard 4, y la repetición local aislada de
+`shopping-tray-lifecycle.spec.ts` reproducen un defecto distinto del estado HTTP: el documento no tiene
+overflow, pero la alerta `role=alert` sale del viewport estrecho. El CI midió el borde derecho en 464,7 px
+frente a 320 px (retry: 339,5 px); localmente llegó a 536,95 px frente a 320 px. La aserción E2E ya existente
+lo detecta; el cierre anterior solo había comprobado el `scrollWidth` del documento y no el rectángulo del aviso.
+
+**Contrato:** la única alerta 503 sigue visible, accesible y completamente dentro del viewport a 320×568 y
+568×320; su borde izquierdo es ≥0 y el derecho no supera el ancho solicitado. La página tampoco adquiere
+overflow horizontal. En escritorio el aviso conserva la anchura máxima compartida de 400 px.
+
+**TDD rojo:** CI `37968280085` falló en la aserción del rectángulo; la repetición local aislada también falló
+(**1/1**) antes del arreglo:
+
+```powershell
+$env:E2E_RATE_LIMIT='on'
+node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium tests/e2e/shopping-tray-lifecycle.spec.ts --grep 'terminar y reabrir desde el historial conserva el estado tras recargar' --reporter=line
+```
+
+- [x] Revalidar el E2E, aislar el rectángulo del aviso como causa y reproducir el fallo con Playwright real,
+      rate limit activo y SQLite/puertos/semilla aislados.
+
+- [ ] Ajustar la geometría del contenedor superior de avisos para que el toast use el ancho disponible en
+      móvil y mantenga su límite de 400 px en escritorio; no alterar estados, copy ni persistencia de Compra.
+- [ ] Reejecutar el caso en Chromium y Pixel 5, en 320×568, 568×320 y escritorio; comprobar rectángulo, scroll,
+      accesibilidad y ausencia de `pageerror`. Guardar e inspeccionar capturas sintéticas comparables de PC y
+      móvil. Ejecutar `typecheck:e2e`, `check:ui`, formato y las suites requeridas; cobertura N/A si solo cambia CSS.
+- [ ] Registrar evidencia y rollback en el commit atómico, ejecutar hooks completos, push y confirmar CI verde.
+
+**Rollback:** revertir el ajuste geométrico y la regresión/cierre de esta subunidad; conservar el manejo 503
+de `shopping.service.ts` y su alerta localizada.
+
 #### QA-SHOPPING.TRAY-STORE-FILTER.1 · filtro de tienda con enlace recuperable
 
 **Fuente revalidada (2026-10-09):** `ShoppingListsComponent` obtiene las opciones del servicio de tiendas,
