@@ -3228,6 +3228,34 @@ resultado anterior potencialmente completado. La subunidad sigue abierta.
 mantener el cargador general de fixtures sintéticas, adjuntos de inventario ya probados y el código de
 WebAPI en su repositorio.
 
+**Revalidación tras el supuesto arreglo de WebAPI (2026-10-09; detenida antes de IA y sin reenvío):**
+el checkout local `D:\projects\webApi`, rama `fix/live-ticket-inventory-attachments`, está en
+`f4241290`; el último commit solo actualiza la spec de WebAPI y no cambia los archivos de producción.
+El listener existente PID 21588 ejecuta `node --import tsx src/main.ts`, arrancó a las 09:46 hora local
+y `/health/ready` devolvió `ready=true`, `storage=ready`. La fuente vigente aún contiene el fallo: el
+middleware multipart guarda cada fichero con el nombre `<índice>-<nombre original>` (p. ej.
+`1-inventario.json`), mientras `buildOpenCodeMessageAttachments()` solo reconoce el nombre exacto o
+un prefijo UUID para forzar la subida. Por ello el JSON staged no se clasifica como adjunto requerido;
+`prepareOpenCodeAttachments()` lo trata como texto pequeño y lo añade al prompt. Además, si el JSON
+fuera forzado pero excediese presupuesto/tamaño, la política actual también permite inlinearlo en vez
+de fallar cerrado.
+
+La reproducción local aislada con `0-ticket.jpg` y `1-inventario.json` sintéticos y temporales produjo
+`ticketUploaded=true`, `inventoryUploaded=false`, `inventoryInlined=true`; los ficheros se limpiaron y
+no se llamó al proveedor. Las pruebas focales
+`pnpm exec vitest run tests/api/opencode/attachment-policy.test.ts tests/api/opencode/multipart-chat-completions.test.ts tests/providers/chatgpt/opencode-executor.test.ts --config vitest.config.ts --reporter=dot`
+pasaron **30/30**, pero no cubren el prefijo numérico multipart (la regresión existente cubre el UUID),
+por lo que no invalidan esta reproducción. El resultado sintético previo que solo comprobaba ambos
+marcadores tampoco demuestra que ChatGPT recibiera dos tarjetas: el JSON puede provenir del contexto
+inline. La spec vigente de WebAPI deja sin marcar la clasificación del nombre staged y el fallo cerrado.
+
+No se ejecutó otra llamada live: la causa se reprodujo antes de tocar el proveedor. No se abrió ni se
+reenvió ningún ticket real; la solicitud JPEG anterior, potencialmente ambigua, y los PDF individuales
+siguen excluidos, y no se envió el PDF largo. La validación de extracción/schema, categorías,
+deduplicación, revisión e historial continúa pendiente. Para retomar, WebAPI debe reconocer el prefijo
+multipart numérico, fallar cerrado para el inventario requerido y demostrar con evidencia de upload
+(no solo marcadores) que ambos ficheros llegaron al modelo.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
