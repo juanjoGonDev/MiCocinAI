@@ -2912,6 +2912,20 @@ global 92.22/83.53/90.97/93.64 % S/B/F/L; picker 100/100/100/100 % y StorageServ
 Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el código final en `0af4741` (**9/9** jobs).
 
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
+
+#### QA-SHOPPING.PHOTO-REVIEW.1 · revisar, editar y confirmar una propuesta por foto
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §8f define un flujo de dos pasos: `POST …/photo/analyze` devuelve una propuesta validada sin escribir en la lista; solo `POST …/items/apply` persiste lo confirmado y fusiona por `product_key`. `shopping.routes.spec.ts` prueba la respuesta exitosa y que analizar no escribe, y `shopping-round6.spec.ts`/`shopping-ai-recovery.spec.ts` prueban únicamente el error sin configuración. El flujo de éxito no tiene E2E de UI; no se infiere un defecto de producción.
+
+**Contrato:** con una lista y una línea sintéticas, seleccionar un PNG local y analizarlo mediante la API real contra un proveedor OpenAI-compatible local y controlado. El proveedor recibe imagen, modo/nota y `response_format` JSON Schema estricto; devuelve líneas y avisos válidos. Antes de confirmar, la UI permite revisar, desmarcar y editar propuestas, y la lista persiste intacta. Al aplicar, solo se guardan las líneas seleccionadas y editadas, las equivalentes se fusionan sin duplicados, y la propuesta queda cerrada; tras recargar, la lista conserva exactamente esos cambios.
+
+- [ ] Añadir primero E2E aislada del camino exitoso con provider stub local; verificar request JSON Schema estricto, imagen, modo/nota, propuestas/avisos visibles y que `photo/analyze` no cree items.
+- [ ] Editar una propuesta, desmarcar otra, aplicar y comprobar el payload de `items/apply`, la fusión por `product_key`, ausencia de líneas no confirmadas y persistencia tras recargar.
+- [ ] Validar escritorio Chromium y Pixel 5 móvil con rate limit, SQLite/puerto/semilla propios y cleanup; inspeccionar el flujo en 1440×900, 393×851 y 320×568, sin overflow ni CTA tapada. Guardar capturas sintéticas PC/móvil.
+- [ ] Ejecutar typecheck E2E, tests focales de servidor/UI, `check:ui`, formato, build y `git diff --check`; registrar rollback y evidencia. No hay cambio de producción previsto: coverage S/B/F/L N/A si solo se añade E2E.
+
+**Rollback:** retirar la E2E del camino feliz y esta subunidad; no cambiar los endpoints, la lectura IA ni sus contratos.
+
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
 - [ ] `/receipts`: elegir/arrastrar archivo, validar formatos y borde de 10 MiB a través del ingress de producción, rechazar inválidos, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
 - [ ] `/receipts/:id`: procesamiento IA directo (sin OCR según HOGARIA-SPEC §12aj), edición de tienda/notas/líneas/unidad/cantidad/precio/oferta, añadir/quitar, total que cuadra/no cuadra, confirmar a inventario, detener/reintentar/borrar y fallo de proveedor.
