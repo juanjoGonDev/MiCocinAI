@@ -1036,6 +1036,36 @@ la regresión demuestre un defecto distinto.
 
 **Rollback previsto:** revertir esta unidad de forma atómica: `data-table.component.ts`, `data-table.util.ts`, `data-table.component.spec.ts`, `data-table.util.spec.ts`, los cambios focales de `tests/e2e/pantry.spec.ts` y este bloque de spec. No incluir archivos modificados por otras unidades.
 
+### QA-04c.UI.TAG-ACCESSIBILITY.1 · chips de filtro accesibles y con cobertura
+
+**Fuente revalidada (2026-10-09, HEAD `8fccc05`):** `TagComponent` se usa como filtro seleccionable
+en Recetas, categorías e inventario de productos. Hoy el control interactivo es un `<span (click)>`
+sin foco/teclado ni estado accesible; `selected` solo añade una clase CSS. La variante removible incluye
+un segundo botón, por lo que convertir el contenedor entero en botón produciría controles anidados.
+No existe spec unitario propio. LCOV actual (`frontend/coverage/lcov.info`): **10/10/0/10 % S/B/F/L**
+según los contadores instrumentados; `tag.component.ts` está muy por debajo del 70 % focal.
+
+**Conducta esperada:** el filtro es un botón nativo de alternancia con nombre visible, `aria-pressed`
+sincronizado con `selected` y activación por teclado; `disabled` bloquea la activación. Un tag removible
+tiene una acción de borrado separada, localizada y accesible por teclado/táctil, sin que quitarlo active
+el filtro. La caja del tag conserva las dimensiones actuales (tolerancia ≤1 CSS px).
+
+- [ ] Añadir primero pruebas unitarias de combinaciones base/seleccionada/deshabilitada/removible, nombre,
+      `aria-pressed`, emisión de `onClick` y emisión aislada de `onRemove`.
+- [ ] Reproducir en E2E que los filtros actuales no reciben foco/teclado; después verificar click/tap,
+      Enter/Espacio, estado anunciado y eliminación independiente en Recetas, categorías y productos,
+      usando fixture/DB aislados.
+- [ ] Hacer el ajuste semántico mínimo sin botones anidados; conservar visualización y geometría de chips
+      base/seleccionados/removibles en desktop y móvil y estado deshabilitado.
+- [ ] Capturar/inspeccionar antes y después en PC y móvil; comparar las cajas con tolerancia ≤1 px y
+      ejecutar los breakpoints/anchos relevantes sin overflow.
+- [ ] Alcanzar ≥70 % S/B/F/L en `tag.component.ts`, ejecutar Karma focal y suite frontend completa (gate
+      ≥80 %), E2E afectadas, typecheck/build, formato y `git diff --check`; correr hooks commit/push sin
+      bypass y cerrar solo tras publicar evidencia.
+
+**Rollback:** revertir únicamente el contrato semántico de `tag.component.ts`, sus pruebas unitarias/E2E
+y esta subunidad; no revertir consumidores ni otros componentes compartidos.
+
 ### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (resuelta localmente; gate global revalidado)
 
 **Fuente revalidada antes de añadir el spec (2026-10-01):** `TasteProfileService` no tenía spec propio y el reporte marcaba 5.40/0/0/3.33 % (sentencias/ramas/funciones/líneas). Sus caminos actuales son `ensureLoaded`/`load`, `save` con campos opcionales, normalización/aplicación de `TasteResponse` y `finalize` de loading en éxito/error. El alcance no cambia comportamiento de producción ni toca DB: se ejercita con `HttpTestingController`.
