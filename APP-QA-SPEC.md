@@ -2616,6 +2616,17 @@ persista, esta comprobación no hizo POST, no reabrió los tickets y no generó 
 reales. El fix resuelve el cleanup parcial; el bloqueo actual es que el upload real no termina. No
 declarar validación de IA ni procesamiento/deduplicación completos hasta demostrar entrega sin 504.
 
+**Nuevo intento de validación solicitado (2026-10-09):** volví a actualizar las referencias de WebAPI;
+el remoto confirma `fix/ticket-prompt-association-diagnostics` en `7c1e52e9`, sin cambios de código
+posteriores al fix `e679f44d`. El proceso activo `43088` (`tsx src/main.ts`) arrancó después de ese fix y
+`/health` responde 200. La lectura filtrada de su `app.log` confirma que el intento de dos adjuntos más
+reciente (`kaamY`) aún termina en `attachment_upload_failed` HTTP 504 tras 45 s; `page_closed` restaura
+el estado, pero no aparecen `prompt_submitted` ni `response_completed`. El fix de cleanup está activo,
+pero no solucionó que se complete la subida. Esta comprobación fue solo `git fetch`, health y lectura de
+logs: **0 POST, 0 archivos reenviados, 0 nuevas completions y 0 escrituras**. Se conserva el veto de
+reenviar tickets hasta que la subida real concluya; los dos PDF con fallback 200 siguen excluidos por
+posible finalización.
+
 **Rollback del registro:** revertir solo este bloque diagnóstico/preparación y la actualización de
 checklist; no alterar el transporte probado ni los datos reales.
 
