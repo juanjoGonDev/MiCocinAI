@@ -1,10 +1,10 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1285/1285** con cobertura **92.22/83.54/90.97/93.64 % S/B/F/L**; `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. CI `37966484202` para HEAD `0af4741` pasó **9/9** jobs, incluidos los cuatro shards y E2E full-stack. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge (GitHub aún informa `mergeStateStatus=BLOCKED`). QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. `/ai-config` pasó su suite completa en Chromium/Pixel 5 (**52/52**) y concurrencia/proveedor **6/6**; la ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1285/1285** con cobertura **92.22/83.54/90.97/93.64 % S/B/F/L**; `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. CI `37980861919` para HEAD `fc92eee` pasó **9/9** jobs, incluidos los cuatro shards y E2E full-stack. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1285/1285 con cobertura 92.22/83.54/90.97/93.64 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
-- **IA / tickets reales (2026-10-09, vigente):** WebAPI local (`127.0.0.1:3001`, PID 7100) respondió `/health` y `/health/ready` 200; no ofrece endpoint para verificar el SHA servido. El smoke sintético imagen+inventario pasó con `response_format` JSON Schema estricto, dos adjuntos listos (`uploadAttachmentCount=2`, `inventorySnapshotUploadCount=1`), cero contexto inline y readiness `2/2`. En el reintento real directo a WebAPI, los dos PDF separados devolvieron HTTP 200 y pasaron validación del proveedor y del schema local, cada uno con ticket + `inventario.json` visibles. La JPEG preferida llegó al prompt con ambos adjuntos, pero terminó en HTTP 502 tras fallos de salida estructurada y `composer_not_ready`; no hubo respuesta válida. No se volvió a enviar el ticket largo de tres fotos porque su petición anterior llegó a `Prompt submitted` y acabó en 504, así que pudo completarse. No hubo escrituras en el inventario MiCocinAI; token efímero revocado/eliminado y archivos temporales vaciados. El proceso vivo arrancó antes de las modificaciones recientes del checkout WebAPI y su SHA no es verificable; no acredita esas modificaciones. El usuario está corrigiendo WebAPI y pidió dejar la revalidación/logs y cualquier reenvío para el final, preguntando entonces si el servicio ya está listo; desde esa indicación no se han consultado logs ni reenviado tickets. La deduplicación del ticket largo y la validación real completa siguen pendientes.
+- **IA / tickets reales (2026-10-09, vigente):** se confirmó que WebAPI está activo en `127.0.0.1:3001` (PID 50248) y `GET /health/ready` devuelve 200; no se reinició ni alteró el servicio y se conservó su cambio ajeno `tools.txt`. El smoke sintético previo confirmó dos adjuntos legibles más JSON Schema estricto, pero no valida tickets. Los dos PDF ya respondieron y la JPEG quedó ambigua; el ticket largo llegó a `Prompt submitted` antes del timeout. Se prohíbe repetir peticiones que pudieron completarse: no hay fuente real segura para otro smoke y la extracción/schema/categorías/deduplicación siguen sin validar. Se preguntó al usuario si aportará tickets nuevos o autoriza expresamente repetir los grupos ambiguos; no hay petición live nueva ni escritura en inventario real.
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -894,7 +894,9 @@ interceptó cada petición antes de llegar al servicio, por lo que no hubo WebAP
 `pnpm run typecheck:e2e`, `pnpm exec prettier --check tests/e2e/ai-config.spec.ts APP-QA-SPEC.md`,
 `pnpm run check:ui` (**212 ficheros, 21 reglas**), `pnpm run build` y `git diff --check` pasaron.
 Build mantiene warnings de budget de estilos ya existentes; no se tocó CSS ni geometría, así que
-capturas y coverage de producción no aplican. Pendiente solo commit/hooks, push y CI de esta unidad.
+capturas y coverage de producción no aplican. Commit `46e4d44` pasó pre-commit (Prettier/check-ui) y
+pre-push completo; CI del HEAD final `fc92eee` (**37980861919**) pasó **9/9** jobs, incluidos los
+cuatro shards E2E y full-stack.
 
 **Rollback:** retirar solo la E2E focal y esta subunidad; no cambiar la semántica de conexión ni tocar
 configuración real.
@@ -919,7 +921,7 @@ petición de prueba. Nunca capturar el campo mientras la clave sintética esté 
       screenshots/traces/videos con la clave visible ni contactar WebAPI/proveedor.
 - [x] Ejecutar `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`. No cambia geometría:
       capturas y coverage de producción N/A.
-- [ ] Registrar evidencia final, commit atómico con hooks, push y CI verde para el SHA del PR.
+- [x] Registrar evidencia final, commit atómico con hooks, push y CI verde para el SHA del PR.
 
 **Evidencia local (2026-10-09):** `tests/e2e/ai-config.spec.ts` ahora llena solo una clave ficticia
 y comprueba que comienza oculta; el botón accesible revela el valor con Enter, lo vuelve a ocultar
@@ -929,7 +931,8 @@ puerto y cleanup fueron temporales. No se contactó WebAPI/proveedor ni se habil
 `pnpm run typecheck:e2e`, `pnpm exec prettier --check tests/e2e/ai-config.spec.ts APP-QA-SPEC.md`,
 `pnpm run check:ui` (**212 ficheros/21 reglas**), `pnpm run build` y `git diff --check` pasaron;
 el build conserva sus warnings preexistentes de tamaño. Sin cambio de producción/UI: coverage y
-capturas comparables no aplican. Commit/push/CI aún pendientes.
+capturas comparables no aplican. Commit `fc92eee` pasó pre-commit (Prettier/check-ui) y pre-push
+completo. CI `37980861919` del mismo SHA pasó **9/9** jobs, incluidos full-stack y los cuatro shards.
 
 **Rollback:** retirar solamente la E2E y esta subunidad; el control genérico de contraseña permanece
 intacto.
@@ -2849,8 +2852,19 @@ Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
 - [ ] `/receipts`: elegir/arrastrar archivo, validar formatos y borde de 10 MiB a través del ingress de producción, rechazar inválidos, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
 - [ ] `/receipts/:id`: procesamiento IA directo (sin OCR según HOGARIA-SPEC §12aj), edición de tienda/notas/líneas/unidad/cantidad/precio/oferta, añadir/quitar, total que cuadra/no cuadra, confirmar a inventario, detener/reintentar/borrar y fallo de proveedor.
-- [ ] `/ai-config`: alta/edición/borrado, campos y rangos, mostrar/ocultar clave, probar desde formulario y desde ficha, loading/éxito/error/timeout, activar una sola config y conservar el secreto sin exponerlo.
+- [x] `/ai-config`: alta/edición/borrado, campos y rangos, mostrar/ocultar clave, probar desde formulario y desde ficha, loading/éxito/error/timeout, activar una sola config y conservar el secreto sin exponerlo.
 - [ ] `/logs`: conexión SSE/reconexión, pausar/reanudar/autoscroll, filtrar fuente/nivel, seleccionar/copiar líneas o todo, borrar con confirmación y cola de logs vacía/larga.
+
+**Evidencia de `/ai-config` (2026-10-09):** suite aislada completa
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+--forbid-only tests/e2e/ai-config.spec.ts --reporter=line`: **52/52**; cobertura adicional de límites/defaults de
+concurrencia con `tests/e2e/ai-provider-concurrency.spec.ts`: **6/6** en los mismos dos proyectos. Se verifican alta,
+edición, borrado/confirmación, campos, límites `0..8`, visibilidad por Enter/Space, clave no reenviada al editar,
+prueba desde formulario y ficha, estados loading/éxito/error/503/504 y única configuración activa. Los tests nuevos
+usan interceptores sintéticos, valores no secretos, SQLite/puerto/semilla temporales y cleanup confirmado; no llaman
+a WebAPI/proveedor. La cobertura de timeout dio **4/4** y visibilidad **2/2**. Pre-push pasó formato, `check:ui`,
+build, typecheck E2E y suites unitarias; CI del HEAD `fc92eee` (`37980861919`) pasó **9/9**. No hubo cambio productivo
+ni visual, por lo que capturas/coverage de producción N/A.
 
 ### Unidad QA-LOGS.SSE-RECONNECT.1 · recuperación tras fallo de transporte
 
