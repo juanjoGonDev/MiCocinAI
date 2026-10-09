@@ -3163,6 +3163,31 @@ correlación previa `kaamY`: dos adjuntos, timeout de subida de 45 s y HTTP 504 
 07:16. Esto confirma que el fix de recuperación/limpieza no corrigió el bloqueo de subida. No se hizo
 ninguna llamada IA ni se reenvió ticket alguno; no evaluar todavía extracción, categorías ni duplicados.
 
+**Revalidación tras los cambios locales de WebAPI (2026-10-09; sin reenvío de tickets):** la rama
+`fix/live-ticket-inventory-attachments` sigue en HEAD `a6105c20`, pero su árbol ahora contiene cambios
+locales no confirmados en el flujo de adjuntos, navegador y pruebas. El listener PID 36628 inició a las
+07:02 UTC, después de esos cambios, y `/health/ready` devolvió `ready=true`; no se tocaron settings ni
+credenciales. Sobre esta fuente, la E2E sintética de fallback pasó **19/19** y las unitarias de
+`attachment-flow.test.ts` pasaron **14/14**. No bastan para demostrar aceptación real del proveedor.
+
+El smoke live de WebAPI `pnpm run test:e2e:chatgpt-ticket-inventory-live` usó exclusivamente un JPEG y
+un `inventario.json` sintéticos con marcadores únicos, en el perfil autenticado existente, con
+`AGENTA_CAPTURE_CONTENT=false`; no accedió a tickets reales. La sonda encontró tres inputs de fichero y
+el código eligió el índice 2, el único que acepta imagen/JSON/PDF. Aun así, la carga terminó en
+`attachment_upload_failed`/HTTP 504 después de 45 s, antes de enviar el prompt: `attachments_not_represented`,
+`expectedCount=2`, `visibleCount=1`, `mediaPreviewCount=1`, `fileNameMatchCount=0`,
+`fileInputCount=3`, `selectedFileCount=0`, `pending=false` y `rejected=false`. No llegó respuesta que
+contuviera ambos marcadores; el arreglo aún no está validado y la limitación observable es la
+representación/readiness de los dos adjuntos, no el tiempo de espera.
+
+La prueba cerró navegador y runtime; se verificó que no quedara lease del perfil, directorio temporal
+de archivos sintéticos ni proceso Chrome del test, y WebAPI siguió listo. El smoke aislado de MiCocinAI
+ejecutado antes de observar este cambio local devolvió HTTP 400 en streaming y HTTP 504 en el único
+fallback; el proceso previo se reinició y ya no ofrece logs correlacionables de esa petición, por lo
+que no se afirma si el proveedor llegó a recibirla. No se repitió esa JPEG, no se envió el PDF largo ni
+ningún PDF original, y no hubo escritura al inventario real. No volver a enviar los tickets hasta que
+el par sintético obtenga ambos marcadores y se confirme el estado de la petición anterior.
+
 **Rollback:** revertir únicamente la selección live `unsubmitted-only`, sus pruebas y esta subunidad;
 mantener el cargador general de fixtures sintéticas, adjuntos de inventario ya probados y el código de
 WebAPI en su repositorio.
