@@ -2850,6 +2850,33 @@ o duplicado.
 Por tanto, quedan sin marcar las casillas de validación de los tickets y cierre completo; la respuesta
 real no llegó al modelo y no se puede declarar esta subunidad ni la spec completa.
 
+**Nuevo reintento solicitado (2026-10-09; resultado fallido, unidad abierta):** se hizo `git fetch --all`
+en `D:\projects\webApi`: no aparecieron commits posteriores; el checkout continúa limpio en
+`7c1e52e9` (incluye `e679f44d`) y el listener existente PID 43088 sigue en `ready=true` /
+`storage=ready`. La prueba sintética `pnpm exec vitest run --config vitest.clipboard-e2e.config.ts
+tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts --reporter=dot` pasó **18/18**;
+prueba limpieza/recovery con fixtures, no demuestra que el proveedor acepte ahora los adjuntos. El
+preflight read-only volvió a validar `gpt-5`, readiness/privacidad y cleanup verificado del token
+temporal (0 completions).
+
+Se reanudó el smoke cerrado `unsubmitted-only`, en concurrencia 1, sin abrir los dos PDF individuales:
+la JPEG preferida volvió a producir HTTP **400** en streaming y el único fallback no-stream permitido
+terminó en HTTP **504** (**2/4 requests, 0 respuestas completadas**). Ambos requests atravesaron el
+validador previo del proxy —`response_format` JSON Schema estricto y exactamente un adjunto
+`inventario.json` más un ticket—; WebAPI registra el fallo como `attachment_upload_failed` durante
+`chatgpt_attachment_upload`, antes de `prompt_submitted`. El tail sin truncar de 577 líneas muestra
+27 fallos de subida, cero `prompt_submitted`/`response_completed` y cero `cleanup_failed`; el servicio
+permanece listo. El test aislado se detuvo tras el primer ticket y **no** mandó el PDF de tres fotos ni
+repitió el intento de subida después del 504. No se pudo validar la respuesta/schema, las categorías,
+duplicados, edición o historial. La base de datos/uploads y browser del runner fueron temporales; el
+cleanup del token propio se verificó, sin nuevas carpetas de runner ni procesos Chrome/Node huérfanos;
+no se escribió en la despensa/inventario real ni se guardaron resultados o medios.
+
+**Conclusión:** sigue presente el timeout de subida pese al cleanup/recovery probado. No hacer otro
+reenvío de tickets hasta observar un cambio efectivo del WebAPI/proveedor; si se corrige, retomar solo
+la JPEG (su último resultado fue 504 sin prompt ni respuesta) y luego, únicamente si pasa, las tres
+fotos juntas como PDF multipágina. Los dos PDF individuales continúan excluidos.
+
 **Rollback:** revertir únicamente la selección live `unsubmitted-only`, sus pruebas y esta subunidad;
 mantener el cargador general de fixtures sintéticas, adjuntos de inventario ya probados y el código de
 WebAPI en su repositorio.
