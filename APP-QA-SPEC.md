@@ -6130,12 +6130,25 @@ navegar a la bandeja y dejar el ticket inaccesible/ausente en historial; la limp
 dejar líneas ni trabajo huérfanos. Mantener confirmación accesible y el control de borrado existente;
 no cambiar producto salvo que el E2E reproduzca un fallo funcional.
 
-- [ ] Añadir primero un E2E real que cancele el borrado y compruebe que ficha y DB siguen intactas;
+- [x] Añadir un E2E real que cancele el borrado y compruebe que ficha y DB siguen intactas;
       confirmar después el borrado y validar 200, navegación, 404 y ausencia de filas hijas.
-- [ ] Ejecutar en Chromium y Pixel 5 con runner, base y semilla aislados; sin `page.route` en el
+- [x] Ejecutar en Chromium y Pixel 5 con runner, base y semilla aislados; sin `page.route` en el
       DELETE, verificar limpieza y guardar/inspeccionar capturas sintéticas en un directorio único.
 - [ ] Ejecutar typecheck E2E, `check:ui`, Prettier, build, cobertura global y `git diff --check`;
       documentar resultados/limitaciones, commit y push con todos los hooks y CI verde.
 
 **Rollback:** retirar solo el E2E de confirmación/borrado y esta subunidad; no cambiar la ruta DELETE
 ni borrar datos reales.
+
+**Evidencia local (2026-10-10):** el nuevo E2E usa PNG sintética, cuenta/SQLite efímeras y el
+proveedor desconfigurado (`NO_CONFIG`). Añade una línea por HTTP real para comprobar la cascada.
+Cancelar mantiene la ficha, su línea y su trabajo (GET 200, conteos 1/1/1) y no emite DELETE; aceptar
+emite exactamente un DELETE 200, vuelve a `/receipts`, deja GET 404 y los tres conteos en cero. Sin
+`page.route`, `typecheck:e2e`, Prettier, `check:ui` (212 ficheros/21 reglas), build y `git diff --check`
+pasaron; build conserva avisos previos de bundles/imports. El archivo `receipts.spec.ts` completo pasó
+**26/26** en Chromium y Pixel 5 con el runner, `E2E_RATE_LIMIT=on`, `E2E_SCREENSHOT_DIR` único y
+cleanup verificado; el caso focal pasó **2/2** tras capturar vistas estables de la confirmación. Sin
+cambio de producción; cobertura de producción N/A. Capturas sintéticas revisadas:
+[PC 1440×900](.e2e-screenshots/qa-receipt-delete-confirmation-20261010/receipt-delete-confirmation-chromium-1440x900.png),
+[móvil 390×844](.e2e-screenshots/qa-receipt-delete-confirmation-20261010/receipt-delete-confirmation-mobile-chrome-390x844.png)
+y [móvil 320×740](.e2e-screenshots/qa-receipt-delete-confirmation-20261010/receipt-delete-confirmation-mobile-chrome-320x740.png).

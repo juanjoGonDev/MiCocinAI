@@ -54,6 +54,39 @@ function trabajosDeTicket(receiptId: string): number {
   }
 }
 
+/** Recuento de ficha y filas hijas: lectura exclusivamente sobre la SQLite temporal del E2E. */
+function filasPersistidasDeTicket(receiptId: string): {
+  receipts: number;
+  receiptItems: number;
+  aiJobs: number;
+} {
+  const runDirectory = process.env.E2E_RUN_DIR;
+  const databasePath = process.env.DATABASE_PATH;
+  if (!runDirectory || !databasePath) throw new Error('E2E requiere rutas temporales aisladas');
+  const relativeDatabasePath = relative(resolve(runDirectory), resolve(databasePath));
+  if (isAbsolute(relativeDatabasePath) || relativeDatabasePath.startsWith('..')) {
+    throw new Error('DATABASE_PATH debe permanecer dentro del directorio aislado del test');
+  }
+
+  const database = new Database(databasePath, { readonly: true, fileMustExist: true });
+  try {
+    return database
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM receipts WHERE id = ?) AS receipts,
+           (SELECT COUNT(*) FROM receipt_items WHERE receipt_id = ?) AS receiptItems,
+           (SELECT COUNT(*) FROM ai_jobs WHERE receipt_id = ?) AS aiJobs`
+      )
+      .get(receiptId, receiptId, receiptId) as {
+      receipts: number;
+      receiptItems: number;
+      aiJobs: number;
+    };
+  } finally {
+    database.close();
+  }
+}
+
 /** Un PNG de mentira de 8 bytes: la firma es lo unico que la subida valida. */
 function pngDeMentira(): Buffer {
   return Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -614,6 +647,144 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
     await cerrarAvisos(page);
     await terminarTransiciones(page);
     await page.screenshot({ path: testInfo.outputPath('receipt-history.png'), fullPage: true });
+  });
+
+  test('cancelar conserva el ticket; confirmar lo borra con sus filas relacionadas', async ({
+    page
+  }, testInfo) => {
+    const isMobileProject = testInfo.project.name === 'mobile-chrome';
+    await page.setViewportSize(
+      isMobileProject ? { width: 390, height: 844 } : { width: 1440, height: 900 }
+    );
+    await registerAndGoto(page, '/receipts');
+    const token = await tokenOf(page);
+
+    const uploadPromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/receipts' && response.request().method() === 'POST';
+    });
+    await page.setInputFiles('input[name="ticketFile"]', {
+      name: 'compra-borrar.png',
+      mimeType: 'image/png',
+      buffer: pngDeMentira()
+    });
+    const upload = await uploadPromise;
+    expect(upload.status()).toBe(201);
+    const uploaded = (await upload.json()) as { data: { id: string } };
+    const receiptId = uploaded.data.id;
+
+    const historyItem = page
+      .locator('[data-test="receipt-history"] [data-test="ticket-history-item"]')
+      .filter({ hasText: 'compra-borrar.png' });
+    await expect(historyItem).toHaveCount(1, { timeout: 20000 });
+    await historyItem.locator('a').first().click();
+    await expect(page).toHaveURL(new RegExp(`/receipts/${receiptId}$`));
+    await expect(page.locator('[data-test="ticket-error"]')).toBeVisible({ timeout: 20000 });
+
+    // Añadir una línea de fixture por el endpoint real para comprobar que DELETE no deja huérfanas.
+    const line = await page.request.post(`/api/receipts/${receiptId}/items`, {
+      headers: { authorization: `Bearer ${token}` },
+      data: { name: 'Artículo sintético', quantity: 1, unit: 'ud', category: 'other' }
+    });
+    expect(line.status()).toBe(201);
+    expect(trabajosDeTicket(receiptId)).toBe(1);
+    expect(filasPersistidasDeTicket(receiptId)).toEqual({
+      receipts: 1,
+      receiptItems: 1,
+      aiJobs: 1
+    });
+
+    let deleteRequests = 0;
+    page.on('request', (request) => {
+      const url = new URL(request.url());
+      if (request.method() === 'DELETE' && url.pathname === `/api/receipts/${receiptId}`) {
+        deleteRequests += 1;
+      }
+    });
+
+    const openDialog = async () => {
+      await page.getByRole('button', { name: 'Borrar', exact: true }).click();
+      const dialog = page.locator('app-confirm-dialog .modal-overlay');
+      await expect(dialog).toContainText('compra-borrar.png');
+      await expect(dialog.getByRole('button', { name: 'Cancelar', exact: true })).toBeVisible();
+      await expect(dialog.getByRole('button', { name: 'Eliminar', exact: true })).toBeVisible();
+      return dialog;
+    };
+
+    const cancelDialog = await openDialog();
+    const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+    if (!screenshotDirectory)
+      throw new Error('E2E_SCREENSHOT_DIR debe ser único para las capturas');
+    mkdirSync(screenshotDirectory, { recursive: true });
+    const captureConfirmation = async (width: number, height: number) => {
+      await page.setViewportSize({ width, height });
+      await expect(cancelDialog).toBeVisible();
+      await terminarTransiciones(page);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+        'la ficha y el diálogo no deben desbordar horizontalmente'
+      ).toBe(true);
+      await page.screenshot({
+        path: join(
+          screenshotDirectory,
+          `receipt-delete-confirmation-${testInfo.project.name}-${width}x${height}.png`
+        )
+      });
+    };
+    if (isMobileProject) {
+      await captureConfirmation(390, 844);
+      await captureConfirmation(320, 740);
+    } else {
+      await captureConfirmation(1440, 900);
+    }
+    await cancelDialog.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await expect(page.locator('app-confirm-dialog .modal-overlay')).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`/receipts/${receiptId}$`));
+    expect(deleteRequests).toBe(0);
+    const preserved = await page.request.get(`/api/receipts/${receiptId}`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect(preserved.status()).toBe(200);
+    expect(filasPersistidasDeTicket(receiptId)).toEqual({
+      receipts: 1,
+      receiptItems: 1,
+      aiJobs: 1
+    });
+
+    const confirmDialog = await openDialog();
+    const deleteResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === `/api/receipts/${receiptId}` && response.request().method() === 'DELETE'
+      );
+    });
+    await confirmDialog.getByRole('button', { name: 'Eliminar', exact: true }).click();
+    const deletedResponse = await deleteResponsePromise;
+    expect(deletedResponse.status()).toBe(200);
+    await expect(page).toHaveURL(/\/receipts$/);
+    await expect(page.locator('.tickets')).toBeVisible();
+    await expect(
+      page.locator('[data-test="receipt-history"]').getByText('compra-borrar.png')
+    ).toHaveCount(0);
+    expect(deleteRequests).toBe(1);
+
+    const missing = await page.request.get(`/api/receipts/${receiptId}`, {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect(missing.status()).toBe(404);
+    expect(filasPersistidasDeTicket(receiptId)).toEqual({
+      receipts: 0,
+      receiptItems: 0,
+      aiJobs: 0
+    });
+    await terminarTransiciones(page);
+    const viewport = page.viewportSize();
+    await page.screenshot({
+      path: join(
+        screenshotDirectory,
+        `receipt-deleted-${testInfo.project.name}-${viewport?.width ?? 'unknown'}x${viewport?.height ?? 'unknown'}.png`
+      )
+    });
   });
 
   test('parar todo desde el icono deja los trabajos detenidos', async ({ page }) => {
