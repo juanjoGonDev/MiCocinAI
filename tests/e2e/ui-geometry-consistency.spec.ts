@@ -429,3 +429,109 @@ test('Planificar IA comparte la geometría del botón primario de Recetas', asyn
     JSON.stringify({ calendarMeasurements, sharedMeasurements, documentOverflow }, null, 2)
   ).toEqual([]);
 });
+
+test('la CTA de planificación conserva su geometría mientras carga y está deshabilitada', async ({
+  page
+}, testInfo) => {
+  await registerAndGoto(page, '/calendar', 'UI geometry loading state');
+  const mobile = testInfo.project.name === 'mobile-chrome';
+  const viewport = mobile ? { width: 393, height: 851 } : { width: 1440, height: 900 };
+  await page.setViewportSize(viewport);
+
+  let releaseResponse: (() => void) | undefined;
+  const responseHeld = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route('**/api/ai/plan-week', async (route) => {
+    await responseHeld;
+    await route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: false, error: { message: 'Synthetic provider unavailable' } })
+    });
+  });
+
+  try {
+    await page.getByRole('button', { name: 'Planificar IA', exact: true }).click();
+    const modal = page.locator('.modal-overlay');
+    await modal.locator('[data-test="generate-goal-custom"]').click();
+    await modal.locator('#gen-custom').fill('Fixture de geometría');
+
+    const generateButton = modal.locator('.meal-form__actions .cal-btn--primary');
+    await expect(generateButton).toBeEnabled();
+    const screenshotDirectory =
+      process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-layout-ai-loading';
+    mkdirSync(screenshotDirectory, { recursive: true });
+    await generateButton.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: join(screenshotDirectory, `plan-cta-ready-${mobile ? 'mobile' : 'desktop'}.png`)
+    });
+    const measure = () =>
+      generateButton.evaluate((element) => {
+        const style = getComputedStyle(element);
+        const rect = element.getBoundingClientRect();
+        return {
+          box: {
+            left: Number(rect.left.toFixed(2)),
+            top: Number(rect.top.toFixed(2)),
+            width: Number(rect.width.toFixed(2)),
+            height: Number(rect.height.toFixed(2)),
+            right: Number(rect.right.toFixed(2)),
+            bottom: Number(rect.bottom.toFixed(2))
+          },
+          paddingBlockStart: style.paddingBlockStart,
+          paddingBlockEnd: style.paddingBlockEnd,
+          paddingInlineStart: style.paddingInlineStart,
+          paddingInlineEnd: style.paddingInlineEnd,
+          marginBlockStart: style.marginBlockStart,
+          marginBlockEnd: style.marginBlockEnd,
+          marginInlineStart: style.marginInlineStart,
+          marginInlineEnd: style.marginInlineEnd,
+          gap: style.gap,
+          fontFamily: style.fontFamily,
+          fontSize: style.fontSize,
+          fontWeight: style.fontWeight,
+          lineHeight: style.lineHeight,
+          borderStyle: style.borderTopStyle,
+          borderWidth: style.borderWidth,
+          borderRadius: style.borderTopLeftRadius
+        };
+      });
+
+    const readyGeometry = await measure();
+    const request = page.waitForRequest(
+      (candidate) =>
+        new URL(candidate.url()).pathname === '/api/ai/plan-week' && candidate.method() === 'POST'
+    );
+    await generateButton.click();
+    await request;
+    await expect(generateButton).toBeDisabled();
+    await expect(generateButton).toHaveAttribute('aria-busy', 'true');
+    await expect(generateButton).toHaveAttribute('aria-label', /Planificando/);
+    await generateButton.scrollIntoViewIfNeeded();
+    await page.screenshot({
+      path: join(screenshotDirectory, `plan-cta-loading-${mobile ? 'mobile' : 'desktop'}.png`)
+    });
+    const loadingGeometry = await measure();
+
+    const differences = Object.entries(readyGeometry).flatMap(([key, value]) => {
+      const loading = loadingGeometry[key as keyof typeof loadingGeometry];
+      if (key === 'box') {
+        const readyBox = value as typeof readyGeometry.box;
+        const loadingBox = loading as typeof loadingGeometry.box;
+        return (['width', 'height'] as const).flatMap((boxKey) => {
+          const dimension = readyBox[boxKey];
+          const next = loadingBox[boxKey];
+          return Math.abs(dimension - next) <= 1 ? [] : [`${boxKey}: ${dimension}px → ${next}px`];
+        });
+      }
+      return value === loading ? [] : [`${key}: ${String(value)} → ${String(loading)}`];
+    });
+
+    expect(differences, JSON.stringify({ readyGeometry, loadingGeometry }, null, 2)).toEqual([]);
+    releaseResponse?.();
+    await expect(generateButton).toBeEnabled();
+  } finally {
+    releaseResponse?.();
+  }
+});

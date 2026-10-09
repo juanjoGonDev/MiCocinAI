@@ -3706,6 +3706,10 @@ excepciones deliberadas antes de implantarlas; no hay excepciones visuales impl�
 - [ ] Añadir primero una regresión E2E roja que mida «Planificar IA» y sus acciones pares en `/calendar`,
       y compare cada familia equivalente entre rutas. Registrar rectángulos, padding, font/line-height,
       gap, margen y radio calculados con tolerancia ≤1 CSS px; un cambio de color/estado no debe alterar caja.
+- [x] Subcaso loading/disabled de la CTA «Planificar IA»: el E2E reprodujo primero un salto de ancho
+      119→150 px y verifica ahora que ancho/alto y estilos calculados se mantienen con tolerancia ≤1 px,
+      nombre accesible, `aria-busy` y spinner superpuesto en Chromium y Pixel 5. La matriz completa de
+      familias y rutas de la casilla anterior sigue abierta.
 - [ ] Extender la comprobación a loading/disabled/focus/validación y overlays relevantes; verificar que no
       haya overrides locales contradictorios y que los mismos tokens produzcan las mismas medidas.
 - [ ] Normalizar las familias en tokens/primitivas compartidas; eliminar el tamaño diferencial de CTA por
@@ -3735,6 +3739,22 @@ disabled, focus, validación y listas pobladas quedan fuera. Los detalles sí es
 colecciones permanecen en su estado inicial. Gutter/espaciado del marco se conserva cubierto por la matriz
 existente. `pnpm run typecheck:e2e`, Prettier focal y `git diff --check` pasan; coverage de producción:
 N/A (solo instrumentación E2E, sin código de producción). La matriz completa sigue abierta.
+
+**Revalidación del subcaso loading de la CTA (2026-10-09):** la prueba aislada bloquea una respuesta
+sintética del endpoint de planificación, mide ready/loading y comprueba que el estado deshabilitado no
+altera ancho, alto, padding, margen, gap, tipografía, borde ni radio; también verifica `aria-busy`, el
+nombre accesible y que el spinner queda centrado. Antes del fix el nombre/spinner sustituidos ensanchaban
+la CTA de 119 a 150 px. Mantener la etiqueta normal oculta en layout y posicionar el spinner sobre ella
+restaura el ancho intrínseco sin `min-width` rígido. `node scripts/run-isolated-playwright.mjs
+--workers=1 --project=chromium --project=mobile-chrome tests/e2e/ui-geometry-consistency.spec.ts
+--reporter=dot` pasó **6/6**; el subcaso pasó **2/2** y guardó capturas sintéticas comparables en
+`.e2e-screenshots/qa-layout-ai-loading/`: `plan-cta-ready-desktop.png`, `plan-cta-loading-desktop.png`,
+`plan-cta-ready-mobile.png` y `plan-cta-loading-mobile.png`. También pasaron Karma **1242/1242**,
+`pnpm run typecheck:e2e`, `pnpm run check:ui` (**211 ficheros, 21 reglas**) y `pnpm run build`; el
+build conserva avisos previos de imports/optional chaining y budgets. La cobertura global Karma es
+91.50/82.44/90.03/92.94 % S/B/F/L, pero `CalendarComponent` queda en 20.14/1.77/5.13/0 % por
+archivo: no satisface el gate ≥70 % por archivo de la spec. Quedan abiertos focus/validación/overlays,
+las demás familias/rutas y esa limitación de coverage; este subcaso no cierra la unidad global.
 
 **Rollback:** revertir solo los tokens/primitivas y ajustes geométricos de esta unidad, sus pruebas/capturas
 ignoradas y este subapartado; preservar el marco/gutters compartidos y las correcciones ajenas.

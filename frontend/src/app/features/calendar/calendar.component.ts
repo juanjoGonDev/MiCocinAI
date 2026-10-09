@@ -1273,13 +1273,18 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             <button
               type="button"
               class="cal-btn cal-btn--primary"
+              [class.cal-btn--loading]="isGenerating()"
+              [attr.aria-busy]="isGenerating() ? 'true' : null"
+              [attr.aria-label]="isGenerating() ? ('calendar.generating' | t) : null"
               [disabled]="
                 isGenerating() || mealTypesForPicker().length === 0 || !generateGoalsReady()
               "
               (click)="generateWeeklyPlan()"
             >
+              <span [class.cal-btn__loading-label--hidden]="isGenerating()">
+                {{ 'calendar.generate_plan' | t }}
+              </span>
               <span class="cal-spinner" *ngIf="isGenerating()" aria-hidden="true"></span>
-              {{ isGenerating() ? ('calendar.generating' | t) : ('calendar.generate_plan' | t) }}
             </button>
           </div>
         </div>

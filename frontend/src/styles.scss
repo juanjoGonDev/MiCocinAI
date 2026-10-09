@@ -1895,6 +1895,20 @@ app-calendar {
     animation: cal-spin 0.7s linear infinite;
   }
 
+  .cal-btn--loading {
+    position: relative;
+  }
+
+  .cal-btn__loading-label--hidden {
+    visibility: hidden;
+  }
+
+  .cal-btn--loading .cal-spinner {
+    position: absolute;
+    inset: 0;
+    margin: auto;
+  }
+
   @keyframes cal-spin {
     to {
       transform: rotate(360deg);
