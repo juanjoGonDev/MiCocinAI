@@ -2928,6 +2928,16 @@ reenvío de tickets hasta observar un cambio efectivo del WebAPI/proveedor; si s
 la JPEG (su último resultado fue 504 sin prompt ni respuesta) y luego, únicamente si pasa, las tres
 fotos juntas como PDF multipágina. Los dos PDF individuales continúan excluidos.
 
+**Comprobación adicional solicitada (2026-10-09; sin nuevo smoke):** `git fetch --all --prune` no
+encontró commits nuevos; WebAPI continúa limpio en `7c1e52e9` y el listener PID 43088 respondió
+`/health/ready` con HTTP 200 (`ready=true`, `storage=ready`). La lectura de
+`/admin/api/logs?lines=500` conserva la correlación del intento anterior (`kaamY`): nueve registros
+`attachment_upload_failed` entre 03:15:09–03:16:09, ocho `page_closed` y cero
+`prompt_submitted`/`response_completed` (las filas de log no son el número de peticiones). El intento
+previo acabó en HTTP 504 tras el fallback, con cleanup correcto; el timeout de subida sigue sin
+resolverse. En esta comprobación solo se hicieron GET de readiness/logs: no hubo petición IA nueva ni
+se reenvió un ticket, por lo que la validación permanece incompleta.
+
 **Rollback:** revertir únicamente la selección live `unsubmitted-only`, sus pruebas y esta subunidad;
 mantener el cargador general de fixtures sintéticas, adjuntos de inventario ya probados y el código de
 WebAPI en su repositorio.
