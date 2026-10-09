@@ -2452,6 +2452,37 @@ de presupuestos/imports que no pertenecen a esta unidad. El gate global se ejecu
 ### Compra, tickets, proveedores y observabilidad
 
 - [ ] `/shopping`: crear/renombrar/borrar lista, tienda, tabs abiertas/completadas, búsqueda/filtros/orden/páginas, completar/reabrir y sugerencias.
+
+#### QA-SHOPPING.TRAY-LIFECYCLE.1 · completar, reabrir y borrar desde la bandeja
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md` §8e define `/shopping` como bandeja con alta,
+apertura, finalización, borrado y pestaña de historial `?tab=hechas`; borrar una lista elimina sus líneas,
+no admite deshacer y exige confirmación mediante `ConfirmService`, nunca `window.confirm`. El template de
+`ShoppingListsComponent` expone acción de terminar/reabrir y borrar por fila; el método `archive()` cambia
+estado con opción de deshacer y `remove()` confirma antes de llamar a `ShoppingService.deleteList()`. Los
+tests de componente verifican ramas de estado/confirmación con spies, y `shopping-lists.spec.ts` finaliza
+una compra desde el detalle y visita el historial, pero no se encontró E2E para reabrir/borrar desde la fila
+de la bandeja. Esta unidad cubre solo esos caminos reales y deja intacta la casilla general, pendiente de
+auditar filtros completos y sugerencias.
+
+**Contrato de aceptación:** con listas sintéticas en SQLite aislada, terminar desde la fila mueve la lista
+de activas a `?tab=hechas`; reabrir desde historial la devuelve a activas y persiste tras recarga. En borrar,
+Cancelar conserva la lista y sus líneas; confirmar elimina únicamente esa lista y ambas vistas la mantienen
+ausente después de recargar. Las acciones tienen nombre accesible y el borrado usa diálogo accesible propio,
+sin diálogo nativo. Si el servidor responde con error, no se muestra éxito falso, la fila conserva el estado
+real y se puede reintentar.
+
+- [x] Revalidar §8e, template/métodos actuales y la brecha entre las pruebas unitarias y E2E de ruta.
+- [ ] Añadir primero regresión unitaria roja para la respuesta de fallo de completar/reabrir/borrar; distinguir
+      éxito y error del servicio para que la bandeja solo notifique éxito confirmado.
+- [ ] Añadir E2E aislada de `/shopping` para terminar/reabrir, Cancelar/borrar y persistencia; validar diálogo/
+      nombres accesibles, ausencia de `window.confirm`, fallo HTTP sin éxito falso y reintento recuperable.
+- [ ] Ejecutar Chromium desktop y Pixel 5 con rate limit activo, SQLite/puertos/semilla temporales y cleanup;
+      confirmar typecheck/formato, capturas sintéticas PC/móvil y ≥70 % statements/branches/functions/lines
+      por archivo afectado, sin rebajar el gate global.
+- [ ] Registrar comandos/resultados y limitaciones; rollback limitado al servicio, componente, pruebas y esta
+      unidad; ejecutar hooks completos, push y CI verde.
+
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
 - [ ] `/receipts`: elegir/arrastrar archivo, validar formatos y borde de 10 MiB a través del ingress de producción, rechazar inválidos, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
