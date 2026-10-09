@@ -945,12 +945,12 @@ API/storage reales.
 - [x] Probar clicks/cambios de nivel y módulos, outputs completos, preservación del estado no editado
       y actualización de la pista de efecto; si falla, corregir mínimamente el selector. Alcanzar
       ≥70 % S/B/F/L del componente y mantener ≥80 % global en Karma.
-- [ ] Repetir `tests/e2e/onboarding.spec.ts` y `tests/e2e/preferences.spec.ts` en Chromium/Pixel 5 con
+- [x] Repetir `tests/e2e/onboarding.spec.ts` y `tests/e2e/preferences.spec.ts` en Chromium/Pixel 5 con
       `node scripts/run-isolated-playwright.mjs`; guardar e inspeccionar el selector antes/después del
       cambio en ambos proyectos, con perfil sintético y sin datos personales. Typecheck/build/check-ui/
       formato/diff-check, rollback, hooks, commit, push y CI sin bypass.
 
-**Evidencia TDD y pruebas (2026-10-09; cierre de hooks/CI pendiente):** el test nuevo falló primero
+**Evidencia TDD y pruebas (2026-10-09):** el test nuevo falló primero
 **2/8** porque `computed()` cacheaba la clave derivada de un `@Input` no reactivo; cambiar el nivel en
 la misma instancia no refrescaba la pista. Convertir la expresión en un método que lee el perfil actual
 hizo pasar la prueba focal **8/8**. Karma completo pasó **1272/1272**, global **92.12/83.40/90.81/93.55 %
@@ -961,9 +961,14 @@ build conserva avisos de presupuesto/imports existentes. Capturas sintéticas in
 `%TEMP%\hogaria-home-profile-picker-ui-2a9a92e2d085417bbbddc682f5fc51a8\` (`chromium` y
 `mobile-chrome`, `beginner`/`expert`); no se guardaron en Git.
 
+**Cierre (2026-10-09):** pre-commit aprobó Prettier y `check:ui` (212 archivos/21 reglas). Pre-push
+aprobó formato, `check:ui`, build, `typecheck:e2e`, configuración **11/11**, Karma **1272/1272** y
+Vitest server **1236 pasadas/1 omitida**, sin bypass. Commit `5dbf992` (`fix(profile): refresh cooking
+level hint`) publicado. CI #641 (`37939214848`) pasó **9/9** jobs; PR #41 continúa abierto, Ready for
+Review y sin merge.
+
 **Validación de esta especificación (2026-10-09):** contrato revalidado en fuentes vigentes;
-`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. El tercer criterio sigue
-abierto hasta registrar la verificación final, hooks, push y CI del commit de implementación.
+`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan.
 
 **Rollback:** retirar solo `home-profile-picker.component.spec.ts`, esta subunidad y, si hiciera falta,
 la corrección mínima del selector; no se cambia el modelo ni persistencia.
