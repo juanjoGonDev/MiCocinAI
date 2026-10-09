@@ -893,14 +893,26 @@ euros conserva coma decimal. `aplicar()` no duplica solicitudes mientras trabaja
 no muestra éxito, cierra ni emite; crear y actualizar muestran el copy correcto, cierran y emiten una vez.
 Usar reloj/promesas y señales controladas, sin red, IA ni almacenamiento real.
 
-- [ ] Añadir primero tests del componente real para visibilidad/estados del modal, los cuatro motivos,
+- [x] Añadir primero tests del componente real para visibilidad/estados del modal, los cuatro motivos,
       total/precios opcionales, carga al iniciar/abrir y cierre.
-- [ ] Cubrir aplicación exitosa nueva/actualización, resultado fallido y doble invocación concurrente;
+- [x] Cubrir aplicación exitosa nueva/actualización, resultado fallido y doble invocación concurrente;
       comprobar toast localizado, cierre y emisión exactamente una vez.
-- [ ] Superar ≥70 % en statements/branches/functions/lines del componente y mantener ≥80 % global en
+- [x] Superar ≥70 % en statements/branches/functions/lines del componente y mantener ≥80 % global en
       la suite frontend; ejecutar la E2E existente de compra sugerida en Chromium y Pixel 5 aislados.
 - [ ] Ejecutar build, typecheck, `check:ui`, formato y `git diff --check`; registrar rollback, hooks,
       commit, push y CI sin bypass. Sin cambio visual: capturas nuevas N/A.
+
+**Evidencia local (2026-10-09):** Karma focal sin coverage pasa **8/8**. El run focal instrumentado
+también pasa 8/8, y `shopping-suggested.component.ts` alcanza **100/100/100/100 % S/B/F/L**; el proceso
+focal sale 1 únicamente porque el reporte parcial agrega 14.38/4.52/7.91/15.52 % contra el gate global
+de 80 % (no se cambia el gate). La suite completa `pnpm run test:client`, con LCOV archivado fuera del
+repo en `%TEMP%\hogaria-shopping-suggested-full-20261009`, pasa **1264/1264**, con **92.06/83.35/90.66/
+93.49 % S/B/F/L**. La E2E existente `shopping-suggested.spec.ts`, con runner aislado, rate limit activo,
+SQLite/puertos/semilla temporales y cleanup, pasa **2/2** (Chromium y Pixel 5); se recorren crear y
+actualizar conservando lo comprado. No se llama a IA/WebAPI ni se modifican datos normales. Sin cambios
+visuales; capturas adicionales N/A. El build ya pasó con warnings previos de budgets/imports; typecheck
+E2E, `check:ui` (212 ficheros/21 reglas), Prettier y `git diff --check` también pasaron localmente.
+Hooks, publicación y CI de esta implementación quedan pendientes para la casilla siguiente.
 
 **Rollback:** retirar solo `shopping-suggested.component.spec.ts` y esta subunidad; no se toca el
 componente ni el flujo persistido.
