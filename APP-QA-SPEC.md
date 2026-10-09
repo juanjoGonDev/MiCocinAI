@@ -6065,3 +6065,49 @@ suite, retries ni límites por test.
 
 **Rollback:** revertir solo el umbral de timeout, el valor del job y esta reapertura; no reducir ni
 excluir pruebas, shards o retries.
+
+### QA-RECEIPT.DRAG-DROP.1 · recibir archivos al soltarlos en la zona visible
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md` §12aj ofrece tanto elegir como arrastrar un
+archivo. En el source actual, `dragover`, `dragleave` y `drop` están ligados al `input[type=file]`,
+pero ese input mide 1×1 px, es transparente y tiene `pointer-events: none`; la zona visible es su
+`label` padre. `tests/e2e/receipts.spec.ts` cubre el selector de archivos con `setInputFiles`, pero
+no arrastrar/soltar. Se debe reproducir antes de corregir.
+
+**Contrato:** los eventos de arrastre se reciben sobre cualquier parte de la zona visible. Soltar un
+único PNG sintético debe seguir las validaciones y el mismo endpoint que el selector, crear una única
+subida/trabajo, reflejar `Falló` al terminar la cola sin configuración IA y limpiar el estado visual
+«arrastrando». El selector, validación MIME/tamaño, estados ocupados y traducciones existentes se
+conservan; no añadir OCR ni IA externa.
+
+- [x] Añadir primero E2E Playwright real con `DataTransfer` y archivo sobre el `label` visible;
+      reproducir que el estado de arrastre o la subida no se activan en el source actual.
+- [x] Reubicar únicamente los handlers drag/drop al contenedor visible; conservar `change` en el
+      input y verificar 201, una fila, un trabajo `NO_CONFIG`, estado `Falló` y hover limpio.
+- [x] Ejecutar prueba aislada en Chromium escritorio y Pixel 5, revisar 1440×900, 390×844 y
+      320×740 sin overflow; guardar e inspeccionar capturas sintéticas PC/móvil.
+- [x] Pasar `typecheck:e2e`, `check:ui`, Prettier, build y `git diff --check`; dejar constancia de
+      si la suite repetible valida solo eventos sintéticos en móvil, sin fingir drag físico táctil.
+- [ ] Commit atómico con hooks completos, push y CI verde para el SHA publicado; mantener PR #41
+      abierto y Ready for review, sin merge.
+
+**Rollback:** revertir solo el E2E, la reubicación de eventos en `receipts.component.ts`, capturas
+aisladas y esta subunidad; mantener intacta la selección de archivos.
+
+**Evidencia TDD (2026-10-09):** el rojo aislado en Chromium falló en el `label` visible: faltaba la
+clase `tickets__drop--over` tras `dragover` (timeout 5 s; seguía en `tickets__drop`), ya que los
+handlers estaban en el input oculto. Tras mover esos tres bindings al `label`, el E2E real con app y
+SQLite temporales pasó **2/2** en Chromium y Pixel 5: `dragover` activa el hover; `drop` lo limpia,
+POST devuelve 201 y crea exactamente un recibo/trabajo; el worker aislado termina `NO_CONFIG` y la
+fila actualiza a `Falló`. Comando:
+
+```sh
+node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/receipt-drag-drop.spec.ts --reporter=line
+```
+
+En los tres tamaños calculados no hubo overflow horizontal. Capturas fixture sintética, inspeccionadas:
+[PC 1440×900](.e2e-screenshots/qa-receipt-drag-drop-qa-hogaria-e2e-Xn7bIO/chromium/receipt-drag-drop-1440x900.png),
+[móvil 390×844](.e2e-screenshots/qa-receipt-drag-drop-qa-hogaria-e2e-Xn7bIO/mobile-chrome/receipt-drag-drop-390x844.png)
+y [móvil 320×740](.e2e-screenshots/qa-receipt-drag-drop-qa-hogaria-e2e-Xn7bIO/mobile-chrome/receipt-drag-drop-320x740.png).
+El test móvil emite eventos DOM `DataTransfer` sintéticos; no valida arrastre físico/táctil de archivos
+en un teléfono. El cambio no añadió lógica TypeScript con ramas nuevas; coverage de producción no aplica.

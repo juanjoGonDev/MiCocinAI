@@ -60,6 +60,9 @@ const ESTADO_VARIANTE: Record<
         [class.tickets__drop--over]="arrastrando()"
         [class.tickets__drop--busy]="subiendo()"
         data-test="ticket-drop"
+        (dragover)="alArrastrar($event, true)"
+        (dragleave)="alArrastrar($event, false)"
+        (drop)="alSoltar($event)"
       >
         <input
           type="file"
@@ -67,9 +70,6 @@ const ESTADO_VARIANTE: Record<
           name="ticketFile"
           [disabled]="subiendo()"
           (change)="elegir($event)"
-          (dragover)="alArrastrar($event, true)"
-          (dragleave)="alArrastrar($event, false)"
-          (drop)="alSoltar($event)"
         />
         <app-icon name="description" [size]="28" [label]="null" />
         <span class="tickets__drop-title">
