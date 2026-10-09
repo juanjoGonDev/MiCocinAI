@@ -2302,7 +2302,13 @@ La evidencia de QA-HOUSEHOLD.API-SURFACE.1 y QA-HOUSEHOLD.CLIPBOARD.1 dejó abie
 - [x] `/pantry/catalogo`: búsqueda, pasillos/categorías, query string, filtros/paginación, alta individual y por lote, ya existente/en inventario, quitar con confirmación y persistencia al volver; evidencia QA-PANTRY.CATALOG.ROUTE.1.
 - [x] `/recipes`: filtros/tabs, favoritos, detalle, cocinar, temporizadores y vuelta; generar 1/3 recetas, ingredientes/utensilios, restricciones/dificultad/raciones/detalle, error/vacío, guardar y cancelar. Evidencia QA-RECIPES.ROUTES.1.
 - [x] `/calendar`: día/semana/mes, anterior/siguiente/hoy/salto a fecha, filtros, recarga/error; alta/edición/borrado de comidas y eventos, recurrencia/instancia, invitados, horarios, completado y confirmación. Evidencia QA-CALENDAR.ROUTES.1.
-- [ ] Planificación IA desde calendario: objetivo/fechas/tipos de comida/exclusiones/preferencias, loading/error/reintento, aplicar o cancelar y cambios persistidos sin duplicar comidas.
+- [x] Planificación IA desde calendario: objetivo/fechas/tipos de comida/exclusiones/preferencias, loading/error/reintento, aplicar o cancelar y cambios persistidos sin duplicar comidas.
+
+**Cierre funcional (2026-10-09):** `QA-CALENDAR.PLAN-WEEK-E2E.1` verifica la generación inicial, objetivos,
+fechas/tipos/exclusiones, estado de carga, error recuperable, reintento e idempotencia; `QA-PLANNER.GOALS-AND-PARTIAL-REPLAN.1`
+verifica la propuesta editable, aplicar/cancelar, persistencia atómica y aislamiento del hogar. E2E repetibles usan
+proveedor sintético, no WebAPI real ni tickets. CI `37966484202` incluyó estas pruebas y pasó **9/9** jobs en
+`0af4741`; el smoke real de tickets permanece separado y aplazado hasta el final.
 
 #### QA-CALENDAR.PLAN-WEEK-E2E.1 · generación semanal inicial con proveedor sintético
 
@@ -2359,8 +2365,8 @@ subcasos recientes de error de rango pasan **2/2** y completado/deshacer **4/4**
 SQLite/puertos/semilla temporales y cleanup; IA solo simulada, sin datos reales. Capturas PC/móvil se
 registran e inspeccionan en las unidades visuales/funcionales respectivas; este cierre no cambia UI.
 Hooks sin bypass, build/typecheck/check-ui y Karma pasan en el pre-push de `53a8c49`; CI #648
-(`37948562809`) pasó **9/9** jobs para el mismo código. La planificación IA completa sigue abierta en
-su casilla separada.
+(`37948562809`) pasó **9/9** jobs para el mismo código. La planificación IA se cerró después con
+`QA-CALENDAR.PLAN-WEEK-E2E.1` y `QA-PLANNER.GOALS-AND-PARTIAL-REPLAN.1`.
 
 **Evidencia QA-RECIPES.ROUTES.1 (2026-10-09):** el grupo Playwright aislado
 de 15 archivos de Recetas/Dashboard terminó **94 pasadas, 2 skips intencionales, 0 fallos** en 5,3 min.
