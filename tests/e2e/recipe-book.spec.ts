@@ -153,7 +153,15 @@ test.describe('Libro de recetas', () => {
     await page.setViewportSize(viewport);
     const cover = await mockLocalRecipeBookCover(page);
 
+    const catalogResponse = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/recipes' && url.searchParams.get('catalogOnly') === 'true';
+    });
     await page.getByRole('tab', { name: 'Libro de recetas' }).click();
+    await expect(page).toHaveURL(/[?&]collection=book/);
+    await catalogResponse;
+    await expect(page.locator('app-loading')).toHaveCount(0);
+
     const card = page.locator('[data-test="recipe-card"]').filter({ hasText: 'Riguas de elote' });
     await expect(card).toHaveCount(1);
     await card.scrollIntoViewIfNeeded();
