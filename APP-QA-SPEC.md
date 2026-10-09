@@ -4824,7 +4824,7 @@ cada ruta exactamente una vez, y ninguna ruta ni viewport se omite para hacer pa
       y cleanup; confirmar que no hay timeout ni errores JS de página inexplicados.
 - [x] Ejecutar typecheck, formato, `check:ui`, `git diff --check`, build y gates de cobertura aplicables;
       registrar resultado, límites y rollback focal.
-- [ ] Commit atómico, push con hooks completos y esperar CI verde para el SHA final; dejar PR Ready y
+- [x] Commit atómico, push con hooks completos y esperar CI verde para el SHA final; dejar PR Ready y
       sin merge.
 
 **Rollback:** revertir el agrupamiento de `layout-gutters.spec.ts`, su aserción de cobertura del
@@ -4843,7 +4843,9 @@ par PC/móvil de Dashboard y Configuración. `pnpm run test:client:coverage` pas
 92.23/83.57/90.98/93.64 % S/B/F/L. También pasan build productivo (warnings preexistentes de tamaño y
 imports Angular), `pnpm run typecheck:e2e`, `pnpm run check:ui` (212 archivos/21 reglas), Prettier y
 `git diff --check`. No se cambió producción en esta unidad; coverage focal para el código E2E: N/A.
-El run remoto fallido pertenece al SHA anterior; el CI posterior a estos cambios sigue pendiente.
+El run remoto fallido pertenece al SHA anterior; los cambios están incluidos en `6f8f5ba`, que forma
+parte del HEAD actual. CI `38003391607` pasó todos los jobs en `30aa041`; PR #41 sigue abierto y
+Ready for review, sin merge. El cleanup, ancho de matriz, rutas y viewports del código no se redujeron.
 
 ### QA-LAYOUT.VISUAL-CONSISTENCY.1 · geometría uniforme en toda la interfaz
 
