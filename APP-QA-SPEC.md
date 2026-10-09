@@ -4697,11 +4697,18 @@ el job E2E tendrá `timeout-minutes: 12` para cubrir el shard más lento más la
 cleanup. Un test de configuración debe fallar si el margen baja de 12. La validación final requiere
 que CI complete todos los shards en el SHA publicado.
 
-- [ ] Añadir primero una regresión estática que lea el job `e2e` y exija timeout mínimo de 12 minutos;
+- [x] Añadir primero una regresión estática que lea el job `e2e` y exija timeout mínimo de 12 minutos;
       comprobar que falla contra el valor actual de 8.
-- [ ] Aumentar únicamente el timeout del job `e2e` a 12; no omitir shards, pruebas ni gates.
+- [x] Aumentar únicamente el timeout del job `e2e` a 12; no omitir shards, pruebas ni gates.
 - [ ] Ejecutar el test de configuración, validación de workflows/formato y el conjunto requerido por
       hooks; push atómico y verificar que todos los jobs CI terminan en verde para el head actual.
+
+**Evidencia TDD (2026-10-09):** el run `37891010180` confirmó el problema: el step de Playwright
+terminó verde, pero el job 2 quedó cancelado a los 8m17s, frente al límite de ocho minutos. La nueva
+prueba `node --test scripts/ci-e2e-timeout.test.mjs` falló primero con el timeout actual de 8; después
+de elevar solo ese job a 12, `pnpm run test:config` pasó **11/11**. `node scripts/check-workflows.mjs`
+validó **5 workflows**, Prettier cubrió YAML/JSON/test/spec y `git diff --check` pasó. Falta esperar la
+CI completa del commit de implementación; no se ha reducido ni alterado la suite E2E.
 
 **Rollback:** revertir el guard de configuración, su registro en `test:config`, el valor de timeout y
 esta unidad; no modificar selección/sharding ni cobertura de Playwright.
