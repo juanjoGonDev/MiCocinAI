@@ -5933,15 +5933,18 @@ cancelación.
 - [x] TDD: elevar el umbral de la regresión de timeout y demostrar que falla con el job actual de
       12 minutos.
 - [x] Cambiar solo `timeout-minutes` del job E2E a 16; conservar distribución y ejecución completa.
-- [ ] Ejecutar suites focales, validación de workflows/formato y hooks completos; commit atómico y
+- [x] Ejecutar suites focales, validación de workflows/formato y hooks completos; commit atómico y
       push. Verificar en un nuevo SHA que todos los jobs E2E y demás gates concluyen en verde y que
       el shard 2 publica su informe sin cancelarse.
 
-**TDD verde local (2026-10-09):** el nuevo umbral de 16 falló primero contra los 12 minutos
-vigentes. Tras aumentarlo a 16, `pnpm run test:config` pasó **11/11**, `node
-scripts/check-workflows.mjs` validó **5 workflows**, Prettier de workflow/test/spec y
-`git diff --check` pasaron. La prueba del archivo mantiene intactos los cuatro shards; falta el CI
-del SHA publicado para demostrar que shard 2 termina y genera sus artefactos.
+**TDD/CI verde (2026-10-09):** el nuevo umbral de 16 falló primero contra los 12 minutos vigentes.
+Tras aumentarlo a 16, `pnpm run test:config` pasó **11/11**, `node scripts/check-workflows.mjs`
+validó **5 workflows**, Prettier de workflow/test/spec y `git diff --check` pasaron. El pre-push del
+commit `1e8dcc7` pasó todos los hooks. CI `37986758250`, SHA `1e8dcc7a647da48d462ff0ef59fb7bce3b68df95`,
+terminó **9/9 jobs verdes**: cuatro shards E2E, Full-stack E2E, Server Tests, Type Check, Production
+Build e instalación. El step de Playwright del shard 2 completó en **5m35s** y el job en **5m54s**,
+con `timeout-minutes: 16`; `Upload Playwright report` concluyó correctamente. No se alteraron shards,
+suite, retries ni límites por test.
 
 **Rollback:** revertir solo el umbral de timeout, el valor del job y esta reapertura; no reducir ni
 excluir pruebas, shards o retries.
