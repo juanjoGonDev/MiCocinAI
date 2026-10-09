@@ -3926,16 +3926,30 @@ diálogo debe tener nombre/rol accesibles, mover y atrapar el foco, cerrar con E
 disparador. Capturas solo con identidad y contenido sintéticos (PC y móvil); no usar datos personales ni
 ejecutar llamadas al proveedor IA.
 
-- [ ] Añadir primero una E2E Playwright aislada que abra Objetivos del Calendario y el alta de
+- [x] Añadir primero una E2E Playwright aislada que abra Objetivos del Calendario y el alta de
       Configuración IA; comparar propiedades calculadas del shell sin tratar `md` y `lg` como el mismo ancho.
-- [ ] Validar Chromium y Pixel 5 en los viewports del contrato, navegación/foco/Escape, dimensiones y
+- [x] Validar Chromium y Pixel 5 en los viewports del contrato, navegación/foco/Escape, dimensiones y
       scroll del modal, hit-target del cierre y ausencia de overflow; guardar e inspeccionar capturas PC/móvil.
-- [ ] Ejecutar typecheck E2E, Prettier, `check:ui`, build de producción y `git diff --check`; cobertura de
+- [x] Ejecutar typecheck E2E, Prettier, `check:ui`, build de producción y `git diff --check`; cobertura de
       producción N/A si no se cambia lógica ejecutable. Registrar resultados/limitaciones y mantener abierta
       la matriz geométrica global mientras quede cualquier otra familia sin auditar.
 
-**Rollback focal:** retirar solo la regresión del shell modal y este subapartado; no cambiar estilos ni
-comportamiento de `ModalComponent` si la medición no descubre una discrepancia reproducible.
+**Evidencia (2026-10-09):** la regresión aislada abre los dos diálogos y compara overlay, header,
+body, título y cierre en 320×568, 393×851, 568×320, 767/768/769 y 1440×900; también verifica tamaños
+`md/lg` por separado, accesibilidad, foco/teclado/Escape, scroll del formulario y ausencia de overflow.
+La inspección inicial revalidó que el diálogo de evento del Calendario tiene un layout anclado/hoja
+intencional y lo excluyó; el comparador usa el diálogo estándar de objetivos. La repetición final en
+Chromium y Pixel 5 emulado pasó **2/2** con SQLite/puertos/servidores aislados y limpiados. Capturas
+sintéticas PC/móvil guardadas e inspeccionadas en `%TEMP%\hogaria-modal-shell-rerun-20261009`:
+`calendar-objectives-modal-{chromium,mobile-chrome}.png` y
+`ai-config-modal-{chromium,mobile-chrome}.png`. `pnpm run typecheck:e2e`, Prettier,
+`pnpm run check:ui` (**211 archivos/21 reglas**), `pnpm run build` y `git diff --check` pasan; el
+build conserva warnings de bundle/imports/budgets ya existentes. Cobertura de producción: N/A,
+porque no se cambió lógica ejecutable. No se llamó al proveedor IA. La auditoría global de familias
+geométricas sigue abierta.
+
+**Rollback focal:** retirar solo `tests/e2e/modal-shell-geometry.spec.ts` y este subapartado; no
+cambiar estilos ni comportamiento de `ModalComponent` si la medición no descubre una discrepancia reproducible.
 
 ### Subunidad QA-CALENDAR.EARLY-HOURS.1 · hora actual visible en la rejilla
 
