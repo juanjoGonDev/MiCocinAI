@@ -6134,6 +6134,9 @@ no cambiar producto salvo que el E2E reproduzca un fallo funcional.
       confirmar después el borrado y validar 200, navegación, 404 y ausencia de filas hijas.
 - [x] Ejecutar en Chromium y Pixel 5 con runner, base y semilla aislados; sin `page.route` en el
       DELETE, verificar limpieza y guardar/inspeccionar capturas sintéticas en un directorio único.
+- [x] Si `E2E_SCREENSHOT_DIR` no existe, guardar las capturas del caso bajo
+      `testInfo.outputPath('screenshots')`, que el runner aísla por prueba/intento; comprobar Chromium
+      y Pixel 5 sin depender de una variable configurada en CI.
 - [ ] Ejecutar typecheck E2E, `check:ui`, Prettier, build, cobertura global y `git diff --check`;
       documentar resultados/limitaciones, commit y push con todos los hooks y CI verde.
 
@@ -6152,3 +6155,12 @@ cambio de producción; cobertura de producción N/A. Capturas sintéticas revisa
 [PC 1440×900](.e2e-screenshots/qa-receipt-delete-confirmation-20261010/receipt-delete-confirmation-chromium-1440x900.png),
 [móvil 390×844](.e2e-screenshots/qa-receipt-delete-confirmation-20261010/receipt-delete-confirmation-mobile-chrome-390x844.png)
 y [móvil 320×740](.e2e-screenshots/qa-receipt-delete-confirmation-20261010/receipt-delete-confirmation-mobile-chrome-320x740.png).
+
+**Hallazgo CI y corrección (2026-10-10):** el CI `37999416317`, shard 3, detectó que el caso exigía
+`E2E_SCREENSHOT_DIR` y fallaba antes de completar cuando el runner de CI no la exportaba. Se reprodujo
+rojo en el runner aislado con esa variable ausente; el E2E ahora cae a `testInfo.outputPath('screenshots')`
+para conservar una ruta única por prueba/intento. El caso focal pasó **2/2** Chromium/Pixel 5 sin esa
+variable y `receipts.spec.ts` completo pasó **26/26** en ambos proyectos con carpeta de captura nueva,
+`E2E_RATE_LIMIT=on` y cleanup. `typecheck:e2e`, `check:ui`, Prettier y `git diff --check` pasan; el
+build y coverage/gates finales quedan para hooks/CI del nuevo commit. Capturas sintéticas de esta
+corrida en `.e2e-screenshots/qa-receipt-delete-ci-fix-20261010-8e1c7023/`.

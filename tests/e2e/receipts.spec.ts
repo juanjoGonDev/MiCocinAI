@@ -712,9 +712,8 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
     };
 
     const cancelDialog = await openDialog();
-    const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
-    if (!screenshotDirectory)
-      throw new Error('E2E_SCREENSHOT_DIR debe ser único para las capturas');
+    const screenshotDirectory =
+      process.env.E2E_SCREENSHOT_DIR ?? testInfo.outputPath('screenshots');
     mkdirSync(screenshotDirectory, { recursive: true });
     const captureConfirmation = async (width: number, height: number) => {
       await page.setViewportSize({ width, height });
