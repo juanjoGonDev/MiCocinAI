@@ -865,10 +865,12 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 
 **Contrato de esta unidad:** probar selección persistida válida/inválida y detección del navegador; que `auto` reaccione a `languagechange` y los idiomas explícitos no, que el efecto alinee `<html lang>` y `dateLocale()`, y que los cambios se guarden en `STORAGE_KEYS.language`. Cubrir traducción disponible/fallback/clave ausente, advertencia solo en desarrollo, sustitución de parámetros repetidos y `null`, plural singular/plural y todas las formas de `relativeTime()` (vacío, ahora, unidades pasadas/futuras y fechas con/sin año). Cada spec restaura storage, idioma global y locale para aislar la suite.
 
-- [ ] Añadir primero `i18n.service.spec.ts` y cubrir las rutas del contrato contra la implementación actual; no cambiar producción si las expectativas pasan.
-- [ ] Cubrir ramas auto/explicit y los estados de `languagechange`, fallback de locale/diccionario, advertencia, parámetros/plural y clases de tiempo relativo con reloj controlado.
-- [ ] Elevar `i18n.service.ts` a ≥70 % en statements/branches/functions/lines; repetir suite completa ≥80 % global, build, `typecheck:e2e`, `check:ui`, formato y `git diff --check` sin alterar gates.
+- [x] Añadir primero `i18n.service.spec.ts` y cubrir las rutas del contrato contra la implementación actual; no cambiar producción si las expectativas pasan.
+- [x] Cubrir ramas auto/explicit y los estados de `languagechange`, fallback de locale/diccionario, advertencia, parámetros/plural y clases de tiempo relativo con reloj controlado.
+- [x] Elevar `i18n.service.ts` a ≥70 % en statements/branches/functions/lines; repetir suite completa ≥80 % global, build, `typecheck:e2e`, `check:ui`, formato y `git diff --check` sin alterar gates.
 - [ ] Registrar evidencia reproducible y rollback; ejecutar hooks completos, commit atómico, push y CI del SHA de implementación.
+
+**Evidencia local (2026-10-09):** el spec unitario focal pasa **11/11** en Chrome Headless 154; no fue necesario modificar código de producción. `pnpm run test:client` pasa **1256/1256** con cobertura global **91.69/83.07/90.20/93.13 % S/B/F/L**; `i18n.service.ts` alcanza **100/100/100/100 %** (52/52 sentencias, 38/38 ramas, 13/13 funciones, 47/47 líneas). `pnpm run build`, `typecheck:e2e`, `check:ui` (212 ficheros/21 reglas), Prettier focal y `git diff --check` pasan; el build mantiene warnings previos de imports y budgets en otras vistas. El spec restaura `STORAGE_KEYS.language`, `<html lang>`, `dateLocale()`, `environment.production`, `navigator.language` y la clave de diccionario temporal al terminar cada caso. Sin E2E visual (solo test unitario), IA ni escrituras fuera de almacenamiento temporal/local del test. Falta completar hooks, publicar el commit y observar CI para marcar el cierre.
 
 **Rollback:** retirar solo el nuevo spec y este bloque; no hay cambios de producción ni datos.
 
