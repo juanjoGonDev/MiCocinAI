@@ -982,14 +982,13 @@ describe('ShoppingService', () => {
 
     it('sets and clears list discounts, refreshing the estimate for either branch', async () => {
       const discount: ListDiscount = {
-        id: 'discount-1',
-        list_id: LIST_ID,
         kind: 'amount',
-        value_minor: 50,
-        percent_bps: null,
+        valueMinor: 50,
+        percentBps: null,
         scope: 'all',
-        first_units: null,
-        label: 'Oferta'
+        firstUnits: null,
+        label: 'Oferta',
+        description: '0,50 €'
       };
       const input = { kind: 'amount' as const, valueMinor: 50 };
       const set = service.setDiscount(LIST_ID, input);

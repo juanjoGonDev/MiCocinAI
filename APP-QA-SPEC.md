@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge (GitHub aún informa `mergeStateStatus=BLOCKED`). QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. `/ai-config` pasó su suite completa en Chromium/Pixel 5 (**52/52**) y concurrencia/proveedor **6/6**; la ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1285/1285** con cobertura **92.22/83.54/90.97/93.64 % S/B/F/L**; `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. CI `37980861919` para HEAD `fc92eee` pasó **9/9** jobs, incluidos los cuatro shards y E2E full-stack. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. `/ai-config` pasó su suite completa en Chromium/Pixel 5 (**52/52**) y concurrencia/proveedor **6/6**; la ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes, descuento por primeras unidades y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1287/1287** con cobertura **92.23/83.57/90.98/93.64 % S/B/F/L**; `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. CI `37989343357` sobre `3b96cab` falló solo en el shard E2E 2, al agotar los 300 s de un test monolítico de la matriz global; el arreglo CI sigue pendiente. Siguen abiertas la auditoría de safe-area nativa no nula, la matriz visual completa y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1285/1285 con cobertura 92.22/83.54/90.97/93.64 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1287/1287 con cobertura 92.23/83.57/90.98/93.64 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
 - **IA / tickets reales (2026-10-09, vigente):** se preservó WebAPI activo en `127.0.0.1:3001` (PID 50248, readiness HTTP 200) y su cambio ajeno `tools.txt`. Tras autorización del usuario se completó una sola vez el smoke del grupo largo; el contrato de MiCocinAI llevaba JSON Schema estricto y dos adjuntos, pero WebAPI registró solo un fichero al preparar el prompt. El código actual explica el defecto: el guardado antepone UUID a `inventario.json`, mientras el detector de subida forzada solo admite prefijo numérico. El resultado del grupo largo no valida extracción/clasificación con inventario adjunto; no se escribió en inventario real ni se repetirá ese grupo. Solo queda autorizada una ejecución de la JPEG preferida después de que WebAPI muestre dos adjuntos en upload y prompt; no se ha reenviado.
 
@@ -2806,6 +2806,55 @@ confirmado. Se revisó overflow en los siete tamaños de escritorio/móvil indic
 en `%TEMP%\hogaria-shop-tray-rename-final2-20261009\{chromium,mobile-chrome}\shopping-tray-rename-editor-baseline.png`,
 `shopping-tray-rename-conflict-baseline.png` y `shopping-tray-rename-conflict-recovered.png`. Rollback focal:
 revertir el commit atómico de este punto de spec, template/servicio y sus regresiones E2E/unitarias.
+
+#### QA-SHOPPING.DISCOUNT-FIRST-UNITS.1 · descuento limitado a las primeras unidades
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md` §8f define que `firstUnits` limita la base
+del descuento a las primeras unidades pagadas, en orden de posición. El cálculo y sus bordes ya
+tienen pruebas de servidor en `server/src/utils/list-discount.spec.ts`; la E2E existente solo
+comprueba el descuento porcentual sobre toda la lista. La fila general `/shopping/:id` sigue abierta
+para el resto de interacciones. El contrato activo habla de descuentos de lista, no de una entidad
+«cupón» independiente; esta unidad no inventa ese alcance.
+
+**Contrato:** en una lista con precios, un porcentaje configurado para las primeras N unidades
+reduce solo el subtotal de esas unidades pagadas; el total permanece correcto después de guardar y
+recargar, y la hoja reabre con el alcance y el límite persistidos.
+
+- [x] Añadir primero una E2E de producción que cree una cesta sintética con cantidades/precios
+      distintos, aplique un porcentaje a `firstUnits`, y afirme el subtotal reducido, el total,
+      el resumen accesible y el alcance/límite al reabrir tras reload.
+- [x] Ejecutar la E2E aislada con rate limit, DB/puertos/semilla temporales y cleanup en Chromium
+      escritorio y Pixel 5; no contactar WebAPI ni proveedor IA. Guardar e inspeccionar capturas
+      sintéticas PC/móvil en un directorio nuevo ignorado por Git.
+- [x] Ejecutar typecheck E2E, formato, `check:ui`, cobertura completa y `git diff --check`; registrar
+      comando/resultados, limitaciones y rollback. El cambio de DTO toca producción: no marcar coverage
+      N/A; la cobertura focal de `shopping.model.ts` es 95.70/91.06/100/98.75 % S/B/F/L y el componente
+      no se instrumenta en Karma, por lo que se verificó por E2E de producción.
+
+**TDD y causa raíz:** la E2E roja falló tras recargar en Chromium y Pixel 5: el servidor persistía el
+DTO `firstUnits: 3`, pero el editor volvía a `1` y perdía el porcentaje. `shopping.routes.ts` ya serializa
+el DTO en `camelCase`; el modelo y la hoja del cliente leían claves obsoletas en `snake_case`, por lo que
+la hidratación y el Undo no conservaban el descuento. Se tipó el contrato real y se centralizó la
+conversión entre DTO, borrador editable y payload de Undo; el cálculo del servidor no cambió.
+
+**Evidencia local (2026-10-09):** la prueba roja usó `pnpm run test:e2e:full-stack -- --workers=1
+--project=chromium --project=mobile-chrome --forbid-only tests/e2e/full-stack/shopping-money.spec.ts
+--grep='primeras unidades' --reporter=line` y falló en ambos proyectos al reabrir el editor (esperado
+`3`, recibido `1`). La corrida final de todo el archivo con rate limit activo y recursos efímeros,
+`E2E_RATE_LIMIT=on`, `E2E_SCREENSHOT_DIR=.e2e-screenshots/qa-shopping-first-units-inspected-20261009`
+y el mismo comando sin `--grep`, pasó **8/8**: persiste/reabre alcance, cap y total y confirma la
+respuesta GET del servidor. Cleanup del stack aislado confirmado; no hubo llamadas a WebAPI/IA ni
+escrituras al inventario. `pnpm run test:client:coverage` pasó **1287/1287**, global
+92.23/83.57/90.98/93.64 % S/B/F/L (sin rebajar umbrales); `pnpm run typecheck:e2e`,
+`pnpm run check:ui` (212 ficheros/21 reglas), Prettier focal y `git diff --check` pasan. Build
+productivo aprobado por el runner E2E con warnings preexistentes de budgets/imports. Capturas
+sintéticas inspeccionadas:
+`.e2e-screenshots/qa-shopping-first-units-inspected-20261009/shopping-first-units-chromium.png` y
+`.e2e-screenshots/qa-shopping-first-units-inspected-20261009/shopping-first-units-mobile-chrome.png`.
+
+**Rollback:** revertir la unidad atómica del DTO/helper de descuentos en `shopping.model.ts`, su uso
+en `shopping-list-detail.component.ts`, las pruebas unitarias y E2E, el fixture de DTO de servicio y
+esta subsección; no revertir cálculos ni comportamiento del servidor.
 
 #### QA-SHOPPING.UNIT-RECENTS.1 · seis unidades usadas recientemente
 

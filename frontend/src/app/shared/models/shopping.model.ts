@@ -545,13 +545,11 @@ export type DiscountKind = 'amount' | 'percent';
 export type DiscountScope = 'all' | 'firstUnits' | 'product' | 'category';
 
 export interface ListDiscount {
-  id: string;
-  list_id: string;
   kind: DiscountKind;
-  value_minor: number | null;
-  percent_bps: number | null;
+  valueMinor: number | null;
+  percentBps: number | null;
   scope: DiscountScope;
-  first_units: number | null;
+  firstUnits: number | null;
   /** Que producto o seccion entra con `scope: 'product' | 'category'`. */
   target?: string | null;
   /** Las demas dianas del mismo cartel: «2,50 € en jamon, queso y pan» es UN descuento. */
@@ -572,6 +570,56 @@ export interface DiscountInput {
   /** Se mandan los nombres legibles de las lineas elegidas; el server normaliza al comparar. */
   targets?: string[] | null;
   label?: string | null;
+}
+
+export interface SavedDiscountDraft {
+  kind: DiscountKind;
+  scope: DiscountScope;
+  firstUnits: number | null;
+  targets: string[];
+  label: string | null;
+  amount: string;
+  percent: string | null;
+}
+
+/** El API devuelve el modelo de dominio camelCase; transforma ese DTO para la hoja de edición. */
+export function discountDraftFromSaved(
+  discount: ListDiscount | null | undefined
+): SavedDiscountDraft {
+  const scoped = discount?.scope === 'product' || discount?.scope === 'category';
+  const targets = scoped
+    ? [
+        ...new Set(
+          [...(discount?.targets ?? []), discount?.target ?? null].filter(
+            (value): value is string => !!value
+          )
+        )
+      ]
+    : [];
+
+  return {
+    kind: discount?.kind ?? 'amount',
+    scope: discount?.scope ?? 'all',
+    firstUnits: discount?.firstUnits ?? null,
+    targets,
+    label: discount?.label ?? null,
+    amount: discount?.valueMinor ? (discount.valueMinor / 100).toFixed(2).replace('.', ',') : '',
+    percent: discount?.percentBps ? String(discount.percentBps / 100) : null
+  };
+}
+
+/** Conserva el contrato camelCase de escritura al ofrecer deshacer un borrado. */
+export function discountInputFromSaved(discount: ListDiscount): DiscountInput {
+  return {
+    kind: discount.kind,
+    valueMinor: discount.valueMinor,
+    percentBps: discount.percentBps,
+    scope: discount.scope,
+    firstUnits: discount.firstUnits,
+    target: discount.target,
+    targets: discount.targets,
+    label: discount.label
+  };
 }
 
 /** Lo que se escribe al cerrar la compra, linea a linea. */

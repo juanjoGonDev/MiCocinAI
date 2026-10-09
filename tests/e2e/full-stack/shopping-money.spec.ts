@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { expect, test, type Page } from '../fixtures';
 import { registerAndGoto } from '../helpers/auth';
 import { shoppingNavigationLink, shoppingNewListAction } from '../helpers/shopping-ui';
@@ -142,5 +144,76 @@ test.describe('lo que cuesta, y en que tienda', () => {
     await page.locator('[data-test="discount-open"]').click();
     await page.locator('[data-test="discount-remove"]').click();
     await expect(page.locator('[data-test="total"]')).toContainText('19,00');
+  });
+
+  test('un descuento porcentual respeta las primeras unidades y sobrevive a recargar', async ({
+    page
+  }, testInfo) => {
+    const isMobile = Boolean(testInfo.project.use.isMobile);
+    await page.setViewportSize(
+      isMobile ? { width: 393, height: 851 } : { width: 1440, height: 900 }
+    );
+    await registerAndGoto(page, '/shopping', 'full-first-units-discount');
+    await createList(page, 'Primeras unidades');
+    await add(page, '2 Avena');
+    await add(page, '2 Zumo');
+    await price(page, 0, '2');
+    await price(page, 1, '1');
+    await expect(page.locator('[data-test="total"]')).toContainText('6,00');
+
+    await page.locator('[data-test="discount-open"]').click();
+    const sheet = page.locator('[data-test="discount-sheet"]');
+    await sheet.locator('[data-test="discount-kind"]', { hasText: 'Porcentaje' }).click();
+    const percent = sheet.locator('[data-test="discount-percent"]');
+    await percent.locator('button').click();
+    await page.getByRole('option', { name: '50 %' }).click();
+    await sheet.locator('[data-test="discount-scope"]', { hasText: 'Primeras unidades' }).click();
+    await sheet.locator('[data-test="discount-first-units"]').fill('3');
+
+    await sheet.locator('[data-test="discount-save"]').click();
+    // Las tres primeras unidades cuestan 5 €: 50 % son 2,50 €, no el 50 % de los 6 €.
+    await expect(page.locator('[data-test="total"]')).toContainText('3,50');
+    await expect(page.locator('[data-test="discount-open"]')).toContainText('50');
+    const toast = page.locator('.toast--success').filter({ hasText: 'Descuento aplicado' });
+    await expect(toast).toBeVisible();
+    await expect
+      .poll(() =>
+        toast.evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          return bounds.left >= 0 && bounds.right <= window.innerWidth;
+        })
+      )
+      .toBe(true);
+    await toast.locator('.toast__close').click();
+    await expect(toast).toHaveCount(0);
+
+    const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+    if (screenshotDirectory) {
+      mkdirSync(resolve(screenshotDirectory), { recursive: true });
+      await page.screenshot({
+        path: join(
+          resolve(screenshotDirectory),
+          `shopping-first-units-${testInfo.project.name}.png`
+        )
+      });
+    }
+
+    const listResponsePromise = page.waitForResponse((response) => {
+      const path = new URL(response.url()).pathname;
+      return response.request().method() === 'GET' && /^\/api\/shopping\/lists\/[^/]+$/.test(path);
+    });
+    await page.reload();
+    const listPayload = await (await listResponsePromise).json();
+    expect(listPayload.data.discount).toMatchObject({
+      scope: 'firstUnits',
+      firstUnits: 3,
+      percentBps: 5000
+    });
+    await expect(page.locator('[data-test="total"]')).toContainText('3,50');
+    await page.locator('[data-test="discount-open"]').click();
+    await expect(page.locator('[data-test="discount-first-units"]')).toHaveValue('3');
+    await expect(page.locator('[data-test="discount-percent"] .picker__trigger')).toContainText(
+      '50 %'
+    );
   });
 });

@@ -10,6 +10,9 @@ import {
   offerOfItem,
   describeOffer,
   parseMoneyToMinor,
+  discountDraftFromSaved,
+  discountInputFromSaved,
+  ListDiscount,
   ShoppingListItem
 } from './shopping.model';
 import { dateLocale, setDateLocale } from '../../core/time';
@@ -74,6 +77,71 @@ describe('shopping.model — dinero', () => {
     expect(formatMoney(0)).toBe('0,00 €');
     expect(formatMoney(85)).toBe('0,85 €');
     expect(formatMoney(129050)).toBe('1290,50 €');
+  });
+});
+
+describe('shopping.model — DTO de descuento de lista', () => {
+  it('restaura las propiedades camelCase del API en la hoja y al deshacer', () => {
+    const saved: ListDiscount = {
+      kind: 'percent',
+      valueMinor: null,
+      percentBps: 1250,
+      scope: 'firstUnits',
+      firstUnits: 3,
+      target: null,
+      targets: null,
+      label: 'Fidelidad',
+      description: '12,5 % en 3 unidades'
+    };
+
+    expect(discountDraftFromSaved(saved)).toEqual({
+      kind: 'percent',
+      scope: 'firstUnits',
+      firstUnits: 3,
+      targets: [],
+      label: 'Fidelidad',
+      amount: '',
+      percent: '12.5'
+    });
+    expect(discountInputFromSaved(saved)).toEqual({
+      kind: 'percent',
+      valueMinor: null,
+      percentBps: 1250,
+      scope: 'firstUnits',
+      firstUnits: 3,
+      target: null,
+      targets: null,
+      label: 'Fidelidad'
+    });
+  });
+
+  it('deduplica objetivos y mantiene el importe visible; sin descuento empieza limpio', () => {
+    const saved: ListDiscount = {
+      kind: 'amount',
+      valueMinor: 150,
+      percentBps: null,
+      scope: 'product',
+      firstUnits: null,
+      target: 'Avena',
+      targets: ['Avena', 'Zumo'],
+      label: null
+    };
+    expect(discountDraftFromSaved(saved)).toEqual(
+      jasmine.objectContaining({
+        targets: ['Avena', 'Zumo'],
+        amount: '1,50',
+        percent: null
+      })
+    );
+    expect(discountDraftFromSaved(null)).toEqual({
+      kind: 'amount',
+      scope: 'all',
+      firstUnits: null,
+      targets: [],
+      label: null,
+      amount: '',
+      percent: null
+    });
   });
 });
 

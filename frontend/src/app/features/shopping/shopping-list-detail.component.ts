@@ -10,6 +10,8 @@ import { seccionDeLista } from './seccion-de-catalogo';
 import {
   auditFace,
   describeLineDiscount,
+  discountDraftFromSaved,
+  discountInputFromSaved,
   lineDiscountOfItem,
   type LineDiscount,
   type ListEvent
@@ -4061,29 +4063,16 @@ export class ShoppingListDetailComponent implements OnDestroy {
 
   /** Al abrir la hoja se parte de lo que hay, no de un formulario en blanco. */
   hydrateDiscount(): void {
-    const discount = this.list()?.discount;
+    const saved = discountDraftFromSaved(this.list()?.discount);
     this.discountDraft.set({
-      kind: discount?.kind ?? 'amount',
-      scope: discount?.scope ?? 'all',
-      firstUnits: discount?.first_units ?? null,
-      // Con 'all' las dianas pueden venir de cuando era «en el jamón»: se limpian aqui para
-      // que la hoja no muestre una diana que ya no esta aplicando nada.
-      targets:
-        discount && (discount.scope === 'product' || discount.scope === 'category')
-          ? [
-              ...new Set(
-                [...(discount.targets ?? []), discount.target ?? null].filter(
-                  (v): v is string => !!v
-                )
-              )
-            ]
-          : [],
-      label: discount?.label ?? null
+      kind: saved.kind,
+      scope: saved.scope,
+      firstUnits: saved.firstUnits,
+      targets: saved.targets,
+      label: saved.label
     });
-    this.amountDraft.set(
-      discount?.value_minor ? (discount.value_minor / 100).toFixed(2).replace('.', ',') : ''
-    );
-    this.percentDraft.set(discount?.percent_bps ? String(discount.percent_bps / 100) : null);
+    this.amountDraft.set(saved.amount);
+    this.percentDraft.set(saved.percent);
   }
 
   setDiscountKind(kind: 'amount' | 'percent'): void {
@@ -4268,14 +4257,7 @@ export class ShoppingListDetailComponent implements OnDestroy {
         label: this.i18n.t('ui.deshacer'),
         run: () => {
           if (!previous) return;
-          void this.shopping.setDiscount(list.id, {
-            kind: previous.kind,
-            valueMinor: previous.value_minor,
-            percentBps: previous.percent_bps,
-            scope: previous.scope,
-            firstUnits: previous.first_units,
-            label: previous.label
-          });
+          void this.shopping.setDiscount(list.id, discountInputFromSaved(previous));
         }
       }
     });
