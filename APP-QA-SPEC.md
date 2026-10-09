@@ -1,9 +1,9 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-08):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La última suite frontend local pasó **1206/1206** con coverage **90.38/81.51/89.11/91.79 % S/B/F/L**; el workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
-- **IA / tickets reales (2026-10-08):** el smoke autorizado consumió el presupuesto de 8/8 completions; la última respondió HTTP 504 y la E2E acabó en fallo antes de la fase «cuatro tickets verificados». No se hizo un reintento manual. El runner aislado y su carpeta temporal se cerraron/eliminaron; QA-AI.REAL-INTEGRATIONS.1 permanece abierta.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1206/1206 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
-- **Actualizado:** 2026-10-08
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La última suite frontend local pasó **1213/1213** con coverage **90.41/81.61/89.13/91.84 % S/B/F/L**; el workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **IA / tickets reales (2026-10-09):** la validación de tickets sigue abierta. WebAPI está listo, pero el último intento registrado falló al subir adjuntos con HTTP 504 antes de `prompt_submitted`; el preflight más reciente confirmó que el fallo sigue en los logs. No se reenviaron tickets porque no existe confirmación de que el proveedor no los recibiera.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1213/1213 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Actualizado:** 2026-10-09
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -2706,14 +2706,15 @@ servicio siguió listo; no se tocaron ajustes ni procesos de WebAPI. El coordina
 limpiar el token propio y no quedaron directorios temporales del runner recientes; ninguna compra se
 confirmó ni se guardó en la despensa/inventario real. No se generaron capturas, traces ni vídeos.
 
-**Revalidación posterior solicitada (2026-10-09; diagnóstico, sin reenvío):** se inspeccionaron de
-nuevo checkout/proceso, readiness y logs redacted de WebAPI antes de repetir documentos. El servicio
-seguía listo, pero el registro del intento previo conservaba `attachment_upload_failed` HTTP 504 /
-timeout, dos adjuntos parciales y cierre de página en cleanup; el timeout ocurrió a los 50,5 s frente
-al límite de readiness de subida de 45 s. No hay evidencia de `prompt_submitted` ni de
-`response_completed`. Como el upload no está confirmado, no se volvió a invocar la IA ni se reenvió
-ningún ticket. Este chequeo no constituye un tercer smoke: solo confirma que la limitación anterior
-sigue sin resolverse y que la unidad debe continuar abierta.
+**Revalidación solicitada (2026-10-09; preflight, sin reenvío):** `D:\projects\webApi` sigue limpio
+en `fix/partial-attachment-cleanup`, HEAD `7c1e52e9` (incluye `e679f44d`, limpieza de subidas
+parciales). El servicio existente responde `ready=true` y `storage=ready`; sin embargo, el tail actual
+de `/admin/api/logs` conserva 18 eventos `attachment_upload_failed` y 16 menciones HTTP 504 (los
+eventos pueden duplicarse por una sola petición). El último fallo, a las 01:00:17 según el timestamp
+local del log, es HTTP 504 con cleanup `page_closed`; el tail termina a las 02:04:51. No aparecen
+`prompt_submitted` ni `response_completed`. Por tanto, el fix de cleanup no ha resuelto el timeout de
+subida y no hay evidencia de que el proveedor recibiera el prompt. No se volvió a invocar la IA ni se
+reenvió ticket alguno. Este preflight no constituye otro smoke y la unidad permanece abierta.
 
 El mismo 504 persiste en el límite de subida de WebAPI pese al fix y a la cobertura sintética. No
 reenviar tickets ni declarar esta validación completa hasta que WebAPI/provider resuelva este fallo.
