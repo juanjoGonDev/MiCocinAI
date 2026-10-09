@@ -496,6 +496,7 @@ describe('ShoppingService', () => {
       const patch = http.expectOne(`${API}/lists/${LIST_ID}`);
       expect(patch.request.method).toBe('PATCH');
       expect(patch.request.body).toEqual({ name: 'Renombrada', version: 9 });
+      expect(patch.request.context.get(SILENT_TOAST)).toBeTrue();
       patch.flush({ data: renamed });
       await expectAsync(rename).toBeResolvedTo(renamed);
       expect(service.list()).toEqual(renamed);
@@ -520,6 +521,16 @@ describe('ShoppingService', () => {
       expect(explicitPatch.request.body.version).toBe(21);
       explicitPatch.flush({ data: makeList({ id: 'manual-version', name: 'Manual' }) });
       await explicitVersion;
+
+      const failedRename = service.renameList(LIST_ID, { name: 'No guardada' }, 22);
+      const failedPatch = http.expectOne(`${API}/lists/${LIST_ID}`);
+      failedPatch.flush(
+        { message: 'LIST_VERSION_CONFLICT' },
+        { status: 409, statusText: 'Conflict' }
+      );
+      await expectAsync(failedRename).toBeResolvedTo(null);
+      expect(toast.warning).toHaveBeenCalledOnceWith('ui.la_lista_cambio_en', undefined);
+      expect(toast.error).not.toHaveBeenCalled();
 
       const deletion = service.deleteList(LIST_ID);
       http.expectOne(`${API}/lists/${LIST_ID}`).flush({});

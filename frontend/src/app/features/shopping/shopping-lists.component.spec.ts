@@ -379,7 +379,7 @@ describe('ShoppingListsComponent', () => {
     component.startRename(first);
     component.draftTitle = 'Conflicto';
     await component.commitRename(first);
-    expect(toast.error).toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
 
     shopping.renameList.and.resolveTo(list());
     component.startRename(first);

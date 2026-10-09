@@ -416,18 +416,24 @@ export class ShoppingService {
   ): Promise<ShoppingList | null> {
     const expected =
       version ?? this.list()?.version ?? this.lists().find((list) => list.id === id)?.version ?? 1;
-    return this.request<ShoppingList>(() =>
-      this.http
-        .patch<{ data: ShoppingList }>(`${this.apiUrl}/lists/${id}`, {
-          ...patch,
-          version: expected
-        })
-        .pipe(
-          map((response) => response.data),
-          tap((list) =>
-            this.list.update((current) => (current && current.id === list.id ? list : current))
+    return this.request(
+      () =>
+        this.http
+          .patch<{ data: ShoppingList }>(
+            `${this.apiUrl}/lists/${id}`,
+            {
+              ...patch,
+              version: expected
+            },
+            { context: new HttpContext().set(SILENT_TOAST, true) }
           )
-        )
+          .pipe(
+            map((response) => response.data),
+            tap((list) =>
+              this.list.update((current) => (current && current.id === list.id ? list : current))
+            )
+          ),
+      true
     );
   }
 
@@ -1007,24 +1013,25 @@ export class ShoppingService {
 
   /** Petición corta: se espera, se propaga el fallo al llamador y ya. */
   /** Respuestas del server, sin reintentos: un 4xx de datos se reenvia tal cual. */
-  private async request<T>(factory: () => Observable<T>): Promise<T | null> {
+  private async request<T>(factory: () => Observable<T>, reportFailure = false): Promise<T | null> {
     try {
       return await firstValue(this.track(factory()));
     } catch (error) {
-      if (isConflict(error)) {
+      const failure = reportFailure ? originalHttpError(error) : error;
+      if (isConflict(failure)) {
         const listId = this.list()?.id;
         this.toast.warning(
           this.i18n.t('ui.la_lista_cambio_en'),
           listId ? this.i18n.t('ui.se_han_vuelto_a') : undefined
         );
         if (listId) this.loadList(listId);
-      } else if (isNetworkError(error)) {
+      } else if (isNetworkError(failure)) {
         this.toast.warning(
           this.i18n.t('ui.sin_conexion'),
           this.i18n.t('ui.el_cambio_se_reintentara')
         );
-      } else if (error instanceof HttpErrorResponse && error.status !== 0) {
-        this.toast.error(this.i18n.t('ui.no_se_ha_podido'), errorMessage(error));
+      } else if (failure instanceof HttpErrorResponse && failure.status !== 0) {
+        this.toast.error(this.i18n.t('ui.no_se_ha_podido'), errorMessage(failure));
       }
       return null;
     }

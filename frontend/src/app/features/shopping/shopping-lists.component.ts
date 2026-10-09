@@ -348,6 +348,8 @@ const PAGE_SIZES: { value: string; labelKey: TranslationKey }[] = [
                       name="rename-{{ list.id }}"
                       [(ngModel)]="draftTitle"
                       maxlength="80"
+                      [attr.aria-label]="'shopping_list_detail.renombrar_la_lista' | t"
+                      autofocus
                       (keydown.enter)="commitRename(list)"
                       (keydown.escape)="cancelRename()"
                       (blur)="onRenameBlur(list)"
@@ -1407,11 +1409,6 @@ export class ShoppingListsComponent {
     if (!name || name === list.name) return;
     void this.shopping.renameList(list.id, { name }, list.version).then((updated) => {
       if (updated) this.reload();
-      else
-        this.toast.error(
-          this.i18n.t('ui.no_se_ha_podido'),
-          this.i18n.t('ui.otra_persona_cambio_la')
-        );
     });
   }
 

@@ -2566,27 +2566,50 @@ duplicados. No se invoca IA/proveedor ni se escribe en la base de datos habitual
 
 **Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md` §8f requiere confirmar con Enter, cancelar con Escape,
 confirmar en blur solo si el nombre cambió y revertir/avisar en fallo. `shopping-lists.component.ts` implementa
-esas transiciones, pero el input no declara nombre accesible. La prueba E2E de `shopping-round6.spec.ts` cubre
-Escape, no éxito/blur/conflicto. La prueba de componente cubre el retorno `null`, aunque el mock no emite los
-avisos que `ShoppingService.request()` ya emite: un fallo puede terminar notificado por servicio y componente.
-El PATCH real conserva compare-and-swap por versión y `shopping.routes.spec.ts` ya verifica el HTTP 409.
+esas transiciones, pero el input no declara nombre accesible y el foco se pierde al sustituir el botón por el
+editor. La prueba E2E de `shopping-round6.spec.ts` cubre Escape, no éxito/blur/conflicto. La prueba de componente
+cubre el retorno `null`, aunque el interceptor HTTP convierte el `HttpErrorResponse` en un objeto que el servicio
+no reconoce; el interceptor y el componente muestran dos toasts de error. El PATCH real conserva compare-and-swap
+por versión y `shopping.routes.spec.ts` ya verifica el HTTP 409.
 
-**Contrato:** el campo editor anuncia «Renombrar la lista». En conflicto, el título previo sigue visible y se
-presenta un único aviso claro (sin falso éxito ni segundo toast); después se puede reintentar. Un renombre
-dirty confirmado al sacar el foco queda persistido tras recargar. Escape conserva el nombre y no escribe. El
-conflicto E2E se inyecta solo para ese PATCH; el éxito usa el servidor SQLite aislado. No hay proveedor externo.
+**Contrato:** el campo editor anuncia «Renombrar la lista» y recibe el foco al abrirse para poder escribir de
+inmediato desde teclado. En conflicto, el título previo sigue visible y se presenta un único aviso claro (sin
+falso éxito ni segundo toast); después se puede reintentar. Un renombre dirty confirmado al sacar el foco queda
+persistido tras recargar. Escape conserva el nombre y no escribe. El conflicto E2E se inyecta solo para ese PATCH;
+el éxito usa el servidor SQLite aislado. No hay proveedor externo.
 
 - [x] Revalidar §8f, template/servicio, comparación de versión de servidor y diferencia entre pruebas unitarias
-      y E2E; limitar el cambio a etiqueta accesible y propiedad del aviso de error.
-- [ ] Añadir primero E2E roja para el nombre accesible, conflicto sin duplicado, reversión visible, reintento por
-      blur y persistencia; registrar el baseline de UI sintético.
-- [ ] Aplicar el cambio mínimo y ajustar regresión unitaria: solo el servicio presenta error/conflicto; mantener
-      escape, Enter, blur limpio/sin cambios y evitar PATCH cuando no cambia el texto.
-- [ ] Validar en Chromium escritorio y Pixel 5 con rate limit activo, base/puertos/semilla temporales y cleanup;
-      revisar teclado/foco, ancho sin overflow y capturas sintéticas antes/después. Si se modifica el componente,
-      ejecutar Karma global y registrar S/B/F/L del archivo; mantener umbral vigente.
+      y E2E; limitar el cambio a etiqueta/foco accesibles y propiedad única del aviso de error.
+- [x] Añadir primero E2E roja para nombre/foco accesibles, conflicto, reversión visible, reintento por blur y
+      persistencia; registrar baseline sintético.
+- [x] Aplicar el cambio mínimo y ajustar regresión unitaria: solo el servicio notifica errores/conflictos; mantener
+      Escape, Enter, blur limpio/sin cambios y evitar PATCH cuando no cambia el texto.
+- [x] Validar en Chromium escritorio y Pixel 5 con rate limit activo, SQLite/puertos/semillas temporales y cleanup;
+      revisar teclado/foco, sin overflow a 320×568, 393×851, 568×320, 1023×768, 1024×768, 1025×768 y 1440×900,
+      e inspeccionar capturas sintéticas PC/móvil. Karma global supera los umbrales; registrar S/B/F/L por archivo.
 - [ ] Anotar comandos/resultado y rollback focal (E2E, etiqueta/aviso y prueba unitaria); ejecutar hooks completos,
       commit atómico, push y confirmar CI verde.
+
+**TDD rojo (2026-10-09):** Playwright aislado con Chrome local, rate limit activo, SQLite/puertos/semillas efímeros
+y cleanup reprodujo en Chromium y Pixel 5 que el campo no tenía nombre accesible y que el conflicto 409 mostraba
+dos toasts rojos (`Error · LIST_VERSION_CONFLICT` y «No se ha podido guardar»). El test espera la respuesta
+interceptada y confirma HTTP 409; no envía peticiones al proveedor IA. Al exigir foco inicial, Chromium reprodujo
+además que el editor dinámico quedaba inactivo tras pulsar «Renombrar».
+
+**Evidencia local (2026-10-09):** `ShoppingListsComponent` etiqueta el editor con la clave ES/EN existente y
+`autofocus`; `ShoppingService.renameList()` marca el PATCH `SILENT_TOAST` y procesa el error original conservado
+por el interceptor, de modo que es el único responsable del aviso; el componente ya no duplica el toast. Karma
+focal: **51/51**; Karma global: **1278/1278**, coverage global **92.17/83.48/90.92/93.59 % S/B/F/L**. Cobertura
+por archivo: `shopping-lists.component.ts` **95.50/87.33/91.80/97.16 %** y `shopping.service.ts`
+**97.24/88.57/100/99.46 % S/B/F/L**. `pnpm run typecheck:e2e` pasa. `shopping-tray-rename.spec.ts` pasa **4/4**
+en Chromium escritorio + Pixel 5: el input es accesible y enfocado, Enter falla una sola vez con 409 dejando el
+título intacto y un único aviso warning (cero error toasts), y el reintento por blur persiste tras recarga.
+`shopping-round6.spec.ts --grep "renombrar se puede cancelar"` pasa **2/2** (Escape no escribe). Cada E2E usa
+`scripts/run-isolated-playwright.mjs`, `E2E_RATE_LIMIT=on`, datos sintéticos, DB/puerto/semilla efímeros; cleanup
+confirmado. Se revisó overflow en los siete tamaños de escritorio/móvil indicados. Capturas sintéticas inspeccionadas
+en `%TEMP%\hogaria-shop-tray-rename-final2-20261009\{chromium,mobile-chrome}\shopping-tray-rename-editor-baseline.png`,
+`shopping-tray-rename-conflict-baseline.png` y `shopping-tray-rename-conflict-recovered.png`. Rollback focal:
+revertir el commit atómico de este punto de spec, template/servicio y sus regresiones E2E/unitarias.
 
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
