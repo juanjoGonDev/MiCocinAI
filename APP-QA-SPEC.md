@@ -2504,6 +2504,28 @@ hasta el final y requiere volver a preguntarlo al usuario.
 `@angular-eslint/builder:lint` referenciado en `frontend/angular.json` no está declarado en
 `frontend/package.json` ni disponible localmente. No se añadió una dependencia fuera de alcance.
 
+#### QA-SHOPPING.TRAY-503.1 · error localizado al reabrir
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md` §8e define reabrir desde la bandeja por el mismo PATCH
+de estado y la unidad `QA-SHOPPING.TRAY-LIFECYCLE.1` exige que un error no anuncie éxito, conserve la fila y
+permita reintentar. El E2E `shopping-tray-lifecycle.spec.ts` simula 503 y espera el aviso accesible «Servicio no
+disponible». Tras hacer silencioso el PATCH para que `ShoppingService` evite duplicar los avisos del interceptor,
+`request()` muestra `errorMessage()` del cuerpo del servidor en vez de la traducción específica del 503; el run CI
+`37963790615` falló precisamente porque no encontró el alert esperado (artifact `hogaria-run-4/junit.xml`).
+
+**Conducta esperada:** un 503 de reapertura muestra una sola alerta accesible y traducida como «Servicio no
+disponible», no expone el texto crudo del servidor, no muestra éxito ni saca la fila de Terminadas; al quitar el
+fallo, reabrir vuelve a funcionar. Los otros estados de error y el conflicto 409 mantienen su conducta actual.
+
+- [x] Revalidar §8e, el E2E vigente, `ShoppingService.request()`, `SILENT_TOAST` y el resultado CI.
+- [ ] Añadir primero prueba unitaria roja del mapeo de 503 y conservar E2E que reproduce la fila/alerta/reintento.
+- [ ] Mapear 503 a `ui.servicio_no_disponible` en el único aviso del servicio, sin duplicarlo ni filtrar el cuerpo.
+- [ ] Ejecutar tests focales y E2E aislada de Chromium/Pixel 5 con rate limit, SQLite/puertos/semilla efímeros,
+      cleanup y coverage focal ≥70 % S/B/F/L; revisar que no haya geometría ni flujo móvil alterado.
+- [ ] Registrar resultado, comandos y rollback; hooks completos, commit atómico, push y CI verde.
+
+Todavía no se implementa: se publica primero este alcance y la regresión ya observada en CI.
+
 #### QA-SHOPPING.TRAY-STORE-FILTER.1 · filtro de tienda con enlace recuperable
 
 **Fuente revalidada (2026-10-09):** `ShoppingListsComponent` obtiene las opciones del servicio de tiendas,
