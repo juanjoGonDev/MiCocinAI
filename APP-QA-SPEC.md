@@ -986,16 +986,24 @@ traducción; nombres escritos por una persona pasan intactos; `null`, `undefined
 y no buscan una clave. Cada llamada lee `changeTick()`, incluso para nombres ajenos, sin tocar storage,
 diccionarios globales ni datos reales.
 
-- [ ] Añadir pruebas Angular directas de `CatalogLabelPipe` con un `I18nService` falso: nombre conocido,
+- [x] Añadir pruebas Angular directas de `CatalogLabelPipe` con un `I18nService` falso: nombre conocido,
       clave/traducción y lectura de `changeTick()`.
-- [ ] Cubrir nombres personalizados y valores ausentes/vacíos, sin llamar `t` cuando no hay clave;
+- [x] Cubrir nombres personalizados y valores ausentes/vacíos, sin llamar `t` cuando no hay clave;
       lograr ≥70 % S/B/F/L del pipe y mantener ≥80 % global en Karma.
 - [ ] Ejecutar Karma focal y suite completa, build/typecheck/check-ui/formato/diff-check; no cambia
       UI ni geometría, así que E2E/capturas nuevas N/A. Registrar rollback, hooks, commit, push y CI.
 
+**Evidencia de cobertura (2026-10-09; cierre de hooks/CI pendiente):** `catalog-label.pipe.spec.ts`
+focal pasa **2/2**; junto con `catalog-label.spec.ts`, el run instrumentado pasa **7/7**. El proceso
+focal instrumentado devuelve exit 1 solo por aplicar el gate global a ese subconjunto (**29.12/4.76/
+11.11/31.73 % S/B/F/L**); no se alteró el umbral. LCOV focal de `catalog-label.pipe.ts`:
+**100/100/100/100 % S/B/F/L**. La suite completa pasa **1274/1274**, global
+**92.16/83.40/90.92/93.59 % S/B/F/L**; LCOV archivado fuera de Git en
+`%TEMP%\hogaria-catalog-label-pipe-full-20261009\lcov.info`. No se cambió producción, UI ni storage.
+
 **Validación spec-first (2026-10-09):** el contrato y el baseline se contrastaron con el código actual;
-`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. Runtime N/A en este commit
-solo de alcance; ejecutar las pruebas al publicar esta unidad.
+`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. Sigue pendiente registrar los
+gates finales, hooks, commit/push y CI.
 
 **Rollback:** retirar solo las pruebas directas nuevas y este subapartado; no cambia el helper, el pipe,
 el diccionario ni la persistencia.
