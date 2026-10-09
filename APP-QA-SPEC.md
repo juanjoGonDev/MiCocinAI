@@ -929,19 +929,22 @@ traducidos que admiten overrides por pantalla. `home-profile.spec.ts` ya cubre e
 `tests/e2e/onboarding.spec.ts` y `tests/e2e/preferences.spec.ts` recorren persistencia real; no hay
 una spec directa del componente, así que sus ramas de presentación/outputs quedan sin contrato
 unitario. El LCOV completo mide `home-profile-picker.component.ts` **70.59/66.67/60/70.59 % S/B/F/L**
-(12/17 líneas, 8/12 ramas, 6/10 funciones). Alcance test-only: no alterar el componente ni el
-guardado de perfil.
+(12/17 líneas, 8/12 ramas, 6/10 funciones). Alcance limitado al selector y su evento de salida; no
+cambiar guardado ni persistencia del perfil.
 
 **Contrato de pruebas:** defaults de etiquetas provienen de `I18nService` al leer y cada `@Input`
 explícito los reemplaza; cambiar nivel o marcar/desmarcar módulo emite un perfil completo preservando
-el otro campo. Renderizar selección actual, indicación «pronto» del módulo no disponible y los modos
-`askForLevel`/`askForModules` sin controles ajenos; la pista opcional de nivel solo aparece si se pasa.
-Usar I18n y perfil deterministas, sin API/storage reales.
+el otro campo. La selección activa y la pista de efecto deben reflejar el nivel nuevo en el mismo
+ciclo tras un click (sin valor cacheado), también al recibir un perfil actualizado. Renderizar
+indicación «pronto» del módulo no disponible y los modos `askForLevel`/`askForModules` sin controles
+ajenos; la pista opcional de nivel solo aparece si se pasa. Usar I18n y perfil deterministas, sin
+API/storage reales.
 
 - [ ] Añadir pruebas Angular directas del componente para getters traducidos/overrides, opciones,
       selección, hint opcional, marcas pronto y visibilidad configurable de secciones.
-- [ ] Probar clicks/cambios de nivel y módulos, outputs completos y preservación del estado no editado;
-      alcanzar ≥70 % S/B/F/L del componente y mantener ≥80 % global en Karma.
+- [ ] Probar clicks/cambios de nivel y módulos, outputs completos, preservación del estado no editado
+      y actualización de la pista de efecto; si falla, corregir mínimamente el selector. Alcanzar
+      ≥70 % S/B/F/L del componente y mantener ≥80 % global en Karma.
 - [ ] Repetir `tests/e2e/onboarding.spec.ts` y `tests/e2e/preferences.spec.ts` en Chromium/Pixel 5 con
       `node scripts/run-isolated-playwright.mjs`;
       typecheck/build/check-ui/formato/diff-check, rollback, hooks, commit, push y CI sin bypass.
@@ -951,8 +954,8 @@ Usar I18n y perfil deterministas, sin API/storage reales.
 `pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. Harness de runtime: N/A,
 este commit solo define la unidad; ejecutar interacción cuando la spec esté publicada.
 
-**Rollback:** retirar solo `home-profile-picker.component.spec.ts` y esta subunidad; no se cambia el
-componente compartido, el modelo ni persistencia.
+**Rollback:** retirar solo `home-profile-picker.component.spec.ts`, esta subunidad y, si hiciera falta,
+la corrección mínima del selector; no se cambia el modelo ni persistencia.
 
 ### QA-04c.AVATAR-IMAGE.1 · cubrir decodificación, canvas y cleanup de la foto de perfil
 
