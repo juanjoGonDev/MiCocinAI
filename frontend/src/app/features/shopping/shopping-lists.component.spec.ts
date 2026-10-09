@@ -1,4 +1,4 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { signal, type WritableSignal } from '@angular/core';
 import { Router } from '@angular/router';
 import { ShoppingService } from '../../core/services/shopping.service';
@@ -287,6 +287,16 @@ describe('ShoppingListsComponent', () => {
       jasmine.objectContaining({ queryParams: jasmine.objectContaining({ page: null }) })
     );
   });
+
+  it('clears the refresh indicator after exactly 500 ms', fakeAsync(() => {
+    component.refresh();
+
+    expect(component.refreshing()).toBeTrue();
+    tick(499);
+    expect(component.refreshing()).toBeTrue();
+    tick(1);
+    expect(component.refreshing()).toBeFalse();
+  }));
 
   it('refreshes and creates only valid trimmed lists, then navigates to the new detail', async () => {
     component.refresh();
