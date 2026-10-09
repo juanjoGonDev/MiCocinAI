@@ -4109,6 +4109,20 @@ WebAPI sigue en reparación y pide posponer esta validación live hasta el final
 le volverá a preguntar si ya está listo. No se enviarán esos grupos antes. La unidad no se marca
 completa.
 
+**Preflight tras la nueva solicitud (2026-10-09; sin tickets):** `D:\projects\webApi` sigue en
+`feat/session-attachment-previews`, HEAD `7eee7c7c`; el listener Node PID 50248 arrancó a las
+13:10:59Z, después del fix de producción `fc324f07` (14:40 CEST), y `/health/ready` devuelve
+`ready=true`, `storage=ready`. La regresión sintética
+`pnpm exec vitest run --config vitest.clipboard-e2e.config.ts tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts --reporter=dot`
+pasó **18/18**; verifica el flujo con fixtures, no extracción real ni respuesta del modelo. El usuario
+confirmó que las dos sesiones recientes con dos/cuatro adjuntos eran sintéticas; este preflight no abrió
+ni reenvió ningún ticket real. La evidencia anterior sigue siendo el ledger de los tickets reales: los dos
+PDF tuvieron HTTP 200; la JPEG quedó ambigua y el PDF de tres fotos alcanzó `prompt_submitted` antes del
+timeout. Aunque WebAPI esté listo, ninguno es seguro para reenviar bajo el criterio vigente de no repetir
+peticiones que pudieron completarse. No hay grupo real no enviado que pueda procesarse ahora: schema,
+respuesta, categorías y deduplicación siguen sin validar. Para cerrar la unidad hace falta una nueva fuente
+no enviada o que el usuario cambie expresamente el criterio de no reenvío.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
