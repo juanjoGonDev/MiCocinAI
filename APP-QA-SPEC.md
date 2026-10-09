@@ -973,6 +973,33 @@ Review y sin merge.
 **Rollback:** retirar solo `home-profile-picker.component.spec.ts`, esta subunidad y, si hiciera falta,
 la corrección mínima del selector; no se cambia el modelo ni persistencia.
 
+### QA-04c.CATALOG-LABEL-PIPE.1 · contrato de traducción del pipe de catálogo
+
+**Fuente revalidada (2026-10-09, HEAD `b585e5e`):** `catalog-label.pipe.ts` deja el dato persistido
+intacto y traduce solo nombres sembrados; el pipe impuro consulta `changeTick()` antes de resolver la
+etiqueta para seguir cambios de idioma. `catalog-label.spec.ts` cubre el helper puro, pero no hay
+pruebas directas de `CatalogLabelPipe` ni de su integración con `I18nService`. LCOV completo vigente:
+**50/100/25/50 % S/B/F/L** (3/6 sentencias y líneas, 4/4 ramas y 1/4 funciones).
+
+**Contrato:** con I18n determinista, el pipe pasa la clave del nombre sembrado a `t` y devuelve su
+traducción; nombres escritos por una persona pasan intactos; `null`, `undefined` y `''` siguen vacíos
+y no buscan una clave. Cada llamada lee `changeTick()`, incluso para nombres ajenos, sin tocar storage,
+diccionarios globales ni datos reales.
+
+- [ ] Añadir pruebas Angular directas de `CatalogLabelPipe` con un `I18nService` falso: nombre conocido,
+      clave/traducción y lectura de `changeTick()`.
+- [ ] Cubrir nombres personalizados y valores ausentes/vacíos, sin llamar `t` cuando no hay clave;
+      lograr ≥70 % S/B/F/L del pipe y mantener ≥80 % global en Karma.
+- [ ] Ejecutar Karma focal y suite completa, build/typecheck/check-ui/formato/diff-check; no cambia
+      UI ni geometría, así que E2E/capturas nuevas N/A. Registrar rollback, hooks, commit, push y CI.
+
+**Validación spec-first (2026-10-09):** el contrato y el baseline se contrastaron con el código actual;
+`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. Runtime N/A en este commit
+solo de alcance; ejecutar las pruebas al publicar esta unidad.
+
+**Rollback:** retirar solo las pruebas directas nuevas y este subapartado; no cambia el helper, el pipe,
+el diccionario ni la persistencia.
+
 ### QA-04c.AVATAR-IMAGE.1 · cubrir decodificación, canvas y cleanup de la foto de perfil
 
 **Fuente revalidada (2026-10-09, HEAD `f4b8462`):** `HOGARIA-SPEC.md` §12j exige aceptar JPEG/PNG/WebP hasta 4 MiB, recortar una región cuadrada y re-encodear a JPEG de 128 px desde el dispositivo. `avatar-image.spec.ts` prueba ahora la validación pura, `squareCrop`, la decodificación real/fallback, canvas y liberación; producción permanece sin cambios. El baseline antes de esta unidad era **34.78/26.32/25.00/34.78 % S/B/F/L** (16/46 líneas, 5/19 ramas, 3/12 funciones), archivado en `%TEMP%\hogaria-coverage-avatar-image-baseline-a09d4e9-20261009.lcov`.
