@@ -1031,7 +1031,9 @@ export class ShoppingService {
           this.i18n.t('ui.el_cambio_se_reintentara')
         );
       } else if (failure instanceof HttpErrorResponse && failure.status !== 0) {
-        this.toast.error(this.i18n.t('ui.no_se_ha_podido'), errorMessage(failure));
+        const message =
+          failure.status === 503 ? this.i18n.t('ui.servicio_no_disponible') : errorMessage(failure);
+        this.toast.error(this.i18n.t('ui.no_se_ha_podido'), message);
       }
       return null;
     }

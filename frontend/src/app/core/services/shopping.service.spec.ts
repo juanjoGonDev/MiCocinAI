@@ -586,6 +586,24 @@ describe('ShoppingService', () => {
       await expectAsync(failedComplete).toBeResolvedTo({ ok: false, code: 'ERROR' });
     });
 
+    it('localizes a 503 from reopening without exposing the server message', async () => {
+      service.list.set(makeList({ status: 'done', version: 4 }));
+
+      const reopen = service.setStatus(LIST_ID, 'active');
+      const request = http.expectOne(`${API}/lists/${LIST_ID}`);
+      expect(request.request.context.get(SILENT_TOAST)).toBeTrue();
+      request.flush(
+        { message: 'synthetic unavailable' },
+        { status: 503, statusText: 'Service Unavailable' }
+      );
+
+      await expectAsync(reopen).toBeResolvedTo(null);
+      expect(toast.error).toHaveBeenCalledOnceWith(
+        'ui.no_se_ha_podido',
+        'ui.servicio_no_disponible'
+      );
+    });
+
     it('maps complete business failures without global toasts and marks its request silent', async () => {
       const missing = [{ itemId: ITEM_ID, name: 'Leche', quantity: 1, unit: null }];
       const missingResult = service.complete(LIST_ID, { store: 'Tienda' });

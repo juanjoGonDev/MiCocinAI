@@ -98,12 +98,39 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
     );
     await reopen.click();
     await failedReopen;
-    await expect(
-      page.getByRole('alert').filter({ hasText: 'Servicio no disponible' })
-    ).toBeVisible();
+    const serviceUnavailable = page
+      .getByRole('alert')
+      .filter({ hasText: 'Servicio no disponible' });
+    await expect(serviceUnavailable).toHaveCount(1);
+    await expect(serviceUnavailable).toBeVisible();
     await expect.poll(() => reopenFailures).toBe(1);
     await expect(doneRow).toBeVisible();
     await waitForPaint(page);
+    await captureIfRequested(page, testInfo, 'shopping-list-reopen-503.png');
+    const originalViewport = page.viewportSize();
+    if (!originalViewport) throw new Error('El contexto Playwright no informa el viewport');
+    for (const viewport of [
+      { width: 320, height: 568 },
+      { width: 568, height: 320 }
+    ]) {
+      await page.setViewportSize(viewport);
+      await expect(serviceUnavailable).toBeVisible();
+      const dimensions = await page.evaluate(() => ({
+        viewport: innerWidth,
+        document: document.documentElement.scrollWidth
+      }));
+      expect(
+        dimensions.document,
+        `desbordamiento horizontal a ${viewport.width}px`
+      ).toBeLessThanOrEqual(dimensions.viewport);
+      const alertBox = await serviceUnavailable.boundingBox();
+      expect(alertBox).not.toBeNull();
+      if (alertBox) {
+        expect(alertBox.x).toBeGreaterThanOrEqual(0);
+        expect(alertBox.x + alertBox.width).toBeLessThanOrEqual(viewport.width);
+      }
+    }
+    await page.setViewportSize(originalViewport);
     await expect(page.locator('.toast__title').filter({ hasText: 'Lista reabierta' })).toHaveCount(
       0
     );
