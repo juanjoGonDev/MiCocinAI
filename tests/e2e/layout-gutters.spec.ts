@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import type { TestInfo } from '@playwright/test';
 
@@ -45,8 +45,8 @@ async function addVisualInventorySample(
 }
 
 const WIDTH_BREAKPOINTS = [
-  360, 362, 480, 481, 560, 600, 601, 640, 641, 719, 720, 721, 767, 768, 860, 900, 959, 1023, 1024,
-  1100
+  360, 362, 400, 420, 480, 481, 560, 600, 601, 640, 641, 719, 720, 721, 760, 767, 768, 860, 900,
+  920, 959, 1023, 1024, 1100
 ];
 
 const VIEWPORTS: ViewportCase[] = (() => {
@@ -94,6 +94,58 @@ const VIEWPORTS: ViewportCase[] = (() => {
     (left, right) => left.width - right.width || left.height - right.height
   );
 })();
+
+function collectFrontendSourceFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) return collectFrontendSourceFiles(path);
+    if (
+      !entry.isFile() ||
+      !/\.(?:css|scss|ts)$/i.test(entry.name) ||
+      /\.spec\.ts$/i.test(entry.name)
+    ) {
+      return [];
+    }
+    return [path];
+  });
+}
+
+function frontendWidthBreakpoints(): number[] {
+  const files = collectFrontendSourceFiles(resolve(process.cwd(), 'frontend/src'));
+  const breakpoints = new Set<number>();
+  const mediaHeaders = /@media\b([^{}]*)\{/gi;
+  const widthFeatures = /\((?:min|max)-width\s*:\s*([^)]+)\)/gi;
+
+  for (const file of files) {
+    const source = readFileSync(file, 'utf8');
+    for (const [, header] of source.matchAll(mediaHeaders)) {
+      for (const [, rawValue] of header.matchAll(widthFeatures)) {
+        const value = rawValue.trim().match(/^(\d+(?:\.\d+)?)(px|rem|em)$/i);
+        if (!value)
+          throw new Error(`No se puede normalizar el breakpoint CSS ${rawValue} (${file})`);
+        const pixels = Number(value[1]) * (value[2].toLowerCase() === 'px' ? 1 : 16);
+        if (!Number.isInteger(pixels)) {
+          throw new Error(`El breakpoint CSS no cae en un píxel entero: ${rawValue} (${file})`);
+        }
+        breakpoints.add(pixels);
+      }
+    }
+  }
+
+  return [...breakpoints].sort((left, right) => left - right);
+}
+
+test('la matriz responsive prueba B−1/B/B+1 de cada breakpoint del frontend', () => {
+  const widths = new Set(VIEWPORTS.map(({ width }) => width));
+  const missing = frontendWidthBreakpoints().flatMap((breakpoint) =>
+    [-1, 0, 1]
+      .map((offset) => breakpoint + offset)
+      .filter((width) => !widths.has(width))
+      .map((width) => `${width}px (breakpoint ${breakpoint}px)`)
+  );
+
+  expect(missing, 'todos los media queries de ancho requieren B−1/B/B+1').toEqual([]);
+});
 
 test('el contrato de display cubre exactamente todas las raíces estáticas y dinámicas', () => {
   const routes = [
