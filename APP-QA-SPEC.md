@@ -3421,6 +3421,28 @@ excluidos por ejecuciones previas potencialmente completadas. Según la regla de
 petición que pudo completarse, no queda un grupo real elegible para otro smoke. La respuesta/schema,
 las categorías y la deduplicación continúan sin validar; esta unidad no se marca completa.
 
+**Reintento tras el supuesto arreglo WebAPI (2026-10-09, 12:42; sin reenviar tickets):** el checkout
+actual de `D:\projects\webApi` está en `5b51127d` e incluye `5267dcd8` (recuperar replies inactivos)
+y `b9e32fb5` (ignorar actualizaciones tardías). En un worktree detached temporal, las regresiones
+locales pasaron: cuatro archivos unitarios, **39/39**, y el E2E de stream/recovery, **14/14**. Son
+pruebas con fixtures, no validación del proveedor real. El PID antiguo 7100 (inicio 10:09:43) desapareció;
+ahora escucha en `127.0.0.1:3001` el PID 8280, iniciado a las 12:42:06 —después de ambos fixes—.
+`/health/ready` devuelve HTTP 200 (`ready=true`, `storage=ready`). Su tail contiene 20 líneas, sin
+fallos de upload/cleanup ni requests posteriores al arranque; no hay aún etapas de recovery que observar.
+WebAPI no publica el SHA cargado, por lo que el inicio posterior es evidencia de despliegue, no una
+atestación binaria exacta.
+
+No se abrió un smoke live: los dos PDFs ya dieron respuestas 200 validadas, la JPEG preferida llegó a
+`Prompt submitted` antes del error 502 ambiguo, y el ticket largo llegó a `Prompt submitted` antes del
+timeout. El selector denominado `unsubmitted-only` no consulta historial de envíos: el código carga
+precisamente la JPEG preferida y el ticket largo ya intentados. Reusarlo repetiría peticiones que
+pudieron completarse, contra la restricción vigente. Se mantiene sin validar la extracción real,
+schema/categorías y deduplicación; para retomar se necesita que el servicio activo cargue el fix y un
+ticket nuevo no enviado (o autorización explícita para repetir los anteriores). El usuario indica que
+WebAPI sigue en reparación y pide posponer esta validación live hasta el final de la spec; entonces se
+le volverá a preguntar si ya está listo. No se enviarán esos grupos antes. La unidad no se marca
+completa.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
