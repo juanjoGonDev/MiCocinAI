@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, computed, inject } from '@angular/core';
+import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { TranslatePipe } from '../../../../core/pipes/translate.pipe';
 import { I18nService } from '../../../../core/services/i18n.service';
@@ -23,8 +23,7 @@ import {
 @Component({
   selector: 'app-home-profile-picker',
   standalone: true,
-  imports: [
-    TranslatePipe,CommonModule],
+  imports: [TranslatePipe, CommonModule],
   template: `
     <fieldset class="profile-picker">
       <legend class="profile-picker__legend">
@@ -100,7 +99,9 @@ import {
           <span class="profile-picker__module-text">
             <span class="profile-picker__module-label">
               {{ option.labelKey | t }}
-              <span class="profile-picker__soon" *ngIf="!option.available">{{ 'home_profile_picker.proonto' | t }}</span>
+              <span class="profile-picker__soon" *ngIf="!option.available">{{
+                'home_profile_picker.proonto' | t
+              }}</span>
             </span>
             <span class="profile-picker__module-hint">{{ option.hintKey | t }}</span>
           </span>
@@ -154,7 +155,9 @@ import {
         border-radius: var(--radius-lg);
         background: var(--bg-primary);
         cursor: pointer;
-        transition: border-color var(--duration-150) ease, background var(--duration-150) ease,
+        transition:
+          border-color var(--duration-150) ease,
+          background var(--duration-150) ease,
           transform var(--duration-150) ease;
       }
       .profile-picker__level:hover {
@@ -207,7 +210,9 @@ import {
         border: 1px solid var(--border-default);
         border-radius: var(--radius-lg);
         cursor: pointer;
-        transition: border-color var(--duration-150) ease, background var(--duration-150) ease;
+        transition:
+          border-color var(--duration-150) ease,
+          background var(--duration-150) ease;
       }
       .profile-picker__module:hover {
         border-color: var(--primary);
@@ -344,7 +349,9 @@ export class HomeProfilePickerComponent {
   readonly levels = COOKING_LEVEL_OPTIONS;
   readonly modules = HOME_MODULE_OPTIONS;
 
-  readonly effectHintKey = computed(() => detailLevelHintKey(this.profile?.cookingLevel ?? 'beginner'));
+  effectHintKey() {
+    return detailLevelHintKey(this.profile?.cookingLevel ?? 'beginner');
+  }
 
   isSelected(module: HomeModule): boolean {
     return (this.profile?.modules ?? []).includes(module);

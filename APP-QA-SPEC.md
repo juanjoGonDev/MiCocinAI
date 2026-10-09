@@ -922,7 +922,7 @@ componente ni el flujo persistido.
 
 ### QA-04c.HOME-PROFILE-PICKER.1 · cobertura directa del selector de perfil
 
-**Fuente revalidada (2026-10-09, HEAD `21ce551`):** `HOGARIA-SPEC.md §8b` fija el mismo control de
+**Fuente revalidada (2026-10-09, HEAD `c8b85de`):** `HOGARIA-SPEC.md §8b` fija el mismo control de
 nivel de cocina y módulos para el tour y Preferencias: selección compartida, nivel con efecto sobre
 el detalle inicial de receta, módulos todavía no disponibles marcados «pronto» y valores por defecto
 traducidos que admiten overrides por pantalla. `home-profile.spec.ts` ya cubre el modelo y
@@ -940,9 +940,9 @@ indicación «pronto» del módulo no disponible y los modos `askForLevel`/`askF
 ajenos; la pista opcional de nivel solo aparece si se pasa. Usar I18n y perfil deterministas, sin
 API/storage reales.
 
-- [ ] Añadir pruebas Angular directas del componente para getters traducidos/overrides, opciones,
+- [x] Añadir pruebas Angular directas del componente para getters traducidos/overrides, opciones,
       selección, hint opcional, marcas pronto y visibilidad configurable de secciones.
-- [ ] Probar clicks/cambios de nivel y módulos, outputs completos, preservación del estado no editado
+- [x] Probar clicks/cambios de nivel y módulos, outputs completos, preservación del estado no editado
       y actualización de la pista de efecto; si falla, corregir mínimamente el selector. Alcanzar
       ≥70 % S/B/F/L del componente y mantener ≥80 % global en Karma.
 - [ ] Repetir `tests/e2e/onboarding.spec.ts` y `tests/e2e/preferences.spec.ts` en Chromium/Pixel 5 con
@@ -950,9 +950,20 @@ API/storage reales.
       cambio en ambos proyectos, con perfil sintético y sin datos personales. Typecheck/build/check-ui/
       formato/diff-check, rollback, hooks, commit, push y CI sin bypass.
 
+**Evidencia TDD y pruebas (2026-10-09; cierre de hooks/CI pendiente):** el test nuevo falló primero
+**2/8** porque `computed()` cacheaba la clave derivada de un `@Input` no reactivo; cambiar el nivel en
+la misma instancia no refrescaba la pista. Convertir la expresión en un método que lee el perfil actual
+hizo pasar la prueba focal **8/8**. Karma completo pasó **1272/1272**, global **92.12/83.40/90.81/93.55 %
+S/B/F/L**; LCOV de `home-profile-picker.component.ts`: **100/83.33/100/100 % S/B/F/L**. E2E aislada,
+`E2E_RATE_LIMIT=on`, Chromium y Pixel 5, ambos specs: **26/26**, SQLite/semilla temporales y cleanup
+confirmado. `typecheck:e2e`, `check:ui` (212 archivos/21 reglas), build y `git diff --check` pasan; el
+build conserva avisos de presupuesto/imports existentes. Capturas sintéticas inspeccionadas:
+`%TEMP%\hogaria-home-profile-picker-ui-2a9a92e2d085417bbbddc682f5fc51a8\` (`chromium` y
+`mobile-chrome`, `beginner`/`expert`); no se guardaron en Git.
+
 **Validación de esta especificación (2026-10-09):** contrato revalidado en fuentes vigentes;
-`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. Harness de runtime: N/A,
-este commit solo define la unidad; ejecutar interacción cuando la spec esté publicada.
+`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. El tercer criterio sigue
+abierto hasta registrar la verificación final, hooks, push y CI del commit de implementación.
 
 **Rollback:** retirar solo `home-profile-picker.component.spec.ts`, esta subunidad y, si hiciera falta,
 la corrección mínima del selector; no se cambia el modelo ni persistencia.

@@ -1,3 +1,5 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { test, expect } from './fixtures';
 import { registerAndGoto, registerUser } from './helpers/auth';
 
@@ -79,7 +81,9 @@ test.describe('Preferencias', () => {
     await expect(page.locator('app-chip-select')).toHaveCount(1);
   });
 
-  test('el perfil del hogar se cambia aquí, se guarda y se conserva', async ({ page }) => {
+  test('el perfil del hogar se cambia aquí, se guarda y se conserva', async ({
+    page
+  }, testInfo) => {
     await registerAndGoto(page, '/preferences?tab=profile', 'prefs-profile');
 
     // Cuatro niveles, los mismos que en el tour...
@@ -89,8 +93,29 @@ test.describe('Preferencias', () => {
     await expect(page.locator('.preferences__inline-link')).toHaveCount(1);
     // Se entra con el nivel por defecto del registro
     await expect(page.locator('[data-level="beginner"]')).toHaveClass(/--on/);
+    const effectHint = page.locator('.profile-picker__effect');
+    await expect(effectHint).toContainText('La IA explicará cómo se hace cada paso');
+
+    const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+    if (screenshotDirectory) {
+      mkdirSync(screenshotDirectory, { recursive: true });
+      await page.locator('app-home-profile-picker').screenshot({
+        path: join(
+          screenshotDirectory,
+          `home-profile-picker-${testInfo.project.name}-beginner.png`
+        ),
+        animations: 'disabled'
+      });
+    }
 
     await page.locator('[data-level="expert"]').click();
+    await expect(effectHint).toContainText('técnica, tiempos y temperaturas');
+    if (screenshotDirectory) {
+      await page.locator('app-home-profile-picker').screenshot({
+        path: join(screenshotDirectory, `home-profile-picker-${testInfo.project.name}-expert.png`),
+        animations: 'disabled'
+      });
+    }
     await expect(page.locator('.preferences__state')).toContainText('Hay cambios sin guardar');
 
     await page.getByRole('button', { name: 'Guardar preferencias' }).click();
