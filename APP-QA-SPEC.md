@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La última suite frontend local pasó **1218/1218** con cobertura **90.54/81.61/89.32/91.99 % S/B/F/L**; el callback del refresco de compra está cubierto de forma determinista y la variación residual de cobertura se localiza en el handler de viewport de `PickerComponent`, pendiente en QA-04c. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La última suite frontend local pasó **1219/1219** con cobertura **90.69/81.87/89.35/92.15 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (2026-10-09):** la validación de tickets sigue abierta. WebAPI está listo, pero el último intento registrado falló al subir adjuntos con HTTP 504 antes de `prompt_submitted`; el preflight más reciente confirmó que el fallo sigue en los logs. No se reenviaron tickets porque no existe confirmación de que el proveedor no los recibiera.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1218/1218 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1219/1219 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -850,7 +850,7 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 **Evidencia histórica (2026-10-01/02):** la línea base pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentencias/ramas/funciones/líneas); corridas posteriores pasaron `651/651` con 60.64/51.37/50.72/62.41 % y `665/665` con **60.30/52.21/49.80/61.92 %**, por debajo de los gates. No se rebajó ningún umbral. Estas métricas ya no describen el estado actual.
 
-**Revalidación vigente (2026-10-09, pre-push de `4da6ca8`):** `pnpm run test:client` pasó **1218/1218** en Chrome Headless 154 con **90.54/81.61/89.32/91.99 % S/B/F/L**. El callback de `ShoppingListsComponent.refresh()` figura `FNDA=2` también en esta corrida; todas las métricas globales superan 80 %. La variación residual está en `PickerComponent.onViewportChange()` (`picker.component.ts:426`), pendiente en QA-04c global. LCOV archivado fuera del repo en `%TEMP%\hogaria-coverage-shopping-refresh-prepush-20261009-0222\lcov.info`. `.github/workflows/ci.yml` comprueba el cableado Karma y ejecuta E2E, pero no incluye la suite frontend completa.
+**Revalidación vigente (2026-10-09, pre-push de `0bf2713`):** `pnpm run test:client` pasó **1219/1219** en Chrome Headless 154 con **90.69/81.87/89.35/92.15 % S/B/F/L**. Los callbacks de `ShoppingListsComponent.refresh()` y `PickerComponent.onViewportChange()` quedan cubiertos determinísticamente (`FNDA=2` cada uno); las cuatro métricas globales superan 80 %. LCOV archivado fuera del repo en `%TEMP%\hogaria-coverage-picker-prepush-20261009-023703\lcov.info`. `.github/workflows/ci.yml` comprueba el cableado Karma y ejecuta E2E, pero no incluye la suite frontend completa.
 
 - [x] Revalidar cobertura global y por archivo antes del siguiente lote; archivar el reporte base de esta ejecución en `%TEMP%`.
 - [ ] Añadir pruebas unitarias/integración para ramas y caminos de error/éxito no cubiertos; cada lote debe partir de fuentes actuales, tener regresión útil, cobertura ≥70 % en cada métrica del alcance y commit atómico.
@@ -887,7 +887,7 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 
 **Evidencia inicial de variabilidad (2026-10-09):** las corridas ejecutadas durante el pre-push de `d2bc61a` pasaron 1217/1217; la cobertura varió entre **90.53–90.54 % S**, **81.61 % B**, **89.28–89.32 % F** y **91.99 % L**. Al comparar `FNDA`, la única función diferencial fue el timeout de 500 ms de `refresh()`; informes previos archivados fuera de Git: `%TEMP%\hogaria-coverage-shopping-refresh-baseline-20261009-0214\lcov.info` (última corrida) y `%TEMP%\hogaria-coverage-confirm-service-20261009-0211\lcov.info`.
 
-**Evidencia de cierre (2026-10-09):** Karma focal `pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/features/shopping/shopping-lists.component.spec.ts --browsers=ChromeHeadless --progress=false` pasó **12/12**; `fakeAsync`/`tick(499+1)` demuestra el cambio exacto sin dormir. Tres corridas manuales completas de `pnpm run test:client` pasaron **1217/1217** y la corrida completa del hook pre-push pasó **1218/1218** con **90.54/81.61/89.32/91.99 % S/B/F/L**; las cuatro LCOV muestran `FNDA=2` para el callback. `shopping-lists.component.ts`: **95.43/86.8/91.8/97.14 % S/B/F/L**. Informe final: `%TEMP%\hogaria-coverage-shopping-refresh-prepush-20261009-0222\lcov.info`; comparación pre-test: `%TEMP%\hogaria-coverage-shopping-refresh-baseline-20261009-0214\lcov.info`. Build y `typecheck:e2e` pasaron con los warnings previos de budget/imports. Commit `4da6ca8` (`test(shopping): cover refresh timeout`) pasó pre-commit (Prettier, `check:ui`) y pre-push (formato, `check:ui`, builds servidor/cliente, typecheck E2E, config 10/10, Karma 1218/1218, Vitest server 1234 passed / 1 skipped); push completado sin bypass. PR #41 sigue Draft y sin merge. La variación global restante es el handler de viewport del picker, fuera de este alcance; QA-04c permanece abierta por ese y otros déficits.
+**Evidencia de cierre (2026-10-09):** Karma focal `pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/features/shopping/shopping-lists.component.spec.ts --browsers=ChromeHeadless --progress=false` pasó **12/12**; `fakeAsync`/`tick(499+1)` demuestra el cambio exacto sin dormir. Tres corridas manuales completas de `pnpm run test:client` pasaron **1217/1217** y la corrida completa del hook pre-push pasó **1218/1218** con **90.54/81.61/89.32/91.99 % S/B/F/L**; las cuatro LCOV muestran `FNDA=2` para el callback. `shopping-lists.component.ts`: **95.43/86.8/91.8/97.14 % S/B/F/L**. Informe final: `%TEMP%\hogaria-coverage-shopping-refresh-prepush-20261009-0222\lcov.info`; comparación pre-test: `%TEMP%\hogaria-coverage-shopping-refresh-baseline-20261009-0214\lcov.info`. Build y `typecheck:e2e` pasaron con los warnings previos de budget/imports. Commit `4da6ca8` (`test(shopping): cover refresh timeout`) pasó pre-commit (Prettier, `check:ui`) y pre-push (formato, `check:ui`, builds servidor/cliente, typecheck E2E, config 10/10, Karma 1218/1218, Vitest server 1234 passed / 1 skipped); push completado sin bypass. PR #41 sigue Draft y sin merge. El callback de viewport del picker quedó cubierto en `QA-04c.PICKER-VIEWPORT.1`; QA-04c global permanece abierta por otros déficits.
 
 ### QA-04c.PICKER-VIEWPORT.1 · cobertura determinista del reposicionamiento flotante
 
@@ -895,8 +895,8 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 `scroll` en captura; `ngOnDestroy()` los elimina. La función `onViewportChange` (`picker.component.ts:426`)
 delega en `positionFloatingPanel()`, que solo reposiciona un menú abierto con `floatingPanel=true`.
 `picker.component.spec.ts` cubre apertura y orientación inicial, pero no dispara esos eventos. El último
-LCOV de la suite completa pasó **1218/1218** con **90.54/81.61/89.32/91.99 % S/B/F/L** global; el archivo
-del selector quedó en **91.77/82.35/97.29/94.20 % S/B/F/L**, pero `FNDA=0` para el callback de línea 426.
+LCOV de la suite completa pasó **1218/1218** con **90.54/81.61/89.32/91.99 % S/B/F/L** global; el
+callback de línea 426 registró `FNDA=0`.
 Baseline archivado fuera de Git: `%TEMP%\hogaria-coverage-picker-baseline-20261009-023005\lcov.info`.
 
 **Contrato:** con el menú flotante abierto, cambios sintéticos de la geometría del trigger seguidos por
@@ -904,12 +904,25 @@ Baseline archivado fuera de Git: `%TEMP%\hogaria-coverage-picker-baseline-202610
 eventos posteriores no deben cambiar la última posición. Usar rectángulos sintéticos y eventos directos,
 sin sleeps, servicios reales ni cambios de producción.
 
-- [ ] Añadir primero una prueba unitaria que verifique reposicionamiento en `resize` y `scroll` y ausencia
+- [x] Añadir primero una prueba unitaria que verifique reposicionamiento en `resize` y `scroll` y ausencia
       de callback tras destruir el componente.
-- [ ] Ejecutar Karma focal y suite frontend completa; demostrar que el callback queda cubierto y mantener
+- [x] Ejecutar Karma focal y suite frontend completa; demostrar que el callback queda cubierto y mantener
       ≥70 % en S/B/F/L por archivo y ≥80 % global en todas las métricas, sin relajar gates.
-- [ ] Ejecutar formato, `git diff --check`, build, `typecheck:e2e` y hooks de commit/push sin bypass; anotar
+- [x] Ejecutar formato, `git diff --check`, build, `typecheck:e2e` y hooks de commit/push sin bypass; anotar
       evidencia antes de cerrar la unidad.
+
+**Evidencia de cierre (2026-10-09):** la prueba focal `pnpm --filter @hogaria/web exec ng test
+--no-watch --include=src/app/shared/components/ui/picker/picker.component.spec.ts
+--browsers=ChromeHeadless --progress=false` pasó **14/14**. `pnpm run test:client` y el hook pre-push
+pasaron **1219/1219**, **90.69/81.87/89.35/92.15 % S/B/F/L** global. `picker.component.ts` quedó en
+**92.39/82.20/97.44/95.03 % S/B/F/L**; el callback de línea 426 registró `FNDA=2`. La prueba mueve el
+panel mediante geometría sintética en `resize` y `scroll`, y confirma que el cleanup impide cambios tras
+destruir el fixture. LCOV/HTML pre-push: `%TEMP%\hogaria-coverage-picker-prepush-20261009-023703`.
+`pnpm run build`, `pnpm run typecheck:e2e`, Prettier y `git diff --check` pasaron; el build conserva
+advertencias previas de presupuesto/importaciones. Commit `0bf2713` (`test(ui): cover picker viewport
+events`) pasó hooks pre-commit y pre-push completos (formato, `check:ui`, builds, typecheck, config 10/10,
+Karma 1219/1219, Vitest server 1234 passed / 1 skipped) y fue publicado sin bypass. PR #41 sigue Draft;
+QA-04c global permanece abierta por déficits ajenos a esta subunidad.
 
 **Rollback:** retirar solo esta suite y la subunidad; no cambiar `PickerComponent` de producción salvo que
 la regresión demuestre un defecto distinto.
