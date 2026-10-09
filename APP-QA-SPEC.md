@@ -2304,6 +2304,17 @@ La evidencia de QA-HOUSEHOLD.API-SURFACE.1 y QA-HOUSEHOLD.CLIPBOARD.1 dejó abie
 - [x] `/calendar`: día/semana/mes, anterior/siguiente/hoy/salto a fecha, filtros, recarga/error; alta/edición/borrado de comidas y eventos, recurrencia/instancia, invitados, horarios, completado y confirmación. Evidencia QA-CALENDAR.ROUTES.1.
 - [ ] Planificación IA desde calendario: objetivo/fechas/tipos de comida/exclusiones/preferencias, loading/error/reintento, aplicar o cancelar y cambios persistidos sin duplicar comidas.
 
+#### QA-CALENDAR.PLAN-WEEK-E2E.1 · generación semanal inicial con proveedor sintético
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md` §8.D define la selección real de tipos de comida, el periodo semanal, el conteo de comidas creadas/omitidas y que una selección vacía equivale a solicitar todas las comidas permitidas; §12aq define objetivos plurales/custom, preferencias de participantes y la confirmación previa de la replanificación parcial. La generación semanal inicial no tiene vista previa: el servidor persiste y reporta los espacios creados/omitidos. La cancelación antes de generar no debe llamar al proveedor (ya cubierta en `ai-goal.spec.ts`). La aplicación/cancelación de una propuesta de replanificación parcial se valida por separado en `QA-PLANNER.GOALS-AND-PARTIAL-REPLAN.1`.
+
+**Brecha de evidencia:** `ai-goal.spec.ts` cubre el payload plural y cancelación, pero intercepta el endpoint de planificación; `ai-weekly-participants.spec.ts` usa servidor proveedor sintético y persiste una comida, pero no comprueba selección de fechas/tipos, fallo recuperable, bloqueo mientras se procesa ni repetición idempotente. Esta unidad añade solo cobertura E2E contra app/SQLite aisladas y proveedor loopback sintético; no llama a IA/WebAPI reales ni usa tickets de usuario.
+
+- [ ] Añadir primero un E2E rojo que valide periodo/tipos/objetivos/preferencias seleccionados y `response_format` JSON Schema estricto en la solicitud del servidor al proveedor sintético.
+- [ ] Mantener un request en curso y verificar estado accesible/submit deshabilitado; simular fallo de proveedor sin persistencia, mantener el diálogo y permitir retry manual.
+- [ ] En el retry exitoso, verificar que solo se guardan los tipos elegidos en las fechas solicitadas; repetir generación y comprobar `created=0`, comidas omitidas y ninguna fila duplicada.
+- [ ] Repetir la E2E en Chromium escritorio y Pixel 5 con DB/puertos/semilla temporales, rate limit activo y cleanup; no sobrescribir capturas preexistentes. Confirmar typecheck/formato, gates aplicables, comandos y limitaciones antes de cerrar esta unidad.
+
 **Evidencia QA-CALENDAR.ROUTES.1 (2026-10-09):** la barrida aislada de las 12 specs de Calendario
 pasó **95 pruebas**, omitió **3** por condiciones existentes de proyecto y tuvo **0 fallos** (6,9 min;
 Chromium + Pixel 5). Los casos cubren semana/día/mes, navegación y salto/URL, filtros, carga/error,
