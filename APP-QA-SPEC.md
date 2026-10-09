@@ -1064,7 +1064,8 @@ botones. Las cajas conservan dimensiones actuales (tolerancia ≤1 CSS px).
       ejecutar los breakpoints/anchos relevantes sin overflow.
 - [x] Alcanzar ≥70 % S/B/F/L focales y ejecutar Karma completa (gate ≥80 %), E2E afectadas,
       typecheck/build, formato y `git diff --check`.
-- [ ] Publicar esta unidad en commit atómico con todos los hooks de commit/push; no cerrar el spec antes
+- [x] Publicar esta unidad en commit atómico con todos los hooks de commit/push; mantener Draft y cerrar
+      solo con evidencia CI verde.
       de confirmar push y evidencia CI de la rama.
 
 **Evidencia (2026-10-09):** `tag.component.spec.ts` y `filter-tag.component.spec.ts` cubren texto
@@ -1085,6 +1086,9 @@ bundles, presupuestos de estilos y Angular. Capturas sintéticas antes/después 
 `.e2e-screenshots/qa-tag-accessibility-after-20261009/`; dimensiones de tags: recetas 86×31 px,
 categorías 66×31 px, productos 86×31 px y alias removible 149×31 px, dentro de la tolerancia de 1 px.
 El test y las capturas usan DB/fixtures sintéticos; los artefactos están ignorados por Git.
+Lefthook pasó pre-commit (`prettier`, `ui-quality`) y pre-push (`format-check`, `ui-quality`, `build`,
+`e2e-typecheck`, `unit-tests`). El CI `37871768326` del SHA `8723903` terminó success en todos los jobs,
+incluidos cuatro shards E2E, full-stack E2E, build, typecheck y tests de servidor; PR #41 permanece Draft.
 
 **Rollback:** revertir únicamente `tag.component.ts`, `filter-tag.component.ts`, sus specs, las referencias
 de filtros en recetas/categorías/productos y esta subunidad; no revertir otros componentes ni el resto de
