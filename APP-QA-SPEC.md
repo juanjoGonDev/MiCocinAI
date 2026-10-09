@@ -2583,8 +2583,8 @@ node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium tests/e2
 
 - [x] Ajustar la geometría del contenedor superior con ancho `min(400px, calc(100vw - 2 × margen))`;
       el cambio no altera estados, texto, persistencia ni avisos de acción inferiores.
-- [x] Reejecutar Chromium y Pixel 5 en escritorio (1440×900), móvil (390×844, 320×740, 320×568) y
-      horizontal (568×320). La alerta sigue siendo visible, tiene rol `alert`, queda dentro del viewport,
+- [x] Reejecutar Chromium y Pixel 5 en escritorio (1440×900), móvil (390×844, 320×740, 320×568),
+      horizontal (568×320) y en el borde del breakpoint (480/481 px). La alerta sigue visible, tiene rol `alert`, queda dentro del viewport,
       no genera overflow ni `pageerror`; guardar e inspeccionar capturas sintéticas comparables.
 - [x] Ejecutar `pnpm run typecheck:e2e`, `pnpm run check:ui` (212 ficheros/21 reglas), Prettier y
       `git diff --check`. La cobertura es N/A: solo cambia CSS de producción y la aserción E2E; no cambia
@@ -2595,7 +2595,7 @@ node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium tests/e2
 temporales pasó **2/2** (Chromium y Pixel 5). En cada proyecto el aviso no supera `min(400px, ancho − 32px)`;
 los cinco viewports cumplen límites del rectángulo y `scrollWidth <= innerWidth`, sin errores de página.
 Capturas sintéticas guardadas en `%TEMP%\hogaria-toast-bounds-20261009\{chromium,mobile-chrome}\` con
-los cinco anchos/altos indicados y revisadas visualmente en escritorio, 320×568 y 568×320. No se guardaron
+los siete anchos/altos indicados y revisadas visualmente en escritorio, 320×568 y 568×320. No se guardaron
 artefactos en Git. `check:ui`, typecheck, Prettier y diff check pasaron; build, unitarias y hooks quedan
 para la verificación de push.
 

@@ -114,6 +114,8 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
     const viewports = [
       { width: 1440, height: 900, fileName: 'shopping-toast-503-1440x900.png' },
       { width: 390, height: 844, fileName: 'shopping-toast-503-390x844.png' },
+      { width: 480, height: 800, fileName: 'shopping-toast-503-480x800.png' },
+      { width: 481, height: 800, fileName: 'shopping-toast-503-481x800.png' },
       { width: 320, height: 740, fileName: 'shopping-toast-503-320x740.png' },
       { width: 320, height: 568, fileName: 'shopping-toast-503-320x568.png' },
       { width: 568, height: 320, fileName: 'shopping-toast-503-568x320.png' }
