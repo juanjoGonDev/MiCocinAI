@@ -15,6 +15,7 @@ import { PickerComponent, type PickerOption } from './picker.component';
         [value]="selected"
         [filterFrom]="filterFrom"
         [allowCustom]="allowCustom"
+        [floatingPanel]="floatingPanel"
         (valueChange)="selected = $event"
       />
     </div>
@@ -31,6 +32,7 @@ class PickerHostComponent {
   label: string | undefined = 'Percentage';
   allowCustom = false;
   filterFrom = 99;
+  floatingPanel = false;
 }
 
 describe('PickerComponent', () => {
@@ -42,10 +44,13 @@ describe('PickerComponent', () => {
     fixture.detectChanges();
   });
 
-  const trigger = () => fixture.nativeElement.querySelector('.picker__trigger') as HTMLButtonElement;
+  const trigger = () =>
+    fixture.nativeElement.querySelector('.picker__trigger') as HTMLButtonElement;
   const panel = () => fixture.nativeElement.querySelector('.picker__panel') as HTMLElement | null;
-  const component = () => fixture.debugElement.query(By.directive(PickerComponent)).componentInstance as PickerComponent;
-  const search = () => fixture.nativeElement.querySelector('.picker__search input') as HTMLInputElement | null;
+  const component = () =>
+    fixture.debugElement.query(By.directive(PickerComponent)).componentInstance as PickerComponent;
+  const search = () =>
+    fixture.nativeElement.querySelector('.picker__search input') as HTMLInputElement | null;
 
   async function open(): Promise<void> {
     trigger().click();
@@ -109,9 +114,17 @@ describe('PickerComponent', () => {
     expect(fixture.nativeElement.querySelectorAll('.picker__group').length).toBe(2);
 
     setQuery('Fresco');
-    expect(component().filtered().map(option => option.value)).toEqual(['fresh']);
+    expect(
+      component()
+        .filtered()
+        .map((option) => option.value)
+    ).toEqual(['fresh']);
     setQuery('20');
-    expect(component().filtered().map(option => option.value)).toEqual(['code-20']);
+    expect(
+      component()
+        .filtered()
+        .map((option) => option.value)
+    ).toEqual(['code-20']);
 
     setQuery('Anything else');
     const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
@@ -128,7 +141,11 @@ describe('PickerComponent', () => {
     fixture.detectChanges();
     await open();
     setQuery('fresh');
-    expect(component().filtered().map(option => option.value)).toEqual(['fresh']);
+    expect(
+      component()
+        .filtered()
+        .map((option) => option.value)
+    ).toEqual(['fresh']);
 
     fixture.componentInstance.options = [
       { value: 'fresh-recipe', label: 'Fresh recipe', group: 'New group' },
@@ -136,10 +153,19 @@ describe('PickerComponent', () => {
     ];
     fixture.detectChanges();
 
-    expect(component().filtered().map(option => option.value)).toEqual(['fresh-recipe']);
-    expect(component().rows().map(row => row.kind === 'header' ? row.label : row.option.label))
-      .toEqual(['New group', 'Fresh recipe']);
-    expect(fixture.nativeElement.querySelectorAll('[role="option"]')[0].textContent).toContain('Fresh recipe');
+    expect(
+      component()
+        .filtered()
+        .map((option) => option.value)
+    ).toEqual(['fresh-recipe']);
+    expect(
+      component()
+        .rows()
+        .map((row) => (row.kind === 'header' ? row.label : row.option.label))
+    ).toEqual(['New group', 'Fresh recipe']);
+    expect(fixture.nativeElement.querySelectorAll('[role="option"]')[0].textContent).toContain(
+      'Fresh recipe'
+    );
   });
 
   it('una coincidencia exacta se confirma en el buscador y evita usarla como texto libre', async () => {
@@ -192,7 +218,9 @@ describe('PickerComponent', () => {
     setQuery('250');
 
     const press = (key: string) => {
-      search()!.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      search()!.dispatchEvent(
+        new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+      );
       fixture.detectChanges();
     };
     const emit = spyOn(component().valueChange, 'emit').and.callThrough();
@@ -216,7 +244,9 @@ describe('PickerComponent', () => {
     await open();
     setQuery('250');
 
-    search()!.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true }));
+    search()!.dispatchEvent(
+      new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true })
+    );
     fixture.detectChanges();
 
     expect(fixture.componentInstance.selected).toBeNull();
@@ -225,7 +255,9 @@ describe('PickerComponent', () => {
 
   it('flechas, Enter, Home, End, Tab y Escape mantienen el contrato de teclado', async () => {
     const key = (target: HTMLElement, value: string) => {
-      target.dispatchEvent(new KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true }));
+      target.dispatchEvent(
+        new KeyboardEvent('keydown', { key: value, bubbles: true, cancelable: true })
+      );
       fixture.detectChanges();
     };
 
@@ -290,5 +322,58 @@ describe('PickerComponent', () => {
     });
     await open();
     expect(component().flipped()).toBeTrue();
+  });
+
+  it('reposiciona el panel flotante en resize y scroll y elimina los listeners al destruir', async () => {
+    const width = 160;
+    const height = 44;
+    const maxLeft = Math.max(8, window.innerWidth - 288);
+    const initialLeft = Math.min(16, maxLeft);
+    const resizedLeft = Math.max(initialLeft, Math.min(200, maxLeft));
+    const makeRect = (left: number, top: number): DOMRect => ({
+      x: left,
+      y: top,
+      left,
+      top,
+      right: left + width,
+      bottom: top + height,
+      width,
+      height,
+      toJSON: () => ({})
+    });
+
+    fixture.componentInstance.floatingPanel = true;
+    fixture.detectChanges();
+
+    let bounds = makeRect(initialLeft, 100);
+    const root = fixture.nativeElement.querySelector('.picker') as HTMLElement;
+    spyOn(root, 'getBoundingClientRect').and.callFake(() => bounds);
+    await open();
+
+    const picker = component();
+    const menu = panel()!;
+    expect(menu.style.left).toBe(`${initialLeft}px`);
+
+    bounds = makeRect(resizedLeft, 140);
+    window.dispatchEvent(new Event('resize'));
+    fixture.detectChanges();
+
+    expect(picker.floatingPosition().left).toBe(resizedLeft);
+    expect(menu.style.left).toBe(`${resizedLeft}px`);
+
+    bounds = makeRect(resizedLeft, window.innerHeight - 60);
+    window.dispatchEvent(new Event('scroll'));
+    fixture.detectChanges();
+
+    const beforeDestroy = picker.floatingPosition();
+    expect(beforeDestroy.top).toBeNull();
+    expect(beforeDestroy.bottom).toBe(64);
+
+    fixture.destroy();
+    bounds = makeRect(initialLeft, 100);
+    window.dispatchEvent(new Event('resize'));
+    window.dispatchEvent(new Event('scroll'));
+
+    expect(picker.floatingPosition()).toEqual(beforeDestroy);
   });
 });
