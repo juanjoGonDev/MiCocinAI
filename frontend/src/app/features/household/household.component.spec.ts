@@ -353,6 +353,46 @@ describe('HouseholdComponent', () => {
     );
   });
 
+  it('preserves a failed household-name draft so the admin can retry it', () => {
+    service.household.set(HOUSEHOLD);
+    service.updateSettings.and.returnValue(of(null));
+    fixture.detectChanges();
+    component.householdNameDraft.set('Nombre actualizado');
+
+    component.saveHouseholdName();
+    fixture.detectChanges();
+
+    expect(component.savingName()).toBeFalse();
+    expect(component.householdNameDraft()).toBe('Nombre actualizado');
+    expect(service.household()?.name).toBe('Casa sintética');
+  });
+
+  it('preserves a dirty draft on refresh and synchronizes an untouched name', () => {
+    service.household.set(HOUSEHOLD);
+    fixture.detectChanges();
+    component.householdNameDraft.set('Borrador local');
+
+    service.household.set({ ...HOUSEHOLD, name: 'Nombre remoto' });
+    fixture.detectChanges();
+    expect(component.householdNameDraft()).toBe('Borrador local');
+
+    component.householdNameDraft.set('Nombre remoto');
+    service.household.set({ ...HOUSEHOLD, name: 'Nombre confirmado' });
+    fixture.detectChanges();
+    expect(component.householdNameDraft()).toBe('Nombre confirmado');
+  });
+
+  it('replaces the draft when a different household is confirmed', () => {
+    service.household.set(HOUSEHOLD);
+    fixture.detectChanges();
+    component.householdNameDraft.set('Borrador del hogar anterior');
+
+    service.household.set({ ...HOUSEHOLD, id: 'other-household', name: 'Otro hogar' });
+    fixture.detectChanges();
+
+    expect(component.householdNameDraft()).toBe('Otro hogar');
+  });
+
   it('releases the saving state after a rejected name or permission update', () => {
     const target = {
       ...HOUSEHOLD.members[0],

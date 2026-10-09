@@ -4,7 +4,7 @@ import type {
   MemberPermissions,
   MemberRole
 } from '../../shared/models/household.model';
-import { Component, DestroyRef, effect, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, effect, inject, OnInit, signal, untracked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -1083,6 +1083,7 @@ export class HouseholdComponent implements OnInit {
   };
 
   inviteLink = signal('');
+  private syncedHouseholdName: { id: string; name: string } | null = null;
 
   constructor() {
     let previousHouseholdId = this.householdService.activeHouseholdId();
@@ -1102,8 +1103,18 @@ export class HouseholdComponent implements OnInit {
 
     effect(() => {
       const h = this.householdService.household();
+      const previous = this.syncedHouseholdName;
+      if (!h) {
+        this.syncedHouseholdName = null;
+        return;
+      }
+
       if (h?.inviteCode) this.inviteLink.set(this.householdService.getInviteLink(h.inviteCode));
-      if (h && !this.savingName()) this.householdNameDraft.set(h.name);
+      const draft = untracked(() => this.householdNameDraft());
+      if (!previous || previous.id !== h.id || draft === previous.name) {
+        this.householdNameDraft.set(h.name);
+      }
+      this.syncedHouseholdName = { id: h.id, name: h.name };
     });
   }
 

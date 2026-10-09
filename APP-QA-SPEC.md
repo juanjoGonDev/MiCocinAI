@@ -3779,21 +3779,39 @@ borrador para corregirlo/reintentarlo; solo un hogar persistido o un cambio de h
 el valor editado. Colores, opacidad y contorno de foco pueden cambiar sin variar caja, padding, tipografía,
 gap o radio.
 
-- [ ] Añadir primero prueba roja de componente y Playwright real aislado que contrasten rectángulo y estilos
+- [x] Añadir primero prueba roja de componente y Playwright real aislado que contrasten rectángulo y estilos
       calculados antes/durante/después de `loading`, `disabled` y `focus-visible`; medir un consumidor real
       mientras una respuesta de servidor sintético queda retenida.
-- [ ] Corregir el salto con el menor cambio compartido y evitar que un error de guardado descarte el borrador;
+- [x] Corregir el salto con el menor cambio compartido y evitar que un error de guardado descarte el borrador;
       conservar contenido/nombre accesible, indicar estado ocupado y bloquear dobles acciones. No alterar la
       geometría base normalizada de `sm/md/lg`, las variantes cromáticas, `fullWidth` ni botones de solo icono.
-- [ ] Verificar respuesta exitosa y fallida del request retenido, borrador recuperable, foco por teclado y
+- [x] Verificar respuesta exitosa y fallida del request retenido, borrador recuperable, foco por teclado y
       ausencia de una segunda petición; ejecutar Chromium escritorio y Pixel 5 emulado con DB/puertos/semillas
       aisladas y cleanup.
-- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil del estado normal y ocupado; ejecutar prueba focal,
+- [x] Guardar e inspeccionar capturas sintéticas PC/móvil del estado normal y ocupado; ejecutar prueba focal,
       suite frontend/gate de cobertura, typecheck, `check:ui`, Prettier, build y `git diff --check`.
       Documentar resultados y rollback sin cerrar la matriz visual global.
 
-**Rollback:** revertir la gestión visual/accesible del estado loading de `ButtonComponent`, sus regresiones
-unitarias/E2E y este subapartado; conservar los contratos previos de tamaño y demás consumidores.
+**Verificación (2026-10-09):** las regresiones primero fallaron con el spinner ensanchando 22 px y el
+guardado de hogar perdiendo el borrador tras 503; después la suite focal del botón/hogar pasó **44/44**.
+`E2E_RATE_LIMIT=on node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium
+--project=mobile-chrome tests/e2e/household.spec.ts --grep 'el botón de guardar conserva geometría'
+--reporter=line` pasó **2/2**. La E2E comprobó foco de teclado, nombre accesible, `aria-busy`, spinner
+centrado, caja/estilos con diferencia ≤1 px, acción deshabilitada sin segundo PATCH, recuperación del
+borrador tras 503, retry HTTP 200 y persistencia tras recargar. Usó DB/servidor/semilla aislados; el runner
+detuvo su proceso propio y limpió artifacts.
+
+Capturas sintéticas normales/cargando, guardadas e inspeccionadas en
+`.e2e-screenshots/qa-button-state-geometry-20261009-0736/` (`chromium` y `mobile-chrome`; ignoradas por
+Git). `pnpm test` pasó con cobertura global **91.11/82.13/89.69/92.56 %** (statements/branches/functions/
+lines); en archivos afectados: `button.component.ts` **100/100/100/100 %** y `household.component.ts`
+**88.04/95.65/74.29/87.21 %**. Pasaron `check:ui` (**211 ficheros, 21 reglas**), typecheck E2E,
+Prettier, build y `git diff --check`; el build conserva sus warnings existentes de dependencias Angular y
+presupuesto, sin errores. No se cerró la matriz visual global.
+
+**Rollback:** revertir la gestión visual/accesible del estado loading de `ButtonComponent`, la sincronización
+de borrador de `HouseholdComponent`, sus regresiones unitarias/E2E y este subapartado; conservar los
+contratos previos de tamaño y demás consumidores.
 
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.SHOPPING-PRIMARY.1 · CTA primario de Compra
 
