@@ -1,8 +1,8 @@
 import {
   AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET,
   AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES,
-  AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS,
   AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT,
+  AI_LIVE_SMOKE_ENV,
   AI_LIVE_SMOKE_COMPLETION_BUDGET,
   createAiLiveSmokeRunnerEnvironment,
   createAiLiveProxy,
@@ -10,6 +10,11 @@ import {
   validateAiLiveReceiptSmokeRequest,
   validateAiLiveSmokeOptIn
 } from './ai-live-smoke-safety.mjs';
+import {
+  AI_LIVE_RECEIPT_LONG_TICKET_ONLY_COMPLETION_BUDGET,
+  AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION,
+  AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT
+} from './ai-live-receipt-inputs.mjs';
 import { prepareExistingAiLiveSmokeSession } from './ai-live-existing-webapi.mjs';
 import { runAiLiveSmokeRunner } from './ai-live-smoke-runner-control.mjs';
 import {
@@ -52,8 +57,17 @@ export async function runAiLiveSmoke({
 } = {}) {
   validateAiLiveSmokeOptIn(env);
   const receiptsOnly = validateAiLiveReceiptSmokeRequest(env);
+  const longTicketOnly =
+    env[AI_LIVE_SMOKE_ENV.receiptSelection] === AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION;
+  const expectedReceiptTicketCount = receiptsOnly
+    ? longTicketOnly
+      ? AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT
+      : AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT
+    : undefined;
   const requestBudget = receiptsOnly
-    ? AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET
+    ? longTicketOnly
+      ? AI_LIVE_RECEIPT_LONG_TICKET_ONLY_COMPLETION_BUDGET
+      : AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET
     : AI_LIVE_SMOKE_COMPLETION_BUDGET;
   assertAiLiveSmokeDeadlineContract();
   signal?.throwIfAborted();
@@ -152,7 +166,8 @@ export async function runAiLiveSmoke({
     runnerExit,
     cleanupFailed,
     calls,
-    receiptsOnly
+    receiptsOnly,
+    expectedReceiptTicketCount
   });
   if (!liveSuccess) {
     writeError(
@@ -162,7 +177,7 @@ export async function runAiLiveSmoke({
           ? 'Smoke real cancelado; se intentó cerrar el runner y limpiar los recursos propios.'
           : runnerExit.timedOut
             ? 'Smoke real fallido: se agotó el límite de tiempo; se intentó cerrar y limpiar.'
-            : `Smoke real fallido: resultado del runner=${runnerExit.code}, peticiones=${calls.length}/${requestBudget} (mínimo permitido ${receiptsOnly ? AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS : 9}).`
+            : `Smoke real fallido: resultado del runner=${runnerExit.code}, peticiones=${calls.length}/${requestBudget} (mínimo permitido ${expectedReceiptTicketCount ?? 9}).`
     );
     return 1;
   }
@@ -175,7 +190,7 @@ export async function runAiLiveSmoke({
         provider: 'local WebAPI :3001',
         model: session.model,
         sourceCount: 6,
-        tickets: AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT,
+        tickets: expectedReceiptTicketCount,
         requests: calls.length,
         completions: calls.filter((call) => call.status >= 200 && call.status < 300).length,
         verifiedStrictSchemaRequests: calls.filter(

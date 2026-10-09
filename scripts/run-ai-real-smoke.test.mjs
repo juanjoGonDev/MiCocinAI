@@ -5,7 +5,8 @@ import { runAiLiveSmoke } from './run-ai-real-smoke.mjs';
 import {
   AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES,
   AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT,
-  AI_LIVE_SMOKE_ENV
+  AI_LIVE_SMOKE_ENV,
+  isSuccessfulAiLiveSmokeResult
 } from './ai-live-smoke-safety.mjs';
 import { AI_LIVE_SMOKE_DEADLINES } from './ai-live-smoke-contract.mjs';
 
@@ -60,6 +61,84 @@ test('coordinator rejects an incomplete receipt-only request before any live set
     /absolute local receipt directory/i
   );
   assert.deepEqual(calls, []);
+});
+
+test('long-ticket-only coordinator budgets and validates exactly one safe receipt', async () => {
+  const proxyCalls = [
+    {
+      status: 200,
+      stream: true,
+      schemaName: 'receipt',
+      requestContract: {
+        strictJsonSchema: true,
+        inventoryJsonAttachmentCount: 1,
+        receiptAttachmentCount: 1
+      }
+    }
+  ];
+  const errors = [];
+  const successes = [];
+  const selection = 'long-ticket-only';
+  const result = await runAiLiveSmoke({
+    env: {
+      [AI_LIVE_SMOKE_ENV.optIn]: '1',
+      [AI_LIVE_SMOKE_ENV.receiptsOnly]: '1',
+      [AI_LIVE_SMOKE_ENV.receiptSelection]: selection,
+      [AI_LIVE_SMOKE_ENV.receiptDirectory]: 'C:/Users/example/tickets',
+      [AI_LIVE_SMOKE_ENV.preferredJpegOrdinal]: '2'
+    },
+    dependencies: {
+      prepareExistingAiLiveSmokeSession: async () => ({
+        origin: 'http://127.0.0.1:3001',
+        token: 'synthetic-existing-webapi-token',
+        model: 'gpt-5',
+        cleanup: async () => {}
+      }),
+      createAiLiveProxy: async (input) => {
+        assert.equal(input.maxCalls, 2);
+        assert.equal(input.maxRequestBytes, AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES);
+        assert.equal(input.requireReceiptAttachments, true);
+        return {
+          clientToken: 'synthetic-proxy-token',
+          baseUrl: 'http://127.0.0.1:43210/v1',
+          metrics: { calls: proxyCalls },
+          close: async () => {}
+        };
+      },
+      createAiLiveSmokeRunnerEnvironment: (parentEnv) => {
+        assert.equal(parentEnv[AI_LIVE_SMOKE_ENV.receiptSelection], selection);
+        return { runnerOnly: true };
+      },
+      runAiLiveSmokeRunner: async () => ({
+        code: 0,
+        cancelled: false,
+        timedOut: false,
+        runnerCleaned: true
+      }),
+      isSuccessfulAiLiveSmokeResult
+    },
+    writeError: (message) => errors.push(message),
+    writeSuccess: (message) => successes.push(message),
+    writeProgress: () => {}
+  });
+
+  assert.equal(result, 0);
+  assert.deepEqual(errors, []);
+  assert.equal(successes.length, 1);
+  assert.deepEqual(JSON.parse(successes[0]), {
+    result: 'passed',
+    provider: 'local WebAPI :3001',
+    model: 'gpt-5',
+    sourceCount: 6,
+    tickets: 1,
+    requests: 1,
+    completions: 1,
+    verifiedStrictSchemaRequests: 1,
+    verifiedInventoryJsonAttachments: 1,
+    verifiedReceiptAttachments: 1,
+    elapsedMs: 0,
+    recoveredFallbacks: 0
+  });
 });
 
 test('coordinator marks a failed runner red and cleans only its existing-WebAPI resources', async () => {

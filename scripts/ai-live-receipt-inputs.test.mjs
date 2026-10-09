@@ -102,6 +102,38 @@ test('unsubmitted-only devuelve JPEG + PDF largo y nunca lee los PDF ya enviados
   );
 });
 
+test('long-ticket-only empaqueta solo las tres fotos no enviadas y no lee la JPEG ambigua ni PDFs', async (t) => {
+  const directory = await fixtureDirectory(t, SIX_SOURCES);
+  const reads = [];
+
+  const plan = await loadAiLiveReceiptPlan({
+    directory,
+    preferredJpegOrdinal: 2,
+    selection: 'long-ticket-only',
+    readFileImpl: async (path) => {
+      reads.push(basename(path));
+      return readFile(path);
+    }
+  });
+
+  assert.equal(plan.sourceCount, 6);
+  assert.equal(plan.ticketCount, 1);
+  assert.equal(plan.selection, 'long-ticket-only');
+  assert.deepEqual(
+    plan.tickets.map(({ kind, sourceFileCount, pageCount }) => ({
+      kind,
+      sourceFileCount,
+      pageCount
+    })),
+    [{ kind: 'pdf', sourceFileCount: 3, pageCount: 3 }]
+  );
+  const composite = plan.tickets[0].buffer.toString('latin1');
+  assert.match(composite, /^%PDF-1\.4/);
+  assert.match(composite, /\/Count 3/);
+  assert.equal((composite.match(/\/Subtype \/Image/g) ?? []).length, 3);
+  assert.deepEqual(reads.sort(), ['03.jpg', '05.jpg', '06.jpeg']);
+});
+
 test('rechaza toda selección de tickets no reconocida', async (t) => {
   const directory = await fixtureDirectory(t, SIX_SOURCES);
 

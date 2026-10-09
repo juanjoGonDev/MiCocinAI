@@ -71,18 +71,25 @@ test('receipt-only runner requires a private source directory and selected JPEG 
   };
 
   assert.equal(validateAiLiveSmokeRunner(env, args), true);
+  assert.equal(
+    validateAiLiveSmokeRunner(
+      { ...env, HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'long-ticket-only' },
+      args
+    ),
+    true
+  );
   assert.throws(
     () =>
       validateAiLiveSmokeRunner(
         { ...env, HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: undefined },
         args
       ),
-    /unsubmitted-only selection/i
+    /supported receipt selection/i
   );
   assert.throws(
     () =>
       validateAiLiveSmokeRunner({ ...env, HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'all' }, args),
-    /unsubmitted-only selection/i
+    /supported receipt selection/i
   );
   assert.throws(
     () =>
@@ -794,6 +801,47 @@ test('accepts exactly two receipt jobs with at most one immediate stream fallbac
         }
       ],
       receiptsOnly: true
+    }),
+    false
+  );
+});
+
+test('accepts one successful long-ticket receipt request without requiring an ambiguous JPEG retry', () => {
+  const runnerExit = { code: 0, timedOut: false, cancelled: false, runnerCleaned: true };
+  const call = {
+    status: 200,
+    stream: true,
+    schemaName: 'receipt',
+    requestContract: VALID_RECEIPT_REQUEST_CONTRACT
+  };
+
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: [call],
+      receiptsOnly: true,
+      expectedReceiptTicketCount: 1
+    }),
+    true
+  );
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: [{ ...call, status: 504 }],
+      receiptsOnly: true,
+      expectedReceiptTicketCount: 1
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveSmokeResult({
+      runnerExit,
+      cleanupFailed: false,
+      calls: [call, call],
+      receiptsOnly: true,
+      expectedReceiptTicketCount: 1
     }),
     false
   );

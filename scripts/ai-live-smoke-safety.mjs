@@ -2,6 +2,8 @@ import { createServer, request as httpRequest } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import {
+  AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION,
+  AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT,
   AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET,
   AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION,
   AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT
@@ -37,7 +39,6 @@ export const AI_LIVE_SMOKE_MIN_COMPLETIONS = 9;
 export const AI_LIVE_SMOKE_COMPLETION_BUDGET = 10;
 export const AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET = AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET;
 export const AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT = AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT;
-export const AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS = AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT;
 export const AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES = 15 * 1024 * 1024;
 
 export function validateAiLiveReceiptSmokeRequest(env = process.env) {
@@ -53,8 +54,13 @@ export function validateAiLiveReceiptSmokeRequest(env = process.env) {
     return false;
   }
   if (requested !== '1') throw new Error('Invalid receipt-only mode for the AI smoke runner.');
-  if (env[AI_LIVE_SMOKE_ENV.receiptSelection] !== AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION) {
-    throw new Error('Receipt-only mode requires the unsubmitted-only selection.');
+  if (
+    ![
+      AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION,
+      AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION
+    ].includes(env[AI_LIVE_SMOKE_ENV.receiptSelection])
+  ) {
+    throw new Error('Receipt-only mode requires a supported receipt selection.');
   }
 
   const directory = env[AI_LIVE_SMOKE_ENV.receiptDirectory];
@@ -552,10 +558,11 @@ export function isSuccessfulAiLiveSmokeResult({
   runnerExit,
   cleanupFailed,
   calls,
-  receiptsOnly = false
+  receiptsOnly = false,
+  expectedReceiptTicketCount = AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT
 }) {
   if (receiptsOnly) {
-    const validReceiptRun = isSuccessfulReceiptOnlyRun(calls);
+    const validReceiptRun = isSuccessfulReceiptOnlyRun(calls, expectedReceiptTicketCount);
     return (
       runnerExit?.code === 0 &&
       runnerExit.cancelled !== true &&
@@ -600,11 +607,13 @@ export function isSuccessfulAiLiveSmokeResult({
   );
 }
 
-function isSuccessfulReceiptOnlyRun(calls) {
+function isSuccessfulReceiptOnlyRun(calls, expectedReceiptTicketCount) {
   if (
     !Array.isArray(calls) ||
-    calls.length < AI_LIVE_RECEIPT_SMOKE_MIN_COMPLETIONS ||
-    calls.length > AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET
+    !Number.isSafeInteger(expectedReceiptTicketCount) ||
+    expectedReceiptTicketCount < 1 ||
+    calls.length < expectedReceiptTicketCount ||
+    calls.length > expectedReceiptTicketCount * 2
   ) {
     return false;
   }
@@ -636,7 +645,7 @@ function isSuccessfulReceiptOnlyRun(calls) {
     completedTickets += 1;
     index += 2;
   }
-  return completedTickets === AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT;
+  return completedTickets === expectedReceiptTicketCount;
 }
 
 function validReceiptRequestContract(call) {

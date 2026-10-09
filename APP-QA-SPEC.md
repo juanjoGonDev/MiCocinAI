@@ -3258,10 +3258,11 @@ multipart numérico, fallar cerrado para el inventario requerido y demostrar con
 
 **Revalidación del arreglo WebAPI (2026-10-09; sin reenviar tickets):** la rama local
 `D:\projects\webApi` está ahora en `b55f958`; el fix de producción está en `246291eb` y el commit
-posterior registra la aceptación live sintética. El proceso activo PID 47764 inició a las 09:57:48,
-después del fix, `/health/ready` devuelve `ready=true`, `storage=ready`. El SHA-256 del archivo del
-executor en el checkout (`138A09D6…BBC5F38`) coincide con el valor documentado por la spec de WebAPI.
-Esa spec documenta el smoke contra el proceso activo con dos ficheros sintéticos: `uploadAttachmentCount=2`,
+posterior registra la aceptación live sintética. El smoke sintético pasó contra PID 47764, que inició
+después del fix. El listener actual es PID 23540, iniciado a las 10:02:01, también después del fix;
+`/health/ready` devuelve `ready=true`, `storage=ready`. El SHA-256 del executor en el checkout
+(`138A09D6…BBC5F38`) coincide con el valor documentado por la spec de WebAPI. Esa spec registra el
+smoke live con dos ficheros sintéticos: `uploadAttachmentCount=2`,
 `inventorySnapshotUploadCount=1`, `inlineContextCount=0`, readiness `expectedCount=2` /
 `visibleCount=2` y ambos marcadores; el token temporal de ese smoke fue revocado. Las pruebas focales
 repetidas aquí, sin proveedor, pasaron **33/33** con el comando registrado arriba. No repetí la prueba
@@ -3270,10 +3271,13 @@ live sintética ni envié tickets reales en esta revalidación.
 La JPEG preferida continúa excluida: el intento previo acabó en HTTP 400/502 sin respuesta 2xx y el
 log disponible no permite probar que el turno no se completara. El PDF largo formado por las otras
 tres fotos nunca se envió y es el único input real elegible. El harness actual solo permite selección
-`unsubmitted-only`, que volvería a incluir la JPEG ambigua; antes del smoke se debe añadir una selección
-aislada de solo-ticket-largo que lea/empaquete las tres fotos en memoria y valide exactamente una
-petición. Aún no se ha enviado el PDF largo; extracción/schema, categorías, deduplicación, revisión e
-historial siguen sin validar.
+`unsubmitted-only`, que volvería a incluir la JPEG ambigua. El harness ya tiene selección
+`long-ticket-only`: su prueba sintética confirma un PDF de tres páginas y que solo se leen las tres
+JPEG no preferidas (ni la JPEG ambigua ni los PDF originales); el coordinador limita esa corrida a un
+ticket y dos peticiones como máximo. Las pruebas focales de este cambio pasaron **42/42** y
+`pnpm run typecheck:e2e` pasó. La carpeta de fuente contiene seis ficheros regulares (2 PDF/4 JPEG) y
+la JPEG preferida sigue siendo el ordinal 4 según el orden del cargador. Aún no se ha enviado el PDF
+largo; extracción/schema, categorías, deduplicación, revisión e historial siguen sin validar.
 
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 

@@ -5,7 +5,10 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
-import { loadAiLiveReceiptPlan } from '../../scripts/ai-live-receipt-inputs.mjs';
+import {
+  AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION,
+  loadAiLiveReceiptPlan
+} from '../../scripts/ai-live-receipt-inputs.mjs';
 
 const TOKEN_KEY = 'hogar:v1:auth_token';
 const PROVIDER_KEY_MARKER = '__HOGARIA_AI_REAL_SMOKE_PROVIDER_KEY__';
@@ -518,7 +521,7 @@ async function selectShelfPhotoMode(page: Parameters<typeof registerAndGoto>[0])
   await expect(picker.locator('.picker__trigger')).toContainText('Estanteria');
 }
 
-test('procesa solo los dos tickets no enviados y verifica la revisión sin confirmar', async ({
+test('procesa solo los tickets reales seleccionados y verifica la revisión sin confirmar', async ({
   page
 }) => {
   test.skip(
@@ -530,18 +533,31 @@ test('procesa solo los dos tickets no enviados y verifica la revisión sin confi
 
   const directory = process.env.HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY ?? '';
   const preferredJpegOrdinal = Number(process.env.HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL);
-  if (LIVE_RECEIPT_SELECTION !== 'unsubmitted-only') {
-    throw new Error('The live receipt smoke only accepts unsubmitted-only selection.');
+  if (
+    !['unsubmitted-only', AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION].includes(
+      LIVE_RECEIPT_SELECTION ?? ''
+    )
+  ) {
+    throw new Error('The live receipt smoke requires a supported safe selection.');
   }
-  const plan = await loadAiLiveReceiptPlan({
-    directory,
-    preferredJpegOrdinal,
-    selection: LIVE_RECEIPT_SELECTION
-  });
+  const longTicketOnly = LIVE_RECEIPT_SELECTION === AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION;
+  const plan = longTicketOnly
+    ? await loadAiLiveReceiptPlan({
+        directory,
+        preferredJpegOrdinal,
+        selection: AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION
+      })
+    : await loadAiLiveReceiptPlan({
+        directory,
+        preferredJpegOrdinal,
+        selection: 'unsubmitted-only'
+      });
   expect(plan.sourceCount).toBe(6);
-  expect(plan.ticketCount).toBe(2);
-  expect(plan.selection).toBe('unsubmitted-only');
-  expect(plan.tickets.map(({ sourceFileCount }) => sourceFileCount)).toEqual([1, 3]);
+  expect(plan.ticketCount).toBe(longTicketOnly ? 1 : 2);
+  expect(plan.selection).toBe(LIVE_RECEIPT_SELECTION);
+  expect(plan.tickets.map(({ sourceFileCount }) => sourceFileCount)).toEqual(
+    longTicketOnly ? [3] : [1, 3]
+  );
   reportLiveSmokePhase('real-receipts-inputs-validated');
 
   await registerAndGoto(page, '/receipts', 'ai-live-receipts-only');

@@ -8,6 +8,9 @@ export const AI_LIVE_RECEIPT_COMPLETION_BUDGET = 8;
 export const AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION = 'unsubmitted-only';
 export const AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT = 2;
 export const AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET = 4;
+export const AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION = 'long-ticket-only';
+export const AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT = 1;
+export const AI_LIVE_RECEIPT_LONG_TICKET_ONLY_COMPLETION_BUDGET = 2;
 
 const NAME_COLLATOR = new Intl.Collator('es-ES', { numeric: true, sensitivity: 'base' });
 
@@ -18,7 +21,13 @@ export async function loadAiLiveReceiptPlan({
   selection = 'all',
   readFileImpl = readFile
 } = {}) {
-  if (!['all', AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION].includes(selection)) {
+  if (
+    ![
+      'all',
+      AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION,
+      AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION
+    ].includes(selection)
+  ) {
     throw new Error('The receipt selection is invalid.');
   }
   if (typeof directory !== 'string' || !isAbsolute(directory)) {
@@ -70,17 +79,22 @@ export async function loadAiLiveReceiptPlan({
     throw new Error('The preferred JPEG must be selected by its sorted 1-based index.');
   }
 
-  const jpegs = await Promise.all(
-    jpegEntries.map((entry) => readVerifiedFile(root, entry.name, 'jpeg', readFileImpl))
-  );
-  const bestJpeg = jpegs[preferredJpegOrdinal - 1];
-  const longTicketJpegs = jpegs.filter((_, index) => index !== preferredJpegOrdinal - 1);
+  const longTicketEntries = jpegEntries.filter((_, index) => index !== preferredJpegOrdinal - 1);
+  const [bestJpeg, longTicketJpegs] = await Promise.all([
+    selection === AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION
+      ? Promise.resolve(undefined)
+      : readVerifiedFile(root, jpegEntries[preferredJpegOrdinal - 1].name, 'jpeg', readFileImpl),
+    Promise.all(
+      longTicketEntries.map((entry) => readVerifiedFile(root, entry.name, 'jpeg', readFileImpl))
+    )
+  ]);
   const longTicketPdf = buildMultiPageJpegPdf(longTicketJpegs);
   if (longTicketPdf.byteLength > AI_LIVE_RECEIPT_MAX_BYTES) {
     throw new Error('The in-memory multi-page ticket exceeds the 10 MiB upload limit.');
   }
 
   if (selection === AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION) {
+    if (bestJpeg === undefined) throw new Error('The preferred JPEG was not loaded.');
     return Object.freeze({
       sourceCount: AI_LIVE_RECEIPT_SOURCE_COUNT,
       ticketCount: AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT,
@@ -91,6 +105,19 @@ export async function loadAiLiveReceiptPlan({
       ])
     });
   }
+
+  if (selection === AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION) {
+    return Object.freeze({
+      sourceCount: AI_LIVE_RECEIPT_SOURCE_COUNT,
+      ticketCount: AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT,
+      selection,
+      tickets: Object.freeze([
+        makeTicket(longTicketPdf, 'pdf', longTicketJpegs.length, longTicketJpegs.length)
+      ])
+    });
+  }
+
+  if (bestJpeg === undefined) throw new Error('The preferred JPEG was not loaded.');
 
   const pdfs = await Promise.all(
     pdfEntries.map((entry) => readVerifiedFile(root, entry.name, 'pdf', readFileImpl))
