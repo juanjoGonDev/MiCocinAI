@@ -1,4 +1,7 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { Page, expect } from '@playwright/test';
+import type { TestInfo } from '@playwright/test';
 import { test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 
@@ -26,23 +29,43 @@ async function tokenOf(page: Page): Promise<string> {
   return token as string;
 }
 
-async function api(page: Page, method: string, path: string, token: string, body?: unknown): Promise<any> {
+async function api(
+  page: Page,
+  method: string,
+  path: string,
+  token: string,
+  body?: unknown
+): Promise<any> {
   const response = await page.request.fetch(path, {
     method,
     headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
     data: body === undefined ? undefined : JSON.stringify(body)
   });
-  expect(response.ok(), `${method} ${path} deberia dar 2xx y dio ${response.status()}`).toBeTruthy();
+  expect(
+    response.ok(),
+    `${method} ${path} deberia dar 2xx y dio ${response.status()}`
+  ).toBeTruthy();
   return response.json();
 }
 
 const filaDe = (page: import('@playwright/test').Page, texto: string | RegExp) =>
   page.locator('[data-test^="sugerida-item-"]').filter({ hasText: texto });
 
+async function captureState(page: Page, testInfo: TestInfo, fileName: string): Promise<void> {
+  const root = process.env.E2E_SCREENSHOT_DIR;
+  if (!root) return;
+  const directory = join(root, testInfo.project.name);
+  mkdirSync(directory, { recursive: true });
+  await page.screenshot({
+    path: join(directory, fileName),
+    animations: 'disabled'
+  });
+}
+
 test.describe('la lista sugerida por la actividad (## 12al)', () => {
   test('de la tarjeta a la lista: motivos a la vista, crear, y actualizar sin perder lo comprado', async ({
     page
-  }) => {
+  }, testInfo) => {
     await registerAndGoto(page, '/shopping', 'r40-sug');
     const token = await tokenOf(page);
 
@@ -57,7 +80,9 @@ test.describe('la lista sugerida por la actividad (## 12al)', () => {
       unit: 'unit',
       location: 'pantry'
     });
-    await api(page, 'PATCH', `/api/pantry/ingredients/${panSembrado.data.id}`, token, { quantity: 0 });
+    await api(page, 'PATCH', `/api/pantry/ingredients/${panSembrado.data.id}`, token, {
+      quantity: 0
+    });
     const ayer = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
     await api(page, 'POST', '/api/pantry/ingredients', token, {
       name: 'Pescado fresco',
@@ -132,6 +157,16 @@ test.describe('la lista sugerida por la actividad (## 12al)', () => {
       checked: true
     });
 
+    // La persona añade algo a mano desde el detalle: actualizar la sugerencia no debe borrarlo.
+    await page.goto(`/shopping/${lista.id}`);
+    await page.locator('[data-test="add-input"]').fill('Detergente QA');
+    await page.locator('[data-test="add-submit"]').click();
+    await expect(
+      page.locator('[data-test="item-row"]').filter({ hasText: 'Detergente QA' })
+    ).toBeVisible();
+    await page.locator('[data-test="back"]').click();
+    await expect(page).toHaveURL(/\/shopping$/);
+
     // Dias despues hay registros nuevos: el boton del modal ofrece ACTUALIZAR, y lo comprado
     // se queda.
     await page.goto('/shopping');
@@ -143,7 +178,12 @@ test.describe('la lista sugerida por la actividad (## 12al)', () => {
       'Lista sugerida actualizada'
     );
 
-    const despues = await api(page, 'GET', `/api/shopping/lists/${lista.id}?includeDeleted=1`, token);
+    const despues = await api(
+      page,
+      'GET',
+      `/api/shopping/lists/${lista.id}?includeDeleted=1`,
+      token
+    );
     const panDespues = despues.data.items.find((i: { name: string }) => i.name === 'Pan de barra');
     expect(panDespues.checked, 'lo comprado se queda, no se retira al actualizar').toBe(1);
     expect(panDespues.deleted_at, 'lo comprado no se borra').toBeNull();
@@ -153,5 +193,34 @@ test.describe('la lista sugerida por la actividad (## 12al)', () => {
       (i: { name: string; deleted_at: string | null }) => i.name === 'Tomate' && !i.deleted_at
     );
     expect(tomatesVivos, 'la sugerencia del plan sigue viva').toHaveLength(1);
+    const detergentesVivos = despues.data.items.filter(
+      (i: { name: string; deleted_at: string | null }) =>
+        i.name === 'Detergente QA' && !i.deleted_at
+    );
+    expect(detergentesVivos, 'la línea manual no se pierde ni duplica').toHaveLength(1);
+    expect(detergentesVivos[0].source).toBe('manual');
+
+    await page.goto(`/shopping/${lista.id}`);
+    const detergentRow = page
+      .locator('[data-test="item-row"]')
+      .filter({ hasText: 'Detergente QA' });
+    await expect(detergentRow).toBeVisible();
+    await detergentRow.scrollIntoViewIfNeeded();
+    const { clientWidth, scrollWidth } = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth
+    }));
+    expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
+    await captureState(page, testInfo, 'shopping-suggested-manual-preserved.png');
+
+    await page.locator('[data-test="tab-cart"]').click();
+    const boughtPan = page.locator('[data-test="item-row"]').filter({ hasText: 'Pan de barra' });
+    await expect(boughtPan).toHaveCount(1);
+    await expect(boughtPan.locator('[data-test="check"]')).toHaveAttribute('aria-checked', 'true');
+    const checkedLayout = await page.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth
+    }));
+    expect(checkedLayout.scrollWidth).toBeLessThanOrEqual(checkedLayout.clientWidth);
   });
 });

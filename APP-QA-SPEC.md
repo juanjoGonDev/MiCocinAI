@@ -2548,11 +2548,17 @@ duplicados. No se invoca IA/proveedor ni se escribe en la base de datos habitual
 
 - [x] Revalidar §12al, filtros de `POST /shopping/suggested`, regresión de servidor y E2E actual; acotar
       la brecha a conservar una línea manual creada por UI.
-- [ ] Añadir primero regresión E2E aislada para crear/actualizar, conservar línea manual y comprada y no
+- [x] Añadir primero regresión E2E aislada para crear/actualizar, conservar línea manual y comprada y no
       duplicar las sugerencias.
-- [ ] Ejecutar Chromium desktop y Pixel 5 con rate limit activo, SQLite/puertos/semilla temporales y cleanup;
+- [x] Ejecutar Chromium desktop y Pixel 5 con rate limit activo, SQLite/puertos/semilla temporales y cleanup;
       comprobar los estados en persistencia, accesibilidad/scroll, guardar e inspeccionar capturas sintéticas.
-      Cobertura de código: N/A si no cambia producción.
+      E2E real aislada `shopping-suggested.spec.ts`: **2/2**; `Detergente QA` se añade desde la UI, persiste una
+      vez con `source=manual`, el pan comprado sigue en el tab del carro con `aria-checked=true` y queda una sola
+      sugerencia vigente de tomate. El test comprueba ancho sin overflow en estados pendientes y carro. Capturas
+      sintéticas de la línea manual inspeccionadas en
+      `%TEMP%\hogaria-suggested-manual-final-20261009\{chromium,mobile-chrome}\shopping-suggested-manual-preserved.png`.
+      Pasan `pnpm run typecheck:e2e` y `pnpm exec prettier --check tests/e2e/shopping-suggested.spec.ts`; cobertura
+      de producción: N/A (sin cambio productivo).
 - [ ] Registrar resultado, comandos y rollback (solo la regresión E2E y esta unidad); ejecutar hooks completos,
       push y CI verde.
 
