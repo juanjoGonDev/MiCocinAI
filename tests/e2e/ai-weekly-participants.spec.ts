@@ -10,7 +10,7 @@ type ProviderRequest = {
   messages?: Array<{ role?: string; content?: string }>;
 };
 
-const screenshotDirectory = resolve('.e2e-screenshots/ai-weekly-participants-20261006-v3');
+const screenshotDirectory = resolve(`.e2e-screenshots/ai-weekly-participants-${process.pid}`);
 
 test('la planificación usa solo miembros activos elegidos e invitados efímeros', async ({
   page,
