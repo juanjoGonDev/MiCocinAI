@@ -2136,12 +2136,14 @@ Evidencia final: `$env:E2E_RATE_LIMIT='on'; $env:E2E_SCREENSHOT_DIR='.e2e-screen
 
 ## Matriz responsive, visual y accesibilidad
 
-- [ ] Barrido de **todas las rutas** en 320, 360, 390/393, 430, 768, 1023, 1024, 1280 y 1440 px; guardar ruta, viewport, overflow y errores por página.
+- [x] Barrido de **todas las rutas** en 320, 360, 390/393, 430, 768, 1023, 1024, 1280 y 1440 px; guardar ruta, viewport, overflow y errores por página.
 - [ ] Cubrir móvil vertical y horizontal (mínimo 844×390 y 932×430), tablet vertical/horizontal y escritorio. Mantener pruebas de dispositivo real emulado Android/Chromium e iOS/WebKit además del cambio de ancho.
 - [ ] Para cada breakpoint usado por una pantalla, probar `B−1`, `B` y `B+1` px; buscar breakpoints de nuevo en los estilos fuente al iniciar cada tarea.
 - [ ] En cada flujo crítico móvil revisar viewport sin overflow horizontal, scroll real, safe-area, teclado virtual, modales/hojas, tablas/listas, botones fijos y orientación; el contenido no debe quedar tras header/nav/teclado.
 - [ ] Revisar cada control por nombre accesible, label/error asociado, foco visible/orden lógico, teclado/Escape, estado disabled/loading, contraste WCAG AA, tamaño táctil objetivo ≥44×44 px y zoom de texto.
 - [ ] Guardar capturas comparables de escritorio (1440×900) y móvil (390×844 y 320×740) por pantalla modificada, antes/después. Adjuntar al reporte/PR; no guardar datos personales ni credenciales en capturas.
+
+**Evidencia QA-LAYOUT.ROUTE-MATRIX.1 (2026-10-09):** `tests/e2e/layout-gutters.spec.ts` recorrió 31 rutas estáticas (públicas, onboarding y privadas) y 8 detalles poblados, cada una en **59** combinaciones de viewport (incluye los anchos requeridos, 320×568/740, 390×844, 844×390, 932×430 y tablet 768×1024/1024×768). `pnpm run test:e2e -- --workers=1 --project=chromium --project=mobile-chrome tests/e2e/layout-gutters.spec.ts --reporter=dot`, con `E2E_RATE_LIMIT=on` y SQLite/puertos/semilla temporales: **6/6**. Los cuatro reportes PC/Pixel (`layout-route-viewport-audit*.json`) registran **1829** filas de rutas iniciales y **472** de detalles por perfil; **0** overflow horizontal y **0** `pageerror`. Los reportes solo guardan rutas saneadas, dimensiones, anchos calculados y nombres de error; están ignorados por Git en `.e2e-screenshots/qa-layout-route-matrix-20261009-final/{chromium,mobile-chrome}/`. El primer reintento encontró colisión del archivo de reporte entre perfiles; los artefactos se separaron por proyecto y la corrida final pasó. `pnpm run typecheck:e2e`, Prettier y `git diff --check` pasan. Coverage N/A: solo se modificaron E2E/helpers, no producción. Esto cierra únicamente el barrido de rutas/ancho/error; orientación, breakpoints fuente, accesibilidad, safe-area y demás casillas globales siguen abiertas.
 
 ## Datos, proveedor IA y privacidad de la prueba
 

@@ -40,7 +40,7 @@ const INVENTORIED_FAMILIES = FAMILY_SELECTORS.map(({ family }) => family).filter
   (family, index, all) => all.indexOf(family) === index
 );
 
-function safeRoute(path: string): string {
+export function safeRoute(path: string): string {
   const url = new URL(path, 'http://layout.invalid');
   const pathname = url.pathname.replace(
     /\/(?:[a-f\d]{8}-[a-f\d-]{20,}|[a-z0-9_-]{20,}|qa-(?:layout|baseline)-[a-z0-9_-]+)/giu,

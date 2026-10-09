@@ -1,5 +1,6 @@
-import { mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import type { TestInfo } from '@playwright/test';
 
 import { expect, test, type Page } from './fixtures';
 import { registerToOnboarding, skipOnboarding } from './helpers/auth';
@@ -7,6 +8,7 @@ import { createSyntheticRecipe, deleteSyntheticRecipe } from './helpers/recipe-f
 import {
   attachVisualFamilyInventory,
   collectVisualFamilyMeasurements,
+  safeRoute,
   type VisualFamilyMeasurement
 } from './helpers/visual-family-inventory';
 import {
@@ -20,6 +22,15 @@ import {
 } from './helpers/route-layout-manifest';
 
 type ViewportCase = { width: number; height: number };
+type RouteViewportAudit = {
+  route: string;
+  shell: RouteShell;
+  viewport: string;
+  documentWidth: number;
+  documentClientWidth: number;
+  horizontalOverflow: boolean;
+  pageErrors: string[];
+};
 
 async function addVisualInventorySample(
   page: Page,
@@ -39,21 +50,49 @@ const WIDTH_BREAKPOINTS = [
 ];
 
 const VIEWPORTS: ViewportCase[] = (() => {
-  const widths = new Set([320, 393, 568, 1440, 1920]);
+  const widths = new Set([320, 360, 390, 393, 430, 568, 768, 1023, 1024, 1280, 1440, 1920]);
   for (const breakpoint of WIDTH_BREAKPOINTS) {
     widths.add(breakpoint - 1);
     widths.add(breakpoint);
     widths.add(breakpoint + 1);
   }
 
-  return [...widths]
-    .sort((left, right) => left - right)
-    .map((width) => ({
+  const viewports = new Map<string, ViewportCase>();
+  for (const width of widths) {
+    const viewport = {
       width,
       // Keep 568×320 as a real landscape viewport; other widths exercise normal page flow.
       height:
-        width === 568 ? 320 : width >= 1920 ? 1080 : width < 768 ? 851 : width < 1024 ? 768 : 900
-    }));
+        width === 568
+          ? 320
+          : width === 390
+            ? 844
+            : width >= 1920
+              ? 1080
+              : width < 768
+                ? 851
+                : width < 1024
+                  ? 768
+                  : 900
+    };
+    viewports.set(`${viewport.width}x${viewport.height}`, viewport);
+  }
+
+  // Acceptance viewports used by the spec that are not implied by the width/B±1 set.
+  for (const viewport of [
+    { width: 320, height: 568 },
+    { width: 320, height: 740 },
+    { width: 768, height: 1024 },
+    { width: 844, height: 390 },
+    { width: 932, height: 430 },
+    { width: 1024, height: 768 }
+  ]) {
+    viewports.set(`${viewport.width}x${viewport.height}`, viewport);
+  }
+
+  return [...viewports.values()].sort(
+    (left, right) => left.width - right.width || left.height - right.height
+  );
 })();
 
 test('el contrato de display cubre exactamente todas las raíces estáticas y dinámicas', () => {
@@ -91,6 +130,39 @@ function expectedGutter(width: number): number {
   if (width >= 1024) return 32;
   if (width >= 768) return 24;
   return 16;
+}
+
+async function attachAndSaveRouteViewportAudit(
+  testInfo: TestInfo,
+  fileName: string,
+  routes: readonly RouteViewportAudit[]
+): Promise<void> {
+  const report = {
+    acceptanceViewports: VIEWPORTS,
+    routes,
+    horizontalOverflowCount: routes.filter((row) => row.horizontalOverflow).length,
+    pageErrorCount: routes.reduce((count, row) => count + row.pageErrors.length, 0)
+  };
+  const serialized = JSON.stringify(report, null, 2);
+  await testInfo.attach(fileName, {
+    body: Buffer.from(serialized),
+    contentType: 'application/json'
+  });
+
+  const outputDirectory = process.env.E2E_LAYOUT_AUDIT_DIR;
+  if (!outputDirectory) return;
+
+  const directory = join(resolve(outputDirectory), testInfo.project.name);
+  mkdirSync(directory, { recursive: true });
+  writeFileSync(join(directory, fileName), serialized, { encoding: 'utf8', flag: 'wx' });
+  console.log(
+    `[qa-layout-route-matrix] ${JSON.stringify({
+      report: join(directory, fileName),
+      routeViewportRows: routes.length,
+      horizontalOverflowCount: report.horizontalOverflowCount,
+      pageErrorCount: report.pageErrorCount
+    })}`
+  );
 }
 
 async function checkPageContainer(
@@ -306,11 +378,37 @@ async function checkRouteAcrossViewports(
   page: Page,
   target: RouteCase,
   mismatches: string[],
+  auditRows: RouteViewportAudit[],
   afterViewport?: (viewport: ViewportCase) => Promise<void>
 ): Promise<void> {
   for (const [index, viewport] of VIEWPORTS.entries()) {
-    mismatches.push(...(await checkPageContainer(page, target, viewport, index === 0)));
-    await afterViewport?.(viewport);
+    const pageErrors: string[] = [];
+    const onPageError = (error: Error) => pageErrors.push(error.name || 'Error');
+    page.on('pageerror', onPageError);
+    try {
+      mismatches.push(...(await checkPageContainer(page, target, viewport, index === 0)));
+      await afterViewport?.(viewport);
+      const dimensions = await page.evaluate(() => ({
+        documentWidth: document.documentElement.scrollWidth,
+        documentClientWidth: document.documentElement.clientWidth
+      }));
+      const horizontalOverflow = dimensions.documentWidth > dimensions.documentClientWidth + 1;
+      if (pageErrors.length > 0) {
+        mismatches.push(
+          `${target.path} @ ${viewport.width}x${viewport.height}: pageerror (${pageErrors.join(', ')})`
+        );
+      }
+      auditRows.push({
+        route: safeRoute(target.path),
+        shell: target.shell,
+        viewport: `${viewport.width}x${viewport.height}`,
+        ...dimensions,
+        horizontalOverflow,
+        pageErrors: [...pageErrors]
+      });
+    } finally {
+      page.off('pageerror', onPageError);
+    }
   }
 }
 
@@ -528,83 +626,102 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
   test.setTimeout(300_000);
 
   const mismatches: string[] = [];
+  const routeViewportAudit: RouteViewportAudit[] = [];
   const visualMeasurements: VisualFamilyMeasurement[] = [];
   const sampledRoutes: string[] = [];
   for (const target of PUBLIC_ROUTES) {
-    await checkRouteAcrossViewports(page, target, mismatches, async (viewport) => {
-      await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
-    });
+    await checkRouteAcrossViewports(
+      page,
+      target,
+      mismatches,
+      routeViewportAudit,
+      async (viewport) => {
+        await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
+      }
+    );
   }
 
   await registerToOnboarding(page, 'Layout gutter QA');
-  await checkRouteAcrossViewports(page, ONBOARDING_ROUTE, mismatches, async (viewport) => {
-    await addVisualInventorySample(
-      page,
-      ONBOARDING_ROUTE,
-      viewport,
-      visualMeasurements,
-      sampledRoutes
-    );
-  });
+  await checkRouteAcrossViewports(
+    page,
+    ONBOARDING_ROUTE,
+    mismatches,
+    routeViewportAudit,
+    async (viewport) => {
+      await addVisualInventorySample(
+        page,
+        ONBOARDING_ROUTE,
+        viewport,
+        visualMeasurements,
+        sampledRoutes
+      );
+    }
+  );
   await skipOnboarding(page);
 
   for (const target of AUTHENTICATED_ROUTES) {
-    await checkRouteAcrossViewports(page, target, mismatches, async (viewport) => {
-      if (viewport.width === 393 || viewport.width === 1440) {
-        await assertPrivateContentCanReachEnd(page, target, viewport, mismatches);
-      }
+    await checkRouteAcrossViewports(
+      page,
+      target,
+      mismatches,
+      routeViewportAudit,
+      async (viewport) => {
+        if (viewport.width === 393 || viewport.width === 1440) {
+          await assertPrivateContentCanReachEnd(page, target, viewport, mismatches);
+        }
 
-      const captureDesktop =
-        target.shell === 'private' &&
-        testInfo.project.name === 'chromium' &&
-        viewport.width === 1440;
-      const captureMobile =
-        target.shell === 'private' &&
-        testInfo.project.name === 'mobile-chrome' &&
-        viewport.width === 393;
-      if (captureDesktop || captureMobile) {
-        const directory = process.env.E2E_SCREENSHOT_DIR;
-        const screenshotName = privateRouteScreenshotName(
-          target,
-          'route',
-          captureDesktop ? 'desktop' : 'mobile'
-        );
-        const screenshotPath = directory
-          ? join(directory, screenshotName)
-          : testInfo.outputPath(screenshotName);
-        mkdirSync(dirname(screenshotPath), { recursive: true });
-        await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled' });
-      }
+        const captureDesktop =
+          target.shell === 'private' &&
+          testInfo.project.name === 'chromium' &&
+          viewport.width === 1440;
+        const captureMobile =
+          target.shell === 'private' &&
+          testInfo.project.name === 'mobile-chrome' &&
+          viewport.width === 393;
+        if (captureDesktop || captureMobile) {
+          const directory = process.env.E2E_SCREENSHOT_DIR;
+          const screenshotName = privateRouteScreenshotName(
+            target,
+            'route',
+            captureDesktop ? 'desktop' : 'mobile'
+          );
+          const screenshotPath = directory
+            ? join(directory, screenshotName)
+            : testInfo.outputPath(screenshotName);
+          mkdirSync(dirname(screenshotPath), { recursive: true });
+          await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled' });
+        }
 
-      if (
-        target.path === '/dashboard' &&
-        ((testInfo.project.name === 'chromium' && viewport.width === 1440) ||
-          (testInfo.project.name === 'mobile-chrome' && viewport.width === 393))
-      ) {
-        await assertDashboardCaptureReady(page, viewport);
-        const directory = process.env.E2E_SCREENSHOT_DIR;
-        const screenshotPath = directory
-          ? join(
-              directory,
-              testInfo.project.name === 'chromium'
-                ? 'dashboard-desktop.png'
-                : 'dashboard-mobile.png'
-            )
-          : testInfo.outputPath(
-              testInfo.project.name === 'chromium'
-                ? 'dashboard-desktop.png'
-                : 'dashboard-mobile.png'
-            );
-        mkdirSync(dirname(screenshotPath), { recursive: true });
-        await page.screenshot({
-          path: screenshotPath,
-          fullPage: false,
-          animations: 'disabled'
-        });
-      }
+        if (
+          target.path === '/dashboard' &&
+          ((testInfo.project.name === 'chromium' && viewport.width === 1440) ||
+            (testInfo.project.name === 'mobile-chrome' && viewport.width === 393))
+        ) {
+          await assertDashboardCaptureReady(page, viewport);
+          const directory = process.env.E2E_SCREENSHOT_DIR;
+          const screenshotPath = directory
+            ? join(
+                directory,
+                testInfo.project.name === 'chromium'
+                  ? 'dashboard-desktop.png'
+                  : 'dashboard-mobile.png'
+              )
+            : testInfo.outputPath(
+                testInfo.project.name === 'chromium'
+                  ? 'dashboard-desktop.png'
+                  : 'dashboard-mobile.png'
+              );
+          mkdirSync(dirname(screenshotPath), { recursive: true });
+          await page.screenshot({
+            path: screenshotPath,
+            fullPage: false,
+            animations: 'disabled'
+          });
+        }
 
-      await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
-    });
+        await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
+      }
+    );
   }
 
   await attachVisualFamilyInventory(
@@ -612,6 +729,11 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
     'visual-family-inventory-route-default.json',
     visualMeasurements,
     sampledRoutes
+  );
+  await attachAndSaveRouteViewportAudit(
+    testInfo,
+    'layout-route-viewport-audit.json',
+    routeViewportAudit
   );
 
   expect(
@@ -626,6 +748,7 @@ test('los detalles dinámicos poblados conservan shell, raíz, gutter y ancho', 
   test.setTimeout(300_000);
 
   const mismatches: string[] = [];
+  const routeViewportAudit: RouteViewportAudit[] = [];
   const visualMeasurements: VisualFamilyMeasurement[] = [];
   const sampledRoutes: string[] = [];
   await registerToOnboarding(page, 'Layout gutter dynamic QA');
@@ -635,29 +758,43 @@ test('los detalles dinámicos poblados conservan shell, raíz, gutter y ancho', 
   try {
     const populatedRoutes = populatedDynamicRoutes(fixtures);
     for (const target of populatedRoutes) {
-      await checkRouteAcrossViewports(page, target, mismatches, async (viewport) => {
-        if (viewport.width === 393 || viewport.width === 1440) {
-          await assertPrivateContentCanReachEnd(page, target, viewport, mismatches);
+      await checkRouteAcrossViewports(
+        page,
+        target,
+        mismatches,
+        routeViewportAudit,
+        async (viewport) => {
+          if (viewport.width === 393 || viewport.width === 1440) {
+            await assertPrivateContentCanReachEnd(page, target, viewport, mismatches);
+          }
+
+          await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
+
+          const captureDesktop = testInfo.project.name === 'chromium' && viewport.width === 1440;
+          const captureMobile = testInfo.project.name === 'mobile-chrome' && viewport.width === 393;
+          if (!captureDesktop && !captureMobile) return;
+
+          const directory = process.env.E2E_SCREENSHOT_DIR;
+          const screenshotPath = directory
+            ? join(
+                directory,
+                privateRouteScreenshotName(
+                  target,
+                  'populated',
+                  captureDesktop ? 'desktop' : 'mobile'
+                )
+              )
+            : testInfo.outputPath(
+                privateRouteScreenshotName(
+                  target,
+                  'populated',
+                  captureDesktop ? 'desktop' : 'mobile'
+                )
+              );
+          mkdirSync(dirname(screenshotPath), { recursive: true });
+          await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled' });
         }
-
-        await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
-
-        const captureDesktop = testInfo.project.name === 'chromium' && viewport.width === 1440;
-        const captureMobile = testInfo.project.name === 'mobile-chrome' && viewport.width === 393;
-        if (!captureDesktop && !captureMobile) return;
-
-        const directory = process.env.E2E_SCREENSHOT_DIR;
-        const screenshotPath = directory
-          ? join(
-              directory,
-              privateRouteScreenshotName(target, 'populated', captureDesktop ? 'desktop' : 'mobile')
-            )
-          : testInfo.outputPath(
-              privateRouteScreenshotName(target, 'populated', captureDesktop ? 'desktop' : 'mobile')
-            );
-        mkdirSync(dirname(screenshotPath), { recursive: true });
-        await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled' });
-      });
+      );
     }
   } finally {
     await deleteSyntheticRecipe(page, fixtures.recipe);
@@ -668,6 +805,11 @@ test('los detalles dinámicos poblados conservan shell, raíz, gutter y ancho', 
     'visual-family-inventory-populated-details.json',
     visualMeasurements,
     sampledRoutes
+  );
+  await attachAndSaveRouteViewportAudit(
+    testInfo,
+    'layout-route-viewport-audit-populated.json',
+    routeViewportAudit
   );
 
   expect(
