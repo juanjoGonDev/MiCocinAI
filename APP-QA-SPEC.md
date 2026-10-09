@@ -3737,6 +3737,31 @@ aislado/fixture sintética y limpió su DB y artefactos temporales propios.
 Dashboard (`--space-3`, título sm/medium con margen `--space-2`, meta sin tamaño/gap explícitos), retirar
 la regresión y esta subunidad; conservar la paridad de métricas y títulos.
 
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.SCREENSHOT-STABILITY.1 · capturas sin transición intermedia
+
+**Fuente revalidada (2026-10-09):** el E2E de paridad de «Planificar IA» y el botón primario de
+Recetas cambia el viewport varias veces y captura PC/móvil inmediatamente después del último resize.
+La corrida aislada de la matriz geométrica pasó **32/32** en Chromium y Pixel 5, pero la captura
+`calendar-cta-mobile.png` muestra la barra lateral a medio cerrar; la captura desktop también queda
+desplazada mientras termina el cambio de breakpoint. Otras capturas del mismo run (`calendar-calendar-route-desktop.png`
+y `ui-geometry-mobile.png`) muestran el estado estable. Esto apunta a una captura prematura del E2E, no
+confirma un defecto de producción. Todos los artefactos son sintéticos y están en `%TEMP%`.
+
+**Contrato:** antes de capturar 393×851 o 1440×900, esperar la posición final calculada del sidebar
+según el viewport (oculto en móvil y fijo en escritorio), la estabilización del layout y `scrollX=0`;
+no usar un `waitForTimeout` fijo. La captura debe mostrar el contenido entero, sin overlay accidental ni
+recorte transitorio. No cambiar producción.
+
+- [ ] Añadir una aserción E2E que espere mediante polling geométrico el estado final del sidebar tras el
+      resize y que compruebe ausencia de overflow horizontal antes de la captura.
+- [ ] Repetir el test en Chromium y Pixel 5; guardar e inspeccionar capturas sintéticas comparables de
+      `/calendar` a 1440×900 y 393×851 para confirmar que no hay transición ni recorte.
+- [ ] Ejecutar typecheck, formato, `git diff --check` y hooks de commit/push sin bypass; actualizar la
+      evidencia al pasar todas las casillas y no tocar estilos de producción.
+
+**Rollback:** retirar únicamente la sincronización/aserciones de captura y este subapartado; conservar
+los tests y correcciones geométricas de producto ya validadas.
+
 ### Subunidad QA-CALENDAR.EARLY-HOURS.1 · hora actual visible en la rejilla
 
 **Fuente revalidada antes de implementar (2026-10-04):** el contrato histórico vigente de `HOGARIA-SPEC.md §8f`
