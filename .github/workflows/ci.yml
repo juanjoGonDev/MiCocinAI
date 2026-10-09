@@ -1,10 +1,9 @@
 # =============================================================================
 # CI Workflow - HogarIA
 # =============================================================================
-# Presupuesto: ningun job por encima de 5 minutos. Para eso la instalacion y las
-# dependencias pesadas (node_modules, navegadores de Playwright) se producen UNA
-# vez en el job `install` y se reparten por cache al resto de nodos, y la suite
-# e2e se parte en shards que corren en paralelo.
+# La instalación de dependencias pesadas (node_modules y Playwright) se produce
+# una vez y se reparte por cache; la suite E2E se divide en shards con margen de
+# hasta 16 minutos para el shard más lento y la subida de artefactos.
 #
 # Ojo al editar este fichero: un `- name: Texto (con: dos puntos)` sin comillas
 # invalida el YAML y GitHub no crea NINGUN check en el PR (solo un run de 0s con
@@ -317,7 +316,7 @@ jobs:
     name: 'E2E Tests (shard ${{ matrix.shard }})'
     runs-on: ubuntu-latest
     needs: install
-    timeout-minutes: 12
+    timeout-minutes: 16
     strategy:
       fail-fast: false
       matrix:

@@ -19,10 +19,10 @@ function getE2eShardTimeoutMinutes(source) {
   return Number(timeout.match(/\d+/)?.[0]);
 }
 
-test('CI E2E shards have at least 12 minutes for tests and cleanup', () => {
+test('CI E2E shards have at least 16 minutes for tests and cleanup', () => {
   const timeout = getE2eShardTimeoutMinutes(workflow);
   assert.ok(
-    timeout >= 12,
-    `e2e shard timeout is ${timeout}m; it must leave room for the slowest shard and artifact cleanup`
+    timeout >= 16,
+    `e2e shard timeout is ${timeout}m; it must cover the slowest observed run plus artifact cleanup`
   );
 });

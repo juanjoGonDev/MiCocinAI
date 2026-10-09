@@ -5926,12 +5926,18 @@ al upload/cleanup margen hasta 16 minutos, sin modificar los límites individual
 validación nueva debe terminar y publicar resultados del shard 2, no limitarse a evitar el rojo por
 cancelación.
 
-- [ ] TDD: elevar el umbral de la regresión de timeout y demostrar que falla con el job actual de
+- [x] TDD: elevar el umbral de la regresión de timeout y demostrar que falla con el job actual de
       12 minutos.
-- [ ] Cambiar solo `timeout-minutes` del job E2E a 16; conservar distribución y ejecución completa.
+- [x] Cambiar solo `timeout-minutes` del job E2E a 16; conservar distribución y ejecución completa.
 - [ ] Ejecutar suites focales, validación de workflows/formato y hooks completos; commit atómico y
       push. Verificar en un nuevo SHA que todos los jobs E2E y demás gates concluyen en verde y que
       el shard 2 publica su informe sin cancelarse.
+
+**TDD verde local (2026-10-09):** el nuevo umbral de 16 falló primero contra los 12 minutos
+vigentes. Tras aumentarlo a 16, `pnpm run test:config` pasó **11/11**, `node
+scripts/check-workflows.mjs` validó **5 workflows**, Prettier de workflow/test/spec y
+`git diff --check` pasaron. La prueba del archivo mantiene intactos los cuatro shards; falta el CI
+del SHA publicado para demostrar que shard 2 termina y genera sus artefactos.
 
 **Rollback:** revertir solo el umbral de timeout, el valor del job y esta reapertura; no reducir ni
 excluir pruebas, shards o retries.
