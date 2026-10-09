@@ -1653,6 +1653,50 @@ renderer del gráfico.
 `tests/e2e/helpers/recipe-fixtures.ts` y este bloque; conservar los filtros vigentes y la propiedad
 personal de recetas.
 
+### QA-RECIPES.BOOK-FILTER-MODAL.1 · filtros avanzados del libro
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md §12au` exige filtros combinables del catálogo,
+estado coherente con URL/resultados y controles traducidos y accesibles por teclado. La vista vigente
+`RecipesComponent` ya incluye país, tipo de comida, dificultad, cocina, etiquetas y tiempo máximo; al
+abrir copia filtros aplicados en borradores, `Aplicar` navega con esos parámetros y `app-modal` cierra
+con Escape. El E2E existente solo combina búsqueda, país y comida; no verifica los otros filtros ni que
+Cancelar/Escape descarten cambios no aplicados.
+
+**Decisión explícita para el borrador:** los filtros solo afectan los resultados y URL al confirmar
+«Aplicar filtros». Cancelar, Escape o cerrar sin aplicar descarta todos los cambios; al reabrir, el
+diálogo refleja los filtros persistidos. Esto evita resultados/URL adelantados a la decisión del usuario.
+
+**TDD rojo (2026-10-09):** la nueva E2E falló primero en Chromium y Pixel 5 al medir el campo «Cocina»
+en **35 CSS px** (objetivo táctil mínimo 44 px); país/comida/dificultad ya superan ese umbral. La prueba
+usa la SQLite y puertos únicos del runner aislado, con las recetas del catálogo local.
+
+- [x] Añadir E2E aislada antes de tocar producción: combinar los seis campos sobre el catálogo editorial
+      sembrado en SQLite temporal, demostrar miembro exacto, URL y recarga; verificar Cancelar/Escape.
+- [x] Verificar etiquetas/nombres accesibles, operación por teclado, foco y controles táctiles ≥44 px en
+      Chromium desktop y Pixel 5; sin overflow a 320×568 ni 393×851.
+- [x] Capturar e inspeccionar resultados de escritorio/móvil en aislamiento; confirmar que no se hacen
+      llamadas a IA ni escrituras fuera de SQLite/puertos temporales.
+- [x] Si las regresiones descubren defectos, escribir primero la prueba roja y aplicar el cambio mínimo;
+      medir cobertura S/B/F/L por fichero ≥70 % y mantener intactos los gates. Si el código actual pasa,
+      no cambiar producción solo para justificar una implementación. En esta unidad solo cambia CSS
+      (no instrumentable); no se modifica TypeScript de producción.
+- [ ] Anotar comandos/resultados, rollback/límites; después de gates, CI y push, decidir si esta casilla
+      cierra la brecha de filtros de `/recipes` (las otras acciones siguen abiertas).
+
+**Evidencia QA-RECIPES.BOOK-FILTER-MODAL.1 (2026-10-09):** prueba roja inicial en Chromium y Pixel 5:
+el campo «Cocina» medía 35 px. `frontend/src/styles.scss` limita la corrección al formulario de filtros
+del libro, con `box-sizing: border-box` y `min-height: 44px`. La E2E usa el runner aislado
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+--forbid-only tests/e2e/recipe-book-filter-modal.spec.ts --reporter=line`: **2/2** (Chromium 1440×900,
+Pixel 5 393×852; además 320×568), sin overflow horizontal ni errores de página o llamadas `/api/ai/`.
+Confirma seis filtros y resultado único Paella valenciana, URL/recarga, selección de país con teclado,
+focus restore y descarte de cambios por Cancelar/Escape; todos los campos/acciones ≥44 px. `pnpm run
+typecheck:e2e` y `pnpm run check:ui` (**212 archivos, 21 reglas**) pasan. Coverage de código no aplica
+al ajuste CSS ni al spec de Playwright. Capturas de la prueba aislada, revisadas:
+`.e2e-screenshots/qa-recipe-book-filter-modal-20261009/chromium-filtered-book.png` y
+`.e2e-screenshots/qa-recipe-book-filter-modal-20261009/mobile-chrome-filtered-book.png`. Rollback:
+revertir este bloque, `frontend/src/styles.scss` y `tests/e2e/recipe-book-filter-modal.spec.ts`.
+
 ## QA-AUTH.FORGOT.1 · resultado honesto y no enumeración en recuperación (spec-first)
 
 **Fuente revalidada (2026-10-01):** `POST /api/auth/forgot-password` valida formato en API y responde 200 indistinguible para cuenta existente/inexistente, pero solo consulta la cuenta; no hay servicio/configuración de email ni generación de enlaces en el repo. La pantalla, su CTA y la respuesta API afirman falsamente que se envió un enlace. `ForgotPasswordComponent.onSubmit()` valida vacío pero no formato; el input es un `ControlValueAccessor` y el `ngSubmit` permite enviar `type=email` inválido. Playwright aislado reprodujo que `not-an-email` hace POST/400. La solicitud tampoco tiene contexto `SILENT_TOAST`, por lo que un error 5xx genera el toast global genérico además del mensaje local; actualmente la rama `error` también llama `toastService.success()`. El mismo E2E midió un CTA de 42 px, por debajo del objetivo táctil de 44 px. Mantener no enumeración, copy honesto en formulario/CTA/API/aviso de que recuperación por correo aún no está disponible, validación local de email y error contextual recuperable sin duplicar toast; botón accesible ≥44 px. El endpoint se aislará en un módulo pequeño para aplicar el gate de cobertura por fichero sin cambiar los gates; no se implementa proveedor de correo sin credenciales/decisión de producto.

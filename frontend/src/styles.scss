@@ -891,6 +891,11 @@ app-recipes {
     width: 100%;
   }
 
+  .recipe-book-filter-form__field .form-input {
+    box-sizing: border-box;
+    min-height: 44px;
+  }
+
   .recipe-book-filter-form__actions {
     grid-column: 1 / -1;
     display: flex;
