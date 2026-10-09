@@ -73,8 +73,8 @@ describe('ShoppingListsComponent', () => {
       openStream: jasmine.createSpy('openStream').and.returnValue(jasmine.createSpy('closeStream')),
       createList: jasmine.createSpy('createList').and.resolveTo(list({ id: 'list-new' })),
       renameList: jasmine.createSpy('renameList').and.resolveTo(list()),
-      setStatus: jasmine.createSpy('setStatus').and.resolveTo(true),
-      deleteList: jasmine.createSpy('deleteList').and.resolveTo(true)
+      setStatus: jasmine.createSpy('setStatus').and.resolveTo({ ok: true }),
+      deleteList: jasmine.createSpy('deleteList').and.resolveTo({ success: true })
     };
     confirm = { confirm: jasmine.createSpy('confirm').and.resolveTo(true) };
     toast = {
@@ -142,6 +142,24 @@ describe('ShoppingListsComponent', () => {
     expect(component.page()).toBe(2);
     expect(component.size()).toBe(10);
     expect(component.filtersOpen()).toBeTrue();
+  });
+
+  it('removes the legacy tab parameter when switching back to active lists', async () => {
+    fixture.destroy();
+    window.history.replaceState({}, '', '/shopping?tab=hechas');
+    await createFixture();
+    router.navigate.calls.reset();
+
+    component.setStatus('active');
+
+    expect(router.navigate).toHaveBeenCalledWith(
+      [],
+      jasmine.objectContaining({
+        queryParams: jasmine.objectContaining({ status: null, tab: null }),
+        queryParamsHandling: 'merge',
+        replaceUrl: true
+      })
+    );
   });
 
   it('ignores invalid URL options and preserves only supported query values', async () => {
@@ -406,5 +424,22 @@ describe('ShoppingListsComponent', () => {
     await component.remove(active);
     expect(shopping.deleteList).toHaveBeenCalledWith(active.id);
     expect(toast.info).toHaveBeenCalledWith('ui.lista_borrada', 'ui.el_historial_de_precios');
+  });
+
+  it('does not announce a failed status change or deletion as successful', async () => {
+    const active = list();
+    const done = list({ status: 'done' });
+    shopping.setStatus.and.resolveTo(null);
+    await component.archive(done);
+    expect(toast.show).not.toHaveBeenCalled();
+
+    shopping.setStatus.and.resolveTo({ ok: false, code: 'ERROR' });
+    await component.archive(active);
+    expect(toast.show).not.toHaveBeenCalled();
+
+    shopping.deleteList.and.resolveTo(null);
+    confirm.confirm.and.resolveTo(true);
+    await component.remove(active);
+    expect(toast.info).not.toHaveBeenCalled();
   });
 });

@@ -1191,6 +1191,7 @@ export class ShoppingListsComponent {
 
   private writeUrl(): void {
     const params: Record<string, string | null> = {
+      tab: null,
       status: this.status() === 'active' ? null : this.status(),
       q: this.search() || null,
       store: this.store() || null,
@@ -1463,7 +1464,10 @@ export class ShoppingListsComponent {
   /** Terminar una lista si es deshacible: la barra de aviso manda, no el boton. */
   async archive(list: ShoppingList): Promise<void> {
     const wasDone = list.status === 'done';
-    await this.shopping.setStatus(list.id, wasDone ? 'active' : 'done');
+    const result = await this.shopping.setStatus(list.id, wasDone ? 'active' : 'done');
+    const succeeded =
+      result !== null && (wasDone || (typeof result === 'object' && 'ok' in result && result.ok));
+    if (!succeeded) return;
     this.toast.show({
       type: 'success',
       title: wasDone ? this.i18n.t('ui.lista_reabierta') : this.i18n.t('ui.lista_terminada'),
@@ -1489,7 +1493,8 @@ export class ShoppingListsComponent {
       variant: 'danger'
     });
     if (!accepted) return;
-    await this.shopping.deleteList(list.id);
+    const deleted = await this.shopping.deleteList(list.id);
+    if (!deleted) return;
     this.toast.info(this.i18n.t('ui.lista_borrada'), this.i18n.t('ui.el_historial_de_precios'));
   }
 

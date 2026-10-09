@@ -1,0 +1,206 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Locator, Page, TestInfo } from '@playwright/test';
+import { expect, test } from './fixtures';
+import { registerAndGoto } from './helpers/auth';
+import { shoppingNewListAction } from './helpers/shopping-ui';
+
+function trayRow(page: Page, name: string): Locator {
+  return page.locator('[data-test="list-row"]', { hasText: name });
+}
+
+async function createList(page: Page, name: string): Promise<string> {
+  await shoppingNewListAction(page).click();
+  await page.locator('[data-test="list-name"]').fill(name);
+  await page.locator('[data-test="create-submit"]').click();
+  await expect(page).toHaveURL(/\/shopping\/[\w-]+$/);
+  const listId = new URL(page.url()).pathname.split('/').filter(Boolean).pop();
+  if (!listId) throw new Error('La ruta no contiene el id de la lista creada');
+  await page.locator('[data-test="back"]').click();
+  await expect(trayRow(page, name)).toBeVisible();
+  return listId;
+}
+
+async function captureIfRequested(page: Page, testInfo: TestInfo, fileName: string): Promise<void> {
+  const root = process.env.E2E_SCREENSHOT_DIR;
+  if (!root) return;
+  const directory = join(root, testInfo.project.name);
+  mkdirSync(directory, { recursive: true });
+  await page.screenshot({
+    path: join(directory, fileName),
+    fullPage: true,
+    animations: 'disabled'
+  });
+}
+
+async function waitForPaint(page: Page): Promise<void> {
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())));
+}
+
+test.describe('Bandeja: ciclo de vida de una lista', () => {
+  test('terminar y reabrir desde el historial conserva el estado tras recargar', async ({
+    page
+  }, testInfo) => {
+    await registerAndGoto(page, '/shopping', 'tray-lifecycle-status');
+    const name = 'QA estado bandeja';
+    const listId = await createList(page, name);
+
+    await trayRow(page, name)
+      .getByRole('link', { name: `Abrir ${name}` })
+      .click();
+    await page.locator('[data-test="add-input"]').fill('1 Cafe');
+    await page.locator('[data-test="add-submit"]').click();
+    const item = page.locator('[data-test="item-row"]', {
+      has: page.locator('.detail__name', { hasText: 'Cafe' })
+    });
+    await expect(item).toBeVisible();
+    await item.locator('.detail__more').click();
+    await page.locator('[data-test="price-input"]').fill('3,20');
+    await page.locator('[data-test="price-input"]').blur();
+    await page.locator('[data-test="edit-sheet"]').getByRole('button', { name: /Hecho/i }).click();
+    await item.locator('[data-test="check"]').click();
+    await page.locator('[data-test="back"]').click();
+    await expect(trayRow(page, name)).toBeVisible();
+    const finish = trayRow(page, name).locator(`[data-test="row-done-${listId}"] button`);
+    await expect(finish).toHaveAccessibleName(/Terminar/i);
+    await finish.click();
+    await expect(
+      page.locator('.toast__title').filter({ hasText: 'Lista terminada' })
+    ).toBeVisible();
+    await expect(trayRow(page, name)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Terminadas' }).click();
+    await expect(page).toHaveURL(/status=done/);
+
+    const doneRow = trayRow(page, name);
+    const reopen = doneRow.locator(`[data-test="row-done-${listId}"] button`);
+    await expect(reopen).toHaveAccessibleName(/Reabrir/i);
+
+    let reopenFailures = 0;
+    const listUrl = `**/api/shopping/lists/${listId}`;
+    await page.route(listUrl, async (route) => {
+      if (route.request().method() === 'PATCH' && reopenFailures === 0) {
+        reopenFailures += 1;
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'synthetic unavailable' })
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    const failedReopen = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        new URL(response.url()).pathname === `/api/shopping/lists/${listId}` &&
+        response.status() === 503
+    );
+    await reopen.click();
+    await failedReopen;
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Servicio no disponible' })
+    ).toBeVisible();
+    await expect.poll(() => reopenFailures).toBe(1);
+    await expect(doneRow).toBeVisible();
+    await waitForPaint(page);
+    await expect(page.locator('.toast__title').filter({ hasText: 'Lista reabierta' })).toHaveCount(
+      0
+    );
+
+    await page.unroute(listUrl);
+    await reopen.click();
+    await expect(page.locator('[data-test="list-row"]')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Activas' }).click();
+    await expect(trayRow(page, name)).toBeVisible();
+    await page.reload();
+    await expect(trayRow(page, name)).toBeVisible();
+    await captureIfRequested(page, testInfo, 'shopping-list-reopened.png');
+  });
+
+  test('Cancelar conserva; borrar fallido no da éxito y permite reintentar', async ({
+    page
+  }, testInfo) => {
+    const nativeDialogs: string[] = [];
+    page.on('dialog', async (dialog) => {
+      nativeDialogs.push(dialog.type());
+      await dialog.dismiss();
+    });
+    await registerAndGoto(page, '/shopping', 'tray-lifecycle-delete');
+    const otherName = 'QA otra lista';
+    const targetName = 'QA borrar bandeja';
+    await createList(page, otherName);
+    const listId = await createList(page, targetName);
+    const target = trayRow(page, targetName);
+    await target.getByRole('link', { name: `Abrir ${targetName}` }).click();
+    await page.locator('[data-test="add-input"]').fill('1 Cacao');
+    await page.locator('[data-test="add-submit"]').click();
+    const targetItem = page.locator('[data-test="item-row"]', {
+      has: page.locator('.detail__name', { hasText: 'Cacao' })
+    });
+    await expect(targetItem).toBeVisible();
+    await page.locator('[data-test="back"]').click();
+    await expect(target).toBeVisible();
+
+    const deleteButton = target.getByRole('button', { name: 'Borrar lista' });
+    const dialog = page.getByRole('dialog', { name: '¿Borrar esta lista?' });
+
+    await deleteButton.click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(targetName);
+    await captureIfRequested(page, testInfo, 'shopping-list-delete-confirmation.png');
+    await dialog.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(target).toBeVisible();
+    await target.getByRole('link', { name: `Abrir ${targetName}` }).click();
+    await expect(targetItem).toBeVisible();
+    await page.locator('[data-test="back"]').click();
+    await expect(target).toBeVisible();
+
+    let deleteFailures = 0;
+    const listUrl = `**/api/shopping/lists/${listId}`;
+    await page.route(listUrl, async (route) => {
+      if (route.request().method() === 'DELETE' && deleteFailures === 0) {
+        deleteFailures += 1;
+        await route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'synthetic unavailable' })
+        });
+        return;
+      }
+      await route.continue();
+    });
+
+    const failedDelete = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'DELETE' &&
+        new URL(response.url()).pathname === `/api/shopping/lists/${listId}` &&
+        response.status() === 503
+    );
+    await deleteButton.click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Borrar' }).click();
+    await failedDelete;
+    await expect(
+      page.getByRole('alert').filter({ hasText: 'Servicio no disponible' })
+    ).toBeVisible();
+    await expect.poll(() => deleteFailures).toBe(1);
+    await expect(target).toBeVisible();
+    await waitForPaint(page);
+    await captureIfRequested(page, testInfo, 'shopping-list-delete-after-failure.png');
+    await expect(page.locator('.toast__title').filter({ hasText: 'Lista borrada' })).toHaveCount(0);
+
+    await page.unroute(listUrl);
+    await deleteButton.click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Borrar' }).click();
+    await expect(target).toHaveCount(0);
+    await expect(trayRow(page, otherName)).toBeVisible();
+    await page.reload();
+    await expect(trayRow(page, targetName)).toHaveCount(0);
+    await expect(trayRow(page, otherName)).toBeVisible();
+    expect(nativeDialogs).toEqual([]);
+    await captureIfRequested(page, testInfo, 'shopping-list-delete-completed.png');
+  });
+});

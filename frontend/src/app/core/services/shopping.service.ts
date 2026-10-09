@@ -436,7 +436,7 @@ export class ShoppingService {
    * Volver atras (el Deshacer de la barra) es un PATCH de estado: reabrir no necesita
    * endpoint propio, el estado es una columna mas.
    */
-  setStatus(id: string, status: ShoppingListStatus): Promise<unknown> {
+  setStatus(id: string, status: ShoppingListStatus): Promise<ShoppingList | CompleteResult | null> {
     if (status === 'done') {
       return this.complete(id).then((result) => {
         if (!result.ok && result.code === 'PRICES_MISSING') {
@@ -458,11 +458,11 @@ export class ShoppingService {
             this.i18n.t('ui.el_precio_se_guarda')
           );
         }
-        return null;
+        return result;
       });
     }
     return this.renameList(id, { status }).then((list) => {
-      this.loadLists();
+      if (list) this.reloadLists();
       return list;
     });
   }
@@ -655,17 +655,22 @@ export class ShoppingService {
   updateItem(listId: string, item: ShoppingListItem, patch: Partial<CreateItemInput>): void {
     const householdId = this.household.activeHouseholdId();
     this.replaceItem({ ...item, ...this.fromPatch(patch, item) } as ShoppingListItem);
-    this.enqueue(`item:${item.id}:patch`, () =>
-      this.http
-        .patch<{ data: ShoppingListItem }>(`${this.apiUrl}/lists/${listId}/items/${item.id}`, patch)
-        .pipe(
-          map((response) => response.data),
-          tap((next) => {
-            if (this.household.activeHouseholdId() !== householdId) return;
-            this.replaceItem(next);
-            void this.loadEstimate(listId);
-          })
-        ),
+    this.enqueue(
+      `item:${item.id}:patch`,
+      () =>
+        this.http
+          .patch<{ data: ShoppingListItem }>(
+            `${this.apiUrl}/lists/${listId}/items/${item.id}`,
+            patch
+          )
+          .pipe(
+            map((response) => response.data),
+            tap((next) => {
+              if (this.household.activeHouseholdId() !== householdId) return;
+              this.replaceItem(next);
+              void this.loadEstimate(listId);
+            })
+          ),
       householdId
     );
   }
@@ -708,20 +713,22 @@ export class ShoppingService {
     const householdId = this.household.activeHouseholdId();
     const checked = item.checked ? 0 : 1;
     this.replaceItem({ ...item, checked });
-    this.enqueue(`item:${item.id}:checked`, () =>
-      this.http
-        // `checked` viaja como booleano: la API pinta la columna 0/1 (SQLite) y
-        // reenviar el entero leido es la tentacion obvia — el contrato lo acepta
-        // desde esta ronda, pero el booleano es el que no se puede leer al reves.
-        .patch<{ data: ShoppingListItem }>(`${this.apiUrl}/lists/${listId}/items/${item.id}`, {
-          checked: checked === 1
-        })
-        .pipe(
-          map((response) => response.data),
-          tap((next) => {
-            if (this.household.activeHouseholdId() === householdId) this.replaceItem(next);
+    this.enqueue(
+      `item:${item.id}:checked`,
+      () =>
+        this.http
+          // `checked` viaja como booleano: la API pinta la columna 0/1 (SQLite) y
+          // reenviar el entero leido es la tentacion obvia — el contrato lo acepta
+          // desde esta ronda, pero el booleano es el que no se puede leer al reves.
+          .patch<{ data: ShoppingListItem }>(`${this.apiUrl}/lists/${listId}/items/${item.id}`, {
+            checked: checked === 1
           })
-        ),
+          .pipe(
+            map((response) => response.data),
+            tap((next) => {
+              if (this.household.activeHouseholdId() === householdId) this.replaceItem(next);
+            })
+          ),
       householdId
     );
   }
@@ -730,19 +737,21 @@ export class ShoppingService {
     const householdId = this.household.activeHouseholdId();
     const quantity = item.quantity + 1;
     this.replaceItem({ ...item, quantity });
-    this.enqueue(`item:${item.id}:qty`, () =>
-      this.http
-        .patch<{ data: ShoppingListItem }>(`${this.apiUrl}/lists/${listId}/items/${item.id}`, {
-          quantity
-        })
-        .pipe(
-          map((response) => response.data),
-          tap((next) => {
-            if (this.household.activeHouseholdId() !== householdId) return;
-            this.replaceItem(next);
-            void this.loadEstimate(listId);
+    this.enqueue(
+      `item:${item.id}:qty`,
+      () =>
+        this.http
+          .patch<{ data: ShoppingListItem }>(`${this.apiUrl}/lists/${listId}/items/${item.id}`, {
+            quantity
           })
-        ),
+          .pipe(
+            map((response) => response.data),
+            tap((next) => {
+              if (this.household.activeHouseholdId() !== householdId) return;
+              this.replaceItem(next);
+              void this.loadEstimate(listId);
+            })
+          ),
       householdId
     );
   }

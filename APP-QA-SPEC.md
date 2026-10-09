@@ -2465,23 +2465,44 @@ una compra desde el detalle y visita el historial, pero no se encontró E2E para
 de la bandeja. Esta unidad cubre solo esos caminos reales y deja intacta la casilla general, pendiente de
 auditar filtros completos y sugerencias.
 
-**Contrato de aceptación:** con listas sintéticas en SQLite aislada, terminar desde la fila mueve la lista
-de activas a `?tab=hechas`; reabrir desde historial la devuelve a activas y persiste tras recarga. En borrar,
-Cancelar conserva la lista y sus líneas; confirmar elimina únicamente esa lista y ambas vistas la mantienen
-ausente después de recargar. Las acciones tienen nombre accesible y el borrado usa diálogo accesible propio,
-sin diálogo nativo. Si el servidor responde con error, no se muestra éxito falso, la fila conserva el estado
-real y se puede reintentar.
+**Contrato de aceptación:** con listas sintéticas en SQLite aislada, terminar desde la fila quita la lista de
+activas; al mostrar Terminadas aparece en el historial. Reabrir desde la fila la devuelve a activas y persiste
+tras recarga. Al volver a activas se elimina también el alias antiguo `tab`, para que `?tab=hechas` no revierta
+la selección tras recargar. En borrar, Cancelar conserva la lista y sus líneas; confirmar elimina únicamente
+esa lista y ambas vistas la mantienen ausente después de recargar. Las acciones tienen nombre accesible y el
+borrado usa diálogo accesible propio, sin diálogo nativo. Si el servidor responde con error, no se muestra éxito
+falso, la fila conserva el estado real y se puede reintentar.
+
+**Hallazgos TDD:** antes del fix, `setStatus()` descartaba el resultado de completar y recargaba listas con
+filtros por defecto incluso cuando fallaba el PATCH de reapertura; `archive()`/`remove()` anunciaban éxito
+incondicionalmente. Además, `writeUrl()` fusionaba parámetros y dejaba `tab=hechas` obsoleto al elegir
+«Activas», por lo que la recarga regresaba al historial. Las regresiones unitarias reprodujeron los tres
+comportamientos; la E2E confirmó el estado final incorrecto tras recargar.
 
 - [x] Revalidar §8e, template/métodos actuales y la brecha entre las pruebas unitarias y E2E de ruta.
-- [ ] Añadir primero regresión unitaria roja para la respuesta de fallo de completar/reabrir/borrar; distinguir
-      éxito y error del servicio para que la bandeja solo notifique éxito confirmado.
-- [ ] Añadir E2E aislada de `/shopping` para terminar/reabrir, Cancelar/borrar y persistencia; validar diálogo/
+- [x] Añadir primero regresión unitaria roja para los fallos de completar/reabrir/borrar y la pérdida del
+      filtro/historial; devolver el resultado real, conservar el query y anunciar éxito solo tras confirmación.
+- [x] Añadir E2E aislada de `/shopping` para terminar/reabrir, Cancelar/borrar y persistencia; validar diálogo/
       nombres accesibles, ausencia de `window.confirm`, fallo HTTP sin éxito falso y reintento recuperable.
-- [ ] Ejecutar Chromium desktop y Pixel 5 con rate limit activo, SQLite/puertos/semilla temporales y cleanup;
-      confirmar typecheck/formato, capturas sintéticas PC/móvil y ≥70 % statements/branches/functions/lines
-      por archivo afectado, sin rebajar el gate global.
-- [ ] Registrar comandos/resultados y limitaciones; rollback limitado al servicio, componente, pruebas y esta
-      unidad; ejecutar hooks completos, push y CI verde.
+- [x] Ejecutar Chromium desktop y Pixel 5 con rate limit activo, SQLite/puertos/semilla temporales y cleanup.
+      Playwright real pasó **4/4**; se guardaron e inspeccionaron capturas sintéticas en
+      `%TEMP%\hogaria-shop-tray-lifecycle-final-20261009\{chromium,mobile-chrome}`. La suite frontend pasó
+      **1.278/1.278** con **92,17/83,45/90,92/93,59 % S/B/F/L** global. Por archivo: `shopping.service.ts`
+      **97,24/87,92/100/99,46 %** y `shopping-lists.component.ts` **95,52/87,42/91,80/97,18 %**. Pasan
+      `pnpm run typecheck:e2e`, `pnpm run check:ui` (212 ficheros/21 reglas), Prettier focal,
+      `pnpm run build` y `git diff --check`; el build mantiene avisos preexistentes de budgets y componentes
+      no pertenecientes a esta unidad.
+- [ ] Registrar commit/rollback, ejecutar hooks completos, publicar en la rama y confirmar CI verde para el
+      SHA resultante. Rollback focal: servicio, componente, sus regresiones/E2E y esta unidad; no retirar
+      otros flujos de Compra ni cambios de tickets/IA.
+
+**Limitación:** no se ejecutaron ni reenviaron tickets reales ni se llamó a proveedor de IA. Las pruebas usan
+solo datos sintéticos y almacenamiento/puertos aislados; el smoke real pendiente de WebAPI queda pospuesto
+hasta el final y requiere volver a preguntarlo al usuario.
+
+`pnpm run lint:client` completó `check:ui` pero `ng lint` no pudo arrancar: el builder
+`@angular-eslint/builder:lint` referenciado en `frontend/angular.json` no está declarado en
+`frontend/package.json` ni disponible localmente. No se añadió una dependencia fuera de alcance.
 
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.

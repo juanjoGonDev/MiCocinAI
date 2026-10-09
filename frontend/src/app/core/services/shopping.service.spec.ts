@@ -214,6 +214,39 @@ describe('ShoppingService', () => {
       shorthand.flush({ data: [] });
     });
 
+    it('keeps the history query when reopening succeeds and avoids refreshing after a failed reopen', async () => {
+      const historyQuery = { status: 'done' as const, q: 'ticket', limit: 10 };
+      service.loadLists(historyQuery);
+      http
+        .expectOne((req) => req.url === `${API}/lists`)
+        .flush({ data: [makeList({ status: 'done' })] });
+
+      const reopen = service.setStatus(LIST_ID, 'active');
+      http.expectOne(`${API}/lists/${LIST_ID}`).flush({ data: makeList({ status: 'active' }) });
+      await reopen;
+
+      const refreshedHistory = http.expectOne((req) => req.url === `${API}/lists`);
+      expect(refreshedHistory.request.params.get('status')).toBe('done');
+      expect(refreshedHistory.request.params.get('q')).toBe('ticket');
+      refreshedHistory.flush({ data: [makeList({ status: 'done' })] });
+
+      const failedReopen = service.setStatus(LIST_ID, 'active');
+      http
+        .expectOne(`${API}/lists/${LIST_ID}`)
+        .flush(
+          { message: 'synthetic unavailable' },
+          { status: 503, statusText: 'Service Unavailable' }
+        );
+      await expectAsync(failedReopen).toBeResolvedTo(null);
+      http.expectNone((req) => req.url === `${API}/lists`);
+
+      service.reloadLists();
+      const retryHistory = http.expectOne((req) => req.url === `${API}/lists`);
+      expect(retryHistory.request.params.get('status')).toBe('done');
+      expect(retryHistory.request.params.get('q')).toBe('ticket');
+      retryHistory.flush({ data: [makeList({ status: 'done' })] });
+    });
+
     it('omits nonpositive minimum totals, preserves old metadata when absent, and clears loading on error', () => {
       service.listsMeta.set({ total: 7, limit: 5, offset: 2 });
       service.loadLists({ minTotalMinor: 0, limit: 5, offset: 2 });
@@ -522,7 +555,24 @@ describe('ShoppingService', () => {
         .flush({ data: { ...makeList({ status: 'done' }), items: [] } });
       http.expectOne((req) => req.url === `${API}/lists`).flush({ data: [] });
       http.expectOne(`${API}/lists/${LIST_ID}/estimate`).flush({ data: makeEstimate() });
-      await expectAsync(complete).toBeResolvedTo(null);
+      await expectAsync(complete).toBeResolvedTo({
+        ok: true,
+        pricesRecorded: 1,
+        items: 1,
+        paidMinor: 125,
+        store: null,
+        pantryMoved: 0,
+        pantryMerged: 0
+      });
+
+      const failedComplete = service.setStatus(LIST_ID, 'done');
+      http
+        .expectOne(`${API}/lists/${LIST_ID}/complete`)
+        .flush(
+          { message: 'synthetic unavailable' },
+          { status: 503, statusText: 'Service Unavailable' }
+        );
+      await expectAsync(failedComplete).toBeResolvedTo({ ok: false, code: 'ERROR' });
     });
 
     it('maps complete business failures without global toasts and marks its request silent', async () => {
