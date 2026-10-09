@@ -2517,11 +2517,17 @@ su lista y reflejar `store` en la URL. Tras recargar, deben conservarse el selec
 filtro debe restaurar ambas listas. No se cambia backend ni se contacta a proveedores externos.
 
 - [x] Revalidar template, `storeOptions`/`setStore`/`readUrl`, E2E actuales de la bandeja y brecha concreta.
-- [ ] Añadir primero E2E aislada de `/shopping` que cree las dos listas, filtre por tienda, compruebe el enlace,
+- [x] Añadir primero E2E aislada de `/shopping` que cree las dos listas, filtre por tienda, compruebe el enlace,
       recargue y quite el filtro.
-- [ ] Ejecutar Chromium desktop y Pixel 5 con rate limit activo, SQLite/puertos/semilla temporales y cleanup;
-      guardar e inspeccionar capturas sintéticas PC/móvil del filtro aplicado, confirmar accesibilidad y ausencia
-      de overflow. Si no hay cambio de producción, cobertura de código: N/A.
+- [x] Ejecutar Chromium desktop y Pixel 5 con rate limit activo, SQLite/puertos/semilla temporales y cleanup;
+      guardar e inspeccionar capturas sintéticas PC/móvil del filtro aplicado, confirmar nombres/roles accesibles
+      del selector/opciones y botón para quitar filtros, y ausencia de overflow horizontal. Si no hay cambio de
+      producción, cobertura de código: N/A. E2E real aislada: **2/2** (Chromium + Pixel 5); URL `?store=Ahorro`,
+      resultado exclusivo, recuperación después de recarga y limpieza recuperando las dos listas. El test comprueba
+      `scrollWidth <= clientWidth` en ambos proyectos. Capturas inspeccionadas en
+      `%TEMP%\hogaria-shop-tray-store-filter-final-20261009\{chromium,mobile-chrome}\shopping-tray-store-filter.png`.
+      Pasan `pnpm run typecheck:e2e`, `pnpm exec prettier --check tests/e2e/shopping-tray-store-filter.spec.ts`
+      y `git diff --check`.
 - [ ] Registrar comandos/resultados y rollback (solo la regresión E2E y esta subunidad si producción no cambia);
       ejecutar hooks completos, push y CI verde.
 
