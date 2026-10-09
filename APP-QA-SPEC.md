@@ -2850,6 +2850,30 @@ recomprobación no hizo POST ni abrió tickets: **0 archivos reenviados, 0 nueva
 escrituras reales**. Se mantiene sin ejecutar el smoke live; los PDF cuyo fallback anterior devolvió
 200 siguen excluidos por posible finalización.
 
+**Preflight tras las correcciones anunciadas (2026-10-09, 10:41–10:44 Europe/Madrid):** la rama
+`fix/live-ticket-inventory-attachments` contiene `e679f44d` (recuperación/limpieza), `67b0de74`
+(detección de tarjetas mixtas) y `246291eb` (forzar la subida del snapshot JSON). Su spec documenta
+una prueba live sintética con PID `47764`, SHA de `opencode-executor.ts`
+`138A09D6272AD7385A115D5E16993FD9A59234A888D6C1FB7BBEDA850BBC5F38`, dos adjuntos subidos,
+`inlineContextCount=0`, readiness `2/2` y ambos marcadores recibidos bajo JSON Schema estricto.
+El PID `7100` del listener actual arrancó el 09-10 a las 10:09:43, cuando el reflog sitúa el checkout
+en `b55f9589` de esa rama; el checkout cambió a `feat/session-attachment-previews` a las 10:18:46.
+WebAPI no expone una atestación del SHA cargado, así que el vínculo del PID con el código es temporal,
+no criptográfico.
+
+La lectura allowlist de `GET /admin/api/logs?lines=2000` devolvió 550 líneas, sin truncar. En ese
+proceso hay dos flujos con `attachmentCount=2`, un snapshot de inventario, readiness correcta
+(`expectedCount=2`, `visibleCount=2`), `upload_completed` y `prompt_submitted`; hay dos limpiezas
+completadas y cero `cleanup_failed`. Por tanto, la subida/limpieza que antes acababa en 504 ya no es
+el bloqueo observado. Sin embargo, uno de esos flujos terminó en `wait_for_reply`/`turn_failed` a los
+120 s y el tail no contiene `response_completed`. Los logs no incluyen nombres ni permiten asignar
+esas solicitudes a un grupo de ticket; dado que ambas llegaron a `prompt_submitted` y podrían haberse
+completado, no se reenvía ninguna ni se abren otros tickets en esta comprobación. Solo se hicieron
+lecturas locales y GET de readiness/logs: **0 archivos abiertos/subidos, 0 nuevas completions y 0
+escrituras** en esta pasada. La validación de respuesta, schema y deduplicación sigue pendiente; no
+marcar la unidad como completa hasta resolver/atestiguar la respuesta final y distinguir entradas no
+enviadas sin riesgo de duplicado.
+
 **Rollback del registro:** revertir solo este bloque diagnóstico/preparación y la actualización de
 checklist; no alterar el transporte probado ni los datos reales.
 
