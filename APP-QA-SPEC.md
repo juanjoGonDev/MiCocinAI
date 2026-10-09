@@ -2747,6 +2747,16 @@ local del log, es HTTP 504 con cleanup `page_closed`; el tail termina a las 02:0
 subida y no hay evidencia de que el proveedor recibiera el prompt. No se volvió a invocar la IA ni se
 reenvió ticket alguno. Este preflight no constituye otro smoke y la unidad permanece abierta.
 
+**Reintento de preflight (2026-10-09; sin enviar tickets):** WebAPI sigue limpio en el mismo HEAD
+`7c1e52e9`; el listener existente continúa en `ready=true`/`storage=ready`. Una nueva lectura de
+`GET /admin/api/logs?lines=2000` devolvió 405 líneas (sin truncar), con 18 `attachment_upload_failed`,
+16 menciones del código 504 y cero `prompt_submitted`/`response_completed`. El último error de subida
+sigue siendo el de las 01:00:17; el tail de esta lectura llega a las 02:26:24 por eventos locales de
+salud/logs, no por una nueva petición de IA. Como el fallo de subida sigue registrado y no hay evidencia
+de que el proveedor no recibiera los adjuntos, no se reenvió ningún PDF/JPEG ni se hizo otra llamada.
+La validación real permanece incompleta; no volver a intentarla hasta verificar una corrección efectiva
+de WebAPI/proveedor.
+
 El mismo 504 persiste en el límite de subida de WebAPI pese al fix y a la cobertura sintética. No
 reenviar tickets ni declarar esta validación completa hasta que WebAPI/provider resuelva este fallo.
 El usuario concedió autorización permanente para la IA, así que no hace falta pedir consentimiento
