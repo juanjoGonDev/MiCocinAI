@@ -364,7 +364,31 @@ test('Planificar IA comparte la geometría del botón primario de Recetas', asyn
     process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-calendar-cta-parity';
   mkdirSync(screenshotDirectory, { recursive: true });
   const mobile = test.info().project.name === 'mobile-chrome';
-  await page.setViewportSize(mobile ? { width: 393, height: 851 } : { width: 1440, height: 900 });
+  const screenshotViewport = mobile ? { width: 393, height: 851 } : { width: 1440, height: 900 };
+  await page.setViewportSize(screenshotViewport);
+  const sidebar = page.locator('.sidebar');
+  await expect
+    .poll(async () => {
+      const box = await sidebar.boundingBox();
+      if (!box) return Number.POSITIVE_INFINITY;
+      return mobile ? box.x + box.width : Math.abs(box.x);
+    })
+    .toBeLessThanOrEqual(1);
+  await expect(page.locator('.sidebar-overlay')).toHaveCount(0);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      )
+  );
+  const screenshotLayout = await page.evaluate(() => ({
+    scrollX: window.scrollX,
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth
+  }));
+  expect(screenshotLayout.scrollX).toBe(0);
+  expect(screenshotLayout.scrollWidth).toBeLessThanOrEqual(screenshotLayout.clientWidth + 1);
   await page.screenshot({
     path: join(screenshotDirectory, `calendar-cta-${mobile ? 'mobile' : 'desktop'}.png`)
   });

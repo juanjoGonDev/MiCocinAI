@@ -3752,12 +3752,23 @@ según el viewport (oculto en móvil y fijo en escritorio), la estabilización d
 no usar un `waitForTimeout` fijo. La captura debe mostrar el contenido entero, sin overlay accidental ni
 recorte transitorio. No cambiar producción.
 
-- [ ] Añadir una aserción E2E que espere mediante polling geométrico el estado final del sidebar tras el
+- [x] Añadir una aserción E2E que espere mediante polling geométrico el estado final del sidebar tras el
       resize y que compruebe ausencia de overflow horizontal antes de la captura.
-- [ ] Repetir el test en Chromium y Pixel 5; guardar e inspeccionar capturas sintéticas comparables de
+- [x] Repetir el test en Chromium y Pixel 5; guardar e inspeccionar capturas sintéticas comparables de
       `/calendar` a 1440×900 y 393×851 para confirmar que no hay transición ni recorte.
 - [ ] Ejecutar typecheck, formato, `git diff --check` y hooks de commit/push sin bypass; actualizar la
       evidencia al pasar todas las casillas y no tocar estilos de producción.
+
+**Evidencia focal (2026-10-09):** `tests/e2e/ui-geometry-consistency.spec.ts` espera el rectángulo
+final del sidebar con `expect.poll`, comprueba ausencia de overlay/overflow y posiciona la ventana en
+`scrollX=0` antes de capturar; no usa esperas fijas ni cambia producción. `pnpm run typecheck:e2e` pasó;
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+--forbid-only tests/e2e/ui-geometry-consistency.spec.ts` pasó **4/4** con `E2E_RATE_LIMIT=on`, DB,
+puertos y artefactos temporales propios. Capturas guardadas en
+`%TEMP%\hogaria-geometry-capture-fix-20261009-024905\calendar-cta-{desktop,mobile}.png` e
+inspeccionadas: ambas muestran calendario y CTA completos, sin sidebar/overlay intermedio ni recorte.
+Prettier focal y `git diff --check` pasan. Los hooks de commit/push quedan pendientes y, por eso, esta
+subunidad aún no se marca cerrada.
 
 **Rollback:** retirar únicamente la sincronización/aserciones de captura y este subapartado; conservar
 los tests y correcciones geométricas de producto ya validadas.
