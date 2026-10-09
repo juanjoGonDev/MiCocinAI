@@ -2562,6 +2562,32 @@ duplicados. No se invoca IA/proveedor ni se escribe en la base de datos habitual
 - [ ] Registrar resultado, comandos y rollback (solo la regresión E2E y esta unidad); ejecutar hooks completos,
       push y CI verde.
 
+#### QA-SHOPPING.TRAY-RENAME.1 · renombrado accesible y sin avisos duplicados
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md` §8f requiere confirmar con Enter, cancelar con Escape,
+confirmar en blur solo si el nombre cambió y revertir/avisar en fallo. `shopping-lists.component.ts` implementa
+esas transiciones, pero el input no declara nombre accesible. La prueba E2E de `shopping-round6.spec.ts` cubre
+Escape, no éxito/blur/conflicto. La prueba de componente cubre el retorno `null`, aunque el mock no emite los
+avisos que `ShoppingService.request()` ya emite: un fallo puede terminar notificado por servicio y componente.
+El PATCH real conserva compare-and-swap por versión y `shopping.routes.spec.ts` ya verifica el HTTP 409.
+
+**Contrato:** el campo editor anuncia «Renombrar la lista». En conflicto, el título previo sigue visible y se
+presenta un único aviso claro (sin falso éxito ni segundo toast); después se puede reintentar. Un renombre
+dirty confirmado al sacar el foco queda persistido tras recargar. Escape conserva el nombre y no escribe. El
+conflicto E2E se inyecta solo para ese PATCH; el éxito usa el servidor SQLite aislado. No hay proveedor externo.
+
+- [x] Revalidar §8f, template/servicio, comparación de versión de servidor y diferencia entre pruebas unitarias
+      y E2E; limitar el cambio a etiqueta accesible y propiedad del aviso de error.
+- [ ] Añadir primero E2E roja para el nombre accesible, conflicto sin duplicado, reversión visible, reintento por
+      blur y persistencia; registrar el baseline de UI sintético.
+- [ ] Aplicar el cambio mínimo y ajustar regresión unitaria: solo el servicio presenta error/conflicto; mantener
+      escape, Enter, blur limpio/sin cambios y evitar PATCH cuando no cambia el texto.
+- [ ] Validar en Chromium escritorio y Pixel 5 con rate limit activo, base/puertos/semilla temporales y cleanup;
+      revisar teclado/foco, ancho sin overflow y capturas sintéticas antes/después. Si se modifica el componente,
+      ejecutar Karma global y registrar S/B/F/L del archivo; mantener umbral vigente.
+- [ ] Anotar comandos/resultado y rollback focal (E2E, etiqueta/aviso y prueba unitaria); ejecutar hooks completos,
+      commit atómico, push y confirmar CI verde.
+
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
 - [ ] `/receipts`: elegir/arrastrar archivo, validar formatos y borde de 10 MiB a través del ingress de producción, rechazar inválidos, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
