@@ -1463,6 +1463,33 @@ en Chromium; la tanda ampliada Chromium + Pixel 5 pasó todos los casos al corre
 documentado en QA-LAYOUT.RECIPE-DETAIL.1. Los fixtures siguieron siendo sintéticos y no se llamó a la IA
 real. El gate global se revalidó después con `pnpm run test:client`: **1164/1164**, **90.17/81.39/88.93/91.54 % S/B/F/L**; supera 80 % en las cuatro métricas. El workflow CI #461 pasó 9/9 y su fuente confirma que no ejecuta Karma, así que el gate frontend queda documentado como verificación local. La suite de cobertura no usó proveedor IA real. Este resultado cierra el único criterio pendiente de cobertura global de esta unidad; no implica que el barrido funcional completo esté cerrado.
 
+### QA-RECIPES.COOK-ACTION.1 · confirmar el registro de «Cocinar ahora»
+
+**Fuente revalidada antes de implementar (2026-10-09):** `POST /api/recipes/:id/cook` registra una
+cocción en el estado del usuario y la API incrementa el contador solo al completar la escritura. Sin
+embargo, `RecipeService.recordCooking()` oculta los errores y retorna `void`; `RecipesComponent` muestra
+éxito y cierra la ficha antes de saber si el POST terminó. No hay una E2E de navegador que compruebe el
+resultado del botón. `HOGARIA-SPEC.md` no define explícitamente el comportamiento ante ese error.
+
+**Decisión de prueba (inferencia explícita):** «Cocinar ahora» solo confirma éxito y vuelve al listado
+después de que el servidor registre la cocción. Mientras el POST está pendiente se impiden envíos
+duplicados; si falla, la ficha queda abierta, aparece un error traducido y el usuario puede reintentar.
+Un fallo no cambia el contador. Esta conducta evita declarar una acción persistente que el servidor no
+guardó; la inferencia se limita a este feedback y no modifica el contrato del endpoint.
+
+- [ ] Escribir primero una E2E roja con receta propia sintética en SQLite temporal: retener el primer
+      POST, impedir el doble envío, responder 503 y verificar que el detalle sigue abierto, no hay éxito
+      y el contador no cambia; reintentar contra el API aislado y comprobar exactamente un incremento.
+- [ ] Hacer observable el resultado de `recordCooking`; el componente solo muestra éxito/cierra al
+      confirmarse y muestra error recuperable en el fallo, liberando el bloqueo de envío en ambos casos.
+- [ ] Probar el servicio/componente con éxito, error, retry y repetición durante loading; mantener
+      cobertura focal ≥70 % en statements/branches/functions/lines sin bajar ningún gate existente.
+- [ ] Ejecutar Playwright real con Chromium y Pixel 5, DB/puertos/semilla aislados; revisar error de
+      página, persistencia tras volver/recargar, foco/estado disabled, ancho mínimo 320 y captura
+      sintética comparable de PC/móvil. No llamar al proveedor IA.
+- [ ] Registrar comando/resultados, límites y rollback por archivos; conservar abierta la casilla
+      general `/recipes` hasta cubrir las demás acciones del listado.
+
 ## QA-AUTH.FORGOT.1 · resultado honesto y no enumeración en recuperación (spec-first)
 
 **Fuente revalidada (2026-10-01):** `POST /api/auth/forgot-password` valida formato en API y responde 200 indistinguible para cuenta existente/inexistente, pero solo consulta la cuenta; no hay servicio/configuración de email ni generación de enlaces en el repo. La pantalla, su CTA y la respuesta API afirman falsamente que se envió un enlace. `ForgotPasswordComponent.onSubmit()` valida vacío pero no formato; el input es un `ControlValueAccessor` y el `ngSubmit` permite enviar `type=email` inválido. Playwright aislado reprodujo que `not-an-email` hace POST/400. La solicitud tampoco tiene contexto `SILENT_TOAST`, por lo que un error 5xx genera el toast global genérico además del mensaje local; actualmente la rama `error` también llama `toastService.success()`. El mismo E2E midió un CTA de 42 px, por debajo del objetivo táctil de 44 px. Mantener no enumeración, copy honesto en formulario/CTA/API/aviso de que recuperación por correo aún no está disponible, validación local de email y error contextual recuperable sin duplicar toast; botón accesible ≥44 px. El endpoint se aislará en un módulo pequeño para aplicar el gate de cobertura por fichero sin cambiar los gates; no se implementa proveedor de correo sin credenciales/decisión de producto.
