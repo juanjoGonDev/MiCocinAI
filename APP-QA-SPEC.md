@@ -685,6 +685,19 @@ La casilla agregada `/pantry` sigue abierta: falta validar la vista vacía real 
 
 **Evidencia de ingress (2026-10-08):** TDD reprodujo inicialmente 413 en `/api/receipts` al cruzar el límite global de 512 KiB. Se añadió un `location = /api/receipts` con `client_max_body_size 11m` y directivas de proxy comunes compartidas por include; el límite `http` de 512 KiB queda intacto. `pnpm run test:e2e:nginx -- --workers=1 --project=chromium --project=mobile-chrome tests/e2e/receipt-ingress.spec.ts` pasó **2/2**: Chromium y Pixel 5 enviaron una PNG 1×1 válida de exactamente 513 KiB por el Nginx del repo, recibió 201, y SQLite aislado confirmó `file_bytes=525312` y trabajo `NO_CONFIG`; la petición sobredimensionada a la ruta ajena fue 413. Se usaron usuario/archivo sintéticos, sin proveedor ni `page.route`; Compose limpió contenedores, imagen, red y datos tras el éxito. `pnpm run typecheck:e2e`, `pnpm --dir server exec vitest run tests/e2e-isolation.spec.ts` (**19/19**) y `git diff --check` pasan. El Dockerfile del stack de prueba compiló el backend con Node 22; no se inició el Compose persistente ni se accedió a DB de uso normal.
 
+### QA-REC.INGRESS.UPLOAD-BOUNDARY.1 · demostrar el límite de archivo real a través de Nginx
+
+**Contrato revalidado:** `HOGARIA-SPEC.md` §12aj y `server/src/routes/receipts.routes.ts` fijan un máximo de `10 * 1024 * 1024` bytes para el archivo. Nginx permite hasta 11 MiB al multipart de `/api/receipts`; la API, no el proxy, debe aceptar exactamente 10 MiB y rechazar 10 MiB + 1. La evidencia anterior de ingreso solo cubría 513 KiB.
+
+- [x] En Chromium, subir por Nginx una PNG sintética válida de exactamente 10 MiB; verificar HTTP 201 y bytes persistidos exactos, sin IA real.
+- [x] Subir por la misma ruta una PNG de 10 MiB + 1 byte; verificar 413 `FILE_TOO_LARGE` y que no aparezca una fila nueva.
+- [x] Ejecutar ambos bordes en Chromium y Pixel 5 emulado con el stack Nginx/backend/SQLite temporal, sin `page.route`; comprobar typecheck, reglas UI, formato y diff.
+- [ ] Commit atómico con hooks íntegros, push y CI verde para el SHA publicado; mantener PR #41 abierto y no mergearlo.
+
+**Evidencia local (2026-10-09):** el primer intento del caso nuevo falló por una precondición del test (el navegador aún no había navegado y `fetch('/api/receipts')` no tenía origen); se añadió navegación a `/api/health`, sin cambio de producción. El caso pasó **1/1** aislado y luego el archivo completo pasó **4/4** en Chromium y Pixel 5 con `pnpm run test:e2e:nginx -- --workers=1 --project=chromium --project=mobile-chrome tests/e2e/receipt-ingress.spec.ts --reporter=line`. SQLite aislado confirma para el borde válido `file_bytes=10485760` y trabajo `NO_CONFIG`; para 10485761 bytes se recibe 413 `FILE_TOO_LARGE` y el conteo de tickets de la cuenta no aumenta. El runner creó y quitó su proyecto Compose, imagen, red, DB y archivos temporales; no hubo `page.route`, proveedor externo, ni uso de la DB/servicios normales. El Dockerfile compila el backend con Node 22.
+
+**Rollback:** retirar el test de borde `receipt-ingress.spec.ts` y esta subunidad; no cambiar el máximo API de 10 MiB ni la excepción Nginx de 11 MiB.
+
 ## Unidad QA-REC.FAV.1 · quitar favoritos desde la pestaña filtrada (resuelta)
 
 **Fuente de verdad revalidada (2026-10-01):** la ruta activa de `/recipes` etiqueta el filtro como «Favoritas»; `RecipesComponent.setFilter('favorites')` pide `RecipeService.loadRecipes({ isFavorite: true })` y `GET /api/recipes` aplica `is_favorite = 1`. El endpoint `POST /api/recipes/:id/favorite` confirma el valor nuevo. Sin embargo, `RecipeService.toggleFavorite()` solo cambia `isFavorite` en el array cargado; la receta desfavoritada sigue pintándose mientras `activeFilter` continúa en «Favoritas». Los E2E actuales verifican el toggle o la selección del filtro por separado, pero no la consistencia de pertenencia ni su persistencia tras recargar.

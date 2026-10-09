@@ -1,12 +1,13 @@
 import Database from 'better-sqlite3';
 import { join, resolve } from 'node:path';
 import { deflateSync } from 'node:zlib';
-import { expect, test } from './fixtures';
+import { expect, test, type Page } from './fixtures';
 import { seededEmail } from './helpers/seed';
 
 test.skip(process.env.E2E_NGINX_INGRESS !== '1', 'requiere el runner aislado con Nginx real');
 
 const TICKET_BYTES = 513 * 1024;
+const MAX_TICKET_BYTES = 10 * 1024 * 1024;
 
 function crc32(bytes: Buffer): number {
   let crc = 0xffffffff;
@@ -29,7 +30,7 @@ function pngChunk(type: string, data: Buffer): Buffer {
   return chunk;
 }
 
-function pngSynthetic(): Buffer {
+function pngSynthetic(targetBytes = TICKET_BYTES): Buffer {
   const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   const header = Buffer.alloc(13);
   header.writeUInt32BE(1, 0);
@@ -42,7 +43,7 @@ function pngSynthetic(): Buffer {
   const afterText = [pngChunk('IEND', Buffer.alloc(0))];
   const keyword = Buffer.from('Comment\0', 'latin1');
   const textPaddingBytes =
-    TICKET_BYTES -
+    targetBytes -
     signature.byteLength -
     [...beforeText, ...afterText].reduce((total, chunk) => total + chunk.byteLength, 0) -
     12 -
@@ -50,8 +51,34 @@ function pngSynthetic(): Buffer {
   if (textPaddingBytes < 0) throw new Error('PNG fixture no cabe en el límite solicitado.');
   const text = pngChunk('tEXt', Buffer.concat([keyword, Buffer.alloc(textPaddingBytes, 0x20)]));
   const png = Buffer.concat([signature, ...beforeText, text, ...afterText]);
-  if (png.byteLength !== TICKET_BYTES) throw new Error('La PNG fixture no tiene el tamaño exacto.');
+  if (png.byteLength !== targetBytes) throw new Error('La PNG fixture no tiene el tamaño exacto.');
   return png;
+}
+
+async function uploadPng(page: Page, token: string, bytes: Buffer, fileName: string) {
+  return page.evaluate(
+    async ({ token, encodedPng, fileName }) => {
+      const rawBytes = atob(encodedPng);
+      const fileBytes = Uint8Array.from(rawBytes, (character) => character.charCodeAt(0));
+      const file = new File([fileBytes], fileName, { type: 'image/png' });
+      const form = new FormData();
+      form.append('file', file);
+      const response = await fetch('/api/receipts', {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}` },
+        body: form
+      });
+      return {
+        status: response.status,
+        body: (await response.json().catch(() => null)) as {
+          success?: boolean;
+          error?: string;
+          data?: { id?: string };
+        } | null
+      };
+    },
+    { token, encodedPng: bytes.toString('base64'), fileName }
+  );
 }
 
 function ticketState(receiptId: string): {
@@ -79,6 +106,26 @@ function ticketState(receiptId: string): {
       .get(receiptId) as { status: string; errorCode: string | null } | undefined;
     if (!receipt || !job) throw new Error('La subida aún no creó el ticket y su trabajo de IA.');
     return { bytes: receipt.bytes, status: job.status, errorCode: job.errorCode };
+  } finally {
+    db.close();
+  }
+}
+
+function receiptCount(userId: string): number {
+  const runDir = process.env.E2E_RUN_DIR;
+  const databasePath = process.env.DATABASE_PATH;
+  if (!runDir || !databasePath) throw new Error('Ingress E2E requiere SQLite temporal aislado.');
+  if (resolve(databasePath) !== join(resolve(runDir), 'hogaria.sqlite')) {
+    throw new Error('DATABASE_PATH debe permanecer dentro del directorio temporal del run.');
+  }
+
+  const db = new Database(databasePath, { readonly: true, fileMustExist: true });
+  try {
+    return (
+      db.prepare('SELECT COUNT(*) AS count FROM receipts WHERE user_id = ?').get(userId) as {
+        count: number;
+      }
+    ).count;
   } finally {
     db.close();
   }
@@ -137,4 +184,47 @@ test('el ingress acepta 513 KiB y entrega el ticket al backend sin proveedor IA'
     return response.status;
   }, TICKET_BYTES);
   expect(unrelatedOversize).toBe(413);
+});
+
+test('el ingress conserva el límite de 10 MiB en el fichero y no persiste 1 byte extra', async ({
+  page
+}) => {
+  const registration = await page.request.post('/api/auth/register', {
+    data: { name: 'Ingress boundary E2E', email: seededEmail(), password: 'Test1234' }
+  });
+  expect(registration.status()).toBe(201);
+  const registrationBody = (await registration.json()) as { data: { token: string } };
+  const token = registrationBody.data.token;
+  const healthResponse = await page.goto('/api/health');
+  expect(healthResponse?.status()).toBe(200);
+  const profileResponse = await page.request.get('/api/auth/profile', {
+    headers: { authorization: `Bearer ${token}` }
+  });
+  expect(profileResponse.status()).toBe(200);
+  const profile = (await profileResponse.json()) as { data: { id: string } };
+
+  const accepted = await uploadPng(
+    page,
+    token,
+    pngSynthetic(MAX_TICKET_BYTES),
+    'ticket-exactly-10-mib.png'
+  );
+  expect(accepted.status).toBe(201);
+  const receiptId = accepted.body?.data?.id;
+  expect(receiptId).toBeTruthy();
+  if (!receiptId) throw new Error('El backend no devolvió id para el ticket en el límite.');
+  await expect
+    .poll(() => ticketState(receiptId), { timeout: 20000 })
+    .toEqual({ bytes: MAX_TICKET_BYTES, status: 'failed', errorCode: 'NO_CONFIG' });
+
+  const persistedBeforeOversize = receiptCount(profile.data.id);
+  const rejected = await uploadPng(
+    page,
+    token,
+    pngSynthetic(MAX_TICKET_BYTES + 1),
+    'ticket-over-10-mib.png'
+  );
+  expect(rejected.status).toBe(413);
+  expect(rejected.body).toMatchObject({ success: false, error: 'FILE_TOO_LARGE' });
+  expect(receiptCount(profile.data.id)).toBe(persistedBeforeOversize);
 });
