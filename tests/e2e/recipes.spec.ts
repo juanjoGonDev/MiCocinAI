@@ -12,16 +12,19 @@ test.describe('Recipes', () => {
   });
 
   test('should show filter options', async ({ page }) => {
-    const filters = page.locator('app-tag');
+    const filters = page.locator('app-filter-tag .tag');
     await expect(filters.nth(0)).toContainText('Todas');
     await expect(filters.nth(1)).toContainText('Favoritas');
     await expect(filters.nth(2)).toContainText('Rápidas');
     await expect(filters.nth(3)).toContainText('IA');
+    await expect(filters.nth(0)).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('should filter by favorites', async ({ page }) => {
-    await page.locator('app-tag', { hasText: 'Favoritas' }).click();
-    await expect(page.locator('app-tag .tag--selected')).toContainText('Favoritas');
+    const favorites = page.getByRole('button', { name: 'Favoritas', exact: true });
+    await favorites.click();
+    await expect(favorites).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('app-filter-tag .tag--selected')).toContainText('Favoritas');
   });
 
   test('should show empty state when no recipes', async ({ page }) => {

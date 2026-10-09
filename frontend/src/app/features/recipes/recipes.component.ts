@@ -25,6 +25,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { ButtonComponent } from '../../shared/components/ui/button/button.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import { TagComponent } from '../../shared/components/ui/tag/tag.component';
+import { FilterTagComponent } from '../../shared/components/ui/tag/filter-tag.component';
 import { ModalComponent, type ModalSize } from '../../shared/components/ui/modal/modal.component';
 import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
 import { TimerComponent } from '../../shared/components/ui/timer/timer.component';
@@ -96,6 +97,7 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
     ButtonComponent,
     BadgeComponent,
     TagComponent,
+    FilterTagComponent,
     ModalComponent,
     LoadingComponent,
     TimerComponent,
@@ -185,14 +187,14 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
 
         <!-- Quick Filters -->
         <div class="recipes__quick-filters">
-          <app-tag
+          <app-filter-tag
             *ngFor="let filter of quickFilters"
             [selected]="activeFilter() === filter.value"
             (onClick)="setFilter(filter.value)"
           >
             <app-icon [name]="filter.icon" [size]="16" [label]="null" />
             {{ filter.labelKey | t }}
-          </app-tag>
+          </app-filter-tag>
         </div>
 
         <!-- Loading -->

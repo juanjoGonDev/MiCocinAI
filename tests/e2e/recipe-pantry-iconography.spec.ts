@@ -195,7 +195,7 @@ test('Recipe and Pantry decorative icons are SVG while food and recipe content s
     await page.locator('[data-test="settings-lang-en"]').click();
     await page.goto('/recipes');
     await expect(page.locator('h1.recipes__title')).toHaveText('Recipes');
-    await expect(page.locator('.recipes__quick-filters app-tag')).toContainText([
+    await expect(page.locator('.recipes__quick-filters app-filter-tag')).toContainText([
       'All',
       'Favorites',
       'Quick',

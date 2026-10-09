@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La última suite frontend local pasó **1219/1219** con cobertura **90.69/81.87/89.35/92.15 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
-- **IA / tickets reales (2026-10-09):** la validación de tickets sigue abierta. El nuevo código de WebAPI sí deja la limpieza de adjuntos en estado correcto, pero sus logs posteriores al cambio aún registran cuatro subidas con HTTP 504 antes de `prompt_submitted`; no se reenviaron tickets.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1219/1219 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición y corrigió el mensaje de error de alias. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1224/1224** con cobertura **90.82/81.92/89.44/92.27 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **IA / tickets reales (2026-10-09):** la validación de tickets sigue abierta. La corrección de WebAPI hace que la limpieza tras un upload parcial termine correctamente, pero el upload real de los dos adjuntos aún expira con HTTP 504 antes de `prompt_submitted`. No se repiten tickets mientras ese fallo persista.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1224/1224 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -1038,33 +1038,57 @@ la regresión demuestre un defecto distinto.
 
 ### QA-04c.UI.TAG-ACCESSIBILITY.1 · chips de filtro accesibles y con cobertura
 
-**Fuente revalidada (2026-10-09, HEAD `8fccc05`):** `TagComponent` se usa como filtro seleccionable
-en Recetas, categorías e inventario de productos. Hoy el control interactivo es un `<span (click)>`
-sin foco/teclado ni estado accesible; `selected` solo añade una clase CSS. La variante removible incluye
-un segundo botón, por lo que convertir el contenedor entero en botón produciría controles anidados.
-No existe spec unitario propio. LCOV actual (`frontend/coverage/lcov.info`): **10/10/0/10 % S/B/F/L**
-según los contadores instrumentados; `tag.component.ts` está muy por debajo del 70 % focal.
+**Fuente revalidada (2026-10-09, HEAD `104adf7`):** `TagComponent` se usa como filtro seleccionable
+en Recetas, categorías e inventario de productos, pero también como texto de alias y etiquetas de solo
+lectura en fichas/revisión. El baseline confirmado en Git tenía filtros como `<span (click)>`, sin
+foco/teclado ni estado accesible; `selected` solo añadía una clase CSS. La variante removible incluye
+una acción separada; convertir el contenedor en botón produciría controles anidados. No había specs
+unitarios propios y la cobertura focal era inferior al 70 %.
 
-**Conducta esperada:** el filtro es un botón nativo de alternancia con nombre visible, `aria-pressed`
-sincronizado con `selected` y activación por teclado; `disabled` bloquea la activación. Un tag removible
-tiene una acción de borrado separada, localizada y accesible por teclado/táctil, sin que quitarlo active
-el filtro. La caja del tag conserva las dimensiones actuales (tolerancia ≤1 CSS px).
+**Conducta esperada:** los filtros usan un componente de botón nativo con nombre visible, `aria-pressed`
+sincronizado con `selected` y activación por teclado; pulsar un filtro no debe deseleccionarlo si el
+consumidor lo modela como opción única. Los tags informativos siguen siendo texto no enfocable. `disabled`
+bloquea la acción correspondiente. Un tag removible conserva una etiqueta de texto y una acción de borrado
+separada, localizada y accesible por teclado/táctil, sin que quitarlo active un filtro. Nunca se anidan
+botones. Las cajas conservan dimensiones actuales (tolerancia ≤1 CSS px).
 
-- [ ] Añadir primero pruebas unitarias de combinaciones base/seleccionada/deshabilitada/removible, nombre,
-      `aria-pressed`, emisión de `onClick` y emisión aislada de `onRemove`.
-- [ ] Reproducir en E2E que los filtros actuales no reciben foco/teclado; después verificar click/tap,
+- [x] Añadir pruebas unitarias de `TagComponent` informativo/removible y `FilterTagComponent`
+      interactivo; cubrir combinaciones
+      base/seleccionada/deshabilitada/removible, nombre, `aria-pressed`, `onClick` y `onRemove` aislado.
+- [x] Confirmar en el baseline la causa `<span (click)>` y verificar en E2E click/tap,
       Enter/Espacio y estado anunciado en Recetas, categorías e inventario de productos, usando fixture/DB
-      aislados. Cubrir en la prueba unitaria que borrar un tag removible no activa `onClick`.
-- [ ] Hacer el ajuste semántico mínimo sin botones anidados; conservar visualización y geometría de chips
+      aislados. Comprobar en un alias removible que Enter/tap lo elimina sin presentar una acción de filtro.
+- [x] Separar semántica pasiva e interactiva sin botones anidados; conservar visualización y geometría de chips
       base/seleccionados/removibles en desktop y móvil y estado deshabilitado.
-- [ ] Capturar/inspeccionar antes y después en PC y móvil; comparar las cajas con tolerancia ≤1 px y
+- [x] Capturar/inspeccionar antes y después en PC y móvil; comparar las cajas con tolerancia ≤1 px y
       ejecutar los breakpoints/anchos relevantes sin overflow.
-- [ ] Alcanzar ≥70 % S/B/F/L en `tag.component.ts`, ejecutar Karma focal y suite frontend completa (gate
-      ≥80 %), E2E afectadas, typecheck/build, formato y `git diff --check`; correr hooks commit/push sin
-      bypass y cerrar solo tras publicar evidencia.
+- [x] Alcanzar ≥70 % S/B/F/L focales y ejecutar Karma completa (gate ≥80 %), E2E afectadas,
+      typecheck/build, formato y `git diff --check`.
+- [ ] Publicar esta unidad en commit atómico con todos los hooks de commit/push; no cerrar el spec antes
+      de confirmar push y evidencia CI de la rama.
 
-**Rollback:** revertir únicamente el contrato semántico de `tag.component.ts`, sus pruebas unitarias/E2E
-y esta subunidad; no revertir consumidores ni otros componentes compartidos.
+**Evidencia (2026-10-09):** `tag.component.spec.ts` y `filter-tag.component.spec.ts` cubren texto
+informativo/removible, botón de borrado desacoplado y localizado, bloqueo por disabled, botón nativo de
+filtro, nombre visible, sincronía de `aria-pressed` y eventos aislados. El HTML focal de Karma marca
+`TagComponent` **9/9 statements, 1/1 branches, 2/2 functions, 8/8 lines (100 %)** y
+`FilterTagComponent` **10/10, 2/2, 2/2, 8/8 (100 %)**.
+
+La suite completa `pnpm run test:client:coverage` ejecutó **1224/1224** y pasó el umbral global con
+**90.82/81.92/89.44/92.27 % S/B/F/L**. La suite E2E aislada de las rutas afectadas ejecutó
+**27 passed, 1 skipped** en Chromium y `mobile-chrome`; activa filtros por Enter/Espacio/click/tap,
+verifica `aria-pressed` y elimina un alias con Enter/tap sin filtro anidado. Otro E2E móvil comprobó
+las filas de filtros en 23 anchos (320–1024 px), incluidos los límites 400/480/720/760/768/860/959/
+960/1023/1024, sin overflow. `pnpm run typecheck:e2e`, `pnpm run check:ui` (211 ficheros/21 reglas),
+Prettier, `git diff --check` y `pnpm run build` pasaron. El build conserva warnings existentes de
+bundles, presupuestos de estilos y Angular. Capturas sintéticas antes/después inspeccionadas: PC
+1440×900 y móvil 393×851 en `.e2e-screenshots/qa-tag-accessibility-before-20261009/` y
+`.e2e-screenshots/qa-tag-accessibility-after-20261009/`; dimensiones de tags: recetas 86×31 px,
+categorías 66×31 px, productos 86×31 px y alias removible 149×31 px, dentro de la tolerancia de 1 px.
+El test y las capturas usan DB/fixtures sintéticos; los artefactos están ignorados por Git.
+
+**Rollback:** revertir únicamente `tag.component.ts`, `filter-tag.component.ts`, sus specs, las referencias
+de filtros en recetas/categorías/productos y esta subunidad; no revertir otros componentes ni el resto de
+los cambios de sus consumidores.
 
 ### QA-04c.CORE.TASTE.1 · cobertura del servicio de perfil (resuelta localmente; gate global revalidado)
 

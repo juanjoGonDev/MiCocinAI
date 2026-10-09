@@ -12,6 +12,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { TooltipComponent } from '../../shared/components/ui/tooltip/tooltip.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
 import { TagComponent } from '../../shared/components/ui/tag/tag.component';
+import { FilterTagComponent } from '../../shared/components/ui/tag/filter-tag.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import {
   PickerComponent,
@@ -71,6 +72,7 @@ type FilaProducto = PantryProduct & { listLines: number };
     IconComponent,
     InputComponent,
     TagComponent,
+    FilterTagComponent,
     BadgeComponent,
     PickerComponent,
     TooltipComponent,
@@ -97,13 +99,13 @@ type FilaProducto = PantryProduct & { listLines: number };
         <section class="gestor__toolbar" data-test="gestor-productos-lista">
           <div class="gestor__vistas">
             @for (opcion of filtros; track opcion.value) {
-              <app-tag
+              <app-filter-tag
                 [selected]="filtro() === opcion.value"
                 (onClick)="cambiarFiltro(opcion.value)"
                 [attr.data-test]="'gestor-productos-filtro-' + opcion.value"
               >
                 {{ opcion.clave | t }}
-              </app-tag>
+              </app-filter-tag>
             }
           </div>
 

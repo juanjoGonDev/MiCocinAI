@@ -12,7 +12,7 @@ import { TranslatePipe } from '../../core/pipes/translate.pipe';
 import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import { TooltipComponent } from '../../shared/components/ui/tooltip/tooltip.component';
 import { InputComponent } from '../../shared/components/ui/input/input.component';
-import { TagComponent } from '../../shared/components/ui/tag/tag.component';
+import { FilterTagComponent } from '../../shared/components/ui/tag/filter-tag.component';
 import { BadgeComponent } from '../../shared/components/ui/badge/badge.component';
 import {
   PickerComponent,
@@ -74,7 +74,7 @@ type FilaCategoria = PantryCategory & {
     TranslatePipe,
     IconComponent,
     InputComponent,
-    TagComponent,
+    FilterTagComponent,
     BadgeComponent,
     PickerComponent,
     PantryCategoryLabelPipe,
@@ -102,13 +102,13 @@ type FilaCategoria = PantryCategory & {
         <section class="gestor__toolbar" data-test="gestor-categorias-lista">
           <div class="gestor__vistas">
             @for (opcion of vistas; track opcion.value) {
-              <app-tag
+              <app-filter-tag
                 [selected]="view() === opcion.value"
                 (onClick)="cambiarVista(opcion.value)"
                 [attr.data-test]="'gestor-categorias-vista-' + opcion.value"
               >
                 {{ opcion.clave | t }}
-              </app-tag>
+              </app-filter-tag>
             }
           </div>
 

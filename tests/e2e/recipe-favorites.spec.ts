@@ -83,7 +83,7 @@ test.describe('pestaña Favoritas de Recetas', () => {
         await expect(favorite).toHaveAttribute('aria-pressed', 'true');
       }
 
-      await page.locator('app-tag').filter({ hasText: 'Favoritas' }).click();
+      await page.getByRole('button', { name: 'Favoritas', exact: true }).click();
       await expect(firstCard).toBeVisible();
       await expect(secondCard).toBeVisible();
 
@@ -124,11 +124,11 @@ test.describe('pestaña Favoritas de Recetas', () => {
       await expect(page.locator('.recipes__count')).toHaveText('1 receta');
 
       await page.reload();
-      await page.locator('app-tag').filter({ hasText: 'Favoritas' }).click();
+      await page.getByRole('button', { name: 'Favoritas', exact: true }).click();
       await expect(firstCard).toHaveCount(0);
       await expect(secondCard).toBeVisible();
 
-      await page.locator('app-tag').filter({ hasText: 'Todas' }).click();
+      await page.getByRole('button', { name: 'Todas', exact: true }).click();
       await expect(firstCard).toBeVisible();
       await expect(secondCard).toBeVisible();
       const allRecipeCount = await page.locator('.recipe-card').count();
@@ -156,13 +156,13 @@ test.describe('pestaña Favoritas de Recetas', () => {
 
       await page.evaluate((key) => localStorage.setItem(key, 'en'), LANGUAGE_KEY);
       await page.reload();
-      await page.locator('app-tag').filter({ hasText: 'Favorites' }).click();
+      await page.getByRole('button', { name: 'Favorites', exact: true }).click();
       await expect(firstCard).toHaveCount(0);
       await expect(secondCard.locator('.recipe-card__favorite')).toHaveAttribute(
         'aria-label',
         'Favourite'
       );
-      await page.locator('app-tag').filter({ hasText: 'All' }).click();
+      await page.getByRole('button', { name: 'All', exact: true }).click();
       await expect(firstCard.locator('.recipe-card__favorite')).toHaveAttribute(
         'aria-label',
         'Add to favourites'
