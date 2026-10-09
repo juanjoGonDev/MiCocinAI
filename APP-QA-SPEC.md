@@ -6114,3 +6114,28 @@ en un teléfono. El cambio no añadió lógica TypeScript con ramas nuevas; cove
 El commit atómico `3a5399f` pasó los hooks completos de pre-push. CI `37994588131` terminó **9/9 jobs
 verdes** en el SHA `3a5399f32bfd7aa3e184e1f6b4ecfc3baecad55c`, incluidos los cuatro shards Playwright y
 Full-stack E2E; PR #41 sigue abierto y Ready for review, sin merge.
+
+### QA-RECEIPT.DELETE-CONFIRMATION.1 · verificar cancelar y borrar un ticket desde su ficha
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §12aj C incluye DELETE para cerrar el ciclo
+del ticket. `receipts.routes.ts` cancela primero un trabajo activo y elimina líneas, trabajos y ficha;
+`ReceiptDetailComponent.borrar()` pide confirmación, no escribe al cancelar y, si se confirma, elimina
+y navega a `/receipts`. El test de ruta `receipts.routes.spec.ts` valida que DELETE borra ficha,
+líneas y trabajo; `receipt-detail.component.spec.ts` valida el flujo de confirmación con servicios
+espía. La auditoría de los tests E2E actuales no encontró cobertura de ese contrato desde el navegador.
+
+**Contrato:** usar una ficha sintética en el servidor/SQLite aislados, sin proveedor real. Cancelar el
+diálogo debe conservar ruta y datos y no enviar DELETE. Confirmar debe enviar DELETE real una sola vez,
+navegar a la bandeja y dejar el ticket inaccesible/ausente en historial; la limpieza backend no debe
+dejar líneas ni trabajo huérfanos. Mantener confirmación accesible y el control de borrado existente;
+no cambiar producto salvo que el E2E reproduzca un fallo funcional.
+
+- [ ] Añadir primero un E2E real que cancele el borrado y compruebe que ficha y DB siguen intactas;
+      confirmar después el borrado y validar 200, navegación, 404 y ausencia de filas hijas.
+- [ ] Ejecutar en Chromium y Pixel 5 con runner, base y semilla aislados; sin `page.route` en el
+      DELETE, verificar limpieza y guardar/inspeccionar capturas sintéticas en un directorio único.
+- [ ] Ejecutar typecheck E2E, `check:ui`, Prettier, build, cobertura global y `git diff --check`;
+      documentar resultados/limitaciones, commit y push con todos los hooks y CI verde.
+
+**Rollback:** retirar solo el E2E de confirmación/borrado y esta subunidad; no cambiar la ruta DELETE
+ni borrar datos reales.
