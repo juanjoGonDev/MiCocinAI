@@ -4,7 +4,7 @@
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1242/1242 con cobertura 91.50/82.44/90.03/92.94 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
-- **IA / tickets reales (2026-10-09, vigente):** WebAPI está en HEAD `a6105c20` con cambios locales no confirmados; el servicio nuevo sigue listo. El smoke live sintético de JPEG + inventario JSON falla con `attachment_upload_failed`/504 tras 45 s y solo representa 1/2 adjuntos, antes del prompt. No se reenvían tickets; QA-AI.REAL-INTEGRATIONS.1 sigue abierto hasta que el par sintético obtenga ambos marcadores y se aclare el estado de la petición anterior.
+- **IA / tickets reales (2026-10-09, vigente):** WebAPI sigue en HEAD `a6105c20` con cambios locales no confirmados; PID 59588 está listo y arrancó después de las modificaciones de producción. El smoke sintético directo WebAPI pasó con ambos marcadores. El reintento aislado de MiCocinAI validó el contrato de los adjuntos y `response_format`, pero falló en el primer ticket (stream HTTP 400, fallback HTTP 502; cero respuestas 2xx) y se detuvo antes del PDF largo; no se reenvían los PDF potencialmente completados. QA-AI.REAL-INTEGRATIONS.1 sigue abierto.
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -3195,6 +3195,34 @@ fallback; el proceso previo se reinició y ya no ofrece logs correlacionables de
 que no se afirma si el proveedor llegó a recibirla. No se repitió esa JPEG, no se envió el PDF largo ni
 ningún PDF original, y no hubo escritura al inventario real. No volver a enviar los tickets hasta que
 el par sintético obtenga ambos marcadores y se confirme el estado de la petición anterior.
+
+**Reintento tras corregir la representación de adjuntos (2026-10-09; validación incompleta):** el
+checkout WebAPI sigue en `fix/live-ticket-inventory-attachments`, HEAD `a6105c20`, con cambios locales
+no confirmados que se dejaron intactos. El listener PID 59588 ejecuta `node --import tsx src/main.ts`,
+arrancó a las 09:14 hora local después de las modificaciones de producción (`attachment-flow.ts`
+09:10 y `browser.ts` 08:56), y `/health/ready` respondió 200 (`ready=true`, `storage=ready`). WebAPI no
+publica SHA del proceso. `pnpm run test:e2e:chatgpt-ticket-inventory-live` pasó **1/1** con solo una
+imagen y un JSON sintéticos: la sonda vio tres inputs; el índice 2 acepta JPEG/JSON/PDF; la respuesta
+de ChatGPT contenía ambos marcadores únicos. Esto demuestra la ruta de adjuntos para el par sintético,
+no el resultado real de MiCocinAI ni el esquema de tickets.
+
+El preflight aislado de MiCocinAI validó identidad, disponibilidad/modelo y controles de privacidad de
+WebAPI antes de crear el runner. El plan local revalidó seis fuentes (2 PDF y 4 JPEG), mantuvo la JPEG
+preferida en el ordinal 4 y seleccionó únicamente `[1,3]`: esa JPEG sola y las otras tres fotos como
+PDF temporal de tres páginas; no leyó ni reenvió los PDF individuales. El proxy de pruebas acepta y
+registra una petición solo si lleva JSON Schema estricto `response_format`, exactamente un adjunto
+`inventario.json` y un ticket. Ambas solicitudes observadas pasaron ese contrato: el stream devolvió
+HTTP **400** y el único fallback no-stream permitido devolvió HTTP **502**. El runner terminó en rojo
+con **2/4 requests, 0 respuestas HTTP 2xx** y se detuvo; no envió el PDF largo ni volvió a intentar la
+JPEG. El tail redacted de WebAPI no expone un evento correlacionable ni una causa interna para ese 502,
+así que no puede afirmarse si el proveedor llegó a completar el turno. La respuesta/schema, categorías,
+deduplicación, revisión e historial no pudieron validarse.
+
+Se confirmó que no quedaban procesos del runner ni directorios `hogaria-e2e-*` recientes; `/health/ready`
+siguió en 200 y el coordinador no reportó error al limpiar su token temporal. No se escribieron compras
+ni resultados en inventario real. No repetir la petición de la JPEG ni enviar las tres fotos hasta
+aclarar el 502 con una prueba sintética/código/logs; los PDF individuales permanecen excluidos por su
+resultado anterior potencialmente completado. La subunidad sigue abierta.
 
 **Rollback:** revertir únicamente la selección live `unsubmitted-only`, sus pruebas y esta subunidad;
 mantener el cargador general de fixtures sintéticas, adjuntos de inventario ya probados y el código de
