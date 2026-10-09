@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1229/1229** con cobertura **91.08/82.10/89.69/92.52 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1233/1233** con cobertura **91.11/82.13/89.69/92.56 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. El CI más reciente (`37891010180`, SHA `3694312`) tiene un único check fallido: shard 2 completa Playwright, pero supera el límite de 8 minutos del job; su corrección queda registrada en QA-CI.E2E.SHARD-TIMEOUT.1. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (2026-10-09, revalidado):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. `GET /admin/api/logs?lines=2000` devuelve 649 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; correlación `kaamY`, `attachmentCount=2`, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. El servicio está listo, pero el fallo de upload sigue presente; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1229/1229 con cobertura 91.08/82.10/89.69/92.52 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1233/1233 con cobertura 91.11/82.13/89.69/92.56 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -4683,3 +4683,25 @@ continúa abierto en Draft y sin merge.
 
 **Rollback:** retirar la sincronización de la helper, la aserción PDF ajustada y esta unidad de spec;
 no revertir cambios de producción ni otras unidades.
+
+### QA-CI.E2E.SHARD-TIMEOUT.1 · dar margen al shard Playwright más lento
+
+**Hallazgo de CI (2026-10-09, run `37891010180`, SHA `3694312`):** el step de Playwright de
+`E2E Tests (shard 2)` terminó correctamente, pero el job acabó `cancelled`/check fallido tras
+**8m17s** con `timeout-minutes: 8`; los otros tres shards y los demás gates pasaron. El job excede el
+límite mientras termina el reporte/cleanup, no por fallos de aserción. La causa se infiere del tiempo
+total del job y del límite configurado; el step de pruebas sí reportó éxito.
+
+**Contrato:** los cuatro shards conservan su distribución, suite, retries y controles de aislamiento;
+el job E2E tendrá `timeout-minutes: 12` para cubrir el shard más lento más la carga de artefactos y
+cleanup. Un test de configuración debe fallar si el margen baja de 12. La validación final requiere
+que CI complete todos los shards en el SHA publicado.
+
+- [ ] Añadir primero una regresión estática que lea el job `e2e` y exija timeout mínimo de 12 minutos;
+      comprobar que falla contra el valor actual de 8.
+- [ ] Aumentar únicamente el timeout del job `e2e` a 12; no omitir shards, pruebas ni gates.
+- [ ] Ejecutar el test de configuración, validación de workflows/formato y el conjunto requerido por
+      hooks; push atómico y verificar que todos los jobs CI terminan en verde para el head actual.
+
+**Rollback:** revertir el guard de configuración, su registro en `test:config`, el valor de timeout y
+esta unidad; no modificar selección/sharding ni cobertura de Playwright.
