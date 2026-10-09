@@ -3766,22 +3766,28 @@ icon-only; el censo visual global sigue abierto.
 
 **Fuente revalidada (2026-10-09):** `ButtonComponent` iguala la geometría nominal `sm/md/lg` y usa
 `disabled`/`focus-visible` como estados de apariencia, pero `loading` inserta un spinner en el flujo
-`inline-flex` antes del contenido. No hay aserción que demuestre que ese estado conserva la caja, el nombre
-accesible y la prevención de envíos repetidos en un consumidor real.
+`inline-flex` antes del contenido. La prueba roja focal aumenta el ancho **22 px** en Karma y en Chromium/
+Pixel 5, y no existe `aria-busy`. La E2E contra el hogar con `PATCH` sintético retenido reprodujo otro
+defecto de consumidor: tras 503, `savingName=false` dispara el efecto que reemplaza el borrador no guardado
+por el nombre confirmado, deja «Guardar nombre» disabled e impide reintentar; la prueba unitaria falló
+**25/26** (`Casa sintética` en lugar de `Nombre actualizado`).
 
 **Contrato:** activar `loading`, `disabled` o foco visible no desplaza ni redimensiona la caja del botón
 (tolerancia ≤1 CSS px); el spinner no sustituye su nombre accesible, la acción ocupada expone `aria-busy`
-y `loading` mantiene la acción inhabilitada. Colores, opacidad y contorno de foco pueden cambiar sin variar
-caja, padding, tipografía, gap o radio.
+y `loading` mantiene la acción inhabilitada. Si falla el guardado del nombre del hogar, se conserva el
+borrador para corregirlo/reintentarlo; solo un hogar persistido o un cambio de hogar confirmado reemplaza
+el valor editado. Colores, opacidad y contorno de foco pueden cambiar sin variar caja, padding, tipografía,
+gap o radio.
 
 - [ ] Añadir primero prueba roja de componente y Playwright real aislado que contrasten rectángulo y estilos
       calculados antes/durante/después de `loading`, `disabled` y `focus-visible`; medir un consumidor real
       mientras una respuesta de servidor sintético queda retenida.
-- [ ] Corregir cualquier salto con el menor cambio compartido; conservar contenido/nombre accesible, indicar
-      estado ocupado y bloquear dobles acciones. No alterar la geometría base normalizada de `sm/md/lg`, las
-      variantes cromáticas, `fullWidth` ni botones de solo icono.
-- [ ] Verificar respuesta exitosa y fallida del request retenido, foco por teclado y ausencia de una segunda
-      petición; ejecutar Chromium escritorio y Pixel 5 emulado con DB/puertos/semillas aisladas y cleanup.
+- [ ] Corregir el salto con el menor cambio compartido y evitar que un error de guardado descarte el borrador;
+      conservar contenido/nombre accesible, indicar estado ocupado y bloquear dobles acciones. No alterar la
+      geometría base normalizada de `sm/md/lg`, las variantes cromáticas, `fullWidth` ni botones de solo icono.
+- [ ] Verificar respuesta exitosa y fallida del request retenido, borrador recuperable, foco por teclado y
+      ausencia de una segunda petición; ejecutar Chromium escritorio y Pixel 5 emulado con DB/puertos/semillas
+      aisladas y cleanup.
 - [ ] Guardar e inspeccionar capturas sintéticas PC/móvil del estado normal y ocupado; ejecutar prueba focal,
       suite frontend/gate de cobertura, typecheck, `check:ui`, Prettier, build y `git diff --check`.
       Documentar resultados y rollback sin cerrar la matriz visual global.
