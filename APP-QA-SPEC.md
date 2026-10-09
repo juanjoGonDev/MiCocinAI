@@ -859,6 +859,32 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 Candidatos del informe previo al lote (histórico; orden statements/branches/functions/lines): `auth.service.ts` 100/81.82/94.59/100 %, `theme.service.ts` 96.67/92.86/87.50/96.67 %, `shopping.model.ts` 79.22/62.40/66.67/79.22 %, `error.interceptor.ts` 7.89/0/0/7.89 %, `swipe-row.directive.ts` 10.09/11.11/11.76/10.09 %, `core/time.ts` 86.75/57.83/95/86.75 %, `data-table.util.ts` 95.86/78.77/100/95.86 %, `i18n.service.ts` 61.70/23.68/61.54/61.70 %, `household.service.ts` 1.79/0/0/1.79 % y `taste-profile.service.ts` 3.33/0/0/3.33 %.
 
+### QA-04c.AI-CONFIG.TIMEOUT-RESULT.1 · no presentar un timeout como éxito
+
+**Fuente revalidada (2026-10-09):** `/ai-config` ya tiene E2E de estados correctos, error 503,
+prueba desde formulario y tarjeta y bloqueo de carga. `AiService.testConnection()` convierte errores
+HTTP a `null`; `AiConfigComponent.testFromForm()` y `testConfig()` deben tratar ese resultado como
+fallo contextual. La casilla de ruta `/ai-config` (línea 2777) exige comprobar también timeout; los
+E2E presentes solo fuerzan 503/fallos genéricos, no una respuesta 504. El nuevo caso usa únicamente
+un `page.route()` sintético sobre la API local aislada, sin invocar al proveedor ni guardar claves.
+
+**Conducta esperada:** ante HTTP 504 tanto al probar una configuración guardada como al probar los
+datos sin guardar, termina el estado de carga y se abre el resultado «Error de conexión»; no aparece
+un aviso de éxito ni un toast genérico duplicado, la configuración/formulario permanece utilizable y
+la clave sintética no aparece en el resultado.
+
+- [ ] Añadir primero regresión E2E de 504 para la tarjeta guardada y el formulario; confirmar un único
+      POST por modo, resultado de error, fin del loading, cero toast de éxito/error duplicado y secreto
+      ausente del contenido visible.
+- [ ] Ejecutar Playwright aislado en Chromium y Pixel 5 con SQLite/puerto/semilla temporales y rate
+      limit activo; confirmar que el handler sintético intercepta ambas peticiones y que no se contacta
+      WebAPI/proveedor. Cambio de producción y coverage: N/A si el contrato actual ya pasa.
+- [ ] Ejecutar `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`; registrar rollback,
+      commit atómico, hooks completos, push y CI verde. No cambia el aspecto de la UI; capturas: N/A.
+
+**Rollback:** retirar solo la E2E focal y esta subunidad; no cambiar la semántica de conexión ni tocar
+configuración real.
+
 ### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
 
 **Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md §12t-R` fija `I18nService` como responsable de resolver `es/en/auto`, actualizar el locale de fechas/números al cambiar idioma y componer frases localizadas; `i18n.service.ts` implementa además selección persistida, `languagechange`, fallback de diccionario, interpolación, plurales y tiempos relativos. No existe `i18n.service.spec.ts`; el uso indirecto en otras pruebas deja este servicio en **69.23/31.58/69.23/72.34 % S/B/F/L** (36/52 sentencias, 12/38 ramas, 9/13 funciones, 34/47 líneas). La cobertura baja no prueba un fallo de producto: faltan pruebas unitarias directas de rutas existentes. Alcance test-only, sin cambiar traducciones, producción, preferencias ajenas ni llamadas externas.
