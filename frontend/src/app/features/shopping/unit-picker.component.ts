@@ -1,8 +1,11 @@
-import { Component, EventEmitter, Input, Output, computed, inject } from '@angular/core';
+import { Component, EventEmitter, Input, Output, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { IconComponent } from '../../shared/components/ui/icon/icon.component';
-import { PickerComponent, type PickerOption } from '../../shared/components/ui/picker/picker.component';
+import {
+  PickerComponent,
+  type PickerOption
+} from '../../shared/components/ui/picker/picker.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
+import { StorageService } from '../../core/services/storage.service';
 
 export { UNIT_FAMILIES, canonicalUnit, familyOf, type UnitFamily } from './unit-families';
 
@@ -28,10 +31,13 @@ export { UNIT_FAMILIES, canonicalUnit, familyOf, type UnitFamily } from './unit-
 import { canonicalUnit, familyOf, unitPickerOptions } from './unit-families';
 import { I18nService } from '../../core/services/i18n.service';
 
+const RECENT_UNITS_KEY = 'shopping.recent-units';
+const MAX_RECENT_UNITS = 6;
+
 @Component({
   selector: 'app-unit-picker',
   standalone: true,
-  imports: [CommonModule, IconComponent, PickerComponent],
+  imports: [CommonModule, PickerComponent],
   template: `
     <div class="unit-picker">
       <app-picker
@@ -46,7 +52,6 @@ import { I18nService } from '../../core/services/i18n.service';
         (valueChange)="pick($event)"
         data-test="unit-picker"
       />
-
     </div>
   `,
   styles: [
@@ -56,12 +61,10 @@ import { I18nService } from '../../core/services/i18n.service';
         flex-direction: column;
         gap: var(--space-1);
       }
-  
     `
   ]
 })
 export class UnitPickerComponent {
-
   /* Los dos textos de fabrica viven en el diccionario y se resuelven al leer: un campo fijado al
      construir no se entera del idioma (12s-B). */
   get labelText(): string {
@@ -72,6 +75,7 @@ export class UnitPickerComponent {
     return this.placeholder ?? this.i18n.t('ui.sin_unidad');
   }
   private readonly i18n = inject(I18nService);
+  private readonly storage = inject(StorageService);
 
   /** La frase propia del picker de unidades, resuelta al pintar: un campo se congela (## 12v). */
   protected get searchText(): string {
@@ -87,18 +91,59 @@ export class UnitPickerComponent {
   @Input() placeholder?: string;
   @Output() valueChange = new EventEmitter<string | null>();
 
+  private readonly recentUnits = signal(this.readRecentUnits());
+
   /**
    * Las unidades, agrupadas por titulo de familia. Ni descripcion por fila (en una columna
    * de movil se recortaba a dos letras: ruido con puntos suspensivos) ni familia elegible.
    */
-  readonly options = computed<PickerOption[]>(() =>
-    unitPickerOptions().map((option) => ({ ...option, group: this.i18n.t(option.groupKey) }))
-  );
+  readonly options = computed<PickerOption[]>(() => {
+    const recentUnits = this.recentUnits();
+    const recentKeys = new Set(recentUnits.map((unit) => unit.toLowerCase()));
+    const recentGroup = this.i18n.t('shopping_list_detail.unidades_recientes');
+    return [
+      ...recentUnits.map((unit) => ({ value: unit, label: unit, group: recentGroup })),
+      ...unitPickerOptions()
+        .filter((option) => !recentKeys.has(option.value.toLowerCase()))
+        .map((option) => ({ ...option, group: this.i18n.t(option.groupKey) }))
+    ];
+  });
 
   /** El icono de la familia, en el disparador: «kg» se ve, «peso» se intuye. */
   readonly familyIcon = computed<IconName>(() => familyOf(this.value)?.icon ?? 'unfold_more');
 
   pick(value: string | null): void {
-    this.valueChange.emit(canonicalUnit(value));
+    const unit = canonicalUnit(value);
+    if (unit) this.recordRecentUnit(unit);
+    this.valueChange.emit(unit);
+  }
+
+  private recordRecentUnit(unit: string): void {
+    const normalized = unit.toLowerCase();
+    const recent = [
+      unit,
+      ...this.recentUnits().filter((existing) => existing.toLowerCase() !== normalized)
+    ].slice(0, MAX_RECENT_UNITS);
+    this.recentUnits.set(recent);
+    this.storage.set(RECENT_UNITS_KEY, recent);
+  }
+
+  private readRecentUnits(): string[] {
+    const stored = this.storage.get<unknown>(RECENT_UNITS_KEY);
+    if (!Array.isArray(stored)) return [];
+
+    const seen = new Set<string>();
+    const recent: string[] = [];
+    for (const value of stored) {
+      if (typeof value !== 'string') continue;
+      const unit = canonicalUnit(value);
+      if (!unit) continue;
+      const normalized = unit.toLowerCase();
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      recent.push(unit);
+      if (recent.length === MAX_RECENT_UNITS) break;
+    }
+    return recent;
   }
 }

@@ -120,5 +120,13 @@ describe('StorageService', () => {
       const result = service.get('invalid');
       expect(result).toBeNull();
     });
+
+    it('should tolerate quota errors when persisting a value', () => {
+      spyOn(Storage.prototype, 'setItem').and.throwError('quota exceeded');
+      const log = spyOn(console, 'error');
+
+      expect(() => service.set('shopping.recent-units', ['kg'])).not.toThrow();
+      expect(log).toHaveBeenCalled();
+    });
   });
 });
