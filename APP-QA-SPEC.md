@@ -4250,6 +4250,56 @@ cambia la condición de no repetir: los dos PDF ya tienen respuesta; la JPEG que
 largo sí alcanzó `prompt_submitted`. Hace falta material nuevo no enviado o una instrucción explícita
 que permita repetir los grupos ambiguos. La validación real no se marca completa.
 
+**Revalidación live tras autorización expresa del usuario (2026-10-09, 21:47 CEST):** el usuario
+autorizó repetir una vez la JPEG preferida y el grupo largo ambiguos. Reprocesé **solo** el grupo largo
+que aún no tenía una respuesta válida; no repetí los PDF ni la JPEG y no volveré a repetir este grupo.
+WebAPI seguía en `feat/session-attachment-previews`/`7eee7c7c`; el proceso PID 50248 arrancó después
+del fix `fc324f07`, readiness HTTP 200 y `maxAttachmentCount=10`. El plan cargó 6 fuentes pero abrió
+únicamente las otras tres fotos para construir un PDF de tres páginas en memoria. En runner Chromium,
+SQLite, uploads y puertos temporales, el smoke devolvió `result=passed`, 1 ticket, 2 peticiones: ambas
+llevaban `response_format` JSON Schema estricto, exactamente un `inventario.json` y un ticket; la
+primera respuesta streaming fue HTTP 400 y el fallback no-stream permitido fue HTTP 200, con JSON
+utilizable. La UI dejó el ticket en revisión con líneas no vacías, no encontró líneas equivalentes
+duplicadas y verificó edición de metadatos e historial tras recarga. No se confirmó compra ni se
+escribió en el inventario real; el coordinador confirmó cleanup del token propio y runner aislado.
+
+**Límite descubierto en la misma ejecución:** los logs redacted de WebAPI registran que MiCocinAI
+entregó ambos ficheros a la API, pero la etapa ChatGPT preparó/subió `fileCount=1` y registró
+`Prompt submitted` con `attachmentCount=1`. El límite efectivo es 10, sin aviso de truncamiento. El
+código de WebAPI explica la diferencia: `writeAttachmentBuffer()` antepone un UUID a cada basename;
+`buildOpenCodeMessageAttachments()` solo reconoce `inventario.json` sin prefijo o con prefijo
+numérico, así que no fuerza la subida de `<UUID>-inventario.json`. `prepareOpenCodeAttachments()` puede
+tratar ese JSON pequeño como contexto inline en vez de un segundo archivo. Por tanto, aunque el proxy
+validó que ambos adjuntos salieron de MiCocinAI, **no está verificado que WebAPI enviara ambos como
+adjuntos al modelo**; la validación solicitada sigue incompleta. El resultado no se usa para afirmar
+que la clasificación recibiera el inventario como archivo.
+
+El runner también imprimió el hito estático «los cuatro tickets ... verificados» cuando esta selección
+procesó uno; el JSON final sí indicó `tickets=1`. Se corrige esa telemetría junto al selector para que
+el mensaje sea válido para una o varias fuentes.
+
+**Decisión SDD antes de la siguiente implementación:** la autorización nueva no permite repetir un
+grupo que ya terminó en esta corrida. Los dos PDF siguen excluidos, el grupo largo queda cerrado con
+respuesta pero sin validar el segundo adjunto y solo la JPEG preferida queda pendiente de un nuevo
+intento. El selector existente `unsubmitted-only` vuelve a incluir el grupo largo, por lo que no se
+puede usar sin duplicarlo. Añadir un modo explícito `preferred-jpeg-only` que lea/suba únicamente esa
+JPEG, con un ticket, máximo dos solicitudes (stream y fallback solo ante HTTP 400), y pruebas de que no
+lee PDFs ni las otras tres fotos. Usarlo para la llamada real únicamente después de corregir y verificar
+la preparación de adjuntos en WebAPI; no volver a procesar el grupo largo.
+
+- [ ] TDD del selector `preferred-jpeg-only`: el plan contiene un JPEG; instrumentar el lector para
+      demostrar que no abre los dos PDFs ni las otras tres JPEG; derivar presupuesto/ticket esperado de 1.
+- [ ] Corregir el texto de progreso estático para que `real-receipts-all-verified` no afirme que se
+      verificaron cuatro tickets al procesar una sola selección; cubrir el mapa del hito con prueba.
+- [ ] Validar las selecciones y el contrato con suites aisladas/loopback; verificar strict JSON Schema,
+      un adjunto de ticket + un adjunto JSON y cleanup. No llamar al proveedor en pruebas sintéticas.
+- [ ] Tras corregir WebAPI, comprobar en logs redacted que su `attachmentCount` de subida y de prompt
+      sea 2; entonces enviar solo la JPEG preferida una vez, con DB/runner temporales, validar schema,
+      categorías, revisión e historial, sin confirmar compras. Detenerse sin reintento ante timeout/5xx.
+
+**Rollback:** retirar solamente el selector single-JPEG, su presupuesto y pruebas, la corrección del
+hito genérico y esta actualización de spec; no cambiar el grupo largo ya completado ni datos reales.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
