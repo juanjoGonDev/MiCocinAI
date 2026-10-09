@@ -1680,8 +1680,9 @@ usa la SQLite y puertos únicos del runner aislado, con las recetas del catálog
       medir cobertura S/B/F/L por fichero ≥70 % y mantener intactos los gates. Si el código actual pasa,
       no cambiar producción solo para justificar una implementación. En esta unidad solo cambia CSS
       (no instrumentable); no se modifica TypeScript de producción.
-- [ ] Anotar comandos/resultados, rollback/límites; después de gates, CI y push, decidir si esta casilla
-      cierra la brecha de filtros de `/recipes` (las otras acciones siguen abiertas).
+- [x] Anotar comandos/resultados, rollback/límites; esta subunidad cierra la brecha concreta del modal
+      de filtros avanzados. El E2E 2/2 está publicado (`61f5d61`) y CI `37928201856` validó el SHA
+      `7c887fb`; la auditoría general `/recipes` sigue abierta por las demás acciones.
 
 **Evidencia QA-RECIPES.BOOK-FILTER-MODAL.1 (2026-10-09):** prueba roja inicial en Chromium y Pixel 5:
 el campo «Cocina» medía 35 px. `frontend/src/styles.scss` limita la corrección al formulario de filtros
@@ -2185,7 +2186,7 @@ de presupuestos/imports que no pertenecen a esta unidad. El gate global se ejecu
 - [x] Añadir un control compartido de completado dentro del editor de comida; probar componente/servicio en éxito, rollback, reintento, desmarcado y repetición, con ≥70 % S/B/F/L por archivo nuevo o modificado dentro del alcance.
 - [x] Probar en Chromium y Pixel 5: PATCH retenido/fallido y recuperación, estado optimista, persistencia tras reload, completar y deshacer, teclado/foco/nombre accesible, 44×44 px; medir que todos los botones de edición caben dentro del diálogo y no hay overflow a 320×568, 393×851, 479/480/481 px y 1440×900.
 - [x] Guardar e inspeccionar capturas sintéticas comparables de PC/móvil; ejecutar typecheck E2E, Karma global sin rebajar el gate, `check:ui`, Prettier, build y `git diff --check`.
-- [ ] Ejecutar todos los hooks sin bypass; hacer commit atómico, push y esperar CI verde en el SHA final.
+- [x] Ejecutar todos los hooks sin bypass; hacer commit atómico, push y esperar CI verde en el SHA final. El commit `bc9281e` se incluye en `7c887fb`; pre-push completo pasó y el CI `37928201856` terminó verde (9/9 jobs).
 
 **Rollback:** retirar el control/modal, el componente y sus pruebas; conservar el comportamiento actual del servicio, y revertir únicamente esta subunidad.
 
@@ -2361,9 +2362,9 @@ Se inspeccionaron capturas sintéticas del error, sin datos personales, para 128
 - [x] Añadir primero E2E aislada con primera respuesta `GET /api/calendar/range` 503; el baseline falló en Chromium y Pixel 5 por falta de anuncio accesible y estado vacío engañoso antes de modificar producción.
 - [x] Silenciar el toast común solo para la carga que ya tiene feedback local, anunciar el error como `role=alert` y ocultar el resumen/estado vacío mientras la carga falla, sin borrar comidas/rango previamente cargados.
 - [x] Añadir aserción unitaria de `SILENT_TOAST` para la petición de rango; probar E2E de error → reintento por Enter → 200, error despejado y estado vacío legítimo solo tras respuesta correcta.
-- [ ] Validar Chromium escritorio y Pixel 5 (incluido 320×568), foco/teclado/overflow, capturas sintéticas inspeccionadas, `typecheck:e2e`, `check:ui`, formato, build, coverage ≥70 % para producción tocada, hooks completos, push y CI del SHA final.
+- [x] Validar Chromium escritorio y Pixel 5 (incluido 320×568), foco/teclado/overflow, capturas sintéticas inspeccionadas, `typecheck:e2e`, `check:ui`, formato, build, coverage ≥70 % para producción tocada, hooks completos, push y CI del SHA de implementación.
 
-**Evidencia local (2026-10-09):** TDD rojo: E2E aislada pre-cambio **2/2 fallos** (alerta sin `role=alert`; «Nada planificado» aparecía tras 503) y `CalendarService` **25/26** (GET sin `SILENT_TOAST`). Verde focal: E2E **2/2** (`chromium`, `mobile-chrome`/Pixel 5), incluida respuesta 200 vacía tras reintento Enter, ancho 320×568 sin overflow y ausencia del toast común; servicio **26/26**. Las comidas/rango previos quedan cubiertos por el caso unitario de fallo 503. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-calendar-range-error-verified-20261009/{chromium-range-error.png,mobile-chrome-range-error.png,mobile-chrome-320x568.png}`. `pnpm run test:client`: **1245/1245**, cobertura agregada **91.51/82.45/90.05/92.96 % S/B/F/L**; cobertura del alcance: `CalendarService` **95.95/80.95/92.13/95.96 %**, `CalendarComponent` **88.01/80.60/81.11/90.49 %**. `pnpm run build` pasa con warnings de budget/imports preexistentes en otras vistas; `typecheck:e2e`, `check:ui` (212 ficheros/21 reglas), Prettier focal y `git diff --check` pasan. Runner E2E usó servidor/SQLite temporales; sin IA ni escrituras en datos reales. Falta hooks completos, publicar y observar CI para cerrar la última casilla.
+**Evidencia local (2026-10-09):** TDD rojo: E2E aislada pre-cambio **2/2 fallos** (alerta sin `role=alert`; «Nada planificado» aparecía tras 503) y `CalendarService` **25/26** (GET sin `SILENT_TOAST`). Verde focal: E2E **2/2** (`chromium`, `mobile-chrome`/Pixel 5), incluida respuesta 200 vacía tras reintento Enter, ancho 320×568 sin overflow y ausencia del toast común; servicio **26/26**. Las comidas/rango previos quedan cubiertos por el caso unitario de fallo 503. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-calendar-range-error-verified-20261009/{chromium-range-error.png,mobile-chrome-range-error.png,mobile-chrome-320x568.png}`. `pnpm run test:client`: **1245/1245**, cobertura agregada **91.51/82.45/90.05/92.96 % S/B/F/L**; cobertura del alcance: `CalendarService` **95.95/80.95/92.13/95.96 %**, `CalendarComponent` **88.01/80.60/81.11/90.49 %**. `pnpm run build` pasa con warnings de budget/imports preexistentes en otras vistas; `typecheck:e2e`, `check:ui` (212 ficheros/21 reglas), Prettier focal y `git diff --check` pasan. Runner E2E usó servidor/SQLite temporales; sin IA ni escrituras en datos reales. Commit de implementación `7c887fb`; pre-commit y pre-push sin bypass pasaron, el push actualizó la rama y CI run **37928201856** (9/9 jobs) está verde.
 
 **Rollback:** retirar el contexto silencioso, la semántica del aviso/condición del estado vacío y las regresiones; no hay cambios de datos ni migraciones.
 
