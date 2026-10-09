@@ -78,6 +78,13 @@ test('receipt-only runner requires a private source directory and selected JPEG 
     ),
     true
   );
+  assert.equal(
+    validateAiLiveSmokeRunner(
+      { ...env, HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'preferred-jpeg-only' },
+      args
+    ),
+    true
+  );
   assert.throws(
     () =>
       validateAiLiveSmokeRunner(

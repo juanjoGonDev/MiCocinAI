@@ -197,6 +197,11 @@ test('runner exposes only allowlisted progress labels from its child', async () 
   });
   child.emit('message', {
     type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:real-receipts-all-verified',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
     phase: 'unrecognized-phase',
     secret: 'must-not-be-forwarded'
   });
@@ -225,8 +230,9 @@ test('runner exposes only allowlisted progress labels from its child', async () 
     'Último hito E2E: el ticket sintético no coincide en la fecha extraída.',
     'Último hito E2E: el ticket sintético no coincide en la tienda extraída.',
     'Último hito E2E: el ticket sintético no coincide en tienda ni fecha.',
-    'Último hito E2E: seis fuentes validadas y cuatro tickets preparados en memoria.',
-    'Último hito E2E: ticket procesado, revisado y guardado en historial.'
+    'Último hito E2E: fuentes validadas y selección de tickets preparada en memoria.',
+    'Último hito E2E: ticket procesado, revisado y guardado en historial.',
+    'Último hito E2E: los tickets seleccionados y su revisión quedaron verificados.'
   ]);
   assert.deepEqual(await running, {
     code: 0,

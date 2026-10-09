@@ -8,6 +8,9 @@ export declare const AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET: 4;
 export declare const AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION: 'long-ticket-only';
 export declare const AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT: 1;
 export declare const AI_LIVE_RECEIPT_LONG_TICKET_ONLY_COMPLETION_BUDGET: 2;
+export declare const AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION: 'preferred-jpeg-only';
+export declare const AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_TICKET_COUNT: 1;
+export declare const AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_COMPLETION_BUDGET: 2;
 
 type AiLiveReceiptTicket = {
   readonly kind: 'pdf' | 'jpeg';
@@ -19,7 +22,7 @@ type AiLiveReceiptTicket = {
 
 type AiLiveReceiptPlan<
   TicketCount extends 1 | 2 | 4,
-  Selection extends 'all' | 'unsubmitted-only' | 'long-ticket-only'
+  Selection extends 'all' | 'unsubmitted-only' | 'long-ticket-only' | 'preferred-jpeg-only'
 > = {
   readonly sourceCount: 6;
   readonly ticketCount: TicketCount;
@@ -36,6 +39,9 @@ type AiLiveReceiptPlanInput = {
 export declare function loadAiLiveReceiptPlan(
   input: AiLiveReceiptPlanInput & { selection: 'long-ticket-only' }
 ): Promise<AiLiveReceiptPlan<1, 'long-ticket-only'>>;
+export declare function loadAiLiveReceiptPlan(
+  input: AiLiveReceiptPlanInput & { selection: 'preferred-jpeg-only' }
+): Promise<AiLiveReceiptPlan<1, 'preferred-jpeg-only'>>;
 export declare function loadAiLiveReceiptPlan(
   input: AiLiveReceiptPlanInput & { selection: 'unsubmitted-only' }
 ): Promise<AiLiveReceiptPlan<2, 'unsubmitted-only'>>;

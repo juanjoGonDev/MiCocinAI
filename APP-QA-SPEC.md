@@ -4,7 +4,7 @@
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1285/1285 con cobertura 92.22/83.54/90.97/93.64 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
-- **IA / tickets reales (2026-10-09, vigente):** se confirmó que WebAPI está activo en `127.0.0.1:3001` (PID 50248) y `GET /health/ready` devuelve 200; no se reinició ni alteró el servicio y se conservó su cambio ajeno `tools.txt`. El smoke sintético previo confirmó dos adjuntos legibles más JSON Schema estricto, pero no valida tickets. Los dos PDF ya respondieron y la JPEG quedó ambigua; el ticket largo llegó a `Prompt submitted` antes del timeout. Se prohíbe repetir peticiones que pudieron completarse: no hay fuente real segura para otro smoke y la extracción/schema/categorías/deduplicación siguen sin validar. Se preguntó al usuario si aportará tickets nuevos o autoriza expresamente repetir los grupos ambiguos; no hay petición live nueva ni escritura en inventario real.
+- **IA / tickets reales (2026-10-09, vigente):** se preservó WebAPI activo en `127.0.0.1:3001` (PID 50248, readiness HTTP 200) y su cambio ajeno `tools.txt`. Tras autorización del usuario se completó una sola vez el smoke del grupo largo; el contrato de MiCocinAI llevaba JSON Schema estricto y dos adjuntos, pero WebAPI registró solo un fichero al preparar el prompt. El código actual explica el defecto: el guardado antepone UUID a `inventario.json`, mientras el detector de subida forzada solo admite prefijo numérico. El resultado del grupo largo no valida extracción/clasificación con inventario adjunto; no se escribió en inventario real ni se repetirá ese grupo. Solo queda autorizada una ejecución de la JPEG preferida después de que WebAPI muestre dos adjuntos en upload y prompt; no se ha reenviado.
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -4250,7 +4250,7 @@ cambia la condición de no repetir: los dos PDF ya tienen respuesta; la JPEG que
 largo sí alcanzó `prompt_submitted`. Hace falta material nuevo no enviado o una instrucción explícita
 que permita repetir los grupos ambiguos. La validación real no se marca completa.
 
-**Revalidación live tras autorización expresa del usuario (2026-10-09, 21:47 CEST):** el usuario
+**Revalidación live tras autorización expresa del usuario (2026-10-09):** el usuario
 autorizó repetir una vez la JPEG preferida y el grupo largo ambiguos. Reprocesé **solo** el grupo largo
 que aún no tenía una respuesta válida; no repetí los PDF ni la JPEG y no volveré a repetir este grupo.
 WebAPI seguía en `feat/session-attachment-previews`/`7eee7c7c`; el proceso PID 50248 arrancó después
@@ -4278,6 +4278,16 @@ El runner también imprimió el hito estático «los cuatro tickets ... verifica
 procesó uno; el JSON final sí indicó `tickets=1`. Se corrige esa telemetría junto al selector para que
 el mensaje sea válido para una o varias fuentes.
 
+**Revalidación de WebAPI antes de tocar la JPEG:** checkout `D:\projects\webApi`, rama
+`feat/session-attachment-previews`, HEAD `7eee7c7c`; árbol de trabajo sin cambios nuevos salvo el
+`tools.txt` del usuario, que se preservó. El listener PID 50248 continúa activo y readiness HTTP 200,
+pero el código fuente en ese checkout conserva el detector
+`/^(?:\d+-)?(?:inventario|inventory)\.json$/iu`; `writeAttachmentBuffer()` genera en cambio
+`<UUID>-inventario.json`. La prueba existente solo cubre `1-inventario.json`, no esta ruta UUID. Esto
+coincide con la telemetría redacted `fileCount=1`/`attachmentCount=1` del smoke anterior. Readiness
+no prueba la entrega del archivo al modelo y no se vuelve a llamar al proveedor hasta verificar en
+WebAPI ambos contadores en 2. No se editó ni reinició ese servicio.
+
 **Decisión SDD antes de la siguiente implementación:** la autorización nueva no permite repetir un
 grupo que ya terminó en esta corrida. Los dos PDF siguen excluidos, el grupo largo queda cerrado con
 respuesta pero sin validar el segundo adjunto y solo la JPEG preferida queda pendiente de un nuevo
@@ -4287,15 +4297,25 @@ JPEG, con un ticket, máximo dos solicitudes (stream y fallback solo ante HTTP 4
 lee PDFs ni las otras tres fotos. Usarlo para la llamada real únicamente después de corregir y verificar
 la preparación de adjuntos en WebAPI; no volver a procesar el grupo largo.
 
-- [ ] TDD del selector `preferred-jpeg-only`: el plan contiene un JPEG; instrumentar el lector para
+- [x] TDD del selector `preferred-jpeg-only`: el plan contiene un JPEG; instrumentar el lector para
       demostrar que no abre los dos PDFs ni las otras tres JPEG; derivar presupuesto/ticket esperado de 1.
-- [ ] Corregir el texto de progreso estático para que `real-receipts-all-verified` no afirme que se
+- [x] Corregir el texto de progreso estático para que `real-receipts-all-verified` no afirme que se
       verificaron cuatro tickets al procesar una sola selección; cubrir el mapa del hito con prueba.
-- [ ] Validar las selecciones y el contrato con suites aisladas/loopback; verificar strict JSON Schema,
+- [x] Validar las selecciones y el contrato con suites aisladas/loopback; verificar strict JSON Schema,
       un adjunto de ticket + un adjunto JSON y cleanup. No llamar al proveedor en pruebas sintéticas.
 - [ ] Tras corregir WebAPI, comprobar en logs redacted que su `attachmentCount` de subida y de prompt
       sea 2; entonces enviar solo la JPEG preferida una vez, con DB/runner temporales, validar schema,
       categorías, revisión e historial, sin confirmar compras. Detenerse sin reintento ante timeout/5xx.
+
+**TDD y evidencia local (2026-10-09):** primero fallaron las pruebas nuevas de single-JPEG,
+presupuesto del coordinador, allowlist y hito genérico. Tras añadir el selector, el comando
+`node --test scripts/ai-live-receipt-inputs.test.mjs scripts/ai-live-smoke-safety.test.mjs
+scripts/run-ai-real-smoke.test.mjs scripts/ai-live-smoke-runner-control.test.mjs` pasó **50/50**.
+Incluye fixture temporal que lee solo `04.jpeg`, selección/coordinador limitados a un ticket y dos
+requests, validación loopback de JSON Schema estricto y un adjunto de recibo + inventario, y cierre
+de proxy/sesión propios; no llama a proveedor. `pnpm run typecheck:e2e`, `pnpm run check:ui`
+(212 ficheros/21 reglas) y `git diff --check` también pasaron. El E2E live queda pendiente por el
+defecto de WebAPI descrito arriba.
 
 **Rollback:** retirar solamente el selector single-JPEG, su presupuesto y pruebas, la corrección del
 hito genérico y esta actualización de spec; no cambiar el grupo largo ya completado ni datos reales.

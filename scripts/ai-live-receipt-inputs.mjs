@@ -11,6 +11,9 @@ export const AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET = 4;
 export const AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION = 'long-ticket-only';
 export const AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT = 1;
 export const AI_LIVE_RECEIPT_LONG_TICKET_ONLY_COMPLETION_BUDGET = 2;
+export const AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION = 'preferred-jpeg-only';
+export const AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_TICKET_COUNT = 1;
+export const AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_COMPLETION_BUDGET = 2;
 
 const NAME_COLLATOR = new Intl.Collator('es-ES', { numeric: true, sensitivity: 'base' });
 
@@ -25,7 +28,8 @@ export async function loadAiLiveReceiptPlan({
     ![
       'all',
       AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION,
-      AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION
+      AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION,
+      AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION
     ].includes(selection)
   ) {
     throw new Error('The receipt selection is invalid.');
@@ -77,6 +81,21 @@ export async function loadAiLiveReceiptPlan({
     preferredJpegOrdinal > jpegEntries.length
   ) {
     throw new Error('The preferred JPEG must be selected by its sorted 1-based index.');
+  }
+
+  if (selection === AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION) {
+    const preferredJpeg = await readVerifiedFile(
+      root,
+      jpegEntries[preferredJpegOrdinal - 1].name,
+      'jpeg',
+      readFileImpl
+    );
+    return Object.freeze({
+      sourceCount: AI_LIVE_RECEIPT_SOURCE_COUNT,
+      ticketCount: AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_TICKET_COUNT,
+      selection,
+      tickets: Object.freeze([makeTicket(preferredJpeg, 'jpeg', 1)])
+    });
   }
 
   const longTicketEntries = jpegEntries.filter((_, index) => index !== preferredJpegOrdinal - 1);

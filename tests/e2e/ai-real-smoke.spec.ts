@@ -7,6 +7,7 @@ import { expect, test } from './fixtures';
 import { registerAndGoto } from './helpers/auth';
 import {
   AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION,
+  AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION,
   loadAiLiveReceiptPlan
 } from '../../scripts/ai-live-receipt-inputs.mjs';
 
@@ -534,29 +535,40 @@ test('procesa solo los tickets reales seleccionados y verifica la revisión sin 
   const directory = process.env.HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY ?? '';
   const preferredJpegOrdinal = Number(process.env.HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL);
   if (
-    !['unsubmitted-only', AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION].includes(
-      LIVE_RECEIPT_SELECTION ?? ''
-    )
+    ![
+      'unsubmitted-only',
+      AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION,
+      AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION
+    ].includes(LIVE_RECEIPT_SELECTION ?? '')
   ) {
     throw new Error('The live receipt smoke requires a supported safe selection.');
   }
   const longTicketOnly = LIVE_RECEIPT_SELECTION === AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION;
+  const preferredJpegOnly =
+    LIVE_RECEIPT_SELECTION === AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION;
   const plan = longTicketOnly
     ? await loadAiLiveReceiptPlan({
         directory,
         preferredJpegOrdinal,
         selection: AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION
       })
-    : await loadAiLiveReceiptPlan({
-        directory,
-        preferredJpegOrdinal,
-        selection: 'unsubmitted-only'
-      });
+    : preferredJpegOnly
+      ? await loadAiLiveReceiptPlan({
+          directory,
+          preferredJpegOrdinal,
+          selection: AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION
+        })
+      : await loadAiLiveReceiptPlan({
+          directory,
+          preferredJpegOrdinal,
+          selection: 'unsubmitted-only'
+        });
   expect(plan.sourceCount).toBe(6);
-  expect(plan.ticketCount).toBe(longTicketOnly ? 1 : 2);
+  const expectedTicketCount = LIVE_RECEIPT_SELECTION === 'unsubmitted-only' ? 2 : 1;
+  expect(plan.ticketCount).toBe(expectedTicketCount);
   expect(plan.selection).toBe(LIVE_RECEIPT_SELECTION);
   expect(plan.tickets.map(({ sourceFileCount }) => sourceFileCount)).toEqual(
-    longTicketOnly ? [3] : [1, 3]
+    LIVE_RECEIPT_SELECTION === 'unsubmitted-only' ? [1, 3] : [longTicketOnly ? 3 : 1]
   );
   reportLiveSmokePhase('real-receipts-inputs-validated');
 

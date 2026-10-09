@@ -134,6 +134,35 @@ test('long-ticket-only empaqueta solo las tres fotos no enviadas y no lee la JPE
   assert.deepEqual(reads.sort(), ['03.jpg', '05.jpg', '06.jpeg']);
 });
 
+test('preferred-jpeg-only lee solo la JPEG elegida, sin abrir los otros cinco archivos', async (t) => {
+  const directory = await fixtureDirectory(t, SIX_SOURCES);
+  const reads = [];
+
+  const plan = await loadAiLiveReceiptPlan({
+    directory,
+    preferredJpegOrdinal: 2,
+    selection: 'preferred-jpeg-only',
+    readFileImpl: async (path) => {
+      reads.push(basename(path));
+      return readFile(path);
+    }
+  });
+
+  assert.equal(plan.sourceCount, 6);
+  assert.equal(plan.ticketCount, 1);
+  assert.equal(plan.selection, 'preferred-jpeg-only');
+  assert.deepEqual(
+    plan.tickets.map(({ kind, sourceFileCount, pageCount }) => ({
+      kind,
+      sourceFileCount,
+      pageCount
+    })),
+    [{ kind: 'jpeg', sourceFileCount: 1, pageCount: 1 }]
+  );
+  assert.equal(plan.tickets[0].buffer.equals(JPEG), true);
+  assert.deepEqual(reads, ['04.jpeg']);
+});
+
 test('rechaza toda selección de tickets no reconocida', async (t) => {
   const directory = await fixtureDirectory(t, SIX_SOURCES);
 

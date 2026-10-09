@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import {
   AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION,
-  AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT,
+  AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION,
   AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET,
   AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION,
   AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT
@@ -57,7 +57,8 @@ export function validateAiLiveReceiptSmokeRequest(env = process.env) {
   if (
     ![
       AI_LIVE_RECEIPT_UNSUBMITTED_ONLY_SELECTION,
-      AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION
+      AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION,
+      AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION
     ].includes(env[AI_LIVE_SMOKE_ENV.receiptSelection])
   ) {
     throw new Error('Receipt-only mode requires a supported receipt selection.');

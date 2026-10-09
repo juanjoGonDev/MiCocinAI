@@ -13,7 +13,10 @@ import {
 import {
   AI_LIVE_RECEIPT_LONG_TICKET_ONLY_COMPLETION_BUDGET,
   AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION,
-  AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT
+  AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT,
+  AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_COMPLETION_BUDGET,
+  AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION,
+  AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_TICKET_COUNT
 } from './ai-live-receipt-inputs.mjs';
 import { prepareExistingAiLiveSmokeSession } from './ai-live-existing-webapi.mjs';
 import { runAiLiveSmokeRunner } from './ai-live-smoke-runner-control.mjs';
@@ -59,15 +62,21 @@ export async function runAiLiveSmoke({
   const receiptsOnly = validateAiLiveReceiptSmokeRequest(env);
   const longTicketOnly =
     env[AI_LIVE_SMOKE_ENV.receiptSelection] === AI_LIVE_RECEIPT_LONG_TICKET_ONLY_SELECTION;
+  const preferredJpegOnly =
+    env[AI_LIVE_SMOKE_ENV.receiptSelection] === AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_SELECTION;
   const expectedReceiptTicketCount = receiptsOnly
     ? longTicketOnly
       ? AI_LIVE_RECEIPT_LONG_TICKET_ONLY_TICKET_COUNT
-      : AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT
+      : preferredJpegOnly
+        ? AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_TICKET_COUNT
+        : AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT
     : undefined;
   const requestBudget = receiptsOnly
     ? longTicketOnly
       ? AI_LIVE_RECEIPT_LONG_TICKET_ONLY_COMPLETION_BUDGET
-      : AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET
+      : preferredJpegOnly
+        ? AI_LIVE_RECEIPT_PREFERRED_JPEG_ONLY_COMPLETION_BUDGET
+        : AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET
     : AI_LIVE_SMOKE_COMPLETION_BUDGET;
   assertAiLiveSmokeDeadlineContract();
   signal?.throwIfAborted();
