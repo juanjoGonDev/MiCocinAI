@@ -3118,6 +3118,16 @@ previo acabó en HTTP 504 tras el fallback, con cleanup correcto; el timeout de 
 resolverse. En esta comprobación solo se hicieron GET de readiness/logs: no hubo petición IA nueva ni
 se reenvió un ticket, por lo que la validación permanece incompleta.
 
+**Reintento solicitado (2026-10-09; solo preflight, sin reenvío):** tras actualizar referencias con
+`git fetch --all --prune`, no hay commits nuevos: `D:\projects\webApi` sigue limpio en
+`7c1e52e9` y su upstream apunta al mismo commit. El listener PID 43088 arrancó a las 23:48, después
+del fix `e679f44d` (23:42), y `/health/ready` responde HTTP 200. Sus logs locales aún contienen la
+correlación previa `kaamY`: dos adjuntos, timeout de subida de 45 s y HTTP 504 a las 03:16:09;
+`page_closed` confirma que sí funcionó la limpieza, pero no hay `prompt_submitted` ni
+`response_completed`. No aparecen intentos IA posteriores en ese log hasta su última escritura a las
+07:16. Esto confirma que el fix de recuperación/limpieza no corrigió el bloqueo de subida. No se hizo
+ninguna llamada IA ni se reenvió ticket alguno; no evaluar todavía extracción, categorías ni duplicados.
+
 **Rollback:** revertir únicamente la selección live `unsubmitted-only`, sus pruebas y esta subunidad;
 mantener el cargador general de fixtures sintéticas, adjuntos de inventario ya probados y el código de
 WebAPI en su repositorio.
