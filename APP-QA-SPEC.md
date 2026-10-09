@@ -1618,9 +1618,10 @@ Chromium y Pixel 5.
 `pnpm run check:ui`, Prettier focal y `git diff --check` pasan. Build conserva los warnings
 preexistentes de budgets y componentes/imports no usados; no se rebajó ninguna regla.
 
-La ejecución de CI de PR #41 `37885022787` en el commit `e848586` queda verde: 4/4 shards E2E,
-E2E full-stack, build de producción, typecheck y server tests pasan. El test nuevo del gráfico se
-añadió después de esa ejecución; lo cubren la suite completa local y el siguiente CI tras el push.
+La ejecución de CI de PR #41 `37885783378` en `b5729fe` queda verde: 4/4 shards E2E, E2E
+full-stack, build de producción, typecheck y server tests pasan. El workflow CI no ejecuta Karma
+completo: valida su cableado; el pre-push local ejecutó el gate completo **1229/1229**, incluido el
+renderer del gráfico.
 
 **Rollback:** revertir solo `server/src/schemas/recipe.schema.ts`,
 `server/src/routes/recipes.routes.ts`, `server/src/routes/recipes.routes.spec.ts`,
