@@ -873,14 +873,28 @@ datos sin guardar, termina el estado de carga y se abre el resultado «Error de 
 un aviso de éxito ni un toast genérico duplicado, la configuración/formulario permanece utilizable y
 la clave sintética no aparece en el resultado.
 
-- [ ] Añadir primero regresión E2E de 504 para la tarjeta guardada y el formulario; confirmar un único
+- [x] Añadir primero regresión E2E de 504 para la tarjeta guardada y el formulario; confirmar un único
       POST por modo, resultado de error, fin del loading, cero toast de éxito/error duplicado y secreto
       ausente del contenido visible.
-- [ ] Ejecutar Playwright aislado en Chromium y Pixel 5 con SQLite/puerto/semilla temporales y rate
+- [x] Ejecutar Playwright aislado en Chromium y Pixel 5 con SQLite/puerto/semilla temporales y rate
       limit activo; confirmar que el handler sintético intercepta ambas peticiones y que no se contacta
       WebAPI/proveedor. Cambio de producción y coverage: N/A si el contrato actual ya pasa.
-- [ ] Ejecutar `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`; registrar rollback,
+- [x] Ejecutar `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`; registrar rollback,
       commit atómico, hooks completos, push y CI verde. No cambia el aspecto de la UI; capturas: N/A.
+
+**Evidencia (2026-10-09):** el E2E se añadió sin cambiar producción y las dos pruebas primero
+interceptan localmente `/api/ai/test-connection` con un 504 sintético. En el formulario y en una
+configuración guardada se verifican un solo POST, el resultado accesible de error, fin del estado de
+carga, ausencia de ambos tipos de toast y de la clave sintética en el modal; la configuración
+guardada manda solo `configId`, nunca la clave. Con `E2E_RATE_LIMIT=on` y Chrome local,
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/ai-config.spec.ts --grep='timeout' --reporter=line` pasó **4/4** (dos variantes en
+Chromium y Pixel 5). El runner aisló SQLite, semilla, puerto y limpieza bajo `%TEMP%`; el mock
+interceptó cada petición antes de llegar al servicio, por lo que no hubo WebAPI/proveedor externo.
+`pnpm run typecheck:e2e`, `pnpm exec prettier --check tests/e2e/ai-config.spec.ts APP-QA-SPEC.md`,
+`pnpm run check:ui` (**212 ficheros, 21 reglas**), `pnpm run build` y `git diff --check` pasaron.
+Build mantiene warnings de budget de estilos ya existentes; no se tocó CSS ni geometría, así que
+capturas y coverage de producción no aplican. Pendiente solo commit/hooks, push y CI de esta unidad.
 
 **Rollback:** retirar solo la E2E focal y esta subunidad; no cambiar la semántica de conexión ni tocar
 configuración real.
@@ -4177,6 +4191,15 @@ haber fuente real segura para reenviar: los PDF individuales ya respondieron, y 
 tres fotos pudieron llegar al modelo en intentos anteriores. No se repitió ningún ticket; la
 extracción real, schema/categorías y deduplicación permanecen pendientes hasta recibir una fuente
 nueva no enviada o autorización explícita para cambiar la regla de no repetición.
+
+**Comprobación posterior al aviso del usuario (2026-10-09, 21:23 CEST; sin tickets):** WebAPI sí
+está activo en `127.0.0.1:3001` (PID 50248, `node --import tsx src/main.ts`); el endpoint
+`GET /health/ready` responde **HTTP 200**. `:8000` no es el puerto de este proceso. El checkout
+permanece en `feat/session-attachment-previews`, HEAD `7eee7c7c`; se preservó sin tocar el cambio
+ajeno `tools.txt`. No hice una petición IA ni leí logs administrativos. El estado de readiness no
+cambia la condición de no repetir: los dos PDF ya tienen respuesta; la JPEG quedó ambigua y el ticket
+largo sí alcanzó `prompt_submitted`. Hace falta material nuevo no enviado o una instrucción explícita
+que permita repetir los grupos ambiguos. La validación real no se marca completa.
 
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 

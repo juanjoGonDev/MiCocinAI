@@ -826,6 +826,95 @@ test.describe('AI Config', () => {
     await expect(page.locator('input#name')).toBeVisible();
   });
 
+  test('a saved connection timeout shows an error result and clears loading', async ({ page }) => {
+    await page
+      .getByRole('button', { name: /Agregar configuración/ })
+      .first()
+      .click();
+    await page.fill('input#name', 'Timeout guardado');
+    await page.fill('input#model', 'gpt-test');
+    await page.fill('input#baseUrl', 'http://localhost:8000/v1');
+    await page.fill('input#apiKey', 'sk-timeout-secret');
+    await page.locator('app-modal button[type="submit"]').click();
+
+    const card = page.locator('.config-card').filter({ hasText: 'Timeout guardado' });
+    await expect(card).toBeVisible();
+    let requestCount = 0;
+    let requestBody: Record<string, unknown> | undefined;
+    await page.route('**/api/ai/test-connection', async (route) => {
+      requestCount += 1;
+      requestBody = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 504,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: 'Synthetic gateway timeout' })
+      });
+    });
+
+    const testButton = card.getByRole('button', { name: /Probar/ });
+    await testButton.click();
+    await expect(page.locator('.test-result__title')).toContainText('Error de conexión');
+    await expect(testButton).toBeEnabled();
+    expect(requestCount).toBe(1);
+    expect(requestBody).toEqual({ configId: expect.any(String) });
+    expect(JSON.stringify(requestBody)).not.toContain('sk-timeout-secret');
+    await expect(page.locator('.toast--success')).toHaveCount(0);
+    await expect(page.locator('.toast--error')).toHaveCount(0);
+
+    const resultDialog = page.getByRole('dialog', { name: 'Resultado del Test' });
+    await expect(resultDialog).toBeVisible();
+    await expect(resultDialog).not.toContainText('sk-timeout-secret');
+    await resultDialog.getByRole('button', { name: 'Cerrar' }).click();
+    await expect(resultDialog).toHaveCount(0);
+    await expect(card).toBeVisible();
+  });
+
+  test('an unsaved connection timeout shows an error result and keeps the form usable', async ({
+    page
+  }) => {
+    let requestCount = 0;
+    let requestBody: Record<string, unknown> | undefined;
+    await page.route('**/api/ai/test-connection', async (route) => {
+      requestCount += 1;
+      requestBody = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 504,
+        contentType: 'application/json',
+        body: JSON.stringify({ success: false, message: 'Synthetic gateway timeout' })
+      });
+    });
+
+    await page
+      .getByRole('button', { name: /Agregar configuración/ })
+      .first()
+      .click();
+    await page.fill('input#name', 'Timeout sin guardar');
+    await page.fill('input#model', 'gpt-test');
+    await page.fill('input#baseUrl', 'http://localhost:8000/v1');
+    await page.fill('input#apiKey', 'sk-timeout-secret');
+    const testButton = page.locator('[data-test="probar-formulario"] button');
+    await testButton.click();
+
+    await expect(page.locator('.test-result__title')).toContainText('Error de conexión');
+    await expect(testButton).toBeEnabled();
+    expect(requestCount).toBe(1);
+    expect(requestBody).toMatchObject({
+      baseUrl: 'http://localhost:8000/v1',
+      apiKey: 'sk-timeout-secret',
+      model: 'gpt-test'
+    });
+    await expect(page.locator('.toast--success')).toHaveCount(0);
+    await expect(page.locator('.toast--error')).toHaveCount(0);
+
+    const resultDialog = page.getByRole('dialog', { name: 'Resultado del Test' });
+    await expect(resultDialog).toBeVisible();
+    await expect(resultDialog).not.toContainText('sk-timeout-secret');
+    await resultDialog.getByRole('button', { name: 'Cerrar' }).click();
+    await expect(resultDialog).toHaveCount(0);
+    await expect(page.locator('input#name')).toHaveValue('Timeout sin guardar');
+    await expect(page.locator('input#apiKey')).toHaveValue('sk-timeout-secret');
+  });
+
   test('la configuracion recien creada es LA activa, y activar otra apaga la anterior', async ({
     page
   }) => {
