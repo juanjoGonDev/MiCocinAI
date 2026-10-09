@@ -4299,3 +4299,33 @@ mergeó.
 
 **Rollback:** retirar solo la barrera/sincronización E2E y esta subunidad; no cambiar la política del
 historial ni los estados de producción.
+
+### QA-CI.E2E.PANTRY-RECEIPT-ASYNC.1 · estabilizar altas y cola asíncrona
+
+**Hallazgo de CI (2026-10-09, run `37872611309`, shard 3):** 98 pruebas pasaron y el job quedó rojo.
+`pantry.spec.ts:442` agotó 45 s esperando `input#ingredientName` después de intentar abrir el modal;
+la captura final muestra dos altas visibles y el modal cerrado. `receipts.spec.ts:473` esperó una fila
+solo en el historial y agotó 20 s; la captura muestra `ticket.pdf` aceptado y todavía «En cola» en la
+sección «En curso». El POST de ese PDF respondió 201 y el servidor guardó `file_kind='pdf'`. La
+ejecución focal local previa pasó ambos casos, por lo que las aserciones actuales no sincronizan bien
+el trabajo asíncrono y las altas repetidas bajo carga de CI.
+
+**Contrato:** la helper de alta de inventario espera cada transición visible (modal abierto, guardado,
+modal cerrado y fila creada) antes de iniciar la siguiente. La prueba PDF valida aceptación como PDF y
+aparición única en la bandeja, tanto si el trabajo continúa como si ya terminó; el fallo por falta de
+configuración se cubre en la prueba de rescate manual. No cambiar producción salvo que una regresión
+reproducible demuestre una deficiencia funcional, y no introducir llamadas a IA externa.
+
+- [ ] Reproducir el flaky de `darAlta` con Playwright aislado y añadir primero sincronización por
+      modal/fila, nunca por una notificación antigua; repetir la E2E de paginación para confirmar
+      estabilidad de las 11 altas.
+- [ ] Ajustar la E2E PDF para esperar el POST 201, confirmar `fileKind='pdf'` y encontrar exactamente
+      una fila de `ticket.pdf` en «En curso» o Historial sin exigir que el worker alcance estado
+      terminal en 20 s.
+- [ ] Ejecutar ambas pruebas focales repetidas, `pantry.spec.ts` y `receipts.spec.ts` en Chromium y
+      Pixel 5, `typecheck:e2e`, `check:ui`, format, build, `git diff --check` y la suite/gates de CI.
+- [ ] Actualizar evidencia reproducible, hacer commits atómicos con todos los hooks y push; comprobar
+      que CI termina verde para el SHA actual y mantener PR #41 en Draft, sin merge.
+
+**Rollback:** retirar la sincronización de la helper, la aserción PDF ajustada y esta unidad de spec;
+no revertir cambios de producción ni otras unidades.
