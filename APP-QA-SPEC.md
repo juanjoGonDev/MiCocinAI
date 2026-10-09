@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1285/1285** con cobertura **92.22/83.54/90.97/93.64 % S/B/F/L**; `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. CI `37932210836` para HEAD `ae46a63` pasó **9/9** jobs, incluidos los cuatro shards. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1285/1285** con cobertura **92.22/83.54/90.97/93.64 % S/B/F/L**; `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. CI `37966484202` para HEAD `0af4741` pasó **9/9** jobs, incluidos los cuatro shards y E2E full-stack. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1285/1285 con cobertura 92.22/83.54/90.97/93.64 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
@@ -2451,7 +2451,22 @@ de presupuestos/imports que no pertenecen a esta unidad. El gate global se ejecu
 
 ### Compra, tickets, proveedores y observabilidad
 
-- [ ] `/shopping`: crear/renombrar/borrar lista, tienda, tabs abiertas/completadas, búsqueda/filtros/orden/páginas, completar/reabrir y sugerencias.
+- [x] `/shopping`: crear/renombrar/borrar lista, tienda, tabs abiertas/completadas, búsqueda/filtros/orden/páginas, completar/reabrir y sugerencias.
+
+**Barrido integrado (2026-10-09):** con `$env:E2E_RATE_LIMIT='on'` se ejecutaron en Chromium y Pixel 5 las doce
+specs de Compra: `shopping-ai-recovery`, `shopping-lists`, `shopping-primary-geometry`, `shopping-round10`,
+`shopping-round6`, `shopping-sugerencias`, `shopping-suggested`, `shopping-tray-lifecycle`, `shopping-tray-rename`,
+`shopping-tray-store-filter`, `shopping-unit-recents` y `shopping-view-order`; comando reproducible: `pnpm run test:e2e --
+--workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/shopping-ai-recovery.spec.ts
+tests/e2e/shopping-lists.spec.ts tests/e2e/shopping-primary-geometry.spec.ts tests/e2e/shopping-round10.spec.ts
+tests/e2e/shopping-round6.spec.ts tests/e2e/shopping-sugerencias.spec.ts tests/e2e/shopping-suggested.spec.ts
+tests/e2e/shopping-tray-lifecycle.spec.ts tests/e2e/shopping-tray-rename.spec.ts
+tests/e2e/shopping-tray-store-filter.spec.ts tests/e2e/shopping-unit-recents.spec.ts
+tests/e2e/shopping-view-order.spec.ts --reporter=line`. Resultado: **98 pasaron, 4 omitidas intencionalmente** por
+especificidad de proyecto/viewport en `shopping-round6.spec.ts`, 0 fallos (6,9 min). El runner confirmó cleanup de
+SQLite, puertos y procesos aislados; el test de recuperación de foto responde `AI_NOT_CONFIGURED` sin llamar a
+proveedores ni crear líneas. CI `37966484202` validó HEAD `0af4741` con **9/9** jobs verdes; no hubo cambio de
+producto en este barrido.
 
 #### QA-SHOPPING.TRAY-LIFECYCLE.1 · completar, reabrir y borrar desde la bandeja
 
@@ -2462,8 +2477,8 @@ no admite deshacer y exige confirmación mediante `ConfirmService`, nunca `windo
 estado con opción de deshacer y `remove()` confirma antes de llamar a `ShoppingService.deleteList()`. Los
 tests de componente verifican ramas de estado/confirmación con spies, y `shopping-lists.spec.ts` finaliza
 una compra desde el detalle y visita el historial, pero no se encontró E2E para reabrir/borrar desde la fila
-de la bandeja. Esta unidad cubre solo esos caminos reales y deja intacta la casilla general, pendiente de
-auditar filtros completos y sugerencias.
+de la bandeja. Esta unidad cubrió solo esos caminos reales; el barrido integrado y las unidades de filtro y
+sugerencias posteriores cerraron después la casilla general.
 
 **Contrato de aceptación:** con listas sintéticas en SQLite aislada, terminar desde la fila quita la lista de
 activas; al mostrar Terminadas aparece en el historial. Reabrir desde la fila la devuelve a activas y persiste
@@ -2492,9 +2507,10 @@ comportamientos; la E2E confirmó el estado final incorrecto tras recargar.
       `pnpm run typecheck:e2e`, `pnpm run check:ui` (212 ficheros/21 reglas), Prettier focal,
       `pnpm run build` y `git diff --check`; el build mantiene avisos preexistentes de budgets y componentes
       no pertenecientes a esta unidad.
-- [ ] Registrar commit/rollback, ejecutar hooks completos, publicar en la rama y confirmar CI verde para el
-      SHA resultante. Rollback focal: servicio, componente, sus regresiones/E2E y esta unidad; no retirar
-      otros flujos de Compra ni cambios de tickets/IA.
+- [x] Registrar commit/rollback, ejecutar hooks completos, publicar en la rama y confirmar CI verde para el
+      SHA resultante. La unidad quedó en `98e27e4`; los hooks completos del push final pasaron y CI
+      `37966484202` verificó el código incluido en `0af4741` (**9/9** jobs). Rollback focal: servicio,
+      componente, sus regresiones/E2E y esta unidad; no retirar otros flujos de Compra ni cambios de tickets/IA.
 
 **Limitación:** no se ejecutaron ni reenviaron tickets reales ni se llamó a proveedor de IA. Las pruebas usan
 solo datos sintéticos y almacenamiento/puertos aislados; el smoke real pendiente de WebAPI queda pospuesto
@@ -2522,7 +2538,8 @@ al quitar el fallo, reabrir vuelve a funcionar. Los otros estados de error y el 
 - [x] Mapear 503 a `ui.servicio_no_disponible` en el único aviso del servicio, sin duplicarlo ni filtrar el cuerpo.
 - [x] Ejecutar tests focales y E2E aislada de Chromium/Pixel 5 con rate limit, SQLite/puertos/semilla efímeros,
       cleanup y coverage focal ≥70 % S/B/F/L; revisar que no haya geometría ni flujo móvil alterado.
-- [ ] Registrar resultado, comandos y rollback; hooks completos, commit atómico, push y CI verde.
+- [x] Registrar resultado, comandos y rollback; hooks completos, commit atómico, push y CI verde. Fix en
+      `0af4741`; hooks completos y push pasaron, CI `37966484202` quedó verde (**9/9** jobs).
 
 **Evidencia local (2026-10-09):** la regresión unitaria primero falló porque enviaba `synthetic unavailable`; tras
 el mapeo localizado `pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/core/services/shopping.service.spec.ts`
@@ -2532,8 +2549,8 @@ desbordamiento horizontal a 320×568/568×320. Las capturas sintéticas del avis
 `%TEMP%\hogaria-tray-lifecycle-503-final-20261009\{chromium,mobile-chrome}\shopping-list-reopen-503.png`.
 `pnpm run test:client:coverage` pasó **1285/1285**, global **92.22/83.54/90.97/93.64 % S/B/F/L**; `shopping.service.ts`
 **97.25/88.67/100/99.46 %**. `pnpm run typecheck:e2e` pasó. Rollback focal: revertir el mapeo 503 y sus regresiones
-unitaria/E2E, junto con esta subsección; no retirar otras conductas de Compra. La última casilla espera el commit
-atómico, hooks, push y CI verde.
+unitaria/E2E, junto con esta subsección; no retirar otras conductas de Compra. Fix publicado en `0af4741`;
+hooks completos y CI `37966484202` están verdes para el código final.
 
 #### QA-SHOPPING.TRAY-STORE-FILTER.1 · filtro de tienda con enlace recuperable
 
@@ -2559,8 +2576,10 @@ filtro debe restaurar ambas listas. No se cambia backend ni se contacta a provee
       `%TEMP%\hogaria-shop-tray-store-filter-final-20261009\{chromium,mobile-chrome}\shopping-tray-store-filter.png`.
       Pasan `pnpm run typecheck:e2e`, `pnpm exec prettier --check tests/e2e/shopping-tray-store-filter.spec.ts`
       y `git diff --check`.
-- [ ] Registrar comandos/resultados y rollback (solo la regresión E2E y esta subunidad si producción no cambia);
-      ejecutar hooks completos, push y CI verde.
+- [x] Registrar comandos/resultados y rollback (solo la regresión E2E y esta subunidad si producción no cambia);
+      ejecutar hooks completos, push y CI verde. Commit `7bba4b8`; revalidado en el barrido integrado (**98/102**,
+      cuatro skips de viewport intencionales) y CI `37966484202` (**9/9** jobs). Rollback: revertir solo la
+      regresión E2E y retirar esta evidencia.
 
 #### QA-SHOPPING.SUGGESTED-PRESERVE-MANUAL.1 · actualizar sin perder líneas de la casa
 
@@ -2590,8 +2609,9 @@ duplicados. No se invoca IA/proveedor ni se escribe en la base de datos habitual
       `%TEMP%\hogaria-suggested-manual-final-20261009\{chromium,mobile-chrome}\shopping-suggested-manual-preserved.png`.
       Pasan `pnpm run typecheck:e2e` y `pnpm exec prettier --check tests/e2e/shopping-suggested.spec.ts`; cobertura
       de producción: N/A (sin cambio productivo).
-- [ ] Registrar resultado, comandos y rollback (solo la regresión E2E y esta unidad); ejecutar hooks completos,
-      push y CI verde.
+- [x] Registrar resultado, comandos y rollback (solo la regresión E2E y esta unidad); ejecutar hooks completos,
+      push y CI verde. Commit `1add612`; barrido integrado (**98/102**, cuatro skips de viewport intencionales)
+      y CI `37966484202` (**9/9** jobs). Rollback: revertir solo la regresión E2E y retirar esta unidad.
 
 #### QA-SHOPPING.TRAY-RENAME.1 · renombrado accesible y sin avisos duplicados
 
@@ -2618,8 +2638,10 @@ el éxito usa el servidor SQLite aislado. No hay proveedor externo.
 - [x] Validar en Chromium escritorio y Pixel 5 con rate limit activo, SQLite/puertos/semillas temporales y cleanup;
       revisar teclado/foco, sin overflow a 320×568, 393×851, 568×320, 1023×768, 1024×768, 1025×768 y 1440×900,
       e inspeccionar capturas sintéticas PC/móvil. Karma global supera los umbrales; registrar S/B/F/L por archivo.
-- [ ] Anotar comandos/resultado y rollback focal (E2E, etiqueta/aviso y prueba unitaria); ejecutar hooks completos,
-      commit atómico, push y confirmar CI verde.
+- [x] Anotar comandos/resultado y rollback focal (E2E, etiqueta/aviso y prueba unitaria); ejecutar hooks completos,
+      commit atómico, push y confirmar CI verde. Fix en `a80a8b8`; barrido integrado (**98/102**, cuatro skips de
+      viewport intencionales) y CI `37966484202` (**9/9** jobs). Rollback focal: revertir ese commit, sus regresiones
+      y esta subsección.
 
 **TDD rojo (2026-10-09):** Playwright aislado con Chrome local, rate limit activo, SQLite/puertos/semillas efímeros
 y cleanup reprodujo en Chromium y Pixel 5 que el campo no tenía nombre accesible y que el conflicto 409 mostraba
@@ -2665,9 +2687,11 @@ corrupto o no admite escritura, el catálogo completo sigue siendo utilizable y 
 - [x] Validar interfaz real y accesibilidad en Chromium/Pixel 5 con rate limit activo, DB/puerto/semilla aislados y
       cleanup; cubrir 320×568, 393×851, 568×320 y breakpoints 1023/1024/1025/1440 sin overflow. Inspeccionar y guardar
       capturas sintéticas de PC/móvil; coverage focal ≥70 % S/B/F/L y Karma global sin rebajar gates.
-- [ ] Registrar comandos/evidencia y rollback focal; ejecutar hooks completos, commit atómico, push y confirmar CI.
+- [x] Registrar comandos/evidencia y rollback focal; ejecutar hooks completos, commit atómico, push y confirmar CI.
+      Commit `4e1e1bc`; barrido integrado (**98/102**, cuatro skips de viewport intencionales) y CI
+      `37966484202` (**9/9** jobs). Rollback focal: revertir ese commit, sus pruebas y esta subsección.
 
-El caso de almacenamiento corrupto/cuota llena se simulará con fixtures de navegador: no se limpia almacenamiento
+El caso de almacenamiento corrupto/cuota llena se simuló con fixtures de navegador: no se limpia almacenamiento
 real ni se modifica la DB habitual. `rg app-unit-picker frontend/src/app tests/e2e` confirma que
 `shopping-list-detail.component.ts` es su único consumidor de producción; la E2E valida la hoja real de esa pantalla.
 
@@ -2679,7 +2703,7 @@ global 92.22/83.53/90.97/93.64 % S/B/F/L; picker 100/100/100/100 % y StorageServ
 `pnpm run typecheck:e2e` y `pnpm run check:ui` pasaron. Capturas sintéticas inspeccionadas:
 `%TEMP%\hogaria-unit-recents-final-20261009\chromium\shopping-unit-recents.png` y
 `%TEMP%\hogaria-unit-recents-final-20261009\mobile-chrome\shopping-unit-recents.png`.
-Pendiente para marcar la última casilla: hooks, commit atómico, push y CI verde.
+Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el código final en `0af4741` (**9/9** jobs).
 
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
