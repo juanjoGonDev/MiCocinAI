@@ -4389,7 +4389,7 @@ reproducible demuestre una deficiencia funcional, y no introducir llamadas a IA 
 - [x] Ejecutar las focales repetidas y ambas suites (`pantry.spec.ts`, `receipts.spec.ts`) en
       Chromium y Pixel 5 emulado; correr `typecheck:e2e`, `check:ui`, Prettier, build y
       `git diff --check` con el almacenamiento de capturas preexistentes preservado.
-- [ ] Hacer commit atómico con hooks completos y push; comprobar que todos los gates de CI terminan
+- [x] Hacer commit atómico con hooks completos y push; comprobar que todos los gates de CI terminan
       verdes para el SHA actual y mantener PR #41 en Draft, sin merge.
 
 **Evidencia local (2026-10-09):** CI `37872611309` confirmó que el alta se detenía tras dos filas y
@@ -4411,7 +4411,10 @@ proveedor externo. `pnpm run typecheck:e2e`, Prettier focal, `pnpm run check:ui`
 reglas**), `pnpm run build` y `git diff --check` pasan. Build mantiene warnings preexistentes de
 budgets y imports/optional chaining. Las dos capturas de Inventario que ya existían se respaldaron y
 sus SHA-256 se comprobaron idénticos tras la ejecución; esta unidad no modifica la UI ni exige nuevas
-capturas. La revalidación de gates CI para el nuevo SHA queda pendiente.
+capturas. El cambio está incluido en el commit atómico `15029f4` y se publicó con hooks completos. La
+CI `37876690788` pasó **9/9 jobs** para el SHA `3a88ebbd6ea0810e0c315cf0d771a4136c63d250`, incluidos
+Type Check, Server Tests, Production Build, Full-stack E2E y los cuatro shards Playwright. PR #41
+continúa abierto en Draft y sin merge.
 
 **Rollback:** retirar la sincronización de la helper, la aserción PDF ajustada y esta unidad de spec;
 no revertir cambios de producción ni otras unidades.
