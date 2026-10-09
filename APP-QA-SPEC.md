@@ -2354,6 +2354,17 @@ node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --projec
 
 Se inspeccionaron capturas sintéticas del error, sin datos personales, para 1280×720, Pixel 5 (393×851) y ancho mínimo 320×568: `.e2e-screenshots/qa-calendar-delete-failure/{chromium.png,mobile-chrome.png,mobile-chrome-320x568-top.png,mobile-chrome-320x568-actions.png}`. El aviso permanece bajo el encabezado, recibe foco real y el flujo conserva el reintento; el scroll del formulario queda en el modal. DB, servidor y puertos fueron aislados por el runner; no se llamó a IA real. `pnpm run typecheck:e2e`, `pnpm run check:ui` (**212 ficheros/21 reglas**), Prettier de los cuatro archivos modificados y `git diff --check` pasan. El cierre de publicación y CI se registra tras el commit atómico.
 
+## Unidad QA-CALENDAR.RANGE-ERROR.1 · error y reintento de la carga visible
+
+**Fuente revalidada (2026-10-09):** el criterio activo `/calendar` de esta spec requiere verificar recarga y error; `CalendarService.loadRange()` conserva el rango anterior, guarda un error localizado y deja reintentar la misma fecha. La vista ya muestra ese error con un botón, pero la carga no marca el `HttpContext` `SILENT_TOAST`, el texto inline no tiene rol de anuncio y el estado vacío «Nada planificado» también aparece tras una primera carga fallida. La unidad focal de `CalendarService` ya cubre preservar comidas existentes y reintentar; no hay E2E que compruebe el primer error visual y su recuperación. Contrato: el error inicial debe anunciarse como alerta accesible, no fingir que el periodo está vacío ni duplicarse con un toast, mantener un reintento de teclado y limpiar el error al recuperar HTTP 200. Ninguna escritura ni llamada a IA.
+
+- [ ] Añadir primero E2E aislada con primera respuesta `GET /api/calendar/range` 503; reproducir falta de anuncio accesible, estado vacío engañoso o toast duplicado antes de modificar producción.
+- [ ] Silenciar el toast común solo para la carga que ya tiene feedback local, anunciar el error como `role=alert` y ocultar el estado vacío mientras la carga falla, sin borrar comidas/rango previamente cargados.
+- [ ] Añadir aserción unitaria de `SILENT_TOAST` para la petición de rango; probar E2E de error → reintento por Enter → 200, error despejado y estado vacío legítimo solo tras respuesta correcta.
+- [ ] Validar Chromium escritorio y Pixel 5 (incluido 320×568), foco/teclado/overflow, capturas sintéticas inspeccionadas, `typecheck:e2e`, `check:ui`, formato, build, coverage ≥70 % para producción tocada, hooks completos, push y CI del SHA final.
+
+**Rollback:** retirar el contexto silencioso, la semántica del aviso/condición del estado vacío y las regresiones; no hay cambios de datos ni migraciones.
+
 ## Unidad QA-04c.ERROR-INTERCEPTOR.1 · cobertura de errores HTTP compartidos
 
 **Fuente revalidada (2026-10-02):** `frontend/src/app/core/interceptors/error.interceptor.ts` es el punto común de traducción de errores y avisos; traduce respuestas 400/401/403/404/409/422/429/500/503, conserva errores cliente, agrupa avisos por estado durante 4 s (30 s en 401/429), lee `Retry-After`, respeta `SILENT_TOAST` y omite el toast 401 en rutas de autenticación. No hay spec unitaria del interceptor. La suite frontend ya tiene ejecución completa registrada, pero no cubre este módulo directamente; no se cambiará su comportamiento en esta unidad. El contrato observable a fijar es que el interceptor anuncie como máximo el aviso debido y siempre propague `status`, mensaje localizado y error original al consumidor.
