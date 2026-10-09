@@ -5909,3 +5909,29 @@ con hooks completos. PR #41 sigue abierto, Ready for review y sin merge.
 
 **Rollback:** revertir el guard de configuración, su registro en `test:config`, el valor de timeout y
 esta unidad; no modificar selección/sharding ni cobertura de Playwright.
+
+### Reapertura QA-CI.E2E.SHARD-TIMEOUT.2 · evitar cancelación del shard 2 con carga actual
+
+**Fuente revalidada (CI run `37984423417`, SHA `07d54e2`):** el job de shard 2 conserva
+`timeout-minutes: 12`; su step Playwright seguía activo hasta que GitHub registró
+`The operation was canceled` y el job terminó `cancelled` tras aproximadamente 12 minutos. Los
+shards 1, 3, 4, full-stack, build, typecheck y tests del servidor finalizaron correctamente. El log
+del shard muestra polls de jobs de la cola de Dashboard hasta la cancelación, pero no alcanzó a
+publicar su informe JUnit/HTML, así que no hay evidencia para distinguir una suite simplemente lenta
+de una prueba que espera de más. El run anterior que cerró `.1` pasó con 12 minutos (shard 2 en
+6m52s); el nuevo run demuestra que ese margen no cubre la variación actual.
+
+**Contrato:** conservar los cuatro shards, todas las pruebas, retries y aislamiento. Dar al step y
+al upload/cleanup margen hasta 16 minutos, sin modificar los límites individuales de Playwright; la
+validación nueva debe terminar y publicar resultados del shard 2, no limitarse a evitar el rojo por
+cancelación.
+
+- [ ] TDD: elevar el umbral de la regresión de timeout y demostrar que falla con el job actual de
+      12 minutos.
+- [ ] Cambiar solo `timeout-minutes` del job E2E a 16; conservar distribución y ejecución completa.
+- [ ] Ejecutar suites focales, validación de workflows/formato y hooks completos; commit atómico y
+      push. Verificar en un nuevo SHA que todos los jobs E2E y demás gates concluyen en verde y que
+      el shard 2 publica su informe sin cancelarse.
+
+**Rollback:** revertir solo el umbral de timeout, el valor del job y esta reapertura; no reducir ni
+excluir pruebas, shards o retries.
