@@ -3033,21 +3033,25 @@ endpoint de versión inexistente.
 MiCocinAI aún no puede reanudar con seguridad: `loadAiLiveReceiptPlan()` devuelve los cuatro tickets
 en orden (incluidos los dos PDF cuyos fallbacks anteriores fueron HTTP 200), y
 `tests/e2e/ai-real-smoke.spec.ts` los sube todos en un `for` fijo; el coordinador reserva ocho
-completions y solo considera éxito cuatro tickets. El modo actual reenviaría dos peticiones con
-resultado potencialmente completado, lo que el usuario prohibió. La JPEG preferida falló antes de
-`prompt_submitted` y el PDF largo de tres fotos no se llegó a enviar; son las únicas dos fuentes que
-pueden volver a probarse.
+completions y solo considera éxito cuatro tickets. El modo histórico reenviaría peticiones con
+resultado potencialmente completado, lo que el usuario prohibió. La selección reducida se diseñó para
+la JPEG preferida y el PDF largo con las otras tres fotos, sin reenviar los PDF individuales. La
+evidencia live posterior de esta misma subunidad (véase abajo) cambió su elegibilidad: la JPEG queda
+ambigua por su 400/502 y el PDF largo sí llegó a `prompt_submitted` antes de agotar `wait_for_reply`.
+Ninguno de los cuatro grupos tiene ahora autorización segura para repetirse.
 
-**Contrato:** añadir a la harness live una selección explícita y cerrada `unsubmitted-only`, distinta
-del lote completo histórico. Debe construir únicamente la JPEG preferida y un PDF multipágina con las
-otras tres fotos, en ese orden; no leer/subir los PDF individuales ni aceptar otra selección en este
-reintento. Concurrencia 1, parada en el primer fallo y techo de cuatro requests HTTP: por cada ticket
-una petición streaming y, únicamente si devuelve HTTP 400 sin respuesta utilizable, un fallback
-no-stream. No reintentar timeout/5xx ni una llamada ambigua. Cada ticket debe llevar el snapshot fresco
-`inventario.json` como adjunto y `response_format` estricto. Usar exclusivamente runner/SQLite/uploads
-temporales; verificar respuesta contra schema, detectar duplicados en el ticket largo, confirmar dos
-filas revisables/editables e historial, no confirmar compras ni escribir en despensa/inventario real.
-No guardar nombres/contenido real en logs, screenshots, traces, videos, reportes o Git.
+**Contrato:** la harness live conserva la selección explícita y cerrada `unsubmitted-only`, distinta
+del lote completo histórico. Cuando haya grupos inequívocamente no enviados, solo puede construir la
+JPEG preferida y un PDF multipágina con las otras tres fotos, en ese orden; nunca leer/subir los PDF
+individuales en este reintento. Concurrencia 1, parada en el primer fallo y techo de cuatro requests
+HTTP: por cada ticket una petición streaming y, únicamente si devuelve HTTP 400 sin respuesta
+utilizable, un fallback no-stream. No reintentar timeout/5xx ni una llamada ambigua. Cada petición
+debe llevar el snapshot fresco `inventario.json` como adjunto y `response_format` estricto. Usar
+exclusivamente runner/SQLite/uploads temporales; verificar respuesta contra schema, detectar duplicados
+en el ticket largo, confirmar filas revisables/editables e historial, no confirmar compras ni escribir
+en despensa/inventario real. No guardar nombres/contenido real en logs, screenshots, traces, videos,
+reportes o Git. Si todos los grupos tienen resultado potencialmente completado, detener la validación
+real sin reenviar ninguno.
 
 - [x] Añadir primero pruebas rojas de loader/coordinador que prueben que `unsubmitted-only` devuelve
       solo JPEG + PDF multipágina, no lee los dos PDF originales, rechaza selecciones inválidas y
@@ -3058,10 +3062,10 @@ No guardar nombres/contenido real en logs, screenshots, traces, videos, reportes
 - [x] Ejecutar unitarias focales, typecheck E2E, `check:ui`, formato, build y regresión loopback
       sintética; confirmar antes de tickets que proceso/checkout WebAPI siguen en estado corregido,
       readiness, privacidad y redacción de logs son seguros.
-- [ ] Con el preflight verde, subir solo la JPEG preferida y el PDF largo al proveedor mediante UI
-      aislada, con `inventario.json` y `response_format`; validar cada respuesta, categorías, ausencia
-      de duplicados, edición e historial. Nunca reenviar los PDF individuales ni guardar resultados
-      fuera de la base temporal.
+- [ ] Solo si existe un grupo confirmado como no enviado, subirlo mediante UI aislada, con
+      `inventario.json` y `response_format`; validar respuesta, categorías, ausencia de duplicados,
+      edición e historial. Con el estado actual (JPEG ambigua; PDF largo ya enviado; PDF individuales
+      excluidos) no hay grupo seguro para reenviar. Nunca guardar resultados fuera de la base temporal.
 - [ ] Confirmar cleanup, registrar únicamente evidencia agregada, marcar la unidad con resultados
       reales, commits atómicos/hooks/push y CI verde para el head del PR; dejarlo listo y sin merge.
 
@@ -3324,6 +3328,31 @@ limpieza automática del directorio `C:\Users\juanj\AppData\Local\Temp\hogaria-e
 bloqueada por la política del entorno: aún contiene el artefacto temporal y debe eliminarse después
 de cerrar esta revisión. La inspección posterior mostró que el checkout de WebAPI ya estaba en otra
 rama y tenía un cambio staged; no se modificó ni se usó para atribuir el resultado live.
+
+**Reintento solicitado por el usuario (2026-10-09; preflight de WebAPI, sin nueva petición IA):**
+`git fetch --all --prune` no encontró una corrección de producción posterior. El checkout visible de
+`D:\projects\webApi` está limpio en `feat/session-attachment-previews`, HEAD `cdb14b9b` (el último
+commit es documental). La rama local `fix/live-ticket-inventory-attachments` sigue en `b55f9589`, que
+contiene `246291eb fix(chatgpt): upload staged inventory snapshots`; allí el executor elimina los
+prefijos multipart numéricos/UUID para reconocer `inventario.json` y la política fuerza su subida sin
+inline fallback por tamaño/presupuesto. El listener PID 7100 continúa respondiendo HTTP 200 en
+`/health/ready`; arrancó a las 10:09 hora local, después de esos commits, pero WebAPI no expone el SHA
+cargado, por lo que no se afirma una identidad binaria exacta del proceso.
+
+El tail actual de `/admin/api/logs?lines=500` está truncado, termina a las 11:15:58 y conserva el
+historial de esta corrida: una respuesta sintética detectada a las 10:10:27; el ticket largo tuvo
+`Prompt submitted` a las 10:12:46 y `wait_for_reply` agotado a las 10:14:46. No hay un
+`Reply detected` posterior al envío del ticket, `response_completed`, `attachment_upload_failed` ni
+`cleanup_failed` en ese tail. Esto concuerda con la evidencia de la corrida anterior: ambos adjuntos
+del ticket largo se vieron en ChatGPT, pero no se obtuvo reply dentro de 120 s. El problema observado
+ya no es la representación/subida del par de ficheros; sigue sin demostrarse corregido el timeout de
+espera/lectura de respuesta, y no aparece un cambio de producción posterior que lo resuelva.
+
+No se hizo una nueva petición al proveedor ni se abrieron o reenviaron tickets. El ticket largo ya
+alcanzó `prompt_submitted`; la JPEG tuvo un resultado ambiguo y los dos PDF individuales permanecen
+excluidos por ejecuciones previas potencialmente completadas. Según la regla de no repetir una
+petición que pudo completarse, no queda un grupo real elegible para otro smoke. La respuesta/schema,
+las categorías y la deduplicación continúan sin validar; esta unidad no se marca completa.
 
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
