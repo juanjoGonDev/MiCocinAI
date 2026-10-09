@@ -850,13 +850,24 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 **Evidencia histórica (2026-10-01/02):** la línea base pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentencias/ramas/funciones/líneas); corridas posteriores pasaron `651/651` con 60.64/51.37/50.72/62.41 % y `665/665` con **60.30/52.21/49.80/61.92 %**, por debajo de los gates. No se rebajó ningún umbral. Estas métricas ya no describen el estado actual.
 
-**Revalidación vigente (2026-10-08, HEAD `0d55928`):** el hook pre-push ejecutó `pnpm run test:client` y pasó la suite frontend completa: **1198/1198**, Chrome Headless 154, salida **0**. Cobertura S/B/F/L: **90.33/81.44/88.99/91.75 %**; superó el 80 % en las cuatro métricas sin relajar thresholds ni cambiar la instrumentación. La corrida generó el reporte local en `frontend/coverage/`; no se añadió al commit. `.github/workflows/ci.yml` comprueba el cableado Karma y ejecuta E2E, pero no incluye la suite frontend completa; por ello el gate se conservó y verificó localmente.
+**Revalidación vigente (2026-10-09, HEAD `700e812`):** el hook pre-push ejecutó `pnpm run test:client` y pasó la suite frontend completa: **1213/1213**, Chrome Headless 154, salida **0**. Cobertura S/B/F/L: **90.41/81.61/89.13/91.84 %**; superó el 80 % en las cuatro métricas sin relajar thresholds ni cambiar la instrumentación. El informe `frontend/coverage/lcov.info` quedó archivado fuera del repo en `%TEMP%\hogaria-coverage-qa-20261009-0207\lcov.info`. `.github/workflows/ci.yml` comprueba el cableado Karma y ejecuta E2E, pero no incluye la suite frontend completa; por ello el gate se conservó y verificó localmente.
 
-- [x] Revalidar cobertura global y por archivo antes del siguiente lote; archivar el reporte de esta ejecución en `%TEMP%`.
+- [x] Revalidar cobertura global y por archivo antes del siguiente lote; archivar el reporte base de esta ejecución en `%TEMP%`.
 - [ ] Añadir pruebas unitarias/integración para ramas y caminos de error/éxito no cubiertos; cada lote debe partir de fuentes actuales, tener regresión útil, cobertura ≥70 % en cada métrica del alcance y commit atómico.
 - [x] Repetir la suite frontend completa con coverage y alcanzar 80 % en statements, ramas, funciones y líneas; documentar comandos y salidas, sin bajar umbrales.
 
 Candidatos del informe previo al lote (histórico; orden statements/branches/functions/lines): `auth.service.ts` 100/81.82/94.59/100 %, `theme.service.ts` 96.67/92.86/87.50/96.67 %, `shopping.model.ts` 79.22/62.40/66.67/79.22 %, `error.interceptor.ts` 7.89/0/0/7.89 %, `swipe-row.directive.ts` 10.09/11.11/11.76/10.09 %, `core/time.ts` 86.75/57.83/95/86.75 %, `data-table.util.ts` 95.86/78.77/100/95.86 %, `i18n.service.ts` 61.70/23.68/61.54/61.70 %, `household.service.ts` 1.79/0/0/1.79 % y `taste-profile.service.ts` 3.33/0/0/3.33 %.
+
+### QA-04c.CONFIRM-SERVICE.1 · cubrir el ciclo de vida de confirmación destructiva
+
+**Fuente revalidada (2026-10-09, HEAD `700e812`):** `HOGARIA-SPEC.md` §B exige que todo borrado destructivo pase por `ConfirmService`. `confirm-dialog.component.spec.ts` sustituye el servicio por spies, de modo que comprueba el cableado del diálogo pero no las promesas/señal del servicio; no existe un `confirm.service.spec.ts`. La corrida base `pnpm run test:client` pasó **1213/1213** con gate global verde. El LCOV actual del servicio marca **8.33/0/0/8.33 % S/B/F/L** (1/12 líneas, 0/0 ramas reportadas, 0/5 funciones); informe archivado en `%TEMP%\hogaria-coverage-qa-20261009-0207\lcov.info`.
+
+**Contrato:** `confirm(options)` publica la petición activa; si ya hay una, resuelve la anterior como cancelada antes de sustituirla. `accept()` resuelve `true` y limpia la señal; `cancel()` resuelve `false` y limpia la señal. Aceptar/cancelar sin petición activa son no-op seguros. No deben quedar promesas pendientes tras reemplazar una petición.
+
+- [ ] Añadir una suite unitaria focal que use el `ConfirmService` real y verifique señal inicial, petición/opciones activas y resolución verdadera/falsa tras aceptar/cancelar.
+- [ ] Cubrir reemplazo de petición (la anterior resuelve `false`, la nueva conserva sus opciones y termina normalmente) y llamadas redundantes a aceptar/cancelar sin petición.
+- [ ] Ejecutar pruebas focales y la suite frontend completa; conseguir ≥70 % S/B/F/L en `confirm.service.ts` y mantener ≥80 % global sin cambiar configuración ni umbrales.
+- [ ] Archivar el LCOV final fuera de Git; ejecutar Prettier, `git diff --check`, build y los hooks completos de commit/push. No tocar el diálogo ni lógica de producción salvo que una regresión real lo requiera.
 
 ### Unidad QA-04c.SWIPE-DIRECTIVES.1 · cobertura de los gestos de compra
 
