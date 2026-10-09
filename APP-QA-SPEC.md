@@ -2853,7 +2853,19 @@ Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el
 - [ ] `/receipts`: elegir/arrastrar archivo, validar formatos y borde de 10 MiB a través del ingress de producción, rechazar inválidos, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
 - [ ] `/receipts/:id`: procesamiento IA directo (sin OCR según HOGARIA-SPEC §12aj), edición de tienda/notas/líneas/unidad/cantidad/precio/oferta, añadir/quitar, total que cuadra/no cuadra, confirmar a inventario, detener/reintentar/borrar y fallo de proveedor.
 - [x] `/ai-config`: alta/edición/borrado, campos y rangos, mostrar/ocultar clave, probar desde formulario y desde ficha, loading/éxito/error/timeout, activar una sola config y conservar el secreto sin exponerlo.
-- [ ] `/logs`: conexión SSE/reconexión, pausar/reanudar/autoscroll, filtrar fuente/nivel, seleccionar/copiar líneas o todo, borrar con confirmación y cola de logs vacía/larga.
+- [x] `/logs`: conexión SSE/reconexión, pausar/reanudar/autoscroll, filtrar fuente/nivel, seleccionar/copiar líneas o todo, borrar con confirmación y cola de logs vacía/larga.
+
+**Evidencia de `/logs` (2026-10-09):** las pruebas E2E aisladas en Chromium y Pixel 5 pasaron **16/16** para `logs.spec.ts`, `logs-clear-filters.spec.ts` y `logs-sse-reconnect.spec.ts`; cubren SSE, reconexión, pausa/autoscroll, filtros de fuente/nivel, selección y copiado, y borrado confirmado. La E2E contra el build/servidor de producción pasó **6/6** (`logs-only-errors.spec.ts` y `logs-history-queue.spec.ts`): combinación de «Solo errores» por teclado/táctil con fuentes y niveles, lista vacía y 250 líneas, orden, autoscroll activo/desactivado y SSE en vivo sin recarga. Todas las corridas usaron puertos, SQLite y fixtures sintéticos aislados con cleanup verificado; no llamaron al proveedor de IA. Se guardaron capturas PC/móvil ignoradas por Git en `.e2e-screenshots/qa-logs-matrix-20261009-followup/`; se inspeccionó el par `chromium/logs-history-long.png` y `mobile-chrome/logs-history-long.png`. Los tests de historial y solo-errores asertan cero `pageerror`. Sin cambio de producción; cobertura de producción N/A.
+
+Comandos ejecutados:
+
+```powershell
+$env:E2E_RATE_LIMIT='on'
+node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/logs.spec.ts tests/e2e/logs-clear-filters.spec.ts tests/e2e/logs-sse-reconnect.spec.ts --reporter=line
+
+$env:E2E_SCREENSHOT_DIR='.e2e-screenshots/qa-logs-matrix-20261009-followup'
+pnpm run test:e2e:full-stack -- --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/full-stack/logs-only-errors.spec.ts tests/e2e/full-stack/logs-history-queue.spec.ts --reporter=line
+```
 
 **Evidencia de `/ai-config` (2026-10-09):** suite aislada completa
 `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
