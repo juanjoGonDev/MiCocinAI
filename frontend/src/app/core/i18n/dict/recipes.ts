@@ -9,6 +9,7 @@
 export const recipesEs = {
   'recipes.disfruta_preparando_tu_receta': 'Disfruta preparando tu receta',
   'recipes.a_cocinar': '¡A cocinar!',
+  'recipes.no_se_pudo_registrar_cocina': 'No se pudo registrar que has cocinado esta receta',
   'recipes.no_se_pudo_guardar': 'No se pudo guardar la receta',
   'recipes.la_receta_se_ha': 'La receta se ha guardado correctamente',
   'recipes.guardada': '¡Guardada!',
@@ -248,6 +249,7 @@ export const recipesEs = {
 export const recipesEn: Record<keyof typeof recipesEs, string> = {
   'recipes.disfruta_preparando_tu_receta': 'Enjoy making your recipe',
   'recipes.a_cocinar': 'Time to cook!',
+  'recipes.no_se_pudo_registrar_cocina': 'Could not record that you cooked this recipe',
   'recipes.no_se_pudo_guardar': 'Could not save the recipe',
   'recipes.la_receta_se_ha': 'The recipe has been saved correctly',
   'recipes.guardada': 'Saved!',

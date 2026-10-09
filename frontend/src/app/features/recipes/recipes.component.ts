@@ -13,7 +13,7 @@ import { CommonModule, DOCUMENT } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { combineLatest, of } from 'rxjs';
-import { distinctUntilChanged, map, switchMap } from 'rxjs/operators';
+import { distinctUntilChanged, finalize, map, switchMap } from 'rxjs/operators';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RecipeService } from '../../core/services/recipe.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -1288,9 +1288,12 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
           </section>
 
           <footer class="recipe-detail__actions">
-            <app-button variant="primary" (onClick)="cookRecipe(recipe)">{{
-              'recipes.cocinar_ahora' | t
-            }}</app-button>
+            <app-button
+              variant="primary"
+              [disabled]="cookingRecipeId() === recipe.id"
+              (onClick)="cookRecipe(recipe)"
+              >{{ 'recipes.cocinar_ahora' | t }}</app-button
+            >
             <app-button variant="outline" (onClick)="toggleFavorite(recipe)">{{
               recipe.isFavorite ? ('recipes.favorito' | t) : ('recipes.anadir_a_favoritos' | t)
             }}</app-button>
@@ -2413,6 +2416,7 @@ export class RecipesComponent implements OnInit {
   aiGenerationStep = signal(1);
   recipeIngredientCategory = signal('all');
   selectedRecipe = signal<Recipe | null>(null);
+  cookingRecipeId = signal<string | null>(null);
   recipeServings = signal(2);
   selectedIngredients = signal<any[]>([]);
   selectedRecipeDetailLevel = signal<DetailLevel>('intermediate');
@@ -3260,12 +3264,33 @@ export class RecipesComponent implements OnInit {
   }
 
   cookRecipe(recipe: Recipe): void {
-    this.recipeService.recordCooking(recipe.id);
-    this.toastService.success(
-      this.i18n.t('recipes.a_cocinar'),
-      this.i18n.t('recipes.disfruta_preparando_tu_receta')
-    );
-    this.closeRecipeDetail();
+    if (this.cookingRecipeId() === recipe.id) return;
+    this.cookingRecipeId.set(recipe.id);
+    this.recipeService
+      .recordCooking(recipe.id)
+      .pipe(finalize(() => this.cookingRecipeId.set(null)))
+      .subscribe({
+        next: (recorded) => {
+          if (!recorded) {
+            this.toastService.error(
+              this.i18n.t('ui.error'),
+              this.i18n.t('recipes.no_se_pudo_registrar_cocina')
+            );
+            return;
+          }
+          this.toastService.success(
+            this.i18n.t('recipes.a_cocinar'),
+            this.i18n.t('recipes.disfruta_preparando_tu_receta')
+          );
+          if (this.selectedRecipe()?.id === recipe.id) this.closeRecipeDetail();
+        },
+        error: () => {
+          this.toastService.error(
+            this.i18n.t('ui.error'),
+            this.i18n.t('recipes.no_se_pudo_registrar_cocina')
+          );
+        }
+      });
   }
 
   getCategoryIcon(category: string): string {

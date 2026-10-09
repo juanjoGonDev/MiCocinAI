@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local y el gate global frontend volvió a superar el 80 %. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1224/1224** con cobertura **90.82/81.92/89.44/92.27 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1225/1225** con cobertura **90.83/81.94/89.42/92.27 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (2026-10-09):** la validación de tickets sigue abierta. La corrección de WebAPI hace que la limpieza tras un upload parcial termine correctamente, pero el upload real de los dos adjuntos aún expira con HTTP 504 antes de `prompt_submitted`. No se repiten tickets mientras ese fallo persista.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1224/1224 con el gate global 80 % verde; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1225/1225 con cobertura 90.83/81.94/89.42/92.27 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -1477,18 +1477,48 @@ duplicados; si falla, la ficha queda abierta, aparece un error traducido y el us
 Un fallo no cambia el contador. Esta conducta evita declarar una acción persistente que el servidor no
 guardó; la inferencia se limita a este feedback y no modifica el contrato del endpoint.
 
-- [ ] Escribir primero una E2E roja con receta propia sintética en SQLite temporal: retener el primer
+- [x] Escribir primero una E2E roja con receta propia sintética en SQLite temporal: retener el primer
       POST, impedir el doble envío, responder 503 y verificar que el detalle sigue abierto, no hay éxito
       y el contador no cambia; reintentar contra el API aislado y comprobar exactamente un incremento.
-- [ ] Hacer observable el resultado de `recordCooking`; el componente solo muestra éxito/cierra al
+- [x] Hacer observable el resultado de `recordCooking`; el componente solo muestra éxito/cierra al
       confirmarse y muestra error recuperable en el fallo, liberando el bloqueo de envío en ambos casos.
-- [ ] Probar el servicio/componente con éxito, error, retry y repetición durante loading; mantener
+- [x] Probar el servicio/componente con éxito, error, retry y repetición durante loading; mantener
       cobertura focal ≥70 % en statements/branches/functions/lines sin bajar ningún gate existente.
-- [ ] Ejecutar Playwright real con Chromium y Pixel 5, DB/puertos/semilla aislados; revisar error de
+- [x] Ejecutar Playwright real con Chromium y Pixel 5, DB/puertos/semilla aislados; revisar error de
       página, persistencia tras volver/recargar, foco/estado disabled, ancho mínimo 320 y captura
       sintética comparable de PC/móvil. No llamar al proveedor IA.
-- [ ] Registrar comando/resultados, límites y rollback por archivos; conservar abierta la casilla
+- [x] Registrar comando/resultados, límites y rollback por archivos; conservar abierta la casilla
       general `/recipes` hasta cubrir las demás acciones del listado.
+
+**Evidencia QA-RECIPES.COOK-ACTION.1 (2026-10-09):** la E2E nueva falló primero contra la
+implementación original: al resolver el POST con 503, el detalle ya se había cerrado como éxito. Se
+cambió el servicio para devolver resultado observable y solo incrementar el estado local con
+`success: true`; el componente bloquea repeticiones de la misma receta, silencia el toast HTTP genérico,
+confirma/cierra tras respuesta válida y, en error, mantiene el detalle, muestra mensaje ES/EN y permite
+retry. No cambia el endpoint ni el esquema de datos.
+
+`pnpm run test` pasó **1225/1225** unitarias frontend (coverage global **90.83/81.94/89.42/92.27 %
+S/B/F/L**) y **1234** backend con un skip existente. Cobertura de los ficheros cambiados:
+`recipe.service.ts` **90.19/79.06/92.45/91.59 %** y `recipes.component.ts`
+**94.55/89.14/92.30/95.15 % S/B/F/L**. La build de producción, `typecheck:e2e`, `check:ui`
+(211 ficheros/21 reglas), Prettier y `git diff --check` pasan; la build conserva el warning de
+presupuesto de estilos inline ya existente, sin modificar el gate.
+
+Con `E2E_RATE_LIMIT=on`, la matriz aislada de recetas pasó **26/26** en Chromium y Pixel 5; la E2E
+focal `recipe-cook-action.spec.ts` pasó **2/2** con SQLite/puertos/semilla temporales. Retiene el primer
+POST mientras el botón queda desactivado y solo existe una petición, devuelve 503, verifica estado/contador/foco y error único, reintenta
+contra el API aislado, comprueba una sola persistencia tras volver al listado y recargar, y no produce
+errores de página ni llamadas IA. Viewports: 1440×900 y Pixel 5 a 320×740. Capturas sintéticas
+inspeccionadas: `.e2e-screenshots/qa-recipe-cook-action-20261009-final/chromium-recipe-cook-error.png`
+y `mobile-chrome-recipe-cook-error.png`; se confirma toast claro, ficha retenida, control enfocado y
+sin overflow. El flujo solo usa API local aislada y fotos sintéticas interceptadas.
+
+**Rollback:** revertir únicamente los cambios de `frontend/src/app/core/services/recipe.service.ts`,
+`frontend/src/app/core/services/recipe.service.spec.ts`,
+`frontend/src/app/features/recipes/recipes.component.ts`,
+`frontend/src/app/features/recipes/recipes.component.spec.ts`,
+`frontend/src/app/core/i18n/dict/recipes.ts`, `tests/e2e/recipe-cook-action.spec.ts` y este bloque.
+La cobertura general de `/recipes` permanece abierta por sus otras acciones/filtros.
 
 ## QA-AUTH.FORGOT.1 · resultado honesto y no enumeración en recuperación (spec-first)
 

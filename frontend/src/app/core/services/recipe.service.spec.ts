@@ -179,9 +179,9 @@ describe('RecipeService', () => {
     http.expectOne(`/api/recipes/${original.id}`).flush({ data: original });
 
     let result: Recipe | undefined;
-    service.updateRecipe(original.id, { name: updated.name, servings: updated.servings }).subscribe(
-      (recipe) => (result = recipe)
-    );
+    service
+      .updateRecipe(original.id, { name: updated.name, servings: updated.servings })
+      .subscribe((recipe) => (result = recipe));
     const request = http.expectOne({ method: 'PATCH', url: `/api/recipes/${original.id}` });
     expect(request.request.body).toEqual({ name: updated.name, servings: updated.servings });
     request.flush({ success: true, data: updated });
@@ -301,21 +301,36 @@ describe('RecipeService', () => {
     expect(service.total()).toBe(2);
   });
 
-  it('increments cooking count once on success and keeps it on failure', () => {
+  it('returns the cooking result, increments once on success and keeps it on failure', () => {
     const initial = makeRecipe();
     service.loadRecipes();
     http.expectOne('/api/recipes').flush({ data: { recipes: [initial], total: 1 } });
 
-    service.recordCooking(initial.id);
-    http
-      .expectOne({ method: 'POST', url: `/api/recipes/${initial.id}/cook` })
-      .flush({ success: true });
+    const successfulResults: boolean[] = [];
+    service.recordCooking(initial.id).subscribe((result) => successfulResults.push(result));
+    const successfulCooking = http.expectOne({
+      method: 'POST',
+      url: `/api/recipes/${initial.id}/cook`
+    });
+    expect(successfulCooking.request.context.get(SILENT_TOAST)).toBeTrue();
+    successfulCooking.flush({ success: true });
+    expect(successfulResults).toEqual([true]);
     expect(service.recipes()[0].timesCooked).toBe(1);
 
-    service.recordCooking(initial.id);
+    const failedResults: boolean[] = [];
+    service.recordCooking(initial.id).subscribe((result) => failedResults.push(result));
     http
       .expectOne({ method: 'POST', url: `/api/recipes/${initial.id}/cook` })
       .flush({}, { status: 500, statusText: 'Server Error' });
+    expect(failedResults).toEqual([false]);
+    expect(service.recipes()[0].timesCooked).toBe(1);
+
+    const malformedResults: boolean[] = [];
+    service.recordCooking(initial.id).subscribe((result) => malformedResults.push(result));
+    http
+      .expectOne({ method: 'POST', url: `/api/recipes/${initial.id}/cook` })
+      .flush({ success: false });
+    expect(malformedResults).toEqual([false]);
     expect(service.recipes()[0].timesCooked).toBe(1);
   });
 
@@ -363,7 +378,10 @@ describe('RecipeService', () => {
 
     const request = http.expectOne('/api/recipes/step-photos/search?q=tortilla%20espa%C3%B1ola');
     expect(request.request.method).toBe('GET');
-    request.flush({ success: true, data: [{ id: 'c'.repeat(24), previewUrl: '/api/recipe-photo-previews/x' }] });
+    request.flush({
+      success: true,
+      data: [{ id: 'c'.repeat(24), previewUrl: '/api/recipe-photo-previews/x' }]
+    });
     expect(result).toEqual([{ id: 'c'.repeat(24), previewUrl: '/api/recipe-photo-previews/x' }]);
   });
 
@@ -383,9 +401,9 @@ describe('RecipeService', () => {
 
     service.forgetStepPhotoImage(id);
     service.loadStepPhotoImage(id).subscribe();
-    http.expectOne(`/api/recipes/step-photos/${id}/image`).flush(
-      new Blob(['synthetic image'], { type: 'image/jpeg' })
-    );
+    http
+      .expectOne(`/api/recipes/step-photos/${id}/image`)
+      .flush(new Blob(['synthetic image'], { type: 'image/jpeg' }));
     expect(createObjectUrl).toHaveBeenCalledTimes(2);
   });
 

@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { ActivatedRoute, convertToParamMap, type ParamMap, Router } from '@angular/router';
-import { BehaviorSubject, of, throwError } from 'rxjs';
+import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { RecipesComponent } from './recipes.component';
 import { RecipeService } from '../../core/services/recipe.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -105,7 +105,7 @@ describe('RecipesComponent', () => {
       getRecipe: jasmine.createSpy('getRecipe').and.returnValue(of(null)),
       createRecipe: jasmine.createSpy('createRecipe').and.returnValue(of(RECIPE)),
       toggleFavorite: jasmine.createSpy('toggleFavorite'),
-      recordCooking: jasmine.createSpy('recordCooking')
+      recordCooking: jasmine.createSpy('recordCooking').and.returnValue(of(true))
     };
   }
 
@@ -493,6 +493,40 @@ describe('RecipesComponent', () => {
     expect(router.navigate).not.toHaveBeenCalledWith(
       [],
       jasmine.objectContaining({ queryParams: { recipe: null } })
+    );
+  });
+
+  it('waits for cooking confirmation, rejects duplicate clicks, and keeps retry available', () => {
+    const owned = { ...RECIPE, author: 'user' as const, authorId: 'synthetic-user' };
+    const pending = new Subject<boolean>();
+    recipes.recordCooking.and.returnValues(pending.asObservable(), of(true));
+    component.selectedRecipe.set(owned);
+
+    component.cookRecipe(owned);
+    component.cookRecipe(owned);
+
+    expect(recipes.recordCooking).toHaveBeenCalledTimes(1);
+    expect(component.cookingRecipeId()).toBe(owned.id);
+    expect(component.selectedRecipe()).toEqual(owned);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+
+    pending.next(false);
+    pending.complete();
+
+    expect(component.cookingRecipeId()).toBeNull();
+    expect(component.selectedRecipe()).toEqual(owned);
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith('ui.error', 'recipes.no_se_pudo_registrar_cocina');
+
+    component.cookRecipe(owned);
+
+    expect(recipes.recordCooking).toHaveBeenCalledTimes(2);
+    expect(component.cookingRecipeId()).toBeNull();
+    expect(component.selectedRecipe()).toBeNull();
+    expect(toast.success).toHaveBeenCalledWith(
+      'recipes.a_cocinar',
+      'recipes.disfruta_preparando_tu_receta'
     );
   });
 

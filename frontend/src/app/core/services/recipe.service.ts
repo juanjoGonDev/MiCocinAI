@@ -232,18 +232,25 @@ export class RecipeService {
       .subscribe();
   }
 
-  recordCooking(id: string): void {
-    this.http
-      .post<any>(`${this.apiUrl}/${id}/cook`, {})
+  recordCooking(id: string): Observable<boolean> {
+    return this.http
+      .post<{ success?: boolean }>(
+        `${this.apiUrl}/${id}/cook`,
+        {},
+        {
+          context: new HttpContext().set(SILENT_TOAST, true)
+        }
+      )
       .pipe(
-        tap(() => {
+        map((response) => response?.success === true),
+        tap((recorded) => {
+          if (!recorded) return;
           this.recipesSignal.update((list) =>
             list.map((r) => (r.id === id ? { ...r, timesCooked: r.timesCooked + 1 } : r))
           );
         }),
-        catchError(() => of(null))
-      )
-      .subscribe();
+        catchError(() => of(false))
+      );
   }
 
   adjustServings(id: string, servings: number): Observable<any> {
