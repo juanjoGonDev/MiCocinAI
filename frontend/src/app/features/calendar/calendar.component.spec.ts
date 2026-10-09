@@ -219,6 +219,53 @@ describe('CalendarComponent meal deletion feedback', () => {
     expect(component.draft.servings).toBe(4);
   });
 
+  it('resolves the currently edited meal from the live service state', () => {
+    const meal: CalendarMeal = {
+      id: 'meal-editing',
+      date: '2026-10-05',
+      mealType: 'lunch',
+      title: 'Lentejas',
+      servings: 2,
+      completed: false
+    };
+    calendarMealsState.set([meal]);
+    component.draft = {
+      id: meal.id,
+      date: meal.date,
+      mealType: meal.mealType,
+      customMeal: meal.title,
+      recipeId: '',
+      time: '',
+      servings: meal.servings,
+      notes: ''
+    };
+
+    expect(component.editingMeal()).toEqual(meal);
+    calendarMealsState.set([{ ...meal, completed: true }]);
+    expect(component.editingMeal()?.completed).toBeTrue();
+
+    component.draft.id = 'missing-meal';
+    expect(component.editingMeal()).toBeNull();
+    component.draft.id = null;
+    expect(component.editingMeal()).toBeNull();
+  });
+
+  it('delegates a completion toggle to CalendarService without mutating the meal draft', () => {
+    const meal: CalendarMeal = {
+      id: 'meal-toggle',
+      date: '2026-10-05',
+      mealType: 'lunch',
+      title: 'Lentejas',
+      servings: 2,
+      completed: false
+    };
+
+    component.toggleMeal(meal);
+
+    expect(calendar.toggleComplete).toHaveBeenCalledOnceWith(meal);
+    expect(component.draft.id).toBeNull();
+  });
+
   it('validates and saves a custom meal with normalized optional values', () => {
     component.openAddModal('2026-10-05', 'dinner', '19:30');
     component.draft.customMeal = '   ';

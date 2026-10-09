@@ -469,7 +469,7 @@ describe('CalendarService visible range concurrency', () => {
     http.expectNone(rangeRequest(RANGE_A));
   });
 
-  it('optimistically toggles completion and rolls it back when the patch fails', () => {
+  it('rolls back a rejected completion patch, permits retry and repeated toggles without duplicating meals', () => {
     service.loadRange(RANGE_A.start, RANGE_A.end);
     http.expectOne(rangeRequest(RANGE_A)).flush(rangeResponse(RANGE_A.start, 'Cena', 1800));
     const meal = service.meals()[0];
@@ -486,6 +486,20 @@ describe('CalendarService visible range concurrency', () => {
     expect(rejectedPatch.request.body).toEqual({ completed: false });
     rejectedPatch.flush({}, { status: 503, statusText: 'Unavailable' });
     expect(service.meals()[0].completed).toBeTrue();
+
+    service.toggleComplete(service.meals()[0]);
+    expect(service.meals()[0].completed).toBeFalse();
+    const retriedPatch = http.expectOne(`/api/calendar/meals/${meal.id}`);
+    expect(retriedPatch.request.body).toEqual({ completed: false });
+    retriedPatch.flush({ success: true });
+
+    service.toggleComplete(service.meals()[0]);
+    expect(service.meals()[0].completed).toBeTrue();
+    const repeatedPatch = http.expectOne(`/api/calendar/meals/${meal.id}`);
+    expect(repeatedPatch.request.body).toEqual({ completed: true });
+    repeatedPatch.flush({ success: true });
+    expect(service.meals()).toHaveSize(1);
+    expect(service.meals()[0].id).toBe(meal.id);
   });
 
   it('generates an AI plan and preserves the legacy dashboard calendar APIs', () => {

@@ -84,6 +84,7 @@ import { CalendarYearComponent } from './calendar-year.component';
 import { CalendarAgendaViewComponent } from './calendar-agenda-view.component';
 import { AiParticipantsComponent } from '../../shared/components/ai-participants.component';
 import { CalendarReplanComponent } from './calendar-replan.component';
+import { CalendarMealCompletionComponent } from './calendar-meal-completion.component';
 
 interface MealDraft {
   id: string | null;
@@ -149,7 +150,8 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
     CalendarYearComponent,
     CalendarAgendaViewComponent,
     AiParticipantsComponent,
-    CalendarReplanComponent
+    CalendarReplanComponent,
+    CalendarMealCompletionComponent
   ],
   host: {
     '(window:keydown)': 'onKeydown($event)'
@@ -891,6 +893,12 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
               </button>
             </div>
           </div>
+
+          <app-calendar-meal-completion
+            *ngIf="editingMeal() as meal"
+            [completed]="meal.completed"
+            (toggle)="toggleMeal(meal)"
+          />
 
           <div class="meal-form__field" *ngIf="mealTab() === 'custom'">
             <label for="meal-custom">{{ 'calendar.que_vas_a_comer' | t }}</label>
@@ -2231,6 +2239,12 @@ export class CalendarComponent implements OnInit {
 
   toggleMeal(meal: CalendarMeal): void {
     this.calendarService.toggleComplete(meal);
+  }
+
+  editingMeal(): CalendarMeal | null {
+    const mealId = this.draft.id;
+    if (!mealId) return null;
+    return this.calendarService.meals().find((meal) => meal.id === mealId) ?? null;
   }
 
   /* ──────────────────────────── Objetivos ──────────────────────────── */

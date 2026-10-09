@@ -2079,10 +2079,34 @@ El test del menú espera HTTP 201 y la lista antes de filtrar para evitar una ca
 
 **Contrato:** al abrir una comida ya guardada desde cualquiera de las vistas día/semana/mes/agenda, su modal expone un control accesible «Marcar como hecha» o «Quitar de hechas», con estado `aria-pressed` correcto y objetivo táctil ≥44×44 px. Activarlo actualiza de inmediato el estado visual/resumen y persiste mediante el PATCH existente; si falla, se revierte el estado sin cerrar ni descartar el borrador y se puede reintentar. Guardar/cancelar edición no debe cambiar la completitud; completar/deshacer no elimina ni duplica comidas. El borrado conserva su confirmación actual. Fixtures y API SQLite temporales; no proveedor IA ni datos personales.
 
-- [ ] Escribir primero la E2E de regresión, confirmar rojo en baseline por ausencia del control y cubrir todas las vistas con una comida sintética.
-- [ ] Añadir un control compartido de completado dentro del editor de comida; probar componente/servicio en éxito, rollback, reintento, desmarcado y repetición, con ≥70 % S/B/F/L por archivo nuevo o modificado dentro del alcance.
-- [ ] Probar en Chromium y Pixel 5: PATCH retenido/fallido y recuperación, estado optimista, persistencia tras reload, completar y deshacer, teclado/foco/nombre accesible, 44×44 px y ausencia de overflow a 320×568, 393×851 y 1440×900.
-- [ ] Guardar e inspeccionar capturas sintéticas comparables de PC/móvil; ejecutar typecheck E2E, Karma focal sin rebajar el gate global, `check:ui`, Prettier, build y `git diff --check`; dejar hooks/commit/push y CI verdes.
+**TDD y hallazgo visual (2026-10-09):** en worktree detached del baseline `1eadbe5`, con solo el nuevo
+spec E2E copiado y SQLite/puerto temporales, Chromium falló 1/1 exactamente porque el editor no ofrecía
+«Marcar como hecha» (`toBeVisible`: elemento inexistente). Una ejecución E2E real anterior al ajuste
+CSS midió en 393 px que el footer de borrar/cancelar/guardar excedía el borde del diálogo en 14 px
+(derecho 392 frente al límite 378), aunque el documento no tenía scroll horizontal. Se amplió el
+breakpoint responsive a 480 px y la suite final confirma que los tres botones caben a 320/393/479/480/
+481 y 1440 px.
+
+**Evidencia verde (2026-10-09):** Karma focal del servicio/componente de calendario **74/74**. El gate
+Karma completo pasó **1245/1245**, sin rebajar umbral: **91.52/82.45/90.08/92.96 %** S/B/F/L. Cobertura
+focal del código: `calendar.component.ts` **88.09/80.60/81.56/90.46 %**; el componente nuevo
+`calendar-meal-completion.component.ts`, **100/100/100/100 %**; `calendar.service.ts` (sin cambios de
+producción), **95.94/80.95/92.13/95.95 %**. El Playwright real aislado pasó **4/4** (Chromium y Pixel 5):
+vistas día/semana/mes/agenda; PATCH retenido, estado optimista, fallo 503 y rollback, retry 200,
+persistencia tras reload, Enter/foco visible, botón ≥44×44, no duplicación y límites responsive 320,
+393, 479/480/481 y 1440 px. El runner confirmó cleanup de DB/puertos/artefactos temporales.
+Capturas sintéticas limpias (se descarta el toast efímero para que no tape el título del modal):
+`.e2e-screenshots/qa-calendar-meal-completion/chromium.png` y `mobile-chrome.png`, ambas revisadas.
+`pnpm run typecheck:e2e`, `pnpm run check:ui` (212 ficheros/21 reglas), Prettier focal,
+`pnpm run build` (server+client) y `git diff --check` pasaron; el build conserva warnings preexistentes
+de presupuestos/imports que no pertenecen a esta unidad. El gate global se ejecutó con coverage en
+`%TEMP%`, sin sobrescribir `frontend/coverage` preexistente.
+
+- [x] Escribir primero la E2E de regresión, confirmar rojo en baseline por ausencia del control y cubrir todas las vistas con una comida sintética; red 1/1 en baseline `1eadbe5`, control ausente.
+- [x] Añadir un control compartido de completado dentro del editor de comida; probar componente/servicio en éxito, rollback, reintento, desmarcado y repetición, con ≥70 % S/B/F/L por archivo nuevo o modificado dentro del alcance.
+- [x] Probar en Chromium y Pixel 5: PATCH retenido/fallido y recuperación, estado optimista, persistencia tras reload, completar y deshacer, teclado/foco/nombre accesible, 44×44 px; medir que todos los botones de edición caben dentro del diálogo y no hay overflow a 320×568, 393×851, 479/480/481 px y 1440×900.
+- [x] Guardar e inspeccionar capturas sintéticas comparables de PC/móvil; ejecutar typecheck E2E, Karma global sin rebajar el gate, `check:ui`, Prettier, build y `git diff --check`.
+- [ ] Ejecutar todos los hooks sin bypass; hacer commit atómico, push y esperar CI verde en el SHA final.
 
 **Rollback:** retirar el control/modal, el componente y sus pruebas; conservar el comportamiento actual del servicio, y revertir únicamente esta subunidad.
 
