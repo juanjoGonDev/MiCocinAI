@@ -3752,6 +3752,33 @@ reporta **207 ficheros, 21 reglas, 0 incidencias**. Los E2E de Compra verifican 
 sin imponer un ancho de outline dependiente del navegador. No cambia el contrato de ancho ni la familia
 icon-only; el censo visual global sigue abierto.
 
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.BUTTON-STATES.1 · loading, disabled y foco sin salto
+
+**Fuente revalidada (2026-10-09):** `ButtonComponent` iguala la geometría nominal `sm/md/lg` y usa
+`disabled`/`focus-visible` como estados de apariencia, pero `loading` inserta un spinner en el flujo
+`inline-flex` antes del contenido. No hay aserción que demuestre que ese estado conserva la caja, el nombre
+accesible y la prevención de envíos repetidos en un consumidor real.
+
+**Contrato:** activar `loading`, `disabled` o foco visible no desplaza ni redimensiona la caja del botón
+(tolerancia ≤1 CSS px); el spinner no sustituye su nombre accesible, la acción ocupada expone `aria-busy`
+y `loading` mantiene la acción inhabilitada. Colores, opacidad y contorno de foco pueden cambiar sin variar
+caja, padding, tipografía, gap o radio.
+
+- [ ] Añadir primero prueba roja de componente y Playwright real aislado que contrasten rectángulo y estilos
+      calculados antes/durante/después de `loading`, `disabled` y `focus-visible`; medir un consumidor real
+      mientras una respuesta de servidor sintético queda retenida.
+- [ ] Corregir cualquier salto con el menor cambio compartido; conservar contenido/nombre accesible, indicar
+      estado ocupado y bloquear dobles acciones. No alterar la geometría base normalizada de `sm/md/lg`, las
+      variantes cromáticas, `fullWidth` ni botones de solo icono.
+- [ ] Verificar respuesta exitosa y fallida del request retenido, foco por teclado y ausencia de una segunda
+      petición; ejecutar Chromium escritorio y Pixel 5 emulado con DB/puertos/semillas aisladas y cleanup.
+- [ ] Guardar e inspeccionar capturas sintéticas PC/móvil del estado normal y ocupado; ejecutar prueba focal,
+      suite frontend/gate de cobertura, typecheck, `check:ui`, Prettier, build y `git diff --check`.
+      Documentar resultados y rollback sin cerrar la matriz visual global.
+
+**Rollback:** revertir la gestión visual/accesible del estado loading de `ButtonComponent`, sus regresiones
+unitarias/E2E y este subapartado; conservar los contratos previos de tamaño y demás consumidores.
+
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.SHOPPING-PRIMARY.1 · CTA primario de Compra
 
 **Fuente revalidada antes del cambio (2026-10-03):** `shopping-lists.component.ts` declaraba `.tray__primary` con alto mínimo
