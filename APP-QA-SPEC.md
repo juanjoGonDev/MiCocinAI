@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Draft, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1226/1226** con cobertura **90.83/81.94/89.42/92.28 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1229/1229** con cobertura **91.08/82.10/89.69/92.52 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (2026-10-09, revalidado):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. `GET /admin/api/logs?lines=2000` devuelve 649 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; correlación `kaamY`, `attachmentCount=2`, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. El servicio está listo, pero el fallo de upload sigue presente; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1226/1226 con cobertura 90.83/81.94/89.42/92.28 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1229/1229 con cobertura 91.08/82.10/89.69/92.52 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
@@ -1175,6 +1175,44 @@ cambio visual, las capturas son N/A.
 **Rollback:** retirar únicamente el spec directo del pipe y este subapartado, sin afectar las pruebas puras
 de categorías ni la lógica de producción.
 
+### QA-04c.UI.PRICE-CHART.1 · cobertura del renderer SVG del historial de precios (en curso)
+
+**Fuente revalidada (2026-10-09):** `PriceChartComponent` presenta la leyenda y el SVG desde las
+series de `precio-chart.util.ts`, cuya lógica pura ya tiene spec propia. La página real de detalle
+de despensa ya tiene cobertura E2E en `tests/e2e/pantry-item.spec.ts`, incluidos dos comercios,
+colores, puntos y línea; faltaba una spec unitaria del renderer. El último LCOV completo marca
+`price-chart.component.ts` en **5.00/0/0/5.00 % S/B/F/L** (1/20 líneas, 0/6 ramas y 0/7 funciones).
+No hay defecto de producción observado: este lote añade cobertura de renderizado, sin cambiar UI ni
+contrato. El date locale se fija en ES y la traducción se sustituye por una señal determinista.
+
+- [x] Añadir primero tests unitarios que cubran lista vacía y serie visible, tienda nula/nominada,
+      formatos monetarios, fechas X repetidas/diferentes, un punto sin path vs. varios con path,
+      colores y títulos accesibles por punto.
+- [x] Superar ≥70 % de statements/branches/functions/lines en `price-chart.component.ts`, registrar
+      las métricas focales y explicar que un comando focal conserva el gate global de 80 % intacto.
+- [x] Ejecutar E2E real existente de precios en Chromium y Pixel 5 más suite frontend completa;
+      typecheck/build/formato. Sin cambio de UI: capturas nuevas N/A; se conserva la evidencia de
+      `pantry-item.spec.ts`.
+
+**TDD/cobertura (2026-10-09):** baseline sin spec directa y LCOV **5.00/0/0/5.00 % S/B/F/L**.
+La primera compilación del nuevo test detectó que `NodeList` no es iterable con el `tsconfig` actual;
+se usó `Array.from`. La primera ejecución de aserciones mostró dos expectativas incorrectas del test
+(el formato de fecha no siempre incluye año y la pipe entrega `undefined` como segundo argumento);
+se corrigieron contra la salida real, sin indicio de defecto de producción. Karma focal sin coverage:
+**3/3**. Con cobertura, el archivo sube a **100/83.33/100/100 % S/B/F/L** (supera el mínimo de 70 %);
+el proceso focal sale 1 solo por agregar todo el código de la app al gate global (**34.37/9.64/26.53/36.97 %**),
+sin cambiar el umbral. E2E real existente `tests/e2e/pantry-item.spec.ts` en Chromium + Pixel 5,
+rate limit activo y runner aislado: **12/12**, cleanup de SQLite/artefactos confirmado.
+
+**Evidencia final (2026-10-09):** `pnpm run test` con `DATABASE_PATH=:memory:` y
+`KARMA_COVERAGE_DIR` único bajo `%TEMP%`: config **10/10**, Karma **1229/1229** con gate global
+**91.08/82.10/89.69/92.52 % S/B/F/L**, server **1236 pasadas/1 omitida**. También pasan
+`pnpm run build` (preserva warnings de budget/imports existentes), `pnpm run typecheck:e2e`,
+`pnpm run check:ui` (**211 archivos/21 reglas**), Prettier y `git diff --check`. El test solo
+añade cobertura del renderer; la interfaz/product code no cambia.
+
+**Rollback:** retirar solo `price-chart.component.spec.ts` y este bloque; no hay cambio productivo.
+
 ### QA-04c.CORE.HOUSEHOLD.1 · cobertura y contratos del hogar (resuelta localmente; gate frontend revalidado)
 
 **Fuente revalidada (2026-10-01):** no existe spec directa; el reporte global mide 2/60 statements (3.33 %), 0/24 branches, 0/34 functions y 1/56 lines (1.78 %). Los callers activos consultan carga/creación/unión, permisos e invitaciones. Las firmas de `previewInvite`, `createHousehold`, `updateSettings` y `regenerateInviteCode` indican emitir `data`/entidad/código, pero los pipes actuales solo usan `tap`; la API real de regenerar devuelve `{data:{inviteCode}}`. Las pruebas fijarán contrato a partir de firma, caller y respuesta server, y cubrirán almacenamiento local corrupto.
@@ -1572,13 +1610,17 @@ Coverage Karma focal por fichero: `recipe.service.ts` 90.68/79.06/92.59/92.18 % 
 `recipes.component.ts` 94.55/89.14/92.30/95.15 %; ambos superan 70 % en las cuatro métricas.
 El comando focal con solo esos dos specs ejecuta los 34 tests, pero retorna código 1 porque el
 gate global existente evalúa también todo el código de la aplicación (29.55/21.88/23.57/30.04 %
-S/B/F/L); no se cambió el gate. La suite completa `pnpm run test` pasa con 1226/1226 Karma y el
-umbral global intacto. Server focal `recipes.routes.ts` 87.69/77.50/93.93/89.07 % S/B/F/L y
+S/B/F/L); no se cambió el gate. La suite completa `pnpm run test` pasa con 1229/1229 Karma y
+91.08/82.10/89.69/92.52 % S/B/F/L global. Server focal `recipes.routes.ts` 87.69/77.50/93.93/89.07 % S/B/F/L y
 schema 100 %; suite completa de server: 1236 tests, 1 skipped. E2E amplia de recetas: 58/58 en
 Chromium y Pixel 5.
 `pnpm run build` (server TypeScript + producción Angular), `pnpm run typecheck:e2e`,
 `pnpm run check:ui`, Prettier focal y `git diff --check` pasan. Build conserva los warnings
 preexistentes de budgets y componentes/imports no usados; no se rebajó ninguna regla.
+
+La ejecución de CI de PR #41 `37885022787` en el commit `e848586` queda verde: 4/4 shards E2E,
+E2E full-stack, build de producción, typecheck y server tests pasan. El test nuevo del gráfico se
+añadió después de esa ejecución; lo cubren la suite completa local y el siguiente CI tras el push.
 
 **Rollback:** revertir solo `server/src/schemas/recipe.schema.ts`,
 `server/src/routes/recipes.routes.ts`, `server/src/routes/recipes.routes.spec.ts`,
