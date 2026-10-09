@@ -1,7 +1,7 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
 - **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasó **1233/1233** con cobertura **91.11/82.13/89.69/92.56 % S/B/F/L**; el callback del refresco de compra y el reposicionamiento del `PickerComponent` ya tienen cobertura determinista (timeout y eventos `resize`/`scroll`); QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. CI `37892268641` para `d07ffdc` pasó **9/9** jobs, incluidos los cuatro shards; el shard 2 finalizó en 6m52s con el margen de 12 minutos. Siguen abiertas la auditoría de safe-area no nula, la matriz completa de rutas y tamaños y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
-- **IA / tickets reales (2026-10-09, revalidado):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. `GET /admin/api/logs?lines=2000` devuelve 649 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; correlación `kaamY`, `attachmentCount=2`, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. El servicio está listo, pero el fallo de upload sigue presente; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
+- **IA / tickets reales (2026-10-09, revalidado):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1233/1233 con cobertura 91.11/82.13/89.69/92.56 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
 
@@ -2813,16 +2813,21 @@ persista, esta comprobación no hizo POST, no reabrió los tickets y no generó 
 reales. El fix resuelve el cleanup parcial; el bloqueo actual es que el upload real no termina. No
 declarar validación de IA ni procesamiento/deduplicación completos hasta demostrar entrega sin 504.
 
-**Nuevo intento de validación solicitado (2026-10-09):** volví a actualizar las referencias de WebAPI;
-el remoto confirma `fix/ticket-prompt-association-diagnostics` en `7c1e52e9`, sin cambios de código
-posteriores al fix `e679f44d`. El proceso activo `43088` (`tsx src/main.ts`) arrancó después de ese fix y
-`/health` responde 200. La lectura filtrada de su `app.log` confirma que el intento de dos adjuntos más
-reciente (`kaamY`) aún termina en `attachment_upload_failed` HTTP 504 tras 45 s; `page_closed` restaura
-el estado, pero no aparecen `prompt_submitted` ni `response_completed`. El fix de cleanup está activo,
-pero no solucionó que se complete la subida. Esta comprobación fue solo `git fetch`, health y lectura de
-logs: **0 POST, 0 archivos reenviados, 0 nuevas completions y 0 escrituras**. Se conserva el veto de
-reenviar tickets hasta que la subida real concluya; los dos PDF con fallback 200 siguen excluidos por
-posible finalización.
+**Nuevo intento de validación solicitado (2026-10-09, 08:33–08:35 Europe/Madrid):** `git fetch origin
+--prune` no encontró commits nuevos: WebAPI sigue limpio en `7c1e52e9`, con el fix de cleanup
+`e679f44d`; el proceso activo `43088` (`tsx src/main.ts`) arrancó después del fix. `/health/ready`
+responde 200 (`ready=true`, `storage=ready`), lo cual no demuestra entrega de adjuntos. La lectura
+filtrada de `/admin/api/logs?lines=2000` encontró 27 `attachment_upload_failed`; el más reciente
+registrado sigue siendo de las 03:16:09 y muestra dos adjuntos, HTTP 504 al vencer los 45 s y cleanup
+`page_closed` exitoso. No aparecen `prompt_submitted`, `response_completed` ni `cleanup_failed`.
+Repetí `pnpm exec vitest run --config vitest.clipboard-e2e.config.ts
+tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts --reporter=dot`: **18/18** en
+12,08 s; es cobertura sintética de fallback/cleanup, no una comprobación del proveedor real. La última
+evidencia live sigue mostrando que solo se corrigió la limpieza: la carga no termina y el modelo no
+recibe el turno. Por la condición vigente de no reenviar mientras persista ese fallo, esta
+recomprobación no hizo POST ni abrió tickets: **0 archivos reenviados, 0 nuevas completions y 0
+escrituras reales**. Se mantiene sin ejecutar el smoke live; los PDF cuyo fallback anterior devolvió
+200 siguen excluidos por posible finalización.
 
 **Rollback del registro:** revertir solo este bloque diagnóstico/preparación y la actualización de
 checklist; no alterar el transporte probado ni los datos reales.
