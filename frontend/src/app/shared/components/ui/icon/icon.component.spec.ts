@@ -50,6 +50,16 @@ describe('IconComponent', () => {
     expect(svg().getAttribute('class') ?? '').toContain('icon--em');
   });
 
+  it('usa un SVG decorativo vacio para un nombre desconocido en runtime', () => {
+    fixture.componentInstance.name = 'removed_icon' as IconName;
+
+    expect(() => fixture.detectChanges()).not.toThrow();
+    expect(svg().getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(svg().querySelectorAll('path').length).toBe(0);
+    expect(svg().getAttribute('role')).toBe('presentation');
+    expect(svg().getAttribute('aria-hidden')).toBe('true');
+  });
+
   it('cada forma del set tiene viewBox y al menos un path', () => {
     for (const [name, shape] of Object.entries(ICON_SHAPES)) {
       expect(shape.viewBox).toMatch(/^\d+ \d+ \d+ \d+$/);

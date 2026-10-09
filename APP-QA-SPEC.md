@@ -1025,16 +1025,26 @@ LCOV vigente de `icon.component.ts`: **100/50/100/100 % S/B/F/L** (5/5 líneas y
 el SVG vacío con `viewBox="0 0 24 24"` y mantiene la semántica decorativa (`role="presentation"`,
 `aria-hidden="true"`). Alcance test-only; no cambiar el registry, los tipos ni los templates de producción.
 
-- [ ] Añadir una prueba Angular directa con nombre desconocido en runtime; comprobar fallback visual
+- [x] Añadir una prueba Angular directa con nombre desconocido en runtime; comprobar fallback visual
       vacío, accesibilidad decorativa y ausencia de excepción.
-- [ ] Cubrir ≥70 % S/B/F/L en `icon.component.ts` y mantener ≥80 % en las cuatro métricas globales.
-- [ ] Ejecutar prueba focal y Karma completo, build/typecheck/check-ui/formato/diff-check; no modifica
-      UI/geometría, así que E2E/capturas nuevas N/A. Registrar rollback, hooks, commit, push y CI.
+- [x] Cubrir ≥70 % S/B/F/L en `icon.component.ts` y mantener ≥80 % en las cuatro métricas globales.
+- [x] Ejecutar prueba focal y Karma completo, build/typecheck/check-ui/formato/diff-check. No modifica
+      UI/geometría, así que E2E/capturas nuevas N/A.
+- [ ] Pasar los hooks obligatorios y registrar commit/push y CI verde; conservar el rollback descrito.
 
 **Validación spec-first (2026-10-09):** el contrato de §8f y la rama actual del getter se verificaron;
 el baseline procede de la suite Karma completa **1274/1274**, **92.16/83.40/90.92/93.59 % S/B/F/L**.
-`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. No comenzar implementación hasta
-publicar esta subunidad.
+`pnpm exec prettier --check APP-QA-SPEC.md` y `git diff --check` pasan. La subunidad se publicó antes
+de añadir la prueba en `2764395` (`docs(qa): scope icon fallback tests`).
+
+**Evidencia de la prueba (2026-10-09):** no hubo cambio de producción; la prueba de caracterización
+se ejecutó primero contra el comportamiento actual. Karma focal pasó **7/7**; `pnpm run test:client`
+pasó **1275/1275**, global **92.16/83.42/90.92/93.59 % S/B/F/L**. Build, `typecheck:e2e`, `check:ui`
+(212 archivos/21 reglas), Prettier y `git diff --check` pasan; el build deja avisos Angular de presupuesto,
+imports no usados y optional chaining ya reflejados por el build. LCOV actual de `icon.component.ts`
+confirma **100/100/100/100 % S/B/F/L** (5/5 sentencias y líneas, 2/2 ramas, 2/2 funciones), en
+`frontend/coverage/lcov.info` (ignorado por Git). Formato del test y `git diff --check` pasan. Los gates
+locales están completos; hooks de commit/push, commit/push de esta implementación y CI quedan pendientes.
 
 **Rollback:** retirar solo la nueva prueba y este subapartado; no cambia el registry ni el renderizado.
 
