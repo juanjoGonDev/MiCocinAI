@@ -850,13 +850,26 @@ Evidencia QA-04a (2026-09-30): baseline Chrome Headless 154 aislado — `TOTAL: 
 
 **Evidencia histórica (2026-10-01/02):** la línea base pasó `507/507` con 80.80/69.75/79.25/82.32 % (sentencias/ramas/funciones/líneas); corridas posteriores pasaron `651/651` con 60.64/51.37/50.72/62.41 % y `665/665` con **60.30/52.21/49.80/61.92 %**, por debajo de los gates. No se rebajó ningún umbral. Estas métricas ya no describen el estado actual.
 
-**Revalidación vigente (2026-10-09, pre-push de `0bf2713`):** `pnpm run test:client` pasó **1219/1219** en Chrome Headless 154 con **90.69/81.87/89.35/92.15 % S/B/F/L**. Los callbacks de `ShoppingListsComponent.refresh()` y `PickerComponent.onViewportChange()` quedan cubiertos determinísticamente (`FNDA=2` cada uno); las cuatro métricas globales superan 80 %. LCOV archivado fuera del repo en `%TEMP%\hogaria-coverage-picker-prepush-20261009-023703\lcov.info`. `.github/workflows/ci.yml` comprueba el cableado Karma y ejecuta E2E, pero no incluye la suite frontend completa.
+**Revalidación vigente (2026-10-09, pre-push de `a09d4e9`):** `pnpm run test:client` pasó **1233/1233** en Chrome Headless 154 con **91.11/82.13/89.69/92.56 % S/B/F/L**. Los callbacks de `ShoppingListsComponent.refresh()` y `PickerComponent.onViewportChange()` siguen cubiertos determinísticamente; las cuatro métricas globales superan 80 %. LCOV de referencia archivado fuera del repo en `%TEMP%\hogaria-coverage-avatar-image-baseline-a09d4e9-20261009.lcov`. `.github/workflows/ci.yml` comprueba el cableado Karma y ejecuta E2E, pero no incluye la suite frontend completa.
 
 - [x] Revalidar cobertura global y por archivo antes del siguiente lote; archivar el reporte base de esta ejecución en `%TEMP%`.
 - [ ] Añadir pruebas unitarias/integración para ramas y caminos de error/éxito no cubiertos; cada lote debe partir de fuentes actuales, tener regresión útil, cobertura ≥70 % en cada métrica del alcance y commit atómico.
 - [x] Repetir la suite frontend completa con coverage y alcanzar 80 % en statements, ramas, funciones y líneas; documentar comandos y salidas, sin bajar umbrales.
 
 Candidatos del informe previo al lote (histórico; orden statements/branches/functions/lines): `auth.service.ts` 100/81.82/94.59/100 %, `theme.service.ts` 96.67/92.86/87.50/96.67 %, `shopping.model.ts` 79.22/62.40/66.67/79.22 %, `error.interceptor.ts` 7.89/0/0/7.89 %, `swipe-row.directive.ts` 10.09/11.11/11.76/10.09 %, `core/time.ts` 86.75/57.83/95/86.75 %, `data-table.util.ts` 95.86/78.77/100/95.86 %, `i18n.service.ts` 61.70/23.68/61.54/61.70 %, `household.service.ts` 1.79/0/0/1.79 % y `taste-profile.service.ts` 3.33/0/0/3.33 %.
+
+### QA-04c.AVATAR-IMAGE.1 · cubrir decodificación, canvas y cleanup de la foto de perfil
+
+**Fuente revalidada (2026-10-09, HEAD `a09d4e9`):** `HOGARIA-SPEC.md` §12j exige aceptar JPEG/PNG/WebP hasta 4 MiB, recortar una región cuadrada y re-encodear a JPEG de 128 px desde el dispositivo. `avatar-image.spec.ts` prueba hoy la validación pura y `squareCrop`, pero el navegador también ejecuta `decodeAvatarFile()`, `renderAvatarDataUrl()` y sus wrappers de liberación. El LCOV vigente de `avatar-image.ts` está en **34.78/26.32/25.00/34.78 % S/B/F/L** (16/46 líneas, 5/19 ramas, 3/12 funciones); baseline archivado en `%TEMP%\hogaria-coverage-avatar-image-baseline-a09d4e9-20261009.lcov`.
+
+**Contrato:** la decodificación prefiere `createImageBitmap`; si falla, usa `<img>` con una URL de objeto y la revoca al resolver o rechazar. Los ficheros inválidos se rechazan antes de decodificar. Canvas configura smoothing, usa exactamente la región compartida con el editor y devuelve JPEG con la calidad contractual; sin contexto lanza `AvatarIssue`. Los bitmaps se liberan también si falla el recorte/render. No cambiar producción salvo que una regresión revele una discrepancia real.
+
+- [ ] Añadir pruebas de ChromeHeadless para el camino válido y los errores de `decodeAvatarFile`, incluyendo fallback `<img>` y revocación de URL sin dejar recursos vivos.
+- [ ] Probar el render real/sintético de canvas: dimensiones, smoothing, región recibida, MIME/calidad de salida, contexto ausente y liberación en éxito/error.
+- [ ] Ejecutar la suite focal y la suite cliente completa; alcanzar **≥70 % en S/B/F/L** para `avatar-image.ts` y mantener **≥80 % global** sin alterar gates. Archivar LCOV fuera de Git, y ejecutar build/typecheck/formato/diff-check.
+- [ ] Registrar comandos, resultados y rollback; commit atómico con hooks completos y push a la rama del PR, sin tocar base/proveedor de uso normal.
+
+**Rollback:** retirar solo las pruebas de `avatar-image.spec.ts` agregadas en esta unidad y este subapartado; no cambiar la conducta de producción ni la cuenta/datos reales.
 
 ### QA-04c.CONFIRM-SERVICE.1 · cubrir el ciclo de vida de confirmación destructiva
 
