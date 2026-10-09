@@ -1,6 +1,6 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. `/ai-config` pasó su suite completa en Chromium/Pixel 5 (**52/52**) y concurrencia/proveedor **6/6**; la ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes, descuento por primeras unidades y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1287/1287** con cobertura **92.23/83.57/90.98/93.64 % S/B/F/L**; `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. CI `37989343357` sobre `3b96cab` falló solo en el shard E2E 2, al agotar los 300 s de un test monolítico de la matriz global; el arreglo CI sigue pendiente. Siguen abiertas la auditoría de safe-area nativa no nula, la matriz visual completa y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-09):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. `/ai-config` pasó su suite completa en Chromium/Pixel 5 (**52/52**) y concurrencia/proveedor **6/6**; la ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes, descuento por primeras unidades y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1287/1287** con cobertura **92.23/83.57/90.98/93.64 % S/B/F/L**; `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. CI `37989343357` sobre `3b96cab` falló solo en el shard E2E 2 por el timeout de 300 s de la matriz monolítica; el refactor conserva todas las rutas/viewports y pasó localmente **14/14** en Chromium y Pixel 5. El commit/push y el nuevo CI siguen pendientes. Siguen abiertas la auditoría de safe-area nativa no nula, la matriz visual completa y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1287/1287 con cobertura 92.23/83.57/90.98/93.64 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
@@ -4742,6 +4742,49 @@ producción (`styles.scss`), sin archivo TS instrumentable para cobertura; cober
 Capturas sintéticas revisadas en `%TEMP%\hogaria-safe-area-final-b8dcc311afa94912afce3c827a458c7d\`
 (`safe-area-desktop-chromium.png`, `safe-area-mobile-mobile-chrome.png`). No se probó iOS nativo: la
 revisión WebKit requerida sigue ausente y Pixel 5 no expone inset nativo no nulo; la última casilla queda abierta.
+
+### QA-LAYOUT.ROUTE-MATRIX.CI.1 · mantener la matriz de rutas completa dentro del presupuesto de CI
+
+**Fuente revalidada (2026-10-09):** el run CI `37989343357`, shard 2, ejecutó 111 E2E correctamente
+y agotó el timeout de 300 s en `layout-gutters.spec.ts` al comprobar `/settings`; el retry volvió a
+agotarlo en `/logs`. El protocolo del navegador informó `session closed` al vencerse el test. El código
+recorría secuencialmente las rutas públicas, onboarding y 25 rutas autenticadas, probando todas las
+anchuras declaradas y B−1/B/B+1 en un único test. El timeout ocultaba una matriz sin resultado completo;
+no demuestra un fallo de geometría de `/settings` o `/logs`.
+
+**Conducta esperada:** mantener todas las rutas, anchos/altos, comprobaciones de shell, gutter, raíz,
+overflow, errores de página, scroll y capturas actuales, pero distribuir la matriz estática en grupos
+deterministas acotados. Cada test debe adjuntar un reporte propio, el manifiesto de lotes debe cubrir
+cada ruta exactamente una vez, y ninguna ruta ni viewport se omite para hacer pasar CI.
+
+- [x] Añadir primero una aserción que pruebe que los lotes cubren exactamente las rutas del manifiesto,
+      sin duplicados ni omisiones; conservar el rojo CI como evidencia de la unidad indivisible actual.
+- [x] Separar público/onboarding y rutas privadas en lotes equilibrados con reportes separados, sin
+      reducir `VIEWPORTS`, las mediciones, capturas o asserts actuales.
+- [x] Ejecutar la matriz completa aislada en Chromium y Pixel 5, verificar cada lote, artefactos únicos
+      y cleanup; confirmar que no hay timeout ni errores JS de página inexplicados.
+- [x] Ejecutar typecheck, formato, `check:ui`, `git diff --check`, build y gates de cobertura aplicables;
+      registrar resultado, límites y rollback focal.
+- [ ] Commit atómico, push con hooks completos y esperar CI verde para el SHA final; dejar PR Ready y
+      sin merge.
+
+**Rollback:** revertir el agrupamiento de `layout-gutters.spec.ts`, su aserción de cobertura del
+manifiesto y esta subsección; no quitar las rutas ni las anchuras de la matriz.
+
+**Evidencia local (2026-10-09):** la regresión preexistente está reproducida por CI `37989343357`:
+111 tests del shard 2 pasan antes de que la matriz monolítica alcance el timeout de 300 s (`/settings`; en
+el retry, `/logs`), con `Protocol error ... session closed` como consecuencia del cierre por timeout.
+La aserción de manifiesto confirma que los dos grupos contienen las 25 rutas privadas, en el orden del
+manifiesto, sin omisiones. `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium
+--project=mobile-chrome --forbid-only tests/e2e/layout-gutters.spec.ts --reporter=line`, con
+`E2E_RATE_LIMIT=on`, DB/puertos/semilla aislados y cleanup, pasó **14/14** en **2.8 min**: 5 rutas
+públicas, onboarding, 25 rutas privadas y 8 detalles poblados recorren todos los viewports del
+manifiesto en ambos proyectos. Se generaron 68 capturas sintéticas ignoradas por Git; se inspeccionó el
+par PC/móvil de Dashboard y Configuración. `pnpm run test:client:coverage` pasó **1287/1287** con
+92.23/83.57/90.98/93.64 % S/B/F/L. También pasan build productivo (warnings preexistentes de tamaño y
+imports Angular), `pnpm run typecheck:e2e`, `pnpm run check:ui` (212 archivos/21 reglas), Prettier y
+`git diff --check`. No se cambió producción en esta unidad; coverage focal para el código E2E: N/A.
+El run remoto fallido pertenece al SHA anterior; el CI posterior a estos cambios sigue pendiente.
 
 ### QA-LAYOUT.VISUAL-CONSISTENCY.1 · geometría uniforme en toda la interfaz
 

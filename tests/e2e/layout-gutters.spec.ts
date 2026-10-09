@@ -177,6 +177,11 @@ const SHELL_HOSTS: Record<RouteShell, string> = {
 };
 
 const ALL_SHELL_HOSTS = Object.values(SHELL_HOSTS);
+const PRIVATE_ROUTE_BATCH_SIZE = Math.ceil(AUTHENTICATED_ROUTES.length / 2);
+const AUTHENTICATED_ROUTE_BATCHES = [
+  AUTHENTICATED_ROUTES.slice(0, PRIVATE_ROUTE_BATCH_SIZE),
+  AUTHENTICATED_ROUTES.slice(PRIVATE_ROUTE_BATCH_SIZE)
+];
 
 function expectedGutter(width: number): number {
   if (width >= 1024) return 32;
@@ -682,64 +687,86 @@ async function assertPrivateContentCanReachEnd(
   await page.evaluate(() => window.scrollTo(0, 0));
 }
 
-test('todas las rutas conservan su shell y aplican un único gutter común', async ({
-  page
-}, testInfo) => {
-  test.setTimeout(300_000);
-
+async function auditRouteGroup(
+  page: Page,
+  testInfo: TestInfo,
+  targets: readonly RouteCase[],
+  groupName: string,
+  afterViewport?: (target: RouteCase, viewport: ViewportCase, mismatches: string[]) => Promise<void>
+): Promise<void> {
   const mismatches: string[] = [];
   const routeViewportAudit: RouteViewportAudit[] = [];
   const visualMeasurements: VisualFamilyMeasurement[] = [];
   const sampledRoutes: string[] = [];
-  for (const target of PUBLIC_ROUTES) {
+  for (const target of targets) {
     await checkRouteAcrossViewports(
       page,
       target,
       mismatches,
       routeViewportAudit,
       async (viewport) => {
+        await afterViewport?.(target, viewport, mismatches);
         await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
       }
     );
   }
 
-  await registerToOnboarding(page, 'Layout gutter QA');
-  await checkRouteAcrossViewports(
-    page,
-    ONBOARDING_ROUTE,
-    mismatches,
-    routeViewportAudit,
-    async (viewport) => {
-      await addVisualInventorySample(
-        page,
-        ONBOARDING_ROUTE,
-        viewport,
-        visualMeasurements,
-        sampledRoutes
-      );
-    }
-  );
-  await skipOnboarding(page);
+  const retrySuffix = testInfo.retry > 0 ? `-retry-${testInfo.retry}` : '';
 
-  for (const target of AUTHENTICATED_ROUTES) {
-    await checkRouteAcrossViewports(
+  await attachVisualFamilyInventory(
+    testInfo,
+    `visual-family-inventory-${groupName}${retrySuffix}.json`,
+    visualMeasurements,
+    sampledRoutes
+  );
+  await attachAndSaveRouteViewportAudit(
+    testInfo,
+    `layout-route-viewport-audit-${groupName}${retrySuffix}.json`,
+    routeViewportAudit
+  );
+
+  expect(
+    mismatches,
+    `${groupName}: las rutas deben conservar el shell, alinear la raíz con el marco común y compartir el gutter del main también en el eje vertical privado`
+  ).toEqual([]);
+}
+
+test('las rutas públicas y onboarding conservan su shell y el gutter común', async ({
+  page
+}, testInfo) => {
+  test.setTimeout(240_000);
+
+  await auditRouteGroup(page, testInfo, PUBLIC_ROUTES, 'public');
+  await registerToOnboarding(page, 'Layout gutter QA');
+  await auditRouteGroup(page, testInfo, [ONBOARDING_ROUTE], 'onboarding');
+});
+
+test('los lotes de rutas privadas cubren el manifiesto exactamente una vez', () => {
+  expect(AUTHENTICATED_ROUTE_BATCHES.flat()).toEqual(AUTHENTICATED_ROUTES);
+});
+
+for (const [index, targets] of AUTHENTICATED_ROUTE_BATCHES.entries()) {
+  const groupName = `private-${String(index + 1).padStart(2, '0')}`;
+
+  test(`rutas privadas ${index + 1}/${AUTHENTICATED_ROUTE_BATCHES.length} conservan shell y gutter`, async ({
+    page
+  }, testInfo) => {
+    test.setTimeout(240_000);
+
+    await registerToOnboarding(page, `Layout gutter QA ${index + 1}`);
+    await skipOnboarding(page);
+    await auditRouteGroup(
       page,
-      target,
-      mismatches,
-      routeViewportAudit,
-      async (viewport) => {
+      testInfo,
+      targets,
+      groupName,
+      async (target, viewport, mismatches) => {
         if (viewport.width === 393 || viewport.width === 1440) {
           await assertPrivateContentCanReachEnd(page, target, viewport, mismatches);
         }
 
-        const captureDesktop =
-          target.shell === 'private' &&
-          testInfo.project.name === 'chromium' &&
-          viewport.width === 1440;
-        const captureMobile =
-          target.shell === 'private' &&
-          testInfo.project.name === 'mobile-chrome' &&
-          viewport.width === 393;
+        const captureDesktop = testInfo.project.name === 'chromium' && viewport.width === 1440;
+        const captureMobile = testInfo.project.name === 'mobile-chrome' && viewport.width === 393;
         if (captureDesktop || captureMobile) {
           const directory = process.env.E2E_SCREENSHOT_DIR;
           const screenshotName = privateRouteScreenshotName(
@@ -747,9 +774,13 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
             'route',
             captureDesktop ? 'desktop' : 'mobile'
           );
+          const retrySafeName =
+            testInfo.retry > 0
+              ? screenshotName.replace(/\.png$/, `-retry-${testInfo.retry}.png`)
+              : screenshotName;
           const screenshotPath = directory
-            ? join(directory, screenshotName)
-            : testInfo.outputPath(screenshotName);
+            ? join(directory, retrySafeName)
+            : testInfo.outputPath(retrySafeName);
           mkdirSync(dirname(screenshotPath), { recursive: true });
           await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled' });
         }
@@ -761,18 +792,15 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
         ) {
           await assertDashboardCaptureReady(page, viewport);
           const directory = process.env.E2E_SCREENSHOT_DIR;
+          const screenshotName =
+            testInfo.project.name === 'chromium' ? 'dashboard-desktop.png' : 'dashboard-mobile.png';
+          const retrySafeName =
+            testInfo.retry > 0
+              ? screenshotName.replace(/\.png$/, `-retry-${testInfo.retry}.png`)
+              : screenshotName;
           const screenshotPath = directory
-            ? join(
-                directory,
-                testInfo.project.name === 'chromium'
-                  ? 'dashboard-desktop.png'
-                  : 'dashboard-mobile.png'
-              )
-            : testInfo.outputPath(
-                testInfo.project.name === 'chromium'
-                  ? 'dashboard-desktop.png'
-                  : 'dashboard-mobile.png'
-              );
+            ? join(directory, retrySafeName)
+            : testInfo.outputPath(retrySafeName);
           mkdirSync(dirname(screenshotPath), { recursive: true });
           await page.screenshot({
             path: screenshotPath,
@@ -780,29 +808,10 @@ test('todas las rutas conservan su shell y aplican un único gutter común', asy
             animations: 'disabled'
           });
         }
-
-        await addVisualInventorySample(page, target, viewport, visualMeasurements, sampledRoutes);
       }
     );
-  }
-
-  await attachVisualFamilyInventory(
-    testInfo,
-    'visual-family-inventory-route-default.json',
-    visualMeasurements,
-    sampledRoutes
-  );
-  await attachAndSaveRouteViewportAudit(
-    testInfo,
-    'layout-route-viewport-audit.json',
-    routeViewportAudit
-  );
-
-  expect(
-    mismatches,
-    'todas las rutas deben conservar el shell, alinear la raíz con el marco común y compartir el gutter del main también en el eje vertical privado'
-  ).toEqual([]);
-});
+  });
+}
 
 test('los detalles dinámicos poblados conservan shell, raíz, gutter y ancho', async ({
   page
