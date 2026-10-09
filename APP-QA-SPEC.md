@@ -2611,6 +2611,35 @@ en `%TEMP%\hogaria-shop-tray-rename-final2-20261009\{chromium,mobile-chrome}\sho
 `shopping-tray-rename-conflict-baseline.png` y `shopping-tray-rename-conflict-recovered.png`. Rollback focal:
 revertir el commit atómico de este punto de spec, template/servicio y sus regresiones E2E/unitarias.
 
+#### QA-SHOPPING.UNIT-RECENTS.1 · seis unidades usadas recientemente
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md` §8f pide fijar arriba las seis unidades usadas recientemente
+desde `localStorage`. `UnitPickerComponent` solo convierte `UNIT_FAMILIES` en opciones; ni este componente ni
+`unit-families.ts` leen/escriben unidades recientes, y no hay una clave `shopping:*unit*` en `StorageService`.
+`shopping-round10.spec.ts` prueba selección por toque y unidad personalizada, no orden reciente ni restauración tras
+recarga. `StorageService` ya aporta JSON, namespace `hogar:v1:` y manejo de errores de cuota.
+
+**Conducta esperada:** al elegir una unidad (incluida una cadena personalizada), se coloca primera en una sección
+«Recientes»; las seis más recientes quedan ordenadas de más a menos reciente, sin duplicados y sin perderse al
+recargar. Una unidad de catálogo puede aparecer arriba como reciente y conservar su opción dentro de la familia sin
+duplicar valores elegibles; la cadena personalizada se conserva literalmente. Si el almacenamiento está vacío,
+corrupto o no admite escritura, el catálogo completo sigue siendo utilizable y no falla el editor.
+
+- [x] Revalidar el contrato activo, selector compartido, catálogo de familias, `StorageService` y cobertura E2E
+      actual; limitar esta unidad a recencia persistente del selector, sin alterar el contrato de guardado de la línea.
+- [ ] Escribir primero E2E roja con datos sintéticos que elija más de seis unidades, mezcle catálogo y una cadena
+      personalizada, y compruebe orden, límite, unicidad y persistencia tras reload en escritorio y Pixel 5.
+- [ ] Implementar recencia con `StorageService` y opciones recientes localizadas, deduplicadas de las familias; tratar
+      JSON inválido y cuota llena sin romper búsqueda, selección custom ni el teclado (↑/↓/Enter/Escape).
+- [ ] Validar interfaz real y accesibilidad en Chromium/Pixel 5 con rate limit activo, DB/puerto/semilla aislados y
+      cleanup; cubrir 320×568, 393×851, 568×320 y breakpoints 1023/1024/1025/1440 sin overflow. Inspeccionar y guardar
+      capturas sintéticas de PC/móvil; coverage focal ≥70 % S/B/F/L y Karma global sin rebajar gates.
+- [ ] Registrar comandos/evidencia y rollback focal; ejecutar hooks completos, commit atómico, push y confirmar CI.
+
+El caso de almacenamiento corrupto/cuota llena se simulará con fixtures de navegador: no se limpia almacenamiento
+real ni se modifica la DB habitual. El picker es compartido por pantallas fuera de Compra; se revalidarán sus
+consumidores si el cambio altera su geometría o semántica común.
+
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
 - [ ] `/receipts`: elegir/arrastrar archivo, validar formatos y borde de 10 MiB a través del ingress de producción, rechazar inválidos, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
