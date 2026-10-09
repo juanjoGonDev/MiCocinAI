@@ -1030,7 +1030,7 @@ el SVG vacío con `viewBox="0 0 24 24"` y mantiene la semántica decorativa (`ro
 - [x] Cubrir ≥70 % S/B/F/L en `icon.component.ts` y mantener ≥80 % en las cuatro métricas globales.
 - [x] Ejecutar prueba focal y Karma completo, build/typecheck/check-ui/formato/diff-check. No modifica
       UI/geometría, así que E2E/capturas nuevas N/A.
-- [ ] Pasar los hooks obligatorios y registrar commit/push y CI verde; conservar el rollback descrito.
+- [x] Pasar los hooks obligatorios y registrar commit/push y CI verde; conservar el rollback descrito.
 
 **Validación spec-first (2026-10-09):** el contrato de §8f y la rama actual del getter se verificaron;
 el baseline procede de la suite Karma completa **1274/1274**, **92.16/83.40/90.92/93.59 % S/B/F/L**.
@@ -1044,7 +1044,10 @@ pasó **1275/1275**, global **92.16/83.42/90.92/93.59 % S/B/F/L**. Build, `typec
 imports no usados y optional chaining ya reflejados por el build. LCOV actual de `icon.component.ts`
 confirma **100/100/100/100 % S/B/F/L** (5/5 sentencias y líneas, 2/2 ramas, 2/2 funciones), en
 `frontend/coverage/lcov.info` (ignorado por Git). Formato del test y `git diff --check` pasan. Los gates
-locales están completos; hooks de commit/push, commit/push de esta implementación y CI quedan pendientes.
+locales están completos. Pre-commit aprobó Prettier y `check:ui` (212 archivos/21 reglas); pre-push aprobó
+formato, `check:ui`, build, `typecheck:e2e`, configuración **11/11**, Karma **1275/1275** y Vitest
+server **1236 pasadas/1 omitida**, sin bypass. Commit `06ca504` (`test(ui): cover unknown icon fallback`)
+publicado; CI #647 (`37947337476`) pasó **9/9** jobs. Los avisos actuales de build no bloquean el gate.
 
 **Rollback:** retirar solo la nueva prueba y este subapartado; no cambia el registry ni el renderizado.
 
