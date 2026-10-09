@@ -889,6 +889,31 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 
 **Evidencia de cierre (2026-10-09):** Karma focal `pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/features/shopping/shopping-lists.component.spec.ts --browsers=ChromeHeadless --progress=false` pasó **12/12**; `fakeAsync`/`tick(499+1)` demuestra el cambio exacto sin dormir. Tres corridas manuales completas de `pnpm run test:client` pasaron **1217/1217** y la corrida completa del hook pre-push pasó **1218/1218** con **90.54/81.61/89.32/91.99 % S/B/F/L**; las cuatro LCOV muestran `FNDA=2` para el callback. `shopping-lists.component.ts`: **95.43/86.8/91.8/97.14 % S/B/F/L**. Informe final: `%TEMP%\hogaria-coverage-shopping-refresh-prepush-20261009-0222\lcov.info`; comparación pre-test: `%TEMP%\hogaria-coverage-shopping-refresh-baseline-20261009-0214\lcov.info`. Build y `typecheck:e2e` pasaron con los warnings previos de budget/imports. Commit `4da6ca8` (`test(shopping): cover refresh timeout`) pasó pre-commit (Prettier, `check:ui`) y pre-push (formato, `check:ui`, builds servidor/cliente, typecheck E2E, config 10/10, Karma 1218/1218, Vitest server 1234 passed / 1 skipped); push completado sin bypass. PR #41 sigue Draft y sin merge. La variación global restante es el handler de viewport del picker, fuera de este alcance; QA-04c permanece abierta por ese y otros déficits.
 
+### QA-04c.PICKER-VIEWPORT.1 · cobertura determinista del reposicionamiento flotante
+
+**Fuente revalidada (2026-10-09, HEAD `7f7f375`):** `PickerComponent.ngOnInit()` registra `resize` y
+`scroll` en captura; `ngOnDestroy()` los elimina. La función `onViewportChange` (`picker.component.ts:426`)
+delega en `positionFloatingPanel()`, que solo reposiciona un menú abierto con `floatingPanel=true`.
+`picker.component.spec.ts` cubre apertura y orientación inicial, pero no dispara esos eventos. El último
+LCOV de la suite completa pasó **1218/1218** con **90.54/81.61/89.32/91.99 % S/B/F/L** global; el archivo
+del selector quedó en **91.77/82.35/97.29/94.20 % S/B/F/L**, pero `FNDA=0` para el callback de línea 426.
+Baseline archivado fuera de Git: `%TEMP%\hogaria-coverage-picker-baseline-20261009-023005\lcov.info`.
+
+**Contrato:** con el menú flotante abierto, cambios sintéticos de la geometría del trigger seguidos por
+`resize` y `scroll` deben recalcular la posición del panel. Destruir el fixture elimina ambos listeners:
+eventos posteriores no deben cambiar la última posición. Usar rectángulos sintéticos y eventos directos,
+sin sleeps, servicios reales ni cambios de producción.
+
+- [ ] Añadir primero una prueba unitaria que verifique reposicionamiento en `resize` y `scroll` y ausencia
+      de callback tras destruir el componente.
+- [ ] Ejecutar Karma focal y suite frontend completa; demostrar que el callback queda cubierto y mantener
+      ≥70 % en S/B/F/L por archivo y ≥80 % global en todas las métricas, sin relajar gates.
+- [ ] Ejecutar formato, `git diff --check`, build, `typecheck:e2e` y hooks de commit/push sin bypass; anotar
+      evidencia antes de cerrar la unidad.
+
+**Rollback:** retirar solo esta suite y la subunidad; no cambiar `PickerComponent` de producción salvo que
+la regresión demuestre un defecto distinto.
+
 ### Unidad QA-04c.SWIPE-DIRECTIVES.1 · cobertura de los gestos de compra
 
 **Fuente revalidada (2026-10-08):** el contrato vigente de `HOGARIA-SPEC.md` §8e fija revelar el riel al superar 56 px, confirmar quitar al 60 % del ancho, sumar una unidad a la derecha con `max(56 px, 35 %)`, pulsación larga de 350 ms y prioridad del scroll vertical. También exige que el gesto no se convierta en un tap residual y permite iniciar el swipe sobre botones de la fila, salvo controles con `data-gesture-stop`. `shopping-lists.spec.ts` ya ejercita reveal, quitar/undo, +1 y selección por pulsación larga en Chromium/Pixel 5. Sin embargo, `swipe-row.directive.spec.ts` solo prueba siete casos de las funciones puras y no ejecuta los dos ciclos de vida de directiva. El LCOV de la suite completa actual registra para `swipe-row.directive.ts` **10.09/11.11/11.76/10.09 % S/B/F/L** (11/109 líneas, 5/45 ramas, 2/17 funciones); esta unidad añade cobertura unitaria sin duplicar la E2E de producto.
