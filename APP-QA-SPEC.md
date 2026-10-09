@@ -2301,8 +2301,19 @@ La evidencia de QA-HOUSEHOLD.API-SURFACE.1 y QA-HOUSEHOLD.CLIPBOARD.1 dejó abie
 - [x] `/pantry/categories[/:id]` y `/pantry/products[/:id]`: buscar/filtrar/ordenar, alta/edición, padres/aliases, selección y acciones por lote, protección de registros en uso, validación y confirmaciones; evidencia QA-PANTRY.MANAGERS.ROUTES.1.
 - [x] `/pantry/catalogo`: búsqueda, pasillos/categorías, query string, filtros/paginación, alta individual y por lote, ya existente/en inventario, quitar con confirmación y persistencia al volver; evidencia QA-PANTRY.CATALOG.ROUTE.1.
 - [x] `/recipes`: filtros/tabs, favoritos, detalle, cocinar, temporizadores y vuelta; generar 1/3 recetas, ingredientes/utensilios, restricciones/dificultad/raciones/detalle, error/vacío, guardar y cancelar. Evidencia QA-RECIPES.ROUTES.1.
-- [ ] `/calendar`: día/semana/mes, anterior/siguiente/hoy/salto a fecha, filtros, recarga/error; alta/edición/borrado de comidas y eventos, recurrencia/instancia, invitados, horarios, completado y confirmación.
+- [x] `/calendar`: día/semana/mes, anterior/siguiente/hoy/salto a fecha, filtros, recarga/error; alta/edición/borrado de comidas y eventos, recurrencia/instancia, invitados, horarios, completado y confirmación. Evidencia QA-CALENDAR.ROUTES.1.
 - [ ] Planificación IA desde calendario: objetivo/fechas/tipos de comida/exclusiones/preferencias, loading/error/reintento, aplicar o cancelar y cambios persistidos sin duplicar comidas.
+
+**Evidencia QA-CALENDAR.ROUTES.1 (2026-10-09):** la barrida aislada de las 12 specs de Calendario
+pasó **95 pruebas**, omitió **3** por condiciones existentes de proyecto y tuvo **0 fallos** (6,9 min;
+Chromium + Pixel 5). Los casos cubren semana/día/mes, navegación y salto/URL, filtros, carga/error,
+comidas y eventos, invitaciones, recurrencia/instancia, horarios, confirmación y completado; los
+subcasos recientes de error de rango pasan **2/2** y completado/deshacer **4/4**. Runner con rate limit,
+SQLite/puertos/semilla temporales y cleanup; IA solo simulada, sin datos reales. Capturas PC/móvil se
+registran e inspeccionan en las unidades visuales/funcionales respectivas; este cierre no cambia UI.
+Hooks sin bypass, build/typecheck/check-ui y Karma pasan en el pre-push de `53a8c49`; CI #648
+(`37948562809`) pasó **9/9** jobs para el mismo código. La planificación IA completa sigue abierta en
+su casilla separada.
 
 **Evidencia QA-RECIPES.ROUTES.1 (2026-10-09):** el grupo Playwright aislado
 de 15 archivos de Recetas/Dashboard terminó **94 pasadas, 2 skips intencionales, 0 fallos** en 5,3 min.
