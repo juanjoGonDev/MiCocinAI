@@ -2313,9 +2313,9 @@ La evidencia de QA-HOUSEHOLD.API-SURFACE.1 y QA-HOUSEHOLD.CLIPBOARD.1 dejó abie
 - [x] Añadir primero un E2E que valide periodo/tipos/objetivos/preferencias seleccionados y `response_format` JSON Schema estricto en la solicitud del servidor al proveedor sintético.
 - [x] Mantener un request en curso y verificar estado accesible/submit deshabilitado; simular fallo de proveedor sin persistencia, mantener el diálogo y permitir retry manual.
 - [x] En el retry exitoso, verificar que solo se guardan los tipos elegidos en las fechas solicitadas; repetir generación y comprobar `created=0`, comidas omitidas y ninguna fila duplicada.
-- [ ] Repetir la E2E en Chromium escritorio y Pixel 5 con DB/puertos/semilla temporales, rate limit activo y cleanup; no sobrescribir capturas preexistentes. Confirmar typecheck/formato, gates aplicables, comandos y limitaciones antes de cerrar esta unidad.
+- [x] Repetir la E2E en Chromium escritorio y Pixel 5 con DB/puertos/semilla temporales, rate limit activo y cleanup; no sobrescribir capturas preexistentes. Confirmar typecheck/formato, gates aplicables, comandos y limitaciones antes de cerrar esta unidad.
 
-**Evidencia focal (2026-10-09; falta el gate de commit/CI):** el E2E nuevo configura un proveedor loopback
+**Evidencia focal y cierre CI (2026-10-09):** el E2E nuevo configura un proveedor loopback
 sintético, `retryAttempts: 0` y concurrencia `0` (según `HOGARIA-SPEC.md` §12an, para que el error de
 esta operación síncrona vuelva al modal; concurrencia positiva abre la ventana de retry del gestor de
 cola). La semana `2026-10-19`–`2026-10-25` pide solo `lunch`; el request conserva los objetivos `weight-loss`
@@ -2344,7 +2344,12 @@ node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --projec
 `pnpm run typecheck:e2e` y Prettier focal pasan. Runner inspeccionado antes de iniciar: fija `DATABASE_PATH`
 a `hogaria.sqlite` en su `E2E_RUN_DIR` bajo `%TEMP%`, semilla/puertos únicos y cleanup propio; rate limit
 activo. No se llamó a IA/WebAPI reales ni se usaron tickets. Cobertura de producción N/A (solo tests y ruta
-de capturas); ninguna UI de producto cambió. La validación final de hooks/gates y CI aún queda abierta.
+de capturas); ninguna UI de producto cambió. El commit de pruebas `cf9b2a7992f311b7e8516ca6bf310aeceff9af48`
+pasó CI #651 (**9/9 jobs**, run `37953362743`: typecheck, servidor, cuatro shards E2E, full-stack E2E y
+build; todos en verde). Hooks pre-commit y pre-push pasaron sin omisiones antes del push; los detalles
+están en el historial del commit. Capturas existentes no se sobrescribieron. Rollback: revertir el test
+`tests/e2e/calendar-plan-week.spec.ts`, su aislamiento de capturas en
+`tests/e2e/ai-weekly-participants.spec.ts` y esta sección de spec; no hay cambio de producto.
 
 **Evidencia QA-CALENDAR.ROUTES.1 (2026-10-09):** la barrida aislada de las 12 specs de Calendario
 pasó **95 pruebas**, omitió **3** por condiciones existentes de proyecto y tuvo **0 fallos** (6,9 min;
