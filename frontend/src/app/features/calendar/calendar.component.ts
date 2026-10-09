@@ -1,4 +1,16 @@
-import { Component, DestroyRef, computed, effect, inject, OnInit, signal } from '@angular/core';
+import {
+  afterNextRender,
+  Component,
+  DestroyRef,
+  ElementRef,
+  computed,
+  effect,
+  inject,
+  Injector,
+  OnInit,
+  signal,
+  ViewChild
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -850,10 +862,13 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
         <div class="meal-form">
           <div
             *ngIf="mealDeletionFailed()"
+            #mealDeletionAlert
             class="meal-form__error"
+            data-test="meal-deletion-error"
             role="alert"
             aria-live="assertive"
             aria-atomic="true"
+            tabindex="-1"
           >
             <strong>{{ 'ui.error' | t }}</strong>
             <span>{{ 'calendar.no_se_pudo_quitar_comida' | t }}</span>
@@ -1369,6 +1384,8 @@ export class CalendarComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
+  @ViewChild('mealDeletionAlert') private mealDeletionAlert?: ElementRef<HTMLElement>;
   readonly householdService = inject(HouseholdService);
   private readonly pantryService = inject(PantryService);
   private readonly modules = inject(ModulesService);
@@ -2226,6 +2243,9 @@ export class CalendarComponent implements OnInit {
     this.calendarService.deleteMeal(id).subscribe((removed) => {
       if (!removed) {
         this.mealDeletionFailed.set(true);
+        afterNextRender(() => this.mealDeletionAlert?.nativeElement.focus(), {
+          injector: this.injector
+        });
         return;
       }
 

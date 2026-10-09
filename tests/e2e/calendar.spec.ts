@@ -313,6 +313,7 @@ test.describe('Calendario', () => {
     await expect(deletionError).toHaveAttribute('aria-live', 'assertive');
     await expect(deletionError).toContainText('Error');
     await expect(deletionError).toContainText('No se pudo quitar la comida. Vuelve a intentarlo.');
+    await expect(deletionError).toBeFocused();
     await expect(page.locator('.toast--error')).toHaveCount(0);
     await expect(page.locator('.toast--success')).toHaveCount(0);
     await expect(page.locator('.confirm')).toHaveCount(0);
@@ -345,15 +346,21 @@ test.describe('Calendario', () => {
         () => document.documentElement.scrollWidth > document.documentElement.clientWidth
       );
       expect(narrowOverflow).toBe(false);
-      const alertDoesNotOverlapHeader = await deletionError.evaluate((alert) => {
+      const alertHeaderGeometry = await deletionError.evaluate((alert) => {
         const dialog = alert.closest('[role="dialog"]');
         const header = dialog?.querySelector('.modal__header');
-        if (!dialog || !header) return false;
+        if (!dialog || !header) return null;
         const alertBounds = alert.getBoundingClientRect();
         const headerBounds = header.getBoundingClientRect();
-        return alertBounds.top >= headerBounds.bottom || alertBounds.bottom <= headerBounds.top;
+        return {
+          alertTop: alertBounds.top,
+          alertBottom: alertBounds.bottom,
+          headerTop: headerBounds.top,
+          headerBottom: headerBounds.bottom,
+          overlaps: alertBounds.top < headerBounds.bottom && alertBounds.bottom > headerBounds.top
+        };
       });
-      expect(alertDoesNotOverlapHeader).toBe(true);
+      expect(alertHeaderGeometry?.overlaps, JSON.stringify(alertHeaderGeometry)).toBe(false);
       await editor.locator('.modal__close').focus();
       await page.evaluate(() => document.scrollingElement?.scrollTo(0, 0));
       await page.screenshot({

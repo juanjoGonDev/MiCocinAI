@@ -202,7 +202,8 @@ test('la mini agenda cambia de mes y fecha, enlaza el estado y conserva hoy tras
   await expect(mini.locator(`.mini__day[aria-label="Ver el día ${today}"]`)).toHaveClass(
     /is-selected/
   );
-  await expect(page).toHaveURL(/view=month(?:$|[&#])/);
+  await expect.poll(() => new URL(page.url()).searchParams.get('view')).toBe('month');
+  await expect.poll(() => new URL(page.url()).searchParams.has('date')).toBe(false);
 
   await page.reload();
   await expect(mini.locator(`.mini__day[aria-label="Ver el día ${today}"]`)).toHaveClass(
