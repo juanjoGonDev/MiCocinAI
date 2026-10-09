@@ -320,7 +320,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
 
         <!-- ══ Resumen del periodo ══ -->
         <div class="cal-strip" [class.cal-strip--bare]="!kitchen()">
-          @if (kitchen()) {
+          @if (kitchen() && !calendarService.error()) {
             <div class="cal-strip__item">
               <span class="cal-strip__label">{{ 'calendar.comidas' | t }}</span>
               <span class="cal-strip__value">
@@ -368,7 +368,7 @@ const emptyDraft = (date: string, mealType: MealType): MealDraft => ({
             </span>
           }
 
-          <span class="cal-strip__hint" *ngIf="calendarService.error()">
+          <span class="cal-strip__hint" *ngIf="calendarService.error()" role="alert">
             {{ calendarService.error() }}
             <button type="button" class="cal-link" (click)="reload()">
               {{ 'calendar.reintentar' | t }}

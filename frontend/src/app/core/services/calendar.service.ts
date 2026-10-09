@@ -176,7 +176,10 @@ export class CalendarService {
 
     const params = new HttpParams().set('startDate', start).set('endDate', end);
     this.http
-      .get<RangeResponse>(`${this.apiUrl}/range`, { params })
+      .get<RangeResponse>(`${this.apiUrl}/range`, {
+        params,
+        context: new HttpContext().set(SILENT_TOAST, true)
+      })
       .pipe(
         tap((response) => {
           if (!this.rangeLoadRequests.isCurrent(requestId)) return;

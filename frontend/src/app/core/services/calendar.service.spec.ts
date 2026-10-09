@@ -199,7 +199,9 @@ describe('CalendarService visible range concurrency', () => {
     http.expectOne(rangeRequest(RANGE_A)).flush(rangeResponse(RANGE_A.start, 'Saved meal', 1800));
 
     service.loadRange(RANGE_B.start, RANGE_B.end);
-    http.expectOne(rangeRequest(RANGE_B)).flush({}, { status: 503, statusText: 'Unavailable' });
+    const failedRange = http.expectOne(rangeRequest(RANGE_B));
+    expect(failedRange.request.context.get(SILENT_TOAST)).toBeTrue();
+    failedRange.flush({}, { status: 503, statusText: 'Unavailable' });
 
     expect(service.range()).toEqual(RANGE_A);
     expect(service.meals().map((meal) => meal.title)).toEqual(['Saved meal']);
