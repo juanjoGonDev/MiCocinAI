@@ -383,7 +383,17 @@ async function checkRouteAcrossViewports(
 ): Promise<void> {
   for (const [index, viewport] of VIEWPORTS.entries()) {
     const pageErrors: string[] = [];
-    const onPageError = (error: Error) => pageErrors.push(error.name || 'Error');
+    const onPageError = (error: Error) => {
+      const message = error.message.replace(/https?:\/\/[^\s"'<>]+/gi, (candidate) => {
+        try {
+          const url = new URL(candidate);
+          return `${url.origin}${url.pathname}`;
+        } catch {
+          return '[URL redacted]';
+        }
+      });
+      pageErrors.push(`${error.name || 'Error'}: ${message.slice(0, 320)}`);
+    };
     page.on('pageerror', onPageError);
     try {
       mismatches.push(...(await checkPageContainer(page, target, viewport, index === 0)));
