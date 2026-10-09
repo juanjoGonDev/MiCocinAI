@@ -1053,8 +1053,8 @@ el filtro. La caja del tag conserva las dimensiones actuales (tolerancia ≤1 CS
 - [ ] Añadir primero pruebas unitarias de combinaciones base/seleccionada/deshabilitada/removible, nombre,
       `aria-pressed`, emisión de `onClick` y emisión aislada de `onRemove`.
 - [ ] Reproducir en E2E que los filtros actuales no reciben foco/teclado; después verificar click/tap,
-      Enter/Espacio, estado anunciado y eliminación independiente en Recetas, categorías y productos,
-      usando fixture/DB aislados.
+      Enter/Espacio y estado anunciado en Recetas, categorías e inventario de productos, usando fixture/DB
+      aislados. Cubrir en la prueba unitaria que borrar un tag removible no activa `onClick`.
 - [ ] Hacer el ajuste semántico mínimo sin botones anidados; conservar visualización y geometría de chips
       base/seleccionados/removibles en desktop y móvil y estado deshabilitado.
 - [ ] Capturar/inspeccionar antes y después en PC y móvil; comparar las cajas con tolerancia ≤1 px y
