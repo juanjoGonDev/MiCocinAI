@@ -2531,6 +2531,31 @@ filtro debe restaurar ambas listas. No se cambia backend ni se contacta a provee
 - [ ] Registrar comandos/resultados y rollback (solo la regresión E2E y esta subunidad si producción no cambia);
       ejecutar hooks completos, push y CI verde.
 
+#### QA-SHOPPING.SUGGESTED-PRESERVE-MANUAL.1 · actualizar sin perder líneas de la casa
+
+**Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md` §12al promete que al actualizar una lista
+sugerida se sustituyen solo las líneas sugeridas pendientes; las compradas y las añadidas manualmente
+se conservan. `shopping.routes.ts` implementa el filtro por `source='sugerida'`, `checked=0` y
+`deleted_at IS NULL`; `shopping-suggested.routes.spec.ts` prueba las tres clases mediante inserciones
+directas en SQLite aislada. `shopping-suggested.spec.ts` ya recorre UI, compra y actualización, pero solo
+verifica desde E2E la conservación de la línea comprada y que quede una sugerencia viva, no una línea manual
+creada por la persona.
+
+**Contrato:** con actividad y lista sintéticas, crear sugerencias, marcar una comprada, añadir otra línea
+desde la UI de detalle y actualizar desde la bandeja. Tras la actualización, la comprada conserva `checked`,
+la manual conserva `source=manual` y ambas existen una sola vez; las sugerencias pendientes se reemplazan sin
+duplicados. No se invoca IA/proveedor ni se escribe en la base de datos habitual.
+
+- [x] Revalidar §12al, filtros de `POST /shopping/suggested`, regresión de servidor y E2E actual; acotar
+      la brecha a conservar una línea manual creada por UI.
+- [ ] Añadir primero regresión E2E aislada para crear/actualizar, conservar línea manual y comprada y no
+      duplicar las sugerencias.
+- [ ] Ejecutar Chromium desktop y Pixel 5 con rate limit activo, SQLite/puertos/semilla temporales y cleanup;
+      comprobar los estados en persistencia, accesibilidad/scroll, guardar e inspeccionar capturas sintéticas.
+      Cobertura de código: N/A si no cambia producción.
+- [ ] Registrar resultado, comandos y rollback (solo la regresión E2E y esta unidad); ejecutar hooks completos,
+      push y CI verde.
+
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 - [ ] Interacciones móviles de compra: swipe sin disparos accidentales, modal/sheet, selector de unidad, teclado virtual, controles de precio/cantidad accesibles y contenido desplazable sin tapar el CTA.
 - [ ] `/receipts`: elegir/arrastrar archivo, validar formatos y borde de 10 MiB a través del ingress de producción, rechazar inválidos, estados de cola, detener/reintentar/quitar, concurrencia y volver a abrir ticket desde cola.
