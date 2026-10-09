@@ -6088,7 +6088,7 @@ conservan; no añadir OCR ni IA externa.
       320×740 sin overflow; guardar e inspeccionar capturas sintéticas PC/móvil.
 - [x] Pasar `typecheck:e2e`, `check:ui`, Prettier, build y `git diff --check`; dejar constancia de
       si la suite repetible valida solo eventos sintéticos en móvil, sin fingir drag físico táctil.
-- [ ] Commit atómico con hooks completos, push y CI verde para el SHA publicado; mantener PR #41
+- [x] Commit atómico con hooks completos, push y CI verde para el SHA publicado; mantener PR #41
       abierto y Ready for review, sin merge.
 
 **Rollback:** revertir solo el E2E, la reubicación de eventos en `receipts.component.ts`, capturas
@@ -6111,3 +6111,6 @@ En los tres tamaños calculados no hubo overflow horizontal. Capturas fixture si
 y [móvil 320×740](.e2e-screenshots/qa-receipt-drag-drop-qa-hogaria-e2e-Xn7bIO/mobile-chrome/receipt-drag-drop-320x740.png).
 El test móvil emite eventos DOM `DataTransfer` sintéticos; no valida arrastre físico/táctil de archivos
 en un teléfono. El cambio no añadió lógica TypeScript con ramas nuevas; coverage de producción no aplica.
+El commit atómico `3a5399f` pasó los hooks completos de pre-push. CI `37994588131` terminó **9/9 jobs
+verdes** en el SHA `3a5399f32bfd7aa3e184e1f6b4ecfc3baecad55c`, incluidos los cuatro shards Playwright y
+Full-stack E2E; PR #41 sigue abierto y Ready for review, sin merge.
