@@ -913,13 +913,23 @@ el tipo a texto y actualiza su nombre a «Ocultar contraseña»; se puede volver
 el valor queda intacto. No debe abrir el diálogo de resultado, guardar configuración ni emitir una
 petición de prueba. Nunca capturar el campo mientras la clave sintética esté visible.
 
-- [ ] Añadir primero una E2E real de `/ai-config` que pruebe estado inicial, visibilidad, teclado,
+- [x] Añadir primero una E2E real de `/ai-config` que pruebe estado inicial, visibilidad, teclado,
       etiquetas accesibles, conservación del valor y cero POST de guardado/prueba.
-- [ ] Ejecutar en Chromium y Pixel 5 sobre runner aislado con rate limit activo; no producir
+- [x] Ejecutar en Chromium y Pixel 5 sobre runner aislado con rate limit activo; no producir
       screenshots/traces/videos con la clave visible ni contactar WebAPI/proveedor.
-- [ ] Ejecutar `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`; registrar rollback,
-      commit atómico, hooks completos, push y CI verde. No cambia geometría: capturas y coverage de
-      producción N/A.
+- [x] Ejecutar `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`. No cambia geometría:
+      capturas y coverage de producción N/A.
+- [ ] Registrar evidencia final, commit atómico con hooks, push y CI verde para el SHA del PR.
+
+**Evidencia local (2026-10-09):** `tests/e2e/ai-config.spec.ts` ahora llena solo una clave ficticia
+y comprueba que comienza oculta; el botón accesible revela el valor con Enter, lo vuelve a ocultar
+con Space y preserva el mismo valor. Dos rutas interceptadas prueban que no hay POST de guardado ni
+de prueba. Con rate limit activo, la E2E aislada en Chromium y Pixel 5 pasó **2/2**; SQLite, semilla,
+puerto y cleanup fueron temporales. No se contactó WebAPI/proveedor ni se habilitó captura del campo.
+`pnpm run typecheck:e2e`, `pnpm exec prettier --check tests/e2e/ai-config.spec.ts APP-QA-SPEC.md`,
+`pnpm run check:ui` (**212 ficheros/21 reglas**), `pnpm run build` y `git diff --check` pasaron;
+el build conserva sus warnings preexistentes de tamaño. Sin cambio de producción/UI: coverage y
+capturas comparables no aplican. Commit/push/CI aún pendientes.
 
 **Rollback:** retirar solamente la E2E y esta subunidad; el control genérico de contraseña permanece
 intacto.

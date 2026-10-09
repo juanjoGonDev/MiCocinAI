@@ -235,6 +235,49 @@ test.describe('AI Config', () => {
     await expect(page.locator('input#apiKey')).toBeVisible();
   });
 
+  test('toggles the API key visibility accessibly without saving or testing the config', async ({
+    page
+  }) => {
+    let saveRequests = 0;
+    let testRequests = 0;
+    await page.route('**/api/ai/configs', async (route) => {
+      if (route.request().method() !== 'POST') return route.continue();
+      saveRequests += 1;
+      await route.fulfill({ status: 500, json: { success: false } });
+    });
+    await page.route('**/api/ai/test-connection', async (route) => {
+      testRequests += 1;
+      await route.fulfill({ status: 500, json: { success: false } });
+    });
+
+    await page
+      .getByRole('button', { name: /Agregar configuración/ })
+      .first()
+      .click();
+    const apiKey = page.locator('input#apiKey');
+    const syntheticKey = 'synthetic-ai-key-for-ui-test';
+    await apiKey.fill(syntheticKey);
+    await expect(apiKey).toHaveAttribute('type', 'password');
+
+    const showButton = page.getByRole('button', { name: 'Mostrar contraseña' });
+    await expect(showButton).toBeVisible();
+    await showButton.focus();
+    await page.keyboard.press('Enter');
+    await expect(apiKey).toHaveAttribute('type', 'text');
+    await expect(apiKey).toHaveValue(syntheticKey);
+
+    const hideButton = page.getByRole('button', { name: 'Ocultar contraseña' });
+    await expect(hideButton).toBeVisible();
+    await hideButton.focus();
+    await page.keyboard.press('Space');
+    await expect(apiKey).toHaveAttribute('type', 'password');
+    await expect(apiKey).toHaveValue(syntheticKey);
+    await expect(page.getByRole('dialog', { name: 'Nueva Configuración' })).toBeVisible();
+    await expect(page.locator('.test-result__title')).toHaveCount(0);
+    expect(saveRequests).toBe(0);
+    expect(testRequests).toBe(0);
+  });
+
   test('moves, traps and restores keyboard focus for the configuration dialog', async ({
     page
   }) => {
