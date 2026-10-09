@@ -1487,6 +1487,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                     <input
                       class="detail__photo-name"
                       name="photoName{{ $index }}"
+                      [attr.aria-label]="
+                        'shopping_list_detail.foto_nombre_producto' | t: { name: line.name }
+                      "
                       [ngModel]="line.name"
                       (ngModelChange)="line.name = $event"
                       maxlength="80"
@@ -1497,6 +1500,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       type="number"
                       min="0"
                       step="0.1"
+                      [attr.aria-label]="
+                        'shopping_list_detail.foto_cantidad_producto' | t: { name: line.name }
+                      "
                       [ngModel]="line.quantity"
                       (ngModelChange)="setLineQuantity(line, $event)"
                     />
@@ -1505,6 +1511,9 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       name="photoPrice{{ $index }}"
                       inputmode="decimal"
                       placeholder="precio"
+                      [attr.aria-label]="
+                        'shopping_list_detail.foto_precio_producto' | t: { name: line.name }
+                      "
                       [ngModel]="minorToInput(line.priceMinor)"
                       (ngModelChange)="setLinePrice(line, $event)"
                     />
@@ -1897,6 +1906,15 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         padding-left: var(--space-4);
         font-size: var(--text-xs);
         color: var(--text-tertiary);
+      }
+      @media (max-width: 600px) {
+        .detail__photo-line {
+          grid-template-columns: auto 1fr 48px 60px;
+        }
+        .detail__photo-cat,
+        .detail__photo-doubt {
+          grid-column: 2 / -1;
+        }
       }
       .detail__audit {
         list-style: none;
