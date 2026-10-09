@@ -2119,6 +2119,17 @@ Capturas sintéticas generadas e inspeccionadas (escritorio + Pixel 5): `.e2e-sc
 
 **Rollback:** retirar el control «solo errores» de `logs.component.ts`, su estado/predicado y pruebas de `LogService`, las claves de idioma y esta sección; no revertir filtros existentes, reconexión SSE ni borrado.
 
+### Unidad QA-LOGS.HISTORY-QUEUE.1 · estados de historial vacío/largo y autoscroll real
+
+**Fuente revalidada antes de probar:** el contrato vigente `HOGARIA-SPEC.md` §6 conserva el visor `/logs`; su checklist amplia de QA incluye cola vacía/larga. `LogService.connect()` carga hasta 500 filas del endpoint histórico (orden más reciente primero) y las invierte para mostrar cronológicamente; la plantilla muestra un estado vacío cuando no hay filas. `LogsComponent.ngAfterViewChecked()` solo fuerza el scroll inferior si autoscroll está activo y cambia la longitud del buffer. Los E2E de Logs existentes prueban toggles, filtros, selección/borrado y SSE básico, pero no afirman esos estados ni que el scroll siga/deje de seguir eventos en vivo. Para fijar las 250 filas sin insertar cientos de solicitudes al servicio, el E2E interceptará solo el GET histórico con datos sintéticos; el SSE y el POST que generan el marcador en vivo seguirán pasando por el servidor full-stack aislado.
+
+- [ ] Añadir primero un E2E que entregue historial vacío y compruebe el estado vacío; después emitir una fila al backend aislado y verificar que aparece por SSE, sin recargar ni cambiar `performance.timeOrigin`.
+- [ ] Entregar 250 filas sintéticas en el orden de respuesta del servidor y afirmar 250 filas visibles, orden oldest→newest y scroll inicial al final con autoscroll ON.
+- [ ] Desactivar autoscroll, desplazar al inicio, emitir otro marcador por el POST real al backend y comprobar que aparece sin mover el scroll; verificar `pageerror` vacío.
+- [ ] Ejecutar con SQLite/puertos/semilla propios, rate limit activo, servidor full-stack real, Chromium y Pixel 5; inspeccionar capturas sintéticas PC/móvil del estado largo, ejecutar typecheck E2E, formato y `git diff --check`. Coverage N/A si el test no requiere cambios de producción. Esta unidad solo cierra la verificación de cola vacía/larga; no cierra la ruta general `/logs` ni las capacidades todavía pendientes de HOGARIA §6.
+
+**Rollback:** retirar el test de cola de historial y esta unidad; no cambia producción ni datos persistentes.
+
 ## Matriz responsive, visual y accesibilidad
 
 - [ ] Barrido de **todas las rutas** en 320, 360, 390/393, 430, 768, 1023, 1024, 1280 y 1440 px; guardar ruta, viewport, overflow y errores por página.
