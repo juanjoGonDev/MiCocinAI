@@ -899,6 +899,31 @@ capturas y coverage de producción no aplican. Pendiente solo commit/hooks, push
 **Rollback:** retirar solo la E2E focal y esta subunidad; no cambiar la semántica de conexión ni tocar
 configuración real.
 
+### QA-04c.AI-CONFIG.SECRET-VISIBILITY.1 · mostrar/ocultar clave desde el formulario
+
+**Fuente revalidada (2026-10-09):** `/ai-config` define `apiKey` como `type="password"`; el
+`app-input` compartido muestra el botón con nombre accesible localizado y permite alternar la
+visibilidad. Sus pruebas de componente validan ese control genérico, pero la E2E del formulario de
+configuración no demuestra que el campo real lo conecte y preserve el valor. El contrato general de
+la ruta (línea 2817) exige mostrar/ocultar clave. Unidad test-only, con valor completamente sintético;
+no guardar ni llamar al proveedor.
+
+**Contrato:** clave oculta inicialmente; el botón «Mostrar contraseña» se acciona por teclado, cambia
+el tipo a texto y actualiza su nombre a «Ocultar contraseña»; se puede volver a ocultar por teclado y
+el valor queda intacto. No debe abrir el diálogo de resultado, guardar configuración ni emitir una
+petición de prueba. Nunca capturar el campo mientras la clave sintética esté visible.
+
+- [ ] Añadir primero una E2E real de `/ai-config` que pruebe estado inicial, visibilidad, teclado,
+      etiquetas accesibles, conservación del valor y cero POST de guardado/prueba.
+- [ ] Ejecutar en Chromium y Pixel 5 sobre runner aislado con rate limit activo; no producir
+      screenshots/traces/videos con la clave visible ni contactar WebAPI/proveedor.
+- [ ] Ejecutar `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`; registrar rollback,
+      commit atómico, hooks completos, push y CI verde. No cambia geometría: capturas y coverage de
+      producción N/A.
+
+**Rollback:** retirar solamente la E2E y esta subunidad; el control genérico de contraseña permanece
+intacto.
+
 ### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
 
 **Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md §12t-R` fija `I18nService` como responsable de resolver `es/en/auto`, actualizar el locale de fechas/números al cambiar idioma y componer frases localizadas; `i18n.service.ts` implementa además selección persistida, `languagechange`, fallback de diccionario, interpolación, plurales y tiempos relativos. No existe `i18n.service.spec.ts`; el uso indirecto en otras pruebas deja este servicio en **69.23/31.58/69.23/72.34 % S/B/F/L** (36/52 sentencias, 12/38 ramas, 9/13 funciones, 34/47 líneas). La cobertura baja no prueba un fallo de producto: faltan pruebas unitarias directas de rutas existentes. Alcance test-only, sin cambiar traducciones, producción, preferencias ajenas ni llamadas externas.
