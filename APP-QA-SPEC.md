@@ -4316,16 +4316,38 @@ aparición única en la bandeja, tanto si el trabajo continúa como si ya termin
 configuración se cubre en la prueba de rescate manual. No cambiar producción salvo que una regresión
 reproducible demuestre una deficiencia funcional, y no introducir llamadas a IA externa.
 
-- [ ] Reproducir el flaky de `darAlta` con Playwright aislado y añadir primero sincronización por
+- [x] Reproducir el flaky de `darAlta` con Playwright aislado y añadir primero sincronización por
       modal/fila, nunca por una notificación antigua; repetir la E2E de paginación para confirmar
       estabilidad de las 11 altas.
-- [ ] Ajustar la E2E PDF para esperar el POST 201, confirmar `fileKind='pdf'` y encontrar exactamente
+- [x] Ajustar la E2E PDF para esperar el POST 201, confirmar `fileKind='pdf'` y encontrar exactamente
       una fila de `ticket.pdf` en «En curso» o Historial sin exigir que el worker alcance estado
       terminal en 20 s.
-- [ ] Ejecutar ambas pruebas focales repetidas, `pantry.spec.ts` y `receipts.spec.ts` en Chromium y
-      Pixel 5, `typecheck:e2e`, `check:ui`, format, build, `git diff --check` y la suite/gates de CI.
-- [ ] Actualizar evidencia reproducible, hacer commits atómicos con todos los hooks y push; comprobar
-      que CI termina verde para el SHA actual y mantener PR #41 en Draft, sin merge.
+- [x] Ejecutar las focales repetidas y ambas suites (`pantry.spec.ts`, `receipts.spec.ts`) en
+      Chromium y Pixel 5 emulado; correr `typecheck:e2e`, `check:ui`, Prettier, build y
+      `git diff --check` con el almacenamiento de capturas preexistentes preservado.
+- [ ] Hacer commit atómico con hooks completos y push; comprobar que todos los gates de CI terminan
+      verdes para el SHA actual y mantener PR #41 en Draft, sin merge.
+
+**Evidencia local (2026-10-09):** CI `37872611309` confirmó que el alta se detenía tras dos filas y
+que el PDF sí se aceptaba (POST 201 y `file_kind='pdf'`) pero seguía correctamente «En cola» en la
+bandeja activa; la prueba original lo buscaba solo en Historial. Se endureció `darAlta` para esperar
+el diálogo, su cierre, la fila concreta y la notificación tras cada guardado. La E2E PDF ahora valida
+el 201/`fileKind`/`fileName` y una única fila visible, aceptando ambos estados de la cola.
+
+Con `CI=true E2E_RATE_LIMIT=on`, las dos pruebas del hallazgo con `--repeat-each=2` pasaron **4/4**.
+Las suites completas de Inventario y Tickets en Chromium y Pixel 5 emulado pasaron **48/48** (4
+casos omitidos por las condiciones existentes). Comando:
+
+```sh
+node scripts/run-isolated-playwright.mjs --workers=2 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/pantry.spec.ts tests/e2e/receipts.spec.ts --reporter=line
+```
+
+DB, puerto y servidores fueron aislados y limpiados; se usaron respuestas IA sintéticas locales, no
+proveedor externo. `pnpm run typecheck:e2e`, Prettier focal, `pnpm run check:ui` (**211 ficheros, 21
+reglas**), `pnpm run build` y `git diff --check` pasan. Build mantiene warnings preexistentes de
+budgets y imports/optional chaining. Las dos capturas de Inventario que ya existían se respaldaron y
+sus SHA-256 se comprobaron idénticos tras la ejecución; esta unidad no modifica la UI ni exige nuevas
+capturas. La revalidación de gates CI para el nuevo SHA queda pendiente.
 
 **Rollback:** retirar la sincronización de la helper, la aserción PDF ajustada y esta unidad de spec;
 no revertir cambios de producción ni otras unidades.

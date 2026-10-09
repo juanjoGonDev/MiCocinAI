@@ -37,13 +37,17 @@ async function darAlta(
   }
 ): Promise<void> {
   await page.getByRole('button', { name: '+ Agregar' }).click();
-  await page.fill('input#ingredientName', opts.nombre);
-  await page.fill('input#quantity', opts.cantidad);
-  if (opts.unidad) await page.selectOption('select[name="unit"]', opts.unidad);
+  const dialog = page.getByRole('dialog', { name: 'Agregar Ingrediente' });
+  await expect(dialog).toBeVisible();
+  await dialog.locator('input#ingredientName').fill(opts.nombre);
+  await dialog.locator('input#quantity').fill(opts.cantidad);
+  if (opts.unidad) await dialog.locator('select[name="unit"]').selectOption(opts.unidad);
   if (opts.categoria) await elegir(page, '[data-test="pantry-picker-categoria"]', opts.categoria);
   if (opts.ubicacion) await elegir(page, '[data-test="pantry-picker-ubicacion"]', opts.ubicacion);
-  if (opts.caducidad) await page.fill('input#expiration', opts.caducidad);
-  await page.locator('app-modal button[type="submit"]').click();
+  if (opts.caducidad) await dialog.locator('input#expiration').fill(opts.caducidad);
+  await dialog.locator('button[type="submit"]').click();
+  await expect(dialog).toHaveCount(0);
+  await expect(fila(page, opts.nombre)).toHaveCount(1);
   await expect(page.locator('.toast--success').last()).toContainText('Agregado');
 }
 

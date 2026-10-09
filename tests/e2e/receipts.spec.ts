@@ -461,16 +461,27 @@ test.describe('tickets: la cola de lectura (## 12aj)', () => {
   test('un PDF tambien entra en la cola', async ({ page }) => {
     await registerAndGoto(page, '/receipts');
 
+    const uploadResponsePromise = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/receipts' && response.request().method() === 'POST';
+    });
     await page.setInputFiles('input[name="ticketFile"]', {
       name: 'ticket.pdf',
       mimeType: 'application/pdf',
       buffer: pdfDeMentira()
     });
 
-    // Aparece en la bandeja: el estado termina en Falló (sin IA), pero el fichero fue
-    // aceptado como PDF, no rechazado en la puerta.
-    const fallido = page.locator('[data-test="receipt-history"] [data-test="ticket-history-item"]');
-    await expect(fallido).toHaveCount(1, { timeout: 20000 });
+    const uploadResponse = await uploadResponsePromise;
+    expect(uploadResponse.status()).toBe(201);
+    const upload = (await uploadResponse.json()) as {
+      data: { fileKind: string; fileName: string };
+    };
+    expect(upload.data).toMatchObject({ fileKind: 'pdf', fileName: 'ticket.pdf' });
+
+    // El contrato aquí es que un PDF válido se acepte y aparezca en la bandeja. El worker es
+    // asíncrono: puede seguir «En curso» o haber movido ya el ticket al Historial.
+    const ticket = page.locator('.ticket').filter({ hasText: 'ticket.pdf' });
+    await expect(ticket).toHaveCount(1, { timeout: 20000 });
   });
 
   test('un ticket fallido se rescata a mano y confirma: tienda, precios e inventario', async ({
