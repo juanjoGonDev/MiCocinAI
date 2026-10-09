@@ -4,7 +4,7 @@
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
 - **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1242/1242 con cobertura 91.50/82.44/90.03/92.94 % S/B/F/L; CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-09
-- **IA / tickets reales (2026-10-09, vigente):** WebAPI local (`127.0.0.1:3001`, PID 7100) respondió `GET /health` 200; no ofrece endpoint para verificar el SHA cargado. El smoke live sintético imagen+inventario pasó 1/1 en 29,6 s: `response_format` JSON Schema estricto, dos adjuntos preparados/subidos (`uploadAttachmentCount=2`, `inventorySnapshotUploadCount=1`), cero contexto inline, readiness `visibleCount=2` y ambos marcadores devueltos. Un 401 inicial usando `API_KEY` no alcanzó al modelo; se reintentó con token cliente temporal de 10 min, revocado/eliminado y verificado ausente. El test usó sólo fixtures sintéticas y no escribió en el inventario real; worktree y fixtures temporales quedaron limpios. No se reenviaron tickets reales: la solicitud previa de las tres fotos sí se envió y agotó el timeout de lectura, por lo que no es seguro repetirla. OCR real, validación del contrato de ticket, deduplicación entre fotos y revisión siguen sin validar; QA-AI.REAL-INTEGRATIONS.1 continúa abierto.
+- **IA / tickets reales (2026-10-09, vigente):** WebAPI local (`127.0.0.1:3001`, PID 7100) respondió `/health` y `/health/ready` 200; no ofrece endpoint para verificar el SHA servido. El smoke sintético imagen+inventario pasó con `response_format` JSON Schema estricto, dos adjuntos listos (`uploadAttachmentCount=2`, `inventorySnapshotUploadCount=1`), cero contexto inline y readiness `2/2`. En el reintento real directo a WebAPI, los dos PDF separados devolvieron HTTP 200 y pasaron validación del proveedor y del schema local, cada uno con ticket + `inventario.json` visibles. La JPEG preferida llegó al prompt con ambos adjuntos, pero terminó en HTTP 502 tras fallos de salida estructurada y `composer_not_ready`; no hubo respuesta válida. No se volvió a enviar el ticket largo de tres fotos porque su petición anterior llegó a `Prompt submitted` y acabó en 504, así que pudo completarse. No hubo escrituras en el inventario MiCocinAI; token efímero revocado/eliminado y archivos temporales vaciados. El proceso vivo arrancó antes de las modificaciones recientes del checkout WebAPI y su SHA no es verificable; no acredita esas modificaciones. La deduplicación del ticket largo y la validación real completa siguen pendientes.
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -2900,6 +2900,36 @@ local de WebAPI tiene recuperación acotada en `stream-reply-flow.ts`, sin event
 extracto aportado; queda por distinguir fallo del ciclo de vida vs. runtime desplegado desactualizado.
 No repetir tickets reales hasta resolver esta recuperación y comprobar que la petición nueva llega con
 los dos adjuntos esperados.
+
+**Reintento live solicitado por el usuario (2026-10-09):** `/health/ready` devolvió `ready=true`.
+El smoke sintético contra el PID 7100 registró dos adjuntos visibles, un snapshot de inventario,
+cero contexto inline, compilación del JSON Schema estricto y `validated-output.validation.succeeded`.
+Esto confirma el transporte de adjuntos en ese proceso, no la versión exacta cargada: el PID arrancó
+a las 10:09:43, antes de las modificaciones actuales de `stream-reply-flow.ts` y
+`validated-output-executor.ts` (11:55–11:57); ahora el checkout WebAPI está en
+`fix/chatgpt-inactivity-recovery`/`e52e5f47`, con cambios locales sin commit, y no expone el SHA del
+runtime. No se reinició ni modificó WebAPI ni su trabajo local.
+
+Se creó en almacenamiento temporal una instantánea mediante `buildInventarioJson`, desde una apertura
+SQLite `readonly` + `query_only`; contenía solo tiendas, categorías y productos, sin existencias,
+precios ni historial. MiCocinAI no escribió ningún resultado en el inventario real. A petición nueva
+del usuario se enviaron una vez los dos PDF por separado y la JPEG preferida por separado, cada cual
+con `inventario.json` y `response_format` JSON Schema estricto. Ambos PDF devolvieron HTTP 200; WebAPI
+registró dos adjuntos preparados/visibles, snapshot único, cero contexto inline y validación final;
+el schema local también pasó (18 líneas por PDF). La JPEG llegó a `Prompt submitted` con sus dos
+adjuntos visibles y schema compilado, pero acabó HTTP 502: el output no validó y la corrección terminó
+con `composer_not_ready`; no hubo respuesta final válida ni reintento manual del cliente. El servicio
+realizó las correcciones internas indicadas en sus logs. La attestation de privacidad se consultó
+después, no antes, de estos POST: WebAPI tenía logging/captureDetails activos, grabación de sesión y
+HTML diagnóstico desactivados; el código de la revisión de adjuntos inspeccionada redacta
+`messages`/adjuntos y solo
+permite una allowlist de cabeceras, pero esta pasada no satisface el preflight previo requerido.
+
+No se repitió el ticket largo de tres fotos: su envío anterior llegó a `Prompt submitted` y devolvió
+504, por lo que podría haberse completado; su deduplicación sigue sin validar. Tampoco se ejecutó el
+flujo UI/DB aislado ni se confirmó ningún ticket. El token temporal fue revocado, eliminado y verificado
+ausente; el contenido del snapshot y los scripts auxiliares temporales se vació. Los resultados
+anteriores son parciales y no cierran QA-AI.REAL-INTEGRATIONS.1.
 
 ### Subunidad QA-AI.RECEIPT-INVENTORY-ATTACHMENT.1 · adjuntar el catálogo visible
 
