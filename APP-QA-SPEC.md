@@ -861,14 +861,21 @@ Candidatos del informe previo al lote (histórico; orden statements/branches/fun
 
 ### QA-04c.AVATAR-IMAGE.1 · cubrir decodificación, canvas y cleanup de la foto de perfil
 
-**Fuente revalidada (2026-10-09, HEAD `a09d4e9`):** `HOGARIA-SPEC.md` §12j exige aceptar JPEG/PNG/WebP hasta 4 MiB, recortar una región cuadrada y re-encodear a JPEG de 128 px desde el dispositivo. `avatar-image.spec.ts` prueba hoy la validación pura y `squareCrop`, pero el navegador también ejecuta `decodeAvatarFile()`, `renderAvatarDataUrl()` y sus wrappers de liberación. El LCOV vigente de `avatar-image.ts` está en **34.78/26.32/25.00/34.78 % S/B/F/L** (16/46 líneas, 5/19 ramas, 3/12 funciones); baseline archivado en `%TEMP%\hogaria-coverage-avatar-image-baseline-a09d4e9-20261009.lcov`.
+**Fuente revalidada (2026-10-09, HEAD `f4b8462`):** `HOGARIA-SPEC.md` §12j exige aceptar JPEG/PNG/WebP hasta 4 MiB, recortar una región cuadrada y re-encodear a JPEG de 128 px desde el dispositivo. `avatar-image.spec.ts` prueba ahora la validación pura, `squareCrop`, la decodificación real/fallback, canvas y liberación; producción permanece sin cambios. El baseline antes de esta unidad era **34.78/26.32/25.00/34.78 % S/B/F/L** (16/46 líneas, 5/19 ramas, 3/12 funciones), archivado en `%TEMP%\hogaria-coverage-avatar-image-baseline-a09d4e9-20261009.lcov`.
 
 **Contrato:** la decodificación prefiere `createImageBitmap`; si falla, usa `<img>` con una URL de objeto y la revoca al resolver o rechazar. Los ficheros inválidos se rechazan antes de decodificar. Canvas configura smoothing, usa exactamente la región compartida con el editor y devuelve JPEG con la calidad contractual; sin contexto lanza `AvatarIssue`. Los bitmaps se liberan también si falla el recorte/render. No cambiar producción salvo que una regresión revele una discrepancia real.
 
-- [ ] Añadir pruebas de ChromeHeadless para el camino válido y los errores de `decodeAvatarFile`, incluyendo fallback `<img>` y revocación de URL sin dejar recursos vivos.
-- [ ] Probar el render real/sintético de canvas: dimensiones, smoothing, región recibida, MIME/calidad de salida, contexto ausente y liberación en éxito/error.
-- [ ] Ejecutar la suite focal y la suite cliente completa; alcanzar **≥70 % en S/B/F/L** para `avatar-image.ts` y mantener **≥80 % global** sin alterar gates. Archivar LCOV fuera de Git, y ejecutar build/typecheck/formato/diff-check.
-- [ ] Registrar comandos, resultados y rollback; commit atómico con hooks completos y push a la rama del PR, sin tocar base/proveedor de uso normal.
+- [x] Añadir pruebas de ChromeHeadless para el camino válido y los errores de `decodeAvatarFile`, incluyendo fallback `<img>` y revocación de URL sin dejar recursos vivos.
+- [x] Probar el render real/sintético de canvas: dimensiones, smoothing, región recibida, MIME/calidad de salida, contexto ausente y liberación en éxito/error.
+- [x] Ejecutar la suite focal y la suite cliente completa; alcanzar **≥70 % en S/B/F/L** para `avatar-image.ts` y mantener **≥80 % global** sin alterar gates. Archivar LCOV fuera de Git, y ejecutar build/typecheck/formato/diff-check.
+- [x] Registrar comandos, resultados y rollback; commit atómico con hooks completos y push a la rama del PR, sin tocar base/proveedor de uso normal.
+
+**Evidencia QA-04c.AVATAR-IMAGE.1 (2026-10-09):** la suite focal
+`pnpm --filter @hogaria/web exec ng test --no-watch --include=src/app/core/avatar-image.spec.ts --browsers=ChromeHeadless --progress=false`
+pasó **13/13**. `pnpm run test:client`, ejecutado por el hook pre-push, pasó **1242/1242**; cobertura global **91.50/82.44/90.03/92.94 % S/B/F/L**. En el informe LCOV/HTML de
+`%TEMP%\hogaria-coverage-avatar-image-final-20261009-0849`, `avatar-image.ts` alcanzó **100/94.73/100/100 % S/B/F/L** (52/52 statements, 18/19 ramas, 12/12 funciones, 46/46 líneas). El código de producción no cambió.
+
+El hook pre-push completo pasó: format-check, `check:ui` (211 ficheros, 21 reglas), build, `typecheck:e2e`, configuración **11/11**, suite cliente **1242/1242** y servidor **1236 pasadas/1 omitida**. `git diff --check` también pasó. No hay cambio de comportamiento UI que requiera E2E/capturas; no se tocaron base de datos, proveedor ni artefactos personales. Rollback: retirar las pruebas añadidas en `frontend/src/app/core/avatar-image.spec.ts` y este subapartado, sin modificar producción.
 
 **Rollback:** retirar solo las pruebas de `avatar-image.spec.ts` agregadas en esta unidad y este subapartado; no cambiar la conducta de producción ni la cuenta/datos reales.
 
