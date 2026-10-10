@@ -6651,7 +6651,7 @@ teclado al abandonar el campo.
       inputs de línea, overflow y geometría sin nueva columna, con capturas sintéticas PC/móvil.
 - [x] Ejecutar unitarias focales, `typecheck:e2e`, build, `check:ui`, formato, `git diff --check` y
       coverage ≥70 % en S/B/F/L para cada archivo instrumentable tocado; no llamar a WebAPI/proveedor.
-- [ ] Registrar comandos/resultados/limitaciones y rollback; commit atómico con hooks, push, CI verde
+- [x] Registrar comandos/resultados/limitaciones y rollback; commit atómico con hooks, push, CI verde
       para el commit de implementación; PR #41 abierta y sin merge.
 
 **Evidencia TDD y local (2026-10-10):** antes del cambio, la E2E aislada falló **2/2** porque no
@@ -6680,5 +6680,11 @@ parcial; la suite completa sí pasa el gate, que no se rebajó. También pasan `
 `pnpm run check:ui` (**212 ficheros, 21 reglas**), `pnpm run build`, Prettier focal y `git diff --check`.
 El build conserva warnings previos de imports/presupuesto Angular. El emulador Pixel 5 valida interacción
 por teclado sintética, no el teclado software/safe-area de un teléfono real.
+
+El commit de implementación `6fa43c6` se publicó tras pasar Lefthook pre-commit y pre-push, sin
+omitir hooks. El pre-push ejecutó formato, `check:ui`, build, typecheck E2E y las suites completas
+(cliente **1297/1297**; servidor **1236 pasaron, 1 omitida**). GitHub Actions, run
+`38033079862`, quedó verde: Type Check, Production Build, Server Tests, Full-stack E2E y los cuatro
+shards E2E. La PR #41 permanece abierta, Ready for review y sin merge.
 
 **Rollback:** revertir solo el control de nota, su prueba y esta subunidad; conservar el contrato API.
