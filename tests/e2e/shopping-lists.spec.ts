@@ -11,7 +11,8 @@ import { shoppingNavigationLink, shoppingNewListAction } from './helpers/shoppin
  * Las pruebas de gestos no simulan toques con `tap()` ni hacen clic en el riel:
  * arrastran de verdad, porque lo que se quiere comprobar es el umbral (asomar vs
  * ejecutar) y el hecho de que un arrastre del todo borre y aun se pueda deshacer.
- * El raton de Playwright genera los mismos pointer events que el dedo.
+ * En viewports tactiles se despachan eventos tactiles por CDP; en escritorio se
+ * mantiene el arrastre con raton.
  */
 
 const LIST_NAME = 'Compra de la semana';
@@ -57,10 +58,33 @@ async function dragRow(
   const box = await faceOf(row).boundingBox();
   if (!box) throw new Error('La fila no tiene caja: no se puede arrastrar');
   const y = box.y + box.height / 2;
-  await page.mouse.move(box.x + box.width * fromRatio, y);
+  const startX = box.x + box.width * fromRatio;
+  const endX = box.x + box.width * toRatio;
+  const isTouch = await page.evaluate(() => navigator.maxTouchPoints > 0);
+  if (isTouch) {
+    const cdp = await page.context().newCDPSession(page);
+    try {
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [{ x: startX, y }]
+      });
+      for (let step = 1; step <= 10; step++) {
+        await cdp.send('Input.dispatchTouchEvent', {
+          type: 'touchMove',
+          touchPoints: [{ x: startX + ((endX - startX) * step) / 10, y }]
+        });
+      }
+      if (holdMs) await page.waitForTimeout(holdMs);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    } finally {
+      await cdp.detach();
+    }
+    return;
+  }
+  await page.mouse.move(startX, y);
   await page.mouse.down();
   await page.mouse.move(box.x + box.width * ((fromRatio + toRatio) / 2), y, { steps: 5 });
-  await page.mouse.move(box.x + box.width * toRatio, y, { steps: 5 });
+  await page.mouse.move(endX, y, { steps: 5 });
   if (holdMs) await page.waitForTimeout(holdMs);
   await page.mouse.up();
 }

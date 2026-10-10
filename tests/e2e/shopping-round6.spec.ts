@@ -319,6 +319,12 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
     await expect(offerChip).toHaveAccessibleName('3x2');
     await expect(offerChip).toHaveAttribute('title', /Oferta 3x2/);
     const editSheet = page.locator('[data-test="edit-sheet"]');
+    const quantityInput = editSheet.locator('input[name="qty"]');
+    const priceInput = editSheet.locator('[data-test="price-input"]');
+    await expect(quantityInput).toHaveAccessibleName('Cantidad');
+    await expect(quantityInput).toHaveAttribute('type', 'number');
+    await expect(priceInput).toHaveAccessibleName('Precio por unidad');
+    await expect(priceInput).toHaveAttribute('inputmode', 'decimal');
     const doneButton = editSheet.getByRole('button', { name: /Hecho/i });
     if (isMobile) {
       const geometry = await editSheet.evaluate((sheet) => {
@@ -462,6 +468,14 @@ test.describe('Cesta: iconos, oferta y descuento', () => {
         );
       });
       expect(buttonInViewport).toBe(true);
+      const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+      if (screenshotDirectory) {
+        mkdirSync(screenshotDirectory, { recursive: true });
+        await page.screenshot({
+          path: join(screenshotDirectory, 'shopping-edit-sheet-320x568-cta.png'),
+          animations: 'disabled'
+        });
+      }
       await doneButton.focus();
       expect(await doneButton.evaluate((button) => button === document.activeElement)).toBe(true);
       await page.keyboard.press('Enter');
