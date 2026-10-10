@@ -5335,7 +5335,7 @@ de llamadas externas ni cambiar producción.
       de configuración de los endpoints provider-bound; validar el método HTTP y rutas del router.
 - [x] Ejecutar `recipe-actions-mobile.spec.ts` en Chromium y Pixel 5, conservar asserts de scroll,
       foco, geometría y que no se invoca ningún endpoint de proveedor.
-- [ ] Ejecutar `typecheck:e2e`, formato, `check:ui`, `git diff --check`, hooks, commit atómico, push y
+- [x] Ejecutar `typecheck:e2e`, formato, `check:ui`, `git diff --check`, hooks, commit atómico, push y
       esperar CI verde; test-only, sin cambio de producto ni llamadas al modelo.
 
 **Evidencia (2026-10-10):** CI `38042245009` expuso el falso positivo; la corrida local previa al
@@ -5345,6 +5345,12 @@ cuenta POST a los endpoints de IA que llaman al proveedor según `ai.routes.ts`,
 --workers=1 --project=chromium --project=mobile-chrome --forbid-only
 tests/e2e/recipe-actions-mobile.spec.ts --grep 'formulario IA cabe en móvil' --reporter=line` pasó
 **2/2** en Chromium y Pixel 5; la aplicación temporal se limpió y no se invocó ningún proveedor.
+
+**Cierre (2026-10-10):** el código/test quedó publicado en la rama de PR #41; el CI `38044063543`
+terminó en el intento 2 con **9/9 jobs verdes**, incluidos E2E, typecheck, build y servidor. El intento
+1 tuvo fallos transitorios en tres E2E ajenos a este observer, documentados en
+`QA-RECEIPTS.LINE-REMOVAL-MATCHING-TOTAL.1`; las reproducciones focales y el reintento CI pasaron.
+Hooks Lefthook corrieron sin bypass. No hubo llamada IA.
 
 **Rollback:** revertir únicamente el filtro/assertion de solicitudes del test E2E y este subapartado.
 
