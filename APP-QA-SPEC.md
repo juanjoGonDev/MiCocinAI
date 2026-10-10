@@ -3096,7 +3096,9 @@ global 92.22/83.53/90.97/93.64 % S/B/F/L; picker 100/100/100/100 % y StorageServ
 `%TEMP%\hogaria-unit-recents-final-20261009\mobile-chrome\shopping-unit-recents.png`.
 Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el código final en `0af4741` (**9/9** jobs).
 
-- [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
+- [x] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
+
+**Cierre de `/shopping/:id` (2026-10-10):** los subcasos de esta ruta están cerrados abajo; la matriz aislada de 14 specs en Chromium y Pixel 5 emulado cubrió alta/typeahead/pegado, selección, precios/unidades/ofertas/descuentos/cupón, estado de la cesta, cierre/reapertura, transferencia a despensa, sugerencias, recuperación de error y auditoría SSE. Se ejecutó con rate limit activo, runner y SQLite temporales y semilla propia. El resultado agregado fue **106 passed, 9 skipped por guardas de proyecto y 1 fallo**: el bootstrap móvil del test preexistente «quitar desde la hoja» agotó el timeout esperando que apareciera la acción «nueva lista», sin alcanzar sus aserciones de Compra. Su reproducción aislada pasó **2/2**; la spec `shopping-sugerencias.spec.ts` completa pasó **10/10**. El runner paró el servidor propio pero preservó los artefactos/SQLite de ese intento fallido en `%TEMP%` para diagnóstico; las repeticiones verdes limpiaron sus propios recursos. El proceso/puerto temporal quedó detenido. La E2E photo-review corre en el proyecto full-stack sintético; la CI del HEAD `5bb1606` terminó **9/9 jobs verdes** en `38056833392`, incluyendo full-stack y los cuatro shards. Por ello se cierra la cobertura funcional de la ruta, dejando constancia del fallo intermitente de setup (sin atribuirle una causa no probada). Capturas sintéticas revisadas en `.e2e-screenshots/qa-shopping-route-matrix-20261010/`: `shopping-discount-1440x900.png`, `shopping-discount-393x851.png` y `shopping-quick-add-mobile-320x568.png`. No hubo llamada a proveedores externos ni escritura fuera de los entornos aislados.
 
 #### QA-SHOPPING.AUDIT-LIVE.1 · refresco de autoría con la hoja abierta
 
@@ -3565,6 +3567,7 @@ Angular/budgets preexistentes. Coverage N/A: corrección geométrica de CSS sin 
 7. QA-RECIPES.AI-FLOW.1 ya tiene pruebas unitarias, integración, E2E funcionales y gate frontend global ≥80 % verificado; no reabrir salvo cambio de código o nueva regresión.
 8. Dashboard/recetas y Pantry (incluida la unidad TOUCH.1) ya tienen regresiones verificadas; completar las demás acciones/estados de esas rutas y todas las rutas pendientes.
 9. QA-RECEIPTS `/receipts/:id` queda cerrada por la matriz integral **50/50** documentada abajo; reabrir solo ante cambio o regresión.
+10. QA-SHOPPING `/shopping/:id` queda cerrada por la matriz en escritorio/móvil y CI 9/9 documentadas arriba; reabrir solo ante cambio o regresión.
 
 ## Unidad QA-CALENDAR.DELETE-FAILURE.1 · conservar el plan si falla el borrado de una comida
 
