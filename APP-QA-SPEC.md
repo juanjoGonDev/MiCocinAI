@@ -5639,8 +5639,14 @@ semilla/artefactos temporales; runner limpió tras detener su app. `pnpm run typ
 warnings existentes de bundle, presupuesto e imports; no se rebajaron gates. Solo se modificó CSS de
 producción (`styles.scss`), sin archivo TS instrumentable para cobertura; cobertura S/B/F/L: N/A.
 Capturas sintéticas revisadas en `%TEMP%\hogaria-safe-area-final-b8dcc311afa94912afce3c827a458c7d\`
-(`safe-area-desktop-chromium.png`, `safe-area-mobile-mobile-chrome.png`). No se probó iOS nativo: la
-revisión WebKit requerida sigue ausente y Pixel 5 no expone inset nativo no nulo; la última casilla queda abierta.
+(`safe-area-desktop-chromium.png`, `safe-area-mobile-mobile-chrome.png`).
+
+**Revalidación WebKit (2026-10-10):** `pnpm run test:e2e -- --workers=1 --project=mobile-safari
+tests/e2e/safe-area-layout.spec.ts --reporter=line` pasa **1/1** y el runner limpia SQLite y procesos;
+ese E2E solo inyecta tokens sintéticos. En contexto Playwright `iPhone 13` medí directamente los cuatro
+`env(safe-area-inset-*)`: top/right/bottom/left son **0 px**. WebKit está disponible en este Windows,
+pero no ofrece un inset de dispositivo real en esta emulación; la última casilla permanece abierta hasta
+ejecutar/medir Safari en hardware iOS con inset nativo superior e inferior no nulo.
 
 ### QA-LAYOUT.ROUTE-MATRIX.CI.1 · mantener la matriz de rutas completa dentro del presupuesto de CI
 
