@@ -37,6 +37,7 @@ export const households = sqliteTable('households', {
   name: text('name').notNull(),
   inviteCode: text('invite_code').unique().notNull(),
   sharedPantry: integer('shared_pantry', { mode: 'boolean' }).default(true),
+  aiOwnerUserId: text('ai_owner_user_id'),
   createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
   updatedAt: text('updated_at').default('CURRENT_TIMESTAMP')
 });
@@ -44,6 +45,7 @@ export const households = sqliteTable('households', {
 export const householdsRelations = relations(households, ({ many }) => ({
   members: many(users),
   ingredients: many(ingredients),
+  aiConfigs: many(aiConfigs),
   calendars: many(weeklyCalendars)
 }));
 
@@ -111,17 +113,21 @@ export const recipes = sqliteTable('recipes', {
   description: text('description'),
   difficulty: text('difficulty').default('medium'),
   cuisine: text('cuisine'),
+  countryCode: text('country_code'),
+  catalogKey: text('catalog_key'),
+  sourceAttribution: text('source_attribution'),
   mealType: text('meal_type').default('[]'),
   totalTime: integer('total_time'),
   prepTime: integer('prep_time'),
   cookTime: integer('cook_time'),
   restTime: integer('rest_time'),
-  servings: integer('servings').default(4),
+  servings: integer('servings').default(2),
   calories: real('calories'),
   image: text('image'),
   ingredients: text('ingredients').default('[]'),
   utensils: text('utensils').default('[]'),
   steps: text('steps').default('[]'),
+  recipeGuidance: text('recipe_guidance'),
   nutrition: text('nutrition'),
   storage: text('storage'),
   author: text('author').default('user'),
@@ -177,7 +183,8 @@ export const userRecipesRelations = relations(userRecipes, ({ one }) => ({
 
 export const weeklyCalendars = sqliteTable('weekly_calendars', {
   id: text('id').primaryKey(),
-  householdId: text('household_id').notNull(),
+  // NULL = calendario personal (sin hogar). Ver la migración en config/database.ts.
+  householdId: text('household_id'),
   userId: text('user_id').notNull(),
   weekStart: text('week_start').notNull(),
   weekEnd: text('week_end').notNull(),
@@ -236,6 +243,7 @@ export const mealsRelations = relations(meals, ({ one }) => ({
 export const aiConfigs = sqliteTable('ai_configs', {
   id: text('id').primaryKey(),
   userId: text('user_id').notNull(),
+  householdId: text('household_id').references(() => households.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   provider: text('provider').default('custom'),
   baseUrl: text('base_url').notNull(),
@@ -248,6 +256,7 @@ export const aiConfigs = sqliteTable('ai_configs', {
   presencePenalty: real('presence_penalty'),
   timeout: integer('timeout').default(30000),
   retryAttempts: integer('retry_attempts').default(3),
+  concurrency: integer('concurrency').notNull().default(0),
   isActive: integer('is_active', { mode: 'boolean' }).default(true),
   lastTested: text('last_tested'),
   testStatus: text('test_status'),
@@ -260,5 +269,31 @@ export const aiConfigsRelations = relations(aiConfigs, ({ one }) => ({
   user: one(users, {
     fields: [aiConfigs.userId],
     references: [users.id]
+  }),
+  household: one(households, {
+    fields: [aiConfigs.householdId],
+    references: [households.id]
   })
 }));
+
+/** Metadata only: non-ticket request bodies, prompts and attachments intentionally stay in memory. */
+export const aiJobs = sqliteTable('ai_jobs', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  householdId: text('household_id'),
+  configId: text('config_id'),
+  kind: text('kind').notNull().default('receipt'),
+  receiptId: text('receipt_id'),
+  status: text('status').notNull().default('queued'),
+  attempts: integer('attempts').notNull().default(0),
+  maxAttempts: integer('max_attempts').notNull().default(3),
+  queueOrder: integer('queue_order').notNull().default(0),
+  claimGeneration: integer('claim_generation').notNull().default(0),
+  leaseUntil: text('lease_until'),
+  errorCode: text('error_code'),
+  errorDetail: text('error_detail'),
+  createdAt: text('created_at').default('CURRENT_TIMESTAMP'),
+  updatedAt: text('updated_at').default('CURRENT_TIMESTAMP'),
+  startedAt: text('started_at'),
+  finishedAt: text('finished_at')
+});

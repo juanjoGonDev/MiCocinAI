@@ -1,0 +1,59 @@
+import { signal } from '@angular/core';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ConfirmDialogComponent } from './confirm-dialog.component';
+import { ConfirmService } from '../../../../core/services/confirm.service';
+import { I18nService } from '../../../../core/services/i18n.service';
+
+describe('ConfirmDialogComponent', () => {
+  let fixture: ComponentFixture<ConfirmDialogComponent>;
+  let request: ReturnType<typeof signal<any>>;
+  let confirmService: any;
+
+  beforeEach(async () => {
+    request = signal({ title: 'Confirm deletion', message: 'Synthetic confirmation' });
+    confirmService = {
+      request,
+      cancel: jasmine.createSpy('cancel'),
+      accept: jasmine.createSpy('accept')
+    };
+
+    await TestBed.configureTestingModule({
+      imports: [ConfirmDialogComponent],
+      providers: [
+        { provide: ConfirmService, useValue: confirmService },
+        { provide: I18nService, useValue: { changeTick: signal(0), t: (key: string) => key } }
+      ]
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(ConfirmDialogComponent);
+    fixture.detectChanges();
+  });
+
+  it('gives both destructive confirmation actions accessible touch targets', () => {
+    const buttons = Array.from(
+      fixture.nativeElement.querySelectorAll('app-button button')
+    ) as HTMLButtonElement[];
+
+    expect(buttons).toHaveSize(2);
+    expect(buttons.every((button) => button.classList.contains('btn--touch-target'))).toBeTrue();
+    expect(buttons[0].textContent).toContain('common.cancel');
+    expect(buttons[1].textContent).toContain('common.confirmar');
+  });
+
+  it('forwards cancel and accept actions to the service', () => {
+    const buttons = fixture.nativeElement.querySelectorAll(
+      'app-button button'
+    ) as NodeListOf<HTMLButtonElement>;
+    buttons[0].click();
+    buttons[1].click();
+    expect(confirmService.cancel).toHaveBeenCalledTimes(1);
+    expect(confirmService.accept).toHaveBeenCalledTimes(1);
+  });
+
+  it('handles a request without optional message or button text', () => {
+    request.set({ title: 'Confirm without details' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Confirm without details');
+    expect(fixture.nativeElement.querySelector('.confirm__message')).toBeNull();
+  });
+});
