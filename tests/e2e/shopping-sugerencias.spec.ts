@@ -86,6 +86,52 @@ test.describe('el anadido sugiere del catalogo', () => {
     await page.locator('[data-test="add-input"]').press('Enter');
     await expect(row_(page, 'leche semi')).toHaveCount(1);
   });
+
+  test('las flechas recorren sugerencias; Enter elige y Escape conserva el texto', async ({
+    page
+  }) => {
+    await openNewList(page, 'r35-sug-keyboard');
+    const input = page.locator('[data-test="add-input"]');
+    await input.pressSequentially('lech', { delay: 40 });
+
+    const panel = page.locator('[data-test="add-sugerencias"]');
+    await expect(panel).toBeVisible();
+    const options = panel.getByRole('option');
+    await expect.poll(() => options.count()).toBeGreaterThan(1);
+
+    // Escape cierra el listbox sin tocar el borrador; Enter sigue siendo alta libre.
+    await input.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue('lech');
+    await input.press('Enter');
+    await expect(row_(page, 'lech')).toHaveCount(1);
+
+    // Reabrir el catálogo y mover la selección con el teclado sin sacar el foco del combobox.
+    await input.pressSequentially('lech', { delay: 40 });
+    await expect(panel).toBeVisible();
+    await expect.poll(() => options.count()).toBeGreaterThan(1);
+
+    await input.press('ArrowDown');
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
+    await expect(options.nth(0).locator('.detail__sug')).toHaveClass(/detail__sug--on/);
+    await input.press('ArrowDown');
+    await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await input.press('ArrowUp');
+    await expect(options.nth(0)).toHaveAttribute('aria-selected', 'true');
+    await input.press('ArrowDown');
+    await expect(options.nth(1)).toHaveAttribute('aria-selected', 'true');
+
+    const selectedName = await options.nth(1).locator('.detail__sug-nombre').innerText();
+    await input.press('Enter');
+    await expect(panel).toHaveCount(0);
+    await expect(input).toBeFocused();
+    await expect(input).toHaveValue(selectedName);
+    await expect(row_(page, selectedName)).toHaveCount(0);
+
+    await page.locator('[data-test="add-submit"]').click();
+    await expect(row_(page, selectedName)).toHaveCount(1);
+  });
 });
 
 test.describe('cerrar la compra baja el carro a la despensa', () => {

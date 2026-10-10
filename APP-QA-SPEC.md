@@ -3171,9 +3171,11 @@ aserciones E2E agregadas a `shopping-tray-lifecycle.spec.ts`; no modifica la API
 - [x] Con sugerencias visibles pero ninguna seleccionada, Enter añade el texto original en vez de capturar la primera sugerencia.
 - [x] Pegar tres líneas parsea las tres, incluida cantidad/unidad, en escritorio Chromium y Pixel 5 emulado.
 - [x] Ejecutar con rate limit activo y runner aislado (SQLite, puerto, usuario y cleanup propios); sin proveedor externo.
-- [ ] Completar teclado del typeahead: flechas arriba/abajo recorren opciones y actualizan `aria-selected` manteniendo foco; Enter selecciona sin enviar el formulario y Escape cierra sin modificar el texto; el alta final conserva el producto elegido.
+- [x] Completar teclado del typeahead: flechas arriba/abajo recorren opciones y actualizan `aria-selected` manteniendo foco; Enter selecciona sin enviar el formulario y Escape cierra sin modificar el texto; el alta final conserva el producto elegido.
 
 **Evidencia (2026-10-10):** `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/shopping-sugerencias.spec.ts --grep 'despliega el catalogo|sin tocar ninguna hoja' --reporter=line` pasó **4/4**. `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/shopping-lists.spec.ts --grep 'pegar una lista de tres' --reporter=line` pasó **2/2**. Ambas corridas usaron `$env:E2E_RATE_LIMIT='on'`, DB/puerto/semilla temporales y cleanup del runner; no hubo llamadas externas ni escrituras en la DB normal.
+
+**Cobertura de teclado (2026-10-10):** la E2E nueva recorre `ArrowDown`/`ArrowUp`, comprueba la opción activa por `aria-selected` y su estado visual mientras el foco sigue en el combobox; Escape cierra sin alterar el texto y Enter conserva el flujo de alta libre; tras seleccionar con Enter, la propuesta se conserva en el input sin enviarse hasta pulsar «Añadir». El primer run focal pasó **2/2** (Chromium y Pixel 5); la suite completa de `shopping-sugerencias.spec.ts` pasó **10/10** con el mismo aislamiento y rate limit. `pnpm run typecheck:e2e`, Prettier y `git diff --check` pasan. La interacción ya estaba implementada en `onDraftKeys()`; fue una brecha de cobertura, sin cambio de producción. Sin proveedor externo ni datos reales.
 
 **Rollback:** retirar esta subunidad y su evidencia; no revertir typeahead, parser de pegado ni comportamiento de alta existentes.
 
