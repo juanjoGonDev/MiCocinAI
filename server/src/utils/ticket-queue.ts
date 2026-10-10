@@ -24,6 +24,7 @@ import type { Database as SqlDb } from 'better-sqlite3';
 import { nanoid } from 'nanoid';
 import { getDatabase } from '../config/database.js';
 import { activeHouseholdId } from './household-context.js';
+import { ensureDefaultCategories } from './pantry-categories.js';
 import {
   aiConfigByIdInScope,
   aiConfigForPinnedJob,
@@ -982,6 +983,8 @@ export function inventarioDeLaCasa(
   userId: string,
   householdId = activeHouseholdId(db, userId)
 ): InventarioParaPrompt {
+  ensureDefaultCategories(db, userId, householdId);
+
   const tiendas = (
     db
       .prepare(

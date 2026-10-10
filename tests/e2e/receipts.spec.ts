@@ -856,7 +856,7 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
             name: 'Naranjas QA',
             quantity: 2,
             unit: 'kg',
-            category: 'produce',
+            category: 'fruits',
             createCategory: false,
             priceMinor: 300,
             offer: null,
@@ -955,7 +955,14 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
             inventoryData.replace(/^data:application\/json;base64,/, ''),
             'base64'
           ).toString('utf8')
-        ) as { categorias: unknown[]; productos: unknown[]; tiendas: unknown[] };
+        ) as {
+          categorias: { clave: string; nombre: string }[];
+          productos: unknown[];
+          tiendas: unknown[];
+        };
+        expect(inventory.categorias.map((category) => category.clave)).toContain(
+          respuesta.lines[0].category
+        );
         expect(inventory).toEqual({
           tiendas: expect.any(Array),
           categorias: expect.any(Array),
@@ -1034,7 +1041,7 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
               name: 'Naranjas QA',
               quantity: 2,
               unit: 'kg',
-              category: 'produce',
+              category: respuesta.lines[0].category,
               priceMinor: 300,
               offer: null
             }

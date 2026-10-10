@@ -135,6 +135,7 @@ function hasEquivalentReceiptLine(lines: ReceiptLineForDeduplication[]): boolean
 
 type ReceiptLineForDeduplication = {
   name: string;
+  category?: string | null;
   quantity?: number | null;
   unit?: string | null;
   priceMinor?: number | null;
@@ -621,6 +622,17 @@ test('procesa solo los tickets reales seleccionados y verifica la revisión sin 
     const receipt = (await detailResponse.json()).data as {
       lines: ReceiptLineForDeduplication[];
     };
+    const categoriesResponse = await page.request.get('/api/pantry/categories?limit=100', {
+      headers: { authorization: `Bearer ${token}` }
+    });
+    expect(categoriesResponse.ok()).toBe(true);
+    const categories = (await categoriesResponse.json()).data as { key: string }[];
+    const categoryKeys = new Set(categories.map(({ key }) => key));
+    expect(categoryKeys.size).toBeGreaterThan(0);
+    for (const line of receipt.lines) {
+      expect(typeof line.category).toBe('string');
+      expect(categoryKeys.has(line.category!)).toBe(true);
+    }
     if (ticket.sourceFileCount === 3) {
       expect(
         hasEquivalentReceiptLine(receipt.lines),
@@ -635,6 +647,11 @@ test('procesa solo los tickets reales seleccionados y verifica la revisión sin 
     await expect(dateField).toBeVisible();
     const rows = page.getByRole('row');
     expect(await rows.count()).toBeGreaterThan(1);
+    const lineNameFields = page.locator('.tabla__fila input[id$="-nombre"]');
+    await expect(lineNameFields).toHaveCount(receipt.lines.length);
+    for (let lineIndex = 0; lineIndex < receipt.lines.length; lineIndex += 1) {
+      await expect(lineNameFields.nth(lineIndex)).toBeEditable();
+    }
     const qaStore = `Hogar QA ticket ${index + 1}`;
     await storeField.fill(qaStore);
     await dateField.fill('2024-03-01');

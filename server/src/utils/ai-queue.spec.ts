@@ -95,6 +95,39 @@ beforeEach(async () => {
 });
 
 describe('AI provider queue dispatcher', () => {
+  it('seeds default pantry categories before snapshotting a new receipt inventory', async () => {
+    const { inventarioDeLaCasa } = await import('./ticket-queue.js');
+    const { DEFAULT_PANTRY_CATEGORIES } = await import('./pantry-categories.js');
+
+    expect(db.prepare('SELECT COUNT(*) AS count FROM pantry_categories').get()).toEqual({
+      count: 0
+    });
+
+    const snapshot = inventarioDeLaCasa(db, userId, null);
+
+    expect(snapshot.categorias).toEqual(
+      DEFAULT_PANTRY_CATEGORIES.map(({ key, name }) => ({ clave: key, nombre: name }))
+    );
+    expect(db.prepare('SELECT COUNT(*) AS count FROM pantry_categories').get()).toEqual({
+      count: DEFAULT_PANTRY_CATEGORIES.length
+    });
+  });
+
+  it('preserves a nonempty custom category catalog when snapshotting receipt inventory', async () => {
+    const { inventarioDeLaCasa } = await import('./ticket-queue.js');
+    db.prepare(
+      `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color, position)
+       VALUES ('category-custom', ?, NULL, 'custom', 'Mi categoría', '#123456', 0)`
+    ).run(userId);
+
+    expect(inventarioDeLaCasa(db, userId, null).categorias).toEqual([
+      { clave: 'custom', nombre: 'Mi categoría' }
+    ]);
+    expect(db.prepare('SELECT COUNT(*) AS count FROM pantry_categories').get()).toEqual({
+      count: 1
+    });
+  });
+
   it('keeps a household job pinned to its home when another member changes homes before claim', async () => {
     const { submitAiTask } = await import('./ticket-queue.js');
     const configOwnerId = 'household-config-owner';
