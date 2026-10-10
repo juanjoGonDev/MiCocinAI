@@ -2974,16 +2974,18 @@ estado canónico y solo vuelve a leer los eventos mientras la hoja «Quién ha t
 `ShoppingListDetailComponent.startStream()` implementa esa invalidación, pero `tests/e2e/shopping-round10.spec.ts`
 solo comprueba el reloj relativo/absoluto de una fila ya existente, no el refresco en vivo desde otro cliente.
 
-- [ ] Crear lista y línea sintéticas, abrir el historial y esperar la lectura inicial de eventos y conexión SSE.
-- [ ] En una segunda pestaña autenticada del mismo usuario, añadir otra línea a esa lista. Verificar que el
+- [x] Crear lista y línea sintéticas, abrir el historial y esperar la lectura inicial de eventos y conexión SSE.
+- [x] En una segunda pestaña autenticada del mismo usuario, añadir otra línea a esa lista. Verificar que el
       historial abierto se actualiza por SSE/GET de eventos, contiene la nueva acción y no requiere reload ni
       navegación de la pestaña observada; confirmar que el stream estaba conectado y no hay sondeo periódico
       durante el estado inactivo ni errores de página.
-- [ ] Ejecutar en Chromium escritorio y Pixel 5 con servidor, SQLite, puerto y semilla aislados; guardar e
+- [x] Ejecutar en Chromium escritorio y Pixel 5 con servidor, SQLite, puerto y semilla aislados; guardar e
       inspeccionar capturas sintéticas del historial actualizado, pasar typecheck E2E, formato y `git diff --check`.
       No se cambia comportamiento productivo; cobertura instrumentable N/A.
-- [ ] Registrar evidencia y rollback focal (retirar `tests/e2e/shopping-audit-live.spec.ts` y esta subsección).
+- [x] Registrar evidencia y rollback focal (retirar `tests/e2e/shopping-audit-live.spec.ts` y esta subsección).
       La unidad no cierra el resto del barrido `/shopping/:id` ni la matriz visual global.
+
+**Evidencia QA-SHOPPING.AUDIT-LIVE.1 (2026-10-10):** `$env:E2E_RATE_LIMIT='on'; $env:E2E_SCREENSHOT_DIR='D:\projects\MiCocinAI\.e2e-screenshots\qa-shopping-audit-live-20261010'; node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/shopping-audit-live.spec.ts --reporter=line` pasó **2/2**. Ambas vistas recibieron el stream HTTP 200 `text/event-stream`; con la hoja abierta, una pestaña secundaria añadió una línea y la primera recibió exactamente una acción más, con la persona y el artículo correctos, sin navegación ni cambio de `performance.timeOrigin`. Durante 1,2 s inactivos no hubo GET de eventos adicional; no hubo errores de página. Runner confirmó SQLite, puerto, semilla y artefactos temporales y limpió la DB al cerrar el proceso propio. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-shopping-audit-live-20261010/{chromium,mobile-chrome}/audit-updated.png`. `pnpm run typecheck:e2e`, `pnpm exec prettier --check tests/e2e/shopping-audit-live.spec.ts APP-QA-SPEC.md` y `git diff --check` pasan; sin cambios productivos, coverage N/A. Rollback: revertir el test de historial en vivo y este subapartado; el barrido integral `/shopping/:id` sigue abierto.
 
 ### QA-SHOPPING.LIST-DELETE.1 · confirmación y recuperación al borrar una lista
 
