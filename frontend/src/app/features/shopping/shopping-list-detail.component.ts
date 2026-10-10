@@ -2171,6 +2171,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         position: relative;
         z-index: 1;
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: var(--space-2);
         padding: var(--space-2) var(--space-3);
@@ -2208,7 +2209,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       }
       .detail__name {
         flex: 1;
-        min-width: 0;
+        min-width: 56px;
         font-size: var(--text-base);
         color: var(--text-primary);
         overflow-wrap: anywhere;
@@ -2308,11 +2309,6 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
         font-weight: var(--font-normal);
         text-decoration: line-through;
         margin-right: var(--space-1);
-      }
-      .detail__offer--discount {
-        display: inline-flex;
-        align-items: center;
-        gap: 2px;
       }
       .detail__estimate-row {
         display: flex;

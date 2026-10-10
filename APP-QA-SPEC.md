@@ -2963,6 +2963,21 @@ Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el
 
 **Rollback:** retirar solo esta subunidad/evidencia; no revertir el clamp monetario ni su regresión E2E.
 
+#### QA-SHOPPING.DISCOUNT-STACKING.1 · oferta, descuento de línea y cupón de cesta
+
+**Fuente revalidada:** `HOGARIA-SPEC.md` §12h exige el orden de caja: oferta sobre unidades, descuento propio de línea sobre las unidades pagadas y, después, descuento/cupón de cesta. `server/src/utils/list-discount.ts::basketMoney` codifica ese orden, pero las E2E cubrían cada mecanismo por separado.
+
+**Contrato:** para 3 unidades a 10,00 € con oferta 3x2, el importe tras oferta es 20,00 €; un 10 % en las dos unidades pagadas reduce 2,00 €; el descuento de cesta de 2,50 € deja 15,50 €. La ficha muestra los chips/desglose y conserva todos los descuentos tras recargar. En la matriz móvil, el nombre del producto permanece legible con ambos chips activos y ninguno desborda su fila.
+
+- [x] Añadir regresión E2E aislada que combine los tres descuentos mediante la UI y verifique cada total intermedio y el total final exacto.
+- [x] En Pixel 5 a 393×851 y 320×568, comprobar que el nombre no se parte letra por letra y que los chips caben dentro de la fila; verificar también el límite CSS 600/601 px.
+- [x] Ejecutarla en Chromium y Pixel 5 emulado a 1440×900, 393×851, 320×568, 600×851 y 601×851; guardar e inspeccionar capturas sintéticas, revisar overflow y errores de página.
+- [x] Pasar la prueba focal del motor de descuentos, `typecheck:e2e`, Prettier y `git diff --check`; la regresión roja confirmó que la ficha estrecha dejaba el nombre con ancho cero, por lo que se añadió ajuste responsive sin cambiar el motor.
+
+**Evidencia (2026-10-10):** la regresión Playwright aislada con tasa limitada se ejecutó para Chromium y los proyectos Pixel 5 emulado Chrome/WebKit; pasaron **5** pruebas y **10** se omitieron por proyecto. El runner eliminó DB/puerto/artefactos temporales tras cerrar el servidor propio. Los totales comprobados son 20,00 € → 18,00 € → 15,50 €, con el desglose de línea `-2,00 €` conservado tras recarga. La primera regresión móvil mostró `.detail__name` con ancho **0 px** y el texto partido por letra; se permitió que la ficha flex redistribuya sus elementos, se dio un ancho mínimo al nombre y se confirmó que nombres/chips quedan dentro del viewport. En el cruce 600→601 px, el ancho de la fila varía exactamente 1 CSS px y las alturas de fila/nombre, como máximo 1 px. A 320 px el cupón se activa con toque medido en el control visible; el disclosure del desglose usa teclado porque el hit-test de Playwright móvil misrutea el pie sticky hacia la fila, así que esta subunidad no afirma verificación táctil de ese control específico. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-shopping-discount-stacking-20261010/discount-stacking-{chromium-1440x900,mobile-chrome-393x851,mobile-chrome-320x568,mobile-chrome-600x851,mobile-chrome-601x851}.png`. `pnpm --filter @hogaria/server exec vitest run src/utils/list-discount.spec.ts`: **43/43**; `pnpm run typecheck:e2e`, Prettier, `pnpm run check:ui` (**212 ficheros / 21 reglas**), build de producción y `git diff --check`: verdes. El build confirmó que el estilo de la ficha quedó bajo el presupuesto duro de 20 kB; mantuvo avisos globales de tamaño de bundle.
+
+**Rollback:** retirar la E2E y esta subsección y revertir las reglas responsive añadidas a `.detail__face`; el motor monetario no se modifica.
+
 #### QA-SHOPPING.LINE-LIFECYCLE.1 · alta, carro, precios y cierre
 
 **Fuente revalidada:** `HOGARIA-SPEC.md` §12g–§12h y la conducta del detalle de compra: el mismo producto suma cantidades, marcar lo mueve al carro y el cierre solo archiva con el total pagado correcto. Esta subunidad no cubre el barrido completo, reordenamiento ni cupones.
