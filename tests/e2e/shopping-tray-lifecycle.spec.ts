@@ -179,10 +179,14 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
     page
   }, testInfo) => {
     const nativeDialogs: string[] = [];
+    const pageErrors: string[] = [];
+    let deleteRequests = 0;
+    let deleteFailures = 0;
     page.on('dialog', async (dialog) => {
       nativeDialogs.push(dialog.type());
       await dialog.dismiss();
     });
+    page.on('pageerror', (error) => pageErrors.push(error.name));
     await registerAndGoto(page, '/shopping', 'tray-lifecycle-delete');
     const otherName = 'QA otra lista';
     const targetName = 'QA borrar bandeja';
@@ -199,25 +203,14 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
     await page.locator('[data-test="back"]').click();
     await expect(target).toBeVisible();
 
-    const deleteButton = target.getByRole('button', { name: 'Borrar lista' });
-    const dialog = page.getByRole('dialog', { name: '¿Borrar esta lista?' });
-
-    await deleteButton.click();
-    await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText(targetName);
-    await captureIfRequested(page, testInfo, 'shopping-list-delete-confirmation.png');
-    await dialog.getByRole('button', { name: 'Cancelar' }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(target).toBeVisible();
-    await target.getByRole('link', { name: `Abrir ${targetName}` }).click();
-    await expect(targetItem).toBeVisible();
-    await page.locator('[data-test="back"]').click();
-    await expect(target).toBeVisible();
-
-    let deleteFailures = 0;
     const listUrl = `**/api/shopping/lists/${listId}`;
     await page.route(listUrl, async (route) => {
-      if (route.request().method() === 'DELETE' && deleteFailures === 0) {
+      if (route.request().method() !== 'DELETE') {
+        await route.continue();
+        return;
+      }
+      deleteRequests += 1;
+      if (deleteFailures === 0) {
         deleteFailures += 1;
         await route.fulfill({
           status: 503,
@@ -228,6 +221,32 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
       }
       await route.continue();
     });
+
+    const deleteButton = target.getByRole('button', { name: 'Borrar lista' });
+    const dialog = page.getByRole('dialog', { name: '¿Borrar esta lista?' });
+
+    await deleteButton.click();
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(targetName);
+    const viewport = page.viewportSize();
+    if (!viewport) throw new Error('El contexto Playwright no informa el viewport');
+    const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(documentWidth).toBeLessThanOrEqual(viewport.width);
+    const dialogBounds = await dialog.boundingBox();
+    expect(dialogBounds).not.toBeNull();
+    if (dialogBounds) {
+      expect(dialogBounds.x).toBeGreaterThanOrEqual(0);
+      expect(dialogBounds.x + dialogBounds.width).toBeLessThanOrEqual(viewport.width);
+    }
+    await captureIfRequested(page, testInfo, 'shopping-list-delete-confirmation.png');
+    await dialog.getByRole('button', { name: 'Cancelar' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(deleteRequests).toBe(0);
+    await expect(target).toBeVisible();
+    await target.getByRole('link', { name: `Abrir ${targetName}` }).click();
+    await expect(targetItem).toBeVisible();
+    await page.locator('[data-test="back"]').click();
+    await expect(target).toBeVisible();
 
     const failedDelete = page.waitForResponse(
       (response) =>
@@ -247,17 +266,31 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
     await waitForPaint(page);
     await captureIfRequested(page, testInfo, 'shopping-list-delete-after-failure.png');
     await expect(page.locator('.toast__title').filter({ hasText: 'Lista borrada' })).toHaveCount(0);
+    expect(deleteRequests).toBe(1);
+    await target.getByRole('link', { name: `Abrir ${targetName}` }).click();
+    await expect(targetItem).toBeVisible();
+    await page.locator('[data-test="back"]').click();
+    await expect(target).toBeVisible();
 
-    await page.unroute(listUrl);
+    const successfulDelete = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'DELETE' &&
+        new URL(response.url()).pathname === `/api/shopping/lists/${listId}` &&
+        response.status() === 200
+    );
     await deleteButton.click();
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Borrar' }).click();
+    await successfulDelete;
+    expect(deleteRequests).toBe(2);
+    expect(deleteFailures).toBe(1);
     await expect(target).toHaveCount(0);
     await expect(trayRow(page, otherName)).toBeVisible();
     await page.reload();
     await expect(trayRow(page, targetName)).toHaveCount(0);
     await expect(trayRow(page, otherName)).toBeVisible();
     expect(nativeDialogs).toEqual([]);
+    expect(pageErrors).toEqual([]);
     await captureIfRequested(page, testInfo, 'shopping-list-delete-completed.png');
   });
 });

@@ -2970,18 +2970,33 @@ Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el
 
 **Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §8e define el borrado de lista como irreversible y exige
 `ConfirmService`, no diálogo nativo. `ShoppingListsComponent.remove()` solo envía DELETE después de aceptar y
-no muestra éxito si falla. La ruta borra la lista y la cascada de sus líneas. El E2E existente ya cubre cancelar,
-503 y retry, pero aún no cuenta explícitamente las solicitudes DELETE alrededor de Cancelar ni comprueba el
-conteo exacto durante el reintento.
+no muestra éxito si falla. La ruta borra la lista y la cascada de sus líneas. Antes de esta unidad el E2E cubría
+cancelar, 503 y retry, pero no contaba solicitudes DELETE alrededor de Cancelar ni durante el reintento; ahora
+las aserciones instrumentan ambas rutas.
 
-- [ ] Medir solicitudes reales en UI aislada: Cancelar no envía DELETE y conserva lista/líneas; un 503 preserva
+- [x] Medir solicitudes reales en UI aislada: Cancelar no envía DELETE y conserva lista/líneas; un 503 preserva
       la lista y no anuncia éxito; el reintento envía exactamente una solicitud y, al confirmarse, elimina solo
       la lista objetivo de forma persistente tras reload.
-- [ ] Confirmar que se usa diálogo accesible propio (sin diálogo nativo), el error es visible y no hay errores
+- [x] Confirmar que se usa diálogo accesible propio (sin diálogo nativo), el error es visible y no hay errores
       de página ni overflow en Chromium escritorio y Pixel 5.
-- [ ] Ejecutar la prueba focal en ambas configuraciones con SQLite/puertos temporales, inspeccionar capturas
+- [x] Ejecutar la prueba focal en ambas configuraciones con SQLite/puertos temporales, inspeccionar capturas
       sintéticas PC/móvil y anotar comando, resultado, cleanup y rollback. La ruta general `/shopping/:id`
       permanece abierta para las demás acciones y su matriz.
+
+**Evidencia QA-SHOPPING.LIST-DELETE.1 (2026-10-10):** en PowerShell, `$env:E2E_RATE_LIMIT='on';
+$env:E2E_SCREENSHOT_DIR='D:\projects\MiCocinAI\.e2e-screenshots\qa-shopping-list-delete-20261010'; node
+scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only
+--grep 'Cancelar conserva; borrar fallido' tests/e2e/shopping-tray-lifecycle.spec.ts --reporter=line` pasó
+**2/2**. La prueba captura el DELETE: Cancelar produjo **0** solicitudes, el 503 produjo **1** solicitud,
+conservó lista y línea y no mostró éxito; el retry produjo exactamente una segunda solicitud (200), borró solo
+la lista objetivo y la ausencia persistió tras reload, mientras la otra lista siguió presente. Se verificaron
+el diálogo propio (`role=dialog`), cero diálogos nativos y cero errores de página; escritorio Chromium y Pixel 5
+sin overflow horizontal. Runner confirmó SQLite/puerto/artefactos temporales y cleanup. `pnpm exec prettier
+--check APP-QA-SPEC.md tests/e2e/shopping-tray-lifecycle.spec.ts`, `pnpm run typecheck:e2e` y `pnpm run
+check:ui` pasaron (**212 archivos/21 reglas**). No cambió código productivo; gate de coverage no aplica.
+Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-shopping-list-delete-20261010/{chromium,mobile-chrome}/
+shopping-list-delete-confirmation.png` y estados de error/éxito. Rollback: revertir esta subunidad y las
+aserciones E2E agregadas a `shopping-tray-lifecycle.spec.ts`; no modifica la API ni datos persistidos.
 
 #### QA-SHOPPING.COMPLETE-TO-PANTRY.1 · trasladar a despensa solo lo comprado
 
@@ -3226,6 +3241,12 @@ Evidencia final: `$env:E2E_RATE_LIMIT='on'; $env:E2E_SCREENSHOT_DIR='.e2e-screen
 - [ ] En cada flujo crítico móvil revisar viewport sin overflow horizontal, scroll real, safe-area, teclado virtual, modales/hojas, tablas/listas, botones fijos y orientación; el contenido no debe quedar tras header/nav/teclado.
 - [ ] Revisar cada control por nombre accesible, label/error asociado, foco visible/orden lógico, teclado/Escape, estado disabled/loading, contraste WCAG AA, tamaño táctil objetivo ≥44×44 px y zoom de texto.
 - [ ] Guardar capturas comparables de escritorio (1440×900) y móvil (390×844 y 320×740) por pantalla modificada, antes/después. Adjuntar al reporte/PR; no guardar datos personales ni credenciales en capturas.
+
+**Hallazgo para esta matriz (2026-10-10):** la captura sintética móvil del fallo de borrado muestra que el toast
+superior (`app-toast`, `top: var(--space-2)` hasta 480 px) se dibuja sobre la cabecera fija de 56 px y alcanza
+el título de `/shopping`. La prueba focal sí confirmó anuncio accesible y ausencia de overflow, pero no cierra
+la auditoría de solapamiento visual del toast compartido; revalidar su posición en las familias/rutas afectadas
+antes de corregirlo o cerrar esta matriz.
 
 **Evidencia QA-LAYOUT.ROUTE-MATRIX.1 (2026-10-09):** `tests/e2e/layout-gutters.spec.ts` recorrió 31 rutas estáticas (públicas, onboarding y privadas) y 8 detalles poblados, cada una en **59** combinaciones de viewport (incluye los anchos requeridos, 320×568/740, 390×844, 844×390, 932×430 y tablet 768×1024/1024×768). `pnpm run test:e2e -- --workers=1 --project=chromium --project=mobile-chrome tests/e2e/layout-gutters.spec.ts --reporter=dot`, con `E2E_RATE_LIMIT=on` y SQLite/puertos/semilla temporales: **6/6**. Los cuatro reportes PC/Pixel (`layout-route-viewport-audit*.json`) registran **1829** filas de rutas iniciales y **472** de detalles por perfil; **0** overflow horizontal y **0** `pageerror`. Los reportes solo guardan rutas saneadas, dimensiones, anchos calculados y nombres de error; están ignorados por Git en `.e2e-screenshots/qa-layout-route-matrix-20261009-final/{chromium,mobile-chrome}/`. El primer reintento encontró colisión del archivo de reporte entre perfiles; los artefactos se separaron por proyecto y la corrida final pasó. `pnpm run typecheck:e2e`, Prettier y `git diff --check` pasan. Coverage N/A: solo se modificaron E2E/helpers, no producción.
 
