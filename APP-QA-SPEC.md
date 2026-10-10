@@ -1017,10 +1017,10 @@ subárbol tanto a filas como a sugerencias. La tabla de utensilios convierte dis
 `boolean` a un único booleano y busca ignorando mayúsculas/acentos. No se escribe en almacenamiento ni se
 llaman servicios reales.
 
-- [ ] Añadir primero pruebas unitarias focales con signals sintéticas que cubran búsqueda vacía y con
+- [x] Añadir primero pruebas unitarias focales con signals sintéticas que cubran búsqueda vacía y con
       texto, coincidencia y no coincidencia, cantidades positivas/cero/negativas/nulas, padre e hija de
       categoría y disponibilidad API `0/1`/boolean en utensilios.
-- [ ] Alcanzar ≥70 % S/B/F/L en el rango de proyecciones `1484–1544` (objetivo 100 %); repetir la spec
+- [x] Alcanzar ≥70 % S/B/F/L en el rango de proyecciones `1484–1544` (objetivo 100 %); repetir la spec
       focal y suite frontend completa manteniendo el gate global ≥80 %.
 - [ ] Registrar comandos, métricas y limitaciones; formato, `check:ui`, build, typecheck E2E y
       `git diff --check`; hooks, commit atómico, push y CI verde. No hay cambio visual, por lo que E2E y
@@ -1028,6 +1028,18 @@ llaman servicios reales.
 
 **Rollback:** retirar únicamente las pruebas de proyecciones y esta subunidad; no cambiar el componente,
 el servicio ni el contrato de las tablas.
+
+**Evidencia local (2026-10-10):** baseline focal previo **14/14**; antes de añadir las pruebas el rango
+`1484–1544` medía **20/0/0/20 % S/B/F/L**. Con cuatro nuevos casos sintéticos, `pnpm --filter
+@hogaria/web exec ng test --no-watch --include src/app/features/pantry/pantry.component.spec.ts
+--browsers=ChromeHeadlessLocal` pasó **18/18**. La variante focal con `--code-coverage` también pasa
+18/18 y mide el rango en **100/100/100/100 %**, pero sale con código 1 por el gate global del subset
+(18.55/7/10.29/20.37 % S/B/F/L); el gate no se alteró. La suite completa con coverage pasó
+**1302/1302** y **92.61/84.29/91.62/93.93 % S/B/F/L**; su LCOV temporal confirma en el rango objetivo
+25/25 sentencias/líneas, 25/25 ramas y 14/14 funciones. Pasaron `pnpm run typecheck:e2e`,
+`pnpm run check:ui` (**212 ficheros, 21 reglas**), `pnpm run build`, Prettier focal y `git diff --check`.
+El build conserva warnings existentes de imports no usados, cadenas opcionales y budgets. Sin cambio de
+producción/UI: E2E y capturas N/A; los logs de build no muestran regresión funcional.
 
 ### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
 

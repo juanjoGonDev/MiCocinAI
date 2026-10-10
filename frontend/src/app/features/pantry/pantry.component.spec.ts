@@ -1,4 +1,4 @@
-import { runInInjectionContext, signal } from '@angular/core';
+import { runInInjectionContext, signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import { ConfirmService } from '../../core/services/confirm.service';
@@ -6,23 +6,29 @@ import { I18nService } from '../../core/services/i18n.service';
 import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
 import { of } from 'rxjs';
-import type { Ingredient } from '../../shared/models/pantry.model';
+import type { Ingredient, PantryCategory, Utensil } from '../../shared/models/pantry.model';
 import { PantryComponent } from './pantry.component';
 
 describe('PantryComponent add action', () => {
   let router: jasmine.SpyObj<Router>;
   let pantryService: jasmine.SpyObj<PantryService>;
+  let ingredients: WritableSignal<Ingredient[]>;
+  let utensils: WritableSignal<Utensil[]>;
+  let categories: WritableSignal<PantryCategory[]>;
 
   beforeEach(() => {
     router = jasmine.createSpyObj<Router>('Router', ['navigate']);
     router.navigate.and.resolveTo(true);
+    ingredients = signal<Ingredient[]>([]);
+    utensils = signal<Utensil[]>([]);
+    categories = signal<PantryCategory[]>([]);
     pantryService = jasmine.createSpyObj<PantryService>(
       'PantryService',
       ['updateIngredient', 'cargarInventarioCompleto', 'loadStats'],
       {
-        ingredients: signal([]),
-        utensils: signal([]),
-        categories: signal([]),
+        ingredients,
+        utensils,
+        categories,
         stats: signal(null),
         isLoading: signal(false),
         total: signal(0)
@@ -48,6 +54,35 @@ describe('PantryComponent add action', () => {
 
   function createComponent(): PantryComponent {
     return TestBed.runInInjectionContext(() => new PantryComponent());
+  }
+
+  function ingredient(name: string, quantity: number, category: string): Ingredient {
+    return {
+      id: name.toLowerCase(),
+      name,
+      quantity,
+      unit: 'unit',
+      category,
+      location: 'pantry',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z')
+    };
+  }
+
+  function category(key: string, parentKey: string | null): PantryCategory {
+    return {
+      id: key,
+      key,
+      name: key,
+      color: '#4CAF50',
+      description: null,
+      parentKey,
+      parentName: parentKey,
+      position: 0,
+      counts: { products: 0, children: 0, descendantProducts: 0 },
+      protected: false,
+      canDelete: true
+    };
   }
 
   it('opens a clean ingredient form from the ingredients tab', () => {
@@ -359,5 +394,119 @@ describe('PantryComponent add action', () => {
       beforeReload.remove();
       afterNavigation.remove();
     }
+  });
+
+  it('separates stocked rows from suggestions and keeps household counts unfiltered', () => {
+    const component = createComponent();
+    ingredients.set([
+      ingredient('Canela', 0, 'spices'),
+      ingredient('Sal', -1, 'spices'),
+      { ...ingredient('Nula', 0, 'spices'), quantity: null } as unknown as Ingredient,
+      { ...ingredient('Ausente', 0, 'spices'), quantity: undefined } as unknown as Ingredient,
+      ingredient('Manzana', 2, 'fruit'),
+      ingredient('Pimiento', 4, 'vegetables'),
+      ingredient('Leche', 1, 'dairy')
+    ]);
+
+    expect(component.filasInventario().map((item) => item.name)).toEqual([
+      'Manzana',
+      'Pimiento',
+      'Leche'
+    ]);
+    expect(component.suggestions().map((item) => item.name)).toEqual([
+      'Canela',
+      'Sal',
+      'Nula',
+      'Ausente'
+    ]);
+    expect(component.hayInventario()).toBeTrue();
+    expect(component.inPantryCount()).toBe(3);
+
+    component.searchTerm.set('sin coincidencias');
+    component.filtroCategoria.set('fruit');
+    expect(component.filasInventario()).toEqual([]);
+    expect(component.suggestions()).toEqual([]);
+    expect(component.inPantryCount()).toBe(3);
+
+    ingredients.set([]);
+    expect(component.hayInventario()).toBeFalse();
+    expect(component.inPantryCount()).toBe(0);
+  });
+
+  it('applies a parent category subtree and accent-insensitive search to rows and suggestions', () => {
+    const component = createComponent();
+    categories.set([
+      category('food', null),
+      category('fruit', 'food'),
+      category('vegetables', 'food'),
+      category('spices', 'food'),
+      category('cleaning', null)
+    ]);
+    ingredients.set([
+      ingredient('Pimiento rojo', 2, 'vegetables'),
+      ingredient('Manzana', 3, 'fruit'),
+      ingredient('Pimienta', 0, 'spices'),
+      ingredient('Limpiador', 5, 'cleaning'),
+      ingredient('Detergente', 0, 'cleaning')
+    ]);
+    component.filtroCategoria.set('food');
+    component.searchTerm.set('  PÍM  ');
+
+    expect(component.filasInventario().map((item) => item.name)).toEqual(['Pimiento rojo']);
+    expect(component.suggestions().map((item) => item.name)).toEqual(['Pimienta']);
+
+    component.searchTerm.set('no existe');
+    expect(component.filasInventario()).toEqual([]);
+    expect(component.suggestions()).toEqual([]);
+    component.searchTerm.set('');
+    expect(component.filasInventario().map((item) => item.name)).toEqual([
+      'Pimiento rojo',
+      'Manzana'
+    ]);
+    expect(component.suggestions().map((item) => item.name)).toEqual(['Pimienta']);
+    component.filtroCategoria.set('missing-category');
+    expect(component.filasInventario()).toEqual([]);
+    expect(component.suggestions()).toEqual([]);
+  });
+
+  it('treats legacy rows without a category as the reserved other category', () => {
+    const component = createComponent();
+    categories.set([category('other', null)]);
+    ingredients.set([
+      { ...ingredient('Legacy null', 1, 'other'), category: null } as unknown as Ingredient,
+      { ...ingredient('Legacy absent', 2, 'other'), category: undefined } as unknown as Ingredient,
+      { ...ingredient('Unknown suggestion', 0, 'other'), category: null } as unknown as Ingredient
+    ]);
+    component.filtroCategoria.set('other');
+
+    expect(component.filasInventario().map((item) => item.name)).toEqual([
+      'Legacy null',
+      'Legacy absent'
+    ]);
+    expect(component.suggestions().map((item) => item.name)).toEqual(['Unknown suggestion']);
+  });
+
+  it('normalizes utensil availability and filters names without case or accent sensitivity', () => {
+    const component = createComponent();
+    utensils.set([
+      { id: 'ladle', name: 'Cucharón', category: 'tools', available: 1 } as unknown as Utensil,
+      { id: 'pan', name: 'Sartén', category: 'cookware', available: 0 } as unknown as Utensil,
+      { id: 'spoon', name: 'Cuchara', category: 'tools', available: true }
+    ]);
+
+    const normalized = component.utensiliosFiltrados();
+    expect(normalized.map((item) => item.available)).toEqual([true, false, true]);
+
+    utensils.set([
+      { id: 'ladle', name: 'Cucharón', category: 'tools', available: true },
+      { id: 'pan', name: 'Sartén', category: 'cookware', available: false }
+    ]);
+    const booleanRows = utensils();
+    expect(component.utensiliosFiltrados()).toBe(booleanRows);
+
+    component.utensiliosQ.set('  CUCHARON  ');
+    expect(component.utensiliosFiltrados().map((item) => item.id)).toEqual(['ladle']);
+    component.utensiliosQ.set('batidora');
+    expect(component.utensiliosFiltrados()).toEqual([]);
   });
 });
