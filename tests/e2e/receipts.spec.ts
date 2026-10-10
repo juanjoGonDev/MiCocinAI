@@ -112,6 +112,10 @@ type TicketProviderMessage = {
 type TicketProviderRequest = {
   model?: string;
   stream?: boolean;
+  response_format?: {
+    type?: string;
+    json_schema?: { name?: string; strict?: boolean; schema?: unknown };
+  };
   messages?: TicketProviderMessage[];
 };
 
@@ -928,6 +932,10 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
         const providerRequest = proveedor.solicitudes[0];
         expect(providerRequest.model).toBe('synthetic-ticket-model');
         expect(providerRequest.stream).toBe(true);
+        expect(providerRequest.response_format).toMatchObject({
+          type: 'json_schema',
+          json_schema: { strict: true }
+        });
         const userContent = providerRequest.messages?.find(
           (message) => message.role === 'user'
         )?.content;
@@ -977,6 +985,15 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
         }
         await historyRow.locator('a').click();
 
+        const detectedRows = page.locator('.tabla__fila');
+        await expect(detectedRows).toHaveCount(1);
+        await expect(detectedRows.locator('input[id$="-nombre"]')).toHaveValue('Naranjas QA');
+        await expect(detectedRows.locator('input[id$="-cantidad"]')).toHaveValue('2');
+        await expect(detectedRows.locator('input[id$="-unidad"]')).toHaveValue('kg');
+        await expect(detectedRows.locator('input[id$="-precio"]')).toHaveValue('3.00');
+        await expect(detectedRows.locator('input[id$="-oferta"]')).toHaveValue('');
+        await expect(page.locator('.ficha__no-cuadra')).toHaveCount(0);
+
         const storeField = page.getByLabel(scenario.storeLabel);
         const purchaseDateField = page.getByLabel(scenario.dateLabel);
         await expect(storeField).toHaveValue(scenario.store ?? '');
@@ -998,12 +1015,30 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
             store: string | null;
             purchaseDate: string | null;
             createdAt: string;
+            lines: {
+              name: string;
+              quantity: number;
+              unit: string | null;
+              category: string;
+              priceMinor: number | null;
+              offer: { buy: number; take: number } | null;
+            }[];
           };
         };
         expect(detail.data).toMatchObject({
           status: 'review',
           store: scenario.store,
-          purchaseDate: scenario.purchaseDate
+          purchaseDate: scenario.purchaseDate,
+          lines: [
+            {
+              name: 'Naranjas QA',
+              quantity: 2,
+              unit: 'kg',
+              category: 'produce',
+              priceMinor: 300,
+              offer: null
+            }
+          ]
         });
 
         await storeField.fill(scenario.correctedStore);

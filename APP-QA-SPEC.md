@@ -3293,10 +3293,12 @@ Capturas sintéticas inspeccionadas: [escritorio 1440×900](.e2e-screenshots/qa-
 
 **Contrato:** una respuesta sintética válida contiene una línea identificable y total coincidente. Tras el `review`, la ficha presenta exactamente esa fila con nombre, cantidad, unidad, precio y oferta editables; la suma no avisa descuadre, y el `GET /api/receipts/:id` conserva la categoría y valores emitidos. El request al stub local mantiene JSON Schema estricto y los adjuntos independientes del ticket y catálogo. Solo se usan PNG/catalogo sintéticos, SQLite/puerto/usuario temporales y el servidor HTTP local del test; ninguna llamada a WebAPI/modelo real ni confirmación en inventario normal.
 
-- [ ] Ejecutar el test existente como baseline aislado en Chromium y Pixel 5; comprobar que el proveedor local devuelve una línea y la ficha llega a `review`.
-- [ ] Añadir primero aserciones E2E de representación editable, valores de línea/categoría y total cuadrado sobre la respuesta IA sintética.
-- [ ] Repetir en Chromium escritorio y Pixel 5 móvil; ejecutar `typecheck:e2e`, formato, `check:ui`, build y el conjunto focal de tickets, y confirmar cleanup sin artefactos con contenido real.
-- [ ] Registrar evidencia y rollback sin marcar todavía la casilla padre `/receipts/:id`; esta subunidad cubre salida IA visible, no el ciclo completo de edición/confirmación/cola.
+- [x] Ejecutar el test existente como baseline aislado en Chromium y Pixel 5; comprobar que el proveedor local devuelve una línea y la ficha llega a `review`.
+- [x] Añadir primero aserciones E2E de representación editable, valores de línea/categoría y total cuadrado sobre la respuesta IA sintética.
+- [x] Repetir en Chromium escritorio y Pixel 5 móvil; ejecutar `typecheck:e2e`, formato, `check:ui`, build y el conjunto focal de tickets, y confirmar cleanup sin artefactos con contenido real.
+- [x] Registrar evidencia y rollback sin marcar todavía la casilla padre `/receipts/:id`; esta subunidad cubre salida IA visible, no el ciclo completo de edición/confirmación/cola.
+
+**Evidencia QA-RECEIPTS.AI-REVIEW-OUTPUT.1 (2026-10-10):** la prueba preexistente en Chromium y Pixel 5 pasó **4/4** en baseline. Se amplió con aserciones de JSON Schema estricto, exactamente una fila IA en `review`, nombre/cantidad/unidad/precio/oferta editables, ausencia de aviso de descuadre y valores/categoría conservados en `GET /api/receipts/:id`. La repetición focal pasó **4/4**; el conjunto combinado `receipts.spec.ts`, `receipt-line-note.spec.ts`, `receipt-line-removal.spec.ts` y `receipt-queue-actions.spec.ts` pasó **46/46** en los mismos proyectos (`E2E_RATE_LIMIT=on`, SQLite/puerto temporales y proveedor HTTP local sintético). `pnpm run typecheck:e2e`, `pnpm run check:ui` (**212 ficheros/21 reglas**), `pnpm run build`, Prettier y `git diff --check` pasan; el build conserva solo warnings previos de opcionales y budgets. Cambio solo de E2E, sin cobertura de producción aplicable, WebAPI/proveedor real, tickets ni inventario real. Rollback: retirar las aserciones añadidas y este subapartado; no cambiar lógica de aplicación ni cerrar el checklist padre.
 
 #### QA-RECEIPTS.LINE-REMOVAL-MATCHING-TOTAL.1 · quitar una línea y validar la suma exacta
 
