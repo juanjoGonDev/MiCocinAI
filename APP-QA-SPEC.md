@@ -2541,6 +2541,16 @@ Capturas sintéticas limpias (se descarta el toast efímero para que no tape el 
 de presupuestos/imports que no pertenecen a esta unidad. El gate global se ejecutó con coverage en
 `%TEMP%`, sin sobrescribir `frontend/coverage` preexistente.
 
+**Revalidación de estabilidad (2026-10-10):** CI `38024229940` tuvo un timeout transitorio de PATCH
+al completar una comida; esta regresión no se reprodujo en la repetición aislada:
+
+```powershell
+$env:E2E_RATE_LIMIT='on'
+node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --repeat-each=2 --forbid-only tests/e2e/calendar-completion.spec.ts --reporter=line
+```
+
+Pasó **8/8**; cada ejecución usó DB, puertos y semilla temporales, con cleanup confirmado.
+
 - [x] Escribir primero la E2E de regresión, confirmar rojo en baseline por ausencia del control y cubrir todas las vistas con una comida sintética; red 1/1 en baseline `1eadbe5`, control ausente.
 - [x] Añadir un control compartido de completado dentro del editor de comida; probar componente/servicio en éxito, rollback, reintento, desmarcado y repetición, con ≥70 % S/B/F/L por archivo nuevo o modificado dentro del alcance.
 - [x] Probar en Chromium y Pixel 5: PATCH retenido/fallido y recuperación, estado optimista, persistencia tras reload, completar y deshacer, teclado/foco/nombre accesible, 44×44 px; medir que todos los botones de edición caben dentro del diálogo y no hay overflow a 320×568, 393×851, 479/480/481 px y 1440×900.
@@ -3282,6 +3292,15 @@ La suite completa `npm run test -- --browsers=ChromeHeadlessLocal --progress=fal
 **Evidencia QA-AUTH.INTERCEPTOR.REFRESH.1 (2026-10-02):** TDD reprodujo que una respuesta de refresh vacía (la forma en que `AuthService` termina tras un 401 y logout) completaba la petición inicial, no resolvía la concurrente y dejaba `isRefreshing` activo; también encontró que un 503 de la petición reintentada se confundía con error del refresh y cerraba sesión. El cambio limita el manejo de fallo al observable de refresh, convierte completion vacío en fallo explícito, libera a todos los esperadores y no repite logout ya ejecutado por `AuthService`. Las pruebas unitarias enfocadas pasan **11/11**; `auth.interceptor.ts` alcanza **100/100/100/100 % S/B/F/L** (47/47 statements, 17/17 branches, 13/13 functions, 40/40 lines).
 
 `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/auth-refresh-failure.spec.ts`, con rate limit, Chrome local y DB/puertos/semilla aislados: **2/2**. En escritorio y Pixel 5, siete peticiones protegidas y el refresh inválido concluyen, las credenciales sintéticas se limpian, la app vuelve a login, sin `pageerror` ni overflow; cleanup propio completado. Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-auth-refresh-failure-20261002/{desktop.png,mobile.png}`. No se utilizó el servidor habitual en `localhost:4200` ni el proveedor IA.
+
+**Reparación de fiabilidad E2E (2026-10-10):** CI `38024229940` falló esperando que terminara el conjunto de peticiones protegidas. El test anterior instalaba listeners antes del registro y vaciaba sus contadores al terminarlo; respuestas tardías del bootstrap podían mezclarse con la navegación probada. Ahora espera a que el dashboard aislado quede sin tráfico inicial, observa solo la recarga con el JWT sintético inválido, excluye `/api/auth/refresh` del conjunto protegido y descuenta cada petición al recibir `requestfinished` o `requestfailed`. Repetición local con rate limit y almacenamiento/puertos aislados:
+
+```powershell
+$env:E2E_RATE_LIMIT='on'
+node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --repeat-each=3 --forbid-only tests/e2e/auth-refresh-failure.spec.ts --reporter=line
+```
+
+Pasó **6/6**; cada ejecución confirmó cleanup. `pnpm run typecheck:e2e`, Prettier focal y `git diff --check` pasan. Sin cambios de producción ni proveedor IA; pendiente CI del cambio. Rollback: revertir solo la instrumentación del test y retirar esta evidencia; no hay cambio de producción.
 
 La suite frontend completa pasa **844/844**, aunque su gate configurado de **80 %** falla y no se redujo: **74,97/62,80/72,66/76,47 % S/B/F/L**. `npm run build:prod`, `tsc -p tsconfig.e2e.json --noEmit`, Prettier local focal y `git diff --check` pasan. El build conserva advertencias existentes de budget/imports; QA-04c, el barrido `/account` y el resto del barrido funcional siguen abiertos.
 
