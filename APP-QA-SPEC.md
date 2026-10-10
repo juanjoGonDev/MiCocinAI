@@ -2938,6 +2938,20 @@ Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el
 
 **Rollback:** retirar esta subunidad y su evidencia; no revertir typeahead, parser de pegado ni comportamiento de alta existentes.
 
+#### QA-SHOPPING.PROMOTIONS.1 · ofertas y descuentos de lista, producto y línea
+
+**Fuente revalidada:** `HOGARIA-SPEC.md` §12g–§12h separa ofertas de línea, descuentos de cesta dirigidos y descuentos por línea. La cobertura de esta unidad es solo la interacción y el cálculo visible en los cuatro escenarios; no cierra el barrido integral de `/shopping/:id` ni valida cupones.
+
+- [x] Aplicar una oferta 3x2, comprobar que el chip conserva el nombre accesible y la etiqueta, y quitarla desde la fila.
+- [x] Aplicar y quitar un descuento porcentual de lista: 10,00 € pasa a 9,00 € y vuelve a 10,00 €; comprobar 1440×900, 393×851 y 320×568.
+- [x] Dirigir un descuento de 2,00 € al producto elegido desde la lista (5,00 € → 3,00 €); cerrar la hoja sin cambios conserva el total.
+- [x] Verificar descuento porcentual limitado a dos unidades: chip, vista previa en vivo y borrado del descuento de línea.
+- [x] Ejecutar escenarios en Chromium y Pixel 5 emulado con tasa limitada y runner aislado; sin proveedor externo ni base normal.
+
+**Evidencia (2026-10-10):** `$env:E2E_RATE_LIMIT='on'; node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/shopping-round6.spec.ts tests/e2e/shopping-round10.spec.ts --grep 'una oferta 3x2|el descuento de la lista se aplica al total|un descuento prometido en un producto|porcentaje con tope de unidades' --reporter=line` pasó **8/8**. El runner usó DB/puerto/usuario/artefactos temporales y ejecutó cleanup. Estos cuatro casos no llaman a IA ni a un proveedor externo.
+
+**Rollback:** retirar esta subunidad y su evidencia; no revertir los cálculos de oferta/descuento ni las pruebas existentes.
+
 #### QA-SHOPPING.TRAY-COMPLETE-REOPEN.1 · reabrir tras error sin perder el carro
 
 **Fuente revalidada:** el ciclo de vida de `/shopping` permite terminar una lista con líneas compradas, abrirla desde `Terminadas` y volver a activarla. Debe mantener líneas, marcas y precios; un HTTP 503 al reabrir no debe anunciar éxito ni sacar la fila del historial, y el reintento válido debe persistir tras recargar. La casilla global `/shopping/:id` sigue abierta para el resto de acciones.
