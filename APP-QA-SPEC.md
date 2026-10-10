@@ -2952,6 +2952,17 @@ Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el
 
 **Rollback:** retirar esta subunidad y su evidencia; no revertir los cálculos de oferta/descuento ni las pruebas existentes.
 
+#### QA-SHOPPING.DISCOUNT-CLAMP.1 · el descuento no deja un total negativo
+
+**Fuente revalidada:** `HOGARIA-SPEC.md` §12h establece que un descuento superior al importe de la línea se limita a cero y se explica en la hoja; nunca debe descontar el resto de la cesta.
+
+- [x] Con línea de 0,95 € y descuento de 2,00 €, la vista previa indica el límite en cero y el total general nunca muestra importe negativo.
+- [x] Ejecutar en Chromium y Pixel 5 emulado con rate limit y DB/puerto/usuario aislados; sin proveedor externo.
+
+**Evidencia (2026-10-10):** `$env:E2E_RATE_LIMIT='on'; node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/shopping-round10.spec.ts --grep 'un importe mayor que la linea se recorta' --reporter=line` pasó **2/2**. El runner confirmó cleanup de base y artefactos temporales.
+
+**Rollback:** retirar solo esta subunidad/evidencia; no revertir el clamp monetario ni su regresión E2E.
+
 #### QA-SHOPPING.LINE-LIFECYCLE.1 · alta, carro, precios y cierre
 
 **Fuente revalidada:** `HOGARIA-SPEC.md` §12g–§12h y la conducta del detalle de compra: el mismo producto suma cantidades, marcar lo mueve al carro y el cierre solo archiva con el total pagado correcto. Esta subunidad no cubre el barrido completo, reordenamiento ni cupones.
