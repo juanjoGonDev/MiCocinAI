@@ -3957,6 +3957,27 @@ aislado de MiCocinAI verificó `response_format` JSON Schema estricto y el par d
 intentos HTTP antes de reenviarlos; WebAPI informa validación estructurada de la respuesta. Esto no
 demuestra que el JSON llegara como fichero al prompt de ChatGPT.
 
+**Revalidación read-only tras reiniciar WebAPI (2026-10-10, 05:36 CEST):** el listener continúa en
+`127.0.0.1:3001`, PID `56924`, iniciado a las 00:54:11; readiness sigue en `ready=true`,
+`storage=ready`. Los logs actuales no contienen un intento posterior al registrado a las 00:56:29, así
+que no se creó ni reenvió ninguna petición. La lectura del checkout `D:\projects\webApi` (HEAD
+`a1c64d4e`, sin modificar su cambio local `tools.txt`) encuentra una causa probable y reproducible en
+código: `writeAttachmentBuffer()` antepone un UUID al nombre del fichero; después,
+`buildOpenCodeMessageAttachments()` fuerza la subida del inventario solo si el basename coincide con
+`inventario.json`/`inventory.json` o con prefijo numérico. El basename con UUID no coincide, y
+`prepareOpenCodeAttachments()` inlinea los ficheros de texto menores de 64 KiB que no estén marcados
+para subida forzada. Esto explica los contadores `readyAttachmentCount=1` y
+`sentToModelAttachmentCount=1`, pero no sustituye una regresión ejecutada ni prueba por sí solo el
+contenido del prompt. El fix no está presente en el checkout inspeccionado; readiness no equivale a
+comportamiento corregido. Se localizó el fix en el PR abierto de WebAPI
+[#163](https://github.com/juanjoGonDev/webApi/pull/163): su rama `fix/ticket-prompt-association-diagnostics`
+normaliza el prefijo UUID al reconocer el snapshot y declara una regresión multipart, prueba sintética
+con proveedor real y CI verde. No está integrado en el checkout local inspeccionado, que sigue en
+`feat/session-attachment-previews` / `a1c64d4e`; el proceso actual no expone SHA cargado que permita
+vincularlo al código de #163. No se integró ni reemplazó el proceso y no se repitió ningún ticket
+potencialmente completado. Para continuar el smoke de tickets se necesita primero que el servicio activo
+use el fix de #163 y que una petición sintética confirme dos subidas efectivas.
+
 Los logs también muestran una finalización anterior con las cuatro fotos JPEG juntas y el JSON de
 inventario (agrupación distinta a la acordada), además de sesiones PDF+JSON cuyo ticket no se puede
 atribuir con seguridad sin leer datos privados. Como cualquiera pudo completar, no se reenvía ningún
@@ -4144,8 +4165,10 @@ real sin reenviar ninguno.
       y no volver a enviar JPEG ni grupo largo tras una petición potencialmente completada.
 - [ ] Verificar que ambos adjuntos llegan al prompt del modelo y validar las categorías contra el
       snapshot. La sesión posterior al reinicio registró 2 recibidos/incluidos en la petición interna,
-      pero solo 1 listo y enviado; su salida estructurada no acredita uso del catálogo. Nunca guardar
-      resultados fuera de la base temporal.
+      pero solo 1 listo y enviado; su salida estructurada no acredita uso del catálogo. El fix está en
+      el PR WebAPI #163 pero no en el checkout/runtime que se comprobó; antes, probar el comportamiento
+      con datos sintéticos y confirmar dos subidas efectivas. Nunca guardar resultados fuera de la base
+      temporal.
 - [ ] Confirmar cleanup, registrar únicamente evidencia agregada, marcar la unidad con resultados
       reales, commits atómicos/hooks/push y CI verde para el head del PR; dejarlo listo y sin merge.
 
