@@ -4430,41 +4430,30 @@ modificar settings actuales de WebAPI.
 
 ### QA-AI.RECEIPT.RESUME-SAFE-SELECTION.1 · reanudar solo las fuentes no completadas
 
-**Fuente revalidada (2026-10-09; actualizada por la evidencia live posterior):** la corrección de WebAPI ya existe en `D:\projects\webApi`: el
-HEAD local `7c1e52e9` incluye `e679f44d fix(chatgpt): recover partial attachment uploads`, con rollback
-verificado, reset seguro del composer, preservación del error original y prohibición de repetir un
-upload ambiguo. El listener `127.0.0.1:3001` (PID 43088) ejecuta `src/main.ts` desde
-`D:\projects\webApi`, inició a las 21:48 UTC después del commit del fix (21:42 UTC) y
-`/health/ready` devuelve 200. La E2E sintética local de WebAPI `tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts`
-pasó **18/18**, incluidos upload de foto+JSON, fallo parcial, reset y ausencia de replay. No se
-modificó ni reinició el servicio. WebAPI no publica el SHA cargado por HTTP; el origen y timestamp del
-proceso, checkout limpio y test del fix vinculan el runtime con el checkout corregido, sin afirmar un
-endpoint de versión inexistente.
+**Fuente revalidada (2026-10-10):** WebAPI ya incluye las PR #163/#164 fusionadas: checkout limpio
+`D:\projects\webApi`, rama `master` idéntica a `origin/master` en `f47f4b8`; el servicio local
+`127.0.0.1:3001/health/ready` devuelve HTTP 200. La E2E sintética
+`pnpm exec vitest run --config vitest.e2e.config.ts
+tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts --reporter=dot` pasó **22/22**.
+Esto verifica el comportamiento de adjuntos con fixtures, no la extracción de tickets reales; WebAPI
+no expone por HTTP el SHA de proceso. Las ejecuciones anteriores de los dos PDF sí obtuvieron
+respuestas válidas y permanecen excluidas. La JPEG preferida y el grupo de las otras tres fotos
+tuvieron resultados ambiguos/sin respuesta validable. El usuario renovó expresamente (2026-10-10) la
+autorización para repetir **una vez cada uno de esos dos grupos**, no los PDF.
 
-MiCocinAI aún no puede reanudar automáticamente con seguridad: `loadAiLiveReceiptPlan()` devuelve los
-cuatro tickets en orden (incluidos los dos PDF cuyos fallbacks anteriores fueron HTTP 200), y
-`tests/e2e/ai-real-smoke.spec.ts` los sube todos en un `for` fijo; el coordinador reserva ocho
-completions y solo considera éxito cuatro tickets. El modo histórico reenviaría peticiones con
-resultado potencialmente completado, lo que el usuario prohibió. La selección reducida se diseñó para
-la JPEG preferida y el PDF largo con las otras tres fotos, sin reenviar los PDF individuales. El
-intento inicial de la JPEG tuvo respuesta ambigua 400/502 y el PDF largo sí llegó a `prompt_submitted`
-antes de agotar `wait_for_reply`. Después, el usuario autorizó expresamente volver a intentar los
-grupos JPEG/largo bajo el fix. La JPEG ya había devuelto una respuesta potencialmente completada, por
-lo que no se reenvió; el grupo largo se intentó una sola vez y falló sin JSON validable. Ambos permisos
-están consumidos: no se reenvían esas fuentes.
-
-**Contrato:** la harness live conserva la selección explícita y cerrada `unsubmitted-only`, distinta
-del lote completo histórico. Cuando haya grupos inequívocamente no enviados, solo puede construir la
-JPEG preferida y un PDF multipágina con las otras tres fotos, en ese orden; nunca leer/subir los PDF
-individuales en este reintento. Concurrencia 1, parada en el primer fallo y techo de cuatro requests
-HTTP: por cada ticket una petición streaming y, únicamente si devuelve HTTP 400 sin respuesta
-utilizable, un fallback no-stream. No reintentar timeout/5xx ni una llamada ambigua. Cada petición
-debe llevar el snapshot fresco `inventario.json` como adjunto y `response_format` estricto. Usar
-exclusivamente runner/SQLite/uploads temporales; verificar respuesta contra schema, detectar duplicados
-en el ticket largo, confirmar filas revisables/editables e historial, no confirmar compras ni escribir
-en despensa/inventario real. No guardar nombres/contenido real en logs, screenshots, traces, videos,
-reportes o Git. Si todos los grupos tienen resultado potencialmente completado, detener la validación
-real sin reenviar ninguno.
+**Contrato actualizado:** usar separadamente los selectores `preferred-jpeg-only` (JPEG ordinal 4)
+y `long-ticket-only` (las otras tres JPEG como un PDF temporal de tres páginas); no usar
+`unsubmitted-only` ni abrir los PDF individuales. Cada selección representa un ticket y permite como
+máximo la petición streaming más un solo fallback no-stream ante HTTP 400 sin respuesta utilizable;
+no volver a intentar ningún grupo tras timeout, 5xx o resultado ambiguo. El proxy debe validar en cada
+petición JSON Schema estricto en `response_format` y exactamente un adjunto de ticket más un
+`inventario.json` válido; los logs redacted de WebAPI deben acreditar dos ficheros listos y enviados
+al modelo (`inlineContextCount=0`). El resultado debe pasar el parser/schema, quedar en `review` con
+líneas, y cada categoría debe pertenecer al catálogo de la instantánea; el ticket de tres páginas no
+debe guardar líneas equivalentes duplicadas. Verificar edición de metadatos e historial. Usar solo
+runner, SQLite y uploads temporales, sin confirmar compras ni escribir en el inventario real. No
+guardar nombres/contenido real en logs, capturas, traces, vídeos, reportes o Git. Si falla un criterio,
+informar exactamente qué queda sin validar y no marcar completa esta unidad.
 
 - [x] Añadir primero pruebas rojas de loader/coordinador que prueben que `unsubmitted-only` devuelve
       solo JPEG + PDF multipágina, no lee los dos PDF originales, rechaza selecciones inválidas y
@@ -4491,8 +4480,9 @@ real sin reenviar ninguno.
       de forma acotada la combinación de cantidades por grupo equivalente que cuadra con el total.
       Deduplicar solo si hay una interpretación única; preservar filas ante precios/total incompletos,
       sumas discordantes, ambigüedad o exceso de estados de búsqueda.
-- [ ] Validar las categorías reales contra el snapshot y la deduplicación multipágina. El reintento
-      autorizado del grupo largo terminó en HTTP 400/502 sin JSON validable; no se reenvía.
+- [ ] Consumir la autorización renovada en una única ejecución por grupo (JPEG ordinal 4 y PDF
+      multipágina de las otras tres fotos); comprobar las categorías contra el catálogo enviado y que
+      no queden líneas equivalentes duplicadas. No reenviar ninguno tras esta validación.
 - [x] Confirmar cleanup de recursos propios y registrar solo evidencia agregada; se preservan sin
       cambios los tres tokens smoke preexistentes por decisión expresa del usuario.
 - [ ] Cerrar la validación solo después de resultados reales verificables, revisión/historial y CI
