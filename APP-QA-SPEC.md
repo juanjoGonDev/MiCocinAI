@@ -4518,8 +4518,14 @@ desde `ticket-queue.ts`, estas regresiones y esta evidencia; sin cambios de API/
 **Entrega inicial de la reconciliación (2026-10-10):** commit `2e8ee90` se publicó con hooks completos;
 pre-commit y pre-push validaron Prettier, `check:ui`, build server+frontend, typecheck E2E y unitarias
 (frontend **1308/1308**; servidor **1239/1239 ejecutadas**, 1 omitida). La integración de conteos
-mixtos descubrió después el defecto global descrito arriba y se corrigió en la presente revisión;
-CI de GitHub del HEAD actualizado sigue pendiente.
+mixtos descubrió después el defecto global descrito arriba.
+
+**Corrección de conteos mixtos y CI (2026-10-10):** commit `9eeb96f` corrige esa regresión, pasa
+las suites locales y sus hooks Lefthook sin bypass, y se publicó en la rama del PR. GitHub Actions,
+run [38047761073](https://github.com/juanjoGonDev/MiCocinAI/actions/runs/38047761073), terminó con
+**9/9 jobs verdes**, incluidos type check, server tests, production build, full-stack E2E y los cuatro
+shards. PR #41 continúa abierto, fuera de Draft y sin merge. La validación con tickets reales sigue
+abierta por la restricción vigente de no repetir solicitudes que pudieron completarse.
 
 **Smoke live sintético WebAPI previo (2026-10-10, 10:53 CEST; supersedido):** preflight `prepareExistingAiLiveSmokeSession` con el opt-in
 de logging local acotado; una llamada `POST /v1/chat/completions` desde Node stdin con dos `data:` URIs
