@@ -3947,9 +3947,15 @@ a las 00:56, registra exactamente `image/jpeg` + `application/json`, `attachment
 `includedInProviderRequestAttachmentCount=2`; terminó `success`, con `validatedOutput=true` y
 `validationPending=false`. Sin imprimir ni guardar la respuesta, el análisis transitorio confirmó JSON
 válido con las claves de ticket previstas, 24 líneas, cero categorías vacías y `createCategory` booleano
-en todas. La evidencia confirma que esa petición llegó a la validación estructurada de WebAPI; los logs
-redactados no exponen el body entrante, así que el valor exacto de `response_format` no se afirma como
-observado directamente.
+en todas. Pero el log filtrado y redactado de esa misma sesión distingue el envío efectivo: se recibieron
+2 ficheros y la petición interna incluyó 2 (`includedInProviderRequestAttachmentCount=2`), pero
+`Attachments are ready` y `Prompt submitted` reportan respectivamente `readyAttachmentCount=1` y
+`sentToModelAttachmentCount=1`. Por tanto, la vista previa y el recuento de la petición interna no
+demuestran que ambos archivos fueran adjuntos en el prompt; el JSON del inventario no queda acreditado
+como segundo fichero y sus categorías no se validan contra el catálogo. En esa misma corrida el proxy
+aislado de MiCocinAI verificó `response_format` JSON Schema estricto y el par de adjuntos en ambos
+intentos HTTP antes de reenviarlos; WebAPI informa validación estructurada de la respuesta. Esto no
+demuestra que el JSON llegara como fichero al prompt de ChatGPT.
 
 Los logs también muestran una finalización anterior con las cuatro fotos JPEG juntas y el JSON de
 inventario (agrupación distinta a la acordada), además de sesiones PDF+JSON cuyo ticket no se puede
@@ -4134,10 +4140,12 @@ real sin reenviar ninguno.
 - [x] Ejecutar unitarias focales, typecheck E2E, `check:ui`, formato, build y regresión loopback
       sintética; confirmar antes de tickets que proceso/checkout WebAPI siguen en estado corregido,
       readiness, privacidad y redacción de logs son seguros.
-- [ ] La única repetición autorizada, JPEG ordinal 4, ya se ejecutó una vez en almacenamiento
-      temporal. WebAPI registró un solo archivo en `Prompt submitted`, no los dos requeridos; no
-      repetir la JPEG ni el PDF largo ya completado. La validación con ambos adjuntos y categorías
-      basadas en inventario permanece abierta. Nunca guardar resultados fuera de la base temporal.
+- [x] Consumir una sola vez la repetición autorizada de JPEG ordinal 4, en almacenamiento temporal,
+      y no volver a enviar JPEG ni grupo largo tras una petición potencialmente completada.
+- [ ] Verificar que ambos adjuntos llegan al prompt del modelo y validar las categorías contra el
+      snapshot. La sesión posterior al reinicio registró 2 recibidos/incluidos en la petición interna,
+      pero solo 1 listo y enviado; su salida estructurada no acredita uso del catálogo. Nunca guardar
+      resultados fuera de la base temporal.
 - [ ] Confirmar cleanup, registrar únicamente evidencia agregada, marcar la unidad con resultados
       reales, commits atómicos/hooks/push y CI verde para el head del PR; dejarlo listo y sin merge.
 
