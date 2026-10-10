@@ -6,7 +6,7 @@
 - **Actualizado:** 2026-10-10
 - **IA / tickets reales (2026-10-09, histórico; supersedido):** se preservó el proceso WebAPI entonces activo y, tras autorización, se completó una sola vez el smoke del grupo largo. El contrato incluía JSON Schema estricto y dos adjuntos, pero la telemetría anterior no permitía distinguir un `fileCount=1` por operación de un lote incompleto. Ese grupo no se repite y la limitación de inventario quedó pendiente.
 - **IA / tickets reales (2026-10-10, estado actual):** tras el reinicio anunciado por el usuario, el listener WebAPI `127.0.0.1:3001` quedó listo en PID 56924, iniciado a las 00:54:11 CEST, con el checkout `D:\projects\webApi` en `a1c64d4e`. El smoke autorizado de la JPEG preferida (ordinal 4) terminó una vez en almacenamiento temporal: 2 peticiones de contrato estricto, 1 completion HTTP 200 tras un fallback HTTP 400, respuesta JSON válida y revisión/edición/historial E2E. Los logs de las 00:56:07–00:56:29 prueban `receivedFileCount=2`, `normalizedAttachmentCount=2` e `includedInProviderRequestAttachmentCount=2` en la entrada/preparación y dos previews; pero `Attachments are ready` registra `readyAttachmentCount=1` y `Prompt submitted`, `sentToModelAttachmentCount=1`. El código WebAPI confirma por qué: `writeAttachmentBuffer` antepone UUID al nombre, el detector de `buildOpenCodeMessageAttachments` solo fuerza `inventario.json` sin prefijo o con prefijo numérico, y `prepareOpenCodeAttachments` inlinea los JSON pequeños. Así, la evidencia indica que el inventario se incluyó como texto y no como segundo archivo; no inspeccionamos el prompt ni podemos validar que las categorías respetaran ese contenido. No se repite la JPEG ni el grupo largo ya procesado, no se escribe en el inventario real y la validación real de IA sigue abierta.
-- **Revalidación WebAPI (2026-10-10, solo lectura):** `/health/ready` devuelve HTTP 200 (`ready=true`, `storage=ready`); el listener sigue en PID 56924, iniciado a las 00:54:11 CEST, y WebAPI no publica el SHA cargado por el proceso. El checkout inspeccionable `D:\projects\webApi` está en `feat/session-attachment-previews` / `a1c64d4e`, mientras PR #163 (`b55f958`) contiene un helper que elimina prefijos numéricos y UUID del nombre de `inventario.json`; el helper del checkout actual solo admite el prefijo numérico. Los logs ya existentes registran otra ejecución a las 08:28:31: 2 archivos recibidos, normalizados e incluidos en la petición interna; a las 08:28:47 constan 1 listo y a las 08:28:49 1 enviado a ChatGPT, con HTTP 200 a las 08:28:50. La respuesta pudo completarse y no se repite. Esos logs no incluyen `response_format`, por lo que no prueban ni descartan ese campo. En esta revalidación solo se consultaron salud, código y logs; no se hizo POST ni se reenvió ticket. La entrega de dos adjuntos al modelo sigue sin acreditarse.
+- **Revalidación WebAPI (2026-10-10, smoke live sintético):** `/health/ready` devuelve HTTP 200 (`ready=true`, `storage=ready`); el listener sigue en PID 56924, iniciado a las 00:54:11 CEST, y no publica el SHA cargado. El checkout inspeccionable `D:\projects\webApi` está en `feat/session-attachment-previews` / `a1c64d4e`; PR #163 (`b55f958`) contiene un helper que elimina prefijos numéricos y UUID de `inventario.json`, mientras el helper del checkout solo admite el prefijo numérico. Tras verificar privacidad con el opt-in de logging local acotado, se hizo **una única** llamada a `/v1/chat/completions` con un PDF y `inventario.json` completamente sintéticos, `response_format` JSON Schema estricto y sin streaming. Respondió HTTP 200; el resultado cumplió el esquema y la categoría sintética esperada; el token temporal propio se limpió. Los logs agregados de 10:53:31 muestran 2 recibidos, normalizados e incluidos; a las 10:53:50 solo 1 listo y a las 10:53:51 solo 1 enviado (`statusCode=200`). La respuesta pudo completarse y no se repite; no se tocaron tickets, base de datos ni inventario real. La entrega de ambos como archivos independientes sigue sin acreditarse.
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -4411,16 +4411,27 @@ real sin reenviar ninguno.
       readiness, privacidad y redacción de logs son seguros.
 - [x] Consumir una sola vez la repetición autorizada de JPEG ordinal 4, en almacenamiento temporal,
       y no volver a enviar JPEG ni grupo largo tras una petición potencialmente completada.
-- [ ] Verificar que ambos adjuntos llegan al prompt del modelo y validar las categorías contra el
-      snapshot. Los logs posteriores registran 2 recibidos/normalizados/incluidos internamente, pero solo
-      1 listo y enviado; la petición terminó HTTP 200 y no se repite por riesgo de duplicar una llamada ya
-      completada. PR WebAPI #163 incorpora reconocimiento del prefijo UUID, pero el checkout local
-      inspeccionable aún no lo contiene y el proceso no expone su SHA. Antes de cualquier ticket nuevo,
-      exigir evidencia sintética live de 2 adjuntos listos y enviados, además de `response_format`; luego
-      validar categorías y deduplicación en almacenamiento temporal. Nunca persistir resultados en el
-      inventario real.
+- [x] Ejecutar un smoke live único con un PDF y catálogo JSON sintéticos, `response_format` JSON Schema
+      estricto, validar HTTP 200, salida conforme al esquema/categoría del catálogo y cleanup del token
+      temporal; no tocar tickets ni inventario real.
+- [ ] Acreditar que ambos adjuntos llegan como archivos independientes al modelo y validar las
+      categorías reales contra el snapshot. El smoke de 10:53 recibió/normalizó/incluyó 2, pero registró
+      solo 1 listo/enviado; no se repite por riesgo de duplicar una llamada completada. PR WebAPI #163
+      reconoce el prefijo UUID, pero el checkout inspeccionable aún no lo contiene y el proceso no expone
+      su SHA. Antes de otro ticket, exigir evidencia live sintética de 2 adjuntos listos y enviados; luego
+      validar categorías y deduplicación en almacenamiento temporal. Nunca persistir resultados reales.
 - [ ] Confirmar cleanup, registrar únicamente evidencia agregada, marcar la unidad con resultados
       reales, commits atómicos/hooks/push y CI verde para el head del PR; dejarlo listo y sin merge.
+
+**Smoke live sintético WebAPI (2026-10-10):** preflight `prepareExistingAiLiveSmokeSession` con el opt-in
+de logging local acotado; una llamada `POST /v1/chat/completions` desde Node stdin con dos `data:` URIs
+sintéticas (`application/pdf` y `application/json`), `response_format.type=json_schema`, `strict=true` y
+`stream=false`. HTTP **200**; la respuesta JSON cumplió el esquema y devolvió la categoría sintética del
+catálogo; `cleanupVerified=true`. Los logs agregados registran `receivedFileCount=2`,
+`normalizedAttachmentCount=2`, `includedInProviderRequestAttachmentCount=2`, pero
+`readyAttachmentCount=1` y `sentToModelAttachmentCount=1`; por tanto, el resultado correcto no demuestra
+que el JSON se enviara como archivo separado. No se repitió la petición, no se usaron tickets, no hubo
+DB/inventario real y no se conservó contenido de la petición/respuesta ni credenciales.
 
 **Evidencia de preflight (2026-10-09):** `pnpm exec vitest run --config
 vitest.clipboard-e2e.config.ts tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts
