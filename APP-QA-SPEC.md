@@ -3543,10 +3543,43 @@ Angular/budgets preexistentes. Coverage N/A: corrección geométrica de CSS sin 
 
 ## Datos, proveedor IA y privacidad de la prueba
 
-- [ ] Preparar fixtures deterministas con usuario(s), hogar, invitación, despensa, utensilios, listas, ticket/archivo y configuración de IA; cada run debe usar una SQLite temporal y semilla única.
-- [ ] Verificar que la suite puede crear/leer/borrar solo sus propios datos; no usar la base normal del dev server ni reutilizar `localhost:4200` para pruebas con escritura. No limpiar ni restaurar datos ajenos.
-- [ ] Los E2E repetibles deben usar proveedor stub/mock controlado. Separar el smoke del proveedor LAN real, opt-in, con timeout/límites y `API_KEY` desde variable de entorno o almacén de secretos; nunca escribir token/URL con credenciales en git, spec, fixture, screenshot, trace, video o logs.
-- [ ] Probar fallo del proveedor, respuesta mal formada/ilegible, 4xx/5xx, desconexión, timeout, reintento y concurrencia sin claves reales.
+- [x] Preparar fixtures deterministas con usuario(s), hogar, invitación, despensa, utensilios, listas, ticket/archivo y configuración de IA; cada run debe usar una SQLite temporal y semilla única.
+- [x] Verificar que la suite puede crear/leer/borrar solo sus propios datos; no usar la base normal del dev server ni reutilizar `localhost:4200` para pruebas con escritura. No limpiar ni restaurar datos ajenos.
+- [x] Los E2E repetibles deben usar proveedor stub/mock controlado. Separar el smoke del proveedor LAN real, opt-in, con timeout/límites y `API_KEY` desde variable de entorno o almacén de secretos; nunca escribir token/URL con credenciales en git, spec, fixture, screenshot, trace, video o logs.
+- [x] Probar fallo del proveedor, respuesta mal formada/ilegible, 4xx/5xx, desconexión, timeout, reintento y concurrencia sin claves reales.
+
+**Evidencia de fallos sintéticos (2026-10-10):**
+`pnpm --filter @hogaria/server exec vitest run src/utils/ai-client.spec.ts src/utils/ai-queue.spec.ts src/routes/ai-queue.routes.spec.ts src/routes/receipts.routes.spec.ts --reporter=dot`
+pasó **121/121**. `ai-client.spec.ts` sustituye `fetch` y cubre HTTP 401/4xx/5xx,
+cuerpo/JSON malformado, proveedor sin `choices`, error DNS/desconexión, abort/timeout y caída de
+stream; `ai-queue.spec.ts` prueba los límites de concurrencia por configuración, reintentos
+automáticos/manuales y cancelación; las rutas de tickets verifican configuración ausente, rechazo
+del proveedor y respuesta 200 ilegible. Los tests de cola/rutas usan `DATABASE_PATH=:memory:` y
+respuestas/credenciales marcadoras sintéticas; no se requiere token real ni se llama a la red externa.
+CI `38056833392` terminó con **9/9 jobs verdes** en el HEAD `5bb1606`. No se modificó producción
+en esta verificación; se mantiene el gate existente y no aplica coverage focal nuevo.
+
+**Aislamiento, fixtures y credenciales (2026-10-10):** `scripts/run-isolated-playwright.mjs`
+crea una carpeta `hogaria-e2e-*` propia bajo el `%TEMP%` efectivo, genera `hogaria.sqlite`, puertos
+loopback libres y una `E2E_SEED` única; `playwright.config.ts` exige `validateIsolatedEnvironment`,
+usa la URL de ese puerto y `tests/e2e/helpers/seed.ts` genera identidades únicas por run/test. Las
+E2E de Hogar/invitaciones, Despensa, Utensilios, Compra, Tickets y Configuración IA crean sus fixtures
+sintéticos desde esas ayudas y sus propias APIs. Al terminar una corrida verde, el runner para su
+servidor, verifica que sus puertos cerraron y elimina solo su carpeta temporal; si hay fallo conserva
+esa carpeta propia para diagnóstico, como en la matriz de Compra de arriba. Nunca usa la base normal
+ni un servidor preexistente para escritura en `pnpm run test:e2e`; el servidor se enlaza a un puerto
+loopback recién reservado.
+
+La suite repetible intercepta proveedores con `fetch` stub/local controlado y activa fixtures locales
+de búsqueda; el proyecto `full-stack` también usa proveedor sintético. El smoke LAN real se limita a
+`playwright.ai-real-smoke.config.ts` + `tests/e2e/ai-real-smoke.spec.ts`, exige opt-in exacto, está
+prohibido en CI, acota config/request/test/global timeouts y solo acepta el proxy loopback autorizado.
+La credencial del proveedor y el bearer WebAPI se reciben por variables de entorno/proceso con
+separación coordinator/runner; se verifica la redacción antes de subir documentos y el token temporal
+propio se elimina al terminar. Los tests de seguridad/redacción usan sentinels sintéticos, y el
+preflight real de `QA-AI.SMOKE.PRESERVE-REDACTED-LOGS.1` confirmó cleanup sin llamadas al proveedor ni
+cambios de settings. Esta evidencia **no** cierra `QA-AI.REAL-INTEGRATIONS.1`: los resultados reales
+de tickets y su autorización de repetición siguen pendientes por separado.
 
 ## Cierre y evidencia requerida
 
