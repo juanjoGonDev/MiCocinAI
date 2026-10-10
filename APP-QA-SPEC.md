@@ -954,6 +954,32 @@ completo. CI `37980861919` del mismo SHA pasó **9/9** jobs, incluidos full-stac
 **Rollback:** retirar solamente la E2E y esta subunidad; el control genérico de contraseña permanece
 intacto.
 
+### QA-04c.AI-QUEUE-PAGE.PARAM-ABSENT.1 · fallback defensivo si falta configId
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md §12an` y `ai-config.routes.ts` fijan la ruta
+real en `:configId/queue`; por tanto, una ruta sin `configId` no es una URL de producto. Aun así,
+`AiProviderQueuePageComponent` contempla una `paramMap` o `snapshot.paramMap` sin esa clave mediante
+`?? ''`, mientras su spec solo construye la ruta con parámetro. El último LCOV completo generado el
+10-10 a las 09:15 CEST registra `ai-provider-queue-page.component.ts` en **100/50/100/100 % S/B/F/L**
+(BRF 4 / BRH 2); las dos ramas pendientes son precisamente esos defaults defensivos. Se toma
+`frontend/coverage/lcov.info` como fuente actual: `coverage-final.json` conserva fecha 2026-10-02 y el árbol
+HTML contiene páginas históricas duplicadas.
+
+**Contrato:** una prueba unitaria monta el componente mediante una ruta local de test sin `configId`;
+el `provider()` queda sin seleccionar, la página muestra el aviso accesible de proveedor inexistente,
+la carga de configuraciones se solicita una vez y la cola no se observa. La ruta real de producción no
+cambia. Unidad test-only: no se cambia comportamiento, datos, ni configuración real de IA.
+
+- [ ] Añadir primero una prueba focal con `paramMap` y snapshot sin `configId`; comprobar aviso de
+      proveedor inexistente y cero llamadas a `AiQueueService.watch`.
+- [ ] Alcanzar ≥70 % en cada métrica del componente (preferiblemente 100 %); ejecutar la spec focal
+      y la suite frontend completa con gate global ≥80 % intacto.
+- [ ] Ejecutar typecheck E2E, `check:ui`, build, formato y `git diff --check`; registrar resultados,
+      limitaciones y rollback. Hooks completos, commit atómico, push y CI verde; PR #41 abierta y sin merge.
+
+**Rollback:** retirar solamente la prueba y esta subunidad; el componente y la ruta de producción no
+cambian.
+
 ### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
 
 **Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md §12t-R` fija `I18nService` como responsable de resolver `es/en/auto`, actualizar el locale de fechas/números al cambiar idioma y componer frases localizadas; `i18n.service.ts` implementa además selección persistida, `languagechange`, fallback de diccionario, interpolación, plurales y tiempos relativos. No existe `i18n.service.spec.ts`; el uso indirecto en otras pruebas deja este servicio en **69.23/31.58/69.23/72.34 % S/B/F/L** (36/52 sentencias, 12/38 ramas, 9/13 funciones, 34/47 líneas). La cobertura baja no prueba un fallo de producto: faltan pruebas unitarias directas de rutas existentes. Alcance test-only, sin cambiar traducciones, producción, preferencias ajenas ni llamadas externas.
