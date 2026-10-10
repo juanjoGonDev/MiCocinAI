@@ -5902,7 +5902,7 @@ fixtures sintéticas.
       ausencia de overflow y capturas sintéticas comparables; no llamar a WebAPI/proveedor ni confirmar.
 - [x] Ejecutar `typecheck:e2e`, el test focal, formato, `check:ui` y `git diff --check`; no modificar
       producción ni pedir coverage para código instrumentable si el cambio sigue siendo solo de tests/docs.
-- [ ] Registrar evidencia/rollback, commit atómico con hooks y push; verificar CI actualizado del PR sin
+- [x] Registrar evidencia/rollback, commit atómico con hooks y push; verificar CI actualizado del PR sin
       mergearlo.
 
 **Evidencia local (2026-10-10):** la regresión siembra directamente un ticket/una línea sintéticos en la
@@ -5918,7 +5918,10 @@ escritorio/móvil se guardaron e inspeccionaron en
 `.e2e-screenshots/qa-receipt-total-mismatch-20261010/`. `pnpm run typecheck:e2e`, Prettier focal,
 `pnpm run check:ui` (**212 ficheros, 21 reglas**) y `git diff --check` pasaron. No cambia producción,
 por lo que coverage instrumentable es N/A. El runner confirmó la limpieza de SQLite/uploads y del
-servidor propio.
+servidor propio. La spec se publicó antes del test en `a49ec36`; el commit de test/evidencia
+`ba66df5` pasó pre-commit y pre-push sin saltar hooks y se envió a la rama. CI del PR #41
+([run 38027861182](https://github.com/juanjoGonDev/MiCocinAI/actions/runs/38027861182)) pasó todos
+los gates requeridos en ese HEAD. PR abierto, sin merge.
 
 **Rollback focal:** retirar solo la regresión y esta subunidad; no cambiar cálculo ni presentación del
 total salvo que la prueba revele un defecto reproducible.
