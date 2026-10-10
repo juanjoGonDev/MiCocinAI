@@ -2952,6 +2952,21 @@ Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el
 
 **Rollback:** retirar esta subunidad y su evidencia; no revertir los cálculos de oferta/descuento ni las pruebas existentes.
 
+#### QA-SHOPPING.LINE-LIFECYCLE.1 · alta, carro, precios y cierre
+
+**Fuente revalidada:** `HOGARIA-SPEC.md` §12g–§12h y la conducta del detalle de compra: el mismo producto suma cantidades, marcar lo mueve al carro y el cierre solo archiva con el total pagado correcto. Esta subunidad no cubre el barrido completo, reordenamiento ni cupones.
+
+- [x] Alta con cantidad muestra una fila sin precio y el aviso correspondiente; repetir producto suma la cantidad sin duplicar la fila.
+- [x] Marcar una línea la mueve de pendientes al carro y el estado sigue persistido tras recargar.
+- [x] Editar un precio decimal con coma en una línea de dos unidades actualiza el total estimado a 9,50 €.
+- [x] Vaciar el carro requiere confirmación, conserva lo pendiente y «Deshacer» restaura la línea comprada.
+- [x] Cerrar la compra archiva la lista y su total de 3,20 € aparece en el historial.
+- [x] Ejecutar en Chromium y Pixel 5 emulado con tasa limitada y runner aislado; sin proveedor externo ni base normal.
+
+**Evidencia (2026-10-10):** `$env:E2E_RATE_LIMIT='on'; node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/shopping-lists.spec.ts --grep 'anadir una línea|repetir un producto|marcar una línea se guarda|un precio con coma|terminar compra archiva|vaciar el carro' --reporter=line` pasó **12/12**. SQLite, puerto, usuario y artefactos fueron temporales; el runner confirmó cleanup. Sin llamadas a IA/proveedores externos.
+
+**Rollback:** retirar esta subunidad y su evidencia; no revertir el comportamiento existente de alta, marcado, precios, cierre ni deshacer.
+
 #### QA-SHOPPING.TRAY-COMPLETE-REOPEN.1 · reabrir tras error sin perder el carro
 
 **Fuente revalidada:** el ciclo de vida de `/shopping` permite terminar una lista con líneas compradas, abrirla desde `Terminadas` y volver a activarla. Debe mantener líneas, marcas y precios; un HTTP 503 al reabrir no debe anunciar éxito ni sacar la fila del historial, y el reintento válido debe persistir tras recargar. La casilla global `/shopping/:id` sigue abierta para el resto de acciones.
