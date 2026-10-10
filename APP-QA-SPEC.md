@@ -3308,6 +3308,20 @@ El E2E sintético focal, en Chromium y Pixel 5, pasó **4/4**; valida JSON Schem
 
 **Limitación/rollback:** esta subunidad valida catálogo y render con IA sintética, no la extracción real ni la categoría emitida por un modelo; eso sigue en `QA-AI.RECEIPT.RESUME-SAFE-SELECTION.1`. No cierra el ciclo completo de edición/confirmación/cola ni la casilla padre `/receipts/:id`. Retirar solo la llamada de inicialización previa al snapshot, sus dos regresiones, las aserciones E2E y este subapartado; conservar la siembra ya existente en rutas de despensa/confirmación.
 
+#### QA-RECEIPTS.LINE-QUANTITY-PRICE.1 · editar cantidad y precio desde la ficha
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §12aj.D promete que cada propiedad de la línea, incluidas cantidad y precio, es editable. `receipt-detail.component.ts` renderiza controles numéricos con IDs estables y guarda con `editarLinea()` al cambiar; a diferencia de unidad/oferta, cantidad y precio no tienen nombre accesible. `receipt-line-note.spec.ts` ya verifica por navegador los PATCH/persistencia de unidad y oferta, y el componente prueba sus conversores, pero no hay E2E de edición web de cantidad/precio.
+
+**Contrato:** una ficha sintética en `review` expone en español e inglés cantidad/precio mediante nombres accesibles localizados que incluyen el producto. Editar cada campo envía al endpoint real el PATCH numérico correcto, el GET refleja el valor y ambos sobreviven a reload. Los nombres accesibles no cambian geometría; a 1440×900, 393×851 y 320×568 no hay overflow, y los controles móviles cumplen 44×44. E2E usa usuario/SQLite/puerto/semilla propios, sin IA ni datos reales.
+
+- [ ] Reproducir antes del cambio con Chromium el nombre accesible ausente en cantidad y precio, conservando verde el control previo de unidad/oferta.
+- [ ] Añadir etiquetas ARIA localizadas sin alterar medidas y verificar los nombres en español/inglés, valor, `inputmode=decimal` y tipo numérico.
+- [ ] Editar cantidad y precio en la ficha; comprobar cada PATCH (payload/200), GET de detalle y persistencia tras reload.
+- [ ] Ejecutar Chromium y Pixel 5 aislados en 1440×900, 393×851 y 320×568; revisar overflow, objetivos táctiles, errores de página y capturas sintéticas PC/móvil.
+- [ ] Registrar comando, salida, cleanup y rollback; pasar typecheck E2E, formato, `check:ui`, build y la suite focal. La cobertura S/B/F/L de estas expresiones de plantilla no instrumentadas es N/A; no rebajar el gate global.
+
+**Rollback:** retirar los atributos de nombre accesible añadidos al control de cantidad/precio, las aserciones E2E y esta subunidad; no cambiar el contrato API ni la edición de unidad/oferta.
+
 #### QA-RECEIPTS.LINE-REMOVAL-MATCHING-TOTAL.1 · quitar una línea y validar la suma exacta
 
 **Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §12aj.C/D promete líneas revisables con altas/bajas y aviso solo cuando el total no cuadra. `receipt-detail.component.ts` ya pide confirmación accesible antes de `DELETE` y calcula la suma, pero los E2E cubren añadir líneas y el aviso de descuadre, no borrar una línea ni el caso exacto. La hoja de estilos declara 28×28 CSS px para `.linea__quitar`; falta medir su caja renderizada, que debe cumplir el objetivo táctil móvil de 44×44.
