@@ -5277,6 +5277,13 @@ El primer comando sin `--config=vitest.e2e.config.ts` no encontró pruebas porqu
 excluye `*.e2e.test.ts`; no ejecutó pruebas ni hizo llamadas. No se reenviaron las solicitudes reales
 que podían haberse completado.
 
+**Revalidación del listener tras el merge (2026-10-10; solo lectura):** Git confirma
+`HEAD=origin/master=f47f4b8`, commitado a las 11:56:20 CEST. El listener en `127.0.0.1:3001` es PID
+`55680`, iniciado a las 12:32:45 CEST; `/health/ready` devuelve `ready=true`, `storage=ready`. La
+hora de inicio posterior al merge es coherente con el reinicio comunicado, pero el health endpoint no
+expone un SHA y no permite acreditar por sí solo el binario/source cargado. No se reenviaron tickets ni
+se hicieron llamadas al proveedor en esta comprobación.
+
 **Cierre limitado:** quedan demostrados el envío y la lectura por el modelo de la pareja de ficheros en
 el WebAPI activo. `QA-AI.REAL-INTEGRATIONS.1` sigue abierta hasta obtener una respuesta validada de los
 tickets, respetando la prohibición de repetir los grupos que pudieron completarse, y comprobar
