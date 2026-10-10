@@ -1570,6 +1570,19 @@ los cambios de sus consumidores.
 
 **Evidencia QA-04c.CORE.PANTRY.1 (2026-10-01):** `pantry.service.spec.ts` cubre contratos HTTP, estados, filtros/paginación, CRUD, utensilios/stats, categorías/productos, impactos/bulk y catálogo. El grupo aislado de servicios ejecutó **65/65**. TDD confirmó que `getIngredient`, `createIngredient` y `updateIngredient` emitían `{data: ...}` pese a declarar `Ingredient|null`; ahora proyectan `data`, mantienen las señales y no insertan `null`. `deleteIngredient` también proyecta éxito como `true` conforme a su tipo. Cobertura de `PantryService`: **100/84.82/100/100 %** (S/B/F/L). La suite completa y el gate se revalidaron en QA-04c.GATE.1 (2026-10-08).
 
+### QA-04c.UI.PANTRY-COMPONENT.1 · cubrir ramas del componente de inventario
+
+**Fuente revalidada (2026-10-10, antes de editar):** `PantryComponent` centraliza las proyecciones de ingredientes/utensilios, etiquetas de las columnas y pickers, serialización del estado en query params, formato de las filas/caducidades y altas/ediciones/borrados con sus errores. `pantry.component.spec.ts` ya verifica filtros, cambios de stock/foco, recuperación de carga y operaciones por lote, pero no cubre varios de esos contratos ni sus callbacks de éxito/error. El LCOV íntegro de la última suite local (capturado por los hooks antes del commit `ce7c1b3`) sitúa este archivo en **57.14/42.51/44.00/57.14 % S/B/F/L** (192/336 statements y lines, 71/167 branches, 55/125 functions); el parser del mismo reporte no encuentra otro archivo de producción frontend bajo 70 %. Reporte archivado fuera del repo: `%TEMP%\hogaria-coverage-pantry-baseline-ce7c1b3-20261010.lcov`, SHA-256 `D3FC2A7990B8D0F59BF59ACD0327A20D14D1D806437224D1D650783076112754`.
+
+**Alcance:** pruebas unitarias de `PantryComponent` con dependencias controladas y observables/señales sintéticas; no se cambian contratos de producto ni comportamiento productivo si las pruebas no detectan un defecto. Cubrir proyecciones/localización de columnas y opciones (catálogo vacío, personalizado, claves y valores desconocidos), helpers de fila y fechas, estado de URL y no-op cuando ya coincide, y caminos de validación/éxito/error/cancelación de las altas, ediciones, eliminaciones y utensilios. Usar reporter/LCOV en una carpeta temporal única para que una selección focal no sobrescriba el gate ni la evidencia vigente.
+
+- [ ] Añadir primero regresiones unitarias de las ramas actuales no ejercitadas: columnas/pickers y filas, query params, caducidades, validación, éxito y error de ingrediente/utensilio, y cancelación/borrado. No duplicar las pruebas de filtros, foco o lote existentes.
+- [ ] Alcanzar al menos **70 % en statements, branches, functions y lines** para `pantry.component.ts`; sin defectos nuevos, no tocar producción.
+- [ ] Repetir `pnpm run test:client` completo y dejar intactos los gates globales **80/80/80/80 %**; registrar el resultado global y el LCOV por archivo con comandos reproducibles.
+- [ ] Ejecutar formato focal, `pnpm run check:ui`, `pnpm run build:client` y `git diff --check`; no cambia UI ni datos, así que E2E/capturas/DB temporal son N/A. Incluir spec y pruebas en el mismo commit atómico de esta unidad tras publicar primero este cambio de spec.
+
+**Rollback previsto:** retirar las pruebas focales y esta subunidad de cobertura; no revertir `PantryComponent` ni rebajar los gates.
+
 ### QA-04c.UI.PANTRY-CATEGORY-LABEL.1 · cobertura del pipe de categorías
 
 **Fuente revalidada (2026-10-08):** `PantryCategoryLabelPipe` se importa en Despensa y su gestor de
