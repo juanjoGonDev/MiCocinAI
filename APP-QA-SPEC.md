@@ -3165,12 +3165,13 @@ aserciones E2E agregadas a `shopping-tray-lifecycle.spec.ts`; no modifica la API
 
 #### QA-SHOPPING.QUICK-ADD.1 · typeahead, Enter sin selección y pegado multilínea
 
-**Fuente revalidada:** `HOGARIA-SPEC.md` §12ag C define búsqueda de productos del catálogo mientras se teclea; la selección reutiliza el alta normal y conserva la sección/categoría. El contrato de la lista también distingue elegir una sugerencia de enviar texto libre; pegar varias líneas debe parsearlas como altas individuales. El caso de teclado cubierto aquí es Enter sin selección activa; la navegación con flechas del catálogo no se da por probada.
+**Fuente revalidada:** `HOGARIA-SPEC.md` §12ag C define búsqueda de productos del catálogo mientras se teclea; la selección reutiliza el alta normal y conserva la sección/categoría. El contrato de la lista también distingue elegir una sugerencia de enviar texto libre; pegar varias líneas debe parsearlas como altas individuales. `onDraftKeys()` implementa `ArrowDown`, `ArrowUp`, `Enter` y `Escape`, pero la E2E existente solo cubría Enter sin selección; quedaba sin probar el recorrido completo del typeahead por teclado y la exposición del elemento activo.
 
 - [x] Buscar y elegir una sugerencia del catálogo: el nombre se canoniza, desaparece el panel y la línea nace en su sección.
 - [x] Con sugerencias visibles pero ninguna seleccionada, Enter añade el texto original en vez de capturar la primera sugerencia.
 - [x] Pegar tres líneas parsea las tres, incluida cantidad/unidad, en escritorio Chromium y Pixel 5 emulado.
 - [x] Ejecutar con rate limit activo y runner aislado (SQLite, puerto, usuario y cleanup propios); sin proveedor externo.
+- [ ] Completar teclado del typeahead: flechas arriba/abajo recorren opciones y actualizan `aria-selected` manteniendo foco; Enter selecciona sin enviar el formulario y Escape cierra sin modificar el texto; el alta final conserva el producto elegido.
 
 **Evidencia (2026-10-10):** `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/shopping-sugerencias.spec.ts --grep 'despliega el catalogo|sin tocar ninguna hoja' --reporter=line` pasó **4/4**. `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/shopping-lists.spec.ts --grep 'pegar una lista de tres' --reporter=line` pasó **2/2**. Ambas corridas usaron `$env:E2E_RATE_LIMIT='on'`, DB/puerto/semilla temporales y cleanup del runner; no hubo llamadas externas ni escrituras en la DB normal.
 
