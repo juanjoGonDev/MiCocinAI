@@ -7286,3 +7286,52 @@ omitir hooks. El pre-push ejecutó formato, `check:ui`, build, typecheck E2E y l
 shards E2E. La PR #41 permanece abierta, Ready for review y sin merge.
 
 **Rollback:** revertir solo el control de nota, su prueba y esta subunidad; conservar el contrato API.
+
+### QA-RECIPES.COOKING-CHECKLIST.1 · vista de cocina minimalista (prototipo B)
+
+**Fuente revalidada (2026-10-10):** el detalle de receta existente ya escala cantidades en
+`RecipesComponent` usando `recipe.servings` y `recipeServings`, sin persistir ni llamar a IA. Cada
+paso con temporizador monta un `TimerComponent` con iniciar/pausar/reanudar/reiniciar/finalizar; la
+vista actual es una lista de tarjetas y no ofrece progreso/checklist, foco de paso móvil ni feedback
+visible al completar el cronómetro. Contratos relacionados: `HOGARIA-SPEC.md §QA-RECIPE.FULL-DETAIL-VIEW.1`
+y `APP-QA-SPEC.md §QA-RECIPES.TIMER-CONTROLS.1`.
+
+**Decisiones confirmadas (2026-10-10):** el usuario eligió el prototipo **B**. Añadir un modo de
+cocina accesible desde la ficha completa, sin quitarla ni cambiar sus deep links. En escritorio,
+mostrar ingredientes/raciones en una columna lateral y pasos cronológicos como checklist con el
+temporizador alineado junto al paso que lo usa. En móvil, enfocar un paso cada vez con progreso
+«Paso n de N», acciones anterior/siguiente y posibilidad de marcarlo hecho; conservar acceso a
+ingredientes/raciones y a los cronómetros activos. Los cambios del checklist y foco solo viven en la
+sesión de cocina y no editan/persisten la receta.
+
+El selector de comensales es un control accesible con decremento/incremento y valor numérico entero
+positivo seguro (la misma cota ya aceptada por el schema de receta); cambia cantidades visibles al
+instante con `cantidad × comensales / raciones base` (o la
+función de escalado ya existente), sin petición IA/API, escritura de receta ni cambio de la ración
+base guardada. No se añade un campo redundante «por persona» al esquema: el ratio se deriva de
+cantidad+raciones base. Los tiempos de preparación, paso y temporizador siguen siendo los de la
+receta; no se multiplican linealmente por comensales, porque el contrato actual no incluye un modelo
+de ajuste de tiempo fiable. Al finalizar un temporizador se presenta aviso visible y accesible
+`aria-live` asociado al paso; no se pide permiso de notificaciones del sistema ni se reproduce audio.
+Cambiar de paso en móvil no pausa ni desmonta otros cronómetros activos. Al salir/cargar de nuevo se
+descarta la sesión temporal.
+
+- [ ] Añadir primero pruebas rojas de componente y E2E para entrada/salida del modo, checklist/foco,
+      navegación entre pasos, actualización inmediata de raciones y preservación de la receta/API.
+- [ ] Implementar B siguiendo tokens y geometría compartidos: lateral de ingredientes/timer por paso
+      en escritorio; un paso enfocado en móvil con progreso, anterior/siguiente y completar. No añadir
+      tarjeta/modal decorativa ni eliminar secciones del detalle existente.
+- [ ] Cubrir temporizadores simultáneos, avance con el reloj controlado, completar/reiniciar,
+      notificación visible y `aria-live`; al cambiar foco de paso los otros timers conservan su estado.
+- [ ] Validar cálculo en raciones 1, base, 20, la cota de enteros seguros e input inválido; cambio de ración no emite tráfico de
+      IA/API ni persiste en la receta. Los tiempos existentes no cambian al escalar comensales.
+- [ ] Ejecutar Playwright con fixture/DB/puertos aislados, proveedor stub sin invocarlo; Chromium
+      escritorio 1440×900 y móvil 393×851, 320×568 y 568×320, más bordes de breakpoint. Revisar
+      overflow, safe-area disponible, orientación, teclado/foco, nombres/labels, contraste y controles
+      táctiles ≥44×44 px. Guardar e inspeccionar capturas sintéticas comparables de PC/móvil.
+- [ ] Ejecutar unitarias, cobertura ≥70 % S/B/F/L por archivo instrumentable, suite frontend global,
+      `typecheck:e2e`, `check:ui`, Prettier, build y `git diff --check`; registrar comandos/evidencia,
+      limitaciones nativas de iOS y rollback. No marcar casillas hasta contar con evidencia ejecutada.
+
+**Rollback:** revertir la entrada/vista de cocina, el estado efímero/checklist, los avisos y sus
+pruebas/traducciones; mantener intactos los datos y la vista de receta existente.
