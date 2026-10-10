@@ -46,4 +46,51 @@ describe('RatingComponent', () => {
     expect(valueChange).toHaveBeenCalledOnceWith(3);
     expect(ratingChange).toHaveBeenCalledOnceWith(3);
   });
+
+  it('disables every star and ignores click and hover while disabled', () => {
+    const valueChange = jasmine.createSpy('valueChange');
+    const ratingChange = jasmine.createSpy('ratingChange');
+    component.valueChange.subscribe(valueChange);
+    component.ratingChange.subscribe(ratingChange);
+
+    fixture.componentRef.setInput('disabled', true);
+    fixture.detectChanges();
+
+    const host = fixture.nativeElement as HTMLElement;
+    const buttons = Array.from(host.querySelectorAll('.rating__star')) as HTMLButtonElement[];
+    expect(buttons.every((button) => button.disabled)).toBe(true);
+
+    buttons[2].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    buttons[2].dispatchEvent(new MouseEvent('mouseenter'));
+    fixture.detectChanges();
+
+    expect(component.value).toBe(0);
+    expect(component.hoveredIndex).toBe(-1);
+    expect(valueChange).not.toHaveBeenCalled();
+    expect(ratingChange).not.toHaveBeenCalled();
+  });
+
+  it('highlights only the hovered range and clears it when the pointer leaves', () => {
+    const host = fixture.nativeElement as HTMLElement;
+    const buttons = Array.from(host.querySelectorAll('.rating__star')) as HTMLButtonElement[];
+
+    buttons[2].dispatchEvent(new MouseEvent('mouseenter'));
+    fixture.detectChanges();
+
+    expect(component.hoveredIndex).toBe(2);
+    expect(
+      buttons.slice(0, 3).every((button) => button.classList.contains('rating__star--hovered'))
+    ).toBe(true);
+    expect(
+      buttons.slice(3).every((button) => !button.classList.contains('rating__star--hovered'))
+    ).toBe(true);
+
+    buttons[2].dispatchEvent(new MouseEvent('mouseleave'));
+    fixture.detectChanges();
+
+    expect(component.hoveredIndex).toBe(-1);
+    expect(buttons.every((button) => !button.classList.contains('rating__star--hovered'))).toBe(
+      true
+    );
+  });
 });
