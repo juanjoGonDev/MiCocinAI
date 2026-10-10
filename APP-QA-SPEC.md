@@ -6,7 +6,7 @@
 - **Actualizado:** 2026-10-10
 - **IA / tickets reales (2026-10-09, histórico; supersedido):** se preservó el proceso WebAPI entonces activo y, tras autorización, se completó una sola vez el smoke del grupo largo. El contrato incluía JSON Schema estricto y dos adjuntos, pero la telemetría anterior no permitía distinguir un `fileCount=1` por operación de un lote incompleto. Ese grupo no se repite y la limitación de inventario quedó pendiente.
 - **IA / tickets reales (2026-10-10, estado actual):** tras el reinicio anunciado por el usuario, el listener WebAPI `127.0.0.1:3001` quedó listo en PID 56924, iniciado a las 00:54:11 CEST, con el checkout `D:\projects\webApi` en `a1c64d4e`. El smoke autorizado de la JPEG preferida (ordinal 4) terminó una vez en almacenamiento temporal: 2 peticiones de contrato estricto, 1 completion HTTP 200 tras un fallback HTTP 400, respuesta JSON válida y revisión/edición/historial E2E. Los logs de las 00:56:07–00:56:29 prueban `receivedFileCount=2`, `normalizedAttachmentCount=2` e `includedInProviderRequestAttachmentCount=2` en la entrada/preparación y dos previews; pero `Attachments are ready` registra `readyAttachmentCount=1` y `Prompt submitted`, `sentToModelAttachmentCount=1`. El código WebAPI confirma por qué: `writeAttachmentBuffer` antepone UUID al nombre, el detector de `buildOpenCodeMessageAttachments` solo fuerza `inventario.json` sin prefijo o con prefijo numérico, y `prepareOpenCodeAttachments` inlinea los JSON pequeños. Así, la evidencia indica que el inventario se incluyó como texto y no como segundo archivo; no inspeccionamos el prompt ni podemos validar que las categorías respetaran ese contenido. No se repite la JPEG ni el grupo largo ya procesado, no se escribe en el inventario real y la validación real de IA sigue abierta.
-- **Revalidación tras reinicio comunicado (2026-10-10, solo lectura):** `GET /health/ready` responde `ready=true`, `storage=ready`; el listener sigue siendo PID 56924. `gh pr view` confirma que WebAPI PR #164 (`feat/admin: preview session attachments`) está abierta en `a1c64d4`, mientras PR #163 (`fix(chatgpt): deliver ticket inventory attachments`) está abierta en `b55f958`. El checkout/proceso comprobado corresponde a la rama `feat/session-attachment-previews`; el reinicio y healthcheck no acreditan que la corrección de entrega de #163 esté cargada. No se hizo POST, no se llamó al modelo ni se reenvió ticket alguno.
+- **Revalidación WebAPI (2026-10-10, solo lectura):** el aviso del usuario de que reinició el proceso queda contrastado con una comprobación directa a las 06:37 UTC: `curl --noproxy '*' http://127.0.0.1:3001/health/ready` devuelve HTTP 200 (`ready=true`, `storage=ready`), pero `netstat` mantiene el listener en PID 56924, iniciado 00:54:11 CEST; no se observa un inicio posterior. El checkout de `D:\projects\webApi` sigue en `feat/session-attachment-previews` / `a1c64d4e`, mientras PR #163 que contiene la corrección de entrega está en `b55f958`. Por tanto, no hay evidencia de que el listener actual cargue ese fix; no se hizo POST, no se llamó al modelo ni se reenvió ticket alguno.
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -6615,3 +6615,30 @@ suite frontend/backend pasaron en los hooks del commit documental `4cfa900`; cov
 **92.23/83.57/90.98/93.64 % S/B/F/L**, server tests **1236 pasaron/1 omitida**. CI `38001425709`
 en `dcb2b26` y CI `38002513901` en `4cfa900` pasaron todos los jobs. Capturas sintéticas de esta
 corrida en `.e2e-screenshots/qa-receipt-delete-ci-fix-20261010-8e1c7023/`.
+
+### QA-RECEIPT.LINE-NOTE.1 · corregir la nota de cada línea en revisión
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md §12aj D` promete revisión por línea de todas sus
+propiedades, incluida la nota. La ficha renderiza `linea.note` como texto de solo lectura en la celda del
+nombre. El endpoint `PATCH /api/receipts/:id/items/:itemId` ya acepta `note` (máximo 280 caracteres) y
+lo persiste; por tanto, el hueco está en la interfaz, no en el contrato de API.
+
+**Contrato:** en `review`, cada línea tiene un control de nota editable dentro de la celda del producto,
+precargado con el valor reconocido/editado y con nombre accesible ES/EN asociado al producto. Guardar
+actualiza solo esa línea; una nota vacía se persiste como `null` y al recargar permanece vacía. En los
+estados no revisables la nota continúa como texto, sin control de edición. No se añade columna a la
+tabla; el campo permanece en la tarjeta móvil, sin alterar el modelo responsive. Errores de guardado se
+notifican y no descartan el texto introducido. Longitud máxima 280, acorde al schema vigente.
+
+- [ ] Añadir primero una E2E roja con ticket/línea sintéticos y base aislada: la nota debe ser editable
+      en `review`, aceptar creación/edición/borrado, persistir tras reload y no editarse en estado terminal.
+- [ ] Implementar el control en la celda de nombre, con labels ES/EN, límite de 280 y guardado integrado
+      con `editarLinea`; verificar payload PATCH, limpieza a `null`, errores y retención del borrador.
+- [ ] Ejecutar E2E real de navegador en Chromium y Pixel 5, escritorio 1440×900 y móvil 390×844/320×740;
+      revisar teclado, labels, foco, overflow y geometría sin nueva columna, con capturas sintéticas PC/móvil.
+- [ ] Ejecutar unitarias focales, `typecheck:e2e`, build, `check:ui`, formato, `git diff --check` y
+      coverage ≥70 % en S/B/F/L para cada archivo instrumentable tocado; no llamar a WebAPI/proveedor.
+- [ ] Registrar comandos/resultados/limitaciones y rollback; commit atómico con hooks, push, CI verde
+      para el HEAD de PR #41 y PR abierta/sin merge.
+
+**Rollback:** revertir solo el control de nota, su prueba y esta subunidad; conservar el contrato API.
