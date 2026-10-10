@@ -2966,6 +2966,23 @@ Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el
 
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 
+### QA-SHOPPING.LIST-DELETE.1 · confirmación y recuperación al borrar una lista
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §8e define el borrado de lista como irreversible y exige
+`ConfirmService`, no diálogo nativo. `ShoppingListsComponent.remove()` solo envía DELETE después de aceptar y
+no muestra éxito si falla. La ruta borra la lista y la cascada de sus líneas. El E2E existente ya cubre cancelar,
+503 y retry, pero aún no cuenta explícitamente las solicitudes DELETE alrededor de Cancelar ni comprueba el
+conteo exacto durante el reintento.
+
+- [ ] Medir solicitudes reales en UI aislada: Cancelar no envía DELETE y conserva lista/líneas; un 503 preserva
+      la lista y no anuncia éxito; el reintento envía exactamente una solicitud y, al confirmarse, elimina solo
+      la lista objetivo de forma persistente tras reload.
+- [ ] Confirmar que se usa diálogo accesible propio (sin diálogo nativo), el error es visible y no hay errores
+      de página ni overflow en Chromium escritorio y Pixel 5.
+- [ ] Ejecutar la prueba focal en ambas configuraciones con SQLite/puertos temporales, inspeccionar capturas
+      sintéticas PC/móvil y anotar comando, resultado, cleanup y rollback. La ruta general `/shopping/:id`
+      permanece abierta para las demás acciones y su matriz.
+
 #### QA-SHOPPING.COMPLETE-TO-PANTRY.1 · trasladar a despensa solo lo comprado
 
 **Fuente revalidada:** `HOGARIA-SPEC.md` §8f y `POST /lists/:id/complete` distinguen líneas compradas de pendientes; al cerrar, las compradas crean, reponen o fusionan existencias en la despensa, sin duplicar el producto. La UI confirma el traslado. La casilla integral `/shopping/:id` sigue abierta para otras acciones y matriz.
