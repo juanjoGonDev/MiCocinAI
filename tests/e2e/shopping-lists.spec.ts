@@ -404,7 +404,9 @@ test.describe('Lista de la compra — bandeja y cesta', () => {
 
     await expect(page.locator('[data-test="item-row"]')).toHaveCount(3);
     await expect(page.locator('.detail__name', { hasText: 'Tomates' })).toBeVisible();
-    await expect(page.locator('.detail__qty').first()).not.toHaveCount(0);
+    await expect(row_(page, 'Leche').locator('.detail__qty')).toHaveText('2×');
+    await expect(row_(page, 'Tomates').locator('.detail__qty')).toHaveText('1 kg');
+    await expect(row_(page, 'Pan de molde').locator('.detail__qty')).toHaveCount(0);
   });
 
   test('terminar compra archiva la lista con su total en el historial', async ({ page }) => {
