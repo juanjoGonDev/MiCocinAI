@@ -119,6 +119,8 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
       { width: 390, height: 844, fileName: 'shopping-toast-503-390x844.png' },
       { width: 480, height: 800, fileName: 'shopping-toast-503-480x800.png' },
       { width: 481, height: 800, fileName: 'shopping-toast-503-481x800.png' },
+      { width: 1023, height: 800, fileName: 'shopping-toast-503-1023x800.png' },
+      { width: 1024, height: 800, fileName: 'shopping-toast-503-1024x800.png' },
       { width: 320, height: 740, fileName: 'shopping-toast-503-320x740.png' },
       { width: 320, height: 568, fileName: 'shopping-toast-503-320x568.png' },
       { width: 568, height: 320, fileName: 'shopping-toast-503-568x320.png' }
@@ -147,6 +149,16 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
         const rightInset = viewport.width - (alertBox.x + alertBox.width);
         expect(Math.abs(rightInset - 16)).toBeLessThanOrEqual(1);
         expect(alertBox.width).toBeLessThanOrEqual(Math.min(400, viewport.width - 32) + 1);
+        if (viewport.width < 1024) {
+          const headerBox = await page.locator('.header').boundingBox();
+          expect(headerBox).not.toBeNull();
+          if (headerBox) {
+            expect(alertBox.y).toBeGreaterThanOrEqual(headerBox.y + headerBox.height + 8);
+          }
+        } else {
+          await expect(page.locator('.header')).toBeHidden();
+          expect(Math.abs(alertBox.y - 16)).toBeLessThanOrEqual(1);
+        }
       }
       await captureIfRequested(page, testInfo, fileName);
     }

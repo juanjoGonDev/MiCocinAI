@@ -109,6 +109,13 @@ test('a provider/server failure is an error, keeps the email, and can be retried
     ? { width: 393, height: 851 }
     : { width: 1440, height: 900 };
   await page.setViewportSize(viewport);
+  const errorToast = page.locator('.toast--error');
+  const toastBounds = await errorToast.boundingBox();
+  expect(toastBounds).not.toBeNull();
+  if (toastBounds) {
+    const expectedTop = testInfo.project.name.startsWith('mobile-') ? 8 : 16;
+    expect(Math.abs(toastBounds.y - expectedTop)).toBeLessThanOrEqual(1);
+  }
   const captureDir = join(
     process.cwd(),
     '.e2e-screenshots',

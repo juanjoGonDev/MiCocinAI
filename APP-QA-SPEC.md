@@ -3498,17 +3498,32 @@ anchuras, pero no su separación vertical. `auth-layout.component.ts` comparte e
 offset superior desktop existente. En `AuthLayout`, donde no hay cabecera fija, se conserva el offset
 actual (8 px móvil, 16 px desktop). No hay overflow; rol/anuncio y geometría interna del toast no cambian.
 
-- [ ] Añadir primero aserciones E2E rojas para la separación vertical bajo el aviso 503 de `/shopping`,
+- [x] Añadir primero aserciones E2E rojas para la separación vertical bajo el aviso 503 de `/shopping`,
       incluyendo ambos lados de los breakpoints 480/481 y 1023/1024.
-- [ ] Usar una variable de altura en la cabecera autenticada como única fuente del offset; posicionar
+- [x] Usar una variable de altura en la cabecera autenticada como única fuente del offset; posicionar
       el toast debajo solo en `MainLayout`, conservar `AuthLayout` y desktop, y pasar E2E con tolerancia
       de 1 CSS px sin overflow ni errores de página.
-- [ ] Ejecutar Chromium escritorio y Pixel 5 móvil; guardar/inspeccionar capturas sintéticas de error
+- [x] Ejecutar Chromium escritorio y Pixel 5 móvil; guardar/inspeccionar capturas sintéticas de error
       PC/móvil. Pasar typecheck E2E, Prettier, `check:ui`, build, suite focal y diff; registrar cleanup,
       coverage (N/A para geometría/CSS) y rollback sin cerrar la matriz global.
 
 **Rollback:** revertir variable CSS de altura, offset superior condicionado al shell, aserciones/capturas
 E2E y esta subunidad; no modificar duración, contenido, accesibilidad ni posición inferior de los toasts.
+
+**Evidencia QA-LAYOUT.TOAST-HEADER-OVERLAP.1 (2026-10-10):** TDD rojo primero en Chromium y
+Pixel 5: la prueba falló con el primer viewport móvil (390 px), `toast.top=8` y posición mínima
+esperada `header.bottom + 8 = 64`; las seis comprobaciones restantes de autenticación/errores pasaron.
+La altura móvil `56px` ahora tiene una sola fuente en `MainLayout` y el offset se hereda solo desde
+ese shell: aviso a 64 px en anchuras con cabecera, offset original de 8 px en `AuthLayout` y de 16 px
+en escritorio. `pnpm run test:e2e -- --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/shopping-tray-lifecycle.spec.ts tests/e2e/auth-forgot-password.spec.ts --reporter=line`:
+**8/8**; comprobó 320, 390, 480, 481, 568 horizontal, 1023, 1024 y 1440 px, sin overflow horizontal
+ni errores JS; la base SQLite y artefactos de ejecución se limpiaron al detener el servidor aislado.
+Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-toast-header-final-20261010/chromium/
+shopping-toast-503-1440x900.png` y `.e2e-screenshots/qa-toast-header-final-20261010/mobile-chrome/
+shopping-toast-503-390x844.png`. `pnpm run typecheck:e2e`, Prettier focal, `pnpm run check:ui`
+(212 ficheros/21 reglas), `pnpm run build` y `git diff --check` pasan; build informa avisos
+Angular/budgets preexistentes. Coverage N/A: corrección geométrica de CSS sin lógica productiva cubierta.
 
 **Evidencia QA-LAYOUT.ROUTE-MATRIX.1 (2026-10-09):** `tests/e2e/layout-gutters.spec.ts` recorrió 31 rutas estáticas (públicas, onboarding y privadas) y 8 detalles poblados, cada una en **59** combinaciones de viewport (incluye los anchos requeridos, 320×568/740, 390×844, 844×390, 932×430 y tablet 768×1024/1024×768). `pnpm run test:e2e -- --workers=1 --project=chromium --project=mobile-chrome tests/e2e/layout-gutters.spec.ts --reporter=dot`, con `E2E_RATE_LIMIT=on` y SQLite/puertos/semilla temporales: **6/6**. Los cuatro reportes PC/Pixel (`layout-route-viewport-audit*.json`) registran **1829** filas de rutas iniciales y **472** de detalles por perfil; **0** overflow horizontal y **0** `pageerror`. Los reportes solo guardan rutas saneadas, dimensiones, anchos calculados y nombres de error; están ignorados por Git en `.e2e-screenshots/qa-layout-route-matrix-20261009-final/{chromium,mobile-chrome}/`. El primer reintento encontró colisión del archivo de reporte entre perfiles; los artefactos se separaron por proyecto y la corrida final pasó. `pnpm run typecheck:e2e`, Prettier y `git diff --check` pasan. Coverage N/A: solo se modificaron E2E/helpers, no producción.
 

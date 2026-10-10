@@ -151,9 +151,9 @@ import type { IconName } from '../icon/icon-paths';
       }
     }
 
-    @media (max-width: 480px) {
+    @media (max-width: 1023px) {
       .toast-container--top {
-        top: var(--space-2);
+        top: calc(var(--app-mobile-header-height, 0px) + var(--space-2));
       }
     }
 

@@ -189,6 +189,10 @@ interface NavItem {
         background: var(--bg-primary);
       }
 
+      :host {
+        --app-mobile-header-height: 56px;
+      }
+
       /* Header */
       .header {
         position: fixed;
@@ -199,7 +203,7 @@ interface NavItem {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        height: 56px;
+        height: var(--app-mobile-header-height);
         padding: 0 var(--space-4);
         background: var(--bg-secondary);
         border-bottom: 1px solid var(--border-default);
