@@ -4472,6 +4472,19 @@ coincide con la telemetría redacted `fileCount=1`/`attachmentCount=1` del smoke
 no prueba la entrega del archivo al modelo y no se vuelve a llamar al proveedor hasta verificar en
 WebAPI ambos contadores en 2. No se editó ni reinició ese servicio.
 
+**Actualización tras el reinicio de WebAPI y PR #164 (2026-10-10):** `/health/ready` responde
+`ready=true, storage=ready` en `127.0.0.1:3001`; el listener es PID 56924 y el checkout está en
+`a1c64d4e`. La PR [#164](https://github.com/juanjoGonDev/webApi/pull/164) está abierta, ya no en Draft,
+y su CI actual terminó correctamente (`37994193530`). Su instrumentación mejora los contadores de
+adjuntos/previews, pero la inspección del HEAD confirma que `writeAttachmentBuffer()` aún guarda con
+prefijo UUID mientras `buildOpenCodeMessageAttachments()` solo fuerza nombres exactos o prefijos
+numéricos; la regresión existente cubre `1-inventario.json`, no `<UUID>-inventario.json`. Por eso
+readiness, CI verde y contadores de recepción/preparación no demuestran que ambos ficheros lleguen al
+modelo como archivos. El cuerpo actual de la PR anuncia diez pruebas con proveedor y adjuntos
+sintéticos; eso no equivale al smoke de tickets ni resuelve por sí solo esta discrepancia de ruta.
+No se reenvían la JPEG ni el grupo largo; el smoke real de tickets y la entrega del inventario como
+segundo archivo siguen sin validación completa.
+
 **Decisión SDD antes de la siguiente implementación:** la autorización nueva no permite repetir un
 grupo que ya terminó en esta corrida. Los dos PDF siguen excluidos, el grupo largo queda cerrado con
 respuesta pero sin validar el segundo adjunto y solo la JPEG preferida queda pendiente de un nuevo
