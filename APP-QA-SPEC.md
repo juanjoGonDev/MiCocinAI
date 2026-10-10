@@ -5896,14 +5896,29 @@ siendo revisable y la prueba no pulsa confirmar ni escribe en la despensa/invent
 aislados, también se verifica que no haya overflow horizontal en escritorio/móvil y se capturan solo
 fixtures sintéticas.
 
-- [ ] Añadir primero una regresión Playwright de navegador para un ticket sintético descuadrado; comprobar
+- [x] Añadir primero una regresión Playwright de navegador para un ticket sintético descuadrado; comprobar
       la suma, el total, la clase visual de discrepancia, el aviso ES/EN y que continúa en `review`.
-- [ ] Ejecutar en Chromium y Pixel 5 sobre SQLite temporal, comprobar 320 px y el viewport de escritorio,
+- [x] Ejecutar en Chromium y Pixel 5 sobre SQLite temporal, comprobar 320 px y el viewport de escritorio,
       ausencia de overflow y capturas sintéticas comparables; no llamar a WebAPI/proveedor ni confirmar.
-- [ ] Ejecutar `typecheck:e2e`, el test focal, formato, `check:ui` y `git diff --check`; no modificar
+- [x] Ejecutar `typecheck:e2e`, el test focal, formato, `check:ui` y `git diff --check`; no modificar
       producción ni pedir coverage para código instrumentable si el cambio sigue siendo solo de tests/docs.
 - [ ] Registrar evidencia/rollback, commit atómico con hooks y push; verificar CI actualizado del PR sin
       mergearlo.
+
+**Evidencia local (2026-10-10):** la regresión siembra directamente un ticket/una línea sintéticos en la
+SQLite temporal validada bajo `E2E_RUN_DIR`; no configura proveedor ni toca datos normales. La ficha
+muestra la suma de **3,00 €** y el total discordante de **3,50 €**, color computado distinto, aviso ES/EN
+y estado `review`, sin confirmar. En PowerShell, `$env:E2E_RATE_LIMIT='on';
+$env:E2E_SCREENSHOT_DIR=(Join-Path $PWD '.e2e-screenshots/qa-receipt-total-mismatch-20261010');
+node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/receipts.spec.ts --grep 'muestra el aviso sin bloquear la revisión' --reporter=line`
+pasó **4/4** (Chromium + Pixel 5,
+ES/EN); se comprobó ausencia de overflow a 1440×900, 390×844 y 320×740. Las capturas sintéticas de
+escritorio/móvil se guardaron e inspeccionaron en
+`.e2e-screenshots/qa-receipt-total-mismatch-20261010/`. `pnpm run typecheck:e2e`, Prettier focal,
+`pnpm run check:ui` (**212 ficheros, 21 reglas**) y `git diff --check` pasaron. No cambia producción,
+por lo que coverage instrumentable es N/A. El runner confirmó la limpieza de SQLite/uploads y del
+servidor propio.
 
 **Rollback focal:** retirar solo la regresión y esta subunidad; no cambiar cálculo ni presentación del
 total salvo que la prueba revele un defecto reproducible.

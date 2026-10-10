@@ -1110,6 +1110,150 @@ test.describe('metadatos e historial con zona horaria extrema', () => {
   }
 });
 
+test.describe('ficha de ticket con total que no cuadra', () => {
+  for (const scenario of [
+    {
+      language: 'es',
+      warning: 'No cuadra con el total del ticket'
+    },
+    {
+      language: 'en',
+      warning: "Doesn't match the receipt total"
+    }
+  ] as const) {
+    test(`muestra el aviso sin bloquear la revisión (${scenario.language})`, async ({
+      page
+    }, testInfo) => {
+      await registerAndGoto(page, '/receipts');
+      await page.evaluate((language) => {
+        window.localStorage.setItem('hogar:v1:language', language);
+      }, scenario.language);
+      await page.reload();
+
+      const token = await tokenOf(page);
+      const profileResponse = await page.request.get('/api/auth/profile', {
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(profileResponse.ok()).toBeTruthy();
+      const profile = (await profileResponse.json()) as { data: { id: string } };
+
+      const runDirectory = process.env.E2E_RUN_DIR;
+      const databasePath = process.env.DATABASE_PATH;
+      if (!runDirectory || !databasePath) throw new Error('E2E requiere rutas temporales aisladas');
+      const relativeDatabasePath = relative(resolve(runDirectory), resolve(databasePath));
+      if (isAbsolute(relativeDatabasePath) || relativeDatabasePath.startsWith('..')) {
+        throw new Error('DATABASE_PATH debe permanecer dentro del directorio aislado del test');
+      }
+
+      const receiptId = `${profile.data.id}-total-mismatch`;
+      const uploadedAt = new Date('2026-10-10T00:00:00.000Z').toISOString();
+      const database = new Database(databasePath);
+      try {
+        database
+          .prepare(
+            `INSERT INTO receipts (
+               id, user_id, status, store, purchase_date, currency, total_minor,
+               file_url, file_kind, file_name, file_bytes, created_at
+             ) VALUES (?, ?, 'review', ?, ?, 'EUR', 350, ?, 'png', ?, 8, ?)`
+          )
+          .run(
+            receiptId,
+            profile.data.id,
+            'Mercado QA',
+            '2026-10-09',
+            `/api/uploads/receipts/${receiptId}.png`,
+            'ticket-total-mismatch.png',
+            uploadedAt
+          );
+        database
+          .prepare(
+            `INSERT INTO receipt_items (
+               id, receipt_id, name, quantity, unit, category, price_minor,
+               offer_buy, offer_take, note, confidence, position
+             ) VALUES (?, ?, ?, 1, 'ud', 'other', 300, NULL, NULL, '', 0.99, 0)`
+          )
+          .run(`${receiptId}-line-1`, receiptId, 'Producto QA');
+      } finally {
+        database.close();
+      }
+
+      const pageErrors: string[] = [];
+      page.on('pageerror', (error) => pageErrors.push(`${error.name}: ${error.message}`));
+      await page.goto(`/receipts/${receiptId}`);
+
+      const totals = page.locator('.ficha__totales');
+      await expect(totals).toBeVisible();
+      const values = totals.locator('.ficha__total-importe');
+      await expect(values).toHaveCount(2);
+      await expect(values.nth(0)).toContainText(/3[.,]00\s*€/);
+      await expect(values.nth(1)).toContainText(/3[.,]50\s*€/);
+      const discordantTotal = page.locator('.ficha__total-importe--mal');
+      await expect(discordantTotal).toHaveCount(1);
+      await expect(discordantTotal).toContainText(/3[.,]50\s*€/);
+      await expect(page.locator('.ficha__no-cuadra')).toHaveText(scenario.warning);
+      const amountColors = await Promise.all([
+        values.nth(0).evaluate((element) => getComputedStyle(element).color),
+        discordantTotal.evaluate((element) => getComputedStyle(element).color)
+      ]);
+      expect(amountColors[1]).not.toBe(amountColors[0]);
+      await expect(page.locator('[data-test="ticket-confirmed"]')).toHaveCount(0);
+
+      const detailResponse = await page.request.get(`/api/receipts/${receiptId}`, {
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(detailResponse.ok()).toBeTruthy();
+      expect((await detailResponse.json()).data).toMatchObject({
+        status: 'review',
+        totalMinor: 350,
+        lines: [expect.objectContaining({ name: 'Producto QA', priceMinor: 300 })]
+      });
+
+      const checkViewport = async (width: number, height: number) => {
+        await page.setViewportSize({ width, height });
+        await expect(discordantTotal).toBeVisible();
+        await expect(page.locator('.ficha__no-cuadra')).toBeVisible();
+        const dimensions = await page.evaluate(() => ({
+          viewport: document.documentElement.clientWidth,
+          document: document.documentElement.scrollWidth
+        }));
+        expect(dimensions.document, `sin overflow a ${width}×${height}`).toBeLessThanOrEqual(
+          dimensions.viewport
+        );
+      };
+
+      const screenshotDirectory =
+        process.env.E2E_SCREENSHOT_DIR ?? '.e2e-screenshots/qa-receipt-total-mismatch';
+      mkdirSync(screenshotDirectory, { recursive: true });
+      if (testInfo.project.name === 'chromium') {
+        await checkViewport(1440, 900);
+        await page.screenshot({
+          path: join(
+            screenshotDirectory,
+            `receipt-total-mismatch-${scenario.language}-desktop.png`
+          ),
+          fullPage: true
+        });
+      } else {
+        await checkViewport(390, 844);
+        await page.screenshot({
+          path: join(screenshotDirectory, `receipt-total-mismatch-${scenario.language}-mobile.png`),
+          fullPage: true
+        });
+        await checkViewport(320, 740);
+        await page.screenshot({
+          path: join(
+            screenshotDirectory,
+            `receipt-total-mismatch-${scenario.language}-mobile-320.png`
+          ),
+          fullPage: true
+        });
+      }
+
+      expect(pageErrors).toEqual([]);
+    });
+  }
+});
+
 test.describe('metadatos manuales en reintentos de tickets', () => {
   test('conserva metadatos manuales tras fallo y reintento', async ({ page }) => {
     const respuestaDeReintento = {
