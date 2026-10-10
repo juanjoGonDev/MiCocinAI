@@ -4890,6 +4890,18 @@ tickets y la autorización de repetición de la JPEG sigue consumida. No hay evi
 reinicio posterior, por lo que no se reabre el smoke: ambos adjuntos enviados al modelo, categorías
 guiadas por el snapshot y deduplicación del grupo largo siguen sin validarse.
 
+**Revalidación tras el aviso del usuario (2026-10-10, 10:22 CEST; solo lectura):** confirmo que el
+listener de `127.0.0.1:3001` está listo y PID `56924` inició después del HEAD local `a1c64d4e`
+(`2026-10-09 23:27:42 CEST`), así que el proceso sí pudo cargar esa revisión. Sin llamar al proveedor,
+ejecuté `buildOpenCodeMessageAttachments()` con rutas sintéticas: `1-inventario.json` quedó forzado a
+subida (`true`), pero `550e8400-e29b-41d4-a716-446655440000-inventario.json` no (`false`). La causa es
+concreta: `controller.ts::writeAttachmentBuffer()` antepone un UUID, mientras la expresión en
+`opencode-executor.ts` admite solo nombre exacto o prefijo decimal. La corrección publicada para el
+prefijo ordinal no cubre el nombre que realmente genera esta ruta. No reenvié tickets ni hice una
+petición live: el intento autorizado de la JPEG ya se consumió y el ticket de tres fotos ya obtuvo una
+respuesta potencialmente completada. El smoke real queda bloqueado hasta corregir y probar el caso UUID
+con datos sintéticos y disponer de una fuente no repetida o autorización expresa para otra lectura real.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
