@@ -3287,6 +3287,17 @@ Capturas sintéticas inspeccionadas: [escritorio 1440×900](.e2e-screenshots/qa-
 **Evidencia parcial de ficha/cola (2026-10-10):** el runner aislado ejecutó en Chromium y Pixel 5
 `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/receipts.spec.ts tests/e2e/receipt-line-note.spec.ts tests/e2e/receipt-queue-actions.spec.ts --reporter=line`: **42/42**. Incluye extracción contra proveedor HTTP sintético (sin WebAPI/proveedor real), JSON de inventario en el request, corrección de metadatos/líneas, confirmación y lectura de inventario/tienda en SQLite efímera, nota de línea, total no coincidente, parada/reintento y borrado; el runner confirmó cleanup. La suite unitaria actual cubre parsing de unidad/oferta y `ai-queue.spec.ts` comprueba `response_format` estricto. Esa evidencia parcial se completó con `QA-RECEIPTS.LINE-UNIT-OFFER.1`; la ruta amplia sigue abierta y esta subunidad no se toma como validación integral de `/receipts/:id`. No hubo llamadas al proveedor externo ni escrituras reales.
 
+#### QA-RECEIPTS.AI-REVIEW-OUTPUT.1 · mostrar líneas detectadas en la ficha
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §12aj.A/D define lectura JSON directa sin OCR y una ficha revisable con cada línea del ticket. `tests/e2e/receipts.spec.ts` ya envía un PNG sintético y `inventario.json` a un proveedor HTTP local, verifica `response_format`/transporte y espera `review`; sin embargo, no comprueba que la línea devuelta por el proveedor aparezca como control editable en `/receipts/:id`, ni que unidad/precio/categoría del resultado sigan vinculados a esa fila.
+
+**Contrato:** una respuesta sintética válida contiene una línea identificable y total coincidente. Tras el `review`, la ficha presenta exactamente esa fila con nombre, cantidad, unidad, precio y oferta editables; la suma no avisa descuadre, y el `GET /api/receipts/:id` conserva la categoría y valores emitidos. El request al stub local mantiene JSON Schema estricto y los adjuntos independientes del ticket y catálogo. Solo se usan PNG/catalogo sintéticos, SQLite/puerto/usuario temporales y el servidor HTTP local del test; ninguna llamada a WebAPI/modelo real ni confirmación en inventario normal.
+
+- [ ] Ejecutar el test existente como baseline aislado en Chromium y Pixel 5; comprobar que el proveedor local devuelve una línea y la ficha llega a `review`.
+- [ ] Añadir primero aserciones E2E de representación editable, valores de línea/categoría y total cuadrado sobre la respuesta IA sintética.
+- [ ] Repetir en Chromium escritorio y Pixel 5 móvil; ejecutar `typecheck:e2e`, formato, `check:ui`, build y el conjunto focal de tickets, y confirmar cleanup sin artefactos con contenido real.
+- [ ] Registrar evidencia y rollback sin marcar todavía la casilla padre `/receipts/:id`; esta subunidad cubre salida IA visible, no el ciclo completo de edición/confirmación/cola.
+
 #### QA-RECEIPTS.LINE-REMOVAL-MATCHING-TOTAL.1 · quitar una línea y validar la suma exacta
 
 **Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §12aj.C/D promete líneas revisables con altas/bajas y aviso solo cuando el total no cuadra. `receipt-detail.component.ts` ya pide confirmación accesible antes de `DELETE` y calcula la suma, pero los E2E cubren añadir líneas y el aviso de descuadre, no borrar una línea ni el caso exacto. La hoja de estilos declara 28×28 CSS px para `.linea__quitar`; falta medir su caja renderizada, que debe cumplir el objetivo táctil móvil de 44×44.
