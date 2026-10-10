@@ -5882,6 +5882,30 @@ pasó **20/20**; `pnpm run typecheck:e2e`, `pnpm run check:ui` (207 ficheros/21 
 **Rollback focal:** revertir solo los estilos de barra, mínimo de columnas/scroll local, las dos pruebas de
 geometría y este subapartado; no revertir `AGENTS.md` ni la matriz global.
 
+### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.SHARED-ACTIONS.1 · botones de texto compartidos entre rutas
+
+**Fuente revalidada (2026-10-10):** `ButtonComponent` (`button.component.ts`) define la misma geometría
+para `sm`/`md`/`lg` mediante tokens; sus variantes cambian color, no tamaño. `check-ui` protege el
+contrato de origen, y `layout-gutters.spec.ts` ya mide botones visibles por ruta, pero el reporte agrupa
+perfiles y no falla si un botón `.btn` computa geometría distinta en otra vista. La regresión de
+`/calendar` cubre `.cal-btn`, no esta primitiva compartida.
+
+**Contrato:** botones textuales `app-button` comparables comparten altura (≥44 CSS px), padding, gap,
+tipografía/line-height, márgenes, alineación, radio y bordes con tolerancia ≤1 CSS px entre rutas y
+viewports comunes. Se excluyen anchuras naturales por texto, color/sombra de variantes, icon-only y
+controles custom de otras familias; no se fuerzan excepciones locales sin contrato funcional.
+
+- [ ] Añadir primero prueba del comparador con fixtures geométricos: debe detectar diferencias >1 px,
+      permitir ancho natural/texto y color distintos, y separar botones icon-only/touch-target.
+- [ ] Ejecutar E2E aislado en rutas representativas que usan la primitiva (`/account`, `/ai-config`,
+      `/pantry`, `/preferences`, `/recipes`, `/shopping`), Chromium y Pixel 5, 393×851 y 1440×900;
+      registrar solo geometría computada, cubrir labels/variantes presentes y no invocar proveedores.
+- [ ] Si el baseline descubre drift, corregir primero con la regresión roja y el token/primitiva común,
+      no con dimensiones locales; medir cobertura S/B/F/L ≥70 % por cada fichero de producción tocado,
+      sin modificar gates. Si ya cumple, conservar solo prueba/inventario.
+- [ ] Capturar e inspeccionar PC/móvil con fixtures sintéticos, ejecutar typecheck, check-ui, formato y
+      Playwright aislado, documentar rollback y dejar intacta la comparación global de las demás familias.
+
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.ROOT-DISPLAY.1 · preservar el layout de las raíces
 
 **Fuente revalidada (2026-10-08):** `route-layout-manifest.ts` declara 24 selectores `pageRoot` distintos
