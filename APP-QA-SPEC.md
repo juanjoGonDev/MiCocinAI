@@ -1,12 +1,13 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-10):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. `/ai-config` pasó su suite completa en Chromium/Pixel 5 (**52/52**) y concurrencia/proveedor **6/6**; la ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5, incluidas las subunidades de typeahead/pegado, traslado a despensa, selección múltiple y reapertura con estado conservado; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes, descuento por primeras unidades y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1297/1297** con cobertura **92.30/83.67/91.06/93.68 % S/B/F/L**; `loading.component.ts`, `rating.component.ts`, `avatar.component.ts`, `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. El arreglo E2E de screenshots se publicó en `dcb2b26` (CI `38001425709` verde); la evidencia actualizada en `4cfa900` también pasó CI (`38002513901`). Siguen abiertas la auditoría de safe-area nativa no nula, la matriz visual completa y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-10):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. `/ai-config` pasó su suite completa en Chromium/Pixel 5 (**52/52**) y concurrencia/proveedor **6/6**; la ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5, incluidas las subunidades de typeahead/pegado, traslado a despensa, selección múltiple y reapertura con estado conservado; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes, descuento por primeras unidades y feedback 503 quedaron verificadas. En tickets, `QA-RECEIPTS.LINE-UNIT-OFFER.1` está cerrada y la ruta amplia `/receipts/:id` sigue abierta. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1308/1308** con cobertura **93.08/84.43/92.08/94.40 % S/B/F/L**. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. El arreglo E2E de screenshots se publicó en `dcb2b26` (CI `38001425709` verde); la evidencia actualizada en `4cfa900` también pasó CI (`38002513901`). Siguen abiertas la auditoría de safe-area nativa no nula, la matriz visual completa y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1297/1297 con cobertura 92.30/83.67/91.06/93.68 % S/B/F/L; `loading.component.ts`, `rating.component.ts` y `avatar.component.ts` quedan en 100/100/100/100. CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **IA / tickets reales (2026-10-10, verificación vigente 11:22–11:35 CEST):** en el único reintento autorizado del grupo largo, el runner aislado envió las tres fotos acordadas como ticket temporal junto con `inventario.json`, sin abrir los PDF ni la JPEG preferida y sin persistir en el inventario real. Los logs seguros de WebAPI prueban dos ficheros recibidos, listos, visibles y enviados al modelo (`inlineContextCount=0`, `sentToModelAttachmentCount=2`). La respuesta falló: streaming HTTP 400 y un único fallback HTTP 502; no hubo JSON validable y el grupo no se reenvía porque la petición pudo completarse. Por separado, una E2E live sintética con ticket+inventario y `response_format` JSON Schema estricto pasó 1/1 y devolvió ambos marcadores exactos, probando entrega/lectura del par, no extracción real ni deduplicación. Token/temporales propios limpiados; los tres tokens smoke anteriores activos se preservan por decisión del usuario. Detalle y limitaciones: `QA-AI.REAL-INTEGRATIONS.ATTACHMENT-PAIR.1`.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La suite frontend local más reciente pasó 1308/1308 con cobertura 93.08/84.43/92.08/94.40 % S/B/F/L; `receipt-detail.component.ts` llega a 100/89.16/100/100. CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-10
 - **IA / tickets reales (2026-10-09, histórico; supersedido):** se preservó el proceso WebAPI entonces activo y, tras autorización, se completó una sola vez el smoke del grupo largo. El contrato incluía JSON Schema estricto y dos adjuntos, pero la telemetría anterior no permitía distinguir un `fileCount=1` por operación de un lote incompleto. Ese grupo no se repite y la limitación de inventario quedó pendiente.
-- **IA / tickets reales (2026-10-10, estado actual):** tras el reinicio anunciado por el usuario, el listener WebAPI `127.0.0.1:3001` quedó listo en PID 56924, iniciado a las 00:54:11 CEST, con el checkout `D:\projects\webApi` en `a1c64d4e`. El smoke autorizado de la JPEG preferida (ordinal 4) terminó una vez en almacenamiento temporal: 2 peticiones de contrato estricto, 1 completion HTTP 200 tras un fallback HTTP 400, respuesta JSON válida y revisión/edición/historial E2E. Los logs de las 00:56:07–00:56:29 prueban `receivedFileCount=2`, `normalizedAttachmentCount=2` e `includedInProviderRequestAttachmentCount=2` en la entrada/preparación y dos previews; pero `Attachments are ready` registra `readyAttachmentCount=1` y `Prompt submitted`, `sentToModelAttachmentCount=1`. El código WebAPI confirma por qué: `writeAttachmentBuffer` antepone UUID al nombre, el detector de `buildOpenCodeMessageAttachments` solo fuerza `inventario.json` sin prefijo o con prefijo numérico, y `prepareOpenCodeAttachments` inlinea los JSON pequeños. Así, la evidencia indica que el inventario se incluyó como texto y no como segundo archivo; no inspeccionamos el prompt ni podemos validar que las categorías respetaran ese contenido. No se repite la JPEG ni el grupo largo ya procesado, no se escribe en el inventario real y la validación real de IA sigue abierta.
-- **Revalidación WebAPI (2026-10-10, smoke live sintético):** `/health/ready` devuelve HTTP 200 (`ready=true`, `storage=ready`); el listener sigue en PID 56924, iniciado a las 00:54:11 CEST, y no publica el SHA cargado. El checkout inspeccionable `D:\projects\webApi` está en `feat/session-attachment-previews` / `a1c64d4e`; PR #163 (`b55f958`) contiene un helper que elimina prefijos numéricos y UUID de `inventario.json`, mientras el helper del checkout solo admite el prefijo numérico. Tras verificar privacidad con el opt-in de logging local acotado, se hizo **una única** llamada a `/v1/chat/completions` con un PDF y `inventario.json` completamente sintéticos, `response_format` JSON Schema estricto y sin streaming. Respondió HTTP 200; el resultado cumplió el esquema y la categoría sintética esperada; el token temporal propio se limpió. Los logs agregados de 10:53:31 muestran 2 recibidos, normalizados e incluidos; a las 10:53:50 solo 1 listo y a las 10:53:51 solo 1 enviado (`statusCode=200`). La respuesta pudo completarse y no se repite; no se tocaron tickets, base de datos ni inventario real. La entrega de ambos como archivos independientes sigue sin acreditarse.
+- **IA / tickets reales (2026-10-10, evidencia histórica; supersedida):** tras el reinicio anunciado por el usuario, el listener WebAPI `127.0.0.1:3001` quedó listo en PID 56924, iniciado a las 00:54:11 CEST, con el checkout `D:\projects\webApi` en `a1c64d4e`. El smoke autorizado de la JPEG preferida (ordinal 4) terminó una vez en almacenamiento temporal: 2 peticiones de contrato estricto, 1 completion HTTP 200 tras un fallback HTTP 400, respuesta JSON válida y revisión/edición/historial E2E. Los logs de las 00:56:07–00:56:29 prueban `receivedFileCount=2`, `normalizedAttachmentCount=2` e `includedInProviderRequestAttachmentCount=2` en la entrada/preparación y dos previews; pero `Attachments are ready` registra `readyAttachmentCount=1` y `Prompt submitted`, `sentToModelAttachmentCount=1`. El código WebAPI confirma por qué: `writeAttachmentBuffer` antepone UUID al nombre, el detector de `buildOpenCodeMessageAttachments` solo fuerza `inventario.json` sin prefijo o con prefijo numérico, y `prepareOpenCodeAttachments` inlinea los JSON pequeños. Así, la evidencia indica que el inventario se incluyó como texto y no como segundo archivo; no inspeccionamos el prompt ni podemos validar que las categorías respetaran ese contenido. No se repite la JPEG ni el grupo largo ya procesado, no se escribe en el inventario real y la validación real de IA sigue abierta.
+- **Revalidación WebAPI (2026-10-10, smoke sintético previo; supersedido):** `/health/ready` devuelve HTTP 200 (`ready=true`, `storage=ready`); el listener sigue en PID 56924, iniciado a las 00:54:11 CEST, y no publica el SHA cargado. El checkout inspeccionable `D:\projects\webApi` está en `feat/session-attachment-previews` / `a1c64d4e`; PR #163 (`b55f958`) contiene un helper que elimina prefijos numéricos y UUID de `inventario.json`, mientras el helper del checkout solo admite el prefijo numérico. Tras verificar privacidad con el opt-in de logging local acotado, se hizo **una única** llamada a `/v1/chat/completions` con un PDF y `inventario.json` completamente sintéticos, `response_format` JSON Schema estricto y sin streaming. Respondió HTTP 200; el resultado cumplió el esquema y la categoría sintética esperada; el token temporal propio se limpió. Los logs agregados de 10:53:31 muestran 2 recibidos, normalizados e incluidos; a las 10:53:50 solo 1 listo y a las 10:53:51 solo 1 enviado (`statusCode=200`). La respuesta pudo completarse y no se repite; no se tocaron tickets, base de datos ni inventario real. La entrega de ambos como archivos independientes sigue sin acreditarse.
 
 **Contrato de producto:** [`HOGARIA-SPEC.md`](./HOGARIA-SPEC.md)
 
@@ -3948,13 +3949,13 @@ latencias/uso/coste agregados, sin tienda, artículos, importes ni fechas person
       repetir líneas visibles en páginas/fotos solapadas; deduplicar defensivamente líneas equivalentes
       conservando orden y filas de mismo producto con cantidad/precio distintos. Verificar que el ticket
       largo no persiste artículos duplicados.
-- [ ] En cada lectura, generar una instantánea actual del hogar con categorías y productos registrados
-      (incluida la categoría vigente tras movimientos manuales) y adjuntarla como fichero independiente
-      `inventario.json` junto al ticket; no cargar un JSON obsoleto ni incluir existencias, precios o
-      historial de compras. El prompt debe pedir leer el fichero adjunto. El JSON Schema estricto exige
-      `category` no vacía y `createCategory` booleano en cada línea; no admite `null`. Verificar en las
-      peticiones JPEG y PDF que el fichero tiene MIME/nombre/contenido correctos y que la ruta WebAPI lo
-      reenvía como adjunto legible.
+- [x] Construir la instantánea vigente de categorías/productos sin existencias, precios ni historial,
+      adjuntarla como `inventario.json` independiente y conservar `response_format` estricto; la lectura
+      de ambos ficheros está probada con la pareja live sintética y el envío real del grupo largo se
+      acredita por telemetría. Ver `QA-AI.REAL-INTEGRATIONS.ATTACHMENT-PAIR.1`.
+- [ ] Validar con respuestas reales de JPEG y PDF que la categoría de cada línea respeta la categoría
+      vigente del snapshot y comprobar reconocimiento/schema de los tickets; no hay salida real
+      validable del grupo largo y no se repiten solicitudes posiblemente completadas.
 - [x] Enviar PDFs a Chat Completions como parte `type: "file"` con `filename` genérico y
       `file_data: data:application/pdf;base64,...`, nunca como `image_url`; las fotos JPEG siguen como
       `image_url`. Mantener el `response_format` JSON Schema estricto en ambos transportes. La compatibilidad
@@ -4393,7 +4394,7 @@ modificar settings actuales de WebAPI.
 
 ### QA-AI.RECEIPT.RESUME-SAFE-SELECTION.1 · reanudar solo las fuentes no completadas
 
-**Fuente revalidada (2026-10-09):** la corrección de WebAPI ya existe en `D:\projects\webApi`: el
+**Fuente revalidada (2026-10-09; actualizada por la evidencia live posterior):** la corrección de WebAPI ya existe en `D:\projects\webApi`: el
 HEAD local `7c1e52e9` incluye `e679f44d fix(chatgpt): recover partial attachment uploads`, con rollback
 verificado, reset seguro del composer, preservación del error original y prohibición de repetir un
 upload ambiguo. El listener `127.0.0.1:3001` (PID 43088) ejecuta `src/main.ts` desde
@@ -4411,9 +4412,10 @@ completions y solo considera éxito cuatro tickets. El modo histórico reenviar�
 resultado potencialmente completado, lo que el usuario prohibió. La selección reducida se diseñó para
 la JPEG preferida y el PDF largo con las otras tres fotos, sin reenviar los PDF individuales. El
 intento inicial de la JPEG tuvo respuesta ambigua 400/502 y el PDF largo sí llegó a `prompt_submitted`
-antes de agotar `wait_for_reply`. Después el usuario autorizó un solo nuevo intento de la JPEG: el
-2026-10-10 obtuvo respuesta HTTP 200, pero WebAPI registró un solo archivo en el prompt. Esa
-autorización ya se consumió; no se repite ni la JPEG ni el grupo largo.
+antes de agotar `wait_for_reply`. Después, el usuario autorizó expresamente volver a intentar los
+grupos JPEG/largo bajo el fix. La JPEG ya había devuelto una respuesta potencialmente completada, por
+lo que no se reenvió; el grupo largo se intentó una sola vez y falló sin JSON validable. Ambos permisos
+están consumidos: no se reenvían esas fuentes.
 
 **Contrato:** la harness live conserva la selección explícita y cerrada `unsubmitted-only`, distinta
 del lote completo histórico. Cuando haya grupos inequívocamente no enviados, solo puede construir la
@@ -4437,21 +4439,23 @@ real sin reenviar ninguno.
 - [x] Ejecutar unitarias focales, typecheck E2E, `check:ui`, formato, build y regresión loopback
       sintética; confirmar antes de tickets que proceso/checkout WebAPI siguen en estado corregido,
       readiness, privacidad y redacción de logs son seguros.
-- [x] Consumir una sola vez la repetición autorizada de JPEG ordinal 4, en almacenamiento temporal,
-      y no volver a enviar JPEG ni grupo largo tras una petición potencialmente completada.
+- [x] Respetar la autorización explícita de reintento solo para fuentes indicadas, en almacenamiento
+      temporal; no reenviar la JPEG ya potencialmente completada y consumir una sola vez el permiso
+      usado para el grupo largo.
 - [x] Ejecutar un smoke live único con un PDF y catálogo JSON sintéticos, `response_format` JSON Schema
       estricto, validar HTTP 200, salida conforme al esquema/categoría del catálogo y cleanup del token
       temporal; no tocar tickets ni inventario real.
-- [ ] Acreditar que ambos adjuntos llegan como archivos independientes al modelo y validar las
-      categorías reales contra el snapshot. El smoke de 10:53 recibió/normalizó/incluyó 2, pero registró
-      solo 1 listo/enviado; no se repite por riesgo de duplicar una llamada completada. PR WebAPI #163
-      reconoce el prefijo UUID, pero el checkout inspeccionable aún no lo contiene y el proceso no expone
-      su SHA. Antes de otro ticket, exigir evidencia live sintética de 2 adjuntos listos y enviados; luego
-      validar categorías y deduplicación en almacenamiento temporal. Nunca persistir resultados reales.
-- [ ] Confirmar cleanup, registrar únicamente evidencia agregada, marcar la unidad con resultados
-      reales, commits atómicos/hooks/push y CI verde para el head del PR; dejarlo listo y sin merge.
+- [x] Acreditar que ambos adjuntos llegan como archivos independientes y el modelo lee ambos: la E2E
+      live sintética y la telemetría real del grupo largo demuestran 2 listos/visibles/enviados. Véase
+      `QA-AI.REAL-INTEGRATIONS.ATTACHMENT-PAIR.1`; esta marca no acredita extracción de tickets.
+- [ ] Validar las categorías reales contra el snapshot y la deduplicación multipágina. El reintento
+      autorizado del grupo largo terminó en HTTP 400/502 sin JSON validable; no se reenvía.
+- [x] Confirmar cleanup de recursos propios y registrar solo evidencia agregada; se preservan sin
+      cambios los tres tokens smoke preexistentes por decisión expresa del usuario.
+- [ ] Cerrar la validación solo después de resultados reales verificables, revisión/historial y CI
+      verde en el head; mantener abierto y sin merge mientras falte evidencia.
 
-**Smoke live sintético WebAPI (2026-10-10):** preflight `prepareExistingAiLiveSmokeSession` con el opt-in
+**Smoke live sintético WebAPI previo (2026-10-10, 10:53 CEST; supersedido):** preflight `prepareExistingAiLiveSmokeSession` con el opt-in
 de logging local acotado; una llamada `POST /v1/chat/completions` desde Node stdin con dos `data:` URIs
 sintéticas (`application/pdf` y `application/json`), `response_format.type=json_schema`, `strict=true` y
 `stream=false`. HTTP **200**; la respuesta JSON cumplió el esquema y devolvió la categoría sintética del
@@ -4843,7 +4847,7 @@ coincide con la telemetría redacted `fileCount=1`/`attachmentCount=1` del smoke
 no prueba la entrega del archivo al modelo y no se vuelve a llamar al proveedor hasta verificar en
 WebAPI ambos contadores en 2. No se editó ni reinició ese servicio.
 
-**Actualización tras el reinicio de WebAPI y PR #164 (2026-10-10):** `/health/ready` responde
+**Evidencia previa al último reintento autorizado (2026-10-10):** `/health/ready` responde
 `ready=true, storage=ready` en `127.0.0.1:3001`; el listener es PID 56924 y el checkout está en
 `a1c64d4e`. La PR [#164](https://github.com/juanjoGonDev/webApi/pull/164) está abierta, ya no en Draft,
 y su CI actual terminó correctamente (`37994193530`). Su instrumentación mejora los contadores de
@@ -4856,7 +4860,7 @@ sintéticos; eso no equivale al smoke de tickets ni resuelve por sí solo esta d
 No se reenvían la JPEG ni el grupo largo; el smoke real de tickets y la entrega del inventario como
 segundo archivo siguen sin validación completa.
 
-**Decisión SDD antes de la siguiente implementación:** la autorización nueva no permite repetir un
+**Plan SDD histórico (supersedido por la evidencia de adjuntos posterior):** la autorización nueva no permite repetir un
 grupo que ya terminó en esta corrida. Los dos PDF siguen excluidos, el grupo largo queda cerrado con
 respuesta pero sin validar el segundo adjunto y solo la JPEG preferida queda pendiente de un nuevo
 intento. El selector existente `unsubmitted-only` vuelve a incluir el grupo largo, por lo que no se
@@ -4871,10 +4875,9 @@ la preparación de adjuntos en WebAPI; no volver a procesar el grupo largo.
       verificaron cuatro tickets al procesar una sola selección; cubrir el mapa del hito con prueba.
 - [x] Validar las selecciones y el contrato con suites aisladas/loopback; verificar strict JSON Schema,
       un adjunto de ticket + un adjunto JSON y cleanup. No llamar al proveedor en pruebas sintéticas.
-- [ ] Antes de una llamada live, exigir que los logs redacted acrediten dos adjuntos listos y dos en
-      el prompt; nunca repetir una llamada que pudiera haber completado. El intento autorizado de la
-      JPEG se consumió: los logs mostraron solo un adjunto en `Prompt submitted`, así que el smoke no
-      valida que el modelo usara el inventario y no se reenvía ningún ticket.
+- [x] Antes del reintento autorizado del grupo largo, exigir que los logs redacted acrediten dos
+      adjuntos listos y enviados; la prueba live sintética confirmó que el modelo lee ambos. La JPEG
+      potencialmente completada no se reenvió y no hubo retry tras el fallo 400/502 del grupo largo.
 
 **TDD y evidencia local (2026-10-09):** primero fallaron las pruebas nuevas de single-JPEG,
 presupuesto del coordinador, allowlist y hito genérico. Tras añadir el selector, el comando
@@ -5026,7 +5029,7 @@ tests/providers/chatgpt/attachment-pair.live.e2e.test.ts --config vitest.e2e.con
 `uploadAttachmentCount=2`. El token sintético propio fue borrado y verificado, igual que sus temporales.
 Una consulta de solo lectura encontró tres tokens anteriores de smoke aún activos y sin caducidad,
 creados el 2026-10-04/07; no se registraron sus IDs/valores ni se modificaron, pues no pertenecen a esta
-corrida. Revisión pendiente del usuario.
+corrida. El usuario autorizó conservarlos por ahora (2026-10-10); no revocar ni modificar sin nueva indicación.
 
 **Cierre limitado:** quedan demostrados el envío y la lectura por el modelo de la pareja de ficheros en
 el WebAPI activo. `QA-AI.REAL-INTEGRATIONS.1` sigue abierta hasta obtener una respuesta validada de los
