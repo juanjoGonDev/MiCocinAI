@@ -5313,6 +5313,27 @@ dejó el paso final en `y=5.9 px` bajo la cabecera fija de 56 px. Se cambió la 
 repetición Chromium + Pixel 5 de `recipe-full-detail.spec.ts` pasó **2/2**; no hubo cambio de producción.
 La verificación WebKit/safe-area no nula sigue abierta como ya se documenta en esta unidad.
 
+### QA-CI.RECIPE-AI-REQUEST-SCOPE.1 · contar solo llamadas que pueden llegar al proveedor
+
+**Fuente revalidada (2026-10-10):** CI `38042245009` falló en shard 3 en
+`recipe-actions-mobile.spec.ts:238`: la aserción «sin llamadas IA» contó `GET /api/ai/configs`, que
+solo lee configuraciones locales y no llama al proveedor. `server/src/routes/ai.routes.ts` distingue
+esa lectura de las acciones POST que ejecutan modelos (`/test-connection`, `/generate-recipe`,
+`/generate-multiple-recipes`, `/replace-meal`, `/recommendations`, `/plan-week`).
+
+**Contrato:** al recorrer el detalle y abrir/cerrar el formulario IA sin ejecutarlo, permitir GET de
+configuración y fallar ante cualquier POST de generación/test de proveedor; no relajar la prohibición
+de llamadas externas ni cambiar producción.
+
+- [ ] Reproducir el fallo local y ajustar primero el observer/assertion E2E para distinguir rutas de
+      configuración de endpoints provider-bound; comprobar el método HTTP y rutas del router vigente.
+- [ ] Ejecutar `recipe-actions-mobile.spec.ts` en Chromium y Pixel 5, conservar asserts de scroll,
+      foco, geometría y que no se invoca ningún endpoint de proveedor.
+- [ ] Ejecutar `typecheck:e2e`, formato, `check:ui`, `git diff --check`, hooks, commit atómico, push y
+      esperar CI verde; test-only, sin cambio de producto ni llamadas al modelo.
+
+**Rollback:** revertir únicamente el filtro/assertion de solicitudes del test E2E y este subapartado.
+
 ### QA-LAYOUT.MAIN-CONTENT-WIDTH.1 · mismo ancho útil en todas las vistas
 
 **Fuente revalidada (2026-10-03):** `MainLayoutComponent` limita `app-page-container` a
