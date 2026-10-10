@@ -4509,8 +4509,11 @@ a esta regresión. Comando focal reproducible: `pnpm --filter @hogaria/server ex
 src/utils/ticket-prompt.spec.ts src/utils/ticket-lines-dedup.spec.ts src/utils/ai-queue.spec.ts
 --reporter=dot` (**39/39**). Runtime: la integración de cola usa stream sintético y SQLite/directorio
 temporales; no aplica un harness live aparte. Rollback: revertir solo `deduplicateTicketLines`, su
-paso de `totalMinor` desde `ticket-queue.ts`, estas pruebas y esta evidencia. Hooks y CI del nuevo
-commit aún pendientes.
+paso de `totalMinor` desde `ticket-queue.ts`, estas pruebas y esta evidencia. Los hooks Lefthook de
+pre-commit y pre-push pasaron sin bypass: Prettier, `check:ui`, build server+frontend, typecheck E2E y
+unitarias (frontend **1308/1308**; servidor **1239/1239 ejecutadas**, 1 omitida). Commit
+`2e8ee90` publicado en `arena/01a0a6c2-micocinai`; la CI de GitHub para ese SHA aún no aparece en la
+primera consulta posterior al push.
 
 **Smoke live sintético WebAPI previo (2026-10-10, 10:53 CEST; supersedido):** preflight `prepareExistingAiLiveSmokeSession` con el opt-in
 de logging local acotado; una llamada `POST /v1/chat/completions` desde Node stdin con dos `data:` URIs
