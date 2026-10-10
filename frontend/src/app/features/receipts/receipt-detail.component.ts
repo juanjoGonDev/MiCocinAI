@@ -269,7 +269,20 @@ interface LineaEnPantalla extends ReceiptItem {
                     } @else {
                       <span class="linea__nombre">{{ linea.name }}</span>
                     }
-                    @if (linea.note) {
+                    @if (revisable(t.status)) {
+                      <input
+                        class="linea__input linea__input--nota"
+                        type="text"
+                        [attr.id]="'linea-' + linea.id + '-nota'"
+                        [attr.aria-label]="('receipts.nota_linea' | t) + ' ' + linea.name"
+                        [value]="linea.note ?? ''"
+                        [placeholder]="'receipts.nota_vacia' | t"
+                        maxlength="280"
+                        (change)="
+                          editarLinea(linea, { note: $any($event.target).value.trim() || null })
+                        "
+                      />
+                    } @else if (linea.note) {
                       <span class="linea__nota">{{ linea.note }}</span>
                     }
                   </span>
@@ -720,6 +733,20 @@ interface LineaEnPantalla extends ReceiptItem {
         background: var(--bg-primary, #fff);
       }
 
+      .linea__input--nota {
+        font-size: var(--text-xs, 12px);
+        color: var(--text-secondary);
+      }
+
+      .linea__input--nota::placeholder {
+        color: var(--text-secondary);
+        opacity: 1;
+      }
+
+      .linea__input--nota:focus {
+        color: var(--text-primary);
+      }
+
       .linea__input--num {
         text-align: right;
       }
@@ -869,6 +896,11 @@ interface LineaEnPantalla extends ReceiptItem {
 
         .tabla__celda--num {
           text-align: left;
+        }
+
+        .linea__input {
+          min-height: 44px;
+          min-width: 44px;
         }
       }
     `
@@ -1069,7 +1101,8 @@ export class ReceiptDetailComponent implements OnInit, OnDestroy {
   }
 
   async editarLinea(linea: LineaEnPantalla, cambios: Partial<ReceiptItem>): Promise<void> {
-    await this.service.updateLine(this.id, linea.id, cambios);
+    const actualizada = await this.service.updateLine(this.id, linea.id, cambios);
+    if (!actualizada) return;
     this.service.loadReceipt(this.id);
   }
 

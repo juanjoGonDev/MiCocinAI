@@ -1,8 +1,8 @@
 # Spec: auditoría funcional y responsive de HogarIA
 
-- **Estado (2026-10-10):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. `/ai-config` pasó su suite completa en Chromium/Pixel 5 (**52/52**) y concurrencia/proveedor **6/6**; la ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5, incluidas las subunidades de typeahead/pegado, traslado a despensa, selección múltiple y reapertura con estado conservado; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes, descuento por primeras unidades y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1296/1296** con cobertura **92.3/83.66/91.06/93.68 % S/B/F/L**; `loading.component.ts`, `rating.component.ts`, `avatar.component.ts`, `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. El arreglo E2E de screenshots se publicó en `dcb2b26` (CI `38001425709` verde); la evidencia actualizada en `4cfa900` también pasó CI (`38002513901`). Siguen abiertas la auditoría de safe-area nativa no nula, la matriz visual completa y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
+- **Estado (2026-10-10):** el barrido funcional global y la matriz visual/responsive siguen abiertos; PR #41 está Ready for review, abierto y sin merge. QA-RECIPES.AI-FLOW.1 ya tiene validación funcional local; QA-RECIPES.COOK-ACTION.1 se cerró localmente con E2E Chromium/Pixel 5, mientras la ruta general `/recipes` sigue abierta por otras acciones/filtros; el gate global frontend continúa verde. QA-REC.INGRESS.1 ya se reprodujo y corrigió con Nginx real aislado; QA-PANTRY.ITEM.ROUTE.1 cerró la ficha/edición, QA-PANTRY.ROOT-ROUTE.1 la vista general, QA-PANTRY.MANAGERS.ROUTES.1 categorías/productos y QA-PANTRY.CATALOG.ROUTE.1 el catálogo. `/ai-config` pasó su suite completa en Chromium/Pixel 5 (**52/52**) y concurrencia/proveedor **6/6**; la ruta `/shopping` ya pasó el barrido integrado en Chromium/Pixel 5, incluidas las subunidades de typeahead/pegado, traslado a despensa, selección múltiple y reapertura con estado conservado; las unidades de bandeja, filtro de tienda, sugerencias, renombrado, unidades recientes, descuento por primeras unidades y feedback 503 quedaron verificadas. La validación pendiente de Safari/iOS nativo corresponde a la hoja de ofertas de QA-04c.1: WebKit de Playwright en Windows ya pasó la interacción táctil, pero no proporciona safe-area nativa ni teclado software iOS. La suite frontend local pasa **1297/1297** con cobertura **92.30/83.67/91.06/93.68 % S/B/F/L**; `loading.component.ts`, `rating.component.ts`, `avatar.component.ts`, `i18n.service.ts` y `shopping-suggested.component.ts` tienen pruebas directas al 100 % en las cuatro métricas. QA-04c sigue abierto por otros déficits. El workflow CI comprueba el cableado Karma, pero no ejecuta esa suite, por lo que se conserva la verificación local. El arreglo E2E de screenshots se publicó en `dcb2b26` (CI `38001425709` verde); la evidencia actualizada en `4cfa900` también pasó CI (`38002513901`). Siguen abiertas la auditoría de safe-area nativa no nula, la matriz visual completa y QA-AI.REAL-INTEGRATIONS.1. La recuperación por correo no está implementada: su UI comunica esa limitación sin prometer envío.
 - **IA / tickets reales (evidencia previa 2026-10-09; supersedida por la nota vigente):** `GET /health/ready` responde 200 (`ready=true`, `storage=ready`). El checkout comprobado de `D:\projects\webApi` está limpio en `7c1e52e9` e incluye la corrección `e679f44d`; PID 43088 arrancó después de ese commit, aunque WebAPI no publica el SHA realmente cargado por el proceso. La lectura de `GET /admin/api/logs?lines=2000` devolvió 681 líneas: 27 `attachment_upload_failed` (último 2026-10-09 03:16:09; dos adjuntos, HTTP 504 tras timeout de 45 s, cleanup `page_closed` satisfactorio) y cero `prompt_submitted`, `response_completed` o `cleanup_failed`. La prueba sintética de WebAPI pasó 18/18, pero no comprueba entrega real al proveedor. El último upload live posterior al fix sigue fallando; no se reenvían tickets y la validación real continúa bloqueada antes de cualquier respuesta del modelo.
-- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1296/1296 con cobertura 92.3/83.66/91.06/93.68 % S/B/F/L; `loading.component.ts`, `rating.component.ts` y `avatar.component.ts` quedan en 100/100/100/100. CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
+- **Verificación focal:** QA-LOGS.SSE-RECONNECT.1 cubre la recuperación real del stream en Chromium escritorio y Pixel 5; QA-04c.ERROR-INTERCEPTOR.1 cubre todos los resultados del interceptor. La última suite frontend local pasó 1297/1297 con cobertura 92.30/83.67/91.06/93.68 % S/B/F/L; `loading.component.ts`, `rating.component.ts` y `avatar.component.ts` quedan en 100/100/100/100. CI comprueba el cableado Karma y los E2E, pero no ejecuta esa suite completa. La casilla general `/logs` sigue abierta por el resto de acciones y brechas de contrato.
 - **Actualizado:** 2026-10-10
 - **IA / tickets reales (2026-10-09, histórico; supersedido):** se preservó el proceso WebAPI entonces activo y, tras autorización, se completó una sola vez el smoke del grupo largo. El contrato incluía JSON Schema estricto y dos adjuntos, pero la telemetría anterior no permitía distinguir un `fileCount=1` por operación de un lote incompleto. Ese grupo no se repite y la limitación de inventario quedó pendiente.
 - **IA / tickets reales (2026-10-10, estado actual):** tras el reinicio anunciado por el usuario, el listener WebAPI `127.0.0.1:3001` quedó listo en PID 56924, iniciado a las 00:54:11 CEST, con el checkout `D:\projects\webApi` en `a1c64d4e`. El smoke autorizado de la JPEG preferida (ordinal 4) terminó una vez en almacenamiento temporal: 2 peticiones de contrato estricto, 1 completion HTTP 200 tras un fallback HTTP 400, respuesta JSON válida y revisión/edición/historial E2E. Los logs de las 00:56:07–00:56:29 prueban `receivedFileCount=2`, `normalizedAttachmentCount=2` e `includedInProviderRequestAttachmentCount=2` en la entrada/preparación y dos previews; pero `Attachments are ready` registra `readyAttachmentCount=1` y `Prompt submitted`, `sentToModelAttachmentCount=1`. El código WebAPI confirma por qué: `writeAttachmentBuffer` antepone UUID al nombre, el detector de `buildOpenCodeMessageAttachments` solo fuerza `inventario.json` sin prefijo o con prefijo numérico, y `prepareOpenCodeAttachments` inlinea los JSON pequeños. Así, la evidencia indica que el inventario se incluyó como texto y no como segundo archivo; no inspeccionamos el prompt ni podemos validar que las categorías respetaran ese contenido. No se repite la JPEG ni el grupo largo ya procesado, no se escribe en el inventario real y la validación real de IA sigue abierta.
@@ -4792,6 +4792,15 @@ el ticket largo no se repitió; la entrega de ambos adjuntos, la clasificación 
 la deduplicación de las tres fotos siguen sin validar. Mantener la casilla live abierta hasta que la
 telemetría muestre dos adjuntos listos y dos enviados, y exista una ejecución autorizada no duplicada.
 
+**Comprobación tras nuevo aviso de reinicio (2026-10-10, 09:00 CEST; solo lectura):** aunque el usuario
+indicó que WebAPI se había reiniciado, el listener consultado seguía siendo PID `56924`, con creación
+`00:54:11 CEST`; `/health` informó `startTime=2026-10-09T22:54:12Z`, igual que en la comprobación
+anterior. El checkout local está en `feat/session-attachment-previews`, HEAD `a1c64d4e`; se observó el
+cambio local ajeno `tools.txt` y se preservó. No se hizo llamada IA, no se releyeron ni reenviaron
+tickets y la autorización de repetición de la JPEG sigue consumida. No hay evidencia observable de un
+reinicio posterior, por lo que no se reabre el smoke: ambos adjuntos enviados al modelo, categorías
+guiadas por el snapshot y deduplicación del grupo largo siguen sin validarse.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
@@ -6624,24 +6633,52 @@ nombre. El endpoint `PATCH /api/receipts/:id/items/:itemId` ya acepta `note` (m�
 lo persiste; por tanto, el hueco está en la interfaz, no en el contrato de API.
 
 **Contrato:** en `review`, cada línea tiene un control de nota editable dentro de la celda del producto,
-precargado con el valor reconocido/editado y con nombre accesible ES/EN asociado al producto. Guardar
-actualiza solo esa línea; una nota vacía se persiste como `null` y al recargar permanece vacía. En los
-estados no revisables la nota continúa como texto, sin control de edición. No se añade columna a la
+precargado con el valor reconocido/editado, nombre accesible ES/EN asociado al producto y contraste
+WCAG AA en tema claro/oscuro. Guardar actualiza solo esa línea; una nota vacía se persiste como `null` y
+al recargar permanece vacía. En los estados no revisables la nota continúa como texto, sin control de
+edición. No se añade columna a la
 tabla; el campo permanece en la tarjeta móvil, sin alterar el modelo responsive. Errores de guardado se
 notifican y no descartan el texto introducido. Longitud máxima 280, acorde al schema vigente. En móvil,
 los inputs de edición de línea comparten un objetivo táctil mínimo de 44×44 px; el guardado funciona por
 teclado al abandonar el campo.
 
-- [ ] Añadir primero una E2E roja con ticket/línea sintéticos y base aislada: la nota debe ser editable
+- [x] Añadir primero una E2E roja con ticket/línea sintéticos y base aislada: la nota debe ser editable
       en `review`, aceptar creación/edición/borrado, persistir tras reload y no editarse en estado terminal.
-- [ ] Implementar el control en la celda de nombre, con labels ES/EN, límite de 280 y guardado integrado
+- [x] Implementar el control en la celda de nombre, con labels ES/EN, límite de 280 y guardado integrado
       con `editarLinea`; verificar payload PATCH, limpieza a `null`, errores y retención del borrador.
-- [ ] Ejecutar E2E real de navegador en Chromium y Pixel 5, escritorio 1440×900 y móvil 390×844/320×740;
-      revisar teclado, labels, foco, objetivo táctil ≥44×44 de todos los inputs de línea, overflow y
-      geometría sin nueva columna, con capturas sintéticas PC/móvil.
-- [ ] Ejecutar unitarias focales, `typecheck:e2e`, build, `check:ui`, formato, `git diff --check` y
+- [x] Ejecutar E2E real de navegador en Chromium y Pixel 5, escritorio 1440×900 y móvil 390×844/320×740;
+      revisar teclado, labels, foco, contraste AA claro/oscuro, objetivo táctil ≥44×44 de todos los
+      inputs de línea, overflow y geometría sin nueva columna, con capturas sintéticas PC/móvil.
+- [x] Ejecutar unitarias focales, `typecheck:e2e`, build, `check:ui`, formato, `git diff --check` y
       coverage ≥70 % en S/B/F/L para cada archivo instrumentable tocado; no llamar a WebAPI/proveedor.
 - [ ] Registrar comandos/resultados/limitaciones y rollback; commit atómico con hooks, push, CI verde
-      para el HEAD de PR #41 y PR abierta/sin merge.
+      para el commit de implementación; PR #41 abierta y sin merge.
+
+**Evidencia TDD y local (2026-10-10):** antes del cambio, la E2E aislada falló **2/2** porque no
+existía un control con nombre accesible para la nota en ES/EN. La prueba unitaria roja ejecutó 26 casos
+y falló solo el nuevo caso de guardado fallido: `editarLinea` refrescaba aunque `updateLine()` devolvía
+`null`, descartando potencialmente el borrador. Ahora la nota es un input con placeholder/label ES/EN,
+maxlength 280 y guardado al abandonar el campo; una respuesta fallida muestra el toast y conserva el
+texto. `editarLinea` solo refresca tras una respuesta exitosa. En `confirmed`, la nota sigue siendo texto.
+
+El E2E final usa SQLite, cuenta, puertos y servidor temporales; no configura proveedor, no llama WebAPI,
+no confirma compras y el cleanup del runner quedó verificado. Comprobó creación, edición, limpieza a
+`null`, PATCH 200/body, lectura API y reload, error sintético 503/toast/borrador retenido, estado
+terminal, labels ES/EN, teclado Tab/blur, ausencia de overflow en 1440×900, 390×844 y 320×740, y inputs
+móviles de línea ≥44×44 px. Comando `node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium
+--project=mobile-chrome tests/e2e/receipt-line-note.spec.ts --reporter=line`: **4/4**. Capturas de la
+tabla sintética, inspeccionadas: `.e2e-screenshots/qa-receipt-line-note-20261010/receipt-line-note-chromium-es.png`,
+`receipt-line-note-chromium-en.png`, `receipt-line-note-mobile-chrome-es.png` y
+`receipt-line-note-mobile-chrome-en.png`.
+
+`pnpm --filter @hogaria/web exec ng test --no-watch --include
+src/app/features/receipts/receipt-detail.component.spec.ts --browsers=ChromeHeadless` pasó **26/26**;
+`pnpm --filter @hogaria/web run test` pasó **1297/1297** y coverage global **92.30/83.67/91.06/93.68 %
+S/B/F/L**. El reporte focal de `receipt-detail.component.ts` da **98.64/89.15/100/100 % S/B/F/L**.
+El comando focal con coverage retorna 1 solo porque el gate global de 80 % se aplica a la selección
+parcial; la suite completa sí pasa el gate, que no se rebajó. También pasan `pnpm run typecheck:e2e`,
+`pnpm run check:ui` (**212 ficheros, 21 reglas**), `pnpm run build`, Prettier focal y `git diff --check`.
+El build conserva warnings previos de imports/presupuesto Angular. El emulador Pixel 5 valida interacción
+por teclado sintética, no el teclado software/safe-area de un teléfono real.
 
 **Rollback:** revertir solo el control de nota, su prueba y esta subunidad; conservar el contrato API.

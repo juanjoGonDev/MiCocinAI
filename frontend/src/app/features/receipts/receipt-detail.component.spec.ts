@@ -338,6 +338,18 @@ describe('ReceiptDetailComponent', () => {
     expect(component.ofertaTexto(makeLine({ offer: null }))).toBe('');
   });
 
+  it('does not refresh a line after a failed update so its draft is retained', async () => {
+    service.updateLine.and.resolveTo(null);
+    service.loadReceipt.calls.reset();
+
+    await component.editarLinea(component.lineas()[0], { note: 'Borrador sin guardar' });
+
+    expect(service.updateLine).toHaveBeenCalledOnceWith(RECEIPT_ID, 'line-1', {
+      note: 'Borrador sin guardar'
+    });
+    expect(service.loadReceipt).not.toHaveBeenCalled();
+  });
+
   it('adds a line, stores the new id for highlighting, and handles a failed creation', async () => {
     await component.anadirLinea();
     expect(service.addLine).toHaveBeenCalledOnceWith(RECEIPT_ID, {
