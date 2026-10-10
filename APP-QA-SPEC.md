@@ -1043,6 +1043,33 @@ producción/UI: E2E y capturas N/A; los logs de build no muestran regresión fun
 Commit atómico `caffcd5` pasó hooks Lefthook pre-commit/pre-push, se publicó y su CI (`38036745128`) pasó
 **9/9 jobs**. PR #41 sigue abierta, sin Draft y sin merge.
 
+### QA-04c.PANTRY.BULK-ACTIONS.1 · errores y cancelación de acciones por lote
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md §12ab.B/C` define vaciar inventario por PATCH
+`quantity: 0`, borrar cada fila por DELETE, confirmación propia con el número de filas y cambios masivos
+de disponibilidad para utensilios. `pantry.component.ts` implementa esos caminos en `loteVaciar`,
+`loteBorrar` y `loteUtensilios`; la E2E existente cubre los caminos de éxito, pero la suite unitaria no
+ejercita métodos por lote. El LCOV de la suite completa actual mide `pantry.component.ts:1716–1793` en
+**0/0/0/0 % S/B/F/L** (0/34 sentencias/líneas, 0/5 ramas y 0/12 funciones). Unidad test-only: no implica
+un defecto ni permite mutar datos del servidor normal.
+
+**Contrato:** selección vacía o confirmación cancelada no produce escrituras; confirmar vaciado/borrado
+envía una petición por ID válido en paralelo y mantiene el flujo aun si falla una fila; tras completarse
+se limpia/refresca la tabla y se muestra un único toast. El lote de utensilios actualiza disponibilidad
+para los IDs seleccionados, tolera errores individuales y vuelve a cargar el catálogo. Usar únicamente
+signals, promesas y observables sintéticos, sin almacenamiento ni servicios reales.
+
+- [ ] Añadir primero pruebas unitarias para lote vacío, cancelar confirmación, IDs inválidos, éxito y
+      rechazo individual en vaciar/borrar, y actualización/carga de utensilios.
+- [ ] Alcanzar ≥70 % S/B/F/L en `pantry.component.ts:1716–1793`; repetir prueba focal y suite frontend
+      completa manteniendo el gate global ≥80 %.
+- [ ] Registrar comandos/resultados y rollback; ejecutar Prettier, `check:ui`, build, typecheck E2E,
+      `git diff --check`, hooks completos, commit atómico, push y CI verde. Sin cambio de UI, E2E/capturas
+      nuevas no aplican; el E2E de éxito existente sigue siendo evidencia complementaria.
+
+**Rollback:** retirar únicamente las pruebas de acciones por lote y esta subunidad; no cambiar la
+implementación ni las operaciones persistidas.
+
 ### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
 
 **Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md §12t-R` fija `I18nService` como responsable de resolver `es/en/auto`, actualizar el locale de fechas/números al cambiar idioma y componer frases localizadas; `i18n.service.ts` implementa además selección persistida, `languagechange`, fallback de diccionario, interpolación, plurales y tiempos relativos. No existe `i18n.service.spec.ts`; el uso indirecto en otras pruebas deja este servicio en **69.23/31.58/69.23/72.34 % S/B/F/L** (36/52 sentencias, 12/38 ramas, 9/13 funciones, 34/47 líneas). La cobertura baja no prueba un fallo de producto: faltan pruebas unitarias directas de rutas existentes. Alcance test-only, sin cambiar traducciones, producción, preferencias ajenas ni llamadas externas.
