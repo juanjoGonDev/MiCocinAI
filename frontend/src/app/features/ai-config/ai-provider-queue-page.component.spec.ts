@@ -74,7 +74,8 @@ describe('AiProviderQueuePageComponent', () => {
       imports: [AiProviderQueuePageComponent],
       providers: [
         provideRouter([
-          { path: 'ai-config/:configId/queue', component: AiProviderQueuePageComponent }
+          { path: 'ai-config/:configId/queue', component: AiProviderQueuePageComponent },
+          { path: 'ai-config/queue', component: AiProviderQueuePageComponent }
         ]),
         { provide: AiService, useValue: aiService },
         { provide: AiQueueService, useValue: queueService },
@@ -113,6 +114,17 @@ describe('AiProviderQueuePageComponent', () => {
     await harness.navigateByUrl('/ai-config/not-owned/queue', AiProviderQueuePageComponent);
     expect(queueService.watch).not.toHaveBeenCalled();
     expect(harness.routeNativeElement?.querySelector('[data-test="ai-provider-queue"]')).toBeNull();
+  });
+
+  it('shows not found and does not watch a queue when route params omit configId', async () => {
+    const page = await harness.navigateByUrl('/ai-config/queue', AiProviderQueuePageComponent);
+
+    expect(aiService.loadConfigs).toHaveBeenCalledTimes(1);
+    expect(page.provider()).toBeUndefined();
+    expect(harness.routeNativeElement?.querySelector('[role="alert"]')?.textContent).toContain(
+      'ai_config.queue_provider_not_found'
+    );
+    expect(queueService.watch).not.toHaveBeenCalled();
   });
 
   it('shows loading and load-error states without exposing a queue', async () => {

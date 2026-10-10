@@ -970,12 +970,29 @@ el `provider()` queda sin seleccionar, la página muestra el aviso accesible de 
 la carga de configuraciones se solicita una vez y la cola no se observa. La ruta real de producción no
 cambia. Unidad test-only: no se cambia comportamiento, datos, ni configuración real de IA.
 
-- [ ] Añadir primero una prueba focal con `paramMap` y snapshot sin `configId`; comprobar aviso de
+- [x] Añadir primero una prueba focal con `paramMap` y snapshot sin `configId`; comprobar aviso de
       proveedor inexistente y cero llamadas a `AiQueueService.watch`.
-- [ ] Alcanzar ≥70 % en cada métrica del componente (preferiblemente 100 %); ejecutar la spec focal
+- [x] Alcanzar ≥70 % en cada métrica del componente (preferiblemente 100 %); ejecutar la spec focal
       y la suite frontend completa con gate global ≥80 % intacto.
 - [ ] Ejecutar typecheck E2E, `check:ui`, build, formato y `git diff --check`; registrar resultados,
       limitaciones y rollback. Hooks completos, commit atómico, push y CI verde; PR #41 abierta y sin merge.
+
+**Evidencia local (2026-10-10):** se añadió primero una ruta de test sin `configId`; el componente ya
+tenía los defaults defensivos y no necesitó cambio de producción. La prueba comprueba `provider()` sin
+selección, alerta accesible de proveedor inexistente, una sola solicitud de configuración y cero
+`AiQueueService.watch`. Karma focal pasó **4/4** con
+`pnpm --filter @hogaria/web exec ng test --no-watch --include
+src/app/features/ai-config/ai-provider-queue-page.component.spec.ts --browsers=ChromeHeadlessLocal`.
+Con `--code-coverage`, las mismas 4 pruebas pasan; el proceso focal termina 1 solo porque su subset
+no alcanza el gate global configurado (21.86/5.43/10.15/23.69 % S/B/F/L). El reporte específico del
+componente es **100/100/100/100 %**: 8/8 líneas, 5/5 funciones y 4/4 ramas; statements 100 % según
+el HTML generado. La suite completa
+`pnpm --filter @hogaria/web exec ng test --no-watch --code-coverage --progress=false
+--browsers=ChromeHeadlessLocal` pasa **1298/1298** con **92.30/83.71/91.06/93.68 % S/B/F/L** y sin
+rebajar el gate. `coverage-final.json` es obsoleto y las vistas HTML conservan directorios viejos;
+se verificó el LCOV actual (2026-10-10 09:41 CEST) y su página canónica `coverage/app/...`. Sin cambio visual,
+E2E/capturas N/A; el route real exige `configId`, por lo que la prueba es defensiva, no una ruta de
+producto.
 
 **Rollback:** retirar solamente la prueba y esta subunidad; el componente y la ruta de producción no
 cambian.
