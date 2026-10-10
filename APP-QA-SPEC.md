@@ -4979,6 +4979,61 @@ petición live: el intento autorizado de la JPEG ya se consumió y el ticket de 
 respuesta potencialmente completada. El smoke real queda bloqueado hasta corregir y probar el caso UUID
 con datos sintéticos y disponer de una fuente no repetida o autorización expresa para otra lectura real.
 
+### Subunidad QA-AI.REAL-INTEGRATIONS.ATTACHMENT-PAIR.1 · adjuntar y leer el inventario junto al ticket
+
+**Contrato:** el inventario actual se entrega como un fichero `application/json` independiente del
+ticket, sin inlinearlo en el prompt. WebAPI debe preparar ambos ficheros, confirmar que ChatGPT ve los
+dos y que los dos se envían; una prueba sintética con respuesta JSON Schema estricta debe demostrar que
+el modelo leyó el contenido de ambos. Esta subunidad solo valida el transporte/lectura del par: no cierra
+la clasificación de tickets reales ni la deduplicación del ticket multipágina.
+
+- [x] Ejecutar la suite focal de `opencode-executor.test.ts` (**23/23**); validar el nombre UUID real en
+      la siguiente prueba live, ya que la suite unitaria no tiene una assertion específica para ese
+      prefijo.
+- [x] Tras reiniciar WebAPI, ejecutar con una sola pareja sintética ticket+JSON una petición real no
+      streaming, con `response_format` JSON Schema estricto; validar los marcadores de ambos ficheros y
+      la evidencia segura de preparación, visibilidad y envío (`inlineContextCount=0`, `visibleCount=2`).
+- [x] Hacer una lectura del grupo largo autorizado y comprobar por logs que el snapshot generado se
+      envió como fichero separado, sin abrir los PDF ni la JPEG preferida; no confirmar ni persistir en
+      el inventario real.
+- [x] Limpiar y verificar solo el token y temporales propios de estas corridas; no modificar tokens
+      preexistentes ni capturar contenido personal en logs, reportes o artefactos.
+
+**Evidencia live (2026-10-10, 11:22–11:35 CEST):** `pnpm exec vitest run
+tests/providers/chatgpt/opencode-executor.test.ts` en WebAPI pasó **23/23**. En la única ejecución real
+autorizada `long-ticket-only`, el runner aislado agrupó las tres fotos restantes y produjo el PDF temporal
+del ticket más el snapshot actual; no abrió los dos PDF ni la JPEG preferida. WebAPI registró
+`attachmentCount=2`, `requiredInventoryAttachmentCount=1`, `inventorySnapshotUploadCount=1`,
+`inlineContextCount=0`, `uploadAttachmentCount=2`; la preparación del navegador confirmó
+`expectedCount=2`, `visibleCount=2`, `pending=false`, `rejected=false`, `readyAttachmentCount=2` y
+`sentToModelAttachmentCount=2`. Por tanto, el caso del nombre con UUID ya envía realmente el JSON como
+segundo fichero, no como texto inline.
+
+Esa petición no devolvió un ticket validable: el intento streaming recibió HTTP 400 y el único fallback
+no-streaming recibió HTTP 502; el runner terminó en error sin JSON final. El log seguro termina en
+`prompt_submitted`, la sesión quedó en estado `error` y el listener cambió de PID `44736` a `21112` a
+las 11:24:42, durante esa ventana. La coincidencia temporal no demuestra que el reinicio causara el 502;
+no se obtuvo respuesta que permita comprobar categorías, edición, historial o duplicados. La repetición
+autorizada de este grupo queda consumida y no se reenvía porque el modelo pudo haber completado.
+
+Después, sobre el listener estable `21112`, la E2E real sintética
+`node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run
+tests/providers/chatgpt/attachment-pair.live.e2e.test.ts --config vitest.e2e.config.ts` pasó **1/1** en
+24,17 s. El modelo devolvió los dos marcadores exactos bajo el esquema estricto; logs del mismo request:
+`inventorySnapshotUploadCount=1`, `inlineContextCount=0`, `readinessVisibleCount=2` y
+`uploadAttachmentCount=2`. El token sintético propio fue borrado y verificado, igual que sus temporales.
+Una consulta de solo lectura encontró tres tokens anteriores de smoke aún activos y sin caducidad,
+creados el 2026-10-04/07; no se registraron sus IDs/valores ni se modificaron, pues no pertenecen a esta
+corrida. Revisión pendiente del usuario.
+
+**Cierre limitado:** quedan demostrados el envío y la lectura por el modelo de la pareja de ficheros en
+el WebAPI activo. `QA-AI.REAL-INTEGRATIONS.1` sigue abierta hasta obtener una respuesta validada de los
+tickets, respetando la prohibición de repetir los grupos que pudieron completarse, y comprobar
+clasificación con el snapshot, deduplicación multipágina, revisión e historial.
+
+**Rollback:** retirar solamente este subapartado y sus cuatro marcas; no alterar servicios, tickets,
+tokens preexistentes ni inventario.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
