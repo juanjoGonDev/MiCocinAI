@@ -3485,6 +3485,31 @@ el título de `/shopping`. La prueba focal sí confirmó anuncio accesible y aus
 la auditoría de solapamiento visual del toast compartido; revalidar su posición en las familias/rutas afectadas
 antes de corregirlo o cerrar esta matriz.
 
+### QA-LAYOUT.TOAST-HEADER-OVERLAP.1 · separar avisos de la cabecera móvil
+
+**Fuente revalidada (2026-10-10):** `toast.component.ts` posiciona avisos superiores en `space-2` hasta
+480 px y en `space-4` en anchuras mayores. `main-layout.component.ts` fija `.header` en `top:0`, alto
+56 px y lo oculta desde 1024 px; el toast usa z-index 1100 frente a 100 de la cabecera. El E2E
+`shopping-tray-lifecycle.spec.ts` comprueba posición horizontal y overflow del toast de error en varias
+anchuras, pero no su separación vertical. `auth-layout.component.ts` comparte el toast sin tener cabecera.
+
+**Contrato:** en `MainLayout`, el aviso superior queda al menos 8 CSS px debajo de la cabecera visible en
+320, 390, 480, 481, 568 horizontal y 1023 px; a 1024/1440 px, la cabecera está oculta y se mantiene el
+offset superior desktop existente. En `AuthLayout`, donde no hay cabecera fija, se conserva el offset
+actual (8 px móvil, 16 px desktop). No hay overflow; rol/anuncio y geometría interna del toast no cambian.
+
+- [ ] Añadir primero aserciones E2E rojas para la separación vertical bajo el aviso 503 de `/shopping`,
+      incluyendo ambos lados de los breakpoints 480/481 y 1023/1024.
+- [ ] Usar una variable de altura en la cabecera autenticada como única fuente del offset; posicionar
+      el toast debajo solo en `MainLayout`, conservar `AuthLayout` y desktop, y pasar E2E con tolerancia
+      de 1 CSS px sin overflow ni errores de página.
+- [ ] Ejecutar Chromium escritorio y Pixel 5 móvil; guardar/inspeccionar capturas sintéticas de error
+      PC/móvil. Pasar typecheck E2E, Prettier, `check:ui`, build, suite focal y diff; registrar cleanup,
+      coverage (N/A para geometría/CSS) y rollback sin cerrar la matriz global.
+
+**Rollback:** revertir variable CSS de altura, offset superior condicionado al shell, aserciones/capturas
+E2E y esta subunidad; no modificar duración, contenido, accesibilidad ni posición inferior de los toasts.
+
 **Evidencia QA-LAYOUT.ROUTE-MATRIX.1 (2026-10-09):** `tests/e2e/layout-gutters.spec.ts` recorrió 31 rutas estáticas (públicas, onboarding y privadas) y 8 detalles poblados, cada una en **59** combinaciones de viewport (incluye los anchos requeridos, 320×568/740, 390×844, 844×390, 932×430 y tablet 768×1024/1024×768). `pnpm run test:e2e -- --workers=1 --project=chromium --project=mobile-chrome tests/e2e/layout-gutters.spec.ts --reporter=dot`, con `E2E_RATE_LIMIT=on` y SQLite/puertos/semilla temporales: **6/6**. Los cuatro reportes PC/Pixel (`layout-route-viewport-audit*.json`) registran **1829** filas de rutas iniciales y **472** de detalles por perfil; **0** overflow horizontal y **0** `pageerror`. Los reportes solo guardan rutas saneadas, dimensiones, anchos calculados y nombres de error; están ignorados por Git en `.e2e-screenshots/qa-layout-route-matrix-20261009-final/{chromium,mobile-chrome}/`. El primer reintento encontró colisión del archivo de reporte entre perfiles; los artefactos se separaron por proyecto y la corrida final pasó. `pnpm run typecheck:e2e`, Prettier y `git diff --check` pasan. Coverage N/A: solo se modificaron E2E/helpers, no producción.
 
 **Revalidación iOS/WebKit (2026-10-09):** Playwright `mobile-safari` (WebKit, emulación iPhone 13) recorrió la matriz completa de `layout-gutters.spec.ts`: las 59 combinaciones incluyen móvil vertical/horizontal (320×568, 320×740, 844×390 y 932×430), tablet vertical/horizontal (768×1024 y 1024×768), escritorio y B−1/B/B+1 codificados en la matriz. El informe fuera del repo registra **1829** filas estáticas y **472** detalles poblados; **0** overflow y **0** errores de página en los pases guardados. El test estático pasó aislado **1/1** y repetido **2/2**; el de detalles poblados pasó **1/1**. Una corrida exploratoria inicial sí detectó un `XMLHttpRequest cannot load http` en `/pantry/categories/new`; el mensaje completo no quedó capturado y no se reprodujo en las tres corridas posteriores. Se mejoró el diagnóstico E2E para incluir el mensaje acotado y sanear URLs (sin credenciales ni query), pero ese evento puntual sigue sin causa confirmada: no se cierra con esta evidencia la casilla global de errores inexplicados. WebKit en Windows es emulación, no Safari/iOS nativo ni verificación de safe-area/teclado nativo; esas comprobaciones siguen abiertas.
