@@ -295,6 +295,7 @@ interface LineaEnPantalla extends ReceiptItem {
                         step="any"
                         inputmode="decimal"
                         [attr.id]="'linea-' + linea.id + '-cantidad'"
+                        [attr.aria-label]="('receipts.cantidad_accesible' | t) + ': ' + linea.name"
                         [value]="linea.cantidadTexto"
                         (change)="
                           editarLinea(linea, { quantity: numeroDe($any($event.target).value) })
@@ -338,6 +339,7 @@ interface LineaEnPantalla extends ReceiptItem {
                         step="0.01"
                         inputmode="decimal"
                         [attr.id]="'linea-' + linea.id + '-precio'"
+                        [attr.aria-label]="('receipts.precio' | t) + ': ' + linea.name"
                         [value]="linea.precioTexto"
                         (change)="
                           editarLinea(linea, { priceMinor: centimosDe($any($event.target).value) })
@@ -853,7 +855,7 @@ interface LineaEnPantalla extends ReceiptItem {
         }
 
         .tabla__fila {
-          grid-template-columns: 1fr auto auto;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           grid-template-areas:
             'nombre nombre precio'
             'nombre nombre quitar'

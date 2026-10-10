@@ -87,6 +87,35 @@ async function expectMobileTouchTargets(page: Page) {
   }
 }
 
+async function expectNoOverlappingLineInputs(page: Page) {
+  const overlaps = await page.locator('.tabla__fila input.linea__input').evaluateAll((inputs) => {
+    const bounds = inputs.map((input) => {
+      const rect = input.getBoundingClientRect();
+      return {
+        id: input.id,
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom
+      };
+    });
+    const collisions: { first: string; second: string }[] = [];
+    for (let first = 0; first < bounds.length; first += 1) {
+      for (let second = first + 1; second < bounds.length; second += 1) {
+        const a = bounds[first]!;
+        const b = bounds[second]!;
+        if (a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top) {
+          collisions.push({ first: a.id, second: b.id });
+        }
+      }
+    }
+    return collisions;
+  });
+  expect(overlaps, `Los campos de línea no deben solaparse: ${JSON.stringify(overlaps)}`).toEqual(
+    []
+  );
+}
+
 async function expectAccessibleNamesNotToAffectGeometry(page: Page, ids: string[]) {
   const labels = await page.evaluate(
     (inputIds) =>
@@ -214,6 +243,15 @@ async function guardarCapturaUnidadOferta(page: Page, testInfo: TestInfo, langua
   mkdirSync(directory, { recursive: true });
   await page.locator('.tabla').screenshot({
     path: join(directory, `receipt-line-unit-offer-${testInfo.project.name}-${language}.png`),
+    animations: 'disabled'
+  });
+}
+
+async function guardarCapturaCantidadPrecio(page: Page, testInfo: TestInfo, language: string) {
+  const directory = process.env.E2E_SCREENSHOT_DIR ?? testInfo.outputPath('screenshots');
+  mkdirSync(directory, { recursive: true });
+  await page.locator('.tabla').screenshot({
+    path: join(directory, `receipt-line-quantity-price-${testInfo.project.name}-${language}.png`),
     animations: 'disabled'
   });
 }
@@ -456,6 +494,131 @@ test.describe('edición de unidad y oferta en línea de ticket', () => {
       await page.goto(`/receipts/${confirmedId}`);
       await expect(page.getByLabel(scenario.unitLabel, { exact: true })).toHaveCount(0);
       await expect(page.getByLabel(scenario.offerLabel, { exact: true })).toHaveCount(0);
+      expect(pageErrors).toEqual([]);
+    });
+  }
+});
+
+test.describe('edición de cantidad y precio en línea de ticket', () => {
+  for (const scenario of [
+    {
+      language: 'es',
+      quantityLabel: 'Cantidad: Producto QA',
+      priceLabel: 'Precio: Producto QA'
+    },
+    {
+      language: 'en',
+      quantityLabel: 'Quantity: Producto QA',
+      priceLabel: 'Price: Producto QA'
+    }
+  ]) {
+    test(`persiste cantidad y precio con controles accesibles (${scenario.language})`, async ({
+      page
+    }, info) => {
+      test.skip(info.project.name === 'mobile-safari', 'La matriz de esta subunidad usa Chromium');
+      const pageErrors: string[] = [];
+      page.on('pageerror', (error) => pageErrors.push(`${error.name}: ${error.message}`));
+      await registerAndGoto(page, '/receipts');
+      await page.evaluate((language) => {
+        window.localStorage.setItem('hogar:v1:language', language);
+      }, scenario.language);
+      await page.reload();
+
+      const token = await tokenOf(page);
+      const profileResponse = await page.request.get('/api/auth/profile', {
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(profileResponse.ok()).toBeTruthy();
+      const profile = (await profileResponse.json()) as { data: { id: string } };
+      const runDirectory = process.env.E2E_RUN_DIR;
+      const databasePath = process.env.DATABASE_PATH;
+      if (!runDirectory || !databasePath) throw new Error('E2E requiere rutas temporales aisladas');
+      const { reviewId, confirmedId, reviewLineId } = seedReceipts(
+        databasePath,
+        runDirectory,
+        profile.data.id
+      );
+
+      await page.goto(`/receipts/${reviewId}`);
+      const quantity = page.getByLabel(scenario.quantityLabel, { exact: true });
+      const price = page.getByLabel(scenario.priceLabel, { exact: true });
+      await expect(quantity).toHaveValue('1');
+      await expect(price).toHaveValue('3.50');
+      for (const field of [quantity, price]) {
+        await expect(field).toHaveAttribute('type', 'number');
+        await expect(field).toHaveAttribute('inputmode', 'decimal');
+      }
+
+      const linePath = `/api/receipts/${reviewId}/items/${reviewLineId}`;
+      const quantityId = `linea-${reviewLineId}-cantidad`;
+      const priceId = `linea-${reviewLineId}-precio`;
+      const editableFieldIds = [quantityId, priceId];
+      const saveAndRead = async (
+        field: Locator,
+        value: string,
+        expectedPatch: Record<string, unknown>,
+        expectedLine: Record<string, unknown>
+      ) => {
+        const patch = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === linePath && response.request().method() === 'PATCH'
+        );
+        await field.fill(value);
+        await field.press('Tab');
+        const response = await patch;
+        expect(response.status()).toBe(200);
+        expect(response.request().postDataJSON()).toEqual(expectedPatch);
+
+        const detailResponse = await page.request.get(`/api/receipts/${reviewId}`, {
+          headers: { authorization: `Bearer ${token}` }
+        });
+        expect(detailResponse.status()).toBe(200);
+        const detail = (await detailResponse.json()) as {
+          data: { lines: (Record<string, unknown> & { id: string })[] };
+        };
+        expect(detail.data.lines.find((line) => line.id === reviewLineId)).toMatchObject(
+          expectedLine
+        );
+        await page.evaluate(() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+      };
+
+      await saveAndRead(quantity, '1.5', { quantity: 1.5 }, { quantity: 1.5 });
+      await saveAndRead(price, '2.00', { priceMinor: 200 }, { priceMinor: 200 });
+      await page.reload();
+      await expect(quantity).toHaveValue('1.5');
+      await expect(price).toHaveValue('2.00');
+
+      if (info.project.name === 'chromium') {
+        await expectNoHorizontalOverflow(page, 1440, 900);
+        await expect(quantity).toBeVisible();
+        await expectAccessibleNamesNotToAffectGeometry(page, editableFieldIds);
+        await guardarCapturaCantidadPrecio(page, info, scenario.language);
+        await expectNoHorizontalOverflow(page, 393, 851);
+        await expectAccessibleNamesNotToAffectGeometry(page, editableFieldIds);
+        await expectMobileTouchTargets(page);
+        await expectNoOverlappingLineInputs(page);
+        await expectNoHorizontalOverflow(page, 320, 568);
+        await expectAccessibleNamesNotToAffectGeometry(page, editableFieldIds);
+        await expectMobileTouchTargets(page);
+        await expectNoOverlappingLineInputs(page);
+      } else {
+        await expectNoHorizontalOverflow(page, 393, 851);
+        await expect(quantity).toBeVisible();
+        await expectAccessibleNamesNotToAffectGeometry(page, editableFieldIds);
+        await expectMobileTouchTargets(page);
+        await expectNoOverlappingLineInputs(page);
+        await guardarCapturaCantidadPrecio(page, info, scenario.language);
+        await expectNoHorizontalOverflow(page, 320, 568);
+        await expectAccessibleNamesNotToAffectGeometry(page, editableFieldIds);
+        await expectMobileTouchTargets(page);
+        await expectNoOverlappingLineInputs(page);
+      }
+
+      await page.goto(`/receipts/${confirmedId}`);
+      await expect(page.getByLabel(scenario.quantityLabel, { exact: true })).toHaveCount(0);
+      await expect(page.getByLabel(scenario.priceLabel, { exact: true })).toHaveCount(0);
       expect(pageErrors).toEqual([]);
     });
   }
