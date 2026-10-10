@@ -4791,6 +4791,15 @@ inspeccionadas de Dashboard, Calendario, Preferencias, drawer, safe-area y Pantr
 las raíces mantienen el marco común `--container-max:1280px`, sin alterar los max-width interiores de
 formularios y tarjetas; la auditoría geométrica global de familias sigue abierta.
 
+**Revalidación del drawer en WebKit (2026-10-10):** el fallo del E2E estaba en su coordenada, no en
+`MainLayoutComponent` ni en Escape. En Safari `innerWidth` era 393 px, pero el hitbox del overlay
+terminaba en x=387; el clic fijo en x=391 caía en el gutter de scrollbar (`elementFromPoint` devolvía
+`null`). La prueba ahora calcula un punto dentro del overlay y a la derecha del sidebar, y verifica el
+hit-test antes del clic. `main-layout-drawer.spec.ts` pasó **3/3** en mobile-safari y **6/6** en
+Chromium + Pixel 5; el Escape/foco funciona en los cuatro viewports móviles y el clic exterior, botón,
+navegación, límites desktop y ruta de cuenta pasan. El runner aislado confirmó cleanup de DB/proceso;
+no cambió CSS ni runtime, por lo que siguen vigentes las capturas PC/móvil inspeccionadas arriba.
+
 ### QA-LAYOUT.PREFERENCES-END-CONTROL.1 · acción final alcanzable sobre navegación fija
 
 **Fuente revalidada (2026-10-03):** `/preferences` usa la ruta autenticada bajo `MainLayoutComponent`.

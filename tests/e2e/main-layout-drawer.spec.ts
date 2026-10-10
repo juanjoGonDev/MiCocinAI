@@ -96,7 +96,26 @@ test.describe('authenticated mobile navigation drawer', () => {
 
       await menuButton.click();
       await expect(overlay).toBeVisible();
-      await page.mouse.click(viewport.width - 2, Math.floor(viewport.height / 2));
+      const outsidePoint = await page.evaluate(() => {
+        const overlayElement = document.querySelector<HTMLElement>('.sidebar-overlay');
+        const sidebarElement = document.querySelector<HTMLElement>('.sidebar');
+        if (!overlayElement || !sidebarElement) throw new Error('Falta el drawer móvil');
+
+        const overlayRect = overlayElement.getBoundingClientRect();
+        const sidebarRect = sidebarElement.getBoundingClientRect();
+        const outsideStart = Math.max(overlayRect.left, sidebarRect.right);
+        return {
+          x: Math.floor((outsideStart + overlayRect.right) / 2),
+          y: Math.floor((overlayRect.top + overlayRect.bottom) / 2)
+        };
+      });
+      expect(
+        await page.evaluate(
+          ({ x, y }) => document.elementFromPoint(x, y)?.classList.contains('sidebar-overlay'),
+          outsidePoint
+        )
+      ).toBe(true);
+      await page.mouse.click(outsidePoint.x, outsidePoint.y);
       await expect(overlay).toHaveCount(0);
 
       await menuButton.click();
