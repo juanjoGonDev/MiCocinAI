@@ -53,6 +53,10 @@ test('los botones compartidos mantienen la misma geometría sin importar su tama
 }, testInfo) => {
   test.setTimeout(240_000);
 
+  await page.route(/^https:\/\/fonts\.googleapis\.com\/.*/, (route) =>
+    route.fulfill({ status: 200, contentType: 'text/css', body: '' })
+  );
+
   const observations: Array<{
     viewport: (typeof VIEWPORTS)[number];
     large: ButtonGeometry;

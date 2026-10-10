@@ -5895,16 +5895,32 @@ tipografía/line-height, márgenes, alineación, radio y bordes con tolerancia �
 viewports comunes. Se excluyen anchuras naturales por texto, color/sombra de variantes, icon-only y
 controles custom de otras familias; no se fuerzan excepciones locales sin contrato funcional.
 
-- [ ] Añadir primero prueba del comparador con fixtures geométricos: debe detectar diferencias >1 px,
+- [x] Añadir primero prueba del comparador con fixtures geométricos: detecta diferencias >1 px,
       permitir ancho natural/texto y color distintos, y separar botones icon-only/touch-target.
-- [ ] Ejecutar E2E aislado en rutas representativas que usan la primitiva (`/account`, `/ai-config`,
+- [x] Ejecutar E2E aislado en rutas representativas que usan la primitiva (`/account`, `/ai-config`,
       `/pantry`, `/preferences`, `/recipes`, `/shopping`), Chromium y Pixel 5, 393×851 y 1440×900;
-      registrar solo geometría computada, cubrir labels/variantes presentes y no invocar proveedores.
-- [ ] Si el baseline descubre drift, corregir primero con la regresión roja y el token/primitiva común,
-      no con dimensiones locales; medir cobertura S/B/F/L ≥70 % por cada fichero de producción tocado,
-      sin modificar gates. Si ya cumple, conservar solo prueba/inventario.
-- [ ] Capturar e inspeccionar PC/móvil con fixtures sintéticos, ejecutar typecheck, check-ui, formato y
+      registrar solo geometría computada, comprobar botones con etiqueta textual y comparar las
+      variantes presentes; no se invocaron proveedores.
+- [x] El baseline no detectó drift (>1 CSS px); no se tocó código de producción ni hubo ficheros
+      aplicables a la cobertura S/B/F/L. Se conserva únicamente prueba/inventario, sin alterar gates.
+- [x] Capturar e inspeccionar PC/móvil con fixtures sintéticos, ejecutar typecheck, check-ui, formato y
       Playwright aislado, documentar rollback y dejar intacta la comparación global de las demás familias.
+
+**Evidencia (2026-10-10):** `pnpm run typecheck:e2e`, `pnpm run check:ui` (212 ficheros/21 reglas),
+Prettier y E2E aislado con Chromium y Pixel 5: **6/6 tests**, entre la regresión existente
+`ui-shared-button-geometry.spec.ts` y la nueva `ui-shared-button-routes-geometry.spec.ts`. Se conserva
+la cobertura previa de tamaños `sm/md/lg`, botones de diálogo y siete anchuras; el runner usó SQLite temporal bajo
+`%TEMP%\hogaria-e2e-*`, luego limpiada. 20 muestras por proyecto cubren las seis rutas y ambos
+viewports; se compararon las variantes `primary`, `secondary` y `outline`, y se mantuvieron separados
+los perfiles de botones touch-target. No hubo drift, errores de página, conexión de IA ni tráfico
+externo: Google Fonts se sirvió como CSS vacío local y los demás destinos externos se bloquearon. Los
+reportes sin texto ni valores y las capturas inspeccionadas quedan en el artefacto Git-ignorado
+`.e2e-screenshots/qa-layout-shared-buttons-20261010/` (`chromium-geometry.json`,
+`mobile-chrome-geometry.json`, capturas `*-1440-shared-button.png` y `*-393-shared-button.png`).
+Las fuentes remotas se sustituyeron durante esta validación; la inspección visual usa el fallback local.
+
+**Rollback focal:** revertir el commit de esta subunidad para retirar su E2E, inventario temporal y
+registro; no requiere cambio ni reversión de estilos de producción.
 
 ### Subunidad QA-LAYOUT.VISUAL-CONSISTENCY.ROOT-DISPLAY.1 · preservar el layout de las raíces
 
