@@ -3939,6 +3939,26 @@ flujo UI/DB aislado ni se confirmó ningún ticket. El token temporal fue revoca
 ausente; el contenido del snapshot y los scripts auxiliares temporales se vació. Los resultados
 anteriores son parciales y no cierran QA-AI.REAL-INTEGRATIONS.1.
 
+**Comprobación read-only tras el reinicio de WebAPI (2026-10-10):** `/health/ready` devolvió
+`ready=true`, `storage=ready`. El checkout local está en `feat/session-attachment-previews`, HEAD
+`a1c64d4e`; el PID que atiende `3001` arrancó a las 00:54:11, después de ese commit (la API no
+atestigua el SHA cargado). No se tocó el cambio local previo `tools.txt` de WebAPI. Una sesión posterior,
+a las 00:56, registra exactamente `image/jpeg` + `application/json`, `attachmentCount=2` y
+`includedInProviderRequestAttachmentCount=2`; terminó `success`, con `validatedOutput=true` y
+`validationPending=false`. Sin imprimir ni guardar la respuesta, el análisis transitorio confirmó JSON
+válido con las claves de ticket previstas, 24 líneas, cero categorías vacías y `createCategory` booleano
+en todas. La evidencia confirma que esa petición llegó a la validación estructurada de WebAPI; los logs
+redactados no exponen el body entrante, así que el valor exacto de `response_format` no se afirma como
+observado directamente.
+
+Los logs también muestran una finalización anterior con las cuatro fotos JPEG juntas y el JSON de
+inventario (agrupación distinta a la acordada), además de sesiones PDF+JSON cuyo ticket no se puede
+atribuir con seguridad sin leer datos privados. Como cualquiera pudo completar, no se reenvía ningún
+ticket. Esta pasada hizo solo lecturas locales/GET: cero POST al proveedor, cero archivos fuente de
+tickets abiertos/subidos y cero escrituras en la aplicación. Continúan pendientes el grupo exacto de tres fotos, la
+verificación de no duplicados para su respuesta, confirmar `response_format` en la petición entrante sin
+capturar su body y el flujo de revisión/historial en UI aislada; la unidad permanece abierta.
+
 ### Subunidad QA-AI.RECEIPT-INVENTORY-ATTACHMENT.1 · adjuntar el catálogo visible
 
 **Fuente revalidada (2026-10-08):** la captura que aportó el usuario muestra el prompt con el marcador
