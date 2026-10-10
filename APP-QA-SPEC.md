@@ -4467,12 +4467,25 @@ real sin reenviar ninguno.
 - [x] Acreditar que ambos adjuntos llegan como archivos independientes y el modelo lee ambos: la E2E
       live sintética y la telemetría real del grupo largo demuestran 2 listos/visibles/enviados. Véase
       `QA-AI.REAL-INTEGRATIONS.ATTACHMENT-PAIR.1`; esta marca no acredita extracción de tickets.
+- [x] Verificar con proveedor simulado que el prompt trata páginas solapadas como una compra, la
+      deduplicación final fusiona líneas equivalentes y conserva compras distintas del mismo producto;
+      la base aislada guarda solo una copia de cada línea equivalente.
 - [ ] Validar las categorías reales contra el snapshot y la deduplicación multipágina. El reintento
       autorizado del grupo largo terminó en HTTP 400/502 sin JSON validable; no se reenvía.
 - [x] Confirmar cleanup de recursos propios y registrar solo evidencia agregada; se preservan sin
       cambios los tres tokens smoke preexistentes por decisión expresa del usuario.
 - [ ] Cerrar la validación solo después de resultados reales verificables, revisión/historial y CI
       verde en el head; mantener abierto y sin merge mientras falte evidencia.
+
+**Evidencia con proveedor simulado (2026-10-10):**
+`pnpm --filter @hogaria/server exec vitest run src/utils/ticket-prompt.spec.ts
+src/utils/ticket-lines-dedup.spec.ts src/utils/ai-queue.spec.ts --reporter=dot` pasó **36/36**.
+Las pruebas comprueban la instrucción explícita de no repetir líneas entre páginas solapadas,
+normalización de mayúsculas/acentos/unidades, preservación de compras distintas con cantidad/precio/
+oferta diferentes, y persistencia de una sola línea equivalente cuando el stream sintético entrega
+«Tomate»/«Tomáte» repetidos. `ai-queue.spec.ts` usa SQLite `:memory:` y un directorio temporal para
+la integración; no se llamó a proveedor/WebAPI ni se usaron fotos reales. Esto acredita la defensa
+del código, pero no sustituye el resultado real del grupo de tres fotos, que permanece pendiente.
 
 **Smoke live sintético WebAPI previo (2026-10-10, 10:53 CEST; supersedido):** preflight `prepareExistingAiLiveSmokeSession` con el opt-in
 de logging local acotado; una llamada `POST /v1/chat/completions` desde Node stdin con dos `data:` URIs
