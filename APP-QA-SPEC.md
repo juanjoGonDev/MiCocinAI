@@ -4514,8 +4514,11 @@ adjuntos.
   acreditan para el request que alcanzó el submit `attachmentCount=2`,
   `requiredInventoryAttachmentCount=1`, `inventorySnapshotUploadCount=1`, `inlineContextCount=0`,
   `readyAttachmentCount=2` y `sentToModelAttachmentCount=2`. No hubo salida JSON final; el runner
-  terminó con error y, por tanto, no se pudieron comprobar categorías, líneas, deduplicación,
-  edición ni historial de este grupo. La autorización quedó consumida: **no reenviar**.
+  terminó con error. En la correlación redacted que sí alcanzó `prompt_submitted`, WebAPI registró
+  `failureStage=wait_for_reply`, `HttpConnectionAbortedError` y **229730 ms** hasta el fallo; esto no
+  permite determinar si la desconexión se originó en ChatGPT o en el transporte. No se obtuvo salida
+  JSON final, así que no se pudieron comprobar categorías, líneas, deduplicación, edición ni historial
+  de este grupo. La autorización quedó consumida: **no reenviar**.
 - Ambos runs usaron runner, SQLite, uploads y token propio temporales; no confirmaron compras ni
   escribieron en el inventario real. El runner terminó y no quedó su directorio E2E recién creado;
   la limpieza del token propio no reportó error. Se conservaron sin cambios los tres tokens smoke
