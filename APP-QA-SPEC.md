@@ -3284,7 +3284,21 @@ Capturas sintéticas inspeccionadas: [escritorio 1440×900](.e2e-screenshots/qa-
 - [ ] `/receipts/:id`: procesamiento IA directo (sin OCR según HOGARIA-SPEC §12aj), edición de tienda/notas/líneas/unidad/cantidad/precio/oferta, añadir/quitar, total que cuadra/no cuadra, confirmar a inventario, detener/reintentar/borrar y fallo de proveedor.
 
 **Evidencia parcial de ficha/cola (2026-10-10):** el runner aislado ejecutó en Chromium y Pixel 5
-`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/receipts.spec.ts tests/e2e/receipt-line-note.spec.ts tests/e2e/receipt-queue-actions.spec.ts --reporter=line`: **38/38**. Incluye extracción contra proveedor HTTP sintético (sin WebAPI/proveedor real), JSON de inventario en el request, corrección de metadatos/líneas, confirmación y lectura de inventario/tienda en SQLite efímera, nota de línea, total no coincidente, parada/reintento y borrado; el runner confirmó cleanup. La suite unitaria actual cubre parsing de unidad/oferta y `ai-queue.spec.ts` comprueba `response_format` estricto. Esa evidencia parcial se completó con `QA-RECEIPTS.LINE-UNIT-OFFER.1`; la ruta amplia sigue abierta y esta subunidad no se toma como validación integral de `/receipts/:id`. No hubo llamadas al proveedor externo ni escrituras reales.
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/receipts.spec.ts tests/e2e/receipt-line-note.spec.ts tests/e2e/receipt-queue-actions.spec.ts --reporter=line`: **42/42**. Incluye extracción contra proveedor HTTP sintético (sin WebAPI/proveedor real), JSON de inventario en el request, corrección de metadatos/líneas, confirmación y lectura de inventario/tienda en SQLite efímera, nota de línea, total no coincidente, parada/reintento y borrado; el runner confirmó cleanup. La suite unitaria actual cubre parsing de unidad/oferta y `ai-queue.spec.ts` comprueba `response_format` estricto. Esa evidencia parcial se completó con `QA-RECEIPTS.LINE-UNIT-OFFER.1`; la ruta amplia sigue abierta y esta subunidad no se toma como validación integral de `/receipts/:id`. No hubo llamadas al proveedor externo ni escrituras reales.
+
+#### QA-RECEIPTS.LINE-REMOVAL-MATCHING-TOTAL.1 · quitar una línea y validar la suma exacta
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §12aj.C/D promete líneas revisables con altas/bajas y aviso solo cuando el total no cuadra. `receipt-detail.component.ts` ya pide confirmación accesible antes de `DELETE` y calcula la suma, pero los E2E cubren añadir líneas y el aviso de descuadre, no borrar una línea ni el caso exacto. La hoja de estilos declara 28×28 CSS px para `.linea__quitar`; falta medir su caja renderizada, que debe cumplir el objetivo táctil móvil de 44×44.
+
+**Contrato:** sobre una ficha sintética `review` cuya línea suma exactamente el total, no mostrar alerta/desacuerdo. Cancelar la confirmación de quitar conserva la línea y no envía `DELETE`; confirmar hace un único `DELETE`, la línea desaparece tras GET/recarga y la suma/aviso se actualizan coherentemente. El botón conserva su icono compacto y nombre accesible localizado, pero ofrece un objetivo móvil de al menos 44×44 CSS px sin overflow en 390×844 y 320×740; desktop sigue validado en 1440×900.
+
+- [ ] Añadir primero una E2E aislada que compruebe total exacto, cancelación sin mutación, confirmación con payload/ruta `DELETE`, GET y recarga sin la fila, nombre accesible ES/EN y objetivo táctil ≥44×44 en Pixel 5.
+- [ ] Corregir solo la superficie táctil responsive del control si el test la detecta, manteniendo el glifo y la geometría del resto de la fila; inspeccionar capturas sintéticas comparables desktop/móvil.
+- [ ] Ejecutar E2E focal en Chromium/Pixel 5, la suite de tickets, `typecheck:e2e`, tests/coverage si cambia producción, `check:ui`, build, formato, diff, hooks, commit, push y CI verde.
+
+**Aislamiento:** usuario/SQLite/uploads temporales; solo fixtures sintéticas; no WebAPI, modelo, tickets reales ni inventario real.
+
+**Rollback:** retirar la E2E y, solo si se requiere por accesibilidad, el ajuste CSS del área táctil; no cambiar API ni datos.
 
 #### QA-RECEIPTS.LINE-UNIT-OFFER.1 · editar unidad y oferta de una línea
 
