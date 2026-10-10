@@ -71,6 +71,62 @@ describe('deduplicateTicketLines', () => {
     expect(deduplicateTicketLines(lines, 100)).toHaveLength(1);
   });
 
+  it('resolves mixed overlap groups without collapsing a separate identical purchase', () => {
+    const lines = [
+      { name: 'Tomate', quantity: 1, unit: 'ud', priceMinor: 500 },
+      { name: 'Pan', quantity: 1, unit: 'ud', priceMinor: 150 },
+      { name: 'Tomate', quantity: 1, unit: 'ud', priceMinor: 500 },
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 },
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 }
+    ];
+
+    const reconciled = deduplicateTicketLines(lines, 850);
+    expect(reconciled.map(({ name, priceMinor }) => [name, priceMinor])).toEqual([
+      ['Tomate', 500],
+      ['Pan', 150],
+      ['Agua mineral', 100],
+      ['Agua mineral', 100]
+    ]);
+  });
+
+  it('keeps every line when the ticket total cannot disambiguate equal-price duplicate groups', () => {
+    const lines = [
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 },
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 },
+      { name: 'Leche', quantity: 1, unit: 'ud', priceMinor: 100 },
+      { name: 'Leche', quantity: 1, unit: 'ud', priceMinor: 100 }
+    ];
+
+    expect(deduplicateTicketLines(lines, 300)).toEqual(lines);
+  });
+
+  it('can retain the total-supported number of rows in a partially overlapping group', () => {
+    const lines = [
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 },
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 },
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 }
+    ];
+
+    expect(deduplicateTicketLines(lines, 200)).toEqual(lines.slice(0, 2));
+  });
+
+  it('preserves rows rather than expanding an oversized reconciliation search', () => {
+    const groups = Array.from({ length: 13 }, (_, index) => ({
+      name: `Producto ${index}`,
+      quantity: 1,
+      unit: 'ud',
+      priceMinor: 2 ** index
+    }));
+    const lines = groups.flatMap((line) => [line, { ...line }]);
+
+    expect(
+      deduplicateTicketLines(
+        lines,
+        groups.reduce((total, line) => total + line.priceMinor, 0)
+      )
+    ).toEqual(lines);
+  });
+
   it('preserves rows when the total or any line price is unknown or does not reconcile', () => {
     const lines = [
       { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 },

@@ -655,12 +655,14 @@ describe('AI provider queue dispatcher', () => {
             confidence: 0.7,
             note: ''
           },
-          { name: 'Pan', category: 'other', createCategory: false, priceMinor: 150 }
+          { name: 'Pan', category: 'other', createCategory: false, priceMinor: 150 },
+          { name: 'Agua mineral', category: 'beverages', createCategory: false, priceMinor: 100 },
+          { name: 'AGUA mineral', category: 'beverages', createCategory: false, priceMinor: 100 }
         ],
         store: 'Mercado sintético',
         purchaseDate: '2024-02-29',
         currency: 'EUR',
-        totalMinor: 650,
+        totalMinor: 850,
         warnings: []
       };
       const encoder = new TextEncoder();
@@ -755,7 +757,7 @@ describe('AI provider queue dispatcher', () => {
         store: 'Mercado sintético',
         purchase_date: '2024-02-29',
         currency: 'EUR',
-        total_minor: 650
+        total_minor: 850
       });
       expect(
         db
@@ -765,7 +767,9 @@ describe('AI provider queue dispatcher', () => {
           .all(receiptId)
       ).toEqual([
         expect.objectContaining({ name: 'Tomate', quantity: 2, price_minor: 500 }),
-        expect.objectContaining({ name: 'Pan', quantity: 1, price_minor: 150 })
+        expect.objectContaining({ name: 'Pan', quantity: 1, price_minor: 150 }),
+        expect.objectContaining({ name: 'Agua mineral', quantity: 1, price_minor: 100 }),
+        expect.objectContaining({ name: 'AGUA mineral', quantity: 1, price_minor: 100 })
       ]);
       expect(db.prepare('SELECT name FROM stores WHERE user_id = ?').get(userId)).toMatchObject({
         name: 'Mercado sintético'

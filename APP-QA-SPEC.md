@@ -4470,10 +4470,10 @@ real sin reenviar ninguno.
 - [x] Verificar con proveedor simulado que el prompt trata páginas solapadas como una compra, la
       deduplicación final fusiona líneas equivalentes y conserva compras distintas del mismo producto;
       la base aislada guarda solo una copia de cada línea equivalente.
-- [x] Evitar borrar dos compras impresas idénticas: pasar `totalMinor` a la deduplicación final;
-      conservar todas las filas si los importes originales cuadran, deduplicar solo si todos los
-      importes son conocidos y únicamente la suma deduplicada cuadra, y preservar filas ante datos
-      incompletos o sumas discordantes.
+- [x] Evitar borrar compras impresas idénticas: pasar `totalMinor` a la deduplicación final y buscar
+      de forma acotada la combinación de cantidades por grupo equivalente que cuadra con el total.
+      Deduplicar solo si hay una interpretación única; preservar filas ante precios/total incompletos,
+      sumas discordantes, ambigüedad o exceso de estados de búsqueda.
 - [ ] Validar las categorías reales contra el snapshot y la deduplicación multipágina. El reintento
       autorizado del grupo largo terminó en HTTP 400/502 sin JSON validable; no se reenvía.
 - [x] Confirmar cleanup de recursos propios y registrar solo evidencia agregada; se preservan sin
@@ -4491,29 +4491,35 @@ oferta diferentes, y persistencia de una sola línea equivalente cuando el strea
 la integración; no se llamó a proveedor/WebAPI ni se usaron fotos reales. Esto acredita la defensa
 del código, pero no sustituye el resultado real del grupo de tres fotos, que permanece pendiente.
 
-**Regresión de conservación de filas (2026-10-10):** una nueva aserción falló primero: la función
-deduplicaba dos filas idénticas aunque `totalMinor` confirmaba que ambas compras estaban impresas.
-La corrección añade reconciliación con el total antes de persistir: si la suma original coincide,
-conserva las filas; solo colapsa equivalentes cuando todos los importes son conocidos y la suma tras
-deduplicar —pero no la suma original— coincide; si falta el total/precio o ninguna suma coincide,
-conserva las filas para revisión. `ticket-queue.ts` entrega el total validado a la función. La prueba
-focal actualizada (`ticket-prompt.spec.ts`, `ticket-lines-dedup.spec.ts`, `ai-queue.spec.ts`) pasó
-**39/39** con SQLite aislada; la integración sintética siguió guardando una sola línea Tomate, y las
-pruebas nuevas conservan las dos filas cuando el total suma ambas o la aritmética es ambigua. Ningún
-ticket real ni proveedor fue usado. La suite completa del servidor pasó **1239/1239 ejecutadas, 1
-omitida**; `ticket-lines-dedup.ts` quedó en **97.95/92.06/100/100 % S/B/F/L**, y `ticket-queue.ts`
-conservó **86.53/80.09/95.23/92.21 %**. `pnpm --filter @hogaria/server run build`, Prettier y
-`git diff --check` pasaron. El script local `pnpm --filter @hogaria/server run lint` no corre con el
-ESLint 9 configurado: pasa `--ext`, opción eliminada por flat config; no se alteró configuración ajena
-a esta regresión. Comando focal reproducible: `pnpm --filter @hogaria/server exec vitest run
-src/utils/ticket-prompt.spec.ts src/utils/ticket-lines-dedup.spec.ts src/utils/ai-queue.spec.ts
---reporter=dot` (**39/39**). Runtime: la integración de cola usa stream sintético y SQLite/directorio
-temporales; no aplica un harness live aparte. Rollback: revertir solo `deduplicateTicketLines`, su
-paso de `totalMinor` desde `ticket-queue.ts`, estas pruebas y esta evidencia. Los hooks Lefthook de
-pre-commit y pre-push pasaron sin bypass: Prettier, `check:ui`, build server+frontend, typecheck E2E y
-unitarias (frontend **1308/1308**; servidor **1239/1239 ejecutadas**, 1 omitida). Commit
-`2e8ee90` publicado en `arena/01a0a6c2-micocinai`; la CI de GitHub para ese SHA aún no aparece en la
-primera consulta posterior al push.
+**Regresión de conservación de filas (2026-10-10):** TDD detectó primero dos fallos en la función:
+con grupos mixtos se dejaba una repetición de Tomate por conservar también dos compras reales de
+Agua idénticas, y un grupo de tres observaciones no podía representar las dos filas que confirmaba
+el total. La deduplicación ahora agrupa líneas compatibles y resuelve, con tope de **4096 estados**, el
+número de filas a retener por grupo; aplica cambios solo si existe una combinación única. Si coinciden
+varias combinaciones, faltan precios/total, ninguna cuadra o se excede el tope, conserva el original.
+Una línea colapsada mantiene el merge previo de sus campos; filas idénticas distintas y respaldadas
+por el total se conservan en orden. `ticket-queue.ts` pasa el total validado antes de persistir.
+
+`ai-queue.spec.ts` usa stream sintético y SQLite/directorio temporales para validar el límite de
+persistencia: conserva las dos compras Agua de 1,00 € y colapsa solo la visualización repetida de
+Tomate, y persiste 4 filas en total. Pruebas unitarias adicionales cubren grupo mixto, 3→2, soluciones
+ambiguas, total que confirma todas las filas, precios/total incompletos y fallback al superar el límite.
+Comando focal `pnpm --filter @hogaria/server exec vitest run src/utils/ticket-prompt.spec.ts
+src/utils/ticket-lines-dedup.spec.ts src/utils/ai-queue.spec.ts --reporter=dot`: **43/43**; el baseline
+antes de implementar el solver dio **2 fallos/9** en la suite del deduplicador. La suite completa del
+servidor pasó **1243/1243 ejecutadas, 1 omitida**; `ticket-lines-dedup.ts` quedó en
+**98.94/92.70/100/100 % S/B/F/L**, y `ticket-queue.ts` conservó **86.53/80.09/95.23/92.21 %**.
+`pnpm --filter @hogaria/server run build`, Prettier y `git diff --check` pasaron. `pnpm --filter
+@hogaria/server run lint` sigue sin poder ejecutarse con el script heredado: `eslint src --ext .ts`
+usa una opción retirada por ESLint 9/flat config; no se alteró configuración ajena. No se usaron
+tickets reales ni se llamó proveedor. Rollback: retirar el solver acotado, el paso de `totalMinor`
+desde `ticket-queue.ts`, estas regresiones y esta evidencia; sin cambios de API/datos ni WebAPI.
+
+**Entrega inicial de la reconciliación (2026-10-10):** commit `2e8ee90` se publicó con hooks completos;
+pre-commit y pre-push validaron Prettier, `check:ui`, build server+frontend, typecheck E2E y unitarias
+(frontend **1308/1308**; servidor **1239/1239 ejecutadas**, 1 omitida). La integración de conteos
+mixtos descubrió después el defecto global descrito arriba y se corrigió en la presente revisión;
+CI de GitHub del HEAD actualizado sigue pendiente.
 
 **Smoke live sintético WebAPI previo (2026-10-10, 10:53 CEST; supersedido):** preflight `prepareExistingAiLiveSmokeSession` con el opt-in
 de logging local acotado; una llamada `POST /v1/chat/completions` desde Node stdin con dos `data:` URIs
