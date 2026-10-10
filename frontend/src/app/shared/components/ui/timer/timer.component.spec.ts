@@ -35,6 +35,19 @@ describe('TimerComponent', () => {
     expect(timer?.getAttribute('aria-live')).toBe('off');
   });
 
+  it('keeps the default timer layout and supports a compact recipe layout', () => {
+    const timer = fixture.nativeElement.querySelector('[role="timer"]') as HTMLElement;
+    const startButton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(timer.classList.contains('timer--compact')).toBeFalse();
+    expect(startButton.classList.contains('btn--primary')).toBeTrue();
+
+    component.compact = true;
+    fixture.detectChanges();
+
+    expect(timer.classList.contains('timer--compact')).toBeTrue();
+    expect(startButton.classList.contains('btn--outline')).toBeTrue();
+  });
+
   it('should format time correctly', () => {
     expect(component.formatTime(0)).toBe('00:00');
     expect(component.formatTime(30)).toBe('00:30');

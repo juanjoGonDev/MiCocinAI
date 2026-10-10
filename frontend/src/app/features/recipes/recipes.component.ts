@@ -50,6 +50,7 @@ import { I18nService } from '../../core/services/i18n.service';
 import { resolveRecipeRouteIntent } from './recipe-route-intent';
 import { recipeCategoryEmoji } from './recipe-category-emoji';
 import { RecipeStepPhotoComponent } from './recipe-step-photo.component';
+import { RecipeCookingViewComponent } from './recipe-cooking-view.component';
 import { AiParticipantsComponent } from '../../shared/components/ai-participants.component';
 import {
   detailLevelForCookingLevel,
@@ -105,6 +106,7 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
     CatalogLabelPipe,
     IconComponent,
     RecipeStepPhotoComponent,
+    RecipeCookingViewComponent,
     AiParticipantsComponent
   ],
   template: `
@@ -1007,6 +1009,7 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
       <section
         *ngIf="selectedRecipe() as recipe"
         class="recipe-detail-page"
+        [class.recipe-detail-page--cooking]="isCookingMode()"
         data-test="recipe-detail-page"
         aria-labelledby="recipe-detail-title"
       >
@@ -1015,9 +1018,23 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
             <app-icon name="chevron_left" [size]="18" [label]="null" />
             {{ 'recipes.return_to_list' | t }}
           </app-button>
-          <h1 id="recipe-detail-title" data-test="recipe-detail-title" tabindex="-1">
+          <h1
+            *ngIf="!isCookingMode()"
+            id="recipe-detail-title"
+            data-test="recipe-detail-title"
+            tabindex="-1"
+          >
             {{ recipe.name }}
           </h1>
+          <app-button
+            *ngIf="!isCookingMode() && getRecipeSteps(recipe, selectedRecipeDetailLevel()).length"
+            variant="primary"
+            data-test="recipe-cooking-open"
+            (onClick)="enterCookingMode()"
+          >
+            <app-icon name="kitchen" [size]="16" [label]="null" />
+            {{ 'recipes.cooking.mode_open' | t }}
+          </app-button>
           <app-button
             *ngIf="canEditRecipe(recipe)"
             variant="outline"
@@ -1029,7 +1046,15 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
           </app-button>
         </header>
         <article class="recipe-detail" data-test="recipe-full-detail">
-          <header class="recipe-detail__hero">
+          <app-recipe-cooking-view
+            *ngIf="isCookingMode()"
+            [recipe]="recipe"
+            [steps]="getRecipeSteps(recipe, selectedRecipeDetailLevel())"
+            [servings]="recipeServings()"
+            (servingsChange)="setRecipeServings($event)"
+            (exit)="exitCookingMode()"
+          />
+          <header *ngIf="!isCookingMode()" class="recipe-detail__hero">
             <div class="recipe-detail__cover">
               <img
                 *ngIf="recipeImageUrl(recipe) as imageUrl; else detailNoRecipeImage"
@@ -1108,7 +1133,7 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
           </header>
 
           <section
-            *ngIf="recipe.nutrition"
+            *ngIf="!isCookingMode() && recipe.nutrition"
             class="recipe-detail__section recipe-detail__panel"
             data-test="recipe-nutrition"
           >
@@ -1143,7 +1168,7 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
             </dl>
           </section>
 
-          <div class="recipe-detail__body">
+          <div *ngIf="!isCookingMode()" class="recipe-detail__body">
             <aside class="recipe-detail__sidebar" [attr.aria-label]="'dashboard.ingredients' | t">
               <section
                 class="recipe-detail__section recipe-detail__panel"
@@ -1295,7 +1320,10 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
             </div>
           </div>
 
-          <section *ngIf="recipe.sourceAttribution as source" class="recipe-detail__source">
+          <section
+            *ngIf="!isCookingMode() && recipe.sourceAttribution as source"
+            class="recipe-detail__source"
+          >
             <h3>{{ 'recipes.book.source' | t }}</h3>
             <strong>{{ source.publisher }}</strong>
             <p *ngIf="source.title">{{ source.title }}</p>
@@ -1309,7 +1337,7 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
             >
           </section>
 
-          <footer class="recipe-detail__actions">
+          <footer *ngIf="!isCookingMode()" class="recipe-detail__actions">
             <app-button
               variant="primary"
               [disabled]="cookingRecipeId() === recipe.id"
@@ -1372,6 +1400,15 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
 
       .recipe-detail-page__header h1:focus {
         outline: none;
+      }
+
+      .recipe-detail-page--cooking .recipe-detail-page__header {
+        min-height: 0;
+        margin-bottom: 0;
+      }
+
+      .recipe-detail-page--cooking .recipe-detail-page__header > app-button {
+        display: none;
       }
 
       .recipes__header {
@@ -2452,6 +2489,7 @@ export class RecipesComponent implements OnInit {
   recipeIngredientCategory = signal('all');
   selectedRecipe = signal<Recipe | null>(null);
   cookingRecipeId = signal<string | null>(null);
+  isCookingMode = signal(false);
   recipeServings = signal(2);
   selectedIngredients = signal<any[]>([]);
   selectedRecipeDetailLevel = signal<DetailLevel>('intermediate');
@@ -2975,8 +3013,9 @@ export class RecipesComponent implements OnInit {
   }
 
   private showRecipe(recipe: Recipe): void {
+    this.isCookingMode.set(false);
     this.selectedRecipe.set(recipe);
-    this.recipeServings.set(Math.max(1, Math.trunc(recipe.servings || 2)));
+    this.resetRecipeServings(recipe);
     this.selectedRecipeDetailLevel.set(
       recipeDetailLevelFor(
         this.recipeDetailPreferences(),
@@ -2985,6 +3024,10 @@ export class RecipesComponent implements OnInit {
       )
     );
     this.focusAfterRender('[data-test="recipe-detail-title"]');
+  }
+
+  private resetRecipeServings(recipe: Recipe): void {
+    this.recipeServings.set(Math.max(1, Math.trunc(recipe.servings || 2)));
   }
 
   private focusAfterRender(selector: string): void {
@@ -3027,6 +3070,7 @@ export class RecipesComponent implements OnInit {
 
   closeRecipeDetail(): void {
     const clearRecipeQuery = this.route.snapshot.queryParamMap.has('recipe');
+    this.isCookingMode.set(false);
     this.selectedRecipe.set(null);
     this.focusAfterRender('[data-test="recipe-list-heading"]');
     if (clearRecipeQuery) {
@@ -3038,6 +3082,21 @@ export class RecipesComponent implements OnInit {
         replaceUrl: true
       });
     }
+  }
+
+  enterCookingMode(): void {
+    const recipe = this.selectedRecipe();
+    if (!recipe || this.getRecipeSteps(recipe, this.selectedRecipeDetailLevel()).length === 0)
+      return;
+    this.isCookingMode.set(true);
+    this.focusAfterRender('[data-test="recipe-cooking-title"]');
+  }
+
+  exitCookingMode(): void {
+    this.isCookingMode.set(false);
+    const recipe = this.selectedRecipe();
+    if (recipe) this.resetRecipeServings(recipe);
+    this.focusAfterRender('[data-test="recipe-cooking-open"] button');
   }
 
   toggleIngredientSelection(ingredient: any): void {

@@ -7316,22 +7316,55 @@ de ajuste de tiempo fiable. Al finalizar un temporizador se presenta aviso visib
 Cambiar de paso en móvil no pausa ni desmonta otros cronómetros activos. Al salir/cargar de nuevo se
 descarta la sesión temporal.
 
-- [ ] Añadir primero pruebas rojas de componente y E2E para entrada/salida del modo, checklist/foco,
+- [x] Añadir primero pruebas rojas de componente y E2E para entrada/salida del modo, checklist/foco,
       navegación entre pasos, actualización inmediata de raciones y preservación de la receta/API.
-- [ ] Implementar B siguiendo tokens y geometría compartidos: lateral de ingredientes/timer por paso
+- [x] Implementar B siguiendo tokens y geometría compartidos: lateral de ingredientes/timer por paso
       en escritorio; un paso enfocado en móvil con progreso, anterior/siguiente y completar. No añadir
       tarjeta/modal decorativa ni eliminar secciones del detalle existente.
-- [ ] Cubrir temporizadores simultáneos, avance con el reloj controlado, completar/reiniciar,
+- [x] Cubrir temporizadores simultáneos, avance con el reloj controlado, completar/reiniciar,
       notificación visible y `aria-live`; al cambiar foco de paso los otros timers conservan su estado.
-- [ ] Validar cálculo en raciones 1, base, 20, la cota de enteros seguros e input inválido; cambio de ración no emite tráfico de
+- [x] Validar cálculo en raciones 1, base, 20, la cota de enteros seguros e input inválido; cambio de ración no emite tráfico de
       IA/API ni persiste en la receta. Los tiempos existentes no cambian al escalar comensales.
-- [ ] Ejecutar Playwright con fixture/DB/puertos aislados, proveedor stub sin invocarlo; Chromium
+- [x] Ejecutar Playwright con fixture/DB/puertos aislados, proveedor stub sin invocarlo; Chromium
       escritorio 1440×900 y móvil 393×851, 320×568 y 568×320, más bordes de breakpoint. Revisar
       overflow, safe-area disponible, orientación, teclado/foco, nombres/labels, contraste y controles
       táctiles ≥44×44 px. Guardar e inspeccionar capturas sintéticas comparables de PC/móvil.
-- [ ] Ejecutar unitarias, cobertura ≥70 % S/B/F/L por archivo instrumentable, suite frontend global,
+- [x] Ejecutar unitarias, cobertura ≥70 % S/B/F/L por archivo instrumentable, suite frontend global,
       `typecheck:e2e`, `check:ui`, Prettier, build y `git diff --check`; registrar comandos/evidencia,
       limitaciones nativas de iOS y rollback. No marcar casillas hasta contar con evidencia ejecutada.
+
+**Evidencia QA-RECIPES.COOKING-CHECKLIST.1 (2026-10-10):** las primeras pruebas aisladas
+confirmaron que faltaba la entrada accesible al modo. La E2E adicional de salida reprodujo otro fallo:
+el detalle retenía temporalmente 3 comensales en vez de volver a las 2 raciones guardadas; ahora la
+sesión se reinicia a la base al salir y el E2E verifica el valor y cantidad originales. El foco pasa al
+título al entrar y vuelve al botón de modo tras salir. El detalle completo, edición y enlace profundo
+se conservan fuera del modo.
+
+La prueba real aislada usa fixture sintético, SQLite/puertos bajo `%TEMP%` y cleanup verificado; no
+invoca proveedor/WebAPI ni escribe porciones en la receta. Comando:
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome tests/e2e/recipe-cooking-checklist.spec.ts --reporter=line`:
+**3 passed, 1 omitida** (la variante móvil no se repite en escritorio). Verificó escritorio 1440×900,
+móvil 393×851, mínimo 320×568, orientación 568×320 y umbrales 760/761 px; overflow, un único paso
+móvil, navegación/checklist, foco con teclado (incluido indicador visible en la casilla), control de
+raciones 2→3→20, persistencia/API, timers simultáneos con reloj controlado, pausa y conservación al
+cambiar de paso, fin de timer y aviso `status`
+`aria-live="polite"`. Los textos medidos de título, instrucción y timer idle/running/paused/finished
+superan contraste WCAG AA 4.5:1 en tema claro y oscuro; controles móviles comprobados ≥44×44 px.
+El reloj controlado descubrió que reanudar conservaba el número en el timer, pero el resumen volvía
+erróneamente a la duración inicial (`00:59` → `02:00`); se añadió primero la regresión y el resumen
+ahora conserva el tiempo pausado al reanudar.
+
+`pnpm run test:client`: **1327/1327**, cobertura global **94.76/86.25/94.39/96.10 % S/B/F/L**.
+Cobertura por archivo instrumentado: `recipe-cooking-view.component.ts` **100/96/100/100 %**,
+`recipes.component.ts` **92.25/87.56/90.83/92.86 %** y `timer.component.ts` **100/100/100/100 %**.
+También pasan `pnpm run typecheck:e2e`, `pnpm run check:ui` (**213 ficheros, 21 reglas**),
+`pnpm run build`, Prettier, `git diff --check` y la E2E indicada. Build concluye con avisos de
+presupuesto Angular: bundle inicial 862.06 kB y estilos inline de `recipes.component.ts` 17.21 kB
+(límite 10 kB); no se modifican los límites. Se inspeccionaron las capturas sintéticas
+`.e2e-screenshots/qa-recipe-cooking-checklist/chromium-cooking-view.png`,
+`mobile-chrome-cooking-view.png` y `mobile-chrome-cooking-step.png`. CSS respeta
+`env(safe-area-inset-bottom)`; Chromium emulado no valida el safe-area ni teclado software de un móvil
+nativo. La sesión se descarta al salir/cargar; tiempos no se escalan.
 
 **Rollback:** revertir la entrada/vista de cocina, el estado efímero/checklist, los avisos y sus
 pruebas/traducciones; mantener intactos los datos y la vista de receta existente.

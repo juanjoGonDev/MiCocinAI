@@ -10,7 +10,13 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
   standalone: true,
   imports: [TranslatePipe, CommonModule, ButtonComponent],
   template: `
-    <div [class]="getClasses()" role="timer" [attr.aria-label]="label || null" aria-live="off">
+    <div
+      [class]="getClasses()"
+      [class.timer--compact]="compact"
+      role="timer"
+      [attr.aria-label]="label || null"
+      aria-live="off"
+    >
       <span *ngIf="label" class="timer__label">{{ label }}</span>
 
       <div class="timer__display">
@@ -24,7 +30,7 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
       <div class="timer__controls">
         <app-button
           *ngIf="state === 'idle' || state === 'paused'"
-          variant="primary"
+          [variant]="compact ? 'outline' : 'primary'"
           size="sm"
           (onClick)="start()"
         >
@@ -88,6 +94,32 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
         gap: var(--space-3);
       }
 
+      .timer--compact {
+        align-items: stretch;
+        gap: var(--space-2);
+        padding: var(--space-3);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        background: var(--bg-secondary);
+        box-shadow: none;
+      }
+
+      .timer--compact .timer__label {
+        text-align: left;
+      }
+
+      .timer--compact .timer__display {
+        font-size: var(--text-2xl);
+        letter-spacing: normal;
+        text-align: center;
+      }
+
+      .timer--compact .timer__controls {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: var(--space-2);
+      }
+
       /* States */
       .timer--running .timer__display {
         color: var(--primary);
@@ -100,6 +132,24 @@ export type TimerState = 'idle' | 'running' | 'paused' | 'finished';
       .timer--finished .timer__display {
         color: var(--success);
         animation: pulse 1s infinite;
+      }
+
+      .timer--compact .timer__progress-bar {
+        background: var(--color-primary-700);
+      }
+
+      :host-context([data-theme='dark']) .timer--compact .timer__progress-bar {
+        background: var(--color-primary-300);
+      }
+
+      .timer--compact.timer--running .timer__display,
+      .timer--compact.timer--paused .timer__display,
+      .timer--compact.timer--finished .timer__display {
+        color: var(--text-primary);
+      }
+
+      .timer--compact.timer--finished .timer__display {
+        animation: none;
       }
 
       @keyframes pulse {
@@ -118,6 +168,7 @@ export class TimerComponent implements OnInit, OnDestroy {
   @Input() duration = 0; // in seconds
   @Input() label = '';
   @Input() autoStart = false;
+  @Input() compact = false;
 
   @Output() timerStart = new EventEmitter<void>();
   @Output() timerPause = new EventEmitter<void>();
