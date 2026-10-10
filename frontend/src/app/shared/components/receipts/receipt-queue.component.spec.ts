@@ -151,6 +151,42 @@ describe('ReceiptQueueComponent actions', () => {
     expect(component.panelPosition()).toBeNull();
   });
 
+  it('closes from document Escape and restores focus to its trigger', () => {
+    const trigger = document.createElement('button');
+    document.body.appendChild(trigger);
+    trigger.focus();
+    component.togglePanel({ currentTarget: trigger } as unknown as MouseEvent);
+
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    document.dispatchEvent(event);
+    fixture.detectChanges();
+
+    expect(event.defaultPrevented).toBeTrue();
+    expect(component.panelOpen()).toBeFalse();
+    expect(component.panelPosition()).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    trigger.remove();
+  });
+
+  it('also closes when Escape already dismissed a parent without stealing its focus', () => {
+    const queueTrigger = document.createElement('button');
+    const parentTrigger = document.createElement('button');
+    document.body.append(queueTrigger, parentTrigger);
+    parentTrigger.focus();
+    component.togglePanel({ currentTarget: queueTrigger } as unknown as MouseEvent);
+
+    const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    event.preventDefault();
+    document.dispatchEvent(event);
+    fixture.detectChanges();
+
+    expect(component.panelOpen()).toBeFalse();
+    expect(component.panelPosition()).toBeNull();
+    expect(document.activeElement).toBe(parentTrigger);
+    queueTrigger.remove();
+    parentTrigger.remove();
+  });
+
   it('stops all visible work and refreshes after the service settles', async () => {
     await component.pararTodo();
     expect(service.stopAll).toHaveBeenCalledTimes(1);

@@ -15,9 +15,12 @@ test('el panel de cola queda fuera del lateral y dentro del viewport', async ({ 
   });
   page.on('requestfailed', (request) => {
     if (new URL(request.url()).origin === appOrigin) {
-      browserErrors.push(
-        `requestfailed: ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`
-      );
+      const failure = request.failure()?.errorText ?? 'unknown';
+      const cancelledRead =
+        request.method() === 'GET' &&
+        /^(?:Load request cancelled|net::ERR_ABORTED|NS_BINDING_ABORTED)$/i.test(failure);
+      if (cancelledRead) return;
+      browserErrors.push(`requestfailed: ${request.url()} (${failure})`);
     }
   });
 

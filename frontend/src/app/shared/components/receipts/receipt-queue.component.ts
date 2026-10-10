@@ -42,7 +42,7 @@ import {
   standalone: true,
   imports: [CommonModule, RouterLink, IconComponent, ButtonComponent, TranslatePipe],
   template: `
-    <div class="rq" (keydown.escape)="closePanel()">
+    <div class="rq">
       <button
         type="button"
         class="rq__button"
@@ -453,6 +453,19 @@ export class ReceiptQueueComponent implements OnInit, OnDestroy {
     this.activeTrigger = event.currentTarget as HTMLElement;
     this.repositionPanel();
     this.panelOpen.set(true);
+  }
+
+  @HostListener('document:keydown.escape', ['$event'])
+  onEscapeKey(event: KeyboardEvent): void {
+    if (!this.panelOpen() || document.querySelector('.modal-overlay [role="dialog"]')) {
+      return;
+    }
+
+    const previouslyHandled = event.defaultPrevented;
+    if (!previouslyHandled) event.preventDefault();
+    const trigger = this.activeTrigger;
+    this.closePanel();
+    if (!previouslyHandled && trigger?.isConnected) trigger.focus();
   }
 
   @HostListener('window:resize')
