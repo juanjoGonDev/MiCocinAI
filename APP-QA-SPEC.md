@@ -974,7 +974,7 @@ cambia. Unidad test-only: no se cambia comportamiento, datos, ni configuración 
       proveedor inexistente y cero llamadas a `AiQueueService.watch`.
 - [x] Alcanzar ≥70 % en cada métrica del componente (preferiblemente 100 %); ejecutar la spec focal
       y la suite frontend completa con gate global ≥80 % intacto.
-- [ ] Ejecutar typecheck E2E, `check:ui`, build, formato y `git diff --check`; registrar resultados,
+- [x] Ejecutar typecheck E2E, `check:ui`, build, formato y `git diff --check`; registrar resultados,
       limitaciones y rollback. Hooks completos, commit atómico, push y CI verde; PR #41 abierta y sin merge.
 
 **Evidencia local (2026-10-10):** se añadió primero una ruta de test sin `configId`; el componente ya
@@ -992,7 +992,8 @@ el HTML generado. La suite completa
 rebajar el gate. `coverage-final.json` es obsoleto y las vistas HTML conservan directorios viejos;
 se verificó el LCOV actual (2026-10-10 09:41 CEST) y su página canónica `coverage/app/...`. Sin cambio visual,
 E2E/capturas N/A; el route real exige `configId`, por lo que la prueba es defensiva, no una ruta de
-producto.
+producto. Commit de implementación `24959d6` pasó los hooks Lefthook pre-commit/pre-push y está publicado;
+CI del HEAD `24959d6` (run `38035476337`) pasó **8/8 jobs**, incluidos los cuatro shards E2E y full-stack.
 
 **Rollback:** retirar solamente la prueba y esta subunidad; el componente y la ruta de producción no
 cambian.
