@@ -5882,6 +5882,32 @@ que no contienen hoy se conserva el recorte y auto-scroll por eventos actuales.
 **Rollback focal:** revertir únicamente el cálculo de ventana/auto-scroll para el presente, sus regresiones
 unitarias y E2E, y este subapartado; conservar el resto de las unidades del calendario.
 
+### QA-RECEIPT.TOTAL-MISMATCH.VISUAL.1 · avisar cuando no cuadra la suma del ticket
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md §12aj` indica que `totalMinor` avisa si no
+cuadra. `ReceiptDetailComponent` ya calcula la suma de líneas y, cuando difiere del total reconocido,
+marca ese importe y muestra el aviso localizado; su prueba unitaria cubre el cálculo, pero no la ficha
+real en navegador. Esta subunidad añade cobertura de UI sin cambiar el comportamiento ni confirmar
+compras.
+
+**Contrato:** una lectura sintética en estado `review`, con suma de líneas distinta de `totalMinor`,
+muestra ambas cantidades, marca el total discordante y enseña el aviso traducido ES/EN. El estado sigue
+siendo revisable y la prueba no pulsa confirmar ni escribe en la despensa/inventario real. Con datos
+aislados, también se verifica que no haya overflow horizontal en escritorio/móvil y se capturan solo
+fixtures sintéticas.
+
+- [ ] Añadir primero una regresión Playwright de navegador para un ticket sintético descuadrado; comprobar
+      la suma, el total, la clase visual de discrepancia, el aviso ES/EN y que continúa en `review`.
+- [ ] Ejecutar en Chromium y Pixel 5 sobre SQLite temporal, comprobar 320 px y el viewport de escritorio,
+      ausencia de overflow y capturas sintéticas comparables; no llamar a WebAPI/proveedor ni confirmar.
+- [ ] Ejecutar `typecheck:e2e`, el test focal, formato, `check:ui` y `git diff --check`; no modificar
+      producción ni pedir coverage para código instrumentable si el cambio sigue siendo solo de tests/docs.
+- [ ] Registrar evidencia/rollback, commit atómico con hooks y push; verificar CI actualizado del PR sin
+      mergearlo.
+
+**Rollback focal:** retirar solo la regresión y esta subunidad; no cambiar cálculo ni presentación del
+total salvo que la prueba revele un defecto reproducible.
+
 ### QA-RECEIPT.REVIEW-METADATA.1 · editar metadatos tras una lectura correcta
 
 **Fuente revalidada (2026-10-04):** el prompt admite tienda/fecha no detectadas (`null`) y el esquema
