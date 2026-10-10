@@ -1059,9 +1059,9 @@ se limpia/refresca la tabla y se muestra un único toast. El lote de utensilios 
 para los IDs seleccionados, tolera errores individuales y vuelve a cargar el catálogo. Usar únicamente
 signals, promesas y observables sintéticos, sin almacenamiento ni servicios reales.
 
-- [ ] Añadir primero pruebas unitarias para lote vacío, cancelar confirmación, IDs inválidos, éxito y
+- [x] Añadir primero pruebas unitarias para lote vacío, cancelar confirmación, IDs inválidos, éxito y
       rechazo individual en vaciar/borrar, y actualización/carga de utensilios.
-- [ ] Alcanzar ≥70 % S/B/F/L en `pantry.component.ts:1716–1793`; repetir prueba focal y suite frontend
+- [x] Alcanzar ≥70 % S/B/F/L en `pantry.component.ts:1716–1793`; repetir prueba focal y suite frontend
       completa manteniendo el gate global ≥80 %.
 - [ ] Registrar comandos/resultados y rollback; ejecutar Prettier, `check:ui`, build, typecheck E2E,
       `git diff --check`, hooks completos, commit atómico, push y CI verde. Sin cambio de UI, E2E/capturas
@@ -1069,6 +1069,17 @@ signals, promesas y observables sintéticos, sin almacenamiento ni servicios rea
 
 **Rollback:** retirar únicamente las pruebas de acciones por lote y esta subunidad; no cambiar la
 implementación ni las operaciones persistidas.
+
+**Evidencia local (2026-10-10):** `pnpm --filter @hogaria/web exec ng test --no-watch --include
+src/app/features/pantry/pantry.component.spec.ts --browsers=ChromeHeadlessLocal` pasó **24/24**. El run
+con `--code-coverage` también pasó las **24/24** pruebas; su exit code 1 se debe únicamente a que el
+subset no alcanza el gate global configurado de 80 % (20.57/7.54/12.34/22.45 % S/B/F/L), sin cambiar
+ningún umbral. El LCOV focal medido en `pantry.component.ts:1716–1793` alcanzó **94.1/100/83.3/94.1 %
+S/B/F/L** (32/34 sentencias/líneas, 5/5 ramas, 10/12 funciones). `pnpm run test:client` pasó **1308/1308**
+con cobertura global **93.08/84.43/92.08/94.40 % S/B/F/L**. También pasaron `pnpm run typecheck:e2e`,
+`pnpm run check:ui` (212 ficheros/21 reglas), `pnpm run build`, Prettier focal y `git diff --check`.
+El build conserva warnings preexistentes de imports/optional chaining y budgets. Sin cambio de producto,
+API ni UI; no se escribieron datos persistentes ni se llamó a proveedores.
 
 ### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
 

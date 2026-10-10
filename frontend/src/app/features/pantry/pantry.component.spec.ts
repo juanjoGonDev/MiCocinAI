@@ -5,13 +5,15 @@ import { ConfirmService } from '../../core/services/confirm.service';
 import { I18nService } from '../../core/services/i18n.service';
 import { PantryService } from '../../core/services/pantry.service';
 import { ToastService } from '../../core/services/toast.service';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import type { Ingredient, PantryCategory, Utensil } from '../../shared/models/pantry.model';
 import { PantryComponent } from './pantry.component';
 
-describe('PantryComponent add action', () => {
+describe('PantryComponent', () => {
   let router: jasmine.SpyObj<Router>;
   let pantryService: jasmine.SpyObj<PantryService>;
+  let toastService: jasmine.SpyObj<ToastService>;
+  let confirmService: jasmine.SpyObj<ConfirmService>;
   let ingredients: WritableSignal<Ingredient[]>;
   let utensils: WritableSignal<Utensil[]>;
   let categories: WritableSignal<PantryCategory[]>;
@@ -24,7 +26,14 @@ describe('PantryComponent add action', () => {
     categories = signal<PantryCategory[]>([]);
     pantryService = jasmine.createSpyObj<PantryService>(
       'PantryService',
-      ['updateIngredient', 'cargarInventarioCompleto', 'loadStats'],
+      [
+        'updateIngredient',
+        'deleteIngredient',
+        'updateUtensil',
+        'loadUtensils',
+        'cargarInventarioCompleto',
+        'loadStats'
+      ],
       {
         ingredients,
         utensils,
@@ -35,14 +44,20 @@ describe('PantryComponent add action', () => {
       }
     );
     pantryService.updateIngredient.and.returnValue(of(null));
+    pantryService.deleteIngredient.and.returnValue(of(true));
+    pantryService.updateUtensil.and.returnValue(of({} as Utensil));
+    pantryService.loadUtensils.and.returnValue(of([]));
     pantryService.cargarInventarioCompleto.and.resolveTo();
+    toastService = jasmine.createSpyObj<ToastService>('ToastService', ['success']);
+    confirmService = jasmine.createSpyObj<ConfirmService>('ConfirmService', ['confirm']);
+    confirmService.confirm.and.resolveTo(false);
 
     TestBed.configureTestingModule({
       providers: [
         { provide: I18nService, useValue: { t: (key: string) => key, changeTick: signal(0) } },
         { provide: PantryService, useValue: pantryService },
-        { provide: ToastService, useValue: {} },
-        { provide: ConfirmService, useValue: {} },
+        { provide: ToastService, useValue: toastService },
+        { provide: ConfirmService, useValue: confirmService },
         { provide: Router, useValue: router },
         {
           provide: ActivatedRoute,
@@ -82,6 +97,18 @@ describe('PantryComponent add action', () => {
       counts: { products: 0, children: 0, descendantProducts: 0 },
       protected: false,
       canDelete: true
+    };
+  }
+
+  function batchActions(component: PantryComponent): {
+    loteVaciar(): Promise<void>;
+    loteBorrar(): Promise<void>;
+    loteUtensilios(available: boolean): Promise<void>;
+  } {
+    return component as unknown as {
+      loteVaciar(): Promise<void>;
+      loteBorrar(): Promise<void>;
+      loteUtensilios(available: boolean): Promise<void>;
     };
   }
 
@@ -508,5 +535,138 @@ describe('PantryComponent add action', () => {
     expect(component.utensiliosFiltrados().map((item) => item.id)).toEqual(['ladle']);
     component.utensiliosQ.set('batidora');
     expect(component.utensiliosFiltrados()).toEqual([]);
+  });
+
+  it('does not write for an empty selection or a cancelled inventory batch', async () => {
+    const component = createComponent();
+    const actions = batchActions(component);
+
+    await actions.loteVaciar();
+    expect(confirmService.confirm).not.toHaveBeenCalled();
+    expect(pantryService.updateIngredient).not.toHaveBeenCalled();
+
+    component.inventarioSeleccion.set([ingredient('Manzana', 2, 'fruit')]);
+    confirmService.confirm.and.resolveTo(false);
+    await actions.loteVaciar();
+
+    expect(confirmService.confirm).toHaveBeenCalledOnceWith({
+      title: 'pantry.lote_titulo_vaciar',
+      message: 'pantry.lote_pregunta_vaciar',
+      confirmText: 'pantry.lote_vaciar'
+    });
+    expect(pantryService.updateIngredient).not.toHaveBeenCalled();
+    expect(pantryService.cargarInventarioCompleto).not.toHaveBeenCalled();
+    expect(toastService.success).not.toHaveBeenCalled();
+  });
+
+  it('empties valid selected IDs despite an individual update error and refreshes once', async () => {
+    const component = createComponent();
+    component.inventarioSeleccion.set([
+      ingredient('Manzana', 2, 'fruit'),
+      ingredient('Pera', 1, 'fruit'),
+      { ...ingredient('Legacy without ID', 4, 'fruit'), id: '' }
+    ]);
+    confirmService.confirm.and.resolveTo(true);
+    pantryService.updateIngredient.and.callFake((id) =>
+      id === 'manzana' ? throwError(() => new Error('synthetic failure')) : of(null)
+    );
+
+    await batchActions(component).loteVaciar();
+
+    expect(confirmService.confirm).toHaveBeenCalledOnceWith({
+      title: 'pantry.lote_titulo_vaciar',
+      message: 'pantry.lote_pregunta_vaciar',
+      confirmText: 'pantry.lote_vaciar'
+    });
+    expect(pantryService.updateIngredient.calls.allArgs()).toEqual([
+      ['manzana', { quantity: 0 }],
+      ['pera', { quantity: 0 }]
+    ]);
+    expect(pantryService.cargarInventarioCompleto).toHaveBeenCalledTimes(1);
+    expect(pantryService.loadStats).toHaveBeenCalledTimes(1);
+    expect(toastService.success).toHaveBeenCalledOnceWith('pantry.lote_vaciados');
+  });
+
+  it('deletes valid selected rows despite a failed delete and reports one batch result', async () => {
+    const component = createComponent();
+    component.inventarioSeleccion.set([
+      ingredient('Tomate', 2, 'vegetables'),
+      { ...ingredient('Missing ID', 1, 'vegetables'), id: '' }
+    ]);
+    confirmService.confirm.and.resolveTo(true);
+    pantryService.deleteIngredient.and.callFake((id) =>
+      id === 'tomate' ? throwError(() => new Error('synthetic failure')) : of(true)
+    );
+
+    await batchActions(component).loteBorrar();
+
+    expect(confirmService.confirm).toHaveBeenCalledOnceWith({
+      title: 'pantry.lote_titulo_borrar',
+      message: 'pantry.lote_pregunta_borrar',
+      confirmText: 'pantry.lote_borrar'
+    });
+    expect(pantryService.deleteIngredient).toHaveBeenCalledOnceWith('tomate');
+    expect(pantryService.cargarInventarioCompleto).toHaveBeenCalledTimes(1);
+    expect(toastService.success).toHaveBeenCalledOnceWith('pantry.lote_borrados');
+  });
+
+  it('does not confirm an empty delete batch or write after its confirmation is cancelled', async () => {
+    const component = createComponent();
+    const actions = batchActions(component);
+
+    await actions.loteBorrar();
+    expect(confirmService.confirm).not.toHaveBeenCalled();
+    expect(pantryService.deleteIngredient).not.toHaveBeenCalled();
+
+    component.inventarioSeleccion.set([ingredient('Tomate', 2, 'vegetables')]);
+    confirmService.confirm.and.resolveTo(false);
+    await actions.loteBorrar();
+
+    expect(confirmService.confirm).toHaveBeenCalledOnceWith({
+      title: 'pantry.lote_titulo_borrar',
+      message: 'pantry.lote_pregunta_borrar',
+      confirmText: 'pantry.lote_borrar'
+    });
+    expect(pantryService.deleteIngredient).not.toHaveBeenCalled();
+    expect(pantryService.cargarInventarioCompleto).not.toHaveBeenCalled();
+    expect(toastService.success).not.toHaveBeenCalled();
+  });
+
+  it('updates selected utensils in either direction and continues after an item error', async () => {
+    const component = createComponent();
+    component.utensiliosSeleccion.set([
+      { id: 'blender', name: 'Blender', available: false },
+      { id: 'whisk', name: 'Whisk', available: false }
+    ]);
+    pantryService.updateUtensil.and.callFake((id) =>
+      id === 'blender' ? throwError(() => new Error('synthetic failure')) : of({} as Utensil)
+    );
+    const actions = batchActions(component);
+
+    await actions.loteUtensilios(true);
+    await actions.loteUtensilios(false);
+
+    expect(pantryService.updateUtensil.calls.allArgs()).toEqual([
+      ['blender', { available: true }],
+      ['whisk', { available: true }],
+      ['blender', { available: false }],
+      ['whisk', { available: false }]
+    ]);
+    expect(pantryService.loadUtensils).toHaveBeenCalledTimes(2);
+    expect(toastService.success.calls.allArgs()).toEqual([
+      ['pantry.lote_utensilios_actualizados'],
+      ['pantry.lote_utensilios_actualizados']
+    ]);
+    expect(confirmService.confirm).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh or notify when no utensils are selected', async () => {
+    const component = createComponent();
+
+    await batchActions(component).loteUtensilios(true);
+
+    expect(pantryService.updateUtensil).not.toHaveBeenCalled();
+    expect(pantryService.loadUtensils).not.toHaveBeenCalled();
+    expect(toastService.success).not.toHaveBeenCalled();
   });
 });
