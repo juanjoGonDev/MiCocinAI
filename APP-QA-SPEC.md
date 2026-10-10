@@ -4484,13 +4484,43 @@ informar exactamente qué queda sin validar y no marcar completa esta unidad.
       de forma acotada la combinación de cantidades por grupo equivalente que cuadra con el total.
       Deduplicar solo si hay una interpretación única; preservar filas ante precios/total incompletos,
       sumas discordantes, ambigüedad o exceso de estados de búsqueda.
-- [ ] Consumir la autorización renovada en una única ejecución por grupo (JPEG ordinal 4 y PDF
-      multipágina de las otras tres fotos); comprobar las categorías contra el catálogo enviado y que
-      no queden líneas equivalentes duplicadas. No reenviar ninguno tras esta validación.
+- [x] Consumir la autorización renovada en una única ejecución por grupo (JPEG ordinal 4 y PDF
+      multipágina de las otras tres fotos); no reenviar ninguno tras esta validación.
+- [ ] Validar la respuesta real de ambos grupos, sus categorías contra el catálogo y, para el ticket
+      multipágina, que no queden líneas equivalentes duplicadas. La JPEG terminó correctamente; el
+      grupo multipágina no produjo una respuesta validable y queda consumido sin reintento.
 - [x] Confirmar cleanup de recursos propios y registrar solo evidencia agregada; se preservan sin
       cambios los tres tokens smoke preexistentes por decisión expresa del usuario.
 - [ ] Cerrar la validación solo después de resultados reales verificables, revisión/historial y CI
       verde en el head; mantener abierto y sin merge mientras falte evidencia.
+
+**Revalidación live con WebAPI sincronizada (2026-10-10):** tras la confirmación del usuario, se
+comprobó `D:\projects\webApi` limpio y sincronizado (`master` = `origin/master`,
+`f47f4b8deb9fc4a7a027e77bcea46ae733a9f5cd`); readiness devolvió HTTP 200. Los logs se consultaron
+filtrando solo eventos y contadores, sin leer ni conservar cuerpos, nombres, rutas o contenido de
+adjuntos.
+
+- **JPEG preferida (ordinal 4), una ejecución:** el smoke aislado pasó con 1 ticket, 2 solicitudes
+  strict-schema, una respuesta completada y fallback recuperado: streaming HTTP 400, fallback HTTP
+  200 con JSON. El coordinador validó el resultado y la ficha en `review`, líneas editables, metadatos
+  e historial; las categorías devueltas pertenecen al catálogo enviado. Su resumen registró dos
+  solicitudes con un adjunto JSON de inventario y uno de ticket cada una. Los logs redacted de WebAPI
+  acreditan `includedInProviderRequestAttachmentCount=2`, `inventorySnapshotUploadCount=1`,
+  `inlineContextCount=0`, `readyAttachmentCount=2` y `sentToModelAttachmentCount=2` antes del submit.
+- **Ticket largo (las otras tres fotos, una ejecución):** el coordinador creó un único PDF temporal
+  de tres páginas y no abrió los dos PDF ni la JPEG preferida. El proxy aceptó como máximo dos
+  solicitudes —streaming HTTP 400 y fallback HTTP 502— tras exigir a cada request `response_format`
+  JSON Schema estricto y exactamente el adjunto de ticket más `inventario.json`. Los logs redacted
+  acreditan para el request que alcanzó el submit `attachmentCount=2`,
+  `requiredInventoryAttachmentCount=1`, `inventorySnapshotUploadCount=1`, `inlineContextCount=0`,
+  `readyAttachmentCount=2` y `sentToModelAttachmentCount=2`. No hubo salida JSON final; el runner
+  terminó con error y, por tanto, no se pudieron comprobar categorías, líneas, deduplicación,
+  edición ni historial de este grupo. La autorización quedó consumida: **no reenviar**.
+- Ambos runs usaron runner, SQLite, uploads y token propio temporales; no confirmaron compras ni
+  escribieron en el inventario real. El runner terminó y no quedó su directorio E2E recién creado;
+  la limpieza del token propio no reportó error. Se conservaron sin cambios los tres tokens smoke
+  preexistentes. La falta de respuesta del grupo largo mantiene abierta esta subunidad y no permite
+  declarar validación live integral ni cerrar el spec.
 
 **Evidencia con proveedor simulado (2026-10-10):**
 `pnpm --filter @hogaria/server exec vitest run src/utils/ticket-prompt.spec.ts
