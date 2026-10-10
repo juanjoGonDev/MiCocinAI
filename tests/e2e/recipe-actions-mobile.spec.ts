@@ -8,6 +8,15 @@ import {
   waitForStableView
 } from './helpers/recipe-fixtures';
 
+const AI_PROVIDER_ROUTES = new Set([
+  '/api/ai/test-connection',
+  '/api/ai/generate-recipe',
+  '/api/ai/generate-multiple-recipes',
+  '/api/ai/replace-meal',
+  '/api/ai/recommendations',
+  '/api/ai/plan-week'
+]);
+
 async function expectActionsFit(
   page: import('@playwright/test').Page,
   selector: string,
@@ -139,9 +148,12 @@ test('el detalle a página completa conserva scroll y teclado; el formulario IA 
       () => 'Consejo sintético para comprobar el desplazamiento interno del diálogo.'
     ).join(' ')
   });
-  const aiRequests: string[] = [];
+  const providerRequests: string[] = [];
   page.on('request', (request) => {
-    if (request.url().includes('/api/ai/')) aiRequests.push(request.url());
+    const url = new URL(request.url());
+    if (request.method() === 'POST' && AI_PROVIDER_ROUTES.has(url.pathname)) {
+      providerRequests.push(url.pathname);
+    }
   });
 
   try {
@@ -235,7 +247,7 @@ test('el detalle a página completa conserva scroll y teclado; el formulario IA 
       }
     }
 
-    expect(aiRequests).toEqual([]);
+    expect(providerRequests).toEqual([]);
   } finally {
     await deleteSyntheticRecipe(page, recipe);
   }

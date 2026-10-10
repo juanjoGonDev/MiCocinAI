@@ -5325,12 +5325,20 @@ esa lectura de las acciones POST que ejecutan modelos (`/test-connection`, `/gen
 configuración y fallar ante cualquier POST de generación/test de proveedor; no relajar la prohibición
 de llamadas externas ni cambiar producción.
 
-- [ ] Reproducir el fallo local y ajustar primero el observer/assertion E2E para distinguir rutas de
-      configuración de endpoints provider-bound; comprobar el método HTTP y rutas del router vigente.
-- [ ] Ejecutar `recipe-actions-mobile.spec.ts` en Chromium y Pixel 5, conservar asserts de scroll,
+- [x] Diagnosticar el rojo de CI y ajustar el observer/assertion E2E para distinguir las rutas locales
+      de configuración de los endpoints provider-bound; validar el método HTTP y rutas del router.
+- [x] Ejecutar `recipe-actions-mobile.spec.ts` en Chromium y Pixel 5, conservar asserts de scroll,
       foco, geometría y que no se invoca ningún endpoint de proveedor.
 - [ ] Ejecutar `typecheck:e2e`, formato, `check:ui`, `git diff --check`, hooks, commit atómico, push y
       esperar CI verde; test-only, sin cambio de producto ni llamadas al modelo.
+
+**Evidencia (2026-10-10):** CI `38042245009` expuso el falso positivo; la corrida local previa al
+cambio pasó 2/2 porque no reprodujo la carrera de carga de configuraciones. La observación ahora solo
+cuenta POST a los endpoints de IA que llaman al proveedor según `ai.routes.ts`, permitiendo
+`GET /api/ai/configs`. Tras el ajuste, el mismo runner aislado `node scripts/run-isolated-playwright.mjs
+--workers=1 --project=chromium --project=mobile-chrome --forbid-only
+tests/e2e/recipe-actions-mobile.spec.ts --grep 'formulario IA cabe en móvil' --reporter=line` pasó
+**2/2** en Chromium y Pixel 5; la aplicación temporal se limpió y no se invocó ningún proveedor.
 
 **Rollback:** revertir únicamente el filtro/assertion de solicitudes del test E2E y este subapartado.
 
