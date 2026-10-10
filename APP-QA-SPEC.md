@@ -1063,7 +1063,7 @@ signals, promesas y observables sintéticos, sin almacenamiento ni servicios rea
       rechazo individual en vaciar/borrar, y actualización/carga de utensilios.
 - [x] Alcanzar ≥70 % S/B/F/L en `pantry.component.ts:1716–1793`; repetir prueba focal y suite frontend
       completa manteniendo el gate global ≥80 %.
-- [ ] Registrar comandos/resultados y rollback; ejecutar Prettier, `check:ui`, build, typecheck E2E,
+- [x] Registrar comandos/resultados y rollback; ejecutar Prettier, `check:ui`, build, typecheck E2E,
       `git diff --check`, hooks completos, commit atómico, push y CI verde. Sin cambio de UI, E2E/capturas
       nuevas no aplican; el E2E de éxito existente sigue siendo evidencia complementaria.
 
@@ -1080,6 +1080,9 @@ con cobertura global **93.08/84.43/92.08/94.40 % S/B/F/L**. También pasaron `pn
 `pnpm run check:ui` (212 ficheros/21 reglas), `pnpm run build`, Prettier focal y `git diff --check`.
 El build conserva warnings preexistentes de imports/optional chaining y budgets. Sin cambio de producto,
 API ni UI; no se escribieron datos persistentes ni se llamó a proveedores.
+
+**Publicación y CI (2026-10-10):** commit atómico `15c5335` con pruebas y spec pasó Lefthook
+pre-commit/pre-push, se publicó en la rama del PR y su CI `38038159189` pasó **9/9 jobs**.
 
 ### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
 
