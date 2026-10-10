@@ -3283,7 +3283,7 @@ Capturas sintéticas inspeccionadas: [escritorio 1440×900](.e2e-screenshots/qa-
 - [ ] `/receipts/:id`: procesamiento IA directo (sin OCR según HOGARIA-SPEC §12aj), edición de tienda/notas/líneas/unidad/cantidad/precio/oferta, añadir/quitar, total que cuadra/no cuadra, confirmar a inventario, detener/reintentar/borrar y fallo de proveedor.
 
 **Evidencia parcial de ficha/cola (2026-10-10):** el runner aislado ejecutó en Chromium y Pixel 5
-`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/receipts.spec.ts tests/e2e/receipt-line-note.spec.ts tests/e2e/receipt-queue-actions.spec.ts --reporter=line`: **38/38**. Incluye extracción contra proveedor HTTP sintético (sin WebAPI/proveedor real), JSON de inventario en el request, corrección de metadatos/líneas, confirmación y lectura de inventario/tienda en SQLite efímera, nota de línea, total no coincidente, parada/reintento y borrado; el runner confirmó cleanup. La suite unitaria actual cubre parsing de unidad/oferta y `ai-queue.spec.ts` comprueba `response_format` estricto. Se conserva abierta la casilla amplia: falta cerrar todas las ediciones de unidad/oferta en E2E integrado y verificar el contrato completo en una misma ficha; no se hicieron cambios de producto ni llamadas externas.
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome --forbid-only tests/e2e/receipts.spec.ts tests/e2e/receipt-line-note.spec.ts tests/e2e/receipt-queue-actions.spec.ts --reporter=line`: **38/38**. Incluye extracción contra proveedor HTTP sintético (sin WebAPI/proveedor real), JSON de inventario en el request, corrección de metadatos/líneas, confirmación y lectura de inventario/tienda en SQLite efímera, nota de línea, total no coincidente, parada/reintento y borrado; el runner confirmó cleanup. La suite unitaria actual cubre parsing de unidad/oferta y `ai-queue.spec.ts` comprueba `response_format` estricto. Esa evidencia parcial se completó con `QA-RECEIPTS.LINE-UNIT-OFFER.1`; la ruta amplia sigue abierta y esta subunidad no se toma como validación integral de `/receipts/:id`. No hubo llamadas al proveedor externo ni escrituras reales.
 
 #### QA-RECEIPTS.LINE-UNIT-OFFER.1 · editar unidad y oferta de una línea
 
@@ -3293,7 +3293,7 @@ Capturas sintéticas inspeccionadas: [escritorio 1440×900](.e2e-screenshots/qa-
 
 - [x] TDD primero: E2E aislada demuestra payload exacto, persistencia tras recargar, limpieza a `null` y modo confirmado de solo lectura; assertions por nombre accesible.
 - [x] Ejecutar en Chromium escritorio y Pixel 5 móvil; comprobar 390×844 y 320×740 sin overflow ni controles táctiles menores de 44 CSS px, guardar e inspeccionar capturas sintéticas comparables.
-- [ ] Ejecutar pruebas focales, suite frontend completa con coverage, `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`; registrar rollback, hooks, commit atómico, push y CI verde.
+- [x] Ejecutar pruebas focales, suite frontend completa con coverage, `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`; registrar rollback, hooks, commit atómico, push y CI verde.
 
 **Aislamiento:** fixtures y SQLite/puerto del runner temporal; no se llama a proveedor/WebAPI ni se confirma ni modifica el inventario real. El cambio previsto es solo de nombres accesibles, sin alteración visual; comparar geometría de los controles antes/después con tolerancia de 1 CSS px.
 
@@ -3302,6 +3302,8 @@ Capturas sintéticas inspeccionadas: [escritorio 1440×900](.e2e-screenshots/qa-
 `pnpm run test:client`: **1308/1308**, cobertura global **93.08/84.43/92.08/94.40 % S/B/F/L**; `receipt-detail.component.ts` alcanza **100/89.16/100/100 %** (S/B/F/L). `pnpm run typecheck:e2e`, `pnpm run check:ui` (212 ficheros/21 reglas), `pnpm run build`, Prettier y `git diff --check` pasan. El build mantiene warnings preexistentes de imports no usados, optional chaining y budgets.
 
 Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-receipt-line-unit-offer-20261010/receipt-line-unit-offer-chromium-es.png` y `receipt-line-unit-offer-mobile-chrome-es.png`.
+
+**Cierre de QA-RECEIPTS.LINE-UNIT-OFFER.1:** el cambio de accesibilidad está en `6cae5c6`, publicado en la rama de PR #41; CI `38040936155` terminó verde (9/9 jobs). Los hooks Lefthook de pre-commit y pre-push se ejecutaron sin bypass; el pre-push pasó `format-check`, `ui-quality`, `build`, `e2e-typecheck` y `unit-tests`. Comandos, resultados focales, coverage y runtime Chromium/Pixel 5 constan arriba. Esta casilla queda cerrada; la ruta `/receipts/:id` sigue abierta y no se infiere cubierta solo por esta subunidad.
 
 **Rollback:** retirar solo la E2E, atributos accesibles y este bloque; no cambiar contratos ni datos.
 
