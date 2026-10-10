@@ -3294,11 +3294,13 @@ Capturas sintéticas inspeccionadas: [escritorio 1440×900](.e2e-screenshots/qa-
 
 - [x] Añadir primero una E2E aislada que compruebe total exacto, cancelación sin mutación, confirmación con método/ruta `DELETE`, GET y recarga sin la fila, nombre accesible ES/EN y objetivo táctil ≥44×44 en Pixel 5.
 - [x] Corregir solo la superficie táctil responsive del control si el test la detecta, manteniendo el glifo y la geometría del resto de la fila; inspeccionar capturas sintéticas comparables desktop/móvil.
-- [ ] Ejecutar E2E focal en Chromium/Pixel 5, la suite de tickets, `typecheck:e2e`, tests/coverage si cambia producción, `check:ui`, build, formato, diff, hooks, commit, push y CI verde.
+- [x] Ejecutar E2E focal en Chromium/Pixel 5, la suite de tickets, `typecheck:e2e`, tests/coverage si cambia producción, `check:ui`, build, formato, diff, hooks, commit, push y CI verde.
 
 **Evidencia TDD (2026-10-10):** primero, la E2E aislada falló en móvil en 2 casos porque `.linea__quitar` medía 28×28 CSS px; escritorio pasó los otros 2. El cambio se limita a 44×44 en el breakpoint móvil y conserva el glifo SVG de 14×14 y el tamaño de escritorio. La repetición focal pasó **4/4** (ES/EN, Chromium/Pixel 5): total exacto sin aviso, cancelar sin DELETE y con línea preservada, un DELETE 200 tras confirmar, respuesta GET y recarga sin línea, suma 0 y aviso de descuadre localizado. Objetivo táctil ≥44×44 a 390×844 y 320×740, sin overflow a esos anchos; escritorio medido a 1440×900. La suite combinada de tickets pasó **46/46** en Chromium/Pixel 5 en 4.0 min con SQLite/app temporales y cleanup confirmado. Capturas sintéticas ignoradas por Git, inspeccionadas: `.e2e-screenshots/qa-receipt-line-remove-20261010/receipt-line-remove-es-desktop.png` y `receipt-line-remove-es-mobile.png` (también guardadas para EN). Sin proveedor externo.
 
 **Aislamiento:** usuario/SQLite/uploads temporales; solo fixtures sintéticas; no WebAPI, modelo, tickets reales ni inventario real.
+
+**Cierre CI/hooks (2026-10-10):** el commit `0f44e71` se publicó en PR #41 con hooks Lefthook de pre-commit y pre-push ejecutados sin bypass. La corrida `38044063543`, intento 1, tuvo tres fallos intermitentes en el shard 3 (modal de paginación de despensa no encontrado, fila PDF duplicada y fila de historial ausente); las reproducciones locales focales pasaron (PDF 5/5; paginación y rescate 12/12 en Chromium/Pixel 5). El reintento del shard fallido —intento 2 de la misma corrida— terminó verde: **9/9 jobs**, incluidos los cuatro shards E2E, servidor, build, full-stack y typecheck. PR #41 sigue abierto, no-Draft y sin merge. No se ocultó el fallo inicial ni se usaron bypasses.
 
 **Rollback:** retirar la E2E y, solo si se requiere por accesibilidad, el ajuste CSS del área táctil; no cambiar API ni datos.
 
@@ -5046,6 +5048,8 @@ tests/providers/chatgpt/attachment-pair.live.e2e.test.ts --config vitest.e2e.con
 Una consulta de solo lectura encontró tres tokens anteriores de smoke aún activos y sin caducidad,
 creados el 2026-10-04/07; no se registraron sus IDs/valores ni se modificaron, pues no pertenecen a esta
 corrida. El usuario autorizó conservarlos por ahora (2026-10-10); no revocar ni modificar sin nueva indicación.
+
+**Actualización WebAPI (2026-10-10, posterior al smoke):** se verificó que las PR #163 (entrega de adjuntos de inventario) y #164 (previews/diagnóstico de adjuntos) están merged. El checkout local `D:\projects\webApi` está limpio en `master` y coincide con `origin/master` en `f47f4b8`; en ese repositorio la rama principal se llama `master`. `GET http://127.0.0.1:3001/health/ready` devuelve `ready=true`, `storage=ready` (listener PID 55680). WebAPI no expone el SHA cargado por el proceso, por lo que el health check no demuestra el commit runtime. El intento anterior del ticket largo terminó HTTP 400/502 sin JSON validable; no se repite porque pudo haber completado. No se tocaron los tres tokens preexistentes conservados a petición del usuario.
 
 **Cierre limitado:** quedan demostrados el envío y la lectura por el modelo de la pareja de ficheros en
 el WebAPI activo. `QA-AI.REAL-INTEGRATIONS.1` sigue abierta hasta obtener una respuesta validada de los
