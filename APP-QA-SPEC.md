@@ -3292,9 +3292,11 @@ Capturas sintéticas inspeccionadas: [escritorio 1440×900](.e2e-screenshots/qa-
 
 **Contrato:** sobre una ficha sintética `review` cuya línea suma exactamente el total, no mostrar alerta/desacuerdo. Cancelar la confirmación de quitar conserva la línea y no envía `DELETE`; confirmar hace un único `DELETE`, la línea desaparece tras GET/recarga y la suma/aviso se actualizan coherentemente. El botón conserva su icono compacto y nombre accesible localizado, pero ofrece un objetivo móvil de al menos 44×44 CSS px sin overflow en 390×844 y 320×740; desktop sigue validado en 1440×900.
 
-- [ ] Añadir primero una E2E aislada que compruebe total exacto, cancelación sin mutación, confirmación con payload/ruta `DELETE`, GET y recarga sin la fila, nombre accesible ES/EN y objetivo táctil ≥44×44 en Pixel 5.
-- [ ] Corregir solo la superficie táctil responsive del control si el test la detecta, manteniendo el glifo y la geometría del resto de la fila; inspeccionar capturas sintéticas comparables desktop/móvil.
+- [x] Añadir primero una E2E aislada que compruebe total exacto, cancelación sin mutación, confirmación con método/ruta `DELETE`, GET y recarga sin la fila, nombre accesible ES/EN y objetivo táctil ≥44×44 en Pixel 5.
+- [x] Corregir solo la superficie táctil responsive del control si el test la detecta, manteniendo el glifo y la geometría del resto de la fila; inspeccionar capturas sintéticas comparables desktop/móvil.
 - [ ] Ejecutar E2E focal en Chromium/Pixel 5, la suite de tickets, `typecheck:e2e`, tests/coverage si cambia producción, `check:ui`, build, formato, diff, hooks, commit, push y CI verde.
+
+**Evidencia TDD (2026-10-10):** primero, la E2E aislada falló en móvil en 2 casos porque `.linea__quitar` medía 28×28 CSS px; escritorio pasó los otros 2. El cambio se limita a 44×44 en el breakpoint móvil y conserva el glifo SVG de 14×14 y el tamaño de escritorio. La repetición focal pasó **4/4** (ES/EN, Chromium/Pixel 5): total exacto sin aviso, cancelar sin DELETE y con línea preservada, un DELETE 200 tras confirmar, respuesta GET y recarga sin línea, suma 0 y aviso de descuadre localizado. Objetivo táctil ≥44×44 a 390×844 y 320×740, sin overflow a esos anchos; escritorio medido a 1440×900. La suite combinada de tickets pasó **46/46** en Chromium/Pixel 5 en 4.0 min con SQLite/app temporales y cleanup confirmado. Capturas sintéticas ignoradas por Git, inspeccionadas: `.e2e-screenshots/qa-receipt-line-remove-20261010/receipt-line-remove-es-desktop.png` y `receipt-line-remove-es-mobile.png` (también guardadas para EN). Sin proveedor externo.
 
 **Aislamiento:** usuario/SQLite/uploads temporales; solo fixtures sintéticas; no WebAPI, modelo, tickets reales ni inventario real.
 

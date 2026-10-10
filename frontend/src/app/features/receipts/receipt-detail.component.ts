@@ -904,6 +904,11 @@ interface LineaEnPantalla extends ReceiptItem {
           min-height: 44px;
           min-width: 44px;
         }
+
+        .linea__quitar {
+          width: 44px;
+          height: 44px;
+        }
       }
     `
   ]
