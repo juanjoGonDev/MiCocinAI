@@ -162,8 +162,17 @@ test.describe('Bandeja: ciclo de vida de una lista', () => {
     await page.getByRole('button', { name: 'Activas' }).click();
     await expect(trayRow(page, name)).toBeVisible();
     await page.reload();
-    await expect(trayRow(page, name)).toBeVisible();
+    const reopenedRow = trayRow(page, name);
+    await expect(reopenedRow).toBeVisible();
     await captureIfRequested(page, testInfo, 'shopping-list-reopened.png');
+    await reopenedRow.getByRole('link', { name: `Abrir ${name}` }).click();
+    await page.locator('[data-test="tab-cart"]').click();
+    const reopenedItem = page.locator('[data-test="item-row"]', {
+      has: page.locator('.detail__name', { hasText: 'Cafe' })
+    });
+    await expect(reopenedItem).toHaveClass(/detail__row--checked/);
+    await expect(reopenedItem.locator('.detail__price')).toHaveText('3,20 €');
+    await captureIfRequested(page, testInfo, 'shopping-list-reopened-details.png');
   });
 
   test('Cancelar conserva; borrar fallido no da éxito y permite reintentar', async ({
