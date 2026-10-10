@@ -993,7 +993,7 @@ rebajar el gate. `coverage-final.json` es obsoleto y las vistas HTML conservan d
 se verificó el LCOV actual (2026-10-10 09:41 CEST) y su página canónica `coverage/app/...`. Sin cambio visual,
 E2E/capturas N/A; el route real exige `configId`, por lo que la prueba es defensiva, no una ruta de
 producto. Commit de implementación `24959d6` pasó los hooks Lefthook pre-commit/pre-push y está publicado;
-CI del HEAD `24959d6` (run `38035476337`) pasó **8/8 jobs**, incluidos los cuatro shards E2E y full-stack.
+CI del HEAD `24959d6` (run `38035476337`) pasó **9/9 jobs**, incluidos los cuatro shards E2E y full-stack.
 
 **Rollback:** retirar solamente la prueba y esta subunidad; el componente y la ruta de producción no
 cambian.
@@ -1022,7 +1022,7 @@ llaman servicios reales.
       categoría y disponibilidad API `0/1`/boolean en utensilios.
 - [x] Alcanzar ≥70 % S/B/F/L en el rango de proyecciones `1484–1544` (objetivo 100 %); repetir la spec
       focal y suite frontend completa manteniendo el gate global ≥80 %.
-- [ ] Registrar comandos, métricas y limitaciones; formato, `check:ui`, build, typecheck E2E y
+- [x] Registrar comandos, métricas y limitaciones; formato, `check:ui`, build, typecheck E2E y
       `git diff --check`; hooks, commit atómico, push y CI verde. No hay cambio visual, por lo que E2E y
       capturas no aplican.
 
@@ -1040,6 +1040,8 @@ el servicio ni el contrato de las tablas.
 `pnpm run check:ui` (**212 ficheros, 21 reglas**), `pnpm run build`, Prettier focal y `git diff --check`.
 El build conserva warnings existentes de imports no usados, cadenas opcionales y budgets. Sin cambio de
 producción/UI: E2E y capturas N/A; los logs de build no muestran regresión funcional.
+Commit atómico `caffcd5` pasó hooks Lefthook pre-commit/pre-push, se publicó y su CI (`38036745128`) pasó
+**9/9 jobs**. PR #41 sigue abierta, sin Draft y sin merge.
 
 ### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
 
