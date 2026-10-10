@@ -3291,11 +3291,17 @@ Capturas sintéticas inspeccionadas: [escritorio 1440×900](.e2e-screenshots/qa-
 
 **Contrato:** en una ficha sintética en revisión, editar unidad (`ud` → `pack`) y oferta (`3x2` → `{ buy: 3, take: 2 }`) debe enviar solo el campo editado y persistir tras GET/recarga; borrar unidad o vaciar/invalidar oferta guarda `null`. Los controles tienen nombres accesibles localizados y asociados al nombre del producto. Una ficha confirmada no expone esos editores.
 
-- [ ] TDD primero: E2E aislada demuestra payload exacto, persistencia tras recargar, limpieza a `null` y modo confirmado de solo lectura; assertions por nombre accesible.
-- [ ] Ejecutar en Chromium escritorio y Pixel 5 móvil; comprobar 390×844 y 320×740 sin overflow ni controles táctiles menores de 44 CSS px, guardar e inspeccionar capturas sintéticas comparables.
+- [x] TDD primero: E2E aislada demuestra payload exacto, persistencia tras recargar, limpieza a `null` y modo confirmado de solo lectura; assertions por nombre accesible.
+- [x] Ejecutar en Chromium escritorio y Pixel 5 móvil; comprobar 390×844 y 320×740 sin overflow ni controles táctiles menores de 44 CSS px, guardar e inspeccionar capturas sintéticas comparables.
 - [ ] Ejecutar pruebas focales, suite frontend completa con coverage, `typecheck:e2e`, `check:ui`, build, formato y `git diff --check`; registrar rollback, hooks, commit atómico, push y CI verde.
 
 **Aislamiento:** fixtures y SQLite/puerto del runner temporal; no se llama a proveedor/WebAPI ni se confirma ni modifica el inventario real. El cambio previsto es solo de nombres accesibles, sin alteración visual; comparar geometría de los controles antes/después con tolerancia de 1 CSS px.
+
+**TDD y evidencia local (2026-10-10):** la E2E nueva falló primero en los cuatro proyectos/idiomas porque los inputs de unidad/oferta no tenían nombre accesible. Se añadieron etiquetas `aria-label` localizadas con el nombre del producto, sin CSS ni cambios de geometría. Tras el cambio, la subunidad focal pasó **4/4** y `receipt-line-note.spec.ts` pasó **8/8** en Chromium y Pixel 5 móvil. Comprueba payload PATCH exacto, lectura API y recarga de valores, unidad vacía/oferta vacía o inválida a `null`, controles ausentes en ticket confirmado, accesibilidad localizada y sin `pageerror`. La prueba compara rectángulos, márgenes y paddings con y sin `aria-label` (diferencia ≤1 CSS px) en 1440×900, 390×844 y 320×740; no detecta overflow y conserva targets móviles ≥44 px. Cleanup del runner SQLite/app temporal confirmado.
+
+`pnpm run test:client`: **1308/1308**, cobertura global **93.08/84.43/92.08/94.40 % S/B/F/L**; `receipt-detail.component.ts` alcanza **100/89.16/100/100 %** (S/B/F/L). `pnpm run typecheck:e2e`, `pnpm run check:ui` (212 ficheros/21 reglas), `pnpm run build`, Prettier y `git diff --check` pasan. El build mantiene warnings preexistentes de imports no usados, optional chaining y budgets.
+
+Capturas sintéticas inspeccionadas: `.e2e-screenshots/qa-receipt-line-unit-offer-20261010/receipt-line-unit-offer-chromium-es.png` y `receipt-line-unit-offer-mobile-chrome-es.png`.
 
 **Rollback:** retirar solo la E2E, atributos accesibles y este bloque; no cambiar contratos ni datos.
 

@@ -310,6 +310,7 @@ interface LineaEnPantalla extends ReceiptItem {
                         class="linea__input"
                         type="text"
                         [attr.id]="'linea-' + linea.id + '-unidad'"
+                        [attr.aria-label]="('receipts.unidad' | t) + ': ' + linea.name"
                         [value]="linea.unit ?? ''"
                         (change)="editarLinea(linea, { unit: $any($event.target).value || null })"
                       />
@@ -354,6 +355,7 @@ interface LineaEnPantalla extends ReceiptItem {
                         class="linea__input linea__input--oferta"
                         type="text"
                         [attr.id]="'linea-' + linea.id + '-oferta'"
+                        [attr.aria-label]="('receipts.oferta' | t) + ': ' + linea.name"
                         placeholder="3x2"
                         [value]="ofertaTexto(linea)"
                         (change)="editarOferta(linea, $any($event.target).value)"

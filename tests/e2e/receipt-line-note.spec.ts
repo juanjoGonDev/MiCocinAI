@@ -87,6 +87,69 @@ async function expectMobileTouchTargets(page: Page) {
   }
 }
 
+async function expectAccessibleNamesNotToAffectGeometry(page: Page, ids: string[]) {
+  const labels = await page.evaluate(
+    (inputIds) =>
+      inputIds.map((id) => document.getElementById(id)?.getAttribute('aria-label') ?? null),
+    ids
+  );
+  expect(labels.every((label) => label !== null)).toBe(true);
+
+  const captureGeometry = () =>
+    page.evaluate((inputIds) => {
+      return inputIds.map((id) => {
+        const input = document.getElementById(id);
+        if (!(input instanceof HTMLElement)) throw new Error(`No existe el control ${id}`);
+        const rect = input.getBoundingClientRect();
+        const style = getComputedStyle(input);
+        return {
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height,
+          marginTop: style.marginTop,
+          marginRight: style.marginRight,
+          marginBottom: style.marginBottom,
+          marginLeft: style.marginLeft,
+          paddingTop: style.paddingTop,
+          paddingRight: style.paddingRight,
+          paddingBottom: style.paddingBottom,
+          paddingLeft: style.paddingLeft
+        };
+      });
+    }, ids);
+
+  const before = await captureGeometry();
+  await page.evaluate((inputIds) => {
+    for (const id of inputIds) document.getElementById(id)?.removeAttribute('aria-label');
+  }, ids);
+  const withoutNames = await captureGeometry();
+  await page.evaluate(
+    ({ inputIds, savedLabels }) => {
+      inputIds.forEach((id, index) => {
+        const label = savedLabels[index];
+        if (label !== null && label !== undefined) {
+          document.getElementById(id)?.setAttribute('aria-label', label);
+        }
+      });
+    },
+    { inputIds: ids, savedLabels: labels }
+  );
+
+  for (const [index, original] of before.entries()) {
+    const next = withoutNames[index]!;
+    for (const key of Object.keys(original) as (keyof typeof original)[]) {
+      const originalValue = original[key];
+      const nextValue = next[key];
+      if (typeof originalValue === 'number' && typeof nextValue === 'number') {
+        expect(Math.abs(originalValue - nextValue)).toBeLessThanOrEqual(1);
+      } else {
+        expect(nextValue).toBe(originalValue);
+      }
+    }
+  }
+}
+
 async function expectReadableNote(note: Locator) {
   const ratios = await note.evaluate((element) => {
     const root = document.documentElement;
@@ -142,6 +205,15 @@ async function guardarCaptura(page: Page, testInfo: TestInfo, language: string) 
   mkdirSync(directory, { recursive: true });
   await page.locator('.tabla').screenshot({
     path: join(directory, `receipt-line-note-${testInfo.project.name}-${language}.png`),
+    animations: 'disabled'
+  });
+}
+
+async function guardarCapturaUnidadOferta(page: Page, testInfo: TestInfo, language: string) {
+  const directory = process.env.E2E_SCREENSHOT_DIR ?? testInfo.outputPath('screenshots');
+  mkdirSync(directory, { recursive: true });
+  await page.locator('.tabla').screenshot({
+    path: join(directory, `receipt-line-unit-offer-${testInfo.project.name}-${language}.png`),
     animations: 'disabled'
   });
 }
@@ -264,6 +336,126 @@ test.describe('edición de nota de línea del ticket', () => {
       await page.goto(`/receipts/${confirmedId}`);
       await expect(page.getByText('Nota bloqueada', { exact: true })).toBeVisible();
       await expect(page.getByLabel(scenario.noteLabel, { exact: true })).toHaveCount(0);
+      expect(pageErrors).toEqual([]);
+    });
+  }
+});
+
+test.describe('edición de unidad y oferta en línea de ticket', () => {
+  for (const scenario of [
+    { language: 'es', unitLabel: 'Unidad: Producto QA', offerLabel: 'Oferta: Producto QA' },
+    { language: 'en', unitLabel: 'Unit: Producto QA', offerLabel: 'Offer: Producto QA' }
+  ]) {
+    test(`persiste unidad y oferta con controles accesibles (${scenario.language})`, async ({
+      page
+    }, info) => {
+      const pageErrors: string[] = [];
+      page.on('pageerror', (error) => pageErrors.push(`${error.name}: ${error.message}`));
+      await registerAndGoto(page, '/receipts');
+      await page.evaluate((language) => {
+        window.localStorage.setItem('hogar:v1:language', language);
+      }, scenario.language);
+      await page.reload();
+
+      const token = await tokenOf(page);
+      const profileResponse = await page.request.get('/api/auth/profile', {
+        headers: { authorization: `Bearer ${token}` }
+      });
+      expect(profileResponse.ok()).toBeTruthy();
+      const profile = (await profileResponse.json()) as { data: { id: string } };
+      const runDirectory = process.env.E2E_RUN_DIR;
+      const databasePath = process.env.DATABASE_PATH;
+      if (!runDirectory || !databasePath) throw new Error('E2E requiere rutas temporales aisladas');
+      const { reviewId, confirmedId, reviewLineId } = seedReceipts(
+        databasePath,
+        runDirectory,
+        profile.data.id
+      );
+
+      await page.goto(`/receipts/${reviewId}`);
+      const unit = page.getByLabel(scenario.unitLabel, { exact: true });
+      const offer = page.getByLabel(scenario.offerLabel, { exact: true });
+      await expect(unit).toHaveValue('ud');
+      await expect(offer).toHaveValue('');
+
+      const linePath = `/api/receipts/${reviewId}/items/${reviewLineId}`;
+      const unitId = `linea-${reviewLineId}-unidad`;
+      const offerId = `linea-${reviewLineId}-oferta`;
+      const editableFieldIds = [unitId, offerId];
+      const saveAndRead = async (
+        field: Locator,
+        value: string,
+        expectedPatch: Record<string, unknown>,
+        expectedLine: Record<string, unknown>
+      ) => {
+        const patch = page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === linePath && response.request().method() === 'PATCH'
+        );
+        await field.fill(value);
+        await field.press('Tab');
+        const response = await patch;
+        expect(response.status()).toBe(200);
+        expect(response.request().postDataJSON()).toEqual(expectedPatch);
+
+        const detailResponse = await page.request.get(`/api/receipts/${reviewId}`, {
+          headers: { authorization: `Bearer ${token}` }
+        });
+        expect(detailResponse.status()).toBe(200);
+        const detail = (await detailResponse.json()) as {
+          data: { lines: (Record<string, unknown> & { id: string })[] };
+        };
+        expect(detail.data.lines.find((line) => line.id === reviewLineId)).toMatchObject(
+          expectedLine
+        );
+        await page.evaluate(() => {
+          if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        });
+      };
+
+      await saveAndRead(unit, 'pack', { unit: 'pack' }, { unit: 'pack' });
+      await saveAndRead(
+        offer,
+        '3x2',
+        { offer: { buy: 3, take: 2 } },
+        {
+          unit: 'pack',
+          offer: { buy: 3, take: 2 }
+        }
+      );
+      await page.reload();
+      await expect(unit).toHaveValue('pack');
+      await expect(offer).toHaveValue('3x2');
+
+      if (info.project.name === 'chromium') {
+        await expectNoHorizontalOverflow(page, 1440, 900);
+        await expect(unit).toBeVisible();
+        await expectAccessibleNamesNotToAffectGeometry(page, editableFieldIds);
+        await guardarCapturaUnidadOferta(page, info, scenario.language);
+        await expectNoHorizontalOverflow(page, 320, 740);
+        await expectAccessibleNamesNotToAffectGeometry(page, editableFieldIds);
+        await expectMobileTouchTargets(page);
+      } else {
+        await expectNoHorizontalOverflow(page, 390, 844);
+        await expect(unit).toBeVisible();
+        await expectAccessibleNamesNotToAffectGeometry(page, editableFieldIds);
+        await expectMobileTouchTargets(page);
+        await guardarCapturaUnidadOferta(page, info, scenario.language);
+        await expectNoHorizontalOverflow(page, 320, 740);
+        await expectAccessibleNamesNotToAffectGeometry(page, editableFieldIds);
+        await expectMobileTouchTargets(page);
+      }
+
+      await saveAndRead(unit, '', { unit: null }, { unit: null, offer: { buy: 3, take: 2 } });
+      await saveAndRead(offer, '', { offer: null }, { unit: null, offer: null });
+      await saveAndRead(offer, 'oferta inválida', { offer: null }, { offer: null });
+      await page.reload();
+      await expect(unit).toHaveValue('');
+      await expect(offer).toHaveValue('');
+
+      await page.goto(`/receipts/${confirmedId}`);
+      await expect(page.getByLabel(scenario.unitLabel, { exact: true })).toHaveCount(0);
+      await expect(page.getByLabel(scenario.offerLabel, { exact: true })).toHaveCount(0);
       expect(pageErrors).toEqual([]);
     });
   }
