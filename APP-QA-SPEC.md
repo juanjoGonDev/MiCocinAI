@@ -2966,6 +2966,25 @@ Commit `4e1e1bc` y push con hooks completos pasaron; CI `37966484202` validó el
 
 - [ ] `/shopping/:id`: alta rápida/typeahead/teclado/pegado multilínea/foto, marcar y editar items, selección/lote, unidades/cantidad/precio/oferta/descuento/cupón, carro pendiente/comprado, subtotal/total, vaciar/finalizar, reabrir, inventario, auditoría en vivo y volver tras recarga.
 
+#### QA-SHOPPING.AUDIT-LIVE.1 · refresco de autoría con la hoja abierta
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §8e define el historial de autoría mediante
+`GET /lists/:id/events` y SSE `GET /api/shopping/stream/lists/:id`; el cliente usa cada aviso para volver a leer el
+estado canónico y solo vuelve a leer los eventos mientras la hoja «Quién ha tocado qué» está abierta.
+`ShoppingListDetailComponent.startStream()` implementa esa invalidación, pero `tests/e2e/shopping-round10.spec.ts`
+solo comprueba el reloj relativo/absoluto de una fila ya existente, no el refresco en vivo desde otro cliente.
+
+- [ ] Crear lista y línea sintéticas, abrir el historial y esperar la lectura inicial de eventos y conexión SSE.
+- [ ] En una segunda pestaña autenticada del mismo usuario, añadir otra línea a esa lista. Verificar que el
+      historial abierto se actualiza por SSE/GET de eventos, contiene la nueva acción y no requiere reload ni
+      navegación de la pestaña observada; confirmar que el stream estaba conectado y no hay sondeo periódico
+      durante el estado inactivo ni errores de página.
+- [ ] Ejecutar en Chromium escritorio y Pixel 5 con servidor, SQLite, puerto y semilla aislados; guardar e
+      inspeccionar capturas sintéticas del historial actualizado, pasar typecheck E2E, formato y `git diff --check`.
+      No se cambia comportamiento productivo; cobertura instrumentable N/A.
+- [ ] Registrar evidencia y rollback focal (retirar `tests/e2e/shopping-audit-live.spec.ts` y esta subsección).
+      La unidad no cierra el resto del barrido `/shopping/:id` ni la matriz visual global.
+
 ### QA-SHOPPING.LIST-DELETE.1 · confirmación y recuperación al borrar una lista
 
 **Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §8e define el borrado de lista como irreversible y exige
