@@ -4764,6 +4764,34 @@ La prueba de deduplicación entre las tres fotos pertenece al ticket largo ya pr
 la JPEG individual no cubre ese criterio. La autorización de repetir la JPEG ya se consumió; no se
 reintenta ni se vuelve a enviar el ticket largo. Esta evidencia no cierra QA-AI.REAL-INTEGRATIONS.1.
 
+**Revalidación posterior al aviso de reinicio (2026-10-10, 08:28 CEST):** el listener que atendió
+seguía siendo PID `56924`, con CWD `D:\projects\webApi`, HEAD `a1c64d4e` e inicio `00:54:11 CEST`
+(el mismo PID/inicio que en el smoke de las 00:56, sin un reinicio posterior observable);
+`/health/ready` devolvió `ready=true`, `storage=ready`. El preflight solo aceptó los logs locales con
+`HOGARIA_AI_REAL_SMOKE_ALLOW_REDACTED_REQUEST_LOGS=1`: captura de cuerpo/cabeceras en cero y grabación
+de sesión/HTML diagnóstico apagados; no se cambiaron ajustes. Se ejecutó otra selección aislada
+`preferred-jpeg-only` (solo la JPEG preferida, una vez): `result=passed`, 1 ticket, 2 solicitudes
+estrictas, primer intento streaming HTTP 400 y fallback no-stream HTTP 200. La app validó/persistió la
+respuesta como JSON en estado `review`, con líneas, edición de metadatos e historial tras recarga; el
+runner y su SQLite/uploads temporales se limpiaron. No se confirmó el ticket ni se escribió en el
+inventario real.
+
+**El criterio de adjuntos volvió a fallar.** En las dos solicitudes la app/proxy verificó
+`response_format` JSON Schema estricto y exactamente 1 adjunto de ticket + 1 `inventario.json`; WebAPI
+registró `receivedFileCount=2`, `normalizedAttachmentCount=2`,
+`includedInProviderRequestAttachmentCount=2` y dos previews, pero solo
+`readyAttachmentCount=1` y `sentToModelAttachmentCount=1`. No se inspeccionó el prompt: los contadores
+no prueban el contenido inline ni que el modelo usara las categorías del snapshot.
+
+La causa comprobable sigue en el camino de Chat Completions activo: `src/api/opencode/controller.ts`
+`writeAttachmentBuffer()` crea `<UUID>-<basename>`, mientras `src/providers/chatgpt/opencode-executor.ts`
+solo fuerza `inventario.json` sin prefijo o con prefijo decimal. El nombre UUID no coincide; por tanto,
+la política puede inlinear el JSON pequeño y solo enviar un fichero. La detección de prefijo multipart
+numérico no corrige esta ruta UUID. No se reenvía ninguna otra fuente: la JPEG ya pudo completarse y
+el ticket largo no se repitió; la entrega de ambos adjuntos, la clasificación basada en inventario y
+la deduplicación de las tres fotos siguen sin validar. Mantener la casilla live abierta hasta que la
+telemetría muestre dos adjuntos listos y dos enviados, y exista una ejecución autorizada no duplicada.
+
 ### QA-AI.SMOKE.CANCELLATION.1 · cancelar el smoke sin dejar procesos o datos huérfanos
 
 **Fuente revalidada (2026-10-08):** el perfil vigente usa la WebAPI preexistente: la cancelación nunca
