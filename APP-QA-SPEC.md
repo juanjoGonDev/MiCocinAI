@@ -4470,6 +4470,10 @@ real sin reenviar ninguno.
 - [x] Verificar con proveedor simulado que el prompt trata páginas solapadas como una compra, la
       deduplicación final fusiona líneas equivalentes y conserva compras distintas del mismo producto;
       la base aislada guarda solo una copia de cada línea equivalente.
+- [x] Evitar borrar dos compras impresas idénticas: pasar `totalMinor` a la deduplicación final;
+      conservar todas las filas si los importes originales cuadran, deduplicar solo si todos los
+      importes son conocidos y únicamente la suma deduplicada cuadra, y preservar filas ante datos
+      incompletos o sumas discordantes.
 - [ ] Validar las categorías reales contra el snapshot y la deduplicación multipágina. El reintento
       autorizado del grupo largo terminó en HTTP 400/502 sin JSON validable; no se reenvía.
 - [x] Confirmar cleanup de recursos propios y registrar solo evidencia agregada; se preservan sin
@@ -4486,6 +4490,27 @@ oferta diferentes, y persistencia de una sola línea equivalente cuando el strea
 «Tomate»/«Tomáte» repetidos. `ai-queue.spec.ts` usa SQLite `:memory:` y un directorio temporal para
 la integración; no se llamó a proveedor/WebAPI ni se usaron fotos reales. Esto acredita la defensa
 del código, pero no sustituye el resultado real del grupo de tres fotos, que permanece pendiente.
+
+**Regresión de conservación de filas (2026-10-10):** una nueva aserción falló primero: la función
+deduplicaba dos filas idénticas aunque `totalMinor` confirmaba que ambas compras estaban impresas.
+La corrección añade reconciliación con el total antes de persistir: si la suma original coincide,
+conserva las filas; solo colapsa equivalentes cuando todos los importes son conocidos y la suma tras
+deduplicar —pero no la suma original— coincide; si falta el total/precio o ninguna suma coincide,
+conserva las filas para revisión. `ticket-queue.ts` entrega el total validado a la función. La prueba
+focal actualizada (`ticket-prompt.spec.ts`, `ticket-lines-dedup.spec.ts`, `ai-queue.spec.ts`) pasó
+**39/39** con SQLite aislada; la integración sintética siguió guardando una sola línea Tomate, y las
+pruebas nuevas conservan las dos filas cuando el total suma ambas o la aritmética es ambigua. Ningún
+ticket real ni proveedor fue usado. La suite completa del servidor pasó **1239/1239 ejecutadas, 1
+omitida**; `ticket-lines-dedup.ts` quedó en **97.95/92.06/100/100 % S/B/F/L**, y `ticket-queue.ts`
+conservó **86.53/80.09/95.23/92.21 %**. `pnpm --filter @hogaria/server run build`, Prettier y
+`git diff --check` pasaron. El script local `pnpm --filter @hogaria/server run lint` no corre con el
+ESLint 9 configurado: pasa `--ext`, opción eliminada por flat config; no se alteró configuración ajena
+a esta regresión. Comando focal reproducible: `pnpm --filter @hogaria/server exec vitest run
+src/utils/ticket-prompt.spec.ts src/utils/ticket-lines-dedup.spec.ts src/utils/ai-queue.spec.ts
+--reporter=dot` (**39/39**). Runtime: la integración de cola usa stream sintético y SQLite/directorio
+temporales; no aplica un harness live aparte. Rollback: revertir solo `deduplicateTicketLines`, su
+paso de `totalMinor` desde `ticket-queue.ts`, estas pruebas y esta evidencia. Hooks y CI del nuevo
+commit aún pendientes.
 
 **Smoke live sintético WebAPI previo (2026-10-10, 10:53 CEST; supersedido):** preflight `prepareExistingAiLiveSmokeSession` con el opt-in
 de logging local acotado; una llamada `POST /v1/chat/completions` desde Node stdin con dos `data:` URIs

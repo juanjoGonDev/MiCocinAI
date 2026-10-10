@@ -11,8 +11,29 @@ type ReceiptLineIdentity = {
   category?: string | null;
 };
 
-/** Collapse repeated visual views of the same printed line while preserving distinct purchases. */
-export function deduplicateTicketLines<T extends ReceiptLineIdentity>(lines: readonly T[]): T[] {
+/**
+ * Collapse repeated visual views only when the ticket total reconciles with the deduplicated rows.
+ * If the printed rows already sum to the total, or the arithmetic is incomplete/ambiguous, retain
+ * every row: two separate purchases can have identical product, quantity, unit, price and offer.
+ */
+export function deduplicateTicketLines<T extends ReceiptLineIdentity>(
+  lines: readonly T[],
+  totalMinor: number | null | undefined
+): T[] {
+  const ticketTotal = knownNumber(totalMinor);
+  const prices = lines.map((line) => knownNumber(line.priceMinor));
+  if (
+    ticketTotal === null ||
+    !Number.isInteger(ticketTotal) ||
+    ticketTotal < 0 ||
+    prices.some((price) => price === null || !Number.isInteger(price) || price < 0)
+  ) {
+    return [...lines];
+  }
+
+  const originalTotal = prices.reduce<number>((sum, price) => sum + (price ?? 0), 0);
+  if (originalTotal === ticketTotal) return [...lines];
+
   const unique: T[] = [];
   const indexesByProduct = new Map<string, number[]>();
 
@@ -29,7 +50,8 @@ export function deduplicateTicketLines<T extends ReceiptLineIdentity>(lines: rea
     unique[duplicateIndex] = mergeRepeatedLine(unique[duplicateIndex]!, line);
   }
 
-  return unique;
+  const deduplicatedTotal = unique.reduce((sum, line) => sum + knownNumber(line.priceMinor)!, 0);
+  return unique.length < lines.length && deduplicatedTotal === ticketTotal ? unique : [...lines];
 }
 
 function productLineKey(line: ReceiptLineIdentity): string {

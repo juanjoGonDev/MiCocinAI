@@ -747,7 +747,7 @@ async function correr(
       if (!sigueActivo) return;
       db.prepare('DELETE FROM receipt_items WHERE receipt_id = ?').run(recibo.id);
       let posicion = 0;
-      for (const linea of deduplicateTicketLines(validado.data.lines)) {
+      for (const linea of deduplicateTicketLines(validado.data.lines, validado.data.totalMinor)) {
         insertarLinea(db, recibo.id, linea as unknown as Record<string, unknown>, posicion);
         posicion += 1;
       }

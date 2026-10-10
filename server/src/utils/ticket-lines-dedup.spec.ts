@@ -3,24 +3,29 @@ import { deduplicateTicketLines } from './ticket-lines-dedup.js';
 
 describe('deduplicateTicketLines', () => {
   it('quita una línea repetida con variación de mayúsculas/acentos y conserva el dato más completo', () => {
-    const unique = deduplicateTicketLines([
-      {
-        name: 'Yogur natural',
-        quantity: 2,
-        unit: 'ud',
-        priceMinor: null,
-        confidence: 0.4,
-        category: 'other'
-      },
-      {
-        name: 'YÓGUR natural',
-        quantity: 2,
-        unit: 'unidades',
-        priceMinor: 240,
-        confidence: 0.9,
-        category: 'dairy'
-      }
-    ]);
+    const unique = deduplicateTicketLines(
+      [
+        {
+          name: 'Yogur natural',
+          quantity: 2,
+          unit: 'ud',
+          priceMinor: 240,
+          confidence: 0.4,
+          category: 'other',
+          note: ''
+        },
+        {
+          name: 'YÓGUR natural',
+          quantity: 2,
+          unit: 'unidades',
+          priceMinor: 240,
+          confidence: 0.9,
+          category: 'dairy',
+          note: 'matched across pages'
+        }
+      ],
+      240
+    );
 
     expect(unique).toHaveLength(1);
     expect(unique[0]).toMatchObject({
@@ -45,15 +50,50 @@ describe('deduplicateTicketLines', () => {
       }
     ];
 
-    expect(deduplicateTicketLines(lines)).toEqual(lines);
+    expect(deduplicateTicketLines(lines, 565)).toEqual(lines);
+  });
+
+  it('preserves distinct identical printed purchases when the ticket total confirms both', () => {
+    const lines = [
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 },
+      { name: 'AGUA mineral', quantity: 1, unit: 'ud', priceMinor: 100 }
+    ];
+
+    expect(deduplicateTicketLines(lines, 200)).toEqual(lines);
+  });
+
+  it('collapses overlapping views only when the deduplicated prices match the ticket total', () => {
+    const lines = [
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100, confidence: 0.7 },
+      { name: 'AGUA mineral', quantity: 1, unit: 'ud', priceMinor: 100, confidence: 0.9 }
+    ];
+
+    expect(deduplicateTicketLines(lines, 100)).toHaveLength(1);
+  });
+
+  it('preserves rows when the total or any line price is unknown or does not reconcile', () => {
+    const lines = [
+      { name: 'Agua mineral', quantity: 1, unit: 'ud', priceMinor: 100 },
+      { name: 'AGUA mineral', quantity: 1, unit: 'ud', priceMinor: 100 }
+    ];
+
+    expect(deduplicateTicketLines(lines, null)).toEqual(lines);
+    expect(deduplicateTicketLines(lines, 250)).toEqual(lines);
+    expect(deduplicateTicketLines([lines[0]!, { ...lines[1]!, priceMinor: null }], 100)).toEqual([
+      lines[0],
+      { ...lines[1]!, priceMinor: null }
+    ]);
   });
 
   it('mantiene la primera posición cuando una repetición aporta un campo que faltaba', () => {
-    const unique = deduplicateTicketLines([
-      { name: 'Pan integral', quantity: 1, unit: 'ud', priceMinor: 150 },
-      { name: 'Pan integral', quantity: 1, unit: 'ud', priceMinor: null, note: 'Sin etiqueta' },
-      { name: 'Manzana', quantity: 1, unit: 'kg', priceMinor: 299 }
-    ]);
+    const unique = deduplicateTicketLines(
+      [
+        { name: 'Pan integral', quantity: 1, unit: 'ud', priceMinor: 150 },
+        { name: 'Pan integral', quantity: 1, unit: 'ud', priceMinor: 150, note: 'Sin etiqueta' },
+        { name: 'Manzana', quantity: 1, unit: 'kg', priceMinor: 299 }
+      ],
+      449
+    );
 
     expect(unique.map(({ name }) => name)).toEqual(['Pan integral', 'Manzana']);
     expect(unique[0]).toMatchObject({ priceMinor: 150, note: 'Sin etiqueta' });
