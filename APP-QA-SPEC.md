@@ -5759,9 +5759,12 @@ excepciones deliberadas antes de implantarlas; no hay excepciones visuales impl�
 - [x] Recorrer el manifiesto vigente de rutas, shells y vistas pobladas con fixtures sintéticos; inventariar
       familias equivalentes de botones/acciones, tabs/segmentos, campos, tarjetas, modales, navegación,
       encabezados, gutters y espaciado interior. Registrar rutas/estados no cubiertos y el baseline calculado.
-- [ ] Añadir primero una regresión E2E roja que mida «Planificar IA» y sus acciones pares en `/calendar`,
-      y compare cada familia equivalente entre rutas. Registrar rectángulos, padding, font/line-height,
-      gap, margen y radio calculados con tolerancia ≤1 CSS px; un cambio de color/estado no debe alterar caja.
+- [x] Medir «Planificar IA» y sus acciones pares dentro de `/calendar` con una regresión E2E: rectángulos,
+      padding, font/line-height, gap, margen y radio calculados, tolerancia ≤1 CSS px; un cambio de
+      color/estado no altera caja. Se cubren 7 viewports (320, 393, 568×320, 767, 768, 1024 y 1440 px).
+- [ ] Extender la comparación de familias equivalentes a través de todas las rutas pertinentes; registrar
+      rectángulos, padding, font/line-height, gap, margen y radio con tolerancia ≤1 CSS px y documentar
+      excepciones funcionales explícitas.
 - [x] Subcaso loading/disabled de la CTA «Planificar IA»: el E2E reprodujo primero un salto de ancho
       119→150 px y verifica ahora que ancho/alto y estilos calculados se mantienen con tolerancia ≤1 px,
       nombre accesible, `aria-busy` y spinner superpuesto en Chromium y Pixel 5. La matriz completa de
@@ -5811,6 +5814,14 @@ build conserva avisos previos de imports/optional chaining y budgets. La cobertu
 91.50/82.44/90.03/92.94 % S/B/F/L, pero `CalendarComponent` queda en 20.14/1.77/5.13/0 % por
 archivo: no satisface el gate ≥70 % por archivo de la spec. Quedan abiertos focus/validación/overlays,
 las demás familias/rutas y esa limitación de coverage; este subcaso no cierra la unidad global.
+
+**Revalidación de geometría intraruta (2026-10-10):** fuentes actuales confirmadas en
+`tests/e2e/ui-geometry-consistency.spec.ts` y la barra de `CalendarComponent`; la suite aislada
+`node scripts/run-isolated-playwright.mjs --workers=1 --project=chromium --project=mobile-chrome
+tests/e2e/ui-geometry-consistency.spec.ts --reporter=line` pasó **6/6** con SQLite, puertos y semilla
+temporales. La prueba mide acciones pares de la cabecera en los 7 viewports, compara estilos calculados
+con la CTA y limita la diferencia de dimensiones a 1 CSS px. La comparación entre rutas sigue abierta;
+esta revalidación no cierra la unidad global. Coverage de producción: N/A, sin cambio de código productivo.
 
 **Rollback:** revertir solo los tokens/primitivas y ajustes geométricos de esta unidad, sus pruebas/capturas
 ignoradas y este subapartado; preservar el marco/gutters compartidos y las correcciones ajenas.
