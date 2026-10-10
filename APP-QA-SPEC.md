@@ -5116,6 +5116,18 @@ exactos y WebAPI registró `attachmentCount=2`, `inventorySnapshotUploadCount=1`
 `inlineContextCount=0`, `uploadAttachmentCount=2`, `readinessVisibleCount=2`. Fixture, perfil de
 navegador y token propios limpiados; no se abrieron tickets reales ni se escribió en el inventario.
 
+**Verificación adicional del WebAPI fusionado (2026-10-10):** el checkout limpio de
+`D:\projects\webApi` coincide con `origin/master` en `f47f4b8`; las PR #163 y #164 constan como
+merged. `GET http://localhost:3001/health/ready` responde HTTP 200, aunque WebAPI no expone el SHA
+cargado por el listener. La regresión sintética del navegador, ejecutada contra ese checkout con
+`pnpm exec vitest run --config vitest.e2e.config.ts
+tests/providers/chatgpt/attachment-clipboard-fallback.e2e.test.ts --reporter=dot`, pasó **22/22**.
+Incluye fallo parcial con dos ficheros y verifica el reset/limpieza sin volver a invocar `setInputFiles`;
+solo usa el compositor y adjuntos sintéticos, sin completar peticiones al proveedor ni abrir tickets.
+El primer comando sin `--config=vitest.e2e.config.ts` no encontró pruebas porque la config unitaria
+excluye `*.e2e.test.ts`; no ejecutó pruebas ni hizo llamadas. No se reenviaron las solicitudes reales
+que podían haberse completado.
+
 **Cierre limitado:** quedan demostrados el envío y la lectura por el modelo de la pareja de ficheros en
 el WebAPI activo. `QA-AI.REAL-INTEGRATIONS.1` sigue abierta hasta obtener una respuesta validada de los
 tickets, respetando la prohibición de repetir los grupos que pudieron completarse, y comprobar
