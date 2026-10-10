@@ -6629,15 +6629,16 @@ actualiza solo esa línea; una nota vacía se persiste como `null` y al recargar
 estados no revisables la nota continúa como texto, sin control de edición. No se añade columna a la
 tabla; el campo permanece en la tarjeta móvil, sin alterar el modelo responsive. Errores de guardado se
 notifican y no descartan el texto introducido. Longitud máxima 280, acorde al schema vigente. En móvil,
-el área táctil del campo mide al menos 44×44 px; el guardado funciona por teclado al abandonar el campo.
+los inputs de edición de línea comparten un objetivo táctil mínimo de 44×44 px; el guardado funciona por
+teclado al abandonar el campo.
 
 - [ ] Añadir primero una E2E roja con ticket/línea sintéticos y base aislada: la nota debe ser editable
       en `review`, aceptar creación/edición/borrado, persistir tras reload y no editarse en estado terminal.
 - [ ] Implementar el control en la celda de nombre, con labels ES/EN, límite de 280 y guardado integrado
       con `editarLinea`; verificar payload PATCH, limpieza a `null`, errores y retención del borrador.
 - [ ] Ejecutar E2E real de navegador en Chromium y Pixel 5, escritorio 1440×900 y móvil 390×844/320×740;
-      revisar teclado, labels, foco, objetivo táctil ≥44×44, overflow y geometría sin nueva columna,
-      con capturas sintéticas PC/móvil.
+      revisar teclado, labels, foco, objetivo táctil ≥44×44 de todos los inputs de línea, overflow y
+      geometría sin nueva columna, con capturas sintéticas PC/móvil.
 - [ ] Ejecutar unitarias focales, `typecheck:e2e`, build, `check:ui`, formato, `git diff --check` y
       coverage ≥70 % en S/B/F/L para cada archivo instrumentable tocado; no llamar a WebAPI/proveedor.
 - [ ] Registrar comandos/resultados/limitaciones y rollback; commit atómico con hooks, push, CI verde
