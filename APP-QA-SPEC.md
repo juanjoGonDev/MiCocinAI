@@ -998,6 +998,37 @@ CI del HEAD `24959d6` (run `38035476337`) pasó **8/8 jobs**, incluidos los cuat
 **Rollback:** retirar solamente la prueba y esta subunidad; el componente y la ruta de producción no
 cambian.
 
+### QA-04c.PANTRY.FILTER-PROJECTIONS.1 · filtros de filas, sugerencias y utensilios
+
+**Fuente revalidada (2026-10-10):** `HOGARIA-SPEC.md` §12aa.C exige filtrar por el subárbol de categoría;
+§12ab.B/C define búsqueda sin acentos/mayúsculas, filas con existencias, sugerencias sin existencias y
+filtrado de utensilios en la tabla. `PantryComponent` implementa esos resultados en los `computed` de
+`coincideBusqueda`, `clavesFiltro`, `filasInventario`, `hayInventario`, `suggestions`, `inPantryCount` y
+`utensiliosFiltrados`. La spec unitaria existente (`pantry.component.spec.ts`) crea el componente e invoca
+acciones concretas, pero no evalúa estos cálculos; el LCOV generado por la suite completa del 2026-10-10
+09:57 CEST registra el rango actual `pantry.component.ts:1484–1544` en **20/0/0/20 % S/B/F/L** (5/25
+sentencias, 0/25 ramas, 0/14 funciones y 5/25 líneas ejecutables). Unidad test-only; el baseline no
+demuestra un defecto de producto ni justifica cambiar su comportamiento.
+
+**Contrato:** con datos sintéticos, las filas contienen solo cantidades positivas y las sugerencias las
+cantidades `<= 0` (incluido `null`/ausente); los conteos de casa no dependen de búsqueda/categoría. La
+búsqueda recorta espacios y no distingue mayúsculas ni acentos. Elegir una categoría padre aplica su
+subárbol tanto a filas como a sugerencias. La tabla de utensilios convierte disponibilidad API `0/1` y
+`boolean` a un único booleano y busca ignorando mayúsculas/acentos. No se escribe en almacenamiento ni se
+llaman servicios reales.
+
+- [ ] Añadir primero pruebas unitarias focales con signals sintéticas que cubran búsqueda vacía y con
+      texto, coincidencia y no coincidencia, cantidades positivas/cero/negativas/nulas, padre e hija de
+      categoría y disponibilidad API `0/1`/boolean en utensilios.
+- [ ] Alcanzar ≥70 % S/B/F/L en el rango de proyecciones `1484–1544` (objetivo 100 %); repetir la spec
+      focal y suite frontend completa manteniendo el gate global ≥80 %.
+- [ ] Registrar comandos, métricas y limitaciones; formato, `check:ui`, build, typecheck E2E y
+      `git diff --check`; hooks, commit atómico, push y CI verde. No hay cambio visual, por lo que E2E y
+      capturas no aplican.
+
+**Rollback:** retirar únicamente las pruebas de proyecciones y esta subunidad; no cambiar el componente,
+el servicio ni el contrato de las tablas.
+
 ### QA-04c.I18N-SERVICE.1 · cobertura de idioma y mensajes localizados
 
 **Fuente revalidada (2026-10-09):** `HOGARIA-SPEC.md §12t-R` fija `I18nService` como responsable de resolver `es/en/auto`, actualizar el locale de fechas/números al cambiar idioma y componer frases localizadas; `i18n.service.ts` implementa además selección persistida, `languagechange`, fallback de diccionario, interpolación, plurales y tiempos relativos. No existe `i18n.service.spec.ts`; el uso indirecto en otras pruebas deja este servicio en **69.23/31.58/69.23/72.34 % S/B/F/L** (36/52 sentencias, 12/38 ramas, 9/13 funciones, 34/47 líneas). La cobertura baja no prueba un fallo de producto: faltan pruebas unitarias directas de rutas existentes. Alcance test-only, sin cambiar traducciones, producción, preferencias ajenas ni llamadas externas.
