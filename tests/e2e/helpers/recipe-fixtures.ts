@@ -14,6 +14,7 @@ export interface SyntheticRecipeOptions {
   totalTime?: number;
   tips?: string;
   warning?: string;
+  steps?: Array<{ stepNumber: number; instruction: string; tips?: string; warning?: string }>;
   servings?: number;
   calories?: number;
   restTime?: number | null;
@@ -26,10 +27,12 @@ export interface SyntheticRecipeOptions {
     substitutes?: string[];
     notes?: string | null;
   }>;
+  utensils?: string[];
   guidance?: {
     appliances: string[];
     parallelTasks: string[];
     tipsAndVariations: string[];
+    batchCookingWarning?: string | null;
   };
   instructionsByLevel?: {
     basic: Array<Record<string, unknown>>;
@@ -76,11 +79,12 @@ export async function createSyntheticRecipe(
       calories: options.calories,
       restTime: options.restTime,
       ingredients: options.ingredients ?? [{ name: 'Tomate QA', quantity: 2, unit: 'unit' }],
+      utensils: options.utensils ?? [],
       ...(options.guidance ? { guidance: options.guidance } : {}),
       ...(options.instructionsByLevel
         ? { instructionsByLevel: options.instructionsByLevel }
         : {
-            steps: [
+            steps: options.steps ?? [
               {
                 stepNumber: 1,
                 instruction: 'Cortar el tomate.',

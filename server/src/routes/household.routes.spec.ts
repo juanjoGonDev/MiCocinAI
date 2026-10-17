@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
+import { ensureDefaultCategories } from '../utils/pantry-categories.js';
 
 process.env.DATABASE_PATH = ':memory:';
 process.env.NODE_ENV = 'test';
@@ -16,6 +17,7 @@ describe('household create and join transactions', () => {
   beforeAll(async () => {
     const database = await import('../config/database.js');
     const { householdRoutes } = await import('./household.routes.js');
+    const { householdMealPlanningRoutes } = await import('./household-meal-planning.routes.js');
     const { authMiddleware } = await import('../middleware/auth.middleware.js');
     const { config } = await import('../config/app.config.js');
     await database.initializeDatabase();
@@ -23,6 +25,7 @@ describe('household create and join transactions', () => {
     db = database.getDatabase();
     app = new Hono();
     app.route('/api/household', householdRoutes);
+    app.route('/api/household', householdMealPlanningRoutes);
     app.get('/api/protected-household-test', authMiddleware, (context) =>
       context.json({ success: true })
     );
@@ -308,6 +311,113 @@ describe('household create and join transactions', () => {
     });
   });
 
+  it('creates another household when the same user has category keys in an older household', async () => {
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'previous-house',
+      'Hogar anterior',
+      'PREVIOUS1'
+    );
+    const owner = await makeUser('returning-owner', 'previous-house');
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES ('previous-owner-membership', 'previous-house', ?, 'admin', '{}')`
+    ).run(owner.id);
+    db.prepare(
+      `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color, position)
+       VALUES ('previous-vegetables', ?, 'previous-house', 'vegetables', 'Mi huerto', '#123456', 1)`
+    ).run(owner.id);
+
+    const response = await call(owner, 'POST', '', { name: 'Hogar nuevo' });
+    const result = (await response.json()) as { success: boolean; data?: { id: string } };
+
+    expect(response.status).toBe(201);
+    expect(result.success).toBe(true);
+    expect(result.data?.id).toBeTruthy();
+    expect(
+      db
+        .prepare('SELECT name FROM pantry_categories WHERE id = ? AND household_id = ?')
+        .get('previous-vegetables', 'previous-house')
+    ).toEqual({ name: 'Mi huerto' });
+    expect(
+      db
+        .prepare(
+          `SELECT name FROM pantry_categories
+           WHERE user_id = ? AND household_id = ? AND key = 'vegetables'`
+        )
+        .get(owner.id, result.data?.id)
+    ).toEqual({ name: 'Verduras' });
+  });
+
+  it('creates another household when the previous household has the fully seeded category catalog', async () => {
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'seeded-previous-house',
+      'Hogar anterior',
+      'SEEDED01'
+    );
+    const owner = await makeUser('seeded-returning-owner', 'seeded-previous-house');
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES ('seeded-previous-owner', 'seeded-previous-house', ?, 'admin', '{}')`
+    ).run(owner.id);
+    ensureDefaultCategories(db, owner.id, 'seeded-previous-house');
+
+    const response = await call(owner, 'POST', '', { name: 'Segundo hogar' });
+    const result = (await response.json()) as { success: boolean; data?: { id: string } };
+
+    expect(response.status).toBe(201);
+    expect(result.success).toBe(true);
+    const categories = db
+      .prepare('SELECT id, household_id FROM pantry_categories WHERE user_id = ?')
+      .all(owner.id) as { id: string; household_id: string }[];
+    expect(categories).toHaveLength(26);
+    expect(new Set(categories.map((category) => category.id)).size).toBe(26);
+    expect(new Set(categories.map((category) => category.household_id))).toEqual(
+      new Set(['seeded-previous-house', result.data?.id])
+    );
+  });
+
+  it('joins another household without colliding with category keys in the current home', async () => {
+    const { member } = await createJoinFixture();
+    db.prepare(
+      `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color, position)
+       VALUES ('current-vegetables', ?, 'old-house', 'vegetables', 'Mi huerto', '#123456', 1)`
+    ).run(member.id);
+
+    const response = await call(member, 'POST', '/join', { inviteCode: 'TARGET01' });
+
+    expect(response.status).toBe(200);
+    expect(
+      db
+        .prepare('SELECT name FROM pantry_categories WHERE id = ? AND household_id = ?')
+        .get('current-vegetables', 'old-house')
+    ).toEqual({ name: 'Mi huerto' });
+    expect(
+      db
+        .prepare(
+          `SELECT name FROM pantry_categories
+           WHERE user_id = ? AND household_id = 'target-house' AND key = 'vegetables'`
+        )
+        .get(member.id)
+    ).toEqual({ name: 'Verduras' });
+  });
+
+  it('joins another household when the member already has a fully seeded catalog in the current home', async () => {
+    const { member } = await createJoinFixture();
+    ensureDefaultCategories(db, member.id, 'old-house');
+
+    const response = await call(member, 'POST', '/join', { inviteCode: 'TARGET01' });
+
+    expect(response.status).toBe(200);
+    const categories = db
+      .prepare('SELECT id, household_id FROM pantry_categories WHERE user_id = ?')
+      .all(member.id) as { id: string; household_id: string }[];
+    expect(categories).toHaveLength(26);
+    expect(new Set(categories.map((category) => category.id)).size).toBe(26);
+    expect(new Set(categories.map((category) => category.household_id))).toEqual(
+      new Set(['old-house', 'target-house'])
+    );
+  });
+
   it.each([
     { label: 'el endpoint con código en el body', path: '/join', useBody: true },
     { label: 'el endpoint con código en la ruta', path: '/join/TARGET01', useBody: false }
@@ -392,7 +502,9 @@ describe('household create and join transactions', () => {
     expect(result.success).toBe(true);
     expect(result.data.id).toBeTruthy();
     const copiedConfig = db
-      .prepare('SELECT id, user_id, household_id, name, base_url, api_key, model, is_active FROM ai_configs WHERE household_id = ?')
+      .prepare(
+        'SELECT id, user_id, household_id, name, base_url, api_key, model, is_active FROM ai_configs WHERE household_id = ?'
+      )
       .get(result.data.id);
     expect(copiedConfig).toMatchObject({
       user_id: owner.id,
@@ -405,7 +517,11 @@ describe('household create and join transactions', () => {
     });
     expect((copiedConfig as { id: string }).id).not.toBe('personal-active');
     expect(
-      db.prepare('SELECT id, household_id FROM ai_configs WHERE user_id = ? AND household_id IS NULL ORDER BY id').all(owner.id)
+      db
+        .prepare(
+          'SELECT id, household_id FROM ai_configs WHERE user_id = ? AND household_id IS NULL ORDER BY id'
+        )
+        .all(owner.id)
     ).toEqual([
       { id: 'personal-active', household_id: null },
       { id: 'personal-alt', household_id: null }
@@ -448,6 +564,60 @@ describe('household create and join transactions', () => {
         .prepare('SELECT COUNT(*) AS count FROM pantry_categories WHERE household_id = ?')
         .get(result.data.id)
     ).toEqual({ count: 13 });
+  });
+
+  it('inicializa la planificación compartida desde el creador sin copiar ni borrar su perfil', async () => {
+    const owner = await makeUser('planning-owner', null);
+    const personalPreferences = {
+      taste: {
+        goals: ['muscle-gain', 'variety'],
+        goalNotes: 'Más energía para entrenar',
+        allergies: ['frutos secos'],
+        likes: ['lentejas'],
+        dislikes: ['coliflor'],
+        notes: 'Prefiero cenas ligeras'
+      },
+      mealPlan: { breakfast: false, lunch: true, snack: false, dinner: true },
+      mealTimes: { breakfast: '08:10', lunch: '13:15', snack: '17:45', dinner: '21:00' },
+      onboarding: { status: 'done' }
+    };
+    db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(
+      JSON.stringify(personalPreferences),
+      owner.id
+    );
+
+    const response = await call(owner, 'POST', '', { name: 'Hogar con planificación' });
+    const body = (await response.json()) as { data: { id: string } };
+    const storedHome = db
+      .prepare('SELECT meal_planning_preferences FROM households WHERE id = ?')
+      .get(body.data.id) as { meal_planning_preferences: string };
+    const storedProfile = db
+      .prepare('SELECT preferences FROM users WHERE id = ?')
+      .get(owner.id) as {
+      preferences: string;
+    };
+    const settings = await app.request('/api/household/meal-planning', {
+      headers: {
+        authorization: `Bearer ${owner.token}`,
+        'x-household-id': body.data.id
+      }
+    });
+    const settingsBody = (await settings.json()) as { data: any };
+
+    expect(response.status).toBe(201);
+    expect(settings.status).toBe(200);
+    expect(JSON.parse(storedHome.meal_planning_preferences)).toEqual({
+      objective: { goals: ['muscle-gain', 'variety'], notes: 'Más energía para entrenar' },
+      mealTypes: { breakfast: false, lunch: true, snack: false, dinner: true },
+      mealTimes: { breakfast: '08:10', lunch: '13:15', snack: '17:45', dinner: '21:00' }
+    });
+    expect(JSON.parse(storedProfile.preferences)).toEqual(personalPreferences);
+    expect(settingsBody.data.member).toMatchObject({
+      goalOverrideEnabled: false,
+      scheduleOverrideEnabled: false,
+      personalObjective: { goals: ['muscle-gain', 'variety'], notes: 'Más energía para entrenar' }
+    });
+    expect(JSON.stringify(settingsBody)).not.toContain('frutos secos');
   });
 
   it('permite crear otro hogar sin eliminar la membresía anterior ni adoptar datos de esa casa', async () => {
@@ -543,6 +713,15 @@ describe('household create and join transactions', () => {
       'Hogar destino',
       'TARGET01'
     );
+    const existingDefaults = {
+      objective: { goals: ['variety'], notes: 'Ya configurado' },
+      mealTypes: { breakfast: true, lunch: false, snack: true, dinner: false },
+      mealTimes: { breakfast: '09:00', lunch: '14:00', snack: '17:00', dinner: '20:30' }
+    };
+    db.prepare('UPDATE households SET meal_planning_preferences = ? WHERE id = ?').run(
+      JSON.stringify(existingDefaults),
+      'target-house'
+    );
     const member = await makeUser('personal-member', null);
     const admin = await makeUser('target-admin', 'target-house');
     db.prepare(
@@ -566,6 +745,15 @@ describe('household create and join transactions', () => {
         .prepare('SELECT id FROM household_members WHERE household_id = ? AND user_id = ?')
         .get('target-house', member.id)
     ).toBeTruthy();
+    expect(
+      JSON.parse(
+        (
+          db
+            .prepare('SELECT meal_planning_preferences FROM households WHERE id = ?')
+            .get('target-house') as { meal_planning_preferences: string }
+        ).meal_planning_preferences
+      )
+    ).toEqual(existingDefaults);
     expect(
       (
         db
@@ -767,11 +955,9 @@ describe('household create and join transactions', () => {
       `INSERT INTO household_members (id, household_id, user_id, role, permissions)
        VALUES (?, ?, ?, 'member', '{}')`
     ).run('target-no-kick-membership', 'target-house', target.id);
-    db.prepare('UPDATE household_members SET permissions = ? WHERE household_id = ? AND user_id = ?').run(
-      JSON.stringify({ members: { kick: false } }),
-      'target-house',
-      admin.id
-    );
+    db.prepare(
+      'UPDATE household_members SET permissions = ? WHERE household_id = ? AND user_id = ?'
+    ).run(JSON.stringify({ members: { kick: false } }), 'target-house', admin.id);
 
     const denied = await call(admin, 'PATCH', '', {
       memberId: 'target-no-kick-membership',
@@ -867,11 +1053,15 @@ describe('household create and join transactions', () => {
     expect((await call(admin, 'PATCH', '', {})).status).toBe(200);
   });
 
-  it('regenera el enlace y distingue una cuenta todavía sin hogar', async () => {
+  it('mantiene la respuesta de router para cuentas sin hogar en pruebas aisladas', async () => {
     const personalUser = await makeUser('personal-user', null);
-    expect((await call(personalUser, 'PATCH', '', { name: 'No disponible' })).status).toBe(404);
-    expect((await call(personalUser, 'POST', '/regenerate-invite', {})).status).toBe(404);
-    expect((await call(personalUser, 'DELETE', '/leave')).status).toBe(404);
+    for (const response of [
+      await call(personalUser, 'PATCH', '', { name: 'No disponible' }),
+      await call(personalUser, 'POST', '/regenerate-invite', {}),
+      await call(personalUser, 'DELETE', '/leave')
+    ]) {
+      expect(response.status).toBe(404);
+    }
 
     const { admin } = await createJoinFixture();
     const regenerated = await call(admin, 'POST', '/regenerate-invite', {});

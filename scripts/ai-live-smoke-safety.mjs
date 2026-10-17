@@ -30,7 +30,10 @@ export const AI_LIVE_SMOKE_ENV = Object.freeze({
   receiptsOnly: 'HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY',
   receiptSelection: 'HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION',
   receiptDirectory: 'HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY',
-  preferredJpegOrdinal: 'HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL'
+  preferredJpegOrdinal: 'HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL',
+  householdMealOnly: 'HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY',
+  recipeOnly: 'HOGARIA_AI_REAL_SMOKE_RECIPE_ONLY',
+  assistantOnly: 'HOGARIA_AI_REAL_SMOKE_ASSISTANT_ONLY'
 });
 
 export const AI_LIVE_SMOKE_KEY_MARKER = '__HOGARIA_AI_REAL_SMOKE_PROVIDER_KEY__';
@@ -40,6 +43,71 @@ export const AI_LIVE_SMOKE_COMPLETION_BUDGET = 10;
 export const AI_LIVE_RECEIPT_SMOKE_REQUEST_BUDGET = AI_LIVE_RECEIPT_UNSUBMITTED_COMPLETION_BUDGET;
 export const AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT = AI_LIVE_RECEIPT_UNSUBMITTED_TICKET_COUNT;
 export const AI_LIVE_RECEIPT_SMOKE_MAX_REQUEST_BYTES = 15 * 1024 * 1024;
+export const AI_LIVE_HOUSEHOLD_MEAL_SMOKE_COMPLETION_BUDGET = 1;
+export const AI_LIVE_HOUSEHOLD_MEAL_SCHEMA_NAME = 'weekly_meal_proposal';
+export const AI_LIVE_RECIPE_SMOKE_COMPLETION_BUDGET = 1;
+export const AI_LIVE_RECIPE_SCHEMA_NAME = 'generated_recipe';
+export const AI_LIVE_ASSISTANT_SMOKE_COMPLETION_BUDGET = 10;
+export const AI_LIVE_ASSISTANT_SCHEMA_NAME = 'ai_action_plan';
+export const AI_LIVE_HOUSEHOLD_MEAL_CONTEXT_FILENAME = 'meal-planning-context.json';
+export const AI_LIVE_HOUSEHOLD_MEAL_RECIPE_CATALOG_FILENAME = 'household-recipes-catalog.json';
+export const AI_LIVE_HOUSEHOLD_MEAL_PROMPT_CONTRACT = Object.freeze({
+  forbiddenPromptTerms: Object.freeze([
+    'HogarIA miembro QA uno',
+    'HogarIA miembro QA dos',
+    'HogarIA smoke hogar'
+  ])
+});
+
+const RECEIPT_SMOKE_INPUT_KEYS = Object.freeze([
+  AI_LIVE_SMOKE_ENV.receiptPath,
+  AI_LIVE_SMOKE_ENV.receiptsOnly,
+  AI_LIVE_SMOKE_ENV.receiptSelection,
+  AI_LIVE_SMOKE_ENV.receiptDirectory,
+  AI_LIVE_SMOKE_ENV.preferredJpegOrdinal
+]);
+
+export function validateAiLiveHouseholdMealSmokeRequest(env = process.env) {
+  const requested = env[AI_LIVE_SMOKE_ENV.householdMealOnly];
+  if (requested === undefined || requested === '0' || requested === '') return false;
+  if (requested !== '1') {
+    throw new Error('Household meal smoke requires the exact opt-in value.');
+  }
+  if (RECEIPT_SMOKE_INPUT_KEYS.some((key) => env[key] !== undefined)) {
+    throw new Error('Household meal smoke cannot include receipt inputs.');
+  }
+  return true;
+}
+
+export function validateAiLiveRecipeSmokeRequest(env = process.env) {
+  const requested = env[AI_LIVE_SMOKE_ENV.recipeOnly];
+  if (requested === undefined || requested === '0' || requested === '') return false;
+  if (requested !== '1') throw new Error('Recipe-only smoke requires the exact opt-in value.');
+  if (
+    RECEIPT_SMOKE_INPUT_KEYS.some((key) => env[key] !== undefined) ||
+    env[AI_LIVE_SMOKE_ENV.householdMealOnly] === '1'
+  ) {
+    throw new Error('Recipe-only smoke cannot combine with other smoke inputs.');
+  }
+  return true;
+}
+
+export function validateAiLiveAssistantSmokeRequest(env = process.env) {
+  const requested = env[AI_LIVE_SMOKE_ENV.assistantOnly];
+  if (requested === undefined || requested === '0' || requested === '') return false;
+  if (requested !== '1') {
+    throw new Error('Assistant-only smoke requires the exact opt-in value.');
+  }
+  if (
+    RECEIPT_SMOKE_INPUT_KEYS.some((key) => env[key] !== undefined) ||
+    env[AI_LIVE_SMOKE_ENV.receiptsOnly] === '1' ||
+    env[AI_LIVE_SMOKE_ENV.householdMealOnly] === '1' ||
+    env[AI_LIVE_SMOKE_ENV.recipeOnly] === '1'
+  ) {
+    throw new Error('Assistant-only smoke cannot combine with other smoke inputs.');
+  }
+  return true;
+}
 
 export function validateAiLiveReceiptSmokeRequest(env = process.env) {
   const requested = env[AI_LIVE_SMOKE_ENV.receiptsOnly];
@@ -99,7 +167,13 @@ export function validateAiLiveSmokeRunner(env, args) {
     return false;
   }
   validateAiLiveSmokeOptIn(env);
-  validateAiLiveReceiptSmokeRequest(env);
+  const householdMealOnly = validateAiLiveHouseholdMealSmokeRequest(env);
+  const receiptsOnly = validateAiLiveReceiptSmokeRequest(env);
+  const recipeOnly = validateAiLiveRecipeSmokeRequest(env);
+  const assistantOnly = validateAiLiveAssistantSmokeRequest(env);
+  if ([householdMealOnly, receiptsOnly, recipeOnly, assistantOnly].filter(Boolean).length > 1) {
+    throw new Error('AI live smoke modes cannot be combined.');
+  }
   if (env[AI_LIVE_SMOKE_ENV.providerToken]) {
     throw new Error('The WebAPI bearer must remain in the smoke coordinator process memory.');
   }
@@ -129,10 +203,12 @@ export function validateAiLiveSmokeRunner(env, args) {
   if (typeof env[AI_LIVE_SMOKE_ENV.model] !== 'string' || !env[AI_LIVE_SMOKE_ENV.model]) {
     throw new Error('The dedicated AI smoke runner has no selected model.');
   }
-  const expectedArgs = [
-    '--config=playwright.ai-real-smoke.config.ts',
-    'tests/e2e/ai-real-smoke.spec.ts'
-  ];
+  const expectedArgs = householdMealOnly
+    ? [
+        '--config=playwright.ai-household-meal-real-smoke.config.ts',
+        'tests/e2e/household-meal-planning-live-smoke.spec.ts'
+      ]
+    : ['--config=playwright.ai-real-smoke.config.ts', 'tests/e2e/ai-real-smoke.spec.ts'];
   if (args.length !== expectedArgs.length || expectedArgs.some((arg) => !args.includes(arg))) {
     throw new Error('The dedicated AI smoke runner only accepts its isolated config and test.');
   }
@@ -189,6 +265,41 @@ function validStrictResponseFormat(value) {
     /^[A-Za-z0-9_-]{1,64}$/.test(format.name) &&
     strictJsonSchemaNode(format.schema) &&
     format.schema.type === 'object'
+  );
+}
+
+function schemaHasMaxLength(value) {
+  if (value === null || typeof value !== 'object') return false;
+  if (Array.isArray(value)) return value.some(schemaHasMaxLength);
+  return Object.hasOwn(value, 'maxLength') || Object.values(value).some(schemaHasMaxLength);
+}
+
+function validMealRecipeAliasSchema(schema) {
+  const properties = schema?.properties;
+  const newRecipes = properties?.newRecipes;
+  const newRecipeItem = newRecipes?.items;
+  const events = properties?.events;
+  const eventItem = events?.items;
+  return (
+    schema?.type === 'object' &&
+    Array.isArray(schema.required) &&
+    schema.required.includes('newRecipes') &&
+    schema.required.includes('events') &&
+    newRecipes?.type === 'array' &&
+    newRecipeItem?.type === 'object' &&
+    isRecord(newRecipeItem.properties) &&
+    Object.hasOwn(newRecipeItem.properties, 'alias') &&
+    Object.hasOwn(newRecipeItem.properties, 'recipe') &&
+    events?.type === 'array' &&
+    Number.isInteger(events.minItems) &&
+    events.minItems >= 1 &&
+    eventItem?.type === 'object' &&
+    isRecord(eventItem.properties) &&
+    Object.hasOwn(eventItem.properties, 'status') &&
+    Object.hasOwn(eventItem.properties, 'recipeAlias') &&
+    Array.isArray(eventItem.required) &&
+    eventItem.required.includes('status') &&
+    eventItem.required.includes('recipeAlias')
   );
 }
 
@@ -492,6 +603,12 @@ export function isolatedProcessEnvironments(env) {
   delete server[AI_LIVE_SMOKE_ENV.providerToken];
   delete browser[AI_LIVE_SMOKE_ENV.providerToken];
   delete playwright[AI_LIVE_SMOKE_ENV.providerToken];
+  delete server[AI_LIVE_SMOKE_ENV.householdMealOnly];
+  delete browser[AI_LIVE_SMOKE_ENV.householdMealOnly];
+  delete server[AI_LIVE_SMOKE_ENV.recipeOnly];
+  delete browser[AI_LIVE_SMOKE_ENV.recipeOnly];
+  delete server[AI_LIVE_SMOKE_ENV.assistantOnly];
+  delete browser[AI_LIVE_SMOKE_ENV.assistantOnly];
   delete server[AI_LIVE_SMOKE_ENV.receiptPath];
   delete browser[AI_LIVE_SMOKE_ENV.receiptPath];
   for (const key of [
@@ -510,7 +627,15 @@ export function isolatedProcessEnvironments(env) {
 
 export function createAiLiveSmokeRunnerEnvironment(
   parentEnv,
-  { proxyToken, proxyUrl, model, deadlines = AI_LIVE_SMOKE_DEADLINES }
+  {
+    proxyToken,
+    proxyUrl,
+    model,
+    deadlines = AI_LIVE_SMOKE_DEADLINES,
+    householdMealOnly = false,
+    recipeOnly = false,
+    assistantOnly = false
+  }
 ) {
   assertAiLiveSmokeDeadlineContract(deadlines);
   const allowedInherited = [
@@ -533,8 +658,12 @@ export function createAiLiveSmokeRunnerEnvironment(
     AI_LIVE_SMOKE_ENV.receiptDirectory,
     AI_LIVE_SMOKE_ENV.preferredJpegOrdinal
   ];
+  const receiptInputs = new Set(RECEIPT_SMOKE_INPUT_KEYS);
   const env = Object.fromEntries(
     allowedInherited
+      .filter(
+        (key) => !(householdMealOnly || recipeOnly || assistantOnly) || !receiptInputs.has(key)
+      )
       .filter((key) => typeof parentEnv[key] === 'string')
       .map((key) => [key, parentEnv[key]])
   );
@@ -551,6 +680,9 @@ export function createAiLiveSmokeRunnerEnvironment(
     [AI_LIVE_SMOKE_ENV.requestTimeoutMs]: String(deadlines.requestMs),
     [AI_LIVE_SMOKE_ENV.testTimeoutMs]: String(deadlines.testMs),
     [AI_LIVE_SMOKE_ENV.globalTimeoutMs]: String(deadlines.globalMs),
+    ...(householdMealOnly ? { [AI_LIVE_SMOKE_ENV.householdMealOnly]: '1' } : {}),
+    ...(recipeOnly ? { [AI_LIVE_SMOKE_ENV.recipeOnly]: '1' } : {}),
+    ...(assistantOnly ? { [AI_LIVE_SMOKE_ENV.assistantOnly]: '1' } : {}),
     E2E_RATE_LIMIT: 'off'
   };
 }
@@ -560,8 +692,22 @@ export function isSuccessfulAiLiveSmokeResult({
   cleanupFailed,
   calls,
   receiptsOnly = false,
-  expectedReceiptTicketCount = AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT
+  expectedReceiptTicketCount = AI_LIVE_RECEIPT_SMOKE_TICKET_COUNT,
+  recipeOnly = false,
+  assistantOnly = false,
+  proxyMetrics
 }) {
+  if (assistantOnly) {
+    return isSuccessfulAiLiveAssistantSmokeResult({
+      runnerExit,
+      cleanupFailed,
+      calls,
+      proxyMetrics
+    });
+  }
+  if (recipeOnly) {
+    return isSuccessfulAiLiveRecipeSmokeResult({ runnerExit, cleanupFailed, calls, proxyMetrics });
+  }
   if (receiptsOnly) {
     const validReceiptRun = isSuccessfulReceiptOnlyRun(calls, expectedReceiptTicketCount);
     return (
@@ -605,6 +751,105 @@ export function isSuccessfulAiLiveSmokeResult({
     calls.length >= AI_LIVE_SMOKE_MIN_COMPLETIONS &&
     calls.length <= AI_LIVE_SMOKE_COMPLETION_BUDGET &&
     (unsuccessfulIndexes.length === 0 || onlySuccessfulReceiptFallbackFailed)
+  );
+}
+
+export function isSuccessfulAiLiveAssistantSmokeResult({
+  runnerExit,
+  cleanupFailed,
+  calls,
+  proxyMetrics
+}) {
+  return (
+    runnerExit?.code === 0 &&
+    runnerExit.cancelled !== true &&
+    runnerExit.timedOut !== true &&
+    runnerExit.runnerCleaned === true &&
+    cleanupFailed !== true &&
+    Array.isArray(calls) &&
+    calls.length === AI_LIVE_ASSISTANT_SMOKE_COMPLETION_BUDGET &&
+    calls.every(
+      (call) =>
+        call?.status >= 200 &&
+        call.status < 300 &&
+        call.schemaName === AI_LIVE_ASSISTANT_SCHEMA_NAME &&
+        call.requestContract?.strictJsonSchema === true &&
+        call.responseFormat?.hasChoices === true &&
+        call.responseFormat.messageContentType === 'text' &&
+        call.responseFormat.isJsonObject === true &&
+        call.responseFormat.finishReason === 'stop'
+    ) &&
+    proxyMetrics?.requestAttempts === AI_LIVE_ASSISTANT_SMOKE_COMPLETION_BUDGET &&
+    proxyMetrics.rejectedRequests === 0 &&
+    proxyMetrics.failed !== true
+  );
+}
+
+export function isSuccessfulAiLiveRecipeSmokeResult({
+  runnerExit,
+  cleanupFailed,
+  calls,
+  proxyMetrics
+}) {
+  const call = Array.isArray(calls) && calls.length === 1 ? calls[0] : undefined;
+  return (
+    runnerExit?.code === 0 &&
+    runnerExit.cancelled !== true &&
+    runnerExit.timedOut !== true &&
+    runnerExit.runnerCleaned === true &&
+    cleanupFailed !== true &&
+    call?.status >= 200 &&
+    call?.status < 300 &&
+    call?.schemaName === AI_LIVE_RECIPE_SCHEMA_NAME &&
+    call?.requestContract?.strictJsonSchema === true &&
+    call.requestContract.recipeTextUnbounded === true &&
+    call?.responseFormat?.hasChoices === true &&
+    call.responseFormat.messageContentType === 'text' &&
+    call.responseFormat.isJsonObject === true &&
+    call.responseFormat.finishReason === 'stop' &&
+    proxyMetrics?.requestAttempts === 1 &&
+    proxyMetrics.rejectedRequests === 0 &&
+    proxyMetrics.failed !== true
+  );
+}
+
+export function isSuccessfulAiLiveHouseholdMealSmokeResult({
+  runnerExit,
+  cleanupFailed,
+  calls,
+  proxyMetrics
+}) {
+  const call = Array.isArray(calls) && calls.length === 1 ? calls[0] : undefined;
+  return (
+    runnerExit?.code === 0 &&
+    runnerExit.cancelled !== true &&
+    runnerExit.timedOut !== true &&
+    runnerExit.runnerCleaned === true &&
+    cleanupFailed !== true &&
+    call?.status >= 200 &&
+    call?.status < 300 &&
+    call?.schemaName === AI_LIVE_HOUSEHOLD_MEAL_SCHEMA_NAME &&
+    call?.requestContract?.strictJsonSchema === true &&
+    call.requestContract.nonEmptyEventsSchemaValid === true &&
+    call.requestContract.contextJsonAttachmentCount === 1 &&
+    call.requestContract.contextJsonAttachmentValid === true &&
+    call.requestContract.recipeCatalogJsonAttachmentCount === 1 &&
+    call.requestContract.recipeCatalogJsonAttachmentValid === true &&
+    call.requestContract.recipeCatalogAliasesValid === true &&
+    call.requestContract.mealRecipeAliasSchemaValid === true &&
+    call.requestContract.memberProfilesValid === true &&
+    call.requestContract.planningInputsValid === true &&
+    call.requestContract.previousPlanValid === true &&
+    call.requestContract.forbiddenIdentityTermsAbsent === true &&
+    call.requestContract.forbiddenPromptTermsAbsent === true &&
+    call?.responseFormat?.hasChoices === true &&
+    call.responseFormat.messageContentType === 'text' &&
+    call.responseFormat.isJsonObject === true &&
+    call.responseFormat.recipeReferencesValid === true &&
+    call.responseFormat.finishReason === 'stop' &&
+    proxyMetrics?.requestAttempts === 1 &&
+    proxyMetrics.rejectedRequests === 0 &&
+    proxyMetrics.failed !== true
   );
 }
 
@@ -719,16 +964,63 @@ function responseUsage(contentType, body) {
   return usage;
 }
 
-/** Expose only the shape of a text completion, never its content or provider metadata. */
-function responseFormatSummary(contentType, body) {
+/** Inspect in memory; expose only shape/reference booleans, never proposal content. */
+function validMealRecipeReferences(proposal, catalogRecipeAliases) {
+  if (
+    !isRecord(proposal) ||
+    !Array.isArray(proposal.newRecipes) ||
+    !Array.isArray(proposal.events) ||
+    proposal.events.length < 1
+  ) {
+    return false;
+  }
+  const newRecipeAliases = new Set();
+  for (const definition of proposal.newRecipes) {
+    if (
+      !isRecord(definition) ||
+      typeof definition.alias !== 'string' ||
+      !/^N[1-9]\d{0,3}$/.test(definition.alias) ||
+      !isRecord(definition.recipe) ||
+      typeof definition.recipe.name !== 'string' ||
+      !definition.recipe.name.trim() ||
+      newRecipeAliases.has(definition.alias)
+    ) {
+      return false;
+    }
+    newRecipeAliases.add(definition.alias);
+  }
+  const referencedNewRecipes = new Set();
+  for (const event of proposal.events) {
+    if (!isRecord(event)) return false;
+    if (event.status === 'unresolved') {
+      if (event.recipeAlias !== null) return false;
+      continue;
+    }
+    if (
+      event.status !== 'scheduled' ||
+      typeof event.recipeAlias !== 'string' ||
+      (!catalogRecipeAliases.has(event.recipeAlias) && !newRecipeAliases.has(event.recipeAlias))
+    ) {
+      return false;
+    }
+    if (newRecipeAliases.has(event.recipeAlias)) referencedNewRecipes.add(event.recipeAlias);
+  }
+  return [...newRecipeAliases].every((alias) => referencedNewRecipes.has(alias));
+}
+
+function responseFormatSummary(contentType, body, options = {}) {
   if (contentType.includes('text/event-stream')) {
-    return {
+    const summary = {
       hasChoices: false,
       messageContentType: 'stream',
       contentChars: null,
       isJsonObject: false,
       finishReason: 'missing'
     };
+    if (options.expectedSchemaName === AI_LIVE_HOUSEHOLD_MEAL_SCHEMA_NAME) {
+      summary.recipeReferencesValid = false;
+    }
+    return summary;
   }
   if (!contentType.includes('application/json')) return null;
 
@@ -743,10 +1035,11 @@ function responseFormatSummary(contentType, body) {
   const choice = hasChoices ? payload.choices[0] : undefined;
   const content = choice?.message?.content;
   let isJsonObject = false;
+  let parsedContent;
   if (typeof content === 'string') {
     try {
-      const parsed = JSON.parse(content);
-      isJsonObject = typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+      parsedContent = JSON.parse(content);
+      isJsonObject = isRecord(parsedContent);
     } catch {
       // The response content itself is deliberately never retained in diagnostics.
     }
@@ -760,7 +1053,7 @@ function responseFormatSummary(contentType, body) {
     'content_filter'
   ]);
 
-  return {
+  const summary = {
     hasChoices,
     messageContentType:
       typeof content === 'string'
@@ -779,6 +1072,13 @@ function responseFormatSummary(contentType, body) {
           ? 'missing'
           : 'other'
   };
+  if (options.expectedSchemaName === AI_LIVE_HOUSEHOLD_MEAL_SCHEMA_NAME) {
+    summary.recipeReferencesValid =
+      isJsonObject &&
+      options.catalogRecipeAliases instanceof Set &&
+      validMealRecipeReferences(parsedContent, options.catalogRecipeAliases);
+  }
+  return summary;
 }
 
 function redactBearerFromResponse(body, token) {
@@ -832,14 +1132,555 @@ function collectRequestBody(request, maxBytes) {
   });
 }
 
+function rejectLiveProxyRequest(response, state, status, message) {
+  if (state.expectedSchemaName || state.requireReceiptAttachments) state.failed = true;
+  if (state.expectedSchemaName) {
+    state.metrics.failed = true;
+    state.metrics.rejectedRequests += 1;
+  }
+  sendJson(response, status, message);
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function hasExactKeys(value, expected) {
+  return (
+    isRecord(value) &&
+    Object.keys(value).length === expected.length &&
+    expected.every((key) => Object.hasOwn(value, key))
+  );
+}
+
+function hasAllowedKeys(value, required, optional = []) {
+  return (
+    isRecord(value) &&
+    required.every((key) => Object.hasOwn(value, key)) &&
+    Object.keys(value).every((key) => required.includes(key) || optional.includes(key))
+  );
+}
+
+function isIsoDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function dateDifferenceInDays(from, to) {
+  return (Date.parse(`${to}T00:00:00.000Z`) - Date.parse(`${from}T00:00:00.000Z`)) / 86_400_000;
+}
+
+function collectTextMessages(messages) {
+  return messages
+    .flatMap((message) => {
+      if (typeof message?.content === 'string') return [message.content];
+      if (!Array.isArray(message?.content)) return [];
+      return message.content
+        .filter((part) => part?.type === 'text' && typeof part.text === 'string')
+        .map((part) => part.text);
+    })
+    .join('\n')
+    .toLowerCase();
+}
+
+function promptTermContract(messages, state) {
+  const prompt = collectTextMessages(messages);
+  const requiredPromptTermsPresent =
+    state.requiredPromptTerms === undefined ||
+    state.requiredPromptTerms.every((term) => prompt.includes(term));
+  const forbiddenPromptTermsAbsent =
+    state.forbiddenPromptTerms === undefined ||
+    state.forbiddenPromptTerms.every((term) => !prompt.includes(term));
+  return { requiredPromptTermsPresent, forbiddenPromptTermsAbsent };
+}
+
+function containsPrivateIdentityKey(value) {
+  if (Array.isArray(value)) return value.some(containsPrivateIdentityKey);
+  if (!isRecord(value)) return false;
+  return Object.entries(value).some(([key, child]) => {
+    const normalized = key.toLowerCase().replace(/[^a-z]/g, '');
+    return (
+      normalized.endsWith('id') ||
+      [
+        'email',
+        'author',
+        'authorname',
+        'owner',
+        'ownername',
+        'realname',
+        'householdname',
+        'membername',
+        'participantname',
+        'username',
+        'displayname'
+      ].includes(normalized) ||
+      containsPrivateIdentityKey(child)
+    );
+  });
+}
+
+function parseMealJsonAttachment(part, filename) {
+  if (
+    part?.type !== 'file' ||
+    !hasExactKeys(part, ['type', 'file']) ||
+    !hasExactKeys(part.file, ['filename', 'file_data']) ||
+    part.file.filename !== filename ||
+    !validBase64DataUri(part.file.file_data, 'data:application/json;base64,')
+  ) {
+    return undefined;
+  }
+  const encoded = part.file.file_data.slice('data:application/json;base64,'.length);
+  const bytes = Buffer.from(encoded, 'base64');
+  if (bytes.toString('base64') !== encoded) return undefined;
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    const value = JSON.parse(text);
+    return isRecord(value) ? { value, text } : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function validSelectableCatalogRecipe(recipe) {
+  const steps = recipe.steps;
+  if (Array.isArray(steps) && steps.length > 0) return true;
+  const levels = recipe.instructionsByLevel;
+  return (
+    isRecord(levels) &&
+    ['basic', 'intermediate', 'expert'].every(
+      (level) => Array.isArray(levels[level]) && levels[level].length > 0
+    )
+  );
+}
+
+function validCatalogRecipeStep(step) {
+  return (
+    hasExactKeys(step, [
+      'stepNumber',
+      'instruction',
+      'duration',
+      'tips',
+      'warning',
+      'temperature',
+      'timerRequired',
+      'timerDuration',
+      'illustration'
+    ]) &&
+    Number.isInteger(step.stepNumber) &&
+    step.stepNumber > 0 &&
+    typeof step.instruction === 'string' &&
+    step.instruction.trim() !== '' &&
+    (step.duration === null || Number.isFinite(step.duration)) &&
+    (step.tips === null || typeof step.tips === 'string') &&
+    (step.warning === null || typeof step.warning === 'string') &&
+    (step.temperature === null || isRecord(step.temperature)) &&
+    typeof step.timerRequired === 'boolean' &&
+    (step.timerDuration === null || Number.isFinite(step.timerDuration)) &&
+    step.illustration === null
+  );
+}
+
+function validCatalogRecipe(recipe) {
+  return (
+    hasExactKeys(recipe, [
+      'name',
+      'description',
+      'difficulty',
+      'cuisine',
+      'mealType',
+      'totalTime',
+      'prepTime',
+      'cookTime',
+      'restTime',
+      'baseServings',
+      'calories',
+      'ingredients',
+      'utensils',
+      'guidance',
+      'steps',
+      'instructionsByLevel',
+      'nutrition',
+      'storage',
+      'tags'
+    ]) &&
+    typeof recipe.name === 'string' &&
+    recipe.name.trim() !== '' &&
+    typeof recipe.description === 'string' &&
+    (recipe.cuisine === null || typeof recipe.cuisine === 'string') &&
+    Array.isArray(recipe.mealType) &&
+    recipe.mealType.every((value) => typeof value === 'string') &&
+    [recipe.totalTime, recipe.prepTime, recipe.cookTime, recipe.restTime].every(
+      (value) => value === null || (Number.isFinite(value) && value >= 0)
+    ) &&
+    (recipe.baseServings === null ||
+      (Number.isFinite(recipe.baseServings) && recipe.baseServings > 0)) &&
+    (recipe.calories === null || (Number.isFinite(recipe.calories) && recipe.calories >= 0)) &&
+    Array.isArray(recipe.ingredients) &&
+    recipe.ingredients.every(
+      (ingredient) =>
+        hasExactKeys(ingredient, [
+          'name',
+          'quantity',
+          'unit',
+          'preparation',
+          'isOptional',
+          'substitutes',
+          'notes'
+        ]) &&
+        typeof ingredient.name === 'string' &&
+        (ingredient.quantity === null ||
+          (Number.isFinite(ingredient.quantity) && ingredient.quantity > 0)) &&
+        (ingredient.unit === null || typeof ingredient.unit === 'string') &&
+        (ingredient.preparation === null || typeof ingredient.preparation === 'string') &&
+        typeof ingredient.isOptional === 'boolean' &&
+        Array.isArray(ingredient.substitutes) &&
+        ingredient.substitutes.every((value) => typeof value === 'string') &&
+        (ingredient.notes === null || typeof ingredient.notes === 'string')
+    ) &&
+    Array.isArray(recipe.utensils) &&
+    recipe.utensils.every((value) => typeof value === 'string') &&
+    (recipe.guidance === null || isRecord(recipe.guidance)) &&
+    (recipe.steps === null ||
+      (Array.isArray(recipe.steps) && recipe.steps.every(validCatalogRecipeStep))) &&
+    (recipe.instructionsByLevel === null ||
+      (hasExactKeys(recipe.instructionsByLevel, ['basic', 'intermediate', 'expert']) &&
+        ['basic', 'intermediate', 'expert'].every(
+          (level) =>
+            Array.isArray(recipe.instructionsByLevel[level]) &&
+            recipe.instructionsByLevel[level].every(validCatalogRecipeStep)
+        ))) &&
+    (recipe.nutrition === null || isRecord(recipe.nutrition)) &&
+    (recipe.storage === null || isRecord(recipe.storage)) &&
+    Array.isArray(recipe.tags) &&
+    recipe.tags.every((value) => typeof value === 'string')
+  );
+}
+
+function validMealRecipeCatalog(catalog) {
+  if (
+    !hasExactKeys(catalog, ['version', 'recipes']) ||
+    catalog.version !== 1 ||
+    !Array.isArray(catalog.recipes) ||
+    catalog.recipes.length === 0
+  ) {
+    return undefined;
+  }
+  const selectableAliases = new Set();
+  const aliases = new Set();
+  for (const entry of catalog.recipes) {
+    if (
+      !hasExactKeys(entry, ['alias', 'selectable', 'recipe']) ||
+      typeof entry.alias !== 'string' ||
+      !/^R[1-9]\d{0,3}$/.test(entry.alias) ||
+      aliases.has(entry.alias) ||
+      typeof entry.selectable !== 'boolean' ||
+      !isRecord(entry.recipe) ||
+      !validCatalogRecipe(entry.recipe) ||
+      containsPrivateIdentityKey(entry.recipe)
+    ) {
+      return undefined;
+    }
+    aliases.add(entry.alias);
+    if (
+      entry.selectable &&
+      Number.isFinite(entry.recipe.baseServings) &&
+      entry.recipe.baseServings > 0 &&
+      entry.recipe.ingredients.length > 0 &&
+      entry.recipe.ingredients.every(
+        (ingredient) =>
+          isRecord(ingredient) &&
+          typeof ingredient.name === 'string' &&
+          Number.isFinite(ingredient.quantity) &&
+          ingredient.quantity > 0 &&
+          typeof ingredient.unit === 'string' &&
+          ingredient.unit.trim() !== ''
+      ) &&
+      validSelectableCatalogRecipe(entry.recipe)
+    ) {
+      selectableAliases.add(entry.alias);
+    } else if (entry.selectable) {
+      return undefined;
+    }
+  }
+  return selectableAliases.size > 0 ? selectableAliases : undefined;
+}
+
+function validMealContextAttachment(messages) {
+  const userMessages = messages.filter((message) => message?.role === 'user');
+  if (userMessages.length !== 1 || !Array.isArray(userMessages[0]?.content)) return undefined;
+  if (
+    messages.some(
+      (message) => typeof message?.content !== 'string' && !Array.isArray(message?.content)
+    )
+  ) {
+    return undefined;
+  }
+  const allParts = messages.flatMap((message) =>
+    Array.isArray(message?.content) ? message.content : []
+  );
+  const nonUserParts = messages
+    .filter((message) => message?.role !== 'user' && Array.isArray(message?.content))
+    .flatMap((message) => message.content);
+  const attachments = allParts.filter(
+    (part) => part?.type === 'file' || part?.type === 'image_url'
+  );
+  const parts = userMessages[0].content;
+  if (
+    attachments.length !== 2 ||
+    attachments.some((part) => part?.type !== 'file' || !parts.includes(part)) ||
+    nonUserParts.some((part) => part?.type !== 'text') ||
+    parts.filter((part) => part?.type === 'text' && typeof part.text === 'string').length === 0 ||
+    parts.some((part) => part?.type !== 'text' && part?.type !== 'file')
+  ) {
+    return undefined;
+  }
+  const contextAttachment = attachments.find(
+    (part) => part.file?.filename === AI_LIVE_HOUSEHOLD_MEAL_CONTEXT_FILENAME
+  );
+  const catalogAttachment = attachments.find(
+    (part) => part.file?.filename === AI_LIVE_HOUSEHOLD_MEAL_RECIPE_CATALOG_FILENAME
+  );
+  if (!contextAttachment || !catalogAttachment) return undefined;
+  const contextData = parseMealJsonAttachment(
+    contextAttachment,
+    AI_LIVE_HOUSEHOLD_MEAL_CONTEXT_FILENAME
+  );
+  const catalogData = parseMealJsonAttachment(
+    catalogAttachment,
+    AI_LIVE_HOUSEHOLD_MEAL_RECIPE_CATALOG_FILENAME
+  );
+  const selectableRecipeAliases = catalogData
+    ? validMealRecipeCatalog(catalogData.value)
+    : undefined;
+  if (!contextData || !catalogData || !selectableRecipeAliases) return undefined;
+  return {
+    context: contextData.value,
+    text: contextData.text,
+    catalog: catalogData.value,
+    catalogText: catalogData.text,
+    selectableRecipeAliases
+  };
+}
+
+function validEffectiveMemberProfiles(context) {
+  if (
+    !Array.isArray(context.participants) ||
+    context.participants.length !== 2 ||
+    !hasExactKeys(context.household, ['objective', 'schedule'])
+  ) {
+    return false;
+  }
+  const byAlias = new Map(context.participants.map((member) => [member?.alias, member]));
+  if (byAlias.size !== 2 || !byAlias.has('P1') || !byAlias.has('P2')) return false;
+  const expected = {
+    P1: { likes: ['tofu'], dislikes: ['pollo'] },
+    P2: { likes: ['pollo'], dislikes: ['tofu'] }
+  };
+  return ['P1', 'P2'].every((alias) => {
+    const member = byAlias.get(alias);
+    const preference = expected[alias];
+    return (
+      hasExactKeys(member, ['alias', 'preferences', 'effectiveObjective', 'effectiveSchedule']) &&
+      hasExactKeys(member.preferences, ['strictAllergies', 'likes', 'dislikes']) &&
+      Array.isArray(member.preferences.strictAllergies) &&
+      member.preferences.strictAllergies.length === 0 &&
+      JSON.stringify(member.preferences.likes) === JSON.stringify(preference.likes) &&
+      JSON.stringify(member.preferences.dislikes) === JSON.stringify(preference.dislikes) &&
+      hasExactKeys(member.effectiveObjective, ['source', 'goals', 'notes']) &&
+      member.effectiveObjective.source === 'household' &&
+      Array.isArray(member.effectiveObjective.goals) &&
+      member.effectiveObjective.goals.includes('balanced') &&
+      typeof member.effectiveObjective.notes === 'string' &&
+      hasExactKeys(member.effectiveSchedule, ['source', 'mealTypes', 'mealTimes']) &&
+      member.effectiveSchedule.source === 'household' &&
+      isRecord(member.effectiveSchedule.mealTypes) &&
+      member.effectiveSchedule.mealTypes.lunch === true &&
+      isRecord(member.effectiveSchedule.mealTimes) &&
+      typeof member.effectiveSchedule.mealTimes.lunch === 'string'
+    );
+  });
+}
+
+function validRequiredMealTurns(context) {
+  const { startDate, endDate } = context.targetWeek ?? {};
+  if (
+    !isRecord(context.targetWeek) ||
+    !hasExactKeys(context.targetWeek, ['startDate', 'endDate']) ||
+    !isIsoDate(startDate) ||
+    !isIsoDate(endDate) ||
+    dateDifferenceInDays(startDate, endDate) !== 6 ||
+    !Array.isArray(context.requiredTurns) ||
+    context.requiredTurns.length !== 7
+  ) {
+    return false;
+  }
+  const expectedDates = new Set(
+    Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(`${startDate}T00:00:00.000Z`);
+      date.setUTCDate(date.getUTCDate() + index);
+      return date.toISOString().slice(0, 10);
+    })
+  );
+  return (
+    context.requiredTurns.every(
+      (turn) =>
+        hasExactKeys(turn, ['date', 'mealType', 'time', 'eligibleParticipants']) &&
+        expectedDates.has(turn.date) &&
+        turn.mealType === 'lunch' &&
+        turn.time === '13:00' &&
+        JSON.stringify(turn.eligibleParticipants) === JSON.stringify(['P1', 'P2'])
+    ) && new Set(context.requiredTurns.map((turn) => turn.date)).size === 7
+  );
+}
+
+function validPantryItem(item) {
+  return (
+    hasExactKeys(item, ['name', 'quantity', 'unit', 'expirationDate']) &&
+    typeof item.name === 'string' &&
+    Number.isFinite(item.quantity) &&
+    item.quantity > 0 &&
+    typeof item.unit === 'string' &&
+    (item.expirationDate === null || isIsoDate(item.expirationDate))
+  );
+}
+
+function validUtensil(item) {
+  return (
+    hasExactKeys(item, ['name', 'category']) &&
+    typeof item.name === 'string' &&
+    (item.category === null || typeof item.category === 'string')
+  );
+}
+
+function validPreviousPlan(context) {
+  const previous = context.previousConfirmedPlan;
+  return (
+    isRecord(context.targetWeek) &&
+    isRecord(previous) &&
+    hasExactKeys(previous, ['weekStart', 'weekEnd', 'events']) &&
+    isIsoDate(previous.weekStart) &&
+    isIsoDate(previous.weekEnd) &&
+    dateDifferenceInDays(previous.weekStart, previous.weekEnd) === 6 &&
+    previous.weekEnd < context.targetWeek.startDate &&
+    Array.isArray(previous.events) &&
+    previous.events.every(
+      (event) =>
+        hasExactKeys(event, [
+          'date',
+          'mealType',
+          'time',
+          'servings',
+          'participants',
+          'recipeName'
+        ]) &&
+        isIsoDate(event.date) &&
+        typeof event.mealType === 'string' &&
+        typeof event.time === 'string' &&
+        Number.isFinite(event.servings) &&
+        Array.isArray(event.participants) &&
+        event.participants.every((alias) => alias === 'P1' || alias === 'P2') &&
+        (event.recipeName === null || typeof event.recipeName === 'string')
+    ) &&
+    previous.events.some(
+      (event) =>
+        isRecord(event) &&
+        event.recipeName === 'SMOKE_RECIPE_TEST' &&
+        Array.isArray(event.participants) &&
+        event.participants.includes('P1') &&
+        event.participants.includes('P2')
+    )
+  );
+}
+
+function mealContextContract(messages, state) {
+  const attachment = validMealContextAttachment(messages);
+  if (!attachment) return undefined;
+  const { context, text, catalog, catalogText, selectableRecipeAliases } = attachment;
+  const topLevelValid =
+    hasExactKeys(context, [
+      'version',
+      'targetWeek',
+      'household',
+      'participants',
+      'requiredTurns',
+      'pantry',
+      'utensils',
+      'previousConfirmedPlan'
+    ]) &&
+    context.version === 2 &&
+    isRecord(context.household) &&
+    (context.household.objective === null ||
+      hasExactKeys(context.household.objective, ['goals', 'notes'])) &&
+    (context.household.schedule === null ||
+      hasExactKeys(context.household.schedule, ['mealTypes', 'mealTimes']));
+  const memberProfilesValid = topLevelValid && validEffectiveMemberProfiles(context);
+  const turnsValid = topLevelValid && validRequiredMealTurns(context);
+  const planningInputsValid =
+    topLevelValid &&
+    turnsValid &&
+    Array.isArray(context.pantry) &&
+    context.pantry.every(validPantryItem) &&
+    context.pantry.some((item) => item.name === 'SMOKE_PANTRY_RICE') &&
+    Array.isArray(context.utensils) &&
+    context.utensils.every(validUtensil) &&
+    context.utensils.some((item) => item.name === 'SMOKE_UTENSIL_POT');
+  const previousPlanValid = topLevelValid && validPreviousPlan(context);
+  const forbiddenTerms = (state.forbiddenPromptTerms ?? []).map((term) => term.toLowerCase());
+  const fullText = `${text}\n${catalogText}\n${collectTextMessages(messages)}`.toLowerCase();
+  const forbiddenIdentityTermsAbsent =
+    !containsPrivateIdentityKey(context) &&
+    !containsPrivateIdentityKey(catalog) &&
+    forbiddenTerms.every((term) => !fullText.includes(term));
+  if (
+    !topLevelValid ||
+    !memberProfilesValid ||
+    !planningInputsValid ||
+    !previousPlanValid ||
+    !forbiddenIdentityTermsAbsent
+  ) {
+    return undefined;
+  }
+  return {
+    contextJsonAttachmentCount: 1,
+    contextJsonAttachmentValid: true,
+    recipeCatalogJsonAttachmentCount: 1,
+    recipeCatalogJsonAttachmentValid: true,
+    recipeCatalogAliasesValid: true,
+    memberProfilesValid,
+    planningInputsValid,
+    previousPlanValid,
+    forbiddenIdentityTermsAbsent,
+    selectableRecipeAliases
+  };
+}
+
+function validatePromptTermList(value, name) {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.length > 16 ||
+    value.some((term) => typeof term !== 'string' || term.trim().length === 0 || term.length > 256)
+  ) {
+    throw new Error(`Live AI smoke ${name} are invalid.`);
+  }
+  return value.map((term) => term.toLowerCase());
+}
+
 async function handleProxyRequest(request, response, state) {
+  state.metrics.requestAttempts += 1;
   const path = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
   if (request.method !== 'POST' || path !== '/v1/chat/completions' || request.url !== path) {
-    sendJson(response, 404, 'Live AI smoke route not found.');
+    rejectLiveProxyRequest(response, state, 404, 'Live AI smoke route not found.');
     return;
   }
   if (request.headers.authorization !== `Bearer ${state.clientToken}`) {
-    sendJson(response, 401, 'Live AI smoke authorization rejected.');
+    rejectLiveProxyRequest(response, state, 401, 'Live AI smoke authorization rejected.');
+    return;
+  }
+  if (state.expectedSchemaName && state.failed) {
+    rejectLiveProxyRequest(response, state, 409, 'Live AI smoke stopped after a rejected request.');
     return;
   }
   if (state.requireReceiptAttachments && state.failed) {
@@ -852,8 +1693,7 @@ async function handleProxyRequest(request, response, state) {
     return;
   }
   if (!String(request.headers['content-type'] ?? '').includes('application/json')) {
-    if (state.requireReceiptAttachments) state.failed = true;
-    sendJson(response, 415, 'Live AI smoke accepts JSON requests only.');
+    rejectLiveProxyRequest(response, state, 415, 'Live AI smoke accepts JSON requests only.');
     return;
   }
 
@@ -861,10 +1701,10 @@ async function handleProxyRequest(request, response, state) {
   try {
     body = await collectRequestBody(request, state.maxRequestBytes);
   } catch (error) {
-    if (state.requireReceiptAttachments) state.failed = true;
     if (!response.destroyed && !response.headersSent) {
-      sendJson(
+      rejectLiveProxyRequest(
         response,
+        state,
         error instanceof Error && error.message === 'request-too-large' ? 413 : 400,
         'Live AI smoke request rejected.'
       );
@@ -875,8 +1715,7 @@ async function handleProxyRequest(request, response, state) {
   try {
     payload = JSON.parse(body.toString('utf8'));
   } catch {
-    if (state.requireReceiptAttachments) state.failed = true;
-    sendJson(response, 400, 'Live AI smoke request is malformed.');
+    rejectLiveProxyRequest(response, state, 400, 'Live AI smoke request is malformed.');
     return;
   }
   if (
@@ -884,13 +1723,21 @@ async function handleProxyRequest(request, response, state) {
     !Array.isArray(payload.messages) ||
     payload.messages.length === 0
   ) {
-    if (state.requireReceiptAttachments) state.failed = true;
-    sendJson(response, 400, 'Live AI smoke request is outside its model/fixture contract.');
+    rejectLiveProxyRequest(
+      response,
+      state,
+      400,
+      'Live AI smoke request is outside its model/fixture contract.'
+    );
     return;
   }
   if (!validStrictResponseFormat(payload.response_format)) {
-    if (state.requireReceiptAttachments) state.failed = true;
-    sendJson(response, 400, 'Live AI smoke requires a strict JSON Schema response format.');
+    rejectLiveProxyRequest(
+      response,
+      state,
+      400,
+      'Live AI smoke requires a strict JSON Schema response format.'
+    );
     return;
   }
   const requestStream = payload.stream === true;
@@ -899,15 +1746,72 @@ async function handleProxyRequest(request, response, state) {
     state.requireReceiptAttachments &&
     (requestSchemaName !== 'receipt' || !hasExactReceiptAttachments(payload.messages))
   ) {
-    state.failed = true;
-    sendJson(response, 400, 'Live receipt smoke requires one ticket and the inventory JSON file.');
+    rejectLiveProxyRequest(
+      response,
+      state,
+      400,
+      'Live receipt smoke requires one ticket and the inventory JSON file.'
+    );
     return;
   }
+  const eventsSchema = payload.response_format.json_schema.schema?.properties?.events;
+  const nonEmptyEventsSchemaValid =
+    requestSchemaName !== AI_LIVE_HOUSEHOLD_MEAL_SCHEMA_NAME ||
+    (eventsSchema?.type === 'array' &&
+      Number.isInteger(eventsSchema.minItems) &&
+      eventsSchema.minItems >= 1);
+  const mealRecipeAliasSchemaValid =
+    requestSchemaName !== AI_LIVE_HOUSEHOLD_MEAL_SCHEMA_NAME ||
+    validMealRecipeAliasSchema(payload.response_format.json_schema.schema);
+  const contextContract =
+    state.expectedSchemaName === AI_LIVE_HOUSEHOLD_MEAL_SCHEMA_NAME
+      ? mealContextContract(payload.messages, state)
+      : undefined;
+  const recipeTextUnbounded =
+    requestSchemaName !== AI_LIVE_RECIPE_SCHEMA_NAME ||
+    !schemaHasMaxLength(payload.response_format.json_schema.schema);
+  const expectedSchemaValid =
+    !state.expectedSchemaName ||
+    (requestSchemaName === state.expectedSchemaName &&
+      (state.expectedSchemaName !== AI_LIVE_HOUSEHOLD_MEAL_SCHEMA_NAME ||
+        (nonEmptyEventsSchemaValid && mealRecipeAliasSchemaValid && contextContract)) &&
+      (state.expectedSchemaName !== AI_LIVE_RECIPE_SCHEMA_NAME || recipeTextUnbounded));
+  if (!expectedSchemaValid) {
+    rejectLiveProxyRequest(
+      response,
+      state,
+      400,
+      'Live AI smoke request does not match its expected JSON Schema contract.'
+    );
+    return;
+  }
+  const promptContract =
+    state.requiredPromptTerms || state.forbiddenPromptTerms
+      ? promptTermContract(payload.messages, state)
+      : { requiredPromptTermsPresent: true, forbiddenPromptTermsAbsent: true };
+  if (!promptContract.requiredPromptTermsPresent || !promptContract.forbiddenPromptTermsAbsent) {
+    rejectLiveProxyRequest(
+      response,
+      state,
+      400,
+      'Live household meal prompt is outside its synthetic profile contract.'
+    );
+    return;
+  }
+  const selectableRecipeAliases = contextContract?.selectableRecipeAliases;
+  const safeContextContract = contextContract
+    ? Object.fromEntries(
+        Object.entries(contextContract).filter(([key]) => key !== 'selectableRecipeAliases')
+      )
+    : undefined;
+  const verifiedContextContract = contextContract
+    ? { ...safeContextContract, nonEmptyEventsSchemaValid, mealRecipeAliasSchemaValid }
+    : undefined;
   const expectedStreaming = !state.fallbackPending;
   if (state.requireReceiptAttachments && requestStream !== expectedStreaming) {
-    state.failed = true;
-    sendJson(
+    rejectLiveProxyRequest(
       response,
+      state,
       409,
       state.fallbackPending
         ? 'Live receipt fallback must be non-streaming after HTTP 400.'
@@ -916,8 +1820,7 @@ async function handleProxyRequest(request, response, state) {
     return;
   }
   if (state.acceptedCalls >= state.maxCalls) {
-    if (state.requireReceiptAttachments) state.failed = true;
-    sendJson(response, 429, 'Live AI smoke completion budget exhausted.');
+    rejectLiveProxyRequest(response, state, 429, 'Live AI smoke completion budget exhausted.');
     return;
   }
   state.acceptedCalls += 1;
@@ -937,6 +1840,10 @@ async function handleProxyRequest(request, response, state) {
       else if (status === 400 && requestStream) state.fallbackPending = true;
       else state.failed = true;
     }
+    if (state.expectedSchemaName && (status < 200 || status >= 300)) {
+      state.failed = true;
+      state.metrics.failed = true;
+    }
     state.metrics.calls.push({
       model: state.model,
       status,
@@ -944,8 +1851,16 @@ async function handleProxyRequest(request, response, state) {
       schemaName: requestSchemaName,
       requestContract: {
         strictJsonSchema: true,
+        ...(requestSchemaName === AI_LIVE_RECIPE_SCHEMA_NAME ? { recipeTextUnbounded } : {}),
         ...(state.requireReceiptAttachments
           ? { inventoryJsonAttachmentCount: 1, receiptAttachmentCount: 1 }
+          : {}),
+        ...(verifiedContextContract ?? {}),
+        ...(state.requiredPromptTerms
+          ? { requiredPromptTermsPresent: promptContract.requiredPromptTermsPresent }
+          : {}),
+        ...(state.forbiddenPromptTerms
+          ? { forbiddenPromptTermsAbsent: promptContract.forbiddenPromptTermsAbsent }
           : {})
       },
       elapsedMs,
@@ -1006,7 +1921,17 @@ async function handleProxyRequest(request, response, state) {
       }
       const rawBody = Buffer.concat(chunks, byteLength);
       const usage = responseUsage(contentType, rawBody);
-      const responseFormat = responseFormatSummary(contentType, rawBody);
+      const responseFormat = responseFormatSummary(contentType, rawBody, {
+        expectedSchemaName: requestSchemaName,
+        catalogRecipeAliases: selectableRecipeAliases
+      });
+      if (
+        state.expectedSchemaName === AI_LIVE_HOUSEHOLD_MEAL_SCHEMA_NAME &&
+        responseFormat?.recipeReferencesValid !== true
+      ) {
+        state.failed = true;
+        state.metrics.failed = true;
+      }
       const safeProviderBody = redactBearerFromResponse(rawBody, state.token);
       const safeBody = redactBearerFromResponse(safeProviderBody, state.clientToken);
       completeMetrics(status, usage, responseFormat);
@@ -1043,6 +1968,9 @@ export async function createAiLiveProxy({
   maxRequestBytes = 6 * 1024 * 1024,
   maxResponseBytes = 4 * 1024 * 1024,
   requireReceiptAttachments = false,
+  expectedSchemaName,
+  requiredPromptTerms,
+  forbiddenPromptTerms,
   onRequest,
   onCompletion
 }) {
@@ -1058,6 +1986,29 @@ export async function createAiLiveProxy({
   if (!Number.isInteger(maxCalls) || maxCalls < 1 || maxCalls > AI_LIVE_SMOKE_COMPLETION_BUDGET) {
     throw new Error('Live AI smoke completion budget exceeds its hard cap.');
   }
+  if (
+    expectedSchemaName !== undefined &&
+    (typeof expectedSchemaName !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(expectedSchemaName))
+  ) {
+    throw new Error('Live AI smoke expected schema name is invalid.');
+  }
+  if (expectedSchemaName && requireReceiptAttachments) {
+    throw new Error('Live AI smoke cannot combine a JSON Schema with receipt-only mode.');
+  }
+  if (
+    (requiredPromptTerms !== undefined || forbiddenPromptTerms !== undefined) &&
+    !expectedSchemaName
+  ) {
+    throw new Error('Live AI smoke prompt markers require an expected JSON Schema.');
+  }
+  const validatedRequiredPromptTerms = validatePromptTermList(
+    requiredPromptTerms,
+    'required prompt markers'
+  );
+  const validatedForbiddenPromptTerms = validatePromptTermList(
+    forbiddenPromptTerms,
+    'forbidden prompt markers'
+  );
   const target = validateLoopbackOrigin(targetOrigin);
   const state = {
     token,
@@ -1072,10 +2023,13 @@ export async function createAiLiveProxy({
     maxRequestBytes,
     maxResponseBytes,
     requireReceiptAttachments,
+    expectedSchemaName,
+    requiredPromptTerms: validatedRequiredPromptTerms,
+    forbiddenPromptTerms: validatedForbiddenPromptTerms,
     onRequest,
     onCompletion,
     upstreamRequests: new Set(),
-    metrics: { calls: [] }
+    metrics: { calls: [], requestAttempts: 0, rejectedRequests: 0, failed: false }
   };
   let closePromise;
   const server = createServer((request, response) => {

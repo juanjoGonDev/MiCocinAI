@@ -132,16 +132,81 @@ describe('I18nService', () => {
     const i18n = injectService();
     const key: TranslationKey = 'ui.ahora';
     const english = DICTS.en as Record<string, string>;
+    const spanish = DICTS.es as Record<string, string>;
     const translation = english[key];
     delete english[key];
 
     try {
       i18n.setLang('en');
       TestBed.flushEffects();
-      expect(i18n.t(key)).toBe(DICTS.es[key]);
+      expect(i18n.t(key)).toBe(spanish[key]);
     } finally {
       english[key] = translation;
     }
+  });
+
+  it('loads household translations once for both languages before the route renders', async () => {
+    const i18n = injectService();
+    const changeTickBeforeLoad = i18n.changeTick();
+
+    await Promise.all([i18n.loadHouseholdTranslations(), i18n.loadHouseholdTranslations()]);
+
+    expect(i18n.changeTick()).toBe(changeTickBeforeLoad + 1);
+    expect(i18n.t('household.meal_shopping_approve')).toBe('Añadir selección a Compra');
+
+    i18n.setLang('en');
+    TestBed.flushEffects();
+    expect(i18n.t('household.meal_shopping_approve')).toBe('Add selection to Shopping');
+
+    const changeTickAfterLoad = i18n.changeTick();
+    await i18n.loadHouseholdTranslations();
+    expect(i18n.changeTick()).toBe(changeTickAfterLoad);
+  });
+
+  it('loads recipe translations lazily once for both languages', async () => {
+    const i18n = injectService();
+    const dictionaries = DICTS.es as Record<string, string>;
+    const changeTickBeforeLoad = i18n.changeTick();
+
+    expect(dictionaries['recipes.title']).toBeUndefined();
+    await Promise.all([i18n.loadRecipeTranslations(), i18n.loadRecipeTranslations()]);
+
+    expect(i18n.changeTick()).toBe(changeTickBeforeLoad + 1);
+    expect(i18n.t('recipes.title')).toBe('Recetas');
+
+    i18n.setLang('en');
+    TestBed.flushEffects();
+    expect(i18n.t('recipes.title')).toBe('Recipes');
+
+    const changeTickAfterLoad = i18n.changeTick();
+    await i18n.loadRecipeTranslations();
+    expect(i18n.changeTick()).toBe(changeTickAfterLoad);
+  });
+
+  it('loads assistant translations lazily once for both languages', async () => {
+    const i18n = injectService();
+    const dictionaries = DICTS.es as Record<string, string>;
+    const warning = spyOn(console, 'warn');
+    const changeTickBeforeLoad = i18n.changeTick();
+
+    expect(dictionaries['ai_assistant.title']).toBeUndefined();
+    expect(i18n.t('ai_assistant.open')).toBe('Abrir asistente de acciones con IA');
+    expect(i18n.t('ai_assistant.title')).toBe('ai_assistant.title');
+    warning.calls.reset();
+
+    await Promise.all([i18n.loadAssistantTranslations(), i18n.loadAssistantTranslations()]);
+
+    expect(i18n.changeTick()).toBe(changeTickBeforeLoad + 1);
+    expect(i18n.t('ai_assistant.title')).toBe('Asistente de acciones');
+
+    i18n.setLang('en');
+    TestBed.flushEffects();
+    expect(i18n.t('ai_assistant.title')).toBe('Action assistant');
+
+    const changeTickAfterLoad = i18n.changeTick();
+    await i18n.loadAssistantTranslations();
+    expect(i18n.changeTick()).toBe(changeTickAfterLoad);
+    expect(warning).not.toHaveBeenCalled();
   });
 
   it('returns and warns with a missing key in development, but stays quiet in production', () => {

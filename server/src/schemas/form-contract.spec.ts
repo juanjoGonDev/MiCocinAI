@@ -52,8 +52,38 @@ import {
   utensilFilterSchema
 } from './pantry.schema.js';
 import { createRecipeSchema, recipeFilterSchema, updateRecipeSchema } from './recipe.schema.js';
+import { aiRecipeOutputSchema } from './recipe-ai-output.schema.js';
+import { improveRecipeRequestSchema } from './recipe-improvement.schema.js';
+import {
+  householdPlanProposalRequestSchema,
+  householdPlanWriteSchema
+} from './household-plan.schema.js';
+import {
+  householdTaskWeekQuerySchema,
+  householdTaskWeekWriteSchema
+} from './household-task.schema.js';
+import { householdPlanAssignmentWriteSchema } from './household-plan-assignment.schema.js';
+import { householdMealPlanningPatchSchema } from './household-meal-planning.schema.js';
+import {
+  householdMealProposalConfirmRequestSchema,
+  householdMealProposalRequestSchema
+} from './household-meal-proposal-request.schema.js';
+import {
+  householdMealRecipeCandidateSchema,
+  mealProposalSchema
+} from './household-meal-proposal.schema.js';
+import { householdMealConsumptionSchema } from './household-meal-consumption.schema.js';
+import { householdMealShoppingApprovalSchema } from './household-meal-shopping-approval.schema.js';
+import { householdMealShoppingPreviewQuerySchema } from './household-meal-shopping-preview.schema.js';
+import {
+  householdPlanningAutomationPatchSchema,
+  householdPlanningAutomationRetrySchema,
+  householdPlanningAutomationRunSummarySchema
+} from './household-planning-automation.schema.js';
 import { generatedRecipeCandidateSchema } from './generated-recipe.schema.js';
 import {
+  assistantUpdateItemSchema,
+  assistantUpdateListSchema,
   applyLinesSchema,
   bulkItemsSchema,
   completeListSchema,
@@ -83,6 +113,23 @@ import {
   updateAiConfigSchema,
   replaceMealSchema
 } from './ai.schema.js';
+import {
+  aiAssistantActionRefinementRequestSchema,
+  aiAssistantBatchRefinementRequestSchema,
+  aiAssistantProposalRequestSchema,
+  assistantMealProposalRequestSchema,
+  assistantActionBatchRefinementCandidateSchema,
+  assistantActionPlanCandidateSchema,
+  assistantActionRefinementCandidateSchema,
+  assistantActionBatchRefinementProviderCandidateSchema,
+  assistantActionPlanProviderCandidateSchema,
+  assistantActionRefinementProviderCandidateSchema
+} from './ai-assistant.schema.js';
+import { assistantUpdateIngredientSchema } from './ai-assistant-pantry-update.schema.js';
+import {
+  assistantRecipeContentSnapshotSchema,
+  assistantRecipeContentUpdateRequestSchema
+} from './ai-assistant-recipe-update.schema.js';
 
 /**
  * EL CONTRATO DE LOS FORMULARIOS: lo opcional tiene que poder no llegar.
@@ -136,6 +183,69 @@ const query = (
   schema,
   kind: 'query',
   required
+});
+
+const mealRecipeStep = (instruction: string) => ({
+  stepNumber: 1,
+  instruction,
+  duration: null,
+  temperature: null,
+  timerRequired: false,
+  timerDuration: null,
+  tips: null,
+  warning: null,
+  illustration: null
+});
+
+const mealRecipeCandidate = {
+  name: 'Lentejas',
+  description: 'Plato sencillo.',
+  difficulty: 'easy',
+  cuisine: 'española',
+  totalTime: 40,
+  prepTime: 10,
+  cookTime: 30,
+  restTime: null,
+  baseServings: 1,
+  calories: null,
+  ingredients: [
+    {
+      name: 'lentejas',
+      quantity: 80,
+      unit: 'g',
+      preparation: null,
+      isOptional: false,
+      substitutes: [],
+      notes: null
+    }
+  ],
+  utensils: ['olla'],
+  guidance: {
+    appliances: [],
+    parallelTasks: [],
+    tipsAndVariations: [],
+    batchCookingWarning: null
+  },
+  instructionsByLevel: {
+    basic: [mealRecipeStep('Cocer las lentejas.')],
+    intermediate: [mealRecipeStep('Cocer las lentejas a fuego suave.')],
+    expert: [mealRecipeStep('Controlar la textura y el punto.')]
+  },
+  nutrition: null,
+  storage: null,
+  tags: []
+};
+
+const mealProposalEvent = (recipeAlias: string) => ({
+  date: '2026-10-12',
+  mealType: 'lunch',
+  time: '13:00',
+  recipeAlias,
+  participantAliases: ['P1'],
+  servings: 1,
+  objectiveSummary: 'Plato sencillo.',
+  status: 'scheduled',
+  reason: null
 });
 
 const ROWS: Row[] = [
@@ -230,6 +340,163 @@ const ROWS: Row[] = [
     schema: createHouseholdSchema,
     required: { name: 'Los del 3B' }
   },
+  {
+    name: 'householdMealPlanningPatchSchema',
+    schema: householdMealPlanningPatchSchema,
+    required: { household: { mealTypes: { dinner: false } } },
+    note: 'El patch aplica al menos un campo común o personal sin exigir que se envíe el bloque entero.',
+    except: {
+      household:
+        'El bloque vacío no contiene cambios; al menos un ajuste del hogar o de un miembro debe enviarse.',
+      member:
+        'El bloque vacío no contiene cambios; al menos un ajuste del hogar o de un miembro debe enviarse.'
+    }
+  },
+  {
+    name: 'householdMealProposalRequestSchema',
+    schema: householdMealProposalRequestSchema,
+    required: { weekStart: '2026-10-12', householdMemberIds: ['membership-1'] },
+    note: 'La propuesta requiere lunes válido y al menos un miembro activo seleccionado explícitamente.'
+  },
+  {
+    name: 'householdMealProposalConfirmRequestSchema',
+    schema: householdMealProposalConfirmRequestSchema,
+    required: {
+      proposalId: 'proposal-1',
+      weekStart: '2026-10-12',
+      householdMemberIds: ['membership-1'],
+      recipes: [
+        {
+          alias: 'R1',
+          source: 'catalog',
+          recipeId: 'recipe-1',
+          recipe: mealRecipeCandidate
+        }
+      ],
+      events: [{ id: 'event-1', ...mealProposalEvent('R1') }]
+    },
+    note: 'La confirmación acepta recetas incluidas por alias opaco; el servidor resuelve las membresías, el catálogo autorizado y vuelve a validar receta y turnos.'
+  },
+  {
+    name: 'householdMealConsumptionSchema',
+    schema: householdMealConsumptionSchema,
+    required: { status: 'realized', servings: 1, expectedVersion: 0 },
+    note: 'El contrato exige todos los campos y distingue raciones positivas para consumo realizado y cero solo para no realizado.'
+  },
+  {
+    name: 'householdMealShoppingPreviewQuerySchema',
+    schema: householdMealShoppingPreviewQuerySchema,
+    kind: 'query',
+    required: { startDate: '2026-10-13', endDate: '2026-10-13' },
+    note: 'El cálculo requiere un rango explícito y acotado; la ruta rechaza fechas anteriores a hoy.'
+  },
+  {
+    name: 'householdMealShoppingApprovalSchema',
+    schema: householdMealShoppingApprovalSchema,
+    required: {
+      startDate: '2026-10-13',
+      endDate: '2026-10-13',
+      previewId: 'a'.repeat(64),
+      items: [{ name: 'Lentejas', unit: 'g', quantity: 80 }]
+    },
+    note: 'La aprobación referencia un preview y solo admite líneas en un rango y cantidad válidos.'
+  },
+  {
+    name: 'householdMealRecipeCandidateSchema',
+    schema: householdMealRecipeCandidateSchema,
+    required: mealRecipeCandidate,
+    note: 'Objeto completo de receta nueva enviado en la confirmación; debe conservar la plantilla canónica y permitir solo campos explícitos.'
+  },
+  {
+    name: 'mealProposalSchema',
+    schema: mealProposalSchema,
+    required: {
+      newRecipes: [{ alias: 'N1', recipe: mealRecipeCandidate }],
+      events: [mealProposalEvent('N1')]
+    },
+    note: 'Contrato JSON estricto: al menos un turno válido referencia por alias una receta completa existente o nueva; la cobertura real se valida con el planificador.'
+  },
+  {
+    name: 'householdPlanWriteSchema',
+    schema: householdPlanWriteSchema,
+    required: {
+      baseVersion: 0,
+      plan: {
+        schemaVersion: 1,
+        dwellingType: 'apartment',
+        dwellingTypeLabel: null,
+        summary: '',
+        warnings: [],
+        floors: [
+          { id: 'floor-0', name: 'Planta baja', level: 0, walls: [], openings: [], spaces: [] }
+        ]
+      }
+    },
+    note: 'El plano completo y su versión base se envían juntos para validar y guardar con CAS.'
+  },
+  {
+    name: 'householdPlanProposalRequestSchema',
+    schema: householdPlanProposalRequestSchema,
+    required: { baseVersion: 0 },
+    note: 'La solicitud de texto es opcional si la persona sube un boceto o una foto.'
+  },
+  {
+    name: 'householdPlanAssignmentWriteSchema',
+    schema: householdPlanAssignmentWriteSchema,
+    required: {
+      baseVersion: 0,
+      basePlanVersion: 0,
+      spaceId: 'kitchen',
+      memberIds: ['member-a']
+    },
+    note: 'La asignación cambia una sola zona mediante control de versión; el servidor comprueba membresía y pertenencia al plano.'
+  },
+  query('householdTaskWeekQuerySchema', householdTaskWeekQuerySchema, {
+    weekStart: '2026-10-05'
+  }),
+  {
+    name: 'householdTaskWeekWriteSchema',
+    schema: householdTaskWeekWriteSchema,
+    required: {
+      baseVersion: 0,
+      weekStart: '2026-10-05',
+      tasks: []
+    },
+    note: 'El lote semanal completo se versiona y valida antes de guardar.'
+  },
+  {
+    name: 'householdPlanningAutomationPatchSchema',
+    schema: householdPlanningAutomationPatchSchema,
+    required: { expectedVersion: 0, enabled: false },
+    note: 'La API exige cambios explícitos y valida la activación completa en el store.',
+    except: {
+      enabled: 'Los booleanos vacíos o null no son una orden válida para activar o pausar.',
+      mode: 'Los valores vacíos no son modos; null sí permite limpiar una configuración pausada.',
+      scopes: 'Los ámbitos deben ser una lista explícita y no aceptan texto ni null.',
+      weekday: 'El día debe ser ISO 1–7; null sí permite limpiar una configuración pausada.',
+      localTime: 'La hora debe usar HH:mm; null sí permite limpiar una configuración pausada.',
+      timeZone:
+        'La zona debe ser IANA explícita; null sí permite limpiar una configuración pausada.'
+    }
+  },
+  {
+    name: 'householdPlanningAutomationRetrySchema',
+    schema: householdPlanningAutomationRetrySchema,
+    required: { expectedVersion: 1, occurrenceKey: '2026-10-17|Europe/Madrid' },
+    note: 'El retry identifica una ocurrencia explícita y exige la versión que ve el usuario.'
+  },
+  {
+    name: 'householdPlanningAutomationRunSummarySchema',
+    schema: householdPlanningAutomationRunSummarySchema,
+    required: {
+      occurrenceKey: '2026-10-17|Europe/Madrid',
+      targetWeekStart: '2026-10-19',
+      status: 'completed',
+      failureCode: null,
+      updatedAt: '2026-10-13T21:00:00.000Z'
+    },
+    note: 'La lectura pública del ledger expone solo un resumen con estado y fecha allowlist.'
+  },
   { name: 'updateHouseholdSchema', schema: updateHouseholdSchema },
   { name: 'joinHouseholdSchema', schema: joinHouseholdSchema, required: { inviteCode: 'ABC123' } },
   {
@@ -316,7 +583,7 @@ const ROWS: Row[] = [
       prepTime: 5,
       cookTime: 15,
       restTime: null,
-      servings: 2,
+      baseServings: 1,
       calories: 180,
       ingredients: [
         {
@@ -325,17 +592,26 @@ const ROWS: Row[] = [
           unit: 'unit',
           preparation: null,
           isOptional: false,
+          substitutes: [],
           notes: null
         }
       ],
       utensils: [],
-      guidance: { appliances: [], parallelTasks: [], tipsAndVariations: [] },
+      guidance: {
+        appliances: [],
+        parallelTasks: [],
+        tipsAndVariations: [],
+        batchCookingWarning: null
+      },
       instructionsByLevel: {
         basic: [
           {
             stepNumber: 1,
             instruction: 'Cocer.',
             duration: null,
+            temperature: null,
+            timerRequired: false,
+            timerDuration: null,
             tips: null,
             warning: null,
             illustration: null
@@ -346,6 +622,9 @@ const ROWS: Row[] = [
             stepNumber: 1,
             instruction: 'Cortar y cocer.',
             duration: null,
+            temperature: null,
+            timerRequired: false,
+            timerDuration: null,
             tips: null,
             warning: null,
             illustration: null
@@ -356,6 +635,9 @@ const ROWS: Row[] = [
             stepNumber: 1,
             instruction: 'Cortar en dados y cocer a hervor suave.',
             duration: null,
+            temperature: null,
+            timerRequired: false,
+            timerDuration: null,
             tips: null,
             warning: null,
             illustration: null
@@ -366,6 +648,18 @@ const ROWS: Row[] = [
       storage: null,
       tags: []
     }
+  },
+  {
+    name: 'aiRecipeOutputSchema',
+    schema: aiRecipeOutputSchema,
+    required: mealRecipeCandidate,
+    note: 'La respuesta JSON canónica de recetas exige todos los campos, los tres niveles y al menos un ingrediente.'
+  },
+  {
+    name: 'improveRecipeRequestSchema',
+    schema: improveRecipeRequestSchema,
+    required: { recipe: mealRecipeCandidate, scopes: ['preparation'] },
+    note: 'La mejora requiere una receta editable y al menos un ámbito explícito.'
   },
   {
     name: 'updateRecipeSchema',
@@ -392,6 +686,43 @@ const ROWS: Row[] = [
     required: { name: 'Semana', version: 1 },
     except: {
       name: 'NothingToUpdate: sin nombre, sin tienda y sin estado no hay PATCH que aplicar'
+    }
+  },
+  {
+    name: 'assistantUpdateListSchema',
+    schema: assistantUpdateListSchema,
+    required: {
+      version: 1,
+      changes: { store: null },
+      assistantAction: {
+        operation: 'update_list',
+        targetId: 'list-1',
+        before: { name: 'Semana', store: null }
+      }
+    }
+  },
+  {
+    name: 'assistantUpdateItemSchema',
+    schema: assistantUpdateItemSchema,
+    required: {
+      version: 1,
+      changes: { quantity: 2 },
+      assistantAction: {
+        operation: 'update_item',
+        targetId: 'item-1',
+        listId: 'list-1',
+        before: {
+          listName: 'Semana',
+          name: 'Pan',
+          productKey: 'pan',
+          quantity: 1,
+          unit: null,
+          category: null,
+          checked: false,
+          deletedAt: null,
+          updatedAt: null
+        }
+      }
     }
   },
   { name: 'createItemSchema', schema: createItemSchema, required: { name: 'Pan' } },
@@ -422,6 +753,181 @@ const ROWS: Row[] = [
   query('priceFilterSchema', priceFilterSchema),
 
   // ── IA ──
+  {
+    name: 'aiAssistantProposalRequestSchema',
+    schema: aiAssistantProposalRequestSchema,
+    required: { prompt: 'Añade lentejas a la despensa.' }
+  },
+  {
+    name: 'assistantMealProposalRequestSchema',
+    schema: assistantMealProposalRequestSchema,
+    required: {
+      weekStart: '2026-10-12',
+      householdMemberIds: ['membership-1'],
+      instructions: 'Planifica cenas sencillas.'
+    },
+    note: 'Requiere semana lunes y al menos un miembro seleccionado explícitamente.'
+  },
+  {
+    name: 'aiAssistantActionRefinementRequestSchema',
+    schema: aiAssistantActionRefinementRequestSchema,
+    required: {
+      actionId: 'action-1',
+      instruction: 'Cambia la cantidad.',
+      action: {
+        kind: 'pantry.add_ingredient',
+        title: 'Añadir lentejas',
+        summary: 'Añade lentejas a la despensa.',
+        dependsOn: [],
+        warnings: [],
+        payload: {
+          name: 'Lentejas',
+          category: 'legumes',
+          quantity: 500,
+          unit: 'g',
+          expirationDate: null,
+          location: 'pantry',
+          notes: null
+        }
+      },
+      scope: { kind: 'action' }
+    }
+  },
+  {
+    name: 'aiAssistantBatchRefinementRequestSchema',
+    schema: aiAssistantBatchRefinementRequestSchema,
+    required: {
+      instruction: 'Revisa el lote.',
+      scope: { kind: 'batch' },
+      actions: [
+        {
+          actionId: 'pantry-1',
+          action: {
+            kind: 'pantry.add_ingredient',
+            title: 'Añadir lentejas',
+            summary: 'Añade lentejas.',
+            payload: {
+              name: 'Lentejas',
+              category: 'legumes',
+              quantity: 1,
+              unit: 'unit',
+              expirationDate: null,
+              location: 'pantry',
+              notes: null
+            },
+            dependsOn: [],
+            warnings: []
+          }
+        },
+        {
+          actionId: 'shopping-1',
+          action: {
+            kind: 'shopping.create_list',
+            title: 'Crear lista',
+            summary: 'Crea una lista.',
+            payload: { name: 'Compra semanal', store: null },
+            dependsOn: [],
+            warnings: []
+          }
+        }
+      ]
+    }
+  },
+  {
+    name: 'assistantActionPlanCandidateSchema',
+    schema: assistantActionPlanCandidateSchema,
+    required: { summary: 'Sin acciones.', actions: [], questions: [] }
+  },
+  {
+    name: 'assistantActionPlanProviderCandidateSchema',
+    schema: assistantActionPlanProviderCandidateSchema,
+    required: { summary: 'Sin acciones.', actions: [], questions: [] }
+  },
+  {
+    name: 'assistantActionRefinementProviderCandidateSchema',
+    schema: assistantActionRefinementProviderCandidateSchema,
+    required: { summary: 'Sin cambios.', replacement: null, questions: [] }
+  },
+  {
+    name: 'assistantActionBatchRefinementProviderCandidateSchema',
+    schema: assistantActionBatchRefinementProviderCandidateSchema,
+    required: { summary: 'Sin cambios.', replacements: [], questions: [] }
+  },
+  {
+    name: 'assistantUpdateIngredientSchema',
+    schema: assistantUpdateIngredientSchema,
+    required: {
+      changes: { quantity: 0 },
+      assistantAction: {
+        operation: 'update_ingredient',
+        targetId: 'ingredient-1',
+        before: {
+          name: 'Yogur natural',
+          category: 'dairy',
+          quantity: 2,
+          unit: 'unit',
+          expirationDate: null,
+          location: 'fridge',
+          notes: null,
+          updatedAt: null
+        }
+      }
+    }
+  },
+  {
+    name: 'assistantRecipeContentSnapshotSchema',
+    schema: assistantRecipeContentSnapshotSchema,
+    required: {
+      name: 'Lentejas',
+      servings: 2,
+      ingredients: [{ name: 'Lentejas', quantity: 100, unit: 'g' }],
+      steps: [{ stepNumber: 1, instruction: 'Cuece las lentejas.' }]
+    }
+  },
+  {
+    name: 'assistantRecipeContentUpdateRequestSchema',
+    schema: assistantRecipeContentUpdateRequestSchema,
+    required: {
+      changes: {
+        servings: null,
+        ingredients: [{ operation: 'update', targetName: 'Lentejas', changes: { quantity: 80 } }],
+        instructions: []
+      },
+      assistantAction: {
+        operation: 'update_recipe_content',
+        targetId: 'recipe-1',
+        before: {
+          name: 'Lentejas',
+          servings: 2,
+          ingredients: [{ name: 'Lentejas', quantity: 100, unit: 'g' }],
+          steps: [{ stepNumber: 1, instruction: 'Cuece las lentejas.' }]
+        }
+      }
+    }
+  },
+  {
+    name: 'assistantActionRefinementCandidateSchema',
+    schema: assistantActionRefinementCandidateSchema,
+    required: { summary: 'Cantidad revisada.', replacement: null, questions: [] }
+  },
+  {
+    name: 'assistantActionBatchRefinementCandidateSchema',
+    schema: assistantActionBatchRefinementCandidateSchema,
+    required: {
+      summary: 'Lote revisado.',
+      replacements: [
+        {
+          kind: 'shopping.create_list',
+          title: 'Crear lista',
+          summary: 'Crea una lista.',
+          payload: { name: 'Compra semanal', store: null },
+          dependsOn: [],
+          warnings: []
+        }
+      ],
+      questions: []
+    }
+  },
   {
     name: 'createAiConfigSchema',
     schema: createAiConfigSchema,
@@ -484,7 +990,9 @@ const EXEMPT: Record<string, string> = {
   mealReplacementCandidateSchema:
     'respuesta estructurada temporal del proveedor de IA, no es un formulario de usuario',
   mealReplacementResponseSchema:
-    'contrato estricto de salida del modelo para sustituciones, no es un formulario de usuario'
+    'contrato estricto de salida del modelo para sustituciones, no es un formulario de usuario',
+  assistantMealProposalRefinementInstructionSchema:
+    'campo escalar acotado dentro de la refinación compuesta; no es un cuerpo de formulario independiente'
 };
 
 function shapeOf(schema: z.ZodTypeAny): Record<string, z.ZodTypeAny> | null {

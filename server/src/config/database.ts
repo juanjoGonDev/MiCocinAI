@@ -124,6 +124,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
       shared_pantry INTEGER DEFAULT 1,
       share_recipes INTEGER DEFAULT 1,
       share_calendar INTEGER DEFAULT 1,
+      meal_planning_preferences TEXT NOT NULL DEFAULT '{}',
       ai_owner_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -136,6 +137,7 @@ async function runMigrations(db: Database.Database): Promise<void> {
       user_id TEXT NOT NULL,
       role TEXT DEFAULT 'member',
       permissions TEXT DEFAULT '{}',
+      meal_planning_preferences TEXT NOT NULL DEFAULT '{}',
       is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
       joined_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (household_id) REFERENCES households(id),
@@ -143,6 +145,130 @@ async function runMigrations(db: Database.Database): Promise<void> {
       UNIQUE(household_id, user_id)
     );
 
+    -- A single current plan per household plus an immutable snapshot for each applied version.
+    CREATE TABLE IF NOT EXISTS household_plans (
+      household_id TEXT PRIMARY KEY NOT NULL,
+      version INTEGER NOT NULL CHECK (version >= 1),
+      plan_json TEXT NOT NULL,
+      updated_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE,
+      FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS household_plan_revisions (
+      household_id TEXT NOT NULL,
+      version INTEGER NOT NULL CHECK (version >= 1),
+      plan_json TEXT NOT NULL,
+      created_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (household_id, version),
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE,
+      FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS household_plan_assignments (
+      household_id TEXT PRIMARY KEY NOT NULL,
+      version INTEGER NOT NULL CHECK (version >= 1),
+      assignments_json TEXT NOT NULL,
+      updated_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE,
+      FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS household_task_weeks (
+      household_id TEXT NOT NULL,
+      week_start TEXT NOT NULL,
+      version INTEGER NOT NULL CHECK (version >= 1),
+      tasks_json TEXT NOT NULL,
+      updated_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (household_id, week_start),
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE,
+      FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    -- Durable idempotency keys for explicit global-assistant domain writes. Store no prompt,
+    -- proposal or domain content: only the actor, stable action id and request digest/status.
+    CREATE TABLE IF NOT EXISTS assistant_action_results (
+      user_id TEXT NOT NULL,
+      action_id TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      response_status INTEGER NOT NULL CHECK (response_status BETWEEN 200 AND 599),
+      succeeded INTEGER NOT NULL CHECK (succeeded IN (0, 1)),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, action_id),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- One persisted, explicitly configured weekly automation per household.
+    CREATE TABLE IF NOT EXISTS household_planning_automations (
+      household_id TEXT PRIMARY KEY NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+      mode TEXT CHECK (mode IN ('generate', 'repeat') OR mode IS NULL),
+      scopes_json TEXT NOT NULL DEFAULT '[]',
+      weekday INTEGER CHECK (weekday BETWEEN 1 AND 7 OR weekday IS NULL),
+      local_time TEXT,
+      time_zone TEXT,
+      version INTEGER NOT NULL CHECK (version >= 1),
+      authorized_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE,
+      FOREIGN KEY (authorized_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    -- Durable, one-row-per-scheduled-occurrence ledger. It stores only scheduling/config metadata
+    -- and sanitized state codes: never prompts, provider output, credentials, or household content.
+    CREATE TABLE IF NOT EXISTS household_planning_automation_runs (
+      id TEXT PRIMARY KEY NOT NULL,
+      household_id TEXT NOT NULL,
+      occurrence_key TEXT NOT NULL,
+      scheduled_at TEXT NOT NULL,
+      scheduled_local_date TEXT NOT NULL,
+      time_zone TEXT NOT NULL,
+      config_version INTEGER NOT NULL CHECK (config_version >= 1),
+      mode TEXT NOT NULL CHECK (mode IN ('generate', 'repeat')),
+      scopes_json TEXT NOT NULL,
+      target_week_start TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (
+        status IN ('in_progress', 'review_required', 'completed', 'cancelled', 'skipped')
+      ),
+      lease_owner TEXT,
+      lease_expires_at TEXT,
+      fence INTEGER NOT NULL DEFAULT 1 CHECK (fence >= 1),
+      failure_code TEXT CHECK (failure_code IS NULL OR failure_code IN (
+        'AUTOMATION_PAUSED', 'CONFIG_STALE', 'AUTHORIZATION_INVALID',
+        'LEASE_EXPIRED_AMBIGUOUS', 'PROVIDER_TIMEOUT_AMBIGUOUS', 'PROVIDER_REJECTED',
+        'INVALID_PROPOSAL', 'PUBLISH_CONFLICT', 'TARGET_WEEK_MISSED', 'WORKER_FAILURE'
+      )),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      completed_at DATETIME,
+      UNIQUE (household_id, occurrence_key),
+      CHECK (
+        (status = 'in_progress' AND lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL) OR
+        (status <> 'in_progress' AND lease_owner IS NULL AND lease_expires_at IS NULL)
+      ),
+      CHECK ((status = 'completed' AND completed_at IS NOT NULL) OR
+        (status <> 'completed' AND completed_at IS NULL)),
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_household_planning_automation_runs_due
+      ON household_planning_automation_runs(status, lease_expires_at, scheduled_at);
+    CREATE INDEX IF NOT EXISTS idx_household_planning_automation_runs_household
+      ON household_planning_automation_runs(household_id, status, created_at);
+    CREATE TRIGGER IF NOT EXISTS household_planning_automation_runs_snapshot_immutable
+      BEFORE UPDATE OF household_id, occurrence_key, scheduled_at, scheduled_local_date, time_zone,
+                       config_version, mode, scopes_json, target_week_start
+      ON household_planning_automation_runs
+      BEGIN
+        SELECT RAISE(ABORT, 'automation occurrence snapshot is immutable');
+      END;
     -- Ingredients (pantry) table
     CREATE TABLE IF NOT EXISTS ingredients (
       id TEXT PRIMARY KEY,
@@ -224,6 +350,28 @@ async function runMigrations(db: Database.Database): Promise<void> {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Selected Commons clips survive API cache eviction/restart. Recipe JSON stores only videoId;
+    -- this table owns the validated source and attribution and is removed with its recipe.
+    CREATE TABLE IF NOT EXISTS recipe_step_video_assets (
+      recipe_id TEXT NOT NULL,
+      video_id TEXT NOT NULL CHECK (
+        length(video_id) = 24 AND video_id NOT GLOB '*[^a-f0-9]*'
+      ),
+      title TEXT NOT NULL,
+      author TEXT NOT NULL,
+      license_name TEXT NOT NULL,
+      license_url TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      thumbnail_url TEXT NOT NULL,
+      media_url TEXT NOT NULL,
+      mime_type TEXT NOT NULL CHECK (mime_type IN ('video/mp4', 'video/webm')),
+      duration_seconds INTEGER NOT NULL CHECK (duration_seconds BETWEEN 1 AND 60),
+      size_bytes INTEGER NOT NULL CHECK (size_bytes BETWEEN 1 AND 31457280),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (recipe_id, video_id),
+      FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+    );
+
     -- User recipes (favorites, history)
     CREATE TABLE IF NOT EXISTS user_recipes (
       id TEXT PRIMARY KEY,
@@ -276,6 +424,73 @@ async function runMigrations(db: Database.Database): Promise<void> {
       FOREIGN KEY (calendar_id) REFERENCES weekly_calendars(id),
       FOREIGN KEY (recipe_id) REFERENCES recipes(id)
     );
+
+    -- Una fila de comida compartida sigue viviendo en meals; esta relacion guarda solo quienes
+    -- participan, sin copiar comidas ni exponer los otros calendarios de cada persona.
+    CREATE TABLE IF NOT EXISTS meal_participants (
+      meal_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (meal_id, user_id),
+      FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    -- One current consumption state per explicitly shared meal; corrections reconcile against
+    -- the net deductions below instead of applying the same stock change again on retries.
+    CREATE TABLE IF NOT EXISTS meal_consumptions (
+      meal_id TEXT PRIMARY KEY NOT NULL,
+      household_id TEXT NOT NULL,
+      status TEXT NOT NULL CHECK (status IN ('realized', 'not_realized')),
+      servings INTEGER NOT NULL CHECK (
+        (status = 'realized' AND servings > 0 AND servings <= 100) OR
+        (status = 'not_realized' AND servings = 0)
+      ),
+      version INTEGER NOT NULL CHECK (version >= 1),
+      recorded_by TEXT,
+      warnings_json TEXT NOT NULL DEFAULT '[]',
+      recipe_snapshot_hash TEXT,
+      recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE,
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE,
+      FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    -- Current net stock deduction per immutable recipe-snapshot line; deleted catalog products
+    -- leave their historical name/unit and net quantity behind for safe correction warnings.
+    CREATE TABLE IF NOT EXISTS meal_consumption_deductions (
+      meal_id TEXT NOT NULL,
+      line_index INTEGER NOT NULL CHECK (line_index >= 0),
+      ingredient_id TEXT,
+      ingredient_name TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      target_quantity REAL NOT NULL CHECK (target_quantity >= 0),
+      deducted_quantity REAL NOT NULL CHECK (deducted_quantity >= 0),
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (meal_id, line_index),
+      FOREIGN KEY (meal_id) REFERENCES meal_consumptions(meal_id) ON DELETE CASCADE,
+      FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL
+    );
+
+    -- Immutable signed movements provide an audit trail and a uniqueness guard per event-version-line.
+    CREATE TABLE IF NOT EXISTS meal_inventory_movements (
+      id TEXT PRIMARY KEY,
+      meal_id TEXT NOT NULL,
+      consumption_version INTEGER NOT NULL CHECK (consumption_version >= 1),
+      line_index INTEGER NOT NULL CHECK (line_index >= 0),
+      ingredient_id TEXT,
+      ingredient_name TEXT NOT NULL,
+      unit TEXT NOT NULL,
+      delta_quantity REAL NOT NULL CHECK (delta_quantity <> 0),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (meal_id) REFERENCES meals(id) ON DELETE CASCADE,
+      FOREIGN KEY (ingredient_id) REFERENCES ingredients(id) ON DELETE SET NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_meal_inventory_movement_once
+      ON meal_inventory_movements(meal_id, consumption_version, line_index);
+    CREATE INDEX IF NOT EXISTS idx_meal_inventory_movements_ingredient
+      ON meal_inventory_movements(ingredient_id, created_at);
 
     -- AI configurations table
     CREATE TABLE IF NOT EXISTS ai_configs (
@@ -355,6 +570,20 @@ async function runMigrations(db: Database.Database): Promise<void> {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE CASCADE
+    );
+
+    -- Approval idempotency records survive checked-list mutations so an exact retry cannot
+    -- recreate a purchased meal-plan item after its original request has already committed.
+    CREATE TABLE IF NOT EXISTS household_meal_shopping_approvals (
+      household_id TEXT NOT NULL,
+      preview_id TEXT NOT NULL,
+      request_hash TEXT NOT NULL,
+      list_id TEXT,
+      version INTEGER,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (household_id, preview_id, request_hash),
+      FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE,
+      FOREIGN KEY (list_id) REFERENCES shopping_lists(id) ON DELETE SET NULL
     );
 
     -- Lo pagado por quantity unidades (un ticket dice eso, no el precio unitario)
@@ -475,7 +704,6 @@ async function runMigrations(db: Database.Database): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_pantry_categories_user ON pantry_categories(user_id, position);
     CREATE INDEX IF NOT EXISTS idx_pantry_categories_household ON pantry_categories(household_id, position);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_pantry_categories_key ON pantry_categories(user_id, key);
 
     -- La oferta (3x2, 2x1) es de la LINEA porque cambia cuantas unidades se pagan.
     -- Un promo_take >= promo_buy no tiene sentido (pagarias todo), y se ignora en
@@ -633,6 +861,16 @@ async function runMigrations(db: Database.Database): Promise<void> {
     );
   `);
 
+  // A category key is unique for one user's personal catalog or within one user's catalog in a
+  // household. The old user-only index rejected valid reuse in a different home and could make
+  // household creation roll back when the user still had categories attached to another home.
+  // Drop the legacy index once; the scoped replacement is stable across subsequent startups.
+  db.exec(`
+    DROP INDEX IF EXISTS idx_pantry_categories_key;
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_pantry_categories_scope_key
+      ON pantry_categories(user_id, COALESCE(household_id, ''), key);
+  `);
+
   // Auto-migrations: add columns that may be missing in older databases
   const addColumnIfMissing = (table: string, column: string, definition: string) => {
     const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
@@ -645,6 +883,14 @@ async function runMigrations(db: Database.Database): Promise<void> {
     'household_members',
     'is_active',
     'INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1))'
+  );
+  // Shared planner defaults and per-membership overrides are JSON blobs. Adding nullable-safe
+  // defaults is idempotent and leaves every existing household/member preference untouched.
+  addColumnIfMissing('households', 'meal_planning_preferences', "TEXT NOT NULL DEFAULT '{}'");
+  addColumnIfMissing(
+    'household_members',
+    'meal_planning_preferences',
+    "TEXT NOT NULL DEFAULT '{}'"
   );
   addColumnIfMissing('recipes', 'country_code', 'TEXT');
   addColumnIfMissing('recipes', 'catalog_key', 'TEXT');
@@ -726,6 +972,21 @@ async function runMigrations(db: Database.Database): Promise<void> {
   addColumnIfMissing('calendar_events', 'recurrence', "TEXT NOT NULL DEFAULT 'none'");
   addColumnIfMissing('calendar_events', 'recurrence_rule', 'TEXT');
   addColumnIfMissing('calendar_events', 'exceptions', "TEXT NOT NULL DEFAULT '[]'");
+  // `source_proposal_id` identifica el evento confirmado por el planner: los retries de una misma
+  // confirmacion recuperan la fila y nunca crean una copia. Las comidas historicas quedan NULL.
+  addColumnIfMissing('meals', 'source_proposal_id', 'TEXT');
+  // `proposal_id` identifica el lote confirmado; al reintentar se compara el set completo de
+  // eventIds. El snapshot conserva solo la receta pública necesaria para representar el evento.
+  addColumnIfMissing('meals', 'proposal_id', 'TEXT');
+  addColumnIfMissing('meals', 'recipe_snapshot', 'TEXT');
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_meals_source_proposal
+      ON meals(source_proposal_id) WHERE source_proposal_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_meals_proposal_group
+      ON meals(proposal_id) WHERE proposal_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_meal_participants_user
+      ON meal_participants(user_id, meal_id);
+  `);
   // Las dianas del descuento: `target` se queda para las filas ya escritas (una sola
   // diana) y `targets` es el JSON con las demas. Reconstruir la tabla para migrar el
   // formato antiguo habria sido una forma cara de perder datos si algo iba mal.

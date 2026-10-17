@@ -95,6 +95,52 @@ beforeEach(async () => {
 });
 
 describe('AI provider queue dispatcher', () => {
+  it('does not poll the idle database more than once in a short interval', async () => {
+    const { ensureWorker, stopWorker } = await import('./ticket-queue.js');
+    const prepare = vi.spyOn(db, 'prepare');
+    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+
+    try {
+      ensureWorker();
+      expect(setIntervalSpy).toHaveBeenCalledWith(expect.any(Function), 30_000);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      const idlePolls = prepare.mock.calls.filter(([sql]) =>
+        String(sql).includes("SELECT DISTINCT config_id FROM ai_jobs WHERE status = 'queued'")
+      );
+      expect(idlePolls).toHaveLength(1);
+    } finally {
+      prepare.mockRestore();
+      setIntervalSpy.mockRestore();
+      stopWorker();
+    }
+  });
+
+  it('clears the startup wake and reconciliation timer when stopping', async () => {
+    const { ensureWorker, stopWorker } = await import('./ticket-queue.js');
+    const prepare = vi.spyOn(db, 'prepare');
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval');
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+    try {
+      ensureWorker();
+      stopWorker();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      const idlePolls = prepare.mock.calls.filter(([sql]) =>
+        String(sql).includes("SELECT DISTINCT config_id FROM ai_jobs WHERE status = 'queued'")
+      );
+      expect(idlePolls).toHaveLength(0);
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+      expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      prepare.mockRestore();
+      clearIntervalSpy.mockRestore();
+      clearTimeoutSpy.mockRestore();
+      stopWorker();
+    }
+  });
+
   it('seeds default pantry categories before snapshotting a new receipt inventory', async () => {
     const { inventarioDeLaCasa } = await import('./ticket-queue.js');
     const { DEFAULT_PANTRY_CATEGORIES } = await import('./pantry-categories.js');
@@ -216,6 +262,68 @@ describe('AI provider queue dispatcher', () => {
     release.resolve('home-a-config');
     await expect(settledResult).resolves.toEqual({ value: 'home-a-config' });
     expect(jobRow(job.id)).toMatchObject({ household_id: 'home-a', status: 'done' });
+  });
+
+  it('resolves AI config from the prompt household instead of a changed active selection', async () => {
+    const { dispatchAI } = await import('./ticket-queue.js');
+    const configOwnerId = 'scoped-config-owner';
+    db.prepare('INSERT INTO users (id, email, name, password_hash) VALUES (?, ?, ?, ?)').run(
+      configOwnerId,
+      'scoped-owner@test.local',
+      'Scoped config owner',
+      'hash'
+    );
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?), (?, ?, ?)').run(
+      'scope-home-a',
+      'Scope A',
+      'scope-a',
+      'scope-home-b',
+      'Scope B',
+      'scope-b'
+    );
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, 'scope-home-a', ?, 'member', '{}'), (?, 'scope-home-a', ?, 'admin', '{}'),
+              (?, 'scope-home-b', ?, 'member', '{}')`
+    ).run('scope-a-actor', userId, 'scope-a-owner', configOwnerId, 'scope-b-actor', userId);
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run('scope-home-b', userId);
+    db.prepare(
+      `INSERT INTO ai_configs
+        (id, user_id, household_id, name, provider, base_url, api_key, model, concurrency, is_active)
+       VALUES ('scope-a-config', ?, 'scope-home-a', 'Scope A', 'custom', 'http://provider.test/v1',
+         'scope-a-secret', 'model-a', 1, 1),
+              ('scope-b-config', ?, 'scope-home-b', 'Scope B', 'custom', 'http://provider.test/v1',
+         'scope-b-secret', 'model-b', 1, 1)`
+    ).run(configOwnerId, configOwnerId);
+
+    const provider = vi.fn(async (_url: string, init: RequestInit) => {
+      const request = JSON.parse(String(init.body));
+      expect(request.model).toBe('model-a');
+      expect(init.headers).toMatchObject({ Authorization: 'Bearer scope-a-secret' });
+      return new Response(
+        JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: '{}' } }] }),
+        { status: 200 }
+      );
+    });
+    vi.stubGlobal('fetch', provider);
+
+    const result = await dispatchAI(
+      userId,
+      [{ role: 'user', content: 'synthetic' }],
+      db,
+      RECIPE_RESPONSE_FORMAT,
+      'household_plan',
+      undefined,
+      'scope-home-a'
+    );
+
+    expect(result).toBe('{}');
+    expect(provider).toHaveBeenCalledTimes(1);
+    expect(db.prepare('SELECT household_id, config_id, status FROM ai_jobs').get()).toMatchObject({
+      household_id: 'scope-home-a',
+      config_id: 'scope-a-config',
+      status: 'done'
+    });
   });
 
   it('pins a receipt job and its provider from the receipt home, not the current selection', async () => {
@@ -688,7 +796,15 @@ describe('AI provider queue dispatcher', () => {
             confidence: 0.7,
             note: ''
           },
-          { name: 'Pan', category: 'other', createCategory: false, priceMinor: 150 },
+          {
+            name: 'Pan ' + 'artesano '.repeat(300),
+            quantity: 1,
+            unit: 'unidad/'.repeat(320),
+            category: 'other',
+            createCategory: false,
+            priceMinor: 150,
+            note: 'Detalle '.repeat(400)
+          },
           { name: 'Agua mineral', category: 'beverages', createCategory: false, priceMinor: 100 },
           { name: 'AGUA mineral', category: 'beverages', createCategory: false, priceMinor: 100 }
         ],
@@ -792,18 +908,26 @@ describe('AI provider queue dispatcher', () => {
         currency: 'EUR',
         total_minor: 850
       });
-      expect(
-        db
-          .prepare(
-            'SELECT name, quantity, price_minor FROM receipt_items WHERE receipt_id = ? ORDER BY position'
-          )
-          .all(receiptId)
-      ).toEqual([
+      const savedTicketLines = db
+        .prepare(
+          'SELECT name, quantity, price_minor FROM receipt_items WHERE receipt_id = ? ORDER BY position'
+        )
+        .all(receiptId) as { name: string; quantity: number; price_minor: number }[];
+      expect(savedTicketLines).toEqual([
         expect.objectContaining({ name: 'Tomate', quantity: 2, price_minor: 500 }),
-        expect.objectContaining({ name: 'Pan', quantity: 1, price_minor: 150 }),
+        expect.objectContaining({
+          name: 'Pan ' + 'artesano '.repeat(300).trim(),
+          quantity: 1,
+          price_minor: 150
+        }),
         expect.objectContaining({ name: 'Agua mineral', quantity: 1, price_minor: 100 }),
         expect.objectContaining({ name: 'AGUA mineral', quantity: 1, price_minor: 100 })
       ]);
+      expect(
+        db
+          .prepare('SELECT unit, note FROM receipt_items WHERE receipt_id = ? AND name = ?')
+          .get(receiptId, 'Pan ' + 'artesano '.repeat(300).trim())
+      ).toEqual({ unit: 'unidad/'.repeat(320), note: 'Detalle '.repeat(400).trim() });
       expect(db.prepare('SELECT name FROM stores WHERE user_id = ?').get(userId)).toMatchObject({
         name: 'Mercado sintético'
       });

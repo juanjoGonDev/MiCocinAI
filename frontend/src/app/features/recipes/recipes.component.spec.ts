@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { signal } from '@angular/core';
+import { signal, type WritableSignal } from '@angular/core';
 import { ActivatedRoute, convertToParamMap, type ParamMap, Router } from '@angular/router';
 import { BehaviorSubject, of, Subject, throwError } from 'rxjs';
 import { RecipesComponent } from './recipes.component';
@@ -13,6 +13,7 @@ import { ToastService } from '../../core/services/toast.service';
 import { I18nService } from '../../core/services/i18n.service';
 import type { Recipe } from '../../shared/models/recipe.model';
 import type { AIRecipeResponse } from '../../shared/models/ai-config.model';
+import type { HomeProfile } from '../../shared/models/home-profile';
 
 const RECIPE: Recipe = {
   id: 'synthetic-recipe',
@@ -48,7 +49,7 @@ const GENERATED: AIRecipeResponse = {
   prepTime: 15,
   cookTime: 30,
   restTime: 0,
-  servings: 3,
+  baseServings: 1,
   calories: 410,
   ingredients: [
     {
@@ -65,16 +66,59 @@ const GENERATED: AIRecipeResponse = {
   guidance: {
     appliances: ['fogón'],
     parallelTasks: ['Lavar la tabla'],
-    tipsAndVariations: ['Añadir perejil']
+    tipsAndVariations: ['Añadir perejil'],
+    batchCookingWarning: null
   },
-  steps: [{ stepNumber: 1, instruction: 'Cocinar', duration: 10, tips: 'Remover' }],
+  instructionsByLevel: {
+    basic: [
+      {
+        stepNumber: 1,
+        instruction: 'Cocinar',
+        duration: 10,
+        temperature: null,
+        timerRequired: true,
+        timerDuration: 10,
+        tips: 'Remover',
+        warning: null,
+        illustration: null
+      }
+    ],
+    intermediate: [
+      {
+        stepNumber: 1,
+        instruction: 'Cocinar removiendo',
+        duration: 10,
+        temperature: null,
+        timerRequired: true,
+        timerDuration: 10,
+        tips: null,
+        warning: null,
+        illustration: null
+      }
+    ],
+    expert: [
+      {
+        stepNumber: 1,
+        instruction: 'Cocinar hasta el punto deseado',
+        duration: 10,
+        temperature: null,
+        timerRequired: true,
+        timerDuration: 10,
+        tips: null,
+        warning: null,
+        illustration: null
+      }
+    ]
+  },
   tags: ['guiso'],
   nutrition: { calories: 410, protein: 12, carbs: 50, fat: 14, fiber: 6 },
   storage: {
     method: 'frigorífico',
     duration: '2 días',
+    reheatingInstructions: null,
     container: 'recipiente',
-    freezingPossible: true
+    freezingPossible: true,
+    freezingDuration: null
   }
 };
 
@@ -95,12 +139,16 @@ describe('RecipesComponent', () => {
   let household: ReturnType<typeof createHouseholdService>;
   let toast: jasmine.SpyObj<ToastService>;
   let authUserId: string | null;
+  let authCurrentUser: any;
+  let authUpdateProfile: jasmine.Spy;
+  let cookingProfile: WritableSignal<HomeProfile>;
 
   function createRecipeService() {
     return {
       recipes: signal<Recipe[]>([]),
       total: signal(0),
       isLoading: signal(false),
+      recipesLoadError: signal(false),
       loadRecipes: jasmine.createSpy('loadRecipes'),
       getRecipe: jasmine.createSpy('getRecipe').and.returnValue(of(null)),
       createRecipe: jasmine.createSpy('createRecipe').and.returnValue(of(RECIPE)),
@@ -163,19 +211,49 @@ describe('RecipesComponent', () => {
     ai = createAiService();
     pantry = createPantryService();
     household = createHouseholdService();
+    cookingProfile = signal({ cookingLevel: 'intermediate', modules: [] });
     toast = jasmine.createSpyObj<ToastService>('ToastService', ['success', 'error']);
     authUserId = 'synthetic-user';
+    authCurrentUser = signal({
+      id: authUserId,
+      preferences: {
+        theme: 'system',
+        language: 'es',
+        detailLevel: 'intermediate',
+        notifications: {
+          expirationAlerts: true,
+          mealReminders: true,
+          recipeSuggestions: true
+        },
+        recipeViewMode: 'grid'
+      }
+    });
+    authUpdateProfile = jasmine.createSpy('updateProfile').and.callFake((patch: any) => {
+      const user = {
+        ...authCurrentUser(),
+        preferences: { ...authCurrentUser().preferences, ...patch.preferences }
+      };
+      authCurrentUser.set(user);
+      return of(user);
+    });
 
     await TestBed.configureTestingModule({
       imports: [RecipesComponent],
       providers: [
         { provide: RecipeService, useValue: recipes },
-        { provide: AuthService, useValue: { userId: () => authUserId } },
+        {
+          provide: AuthService,
+          useValue: {
+            userId: () => authUserId,
+            currentUser: authCurrentUser,
+            updateProfile: authUpdateProfile
+          }
+        },
         { provide: HouseholdService, useValue: household },
         {
           provide: TasteProfileService,
           useValue: {
-            profile: signal({ cookingLevel: 'intermediate' }),
+            profile: cookingProfile,
             ensureLoaded: jasmine.createSpy('ensureLoaded')
           }
         },
@@ -239,12 +317,30 @@ describe('RecipesComponent', () => {
 
     queryParams.next(convertToParamMap({ maxTime: '30' }));
     expect(component.activeFilter()).toBe('quick');
-    expect(recipes.loadRecipes).toHaveBeenCalledWith({ page: 1, pageSize: 20, maxTime: 30 });
+    expect(recipes.loadRecipes).toHaveBeenCalledWith({ page: 1, pageSize: 9, maxTime: 30 });
     queryParams.next(convertToParamMap({ author: 'user' }));
     expect(component.activeFilter()).toBe('');
     queryParams.next(convertToParamMap({ collection: 'book' }));
     expect(component.page()).toBe(1);
-    expect(recipes.loadRecipes).toHaveBeenCalledWith({ page: 1, pageSize: 12, catalogOnly: true });
+    expect(recipes.loadRecipes).toHaveBeenCalledWith({ page: 1, pageSize: 9, catalogOnly: true });
+  });
+
+  it('restores and saves the list/grid preference on the signed-in user', () => {
+    expect(component.viewMode()).toBe('grid');
+
+    component.setViewMode('list');
+
+    expect(component.viewMode()).toBe('list');
+    expect(authUpdateProfile).toHaveBeenCalledWith({
+      preferences: jasmine.objectContaining({ recipeViewMode: 'list' })
+    });
+    expect(authCurrentUser().preferences.recipeViewMode).toBe('list');
+  });
+
+  it('navigates to the dedicated manual recipe creation form', () => {
+    component.createManualRecipe();
+
+    expect(router.navigate).toHaveBeenCalledWith(['/recipes', 'new']);
   });
 
   it('ignores malformed query values and maps quick filters and favorites to the URL', () => {
@@ -261,7 +357,7 @@ describe('RecipesComponent', () => {
     );
     expect(recipes.loadRecipes).toHaveBeenCalledWith({
       page: 1,
-      pageSize: 20,
+      pageSize: 9,
       countryCode: 'SV',
       difficulty: 'medium',
       isFavorite: true
@@ -295,16 +391,21 @@ describe('RecipesComponent', () => {
     component.setCollection('book');
     expect(router.navigate).toHaveBeenCalledWith(
       [],
-      jasmine.objectContaining({ queryParams: { collection: 'book', page: null, pageSize: '12' } })
+      jasmine.objectContaining({ queryParams: { collection: 'book', page: null, pageSize: null } })
     );
     component.setCollection('all');
     component.searchInput.set('  tortilla  ');
-    component.applyBookSearch();
+    component.applySearch();
     expect(router.navigate).toHaveBeenCalledWith(
       [],
       jasmine.objectContaining({ queryParams: { search: 'tortilla', page: null } })
     );
-    recipes.total.set(30);
+    component.setViewMode('grid');
+    expect(component.viewMode()).toBe('grid');
+    component.setViewMode('list');
+    expect(component.viewMode()).toBe('list');
+    component.setViewMode('grid');
+    recipes.total.set(18);
     component.page.set(1);
     expect(component.pageCount()).toBe(2);
     component.changePage(0);
@@ -328,6 +429,24 @@ describe('RecipesComponent', () => {
           page: null
         })
       })
+    );
+  });
+
+  it('returns to the last valid page when a refreshed result total shrinks', () => {
+    recipes.total.set(25);
+    recipes.loadRecipes.and.callFake(() => recipes.isLoading.set(true));
+
+    queryParams.next(convertToParamMap({ page: '2' }));
+    expect(component.page()).toBe(2);
+    expect(recipes.loadRecipes).toHaveBeenCalledWith(jasmine.objectContaining({ page: 2 }));
+
+    recipes.total.set(7);
+    recipes.isLoading.set(false);
+    fixture.detectChanges();
+
+    expect(router.navigate).toHaveBeenCalledWith(
+      [],
+      jasmine.objectContaining({ queryParams: jasmine.objectContaining({ page: '1' }) })
     );
   });
 
@@ -496,6 +615,117 @@ describe('RecipesComponent', () => {
     );
   });
 
+  it('defaults each recipe to the current profile level and remembers explicit per-recipe choices', () => {
+    cookingProfile.set({ cookingLevel: 'expert', modules: [] });
+    const firstRecipe = { ...RECIPE, id: 'recipe-a' };
+    const secondRecipe = { ...RECIPE, id: 'recipe-b' };
+    recipes.getRecipe.and.returnValue(of(firstRecipe));
+
+    queryParams.next(convertToParamMap({ recipe: firstRecipe.id }));
+    expect(component.selectedRecipeDetailLevel()).toBe('expert');
+
+    component.setSelectedRecipeDetailLevel('basic');
+    recipes.getRecipe.and.returnValue(of(secondRecipe));
+    queryParams.next(convertToParamMap({ recipe: secondRecipe.id }));
+    expect(component.selectedRecipeDetailLevel()).toBe('expert');
+
+    recipes.getRecipe.and.returnValue(of(firstRecipe));
+    queryParams.next(convertToParamMap({ recipe: firstRecipe.id }));
+    expect(component.selectedRecipeDetailLevel()).toBe('basic');
+  });
+
+  it('defaults saved recipe servings to the household count instead of its base yield', () => {
+    household.defaultServings.and.returnValue(3);
+    recipes.getRecipe.and.returnValue(of(RECIPE));
+
+    queryParams.next(convertToParamMap({ recipe: RECIPE.id }));
+
+    expect(component.recipeServings()).toBe(3);
+    component.setRecipeServings(5);
+    expect(component.recipeServings()).toBe(5);
+  });
+
+  it('tracks household loading until servings are edited, then preserves the explicit value', () => {
+    household.defaultServings.and.callFake(() => {
+      const activeMembers =
+        household.household()?.members.filter((member: { isActive: boolean }) => member.isActive)
+          .length ?? 0;
+      return activeMembers || 2;
+    });
+    recipes.getRecipe.and.returnValue(of(RECIPE));
+    queryParams.next(convertToParamMap({ recipe: RECIPE.id }));
+    expect(component.recipeServings()).toBe(2);
+
+    household.household.set({
+      id: 'home-a',
+      members: [
+        { id: 'active-a', isActive: true },
+        { id: 'active-b', isActive: true },
+        { id: 'inactive', isActive: false }
+      ]
+    });
+    fixture.detectChanges();
+    expect(component.recipeServings()).toBe(2);
+
+    component.setRecipeServings(5);
+    household.household.set({
+      id: 'home-b',
+      members: [
+        { id: 'active-a', isActive: true },
+        { id: 'active-b', isActive: true },
+        { id: 'active-c', isActive: true }
+      ]
+    });
+    fixture.detectChanges();
+    expect(component.recipeServings()).toBe(5);
+  });
+
+  it('uses the profile cooking level as the untouched AI-generation default', () => {
+    cookingProfile.set({ cookingLevel: 'expert', modules: [] });
+    fixture.detectChanges();
+    component.openAiModal();
+    expect(component.aiOptions.detailLevel).toBe('expert');
+
+    cookingProfile.set({ cookingLevel: 'intermediate', modules: [] });
+    fixture.detectChanges();
+    expect(component.aiOptions.detailLevel).toBe('intermediate');
+
+    component.setAiDetailLevel('basic');
+    cookingProfile.set({ cookingLevel: 'expert', modules: [] });
+    fixture.detectChanges();
+    expect(component.aiOptions.detailLevel).toBe('basic');
+
+    component.closeAiModal();
+    component.openAiModal();
+    fixture.detectChanges();
+    expect(component.aiOptions.detailLevel).toBe('expert');
+  });
+
+  it('provides translated picker options and rejects invalid AI selector values', () => {
+    expect(component.detailLevelOptions).toEqual([
+      { value: 'basic', label: component.detailLevelLabel('basic') },
+      { value: 'intermediate', label: component.detailLevelLabel('intermediate') },
+      { value: 'expert', label: component.detailLevelLabel('expert') }
+    ]);
+    expect(component.difficultyOptions.map(({ value }) => value)).toEqual([
+      'easy',
+      'medium',
+      'hard'
+    ]);
+
+    component.setAiDifficulty('hard');
+    component.setAiDetailLevel('expert');
+    expect(component.aiOptions.difficulty).toBe('hard');
+    expect(component.aiOptions.detailLevel).toBe('expert');
+    component.setAiDifficulty('unsupported');
+    component.setAiDetailLevel('unsupported');
+    expect(component.aiOptions.difficulty).toBe('hard');
+    expect(component.aiOptions.detailLevel).toBe('expert');
+
+    component.setGeneratedPreviewDetailLevel('unsupported');
+    expect(component.generatedPreviewDetailLevel()).not.toBe('unsupported');
+  });
+
   it('waits for cooking confirmation, rejects duplicate clicks, and keeps retry available', () => {
     const owned = { ...RECIPE, author: 'user' as const, authorId: 'synthetic-user' };
     const pending = new Subject<boolean>();
@@ -535,7 +765,7 @@ describe('RecipesComponent', () => {
     queryParams.next(convertToParamMap({ recipe: RECIPE.id }));
     expect(recipes.getRecipe).toHaveBeenCalledWith(RECIPE.id);
     expect(component.selectedRecipe()).toEqual(RECIPE);
-    expect(component.recipeServings()).toBe(4);
+    expect(component.recipeServings()).toBe(2);
 
     fragment.next('ai');
     expect(component.isAiModalOpen()).toBeTrue();
@@ -658,6 +888,7 @@ describe('RecipesComponent', () => {
     household.household.set({ id: 'home-b', members: [{ id: 'member-b', isActive: true }] });
     fixture.detectChanges();
     expect(component.recipeMemberIds()).toEqual(['member-b']);
+    expect(component.aiOptions.servings).toBe(1);
     component.setAiServings(5);
     component.recipeGuests.set([
       { allergies: [], intolerances: [], diets: [], likes: [], dislikes: [], notes: '' }
@@ -690,6 +921,16 @@ describe('RecipesComponent', () => {
       'recipes.receta_generada',
       'recipes.la_ia_ha_creado'
     );
+    expect(component.generatedPreviewServings()).toBe(3);
+    expect(
+      component.generatedPreviewIngredientQuantity(GENERATED, GENERATED.ingredients[0].quantity)
+    ).toBe(6);
+    component.setGeneratedPreviewServings(5);
+    expect(
+      component.generatedPreviewIngredientQuantity(GENERATED, GENERATED.ingredients[0].quantity)
+    ).toBe(10);
+    expect(GENERATED.ingredients[0].quantity).toBe(2);
+    expect(ai.generateRecipe).toHaveBeenCalledTimes(1);
     ai.generateRecipe.and.returnValue(of(null));
     component.generateSingle();
     expect(toast.error).toHaveBeenCalledWith('ui.error', 'recipes.no_se_pudo_generar');
@@ -708,6 +949,12 @@ describe('RecipesComponent', () => {
     expect(ai.generateMultipleRecipes).toHaveBeenCalledWith(
       jasmine.objectContaining({ servings: 4, count: 3 })
     );
+    expect(component.generatedPreviewServings()).toBe(4);
+    component.setGeneratedPreviewServings(6);
+    expect(
+      component.generatedPreviewIngredientQuantity(GENERATED, GENERATED.ingredients[0].quantity)
+    ).toBe(12);
+    expect(GENERATED.ingredients[0].quantity).toBe(2);
     expect(component.generatedRecipeDetailLevel(0)).toBe('intermediate');
     expect(component.generatedRecipeDetailLevel(1)).toBe('expert');
     ai.generateMultipleRecipes.and.returnValue(of([]));
@@ -726,19 +973,39 @@ describe('RecipesComponent', () => {
     const multi = {
       ...GENERATED,
       instructionsByLevel: {
-        basic: [{ stepNumber: 1, instruction: 'Paso básico', duration: 5, tips: 'Cuidado' }],
-        intermediate: [{ stepNumber: 1, instruction: 'Paso medio', warning: 'Caliente' }],
-        expert: [{ stepNumber: 1, instruction: 'Paso experto' }]
+        basic: [
+          {
+            ...GENERATED.instructionsByLevel.basic[0],
+            instruction: 'Paso básico',
+            duration: 5,
+            temperature: { value: 90, unit: 'C' as const },
+            timerRequired: true,
+            timerDuration: 5,
+            tips: 'Cuidado'
+          }
+        ],
+        intermediate: [
+          {
+            ...GENERATED.instructionsByLevel.intermediate[0],
+            instruction: 'Paso medio',
+            warning: 'Caliente'
+          }
+        ],
+        expert: [{ ...GENERATED.instructionsByLevel.expert[0], instruction: 'Paso experto' }]
       }
     };
     component.openAiModal();
     component.saveGeneratedRecipe(multi, 'expert');
     const payload = recipes.createRecipe.calls.mostRecent().args[0] as any;
     expect(payload.author).toBe('ai');
+    expect(payload.servings).toBe(1);
+    expect(payload.ingredients[0].quantity).toBe(2);
     expect(payload.instructionsByLevel.basic[0]).toEqual(
       jasmine.objectContaining({
         instruction: 'Paso básico',
+        temperature: { value: 90, unit: 'C' },
         timerRequired: true,
+        timerDuration: 5,
         illustration: null
       })
     );
@@ -757,10 +1024,7 @@ describe('RecipesComponent', () => {
     expect(component.isAiModalOpen()).toBeFalse();
 
     recipes.createRecipe.and.returnValue(throwError(() => new Error('synthetic')));
-    component.saveGeneratedRecipe({ ...GENERATED, instructionsByLevel: undefined }, 'basic');
-    const legacy = recipes.createRecipe.calls.mostRecent().args[0] as any;
-    expect(legacy.steps[0].instruction).toBe('Cocinar');
-    expect(legacy.instructionsByLevel).toBeUndefined();
+    component.saveGeneratedRecipe(multi, 'basic');
     expect(toast.error).toHaveBeenCalledWith('ui.error', 'recipes.no_se_pudo_guardar');
 
     recipes.createRecipe.and.returnValue(of(RECIPE));
@@ -768,26 +1032,35 @@ describe('RecipesComponent', () => {
     component.saveGeneratedRecipe({
       ...GENERATED,
       selectedDetailLevel: 'basic',
-      ingredients: [{ name: 'Agua', quantity: 1, unit: 'l' }],
-      steps: [{ stepNumber: 1, instruction: 'Añadir', tips: 'Poco a poco' }],
+      ingredients: [
+        {
+          ...GENERATED.ingredients[0],
+          name: 'Agua',
+          quantity: 1,
+          unit: 'l'
+        }
+      ],
       nutrition: null,
-      storage: { method: 'nevera', duration: '1 día', freezingPossible: undefined },
-      tags: undefined
+      storage: null,
+      tags: []
     });
     const defaults = recipes.createRecipe.calls.mostRecent().args[0] as any;
     expect(component.singleGeneratedDetailLevel()).toBe('basic');
     expect(defaults.ingredients[0]).toEqual(
-      jasmine.objectContaining({ isOptional: false, substitutes: [] })
-    );
-    expect(defaults.steps[0]).toEqual(
       jasmine.objectContaining({
-        instruction: 'Añadir',
-        timerRequired: false,
-        timerDuration: undefined
+        isOptional: false,
+        substitutes: ['tomate en conserva']
+      })
+    );
+    expect(defaults.instructionsByLevel.basic[0]).toEqual(
+      jasmine.objectContaining({
+        instruction: GENERATED.instructionsByLevel.basic[0].instruction,
+        timerRequired: true,
+        timerDuration: 10
       })
     );
     expect(defaults.nutrition).toBeUndefined();
-    expect(defaults.storage.freezingPossible).toBeFalse();
+    expect(defaults.storage).toBeUndefined();
     expect(defaults.tags).toEqual([]);
   });
 });

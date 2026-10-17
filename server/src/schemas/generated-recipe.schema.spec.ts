@@ -10,7 +10,7 @@ const validCandidate = {
   prepTime: 5,
   cookTime: 15,
   restTime: null,
-  servings: 2,
+  baseServings: 1,
   calories: 180,
   ingredients: [
     {
@@ -30,6 +30,9 @@ const validCandidate = {
         stepNumber: 1,
         instruction: 'Cocer la zanahoria.',
         duration: null,
+        temperature: null,
+        timerRequired: false,
+        timerDuration: null,
         tips: null,
         warning: null,
         illustration: null
@@ -40,6 +43,9 @@ const validCandidate = {
         stepNumber: 1,
         instruction: 'Cortar la zanahoria y cocerla hasta que esté tierna.',
         duration: null,
+        temperature: null,
+        timerRequired: false,
+        timerDuration: null,
         tips: null,
         warning: null,
         illustration: null
@@ -50,6 +56,9 @@ const validCandidate = {
         stepNumber: 1,
         instruction: 'Cortar dados uniformes y cocer a hervor suave hasta textura tierna.',
         duration: null,
+        temperature: null,
+        timerRequired: false,
+        timerDuration: null,
         tips: null,
         warning: null,
         illustration: null
@@ -59,13 +68,14 @@ const validCandidate = {
   guidance: {
     appliances: ['Cocina de gas'],
     parallelTasks: ['Mientras hierve el agua, lava y corta las verduras.'],
-    tipsAndVariations: ['Añade limón al final para realzar el sabor.']
+    tipsAndVariations: ['Añade limón al final para realzar el sabor.'],
+    batchCookingWarning: null
   },
   nutrition: { calories: 180, protein: 2, carbs: 20, fat: 5, fiber: 4 },
   storage: {
     method: 'Refrigerada',
     duration: '2 días',
-    reheating: 'Calentar',
+    reheatingInstructions: 'Calentar',
     container: null,
     freezingPossible: false,
     freezingDuration: null
@@ -88,6 +98,85 @@ describe('generatedRecipeCandidateSchema', () => {
         guidance: { ...validCandidate.guidance, appliances: ['freidora de aceite'] }
       }).success
     ).toBe(true);
+  });
+
+  it('requires an explicit nullable batch-cooking decision without a character cap', () => {
+    const { batchCookingWarning: _warning, ...guidanceWithoutWarning } = validCandidate.guidance;
+    expect(
+      generatedRecipeCandidateSchema.safeParse({
+        ...validCandidate,
+        guidance: guidanceWithoutWarning
+      }).success
+    ).toBe(false);
+    expect(
+      generatedRecipeCandidateSchema.safeParse({
+        ...validCandidate,
+        guidance: { ...validCandidate.guidance, batchCookingWarning: '' }
+      }).success
+    ).toBe(false);
+    expect(
+      generatedRecipeCandidateSchema.safeParse({
+        ...validCandidate,
+        guidance: { ...validCandidate.guidance, batchCookingWarning: 't'.repeat(2_001) }
+      }).success
+    ).toBe(true);
+    expect(
+      generatedRecipeCandidateSchema.parse({
+        ...validCandidate,
+        guidance: {
+          ...validCandidate.guidance,
+          batchCookingWarning: 'Dora en tandas pequeñas.'
+        }
+      }).guidance.batchCookingWarning
+    ).toBe('Dora en tandas pequeñas.');
+  });
+
+  it('accepts long text throughout the canonical AI recipe output', () => {
+    const longText = 'x'.repeat(2_501);
+    const longCandidate = {
+      ...validCandidate,
+      name: longText,
+      description: longText,
+      cuisine: longText,
+      ingredients: [
+        {
+          ...validCandidate.ingredients[0],
+          name: longText,
+          preparation: longText,
+          substitutes: [longText],
+          notes: longText
+        }
+      ],
+      utensils: [longText],
+      guidance: {
+        appliances: [longText],
+        parallelTasks: [longText],
+        tipsAndVariations: [longText],
+        batchCookingWarning: longText
+      },
+      instructionsByLevel: Object.fromEntries(
+        Object.entries(validCandidate.instructionsByLevel).map(([level, steps]) => [
+          level,
+          steps.map((step) => ({
+            ...step,
+            instruction: longText,
+            tips: longText,
+            warning: longText
+          }))
+        ])
+      ),
+      storage: {
+        method: longText,
+        duration: longText,
+        reheatingInstructions: longText,
+        container: longText,
+        freezingPossible: true,
+        freezingDuration: longText
+      },
+      tags: [longText]
+    };
+
+    expect(generatedRecipeCandidateSchema.safeParse(longCandidate).success).toBe(true);
   });
 
   it('exige illustration null y rechaza recursos visuales devueltos por el modelo', () => {
@@ -166,22 +255,8 @@ describe('generatedRecipeCandidateSchema', () => {
         instructionsByLevel: {
           ...validCandidate.instructionsByLevel,
           intermediate: [
-            {
-              stepNumber: 2,
-              instruction: 'Segundo paso.',
-              duration: null,
-              tips: null,
-              warning: null,
-              illustration: null
-            },
-            {
-              stepNumber: 1,
-              instruction: 'Primer paso.',
-              duration: null,
-              tips: null,
-              warning: null,
-              illustration: null
-            }
+            { ...validCandidate.instructionsByLevel.intermediate[0], stepNumber: 2 },
+            { ...validCandidate.instructionsByLevel.intermediate[0], stepNumber: 1 }
           ]
         }
       }).success

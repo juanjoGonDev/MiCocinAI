@@ -20,6 +20,7 @@ type Sql = import('better-sqlite3').Database;
 let app: Hono;
 let db: Sql;
 let closeDatabase: () => void;
+let persistSharedMeal: typeof import('../utils/shared-meal-calendar.store.js').persistSharedMeal;
 
 async function makeUser(id: string, householdId: string | null, name = 'Alguien') {
   const email = `${id}@hogaria.test`;
@@ -44,9 +45,35 @@ function call(user: User, method: string, path: string, body?: unknown) {
   });
 }
 
+function assistantCall(
+  user: User,
+  method: string,
+  path: string,
+  body: unknown,
+  householdId: string,
+  actionId: string
+) {
+  return app.request(`/api/calendar${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${user.token}`,
+      'content-type': 'application/json',
+      'x-assistant-household-id': householdId,
+      'x-assistant-action-id': actionId
+    },
+    body: JSON.stringify(body)
+  });
+}
+
 /** Igual que en la compra: `Response.json()` es `unknown` y aqui se ancha una vez. */
 async function data(response: Response) {
-  const body = (await response.json()) as any;
+  const raw = await response.text();
+  let body: any;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    throw new Error(`respuesta no JSON ${response.status}: ${raw}`);
+  }
   if (body?.success !== true) throw new Error(`respuesta inesperada: ${JSON.stringify(body)}`);
   return body.data;
 }
@@ -60,6 +87,7 @@ describe('calendario de la casa (§8f)', () => {
     await database.initializeDatabase();
     closeDatabase = database.closeDatabase;
     db = database.getDatabase();
+    persistSharedMeal = (await import('../utils/shared-meal-calendar.store.js')).persistSharedMeal;
     app = new Hono();
     app.route('/api/calendar', calendarRoutes);
   });
@@ -73,6 +101,8 @@ describe('calendario de la casa (§8f)', () => {
     // Borrar TODO (y no solo lo de esta suite) es lo que permite repetir el mismo id
     // en cada test y leer el fallo sin ambiguedad cuando algo se queda atras.
     for (const sql of [
+      'DELETE FROM household_task_weeks',
+      'DELETE FROM household_plans',
       'DELETE FROM calendar_event_attendees',
       'DELETE FROM calendar_events',
       'DELETE FROM household_members',
@@ -97,6 +127,200 @@ describe('calendario de la casa (§8f)', () => {
     startTime: '17:30',
     endTime: '18:15'
   } as const;
+
+  it('proyecta tareas semanales del hogar en el rango del calendario solo a miembros activos con calendar.view', async () => {
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'other-household',
+      'Otra casa',
+      'OTHER123'
+    );
+    const alice = await makeUser('task-cal-alice', householdId, 'Alice');
+    const bob = await makeUser('task-cal-bob', householdId, 'Bob');
+    const hidden = await makeUser('task-cal-hidden', householdId, 'Hidden');
+    const inactive = await makeUser('task-cal-inactive', householdId, 'Inactive');
+    const outsider = await makeUser('task-cal-outsider', 'other-household', 'Outsider');
+
+    for (const user of [alice, bob, hidden, inactive, outsider]) {
+      db.prepare(
+        `INSERT INTO household_members (id, household_id, user_id, role, permissions, is_active)
+         VALUES (?, ?, ?, 'member', ?, ?)`
+      ).run(
+        `hm-${user.id}`,
+        user.id === outsider.id ? 'other-household' : householdId,
+        user.id,
+        JSON.stringify({ calendar: { view: user.id !== hidden.id, edit: false } }),
+        user.id === inactive.id ? 0 : 1
+      );
+    }
+    db.prepare(
+      `INSERT INTO household_plans (household_id, version, plan_json, updated_by)
+       VALUES (?, 1, ?, ?)`
+    ).run(
+      householdId,
+      JSON.stringify({
+        schemaVersion: 1,
+        dwellingType: 'apartment',
+        dwellingTypeLabel: null,
+        summary: '',
+        warnings: [],
+        floors: [
+          {
+            id: 'floor-0',
+            name: 'Planta baja',
+            level: 0,
+            walls: [],
+            openings: [],
+            spaces: [
+              {
+                id: 'kitchen',
+                kind: 'kitchen',
+                label: 'Cocina',
+                polygon: [
+                  { x: 100, y: 100 },
+                  { x: 900, y: 100 },
+                  { x: 900, y: 900 },
+                  { x: 100, y: 900 }
+                ],
+                parentSpaceId: null
+              }
+            ]
+          }
+        ]
+      }),
+      alice.id
+    );
+    const taskWeek = (household: string, weekStart: string, task: unknown) =>
+      db
+        .prepare(
+          `INSERT INTO household_task_weeks
+           (household_id, week_start, version, tasks_json, updated_by)
+         VALUES (?, ?, 1, ?, ?)`
+        )
+        .run(household, weekStart, JSON.stringify([task]), alice.id);
+    taskWeek(householdId, '2026-10-05', {
+      id: 'task-saturday',
+      title: 'Limpiar la cocina',
+      details: null,
+      spaceId: 'kitchen',
+      scheduledDate: '2026-10-10',
+      assignedMemberId: bob.id,
+      completed: true
+    });
+    taskWeek(householdId, '2026-10-12', {
+      id: 'task-monday',
+      title: 'Sacar reciclaje',
+      details: 'Separar cartón',
+      spaceId: null,
+      scheduledDate: '2026-10-12',
+      assignedMemberId: null,
+      completed: false
+    });
+    taskWeek('other-household', '2026-10-12', {
+      id: 'foreign-task',
+      title: 'Privado de otra casa',
+      details: null,
+      spaceId: null,
+      scheduledDate: '2026-10-12',
+      assignedMemberId: outsider.id,
+      completed: false
+    });
+
+    const range = '/range?startDate=2026-10-10&endDate=2026-10-12';
+    const aliceData = (await data(await call(alice, 'GET', range))) as any;
+    expect(aliceData.tasks).toEqual([
+      {
+        id: 'task-saturday',
+        title: 'Limpiar la cocina',
+        date: '2026-10-10',
+        time: null,
+        zoneName: 'Cocina',
+        assignedMemberId: bob.id,
+        assignedMemberName: 'Bob',
+        completed: true
+      },
+      {
+        id: 'task-monday',
+        title: 'Sacar reciclaje',
+        date: '2026-10-12',
+        time: null,
+        zoneName: null,
+        assignedMemberId: null,
+        assignedMemberName: null,
+        completed: false
+      }
+    ]);
+    expect(JSON.stringify(aliceData.tasks)).not.toContain('Privado de otra casa');
+    expect(((await data(await call(bob, 'GET', range))) as any).tasks).toEqual(aliceData.tasks);
+    expect(((await data(await call(hidden, 'GET', range))) as any).tasks).toEqual([]);
+    expect(((await data(await call(inactive, 'GET', range))) as any).tasks).toEqual([]);
+    expect(((await data(await call(outsider, 'GET', range))) as any).tasks).toEqual([
+      expect.objectContaining({ title: 'Privado de otra casa' })
+    ]);
+
+    const nextDays = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-10-13&endDate=2026-10-14')
+    )) as any;
+    expect(nextDays.tasks).toEqual([]);
+    db.prepare('UPDATE household_members SET is_active = 0 WHERE user_id = ?').run(bob.id);
+    const unassignedFormerMember = (await data(await call(alice, 'GET', range))) as any;
+    expect(unassignedFormerMember.tasks[0]).toMatchObject({
+      assignedMemberId: null,
+      assignedMemberName: null
+    });
+
+    db.prepare('DELETE FROM household_plans WHERE household_id = ?').run(householdId);
+    const missingPlan = (await data(await call(alice, 'GET', range))) as any;
+    expect(missingPlan.tasks[0].zoneName).toBeNull();
+
+    db.prepare(
+      'INSERT INTO household_plans (household_id, version, plan_json, updated_by) VALUES (?, 1, ?, ?)'
+    ).run(householdId, '{invalid json', alice.id);
+    const corruptedPlan = (await data(await call(alice, 'GET', range))) as any;
+    expect(corruptedPlan.tasks[0].zoneName).toBeNull();
+  });
+
+  it('fails closed for malformed task weeks and keeps the calendar range empty when no tasks exist', async () => {
+    const alice = await makeUser('task-cal-empty', householdId, 'Alice');
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, permissions)
+       VALUES (?, ?, ?, 'member', ?)`
+    ).run(
+      `hm-${alice.id}`,
+      householdId,
+      alice.id,
+      JSON.stringify({ calendar: { view: true, edit: false } })
+    );
+    db.prepare(
+      `INSERT INTO household_task_weeks
+         (household_id, week_start, version, tasks_json, updated_by)
+       VALUES (?, ?, 1, ?, ?)`
+    ).run(householdId, '2026-10-05', '[{"malformed":true}]', alice.id);
+
+    const malformed = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-10-05&endDate=2026-10-11')
+    )) as any;
+    expect(malformed.tasks).toEqual([]);
+
+    const emptyWeek = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-10-12&endDate=2026-10-18')
+    )) as any;
+    expect(emptyWeek.tasks).toEqual([]);
+
+    db.prepare(
+      `INSERT INTO household_task_weeks
+         (household_id, week_start, version, tasks_json, updated_by)
+       VALUES (?, ?, 1, ?, ?)`
+    ).run(householdId, '2026-10-12', '{invalid json', alice.id);
+    const invalidJson = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-10-12&endDate=2026-10-18')
+    )) as any;
+    expect(invalidJson.tasks).toEqual([]);
+
+    const noTaskRows = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-10-19&endDate=2026-10-25')
+    )) as any;
+    expect(noTaskRows.tasks).toEqual([]);
+  });
 
   it('crea, lee y borra una suelta', async () => {
     const alice = await makeUser('cal-alice', householdId, 'Alice');
@@ -151,6 +375,213 @@ describe('calendario de la casa (§8f)', () => {
     expect(
       await data(await call(alice, 'GET', '/events?from=2026-03-01&to=2026-03-31'))
     ).toHaveLength(2);
+  });
+
+  it('proyecta una comida confirmada una vez solo a participantes con permiso, sin compartir notas ni objetivos privados', async () => {
+    const alice = await makeUser('meal-alice', householdId, 'Alice');
+    const bob = await makeUser('meal-bob', householdId, 'Bob');
+    const carol = await makeUser('meal-carol', householdId, 'Carol');
+    const dave = await makeUser('meal-dave', householdId, 'Dave');
+    const erin = await makeUser('meal-erin', householdId, 'Erin');
+    for (const user of [alice, bob, carol, dave, erin]) {
+      db.prepare(
+        'INSERT INTO household_members (id, household_id, user_id, role, permissions) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        `hm-${user.id}`,
+        householdId,
+        user.id,
+        'member',
+        JSON.stringify({ calendar: { view: true, edit: true } })
+      );
+    }
+    db.prepare('UPDATE households SET share_calendar = 0 WHERE id = ?').run(householdId);
+    db.prepare(
+      `INSERT INTO weekly_calendars (id, household_id, user_id, week_start, week_end, goals)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(
+      'meal-bob-calendar',
+      householdId,
+      bob.id,
+      '2026-10-12',
+      '2026-10-18',
+      '{"private":"bob-goal"}'
+    );
+
+    const saved = persistSharedMeal(db, alice.id, {
+      proposalId: 'proposal-calendar-shared-meal',
+      date: '2026-10-14',
+      mealType: 'lunch',
+      customMeal: 'Guiso común',
+      time: '13:30',
+      servings: 5,
+      participantIds: [alice.id, bob.id],
+      recipeSnapshot: {
+        name: 'Guiso común',
+        description: 'Receta compartida sintética',
+        baseServings: 1,
+        times: { prepTimeMinutes: 10, cookTimeMinutes: 20, totalTimeMinutes: 30 },
+        ingredients: [{ name: 'arroz', quantity: 100, unit: 'g' }],
+        instructions: ['Lavar', 'Cocer'],
+        prompt: 'dato privado que no debe viajar'
+      }
+    });
+    await call(alice, 'POST', '/meals', {
+      date: '2026-10-14',
+      mealType: 'dinner',
+      customMeal: 'Comida personal de Alice',
+      servings: 1
+    });
+    db.prepare('UPDATE meals SET notes = ? WHERE id = ?').run(
+      'nota privada de Alice',
+      saved.meal.id
+    );
+    db.prepare('UPDATE weekly_calendars SET goals = ? WHERE user_id = ?').run(
+      '{"private":"alice-goal"}',
+      alice.id
+    );
+
+    const bobData = (await data(
+      await call(bob, 'GET', '/range?startDate=2026-10-14&endDate=2026-10-14')
+    )) as any;
+    const sharedForBob = bobData.meals.filter((meal: any) => meal.isShared);
+    expect(sharedForBob).toHaveLength(1);
+    expect(sharedForBob[0]).toMatchObject({
+      id: saved.meal.id,
+      servings: 5,
+      notes: null,
+      calendar_id: null,
+      participantIds: [alice.id, bob.id]
+    });
+    expect(sharedForBob[0].recipe_snapshot).toEqual({
+      name: 'Guiso común',
+      description: 'Receta compartida sintética',
+      baseServings: 1,
+      times: { prepTimeMinutes: 10, cookTimeMinutes: 20, totalTimeMinutes: 30 },
+      ingredients: [{ name: 'arroz', quantity: 100, unit: 'g' }],
+      instructions: ['Lavar', 'Cocer']
+    });
+    expect(JSON.stringify(sharedForBob[0])).not.toContain('dato privado');
+    expect(sharedForBob[0]).not.toHaveProperty('source_proposal_id');
+    expect(bobData.goals).toEqual({ private: 'bob-goal' });
+
+    const aliceData = (await data(
+      await call(alice, 'GET', '/range?startDate=2026-10-14&endDate=2026-10-14')
+    )) as any;
+    expect(aliceData.meals.filter((meal: any) => meal.isShared)).toHaveLength(1);
+    expect(aliceData.goals).toEqual({ private: 'alice-goal' });
+
+    const carolData = (await data(
+      await call(carol, 'GET', '/range?startDate=2026-10-14&endDate=2026-10-14')
+    )) as any;
+    expect(carolData.meals.filter((meal: any) => meal.isShared)).toHaveLength(1);
+    expect(carolData.meals.map((meal: any) => meal.custom_meal)).toEqual(['Guiso común']);
+    expect(carolData.meals[0]).toMatchObject({
+      participantIds: [alice.id, bob.id],
+      participants: [
+        { id: alice.id, name: 'Alice' },
+        { id: bob.id, name: 'Bob' }
+      ],
+      calendar_id: null
+    });
+    expect(JSON.stringify(carolData.meals)).not.toContain('Alice-goal');
+    expect(JSON.stringify(carolData.meals)).not.toContain('nota privada');
+
+    // La ruta semanal también proyecta el plan del hogar si el miembro aún no tiene
+    // calendario propio, sin copiar los objetivos privados de quien confirmó la propuesta.
+    const carolWeek = (await data(await call(carol, 'GET', ''))) as any;
+    expect(carolWeek.meals.filter((meal: any) => meal.isShared)).toHaveLength(1);
+    expect(carolWeek.meals.map((meal: any) => meal.custom_meal)).toEqual(['Guiso común']);
+    expect(carolWeek.goals).toEqual({});
+    expect(carolWeek.id).toBeNull();
+
+    db.prepare('UPDATE household_members SET permissions = ? WHERE user_id = ?').run(
+      JSON.stringify({ calendar: { view: false, edit: true } }),
+      dave.id
+    );
+    db.prepare('UPDATE household_members SET is_active = 0 WHERE user_id = ?').run(erin.id);
+    expect(
+      (
+        (await data(
+          await call(dave, 'GET', '/range?startDate=2026-10-14&endDate=2026-10-14')
+        )) as any
+      ).meals
+    ).toEqual([]);
+    expect(await data(await call(dave, 'GET', ''))).toBeNull();
+    expect(
+      (
+        (await data(
+          await call(erin, 'GET', '/range?startDate=2026-10-14&endDate=2026-10-14')
+        )) as any
+      ).meals
+    ).toEqual([]);
+    expect(await data(await call(erin, 'GET', ''))).toBeNull();
+    expect(
+      db
+        .prepare('SELECT COUNT(*) AS count FROM meals WHERE source_proposal_id = ?')
+        .get('proposal-calendar-shared-meal:single')
+    ).toEqual({ count: 1 });
+  });
+
+  it('oculta la comida compartida si posteriormente se revoca calendar.view o se desactiva la membresía', async () => {
+    const alice = await makeUser('meal-acl-alice', householdId, 'Alice');
+    const bob = await makeUser('meal-acl-bob', householdId, 'Bob');
+    for (const user of [alice, bob]) {
+      db.prepare(
+        'INSERT INTO household_members (id, household_id, user_id, role, permissions) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        `hm-${user.id}`,
+        householdId,
+        user.id,
+        'member',
+        JSON.stringify({ calendar: { view: true, edit: true } })
+      );
+    }
+    persistSharedMeal(db, alice.id, {
+      proposalId: 'proposal-calendar-acl-meal',
+      date: '2026-10-14',
+      mealType: 'lunch',
+      customMeal: 'Arroz',
+      servings: 2,
+      participantIds: [bob.id]
+    });
+    db.prepare(
+      `INSERT INTO weekly_calendars (id, household_id, user_id, week_start, week_end, goals)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(
+      'meal-acl-bob-calendar',
+      householdId,
+      bob.id,
+      '2026-10-12',
+      '2026-10-18',
+      '{"private":"bob-goal"}'
+    );
+
+    const bobWeek = (await data(await call(bob, 'GET', ''))) as any;
+    expect(bobWeek.meals.filter((meal: any) => meal.isShared)).toHaveLength(1);
+    expect(bobWeek.meals.find((meal: any) => meal.isShared).calendar_id).toBeNull();
+    expect(bobWeek.goals).toEqual({ private: 'bob-goal' });
+    expect(
+      ((await data(await call(alice, 'GET', ''))) as any).meals.filter((meal: any) => meal.isShared)
+    ).toHaveLength(1);
+
+    db.prepare('UPDATE household_members SET permissions = ? WHERE user_id = ?').run(
+      JSON.stringify({ calendar: { view: false, edit: true } }),
+      bob.id
+    );
+    const revoked = (await data(
+      await call(bob, 'GET', '/range?startDate=2026-10-14&endDate=2026-10-14')
+    )) as any;
+    expect(revoked.meals).toEqual([]);
+
+    db.prepare('UPDATE household_members SET permissions = ?, is_active = 1 WHERE user_id = ?').run(
+      JSON.stringify({ calendar: { view: true, edit: true } }),
+      bob.id
+    );
+    db.prepare('UPDATE household_members SET is_active = 0 WHERE user_id = ?').run(bob.id);
+    const inactive = (await data(
+      await call(bob, 'GET', '/range?startDate=2026-10-14&endDate=2026-10-14')
+    )) as any;
+    expect(inactive.meals).toEqual([]);
   });
 
   it('ver el evento de otra persona no es poder reescribirlo', async () => {
@@ -233,6 +664,242 @@ describe('calendario de la casa (§8f)', () => {
     expect(updated.endTime).toBeNull();
     // El titulo sigue ahi: un PATCH parcial no borra lo que no se menciona.
     expect(updated.title).toBe(event.title);
+  });
+
+  it('aplica una actualización del asistente con preimagen y replay idempotente', async () => {
+    const alice = await makeUser('calendar-assistant-alice', householdId, 'Alice');
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(householdId, alice.id);
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, is_active)
+       VALUES (?, ?, ?, 'admin', 1)`
+    ).run('calendar-assistant-membership', householdId, alice.id);
+    const targetId = 'calendar-assistant-target';
+    db.prepare(
+      `INSERT INTO calendar_events
+        (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, notes, location, source)
+       VALUES (?, ?, ?, ?, 'appointment', '2026-10-20', '09:00', '11:00', 0, 'Revisar frenos', 'Taller', 'user')`
+    ).run(targetId, householdId, alice.id, 'Revisión del coche');
+    const raw = db
+      .prepare(
+        `SELECT household_id AS householdId, title, kind, date, start_time AS startTime,
+                end_time AS endTime, all_day AS allDay, color, notes, location, recurrence,
+                recurrence_rule AS recurrenceRule, exceptions, source, updated_at AS updatedAt
+           FROM calendar_events WHERE id = ?`
+      )
+      .get(targetId) as any;
+    const before = { ...raw, allDay: Boolean(raw.allDay) };
+    const body = {
+      changes: { startTime: '10:30' },
+      assistantAction: {
+        operation: 'update_event',
+        targetId,
+        householdId,
+        before
+      }
+    };
+    const actionId = 'a10d7286-73d1-4da1-8d3c-8e855a66b0a1';
+
+    const updated = await assistantCall(
+      alice,
+      'PATCH',
+      `/events/${targetId}/assistant-update`,
+      body,
+      householdId,
+      actionId
+    );
+    const updatedBody = await updated.json();
+    expect(updated.status, JSON.stringify(updatedBody)).toBe(200);
+    expect(updatedBody).toMatchObject({
+      success: true,
+      data: { id: targetId, title: 'Revisión del coche', startTime: '10:30' }
+    });
+
+    const replay = await assistantCall(
+      alice,
+      'PATCH',
+      `/events/${targetId}/assistant-update`,
+      body,
+      householdId,
+      actionId
+    );
+    expect(replay.status).toBe(200);
+    expect(await replay.json()).toMatchObject({ success: true, idempotent: true });
+    expect(
+      db.prepare('SELECT start_time AS startTime FROM calendar_events WHERE id = ?').get(targetId)
+    ).toEqual({ startTime: '10:30' });
+    expect(db.prepare('SELECT COUNT(*) AS count FROM assistant_action_results').get()).toEqual({
+      count: 1
+    });
+
+    const conflictingReplay = await assistantCall(
+      alice,
+      'PATCH',
+      `/events/${targetId}/assistant-update`,
+      { ...body, changes: { title: 'Cita falsa' } },
+      householdId,
+      actionId
+    );
+    expect(conflictingReplay.status).toBe(409);
+    expect(await conflictingReplay.json()).toMatchObject({ code: 'ASSISTANT_ACTION_ID_CONFLICT' });
+
+    const currentRaw = db
+      .prepare(
+        `SELECT household_id AS householdId, title, kind, date, start_time AS startTime,
+                end_time AS endTime, all_day AS allDay, color, notes, location, recurrence,
+                recurrence_rule AS recurrenceRule, exceptions, source, updated_at AS updatedAt
+           FROM calendar_events WHERE id = ?`
+      )
+      .get(targetId) as any;
+    const invalidRange = await assistantCall(
+      alice,
+      'PATCH',
+      `/events/${targetId}/assistant-update`,
+      {
+        changes: { endTime: '10:00' },
+        assistantAction: {
+          ...body.assistantAction,
+          before: { ...currentRaw, allDay: Boolean(currentRaw.allDay) }
+        }
+      },
+      householdId,
+      'b20d7286-73d1-4da1-8d3c-8e855a66b0a2'
+    );
+    expect(invalidRange.status).toBe(400);
+    expect(await invalidRange.json()).toMatchObject({ code: 'INVALID_EVENT_TIME_RANGE' });
+
+    const stale = await assistantCall(
+      alice,
+      'PATCH',
+      `/events/${targetId}/assistant-update`,
+      body,
+      householdId,
+      'c30d7286-73d1-4da1-8d3c-8e855a66b0a3'
+    );
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({ code: 'ASSISTANT_EVENT_STALE' });
+    expect(
+      db
+        .prepare(
+          'SELECT start_time AS startTime, end_time AS endTime FROM calendar_events WHERE id = ?'
+        )
+        .get(targetId)
+    ).toEqual({ startTime: '10:30', endTime: '11:00' });
+
+    db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+      'calendar-other-house',
+      'Otra casa',
+      'CALOTHER'
+    );
+    db.prepare(
+      "INSERT INTO household_members (id, household_id, user_id, role, is_active) VALUES (?, ?, ?, 'admin', 1)"
+    ).run('calendar-other-membership', 'calendar-other-house', alice.id);
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(
+      'calendar-other-house',
+      alice.id
+    );
+    const changedHousehold = await assistantCall(
+      alice,
+      'PATCH',
+      `/events/${targetId}/assistant-update`,
+      body,
+      householdId,
+      'd40d7286-73d1-4da1-8d3c-8e855a66b0a4'
+    );
+    expect(changedHousehold.status).toBe(409);
+    expect(await changedHousehold.json()).toMatchObject({
+      code: 'ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED'
+    });
+  });
+
+  it('acepta preimagen con updatedAt normalizado por la API sin perder CAS', async () => {
+    const alice = await makeUser('calendar-assistant-timestamp-alice', householdId, 'Alice');
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(householdId, alice.id);
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, is_active)
+       VALUES (?, ?, ?, 'admin', 1)`
+    ).run('calendar-assistant-timestamp-membership', householdId, alice.id);
+    const targetId = 'calendar-assistant-timestamp-target';
+    db.prepare(
+      `INSERT INTO calendar_events
+        (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, notes, source)
+       VALUES (?, ?, ?, 'Cita de prueba', 'appointment', '2026-10-20', '09:00', '10:00', 0, 'Notas antes', 'user')`
+    ).run(targetId, householdId, alice.id);
+
+    const raw = db
+      .prepare(
+        `SELECT household_id AS householdId, title, kind, date, start_time AS startTime,
+                end_time AS endTime, all_day AS allDay, color, notes, location, recurrence,
+                recurrence_rule AS recurrenceRule, exceptions, source, updated_at AS updatedAt
+           FROM calendar_events WHERE id = ?`
+      )
+      .get(targetId) as any;
+    const { zoneStampValue } = await import('../middleware/timestamp.middleware.js');
+    const before = {
+      ...raw,
+      allDay: Boolean(raw.allDay),
+      updatedAt: zoneStampValue(raw.updatedAt, 'updatedAt')
+    };
+    expect(before.updatedAt).toBe(`${raw.updatedAt.replace(' ', 'T')}Z`);
+
+    const response = await assistantCall(
+      alice,
+      'PATCH',
+      `/events/${targetId}/assistant-update`,
+      {
+        changes: { notes: 'Notas después' },
+        assistantAction: { operation: 'update_event', targetId, householdId, before }
+      },
+      householdId,
+      'e50d7286-73d1-4da1-8d3c-8e855a66b0a6'
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ success: true });
+    expect(db.prepare('SELECT notes FROM calendar_events WHERE id = ?').get(targetId)).toEqual({
+      notes: 'Notas después'
+    });
+  });
+
+  it('rechaza los eventos recurrentes en la ruta de actualización del asistente', async () => {
+    const alice = await makeUser('calendar-assistant-recurring-alice', householdId, 'Alice');
+    db.prepare('UPDATE users SET household_id = ? WHERE id = ?').run(householdId, alice.id);
+    db.prepare(
+      `INSERT INTO household_members (id, household_id, user_id, role, is_active)
+       VALUES (?, ?, ?, 'admin', 1)`
+    ).run('calendar-assistant-recurring-membership', householdId, alice.id);
+    const targetId = 'calendar-assistant-recurring-target';
+    db.prepare(
+      `INSERT INTO calendar_events
+        (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, recurrence, source)
+       VALUES (?, ?, ?, 'Dentista', 'appointment', '2026-10-20', '09:00', '09:30', 0, 'weekly', 'user')`
+    ).run(targetId, householdId, alice.id);
+    const raw = db
+      .prepare(
+        `SELECT household_id AS householdId, title, kind, date, start_time AS startTime,
+                end_time AS endTime, all_day AS allDay, color, notes, location, recurrence,
+                recurrence_rule AS recurrenceRule, exceptions, source, updated_at AS updatedAt
+           FROM calendar_events WHERE id = ?`
+      )
+      .get(targetId) as any;
+    const before = { ...raw, allDay: Boolean(raw.allDay) };
+
+    const response = await assistantCall(
+      alice,
+      'PATCH',
+      `/events/${targetId}/assistant-update`,
+      {
+        changes: { title: 'Dentista semanal' },
+        assistantAction: { operation: 'update_event', targetId, householdId, before }
+      },
+      householdId,
+      'a50d7286-73d1-4da1-8d3c-8e855a66b0a5'
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'ASSISTANT_EVENT_RECURRENCE_UNSUPPORTED' });
+    expect(db.prepare('SELECT title FROM calendar_events WHERE id = ?').get(targetId)).toEqual({
+      title: 'Dentista'
+    });
   });
 
   it('fuera de la ventana no se devuelve nada, aunque el evento exista', async () => {

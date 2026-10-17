@@ -56,6 +56,7 @@ import { IconButtonComponent } from '../../shared/components/ui/icon-button/icon
 import { AvatarComponent } from '../../shared/components/ui/avatar/avatar.component';
 import { MEAL_LABEL_KEYS } from '../../core/i18n/labels';
 import { TranslatePipe } from '../../core/pipes/translate.pipe';
+import { CalendarHouseholdTasksComponent } from './calendar-household-tasks.component';
 
 const TIMELINE_GUTTER_WIDTH_PX = 60;
 const MIN_DAY_COLUMN_WIDTH_PX = 48;
@@ -79,7 +80,13 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
 @Component({
   selector: 'app-calendar-timeline',
   standalone: true,
-  imports: [TranslatePipe, CommonModule, IconButtonComponent, AvatarComponent],
+  imports: [
+    TranslatePipe,
+    CommonModule,
+    IconButtonComponent,
+    AvatarComponent,
+    CalendarHouseholdTasksComponent
+  ],
   template: `
     <div class="tl" [class.tl--single]="single()" [style.--hour-px]="hourPx">
       <div
@@ -130,7 +137,7 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
         <div class="tl__band" [style.grid-template-columns]="columns()">
           <span class="tl__gutter tl__gutter--band">{{ 'calendar.todo_el_dia' | t }}</span>
           @for (day of days; track day.iso) {
-            <div class="tl__bandcol" data-test="timeline-band" (click)="onBandClick(day)">
+            <div class="tl__bandcol" data-test="timeline-band" (click)="onBandClick(day, $event)">
               @for (item of bandOf(day); track item.id) {
                 <button
                   type="button"
@@ -142,7 +149,8 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
                   {{ titleOf(item) }}
                 </button>
               }
-              @if (!bandOf(day).length) {
+              <app-calendar-household-tasks [tasks]="day.tasks" [dense]="true" [maxVisible]="2" />
+              @if (!bandOf(day).length && !day.tasks.length) {
                 <span class="tl__bandempty" aria-hidden="true">—</span>
               }
             </div>
@@ -173,39 +181,45 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
                   <span class="tl__now" [style.top.px]="nowTop()" aria-hidden="true"></span>
                 }
                 @for (block of blocksOf(day); track block.item.id) {
-                  <button
-                    type="button"
-                    class="tl__block"
-                    [class.tl__block--meal]="block.item.kind === 'meal'"
-                    [class.is-done]="block.item.meal?.completed"
-                    [style.--event-color]="colorOf(block.item)"
-                    [style.top.px]="block.topPx"
-                    [style.height.px]="block.heightPx"
-                    [style.left.%]="(block.column / block.columns) * 100"
-                    [style.width.%]="100 / block.columns - 0.6"
-                    [attr.title]="tipOf(block.item)"
-                    [attr.data-test]="'timeline-block-' + block.item.kind"
-                    (click)="$event.stopPropagation(); onOpen(block.item)"
-                  >
-                    <span class="tl__block-when">{{ whenOf(block.item) }}</span>
-                    <span class="tl__block-title">{{ titleOf(block.item) }}</span>
-                    @if (facesOf(block.item).length) {
-                      <!-- Las caras son identidad: la de quien escribio el evento (solo si no soy yo,
-                           que para eso esta el boton de salir) y la de quien esta invitado. Un nombre sin
-                           foto es media identidad, y media identidad es lo que hace preguntar «¿cuanta
-                           Ana?» cuando en la casa hay dos. -->
-                      <span class="tl__block-faces" aria-hidden="true">
-                        @for (person of facesOf(block.item); track person.id) {
-                          <app-avatar
-                            [name]="person.name"
-                            [src]="person.avatar ?? undefined"
-                            size="xs"
-                            [title]="person.who"
-                          />
-                        }
-                      </span>
-                    }
-                  </button>
+                  @if (canOpen(block.item)) {
+                    <button
+                      type="button"
+                      class="tl__block"
+                      [class.tl__block--meal]="block.item.kind === 'meal'"
+                      [class.is-done]="block.item.meal?.completed"
+                      [style.--event-color]="colorOf(block.item)"
+                      [style.top.px]="block.topPx"
+                      [style.height.px]="block.heightPx"
+                      [style.left.%]="(block.column / block.columns) * 100"
+                      [style.width.%]="100 / block.columns - 0.6"
+                      [attr.title]="tipOf(block.item)"
+                      [attr.data-test]="'timeline-block-' + block.item.kind"
+                      (click)="$event.stopPropagation(); onOpen(block.item)"
+                    >
+                      <ng-container
+                        *ngTemplateOutlet="timelineBlockContent; context: { $implicit: block.item }"
+                      />
+                    </button>
+                  } @else {
+                    <div
+                      class="tl__block tl__block--readonly tl__block--meal"
+                      [class.is-done]="block.item.meal?.completed"
+                      role="group"
+                      [attr.aria-label]="tipOf(block.item)"
+                      [style.--event-color]="colorOf(block.item)"
+                      [style.top.px]="block.topPx"
+                      [style.height.px]="block.heightPx"
+                      [style.left.%]="(block.column / block.columns) * 100"
+                      [style.width.%]="100 / block.columns - 0.6"
+                      [attr.title]="tipOf(block.item)"
+                      [attr.data-test]="'timeline-block-' + block.item.kind"
+                      (click)="$event.stopPropagation()"
+                    >
+                      <ng-container
+                        *ngTemplateOutlet="timelineBlockContent; context: { $implicit: block.item }"
+                      />
+                    </div>
+                  }
                 }
               </div>
             }
@@ -213,6 +227,27 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
         </div>
       </div>
     </div>
+
+    <ng-template #timelineBlockContent let-item>
+      <span class="tl__block-when">{{ whenOf(item) }}</span>
+      <span class="tl__block-title">{{ titleOf(item) }}</span>
+      @if (facesOf(item).length) {
+        <!-- Las caras son identidad: la de quien escribio el evento (solo si no soy yo,
+             que para eso esta el boton de salir) y la de quien esta invitado. Un nombre sin
+             foto es media identidad, y media identidad es lo que hace preguntar «¿cuanta
+             Ana?» cuando en la casa hay dos. -->
+        <span class="tl__block-faces" aria-hidden="true">
+          @for (person of facesOf(item); track person.id) {
+            <app-avatar
+              [name]="person.name"
+              [src]="person.avatar ?? undefined"
+              size="xs"
+              [title]="person.who"
+            />
+          }
+        </span>
+      }
+    </ng-template>
   `,
   styles: [
     `
@@ -477,8 +512,12 @@ const MIN_DAY_COLUMN_WIDTH_PX = 48;
         transition: var(--transition-fast);
       }
 
-      .tl__block:hover {
+      .tl__block:not(.tl__block--readonly):hover {
         background: color-mix(in srgb, var(--event-color, var(--primary)) 28%, var(--bg-secondary));
+      }
+
+      .tl__block--readonly {
+        cursor: default;
       }
 
       .tl__block:focus-visible {
@@ -769,6 +808,14 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
     else if (item.kind === 'event' && item.event) this.editEvent.emit(item.event);
   }
 
+  protected canOpen(item: TimelineItem): boolean {
+    return (
+      item.kind !== 'meal' ||
+      item.meal?.isShared !== true ||
+      item.meal.canRecordConsumption === true
+    );
+  }
+
   protected onAddMeal(day: CalendarDayView): void {
     // La hora por defecto es la que se esta viviendo si el día es hoy, y una comida de mediodia si
     // se planifica para manana: son los dos unicos casos con sentido, y evitar preguntar es el
@@ -792,7 +839,13 @@ export class CalendarTimelineComponent implements AfterViewInit, OnChanges {
     this.addEvent.emit({ date, startTime: timeFromMinutes(minutes) });
   }
 
-  protected onBandClick(day: CalendarDayView): void {
+  protected onBandClick(day: CalendarDayView, event?: MouseEvent): void {
+    if (
+      event?.target instanceof Element &&
+      event.target.closest('[data-test="calendar-household-task"]')
+    ) {
+      return;
+    }
     // «Todo el día» sin hora: un evento que ocupa la franja, no las 00:00.
     this.addEvent.emit({ date: day.iso, startTime: '' });
   }

@@ -4,7 +4,7 @@ pre-commit:
   parallel: false
   jobs:
     - name: prettier
-      run: pnpm exec prettier --write {staged_files}
+      run: node scripts/format-staged-files.mjs
       glob:
         - '*.{ts,json,md,yml,yaml}'
       exclude:
@@ -18,7 +18,7 @@ pre-push:
   parallel: false
   jobs:
     - name: format-check
-      run: pnpm exec prettier --check {push_files}
+      run: node scripts/check-push-format.mjs
       glob:
         - '*.{ts,json,md,yml,yaml}'
       exclude:

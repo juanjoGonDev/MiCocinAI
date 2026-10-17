@@ -48,6 +48,62 @@ describe('createRecipeSchema instrucciones', () => {
   });
 });
 
+describe('textos largos de receta', () => {
+  it('acepta contenido superior a los antiguos límites durante alta y edición', () => {
+    const longText = 'x'.repeat(2_501);
+    const longStep = { stepNumber: 1, instruction: longText, tips: longText, warning: longText };
+    const longGuidance = {
+      appliances: [longText],
+      parallelTasks: [longText],
+      tipsAndVariations: [longText],
+      batchCookingWarning: longText
+    };
+    const longStorage = {
+      method: longText,
+      duration: longText,
+      reheatingInstructions: longText,
+      container: longText,
+      freezingPossible: true,
+      freezingDuration: longText
+    };
+    const longRecipe = {
+      ...baseRecipe,
+      name: longText,
+      description: longText,
+      cuisine: longText,
+      ingredients: [
+        {
+          name: longText,
+          quantity: 1,
+          unit: 'g',
+          preparation: longText,
+          substitutes: [longText],
+          notes: longText
+        }
+      ],
+      utensils: [longText],
+      steps: [longStep],
+      guidance: longGuidance,
+      storage: longStorage,
+      tags: [longText]
+    };
+
+    expect(createRecipeSchema.safeParse(longRecipe).success).toBe(true);
+    expect(
+      updateRecipeSchema.safeParse({
+        name: longText,
+        description: longText,
+        cuisine: longText,
+        ingredients: longRecipe.ingredients,
+        steps: [longStep],
+        guidance: longGuidance,
+        storage: longStorage,
+        tags: [longText]
+      }).success
+    ).toBe(true);
+  });
+});
+
 describe('updateRecipeSchema para el editor dedicado', () => {
   it('admite actualizar parcialmente los campos editables y cualquiera de las dos formas de pasos', () => {
     expect(updateRecipeSchema.safeParse({ description: 'Descripción nueva' }).success).toBe(true);
@@ -150,6 +206,35 @@ describe('createRecipeSchema guía completa', () => {
         }
       }).success
     ).toBe(true);
+  });
+
+  it('persists only a selected Commons video id, not client-provided video URLs or attribution', () => {
+    const videoId = 'c'.repeat(24);
+    const result = createRecipeSchema.safeParse({
+      ...baseRecipe,
+      steps: [
+        {
+          stepNumber: 1,
+          instruction: 'Cortar la verdura.',
+          videoId,
+          videoAttribution: { author: 'No confiable' },
+          videoUrl: 'https://attacker.test/video.mp4'
+        }
+      ]
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.steps?.[0]).toMatchObject({ videoId });
+      expect(result.data.steps?.[0]).not.toHaveProperty('videoAttribution');
+      expect(result.data.steps?.[0]).not.toHaveProperty('videoUrl');
+    }
+    expect(
+      createRecipeSchema.safeParse({
+        ...baseRecipe,
+        steps: [{ stepNumber: 1, instruction: 'Cortar.', videoId: 'https://attacker.test/v.mp4' }]
+      }).success
+    ).toBe(false);
   });
 });
 

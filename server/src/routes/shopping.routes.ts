@@ -2,6 +2,18 @@ import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import { getDatabase } from '../config/database.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
+import { zoneStampValue } from '../middleware/timestamp.middleware.js';
+import {
+  ASSISTANT_HOUSEHOLD_HEADER,
+  ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED,
+  assistantHouseholdContextMiddleware,
+  currentAssistantHouseholdSnapshot
+} from '../utils/ai-assistant-household-context.js';
+import {
+  ASSISTANT_ACTION_ID_HEADER,
+  withAssistantActionIdempotency
+} from '../utils/assistant-action-idempotency.js';
+import { assistantShoppingListScope } from '../utils/assistant-shopping-list-scope.js';
 import { productKeyOf } from '../utils/product-key.js';
 import { queueProductImageSearch } from '../utils/product-image-search.js';
 import {
@@ -10,6 +22,8 @@ import {
 } from '../utils/pantry-categories.js';
 import {
   applyLinesSchema,
+  assistantUpdateItemSchema,
+  assistantUpdateListSchema,
   bulkItemsSchema,
   completeListSchema,
   createCategorySchema,
@@ -28,6 +42,7 @@ import {
   updateItemSchema,
   updateListSchema
 } from '../schemas/shopping.schema.js';
+import { householdMealShoppingApprovalSchema } from '../schemas/household-meal-shopping-approval.schema.js';
 import {
   catalogueForPrompt,
   ensureDefaultCategories,
@@ -61,6 +76,15 @@ import { streamSSE } from 'hono/streaming';
 import type { AppEnv } from '../types/hono-env.js';
 import { caducidadesDe, comprasDeLaCasa, hoy } from '../utils/caducidades.js';
 import {
+  hasActiveHouseholdMemberships,
+  readActiveHouseholdId
+} from '../utils/household-context.js';
+import {
+  HouseholdMealShoppingApprovalError,
+  approveHouseholdMealShopping
+} from '../utils/household-meal-shopping-approval.store.js';
+import { canViewSharedMeals } from '../utils/shared-meal-calendar.store.js';
+import {
   necesidadesDelPlan,
   preciosDeLaCasa,
   sugerenciasDeCompra
@@ -85,29 +109,40 @@ import {
 const shoppingRoutes = new Hono<AppEnv>();
 
 shoppingRoutes.use('*', authMiddleware);
+shoppingRoutes.use('*', assistantHouseholdContextMiddleware());
 
 type Scope = { clause: string; params: string[]; householdId: string | null };
 
-function getScope(userId: string): Scope {
+function getScope(userId: string, householdSnapshot?: string | null): Scope {
   const db = getDatabase();
   const user = db
     .prepare(`SELECT u.household_id AS hid FROM users u WHERE u.id = ?`)
     .get(userId) as { hid: string | null } | undefined;
+  const householdId = householdSnapshot === undefined ? (user?.hid ?? null) : householdSnapshot;
 
-  if (user?.hid) {
+  if (householdId) {
     return {
       // Una fila ligada a un hogar solo se comparte dentro de ese hogar. No basta
       // con ser su creador: al cambiar de casa (o quedarse sin hogar activo) no
       // debemos filtrar datos domésticos anteriores por `user_id`.
       clause: '((user_id = ? AND household_id IS NULL) OR household_id = ?)',
-      params: [userId, user.hid],
-      householdId: user.hid
+      params: [userId, householdId],
+      householdId
     };
   }
   return {
     clause: '(user_id = ? AND household_id IS NULL)',
     params: [userId],
     householdId: null
+  };
+}
+
+/** Scope list reads from the already validated active membership, including legacy null pointers. */
+function getActiveHouseholdScope(userId: string, householdId: string): Scope {
+  return {
+    clause: '((user_id = ? AND household_id IS NULL) OR household_id = ?)',
+    params: [userId, householdId],
+    householdId
   };
 }
 
@@ -286,7 +321,15 @@ shoppingRoutes.post('/categories', async (c) => {
 
 shoppingRoutes.get('/lists', async (c) => {
   const db = getDatabase();
-  const scope = getScope(c.get('userId'));
+  const userId = c.get('userId');
+  const assistantSnapshot = currentAssistantHouseholdSnapshot(c);
+  if (!assistantSnapshot.valid) {
+    return c.json({ success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED }, 409);
+  }
+  const scope =
+    assistantSnapshot.householdId === undefined
+      ? getScope(userId)
+      : getScope(userId, assistantSnapshot.householdId);
   const filter = listFilterSchema.parse(c.req.query());
 
   // Con el JOIN del agregado, `user_id` a secas seria ambiguo: el ambito se escribe
@@ -425,17 +468,46 @@ shoppingRoutes.get('/stores', async (c) => {
 shoppingRoutes.post('/lists', async (c) => {
   const db = getDatabase();
   const userId = c.get('userId');
-  const scope = getScope(userId);
+  const originalScope = getScope(userId);
   const body = createListSchema.parse(await c.req.json());
+  const assistantSnapshot = currentAssistantHouseholdSnapshot(c);
+  if (!assistantSnapshot.valid) {
+    return c.json({ success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED }, 409);
+  }
+  const scope =
+    assistantSnapshot.householdId === undefined
+      ? originalScope
+      : getScope(userId, assistantSnapshot.householdId);
 
-  const id = nanoid();
-  db.prepare(
-    `INSERT INTO shopping_lists (id, user_id, household_id, name, store) VALUES (?, ?, ?, ?, ?)`
-  ).run(id, userId, scope.householdId, body.name, body.store ?? null);
+  const result = withAssistantActionIdempotency(
+    db,
+    userId,
+    c.req.header(ASSISTANT_ACTION_ID_HEADER),
+    { operation: 'shopping.create_list', householdId: scope.householdId, input: body },
+    () => {
+      if (!currentAssistantHouseholdSnapshot(c).valid) {
+        return {
+          body: { success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED },
+          status: 409,
+          record: false
+        };
+      }
+      const id = nanoid();
+      db.prepare(
+        `INSERT INTO shopping_lists (id, user_id, household_id, name, store) VALUES (?, ?, ?, ?, ?)`
+      ).run(id, userId, scope.householdId, body.name, body.store ?? null);
 
-  const list = readList(db, scope, id);
-  announce(db, list, userId, 'list.create', null);
-  return c.json({ success: true, data: { ...list, ...listTotals(db, id) } }, 201);
+      const list = readList(db, scope, id);
+      announce(db, list, userId, 'list.create', null);
+      return { body: { success: true, data: { ...list, ...listTotals(db, id) } }, status: 201 };
+    }
+  );
+  if ('error' in result) {
+    return result.error === 'invalid_action_id'
+      ? c.json({ success: false, code: 'ASSISTANT_ACTION_ID_INVALID' }, 400)
+      : c.json({ success: false, code: 'ASSISTANT_ACTION_ID_CONFLICT' }, 409);
+  }
+  return c.json(result.body, result.status);
 });
 
 shoppingRoutes.get('/lists/:id', async (c) => {
@@ -474,6 +546,357 @@ shoppingRoutes.get('/lists/:id', async (c) => {
       discountDescription: describeDiscount(discount)
     }
   });
+});
+
+shoppingRoutes.patch('/lists/:id/assistant-update', async (c) => {
+  const actionId = c.req.header(ASSISTANT_ACTION_ID_HEADER);
+  if (!actionId) return c.json({ success: false, code: 'ASSISTANT_ACTION_ID_REQUIRED' }, 400);
+  if (c.req.header(ASSISTANT_HOUSEHOLD_HEADER) === undefined) {
+    return c.json({ success: false, code: 'ASSISTANT_HOUSEHOLD_CONTEXT_REQUIRED' }, 400);
+  }
+
+  const body = assistantUpdateListSchema.parse(await c.req.json());
+  const targetId = c.req.param('id');
+  if (body.assistantAction.targetId !== targetId) {
+    return c.json({ success: false, code: 'ASSISTANT_ACTION_TARGET_MISMATCH' }, 400);
+  }
+
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const assistantSnapshot = currentAssistantHouseholdSnapshot(c);
+  if (!assistantSnapshot.valid) {
+    return c.json({ success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED }, 409);
+  }
+  const scope = assistantShoppingListScope(userId, assistantSnapshot.householdId ?? null);
+  const result = withAssistantActionIdempotency(
+    db,
+    userId,
+    actionId,
+    {
+      operation: 'shopping.update_list',
+      householdId: scope.householdId,
+      listId: targetId,
+      version: body.version,
+      before: body.assistantAction.before,
+      changes: body.changes
+    },
+    () => {
+      if (!currentAssistantHouseholdSnapshot(c).valid) {
+        return {
+          body: { success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED },
+          status: 409,
+          record: false
+        };
+      }
+
+      const list = readList(db, scope, targetId);
+      if (!list) {
+        return {
+          body: { success: false, message: 'List not found' },
+          status: 404,
+          record: false
+        };
+      }
+      if (list.status !== 'active') {
+        return {
+          body: { success: false, code: 'SHOPPING_LIST_NOT_ACTIVE' },
+          status: 409,
+          record: false
+        };
+      }
+      if (
+        list.version !== body.version ||
+        list.name !== body.assistantAction.before.name ||
+        list.store !== body.assistantAction.before.store
+      ) {
+        return {
+          body: {
+            success: false,
+            message: 'LIST_VERSION_CONFLICT',
+            data: { currentVersion: list.version }
+          },
+          status: 409,
+          record: false
+        };
+      }
+
+      const changes = [
+        ...(body.changes.name !== undefined && body.changes.name !== list.name
+          ? [['name = ?', body.changes.name] as const]
+          : []),
+        ...(body.changes.store !== undefined && body.changes.store !== list.store
+          ? [['store = ?', body.changes.store] as const]
+          : [])
+      ];
+      if (changes.length === 0) {
+        return {
+          body: { success: false, code: 'ASSISTANT_ACTION_NO_CHANGE' },
+          status: 400,
+          record: false
+        };
+      }
+
+      const sets: string[] = changes.map(([set]) => set);
+      const values: unknown[] = changes.map(([, value]) => value);
+      sets.push('version = version + 1', 'updated_at = CURRENT_TIMESTAMP', 'updated_by = ?');
+      values.push(userId);
+      const updated = db
+        .prepare(
+          `UPDATE shopping_lists SET ${sets.join(', ')}
+            WHERE id = ? AND version = ? AND name = ? AND store IS ? AND status = 'active'
+              AND ${scope.clause}`
+        )
+        .run(
+          ...values,
+          targetId,
+          body.version,
+          body.assistantAction.before.name,
+          body.assistantAction.before.store,
+          ...scope.params
+        );
+      if (updated.changes !== 1) {
+        const current = readList(db, scope, targetId);
+        return {
+          body: {
+            success: false,
+            message: 'LIST_VERSION_CONFLICT',
+            data: { currentVersion: current?.version ?? null }
+          },
+          status: 409,
+          record: false
+        };
+      }
+
+      const updatedList = readList(db, scope, targetId);
+      announce(db, updatedList, userId, 'list.update', updatedList?.name ?? null);
+      return {
+        body: {
+          success: true,
+          data: { ...updatedList, ...listTotals(db, targetId) }
+        },
+        status: 200
+      };
+    }
+  );
+
+  if ('error' in result) {
+    return result.error === 'invalid_action_id'
+      ? c.json({ success: false, code: 'ASSISTANT_ACTION_ID_INVALID' }, 400)
+      : c.json({ success: false, code: 'ASSISTANT_ACTION_ID_CONFLICT' }, 409);
+  }
+  return c.json(result.body, result.status);
+});
+
+shoppingRoutes.patch('/lists/:id/items/:itemId/assistant-update', async (c) => {
+  const actionId = c.req.header(ASSISTANT_ACTION_ID_HEADER);
+  if (!actionId) return c.json({ success: false, code: 'ASSISTANT_ACTION_ID_REQUIRED' }, 400);
+  if (c.req.header(ASSISTANT_HOUSEHOLD_HEADER) === undefined) {
+    return c.json({ success: false, code: 'ASSISTANT_HOUSEHOLD_CONTEXT_REQUIRED' }, 400);
+  }
+
+  const body = assistantUpdateItemSchema.parse(await c.req.json());
+  const targetListId = c.req.param('id');
+  const targetItemId = c.req.param('itemId');
+  if (
+    body.assistantAction.targetId !== targetItemId ||
+    body.assistantAction.listId !== targetListId
+  ) {
+    return c.json({ success: false, code: 'ASSISTANT_ACTION_TARGET_MISMATCH' }, 400);
+  }
+
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const assistantSnapshot = currentAssistantHouseholdSnapshot(c);
+  if (!assistantSnapshot.valid) {
+    return c.json({ success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED }, 409);
+  }
+  const scope = assistantShoppingListScope(userId, assistantSnapshot.householdId ?? null);
+  const result = withAssistantActionIdempotency(
+    db,
+    userId,
+    actionId,
+    {
+      operation: 'shopping.update_item',
+      householdId: scope.householdId,
+      listId: targetListId,
+      itemId: targetItemId,
+      version: body.version,
+      before: body.assistantAction.before,
+      changes: body.changes
+    },
+    () => {
+      if (!currentAssistantHouseholdSnapshot(c).valid) {
+        return {
+          body: { success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED },
+          status: 409,
+          record: false
+        };
+      }
+
+      const list = readList(db, scope, targetListId);
+      if (!list) {
+        return { body: { success: false, message: 'List not found' }, status: 404, record: false };
+      }
+      if (list.status !== 'active') {
+        return { body: { success: false, code: 'SHOPPING_LIST_NOT_ACTIVE' }, status: 409 };
+      }
+      if (list.version !== body.version || list.name !== body.assistantAction.before.listName) {
+        return {
+          body: {
+            success: false,
+            message: 'LIST_VERSION_CONFLICT',
+            data: { currentVersion: list.version }
+          },
+          status: 409,
+          record: false
+        };
+      }
+
+      const item = db
+        .prepare(
+          `SELECT id, list_id AS listId, name, product_key AS productKey, quantity, unit, category,
+                  checked, deleted_at AS deletedAt, updated_at AS updatedAt
+             FROM shopping_list_items WHERE id = ? AND list_id = ?`
+        )
+        .get(targetItemId, targetListId) as
+        | {
+            id: string;
+            listId: string;
+            name: string;
+            productKey: string;
+            quantity: number;
+            unit: string | null;
+            category: string | null;
+            checked: number;
+            deletedAt: string | null;
+            updatedAt: string | null;
+          }
+        | undefined;
+      if (!item) {
+        return { body: { success: false, message: 'Item not found' }, status: 404, record: false };
+      }
+      if (item.deletedAt !== null || item.checked !== 0) {
+        return { body: { success: false, code: 'SHOPPING_ITEM_NOT_EDITABLE' }, status: 409 };
+      }
+
+      const before = body.assistantAction.before;
+      if (
+        item.name !== before.name ||
+        item.productKey !== before.productKey ||
+        Number(item.quantity) !== before.quantity ||
+        item.unit !== before.unit ||
+        item.category !== before.category ||
+        Boolean(item.checked) !== before.checked ||
+        item.deletedAt !== before.deletedAt ||
+        zoneStampValue(item.updatedAt, 'updatedAt') !==
+          zoneStampValue(before.updatedAt, 'updatedAt')
+      ) {
+        return {
+          body: {
+            success: false,
+            message: 'SHOPPING_ITEM_PREIMAGE_CONFLICT',
+            data: { currentVersion: list.version }
+          },
+          status: 409,
+          record: false
+        };
+      }
+
+      const changes: Array<[string, unknown]> = [
+        ...(body.changes.name !== undefined && body.changes.name !== item.name
+          ? [
+              ['name = ?', body.changes.name] as [string, unknown],
+              ['product_key = ?', productKeyOf(body.changes.name)] as [string, unknown]
+            ]
+          : []),
+        ...(body.changes.quantity !== undefined && body.changes.quantity !== Number(item.quantity)
+          ? [['quantity = ?', body.changes.quantity] as [string, unknown]]
+          : []),
+        ...(body.changes.unit !== undefined && body.changes.unit !== item.unit
+          ? [['unit = ?', body.changes.unit] as [string, unknown]]
+          : []),
+        ...(body.changes.category !== undefined && body.changes.category !== item.category
+          ? [['category = ?', body.changes.category] as [string, unknown]]
+          : [])
+      ];
+      if (changes.length === 0) {
+        return {
+          body: { success: false, code: 'ASSISTANT_ACTION_NO_CHANGE' },
+          status: 400,
+          record: false
+        };
+      }
+
+      try {
+        const apply = db.transaction(() => {
+          const sets = changes.map(([set]) => set);
+          const values = changes.map(([, value]) => value);
+          sets.push('updated_at = CURRENT_TIMESTAMP', 'updated_by = ?');
+          values.push(userId);
+          const updatedItem = db
+            .prepare(
+              `UPDATE shopping_list_items SET ${sets.join(', ')}
+                WHERE id = ? AND list_id = ? AND deleted_at IS NULL AND checked = 0
+                  AND name = ? AND product_key = ? AND quantity = ? AND unit IS ? AND category IS ?
+                  AND updated_at IS ?`
+            )
+            .run(
+              ...values,
+              targetItemId,
+              targetListId,
+              before.name,
+              before.productKey,
+              before.quantity,
+              before.unit,
+              before.category,
+              item.updatedAt
+            );
+          if (updatedItem.changes !== 1) throw new Error('SHOPPING_ITEM_PREIMAGE_CONFLICT');
+
+          const updatedList = db
+            .prepare(
+              `UPDATE shopping_lists
+                  SET version = version + 1, updated_at = CURRENT_TIMESTAMP, updated_by = ?
+                WHERE id = ? AND version = ? AND status = 'active' AND ${scope.clause}`
+            )
+            .run(userId, targetListId, body.version, ...scope.params);
+          if (updatedList.changes !== 1) throw new Error('SHOPPING_ITEM_LIST_VERSION_CONFLICT');
+
+          return db
+            .prepare('SELECT * FROM shopping_list_items WHERE id = ? AND list_id = ?')
+            .get(targetItemId, targetListId) as Record<string, unknown>;
+        });
+        const updated = apply();
+        announce(db, list, userId, 'item.update', String(updated.name));
+        return { body: { success: true, data: updated }, status: 200 };
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          ['SHOPPING_ITEM_PREIMAGE_CONFLICT', 'SHOPPING_ITEM_LIST_VERSION_CONFLICT'].includes(
+            error.message
+          )
+        ) {
+          const current = readList(db, scope, targetListId);
+          return {
+            body: {
+              success: false,
+              message: error.message,
+              data: { currentVersion: current?.version ?? null }
+            },
+            status: 409,
+            record: false
+          };
+        }
+        throw error;
+      }
+    }
+  );
+  if ('error' in result) {
+    return result.error === 'invalid_action_id'
+      ? c.json({ success: false, code: 'ASSISTANT_ACTION_ID_INVALID' }, 400)
+      : c.json({ success: false, code: 'ASSISTANT_ACTION_ID_CONFLICT' }, 409);
+  }
+  return c.json(result.body, result.status);
 });
 
 shoppingRoutes.patch('/lists/:id', async (c) => {
@@ -605,22 +1028,65 @@ function insertItem(
 
 shoppingRoutes.post('/lists/:id/items', async (c) => {
   const db = getDatabase();
-  const scope = getScope(c.get('userId'));
-  const list = readList(db, scope, c.req.param('id'));
+  const userId = c.get('userId');
+  const initialAssistantSnapshot = currentAssistantHouseholdSnapshot(c);
+  if (!initialAssistantSnapshot.valid) {
+    return c.json({ success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED }, 409);
+  }
+  let scope =
+    initialAssistantSnapshot.householdId === undefined
+      ? getScope(userId)
+      : getScope(userId, initialAssistantSnapshot.householdId);
+  let list = readList(db, scope, c.req.param('id'));
   if (!list) return notFound(c, 'List');
 
   const body = createItemSchema.parse(await c.req.json());
-  const outcome = upsertLine(db, list, body, c.get('userId'));
-  db.prepare(
-    'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
-  ).run(list.id);
-  announce(db, list, c.get('userId'), outcome.merged ? 'item.merge' : 'item.add', outcome.row.name);
-  // `merged` en el cuerpo, como siempre: la UI tiene que poder distinguir «he creado
-  // una fila» de «he sumado a la que habia» para no pintar dos avisos distintos.
-  return c.json(
-    { success: true, data: { ...outcome.row, merged: outcome.merged } },
-    outcome.merged ? 200 : 201
+  const assistantSnapshot = currentAssistantHouseholdSnapshot(c);
+  if (!assistantSnapshot.valid) {
+    return c.json({ success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED }, 409);
+  }
+  if (assistantSnapshot.householdId !== undefined) {
+    scope = getScope(userId, assistantSnapshot.householdId);
+    list = readList(db, scope, c.req.param('id'));
+    if (!list) return notFound(c, 'List');
+  }
+  const result = withAssistantActionIdempotency(
+    db,
+    userId,
+    c.req.header(ASSISTANT_ACTION_ID_HEADER),
+    {
+      operation: 'shopping.add_item',
+      householdId: scope.householdId,
+      listId: list.id,
+      input: body
+    },
+    () => {
+      if (!currentAssistantHouseholdSnapshot(c).valid) {
+        return {
+          body: { success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED },
+          status: 409,
+          record: false
+        };
+      }
+      const outcome = upsertLine(db, list, body, userId);
+      db.prepare(
+        'UPDATE shopping_lists SET version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      ).run(list.id);
+      announce(db, list, userId, outcome.merged ? 'item.merge' : 'item.add', outcome.row.name);
+      // `merged` en el cuerpo, como siempre: la UI tiene que poder distinguir «he creado
+      // una fila» de «he sumado a la que habia» para no pintar dos avisos distintos.
+      return {
+        body: { success: true, data: { ...outcome.row, merged: outcome.merged } },
+        status: outcome.merged ? 200 : 201
+      };
+    }
   );
+  if ('error' in result) {
+    return result.error === 'invalid_action_id'
+      ? c.json({ success: false, code: 'ASSISTANT_ACTION_ID_INVALID' }, 400)
+      : c.json({ success: false, code: 'ASSISTANT_ACTION_ID_CONFLICT' }, 409);
+  }
+  return c.json(result.body, result.status);
 });
 
 /**
@@ -2118,6 +2584,94 @@ shoppingRoutes.post('/suggested', async (c) => {
     },
     creada ? 201 : 200
   );
+});
+
+/** Explicit, household-scoped approval of the current read-only meal shopping preview. */
+shoppingRoutes.post('/meal-plan/approve', async (c) => {
+  const db = getDatabase();
+  const userId = c.get('userId');
+  const householdId = readActiveHouseholdId(db, userId);
+  if (!householdId) {
+    return c.json(
+      {
+        success: false,
+        code: hasActiveHouseholdMemberships(db, userId)
+          ? 'HOUSEHOLD_SELECTION_REQUIRED'
+          : 'HOUSEHOLD_REQUIRED'
+      },
+      hasActiveHouseholdMemberships(db, userId) ? 409 : 404
+    );
+  }
+  if (c.req.header('x-household-id') !== householdId) {
+    return c.json({ success: false, code: 'HOUSEHOLD_CONTEXT_CHANGED' }, 409);
+  }
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ success: false, code: 'INVALID_MEAL_SHOPPING_APPROVAL' }, 400);
+  }
+  const parsed = householdMealShoppingApprovalSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, code: 'INVALID_MEAL_SHOPPING_APPROVAL' }, 400);
+  }
+
+  // Body parsing yields to the event loop; never apply the approval to a newly selected home.
+  if (readActiveHouseholdId(db, userId) !== householdId) {
+    return c.json({ success: false, code: 'HOUSEHOLD_CONTEXT_CHANGED' }, 409);
+  }
+  if (!canViewSharedMeals(db, householdId, userId)) {
+    return c.json({ success: false, code: 'HOUSEHOLD_CALENDAR_VIEW_REQUIRED' }, 403);
+  }
+  // `householdId` came from readActiveHouseholdId + permission checks above. Do not re-resolve it
+  // from users.household_id: a legacy member with one active membership can have a null pointer.
+  const scope = getActiveHouseholdScope(userId, householdId);
+
+  try {
+    const result = approveHouseholdMealShopping(db, {
+      householdId,
+      userId,
+      input: parsed.data
+    });
+    if (result.changed && result.listId) {
+      const list = readList(db, scope, result.listId);
+      if (list) {
+        try {
+          // `announce` records and publishes only after the purchase list transaction commits.
+          announce(db, list, userId, result.created ? 'list.create' : 'list.update');
+        } catch (error) {
+          console.error(
+            '[Shopping] meal-plan approval committed but list notification failed',
+            error
+          );
+        }
+      }
+    }
+    c.header('Cache-Control', 'no-store');
+    return c.json(
+      {
+        success: true,
+        data: {
+          listId: result.listId,
+          version: result.version,
+          created: result.created,
+          idempotent: !result.changed,
+          added: result.added,
+          updated: result.updated,
+          removed: result.removed
+        }
+      },
+      result.created ? 201 : 200
+    );
+  } catch (error) {
+    if (error instanceof HouseholdMealShoppingApprovalError) {
+      const status = error.code === 'MEAL_SHOPPING_ITEM_NOT_IN_PREVIEW' ? 400 : 409;
+      return c.json({ success: false, code: error.code }, status);
+    }
+    console.error('[Shopping] meal-plan approval failed');
+    return c.json({ success: false, code: 'MEAL_SHOPPING_APPROVAL_FAILED' }, 500);
+  }
 });
 
 export { shoppingRoutes };

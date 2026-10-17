@@ -1,3 +1,6 @@
+@use './styles/household-plan-editor';
+@use './styles/household-tasks';
+
 /* ═══════════════════════════════════════════════════════════════════
    HogarIA - Global Styles
    Sistema de Diseño Minimalista con Paleta Cálida
@@ -597,6 +600,19 @@ ol {
   max-width: var(--container-max);
   margin-inline: auto;
   padding-inline: var(--container-padding);
+}
+
+/* Accessible text for control names and section headings that should not add visual clutter. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 app-page-container.page-container {
@@ -2460,5 +2476,34 @@ app-calendar {
     .cal-agenda {
       padding: var(--space-5);
     }
+  }
+}
+
+/* Mirror the approved editor rhythm: tools, breathing space, broad drawing surface, tools. */
+@media (max-width: 767px) {
+  .plan-editor:not(.plan-editor--assignment-view):not(:has(.plan-review, .plan-setup)) {
+    margin-top: 14px;
+  }
+
+  .plan-editor:not(.plan-editor--assignment-view):not(:has(.plan-review, .plan-setup))
+    > .plan-editor__toolbar {
+    margin-top: 19px;
+  }
+
+  .plan-editor:not(.plan-editor--assignment-view):not(:has(.plan-review, .plan-setup))
+    .plan-canvas-column {
+    margin-top: 22px;
+  }
+
+  .plan-editor:not(.plan-editor--assignment-view):not(:has(.plan-review, .plan-setup))
+    .plan-canvas__viewport {
+    width: calc(100% + 20px);
+    max-width: none;
+    height: min(33vh, 310px);
+    min-height: 260px;
+    margin-inline: -10px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
   }
 }

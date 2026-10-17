@@ -8,6 +8,26 @@
  *    `GOAL_TYPE_LABELS` contienen claves, no texto, y `HOUSEHOLD_EVENT_META` lleva `labelKey`.
  */
 export const calendarEs = {
+  'calendar.consumption.title': 'Registrar consumo',
+  'calendar.consumption.loading': 'Cargando consumo…',
+  'calendar.consumption.outcome': '¿Qué ocurrió?',
+  'calendar.consumption.realized': 'Realizada',
+  'calendar.consumption.not_realized': 'No realizada',
+  'calendar.consumption.servings': 'Raciones realmente servidas',
+  'calendar.consumption.servings_hint': 'Indica un número entero entre 1 y 100.',
+  'calendar.consumption.save': 'Guardar consumo',
+  'calendar.consumption.saving': 'Guardando…',
+  'calendar.consumption.saved': 'Consumo guardado.',
+  'calendar.consumption.inventory_warning': 'Algunos alimentos no se pudieron ajustar.',
+  'calendar.consumption.version_conflict': 'El consumo cambió. Recarga los datos antes de guardar.',
+  'calendar.consumption.recipe_changed':
+    'La receta ha cambiado y no se puede ajustar el consumo. Si no se hizo, puedes marcarla como no realizada para revertir el descuento.',
+  'calendar.consumption.unit_changed':
+    'Cambió una unidad del inventario; no se aplicó ningún ajuste.',
+  'calendar.consumption.not_allowed': 'No tienes permiso para registrar esta comida.',
+  'calendar.consumption.error': 'No se pudo guardar. Comprueba la conexión y vuelve a cargar.',
+  'calendar.consumption.reload': 'Recargar estado',
+  'calendar.consumption.retry': 'Reintentar',
   'calendar.bloqueadas_en_preferencias':
     '{comidas} están bloqueadas: la IA no las planifica. Se cambia en Preferencias > Horarios.',
   'calendar.nada_que_planificar':
@@ -232,6 +252,13 @@ export const calendarEs = {
   'calendar.tipo': 'Tipo',
   'calendar.todavia_no_hay_recetas': 'Todavía no hay recetas en tu recetario.',
   'calendar.todo_el_dia': 'Todo el día',
+  'calendar.household_tasks': 'Tareas del hogar',
+  'calendar.task_completed': 'Completada',
+  'calendar.task_pending': 'Pendiente',
+  'calendar.task_unassigned': 'Sin asignar',
+  'calendar.task_zone': 'Zona: {name}',
+  'calendar.task_assignee': 'Asignada a {name}',
+  'calendar.task_more': '{count} tareas más',
   'calendar.view.day': 'Día',
   'calendar.view.four_days': '4 días',
   'calendar.view.month': 'Mes',
@@ -251,6 +278,25 @@ export const calendarEs = {
 } as const;
 
 export const calendarEn: Record<keyof typeof calendarEs, string> = {
+  'calendar.consumption.title': 'Record consumption',
+  'calendar.consumption.loading': 'Loading consumption…',
+  'calendar.consumption.outcome': 'What happened?',
+  'calendar.consumption.realized': 'Made',
+  'calendar.consumption.not_realized': 'Not made',
+  'calendar.consumption.servings': 'Servings actually served',
+  'calendar.consumption.servings_hint': 'Enter a whole number between 1 and 100.',
+  'calendar.consumption.save': 'Save consumption',
+  'calendar.consumption.saving': 'Saving…',
+  'calendar.consumption.saved': 'Consumption saved.',
+  'calendar.consumption.inventory_warning': 'Some ingredients could not be adjusted.',
+  'calendar.consumption.version_conflict': 'Consumption changed. Reload before saving.',
+  'calendar.consumption.recipe_changed':
+    'The recipe changed, so its consumption cannot be adjusted. If it was not made, mark it as not made to reverse the deduction.',
+  'calendar.consumption.unit_changed': 'An inventory unit changed; no adjustment was applied.',
+  'calendar.consumption.not_allowed': 'You cannot record this meal.',
+  'calendar.consumption.error': 'Could not save. Check your connection and reload.',
+  'calendar.consumption.reload': 'Reload status',
+  'calendar.consumption.retry': 'Retry',
   'calendar.bloqueadas_en_preferencias':
     '{comidas} are blocked: the AI does not plan them. Change it in Preferences > Meal times.',
   'calendar.nada_que_planificar': 'Nothing to plan: unblock a meal in Preferences.',
@@ -472,6 +518,13 @@ export const calendarEn: Record<keyof typeof calendarEs, string> = {
   'calendar.tipo': 'Type',
   'calendar.todavia_no_hay_recetas': 'Your recipe book is still empty.',
   'calendar.todo_el_dia': 'All day',
+  'calendar.household_tasks': 'Household tasks',
+  'calendar.task_completed': 'Completed',
+  'calendar.task_pending': 'Pending',
+  'calendar.task_unassigned': 'Unassigned',
+  'calendar.task_zone': 'Area: {name}',
+  'calendar.task_assignee': 'Assigned to {name}',
+  'calendar.task_more': '{count} more tasks',
   'calendar.view.day': 'Day',
   'calendar.view.four_days': '4 days',
   'calendar.view.month': 'Month',

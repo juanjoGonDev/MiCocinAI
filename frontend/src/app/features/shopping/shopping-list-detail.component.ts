@@ -867,7 +867,6 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 [placeholder]="'shopping_list_detail.semidesnatada_la_de_siempre' | t"
                 [ngModel]="draft.note"
                 (ngModelChange)="patch({ note: $event })"
-                maxlength="120"
               />
             </label>
             <div class="detail__field" data-test="product-link">
@@ -1437,7 +1436,6 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                 <input
                   name="photoNote"
                   [placeholder]="'shopping_list_detail.es_del_chino_los' | t"
-                  maxlength="280"
                   [ngModel]="photoNote()"
                   (ngModelChange)="photoNote.set($event)"
                 />
@@ -1492,7 +1490,6 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
                       "
                       [ngModel]="line.name"
                       (ngModelChange)="line.name = $event"
-                      maxlength="80"
                     />
                     <input
                       class="detail__photo-qty"
@@ -2248,7 +2245,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       }
       .detail__bar {
         position: sticky;
-        bottom: calc(var(--bottom-nav-height) + var(--space-2));
+        bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -2325,7 +2322,7 @@ type LineDiscountKindUi = 'none' | 'percent' | 'amount';
       }
       .detail__selection {
         position: sticky;
-        bottom: calc(var(--bottom-nav-height) + var(--space-10));
+        bottom: calc(var(--space-10) + env(safe-area-inset-bottom, 0px));
         display: flex;
         align-items: center;
         gap: var(--space-2);

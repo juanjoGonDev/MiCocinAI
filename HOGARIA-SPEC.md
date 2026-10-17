@@ -2137,6 +2137,13 @@ own dialog (round 12) and every path below goes through it.
 
 ## 12q. Round 16 checklist — the copy says «por defecto», and everything you can press looks pressable
 
+**Fuente de verdad actualizada para planificación del hogar:** los requisitos históricos de esta sección
+describen `mealTimes` en Preferencias y el tour cuando la planificación aún era por cuenta. La extensión
+de planificación del hogar en `HOGARIA-HOUSEHOLD-PLAN-SPEC.md` los supersede como ubicación efectiva:
+los valores existentes se conservan como perfil/origen para inicializar el hogar o activar el override
+personal, sin borrar ni migrar datos de forma destructiva. Desde ese cambio, la configuración común se
+edita en Hogar > Planificación y cada miembro puede activar su propio horario/comidas.
+
 Two sentences of feedback from the user, and they are the same complaint seen from both ends: the app
 described a behaviour with the word for an empty canvas («en blanco») instead of the word for what
 happens («por defecto»), and controls that do nothing when you hover them do not look like controls. The
@@ -2527,28 +2534,140 @@ Pedidos por la persona que usa la app, los dos con su caso detras:
 2. «En la creacion de eventos pueda repetirse: semanal, diario.» Un recado recurrente («sacar la basura los
    lunes») hoy se escribe a mano cada semana.
 
-### T. Bloquear comidas del planificador (`mealPlan`)
+### T. Bloqueo de comidas por cuenta (`mealPlan`) — supersedido como configuración efectiva
 
-- [ ] **El dato**: `users.preferences.mealPlan: { breakfast, lunch, snack, dinner }` de booleanos, con
-      `true` de fabrica (que es exactamente lo que hace la app hoy: una clave ausente no cambia el
-      comportamiento). Se guarda en `preferences` y NO en `users` —misma decision que `mealTimes` (12q).
-- [ ] **El contrato del PATCH, el mismo de `mealTimes`**: `undefined` = no tocar, `null` = borrar la clave
-      (volver al fabrica), `true`/`false` = escribir. Ningun `required` se afloja, y un valor que no es un
-      booleano se rechaza con 400 (`INVALID_FORM`) en lugar de guardarse como verdad rara.
-- [ ] **Quien lo lee**: `plan-week`. Los cuatro checkboxes del dialog pasan a arrancar del bloqueo, y las
-      comidas bloqueadas **no se ofrecen** —una linea dice cuales estan bloqueadas y donde se cambia—. Si estan
-      las cuatro bloqueadas, «Generar» no esta disponible y el motivo se lee al lado del boton.
-- [ ] **Quien lo respeta al escribir**: `persistWeeklyPlan` ignora las comidas bloqueadas aunque el modelo se
-      las invente. Es la diferencia entre «no las pidas» y «no las escribas»: el prompt es una peticion, la
-      persistencia es la garantia.
-- [ ] **Donde se cambia**: en `app-meal-hours`, fila a fila —«Que la IA la planifique» con su `app-checkbox`
-      en la misma linea de la hora—, porque el horario y quien lo rellena son la misma decision. El tour de
-      bienvenida NO lo toca: pregunta las cuatro horas, y ahi bloquear seria una pregunta mas de las seis
-      prometidas (queda en §13).
-- [ ] **Lo que NO cambia**: un bloqueo no borra nada. Ni las comidas ya planificadas de esa semana, ni las
-      siguientes semanas escritas, ni el «+» manual del calendario: bloquear es quitarle la tarea a la IA, no
-      quitarle la comida a la casa. Y los anclajes de la rejilla siguen usando la hora de esa comida,
-      bloqueada o no.
+La clave histórica `users.preferences.mealPlan` y su PATCH triestado se conservan durante la transición,
+pero dejan de ser la fuente efectiva de `plan-week` y no son la ubicación de la configuración común.
+Al crear un hogar pueden servir como valor semilla para sus comidas habilitadas; para una persona se usan
+como valor personal solo cuando su override de horario está activado. La clave existente no se borra ni se
+reescribe automáticamente. La configuración común, los overrides y sus permisos quedan definidos por
+`HOGARIA-HOUSEHOLD-PLAN-SPEC.md` (extensión aprobada en PR #47). La sección siguiente sobre recurrencia
+de eventos es independiente y sigue vigente.
+
+**Estado del código en PR #47 (13-10-2026):** este párrafo describe el contrato de destino, no una
+entrega completa. La API/persistencia/semilla del hogar y el alta con puerta de membresía tienen
+implementación parcial y pruebas unitarias. El endpoint nuevo de propuesta semanal ya resuelve ajustes
+por miembro y confirma de forma explícita tras revalidar; el `POST /api/ai/plan-week` legado todavía
+lee preferencias antiguas y escribe sin esa vista previa. La UI de ajustes y propuesta semanal de
+Hogar > Planificación, más el ajuste local de recetas por ración, están integrados. E2E aislada
+sintética de ajustes pasa 2/2 (PC/móvil); propuesta pasa 2/2 con dos miembros, revisión/confirmación,
+navegación entre subtabs y limpieza de contexto al cambiar de hogar. Faltan combinaciones de
+preferencias y casos completos de restricciones. La E2E de onboarding verifica en Chromium y Mobile
+Chrome que un HTTP 503 sintético conserva el formulario para reintentar y que el retry crea una sola
+membership; el archivo pasa 6/6. Siguen faltando doble envío, alta/invitación real e
+interrupción/reanudación, por lo que la casilla global permanece abierta. Una guarda adicional devuelve
+`409 MEAL_PLAN_OVERRIDE_INCOMPLETE` antes de IA cuando un override personal activo carece de valor
+explícito válido; su cobertura focal y E2E de ajustes pasan, pero no cierra el criterio completo de
+configuración. Decisión del 13-10-2026: toda comida confirmada del plan del hogar será visible para
+miembros activos con `calendar.view`, aunque esté asignada individualmente; esto no expone calendarios
+personales ni metas, alergias, notas o prompts privados. Solo los participantes asignados podrán
+registrar/corregir su consumo: la lectura no concede permiso de escritura. `GET /api/calendar` y
+`/range` ya aplican esta regla; la regresión primero falló para un lector no asignado y luego pasan
+60/60 tests focales (cobertura de ruta/almacén 88,43/79,56/94,52/90,74 % S/B/F/L), `tsc` y hooks.
+La UI de calendario abre el registro de consumo solo para participantes explícitos con `calendar.view`;
+otros miembros siguen viendo la comida doméstica pero no obtienen control de escritura. El endpoint
+GET/PUT persiste realizada/no realizada, raciones reales, versión, idempotencia y ajustes de stock desde
+el snapshot por ración. La regresión focal de consumo pasa 30 tests (schema/store/ruta) con cobertura
+de ruta 88,67/80/100/91,83 % y store 89,77/80,83/100/92,59 % S/B/F/L; 92 tests de frontend pasan y el
+E2E sintético de escritorio/móvil 2/2 verifica propuesta con proveedor local, confirmación, calendario,
+teclado, persistencia de consumo y breakpoints estrechos. Capturas y comandos reproducibles están en
+`HOGARIA-HOUSEHOLD-PLAN-SPEC.md`. La suite web y su cobertura global integrada pasan; por ello se marca
+`QA-HOME-MEALS.CONSUMPTION.1` completo con sus tests focales. La compra doméstica tiene preview de solo
+lectura, UI de revisión editable y aprobación explícita que reconcilia filas `meal_plan` sin tocar
+inventario ni borrar filas compradas/manuales. La ruta de aprobación pasa 14/14 focales; el E2E
+sintético de escritorio/móvil pasa 2/2 e incluye cancelar/error sin escritura, aprobación, retry
+idempotente y conservación de filas. `QA-HOME-MEALS.SHOPPING.1` está cerrado: planificador UI con
+cobertura 90,48/81,08/92,55/96,2 % y servicio HTTP 100 % en sus cuatro métricas; pruebas, comandos,
+capturas sintéticas y límites están documentados en `HOGARIA-HOUSEHOLD-PLAN-SPEC.md`.
+
+La proyección de tareas semanales en el calendario actual pasa 62/62 backend (cobertura de alcance
+89,14/80,45/95,29/91,23 % S/B/F/L), 94/94 frontend y E2E sintética PC/móvil 2/2. Requiere membresía
+activa y `calendar.view`; muestra título, fecha, estado, zona y asignatario activo, sin detalles de tarea
+ni una hora inexistente en el modelo. Es de solo lectura y no modifica calendarios o permisos de
+escritura. `QA-HOME-TASKS.CALENDAR.1` cierra la matriz de vista/rango y teclado: E2E 6/6 en Chromium,
+Mobile Chrome y Mobile Safari, seis vistas y seis anchuras desde 320 px a 1440 px. Capturas y comandos
+están en `HOGARIA-HOUSEHOLD-PLAN-SPEC.md`; no implica cerrar la auditoría visual global de otras vistas.
+
+**Decisión de automatización (13-10-2026):** cada hogar debe elegir explícitamente día, hora local y
+zona IANA antes de activarla; no se inferirá la zona del servidor o del navegador. Una hora local que
+no existe por DST se ejecuta en la primera hora válida posterior; una hora duplicada se ejecuta una vez,
+en la primera ocurrencia. Ante una ejecución automática de generación nueva, el usuario autorizó
+publicar al calendario solo después de la misma validación del servidor; la propuesta manual mantiene
+confirmación explícita y Compra siempre requiere aprobación. El helper puro de siguiente ocurrencia
+pasó 16/16 con cobertura 96,1/97,36/100/95,94 % en esa primera etapa, cuando aún no existían
+configuración persistente, worker ni ledger de ejecuciones. Contrato, decisiones de seguridad, comandos y pendientes en
+`HOGARIA-HOUSEHOLD-PLAN-SPEC.md`.
+
+La proyección de tareas semanales en el calendario existente ya tiene implementación backend/UI y
+pruebas focales: **62/62** backend con cobertura de alcance 89,14/80,45/95,29/91,23 % S/B/F/L, **94/94**
+frontend, typecheck del servidor y E2E sintética PC/móvil/Safari **6/6**. Requiere `calendar.view` y pertenencia
+activa al hogar; las tarjetas muestran título, zona, estado y asignatario; el modelo semanal no define
+hora y el JSON del calendario no expone detalles de tarea. No crea ni altera tareas, comidas o eventos
+personales. El E2E final inspecciona agenda, día, 4 días, semana/timeline, mes y año, la capa ARIA y
+teclado en seis anchuras para Chromium, Mobile Chrome y Mobile Safari. `QA-HOME-TASKS.CALENDAR.1` está
+cerrado; la auditoría visual de otras familias queda fuera de esa unidad.
+La spec activa contiene comandos, rutas de capturas, límites y rollback/evidencia de esta unidad.
+
+**Trazabilidad de tareas semanales (2026-10-13):** la unidad `QA-HOME-TASKS.WEEKLY.2` de la
+extensión de planificación está verificada en desktop y móvil, incluyendo equilibrio, días no
+consecutivos, preservación de asignaciones manuales durante propuesta/uso explícito y persistencia tras
+Guardar. Comando, capturas sintéticas, límites y resultado reproducible constan en
+`HOGARIA-HOUSEHOLD-PLAN-SPEC.md`, «Estado de implementación y evidencia».
+
+**Actualización de automatización (2026-10-14):** hay configuración/ledger SQLite por hogar, poller
+único, worker con fence de versión, modos generar/repetir, publicación transaccional, pausa y retry
+explícito. «Generar» tareas crea propuesta con IA a partir de zonas vigentes y semana confirmada; el
+servidor asigna localmente y publica solo tras validar ámbitos y conflictos. «Repetir» copia la última
+semana confirmada sin IA. Scheduler **6/6**, worker **14/14**, configuración/rutas **55/55** con SQLite
+en memoria; E2E de configuración **2/2 PC/móvil**.
+
+La E2E aislada adicional `publica una propuesta desde el editor pasando por el scheduler y worker
+reales` pasa **2/2 Chromium/Mobile Chrome** y enlaza editor → PATCH → timer/poller → worker → transporte
+OpenAI-compatible local → ledger completado → semana publicada. Valida `response_format` JSON Schema
+estricto y verifica al menos dos ticks del scheduler después de publicar, sin una segunda llamada ni
+versión duplicada. `finally` pausa la automatización y espera que termine un worker activo antes de cerrar
+el proveedor local, evitando contaminar reintentos. Utiliza SQLite temporal y proveedor sintético; no llama
+al proveedor real ni modifica inventario/Compra. Los controles de reloj offset **+4 días**, poller **1 s**
+y traza sin datos personales se habilitan solo con los marcadores del runner aislado y una base SQLite
+normal verificada bajo su directorio temporal; producción/full-stack mantienen reloj real y cadencia
+normal. Prueba runtime **11/11**, cobertura del helper **92,1/95,45/100/94,11 %**, suite enfocada de
+automatización **114/114**, `typecheck:e2e`, build server y `test:config` **13/13** pasan. CI ejecuta este
+recorrido dedicado en el shard 1 y conserva sus propios informes/traces. Comandos, límites y rollback en
+`HOGARIA-HOUSEHOLD-PLAN-SPEC.md`. La aceptación global y el smoke semántico real de comidas siguen
+abiertos; no se marcaron completos por esta validación sintética.
+
+**Validación integrada de planificación (14-10-2026):** E2E aislada multi-miembro confirma que comidas
+individuales y compartidas aparecen por API a ambos miembros, que ambos calendarios semanales muestran
+los mismos títulos y asignaciones, pero solo el participante registra consumo; la vista previa de Compra
+consolida el mismo ingrediente de comidas individuales y compartidas en una sola cantidad (**90 g**).
+Suite de servidor: **1693/1693 aprobados + 1 omitido**;
+cobertura agregada **90,54/82,54/96,1/93,41 %** (S/B/F/L). Suite frontend: **1526/1526**, cobertura
+**93,55/84,25/94/95,7 %**. Planificador de comidas: **90,48/81,08/92,55/96,2 %**; servicio de
+propuestas **100/100/100/100 %**; UI de automatización **87,08/75,25/97,61/94,56 %** (S/B/F/L).
+E2E focal de menú corto pasa **1/1** en Mobile Safari; auditoría
+sintética PC/móvil inspeccionada. La corrida actualizada de nueve archivos pasa **32/32** en Chromium/
+Mobile Chrome, incluida la E2E integrada de
+ajustes, dos miembros, generación/confirmación, calendario, consumo, compra e idempotencia. Esa E2E
+integrada también pasa **3/3** en Chromium, Mobile Chrome y Mobile Safari. La automatización queda
+programada a más de 48 h en ese recorrido; no prueba ejecución. Un test de integración separado ejecuta
+scheduler→worker→proveedor sintético→publicación e idempotencia. No se llamaron servicios IA reales ni se
+modificó inventario persistente. `check:ui` (246 archivos/21 reglas), `typecheck:e2e`, TypeScript server,
+tests config **12/12** y build pasan. La prueba `test:config` se corrigió para la sintaxis experimental
+de Node 22; Volta local quedó en Node **22.23.1** y pnpm **10.15.0**. El build conserva avisos de
+presupuesto (bundle inicial 982,22 kB y SCSS del editor 10,27 kB); no se bajaron los límites. Los gates/
+matriz completa continúan pendientes; ver la spec activa.
+
+**Compatibilidad de preferencias blandas (2026-10-14):** el contrato de § «Resolución de diferencias
+entre miembros» define que gustos distintos no implican incompatibilidad ni justifican duplicar platos;
+la IA debe priorizar una opción compartida segura y razonablemente compatible con los objetivos,
+omitiendo o sirviendo aparte ingredientes cuando baste, y separar solo si no hay un compromiso común
+adecuado. El prompt del endpoint nuevo ahora expresa esa regla y distingue los disgustos de alergias
+estrictas. Pruebas de ruta/planner: **40/40**, cobertura focal >70 % en statements/branches/functions/
+lines y typecheck servidor; detalles, comando y límites están en `HOGARIA-HOUSEHOLD-PLAN-SPEC.md`.
+La regresión usa proveedor sintético: el smoke real semántico continúa pendiente porque la sesión
+ChatGPT de WebAPI indica `needs_login`. Un smoke separado de tickets terminó con
+`ChatGptFlowError(authentication_required)` antes de una respuesta válida; no se considera validada la
+decisión semántica del planificador. El resultado de tickets y sus límites están abajo.
 
 ### R. Recurrencia de los eventos de la casa
 
@@ -5015,6 +5134,33 @@ en el entorno de esta sesión. No se leyó/creó ningún token ni se envió una 
 smoke permanece abierto; la disponibilidad del navegador/local de desarrollo del usuario no demuestra
 que el gateway sea alcanzable desde este proceso.
 
+**Revalidación aislada con tickets (2026-10-14):** WebAPI `GET /health/ready` respondió **200**; la
+sesión local de ChatGPT devolvió `needs_login`. La PR #164 está incluida en `origin/master`.
+Con autorización expresa, se seleccionaron únicamente los dos grupos pendientes (JPEG individual y
+las otras tres fotos como un ticket largo); los dos PDF ya completados no se repitieron. Se corrigió el
+smoke para crear primero un hogar, obligatorio desde el nuevo onboarding: `typecheck:e2e` pasa y
+`household-required-onboarding.spec.ts` pasa **10/10** en Chromium/Mobile Chrome.
+El proxy aislado validó `response_format` JSON Schema estricto y exactamente un `inventario.json` más
+un ticket. La sesión WebAPI confirmó **2 recibidos, 2 preparados, 2 disponibles y 2 incluidos en el
+prompt**, con **0** fallos al persistir previews. Aun así, ChatGPT no estaba autenticado: la primera
+petición streaming respondió HTTP **400**, la alternativa no-stream HTTP **401** y WebAPI registró
+`authentication_required`. El runner terminó `1`, **2/4** requests permitidas: solo se inició el grupo
+JPEG; el grupo largo no llegó a enviarse. No hubo respuesta válida, verificación de categorías ni
+deduplicación, y no se guardó nada en el inventario real (DB E2E temporal limpiada). La validación real
+queda abierta; no reenviar hasta que la sesión WebAPI indique autenticada, y después enviar solo los
+grupos sin respuesta válida.
+
+**Ajuste de no repetición (2026-10-14):** la selección antigua `unsubmitted-only` también incluía la
+JPEG individual cuya petición acabó sin respuesta válida pero pudo alcanzar al proveedor; no es segura
+para la continuación actual. El único grupo aún no enviado se ejecutará exclusivamente con
+`long-ticket-only`: el plan lee las otras tres JPEG, forma un único PDF de tres páginas e ignora la
+JPEG ambigua y los dos PDF ya completados. Su presupuesto del proxy queda limitado a **una completion**,
+sin fallback/reintento. Las pruebas sintéticas verifican la selección (no leen los otros tres archivos)
+y el límite: `run-ai-real-smoke.test.mjs`, `ai-live-receipt-inputs.test.mjs` y
+`ai-live-smoke-safety.test.mjs`, **51/51**. El preflight actual sigue mostrando `/health` y
+`/health/ready` 200 pero sesión `needs_login`; no se hizo llamada, no se subieron archivos y no se cambió
+ninguna base de datos. El smoke real sigue abierto hasta autenticar WebAPI y validar una respuesta única.
+
 ### QA-HOUSEHOLD.SHOPPING.OFFLINE-QUEUE-SCOPE.1 — cola ligada a su hogar de origen
 
 - [x] Cada escritura optimista que entra en la cola captura el hogar activo de origen; la clave de deduplicación también incluye ese ámbito.
@@ -5144,6 +5290,18 @@ respuesta anterior después; pasa **2/2** en Chromium escritorio y Mobile Chrome
 `.e2e-screenshots/calendar-household-context/{chromium,mobile-chrome}.png`. `pnpm run typecheck:e2e`
 pasa. El gate global de Karma se revalidó sin alterar sus umbrales. El contrato mayor §12ap permanece
 abierto para los demás servicios/rutas y su recorrido integrado.
+
+### QA-HOUSEHOLD.CROSS-SERVICE.ACTIVE-CONTEXT.1 — recorrido integrado de cambio de hogar
+
+- [x] En una misma sesión autenticada y con SQLite temporal, crear dos hogares sintéticos y datos
+      diferenciables en despensa, tickets, calendario y compra; cambiar de hogar desde el selector y
+      comprobar que cada servicio muestra solo los datos de la casa activa, y que volver restaura los
+      datos originales. No usar IA ni datos personales.
+- [x] Retener una respuesta de bandeja de compra ya iniciada en A, cambiar a B, confirmar que B carga
+      sus listas y liberar la respuesta de A; la respuesta tardía no repinta ni mezcla la interfaz.
+- [x] Ejecutar Playwright en escritorio y móvil; capturar e inspeccionar estados sintéticos comparables.
+- Evidencia: `pnpm run test:e2e -- --project=chromium --project=mobile-chrome tests/e2e/household-cross-service-context.spec.ts --reporter=line` — 2/2 pasaron con SQLite/artefactos temporales; las capturas PC/móvil están en `.e2e-screenshots/household-cross-service-context/`. Los tickets sintéticos terminaron `NO_CONFIG`; no llamaron al proveedor.
+- Este recorrido no cierra el contrato mayor de §12ap para servicios, cachés y colas fuera de estos cuatro flujos.
 
 ## 12aq — Mejoras solicitadas: planificación, objetivos y contenido multimedia
 
@@ -5322,6 +5480,101 @@ La edición permite corregir los datos existentes completos sin regenerar ni dup
 **Evidencia verificada (2026-10-05):** tests Angular focales **23/23**, E2E aislado Chrome escritorio/móvil **8/8**, suite servidor con coverage **1.118 passed / 1 skipped** y builds/typecheck/UI checks verdes. Detalle de comandos, porcentajes por fichero y capturas en [HOGARIA-MEMBERS-RECIPE-IMPROVEMENTS-SPEC.md](HOGARIA-MEMBERS-RECIPE-IMPROVEMENTS-SPEC.md#evidencia-de-avance--editor-dedicado-y-gestor-de-imágenes-2026-10-05).
 
 **Cierre focal (2026-10-06):** cobertura `recipe-edit.component.ts` **93,99/85,71/91,67/100 %** y `recipe-edit.util.ts` **88,52/82,67/100/100 %** S/B/F/L, con sus **21/21** pruebas Angular; Playwright aislado `recipe-edit.spec.ts` pasa **10/10** (Chromium escritorio y Mobile Chrome). La matriz comprueba 320, 393 px y horizontal, navegación directa, edición round-trip, guardado/reapertura, validación, cancelación, teclado/foco y que editar no llama a IA; los datos son sintéticos y la base es temporal. Capturas comparables revisadas: `.e2e-screenshots/recipe-editor/desktop.png` y `.e2e-screenshots/recipe-editor/mobile.png`. Los builds, `typecheck:e2e`, `check:ui` y `git diff --check` pasan. El comando de cobertura focal conserva el gate global del 80 % intacto y por ello sale con código 1 al medir el subconjunto; ambas unidades cubiertas exceden el mínimo focal del 70 % en las cuatro métricas. No afirma que el gate global frontend esté completo.
+
+### QA-RECIPE.CREATE-EDIT-TABS.1 — alta manual y editor enfocado por pestañas
+
+**Decisión de producto (2026-10-14):** conservar la ruta propia y los controles de edición actuales, pero compartirlos con el alta manual para que crear y editar no diverjan. Añadir una acción explícita «Nueva receta» al libro y una ruta directa `/recipes/new`; no invocar IA automáticamente. Separar el formulario en pestañas `Datos`, `Ingredientes`, `Preparación`, `Consejos y equipo`, `Nutrición y conservación` y `Multimedia`, con subpestañas `Básico / Intermedio / Experto` en Preparación. En recetas históricas con `steps` planos, mostrar y editar únicamente ese contenido; no inventar niveles. La alta manual puede guardar la lista de pasos plana que ya admite el servidor o los tres niveles completos; la persona debe entender qué eligió.
+
+- [x] Desde el libro se puede iniciar alta manual y abrir `/recipes/new` directamente; el mismo editor controla alta y edición sin mezclar el formulario largo con la lista/detalle. La receta manual se crea solo al pulsar Guardar, con protección contra doble envío; cancelar/descartar vuelve al origen y no deja filas incompletas. Evidencia: pruebas de ruta directa, acción del libro, cancelación sin POST, guardado privado y submit in-flight deduplicado en `recipe-edit.component.spec.ts` y `tests/e2e/recipe-edit.spec.ts`.
+- [x] La página muestra una única pestaña de edición cada vez y conserva valores, validación y medios seleccionados al cambiar entre pestañas/subpestañas. En Preparación se edita un nivel por vez; las recetas legacy se conservan como lista única y la creación valida las alternativas ya aceptadas por `createRecipeSchema`. Evidencia: pruebas de cambio de pestaña/nivel, validación, edición completa y round-trip legacy; E2E desktop/móvil.
+- [x] Datos generales, ingredientes, preparación/niveles, utensilios, electrodomésticos, tareas en paralelo, consejos, nutrición, conservación y medios completan el mismo contrato de guardado. Sin conexión, error de validación, conflicto, 403/404 o fallo de escritura, se conserva el borrador y se ofrece recuperación sin duplicar. Evidencia: cobertura de payload/validación del editor, fallo recuperable, rutas server de permiso/no encontrado/conflicto y prueba aislada de guardado fallido sin perder el borrador.
+- [x] TDD del modo creación/edición, listas vacías/límites, cambios de pestaña, alta/actualización, rechazo/reintento y doble clic; E2E aislado de alta manual, edición y receta legacy. Medir a11y/teclado, i18n, geometría, overflow y capturas comparables desktop/móvil (320, 393, horizontal y escritorio). Suite/coverage focal de cada archivo nuevo/modificado ≥70 % S/B/F/L; no rebajar gates existentes. Evidencia: `recipe-edit.spec.ts` en Chromium y Mobile Chrome, geometría del contenido ≤1 CSS px vs. lista, teclado/foco/Escape, sin overflow 320×700/393×852/568×320, capturas sintéticas y cobertura completa.
+
+### QA-RECIPE.AI-IMPROVE.1 — mejora revisable y sin escritura automática
+
+**Decisión de producto (2026-10-14):** incluir «Mejorar con IA» tanto en alta como en edición. La persona elige ámbitos concretos antes de solicitar: datos y estilo, cantidades/ingredientes, tiempos, preparación por nivel, consejos/equipo, nutrición/conservación; multimedia es una acción licenciada separada dentro del mismo flujo y no un ámbito del JSON IA. Se devuelve una propuesta completa conforme al contrato canónico `aiRecipeOutputSchema` —el mismo JSON estricto y `response_format` usado por generación y planificación; no añadir un esquema de receta paralelo ni URLs de medios al contrato. El servidor mezcla exclusivamente los ámbitos pedidos sobre el borrador enviado; no se confía en que el prompt respete lo demás. Multimedia ejecuta búsquedas Commons separadas y basadas solo en escenas culinarias genéricas clasificadas localmente, nunca usa el texto literal de recetas como query. La respuesta se puede comparar, aceptar o descartar; aceptar solo actualiza el borrador local y Guardar sigue siendo la única escritura. Las cantidades del JSON canónico son por ración: el editor convierte temporalmente a base 1 y al aplicar la propuesta vuelve a la base de comensales de la receta, sin cambiarla.
+
+- [x] La acción muestra progreso, cancelación/reintento y selección accesible de ámbitos; ningún ámbito cambia de forma implícita. La propuesta presenta diferencias legibles antes de aplicarlas y conservar/descartar no altera el borrador original. Aplicar ingredientes convierte las cantidades por ración al número base de comensales sin modificarlo. En móvil, la revisión vuelve al inicio al cambiar de formulario a propuesta.
+- [x] Endpoint autenticado con validación estricta y límites recibe solo los campos de receta y ámbitos necesarios; usa `RECIPE_RESPONSE_FORMAT` y valida salida completa con el esquema canónico estricto, sin generar ilustraciones, URLs, archivos ni persistir receta. El merge del servidor permite cambiar solo los campos del ámbito seleccionado; el resto se conserva byte/valor por valor, incluso si la respuesta IA intenta cambiarlos.
+- [x] Al elegir el ámbito multimedia, buscar fotos y clips en Commons por las acciones genéricas clasificadas localmente; mostrar candidatos atribuidos y aplicar solo las selecciones explícitas a los pasos del borrador. Si no hay medios licenciados compatibles, no cambiar el contenido culinario ni bloquear la propuesta.
+- [x] Si se seleccionan ingredientes, se aplican las restricciones alimentarias estrictas ya soportadas por el contexto activo; ante restricción incompatible o no verificable, se rechaza toda la propuesta sin guardar. Recetas legacy no se convierten a tres niveles salvo que la persona pida mejorar explícitamente Preparación; al hacerlo, se presenta esa conversión completa para revisión.
+- [x] TDD de request (`response_format` JSON Schema estricto), salida inválida/incompleta, intentos de cambiar ámbitos protegidos, listas/límites, alergias, error/time-out/cancelación y cero filas/escrituras; tests frontend prueban aplicar→persistencia solo en Guardar, descartar y no duplicar. Proveedor IA simulado en tests repetibles; cualquier smoke real es opt-in, aislado y no escribe en datos normales. Evidencia: frontend 1564/1564, server 1817 passed/1 skipped con `DATABASE_PATH=:memory:`, y E2E sintético desktop/móvil.
+
+### QA-RECIPE.STEP-VIDEO-SEARCH.1 — clips Commons con licencia, streaming y control
+
+**Decisión de producto (2026-10-14):** extender la multimedia opcional con búsqueda de vídeos reales en Wikimedia Commons; no confundirla con la generación textual IA ni simular vídeos. Mantener el JSON canónico de receta sin URLs de medios. La búsqueda produce candidatos seleccionables con autor, licencia y fuente, usando únicamente escenas/acciones culinarias genéricas; no envía nombre del plato, ingredientes, texto literal de pasos, hogar ni preferencias privadas a Commons. Solo persistir un clip que la persona seleccione, mediante ID resuelto y validado en servidor. Si no hay vídeo compatible, ofrecer fotografía licenciada o ningún medio; el texto de preparación sigue siendo suficiente.
+
+**Autorización del reproductor (2026-10-14):** el `<video>` nativo no puede adjuntar el Bearer de la API. El cliente obtiene primero una capacidad de reproducción efímera mediante una acción POST autenticada; el servidor la entrega en cookie `HttpOnly`, `SameSite=Strict`, con ruta limitada al stream y caducidad corta. No poner tokens/capacidades en query strings ni abrir una vía anónima; el stream mantiene comprobación del usuario/receta/clip y soporte Range. Mantener la capacidad acotada en cantidad, bytes y tiempo.
+
+- [x] Búsqueda autenticada restringe consultas a escenas enumeradas; `filetype:video`/`videoinfo` recupera metadatos de fuente, licencia, MIME, miniatura, duración y derivados. Validar HTTPS, allowlist de host, MIME reproducible, duración máxima de 60 s y atribución completa; no aceptar URLs de medios enviadas por cliente ni redirecciones. Resultados vacíos, licencias/formatos inválidos, timeout y upstream 429/5xx no bloquean Guardar. Evidencia: tests de proveedor/ruta para reglas de escena, validación y errores.
+- [x] Servir los clips seleccionados por proxy del mismo origen con streaming y rangos HTTP; sin descargar/bufferizar vídeos completos, no reusar el proxy ni límites de imágenes, y no crear SSRF, lectura arbitraria, caché ilimitada ni filas huérfanas al fallar el guardado. La persistencia exige selección de ID válido del proveedor; receta/autoría se mantiene igual en creación/edición y tras reinicio. Evidencia: tests de ID resuelto, autorización efímera, streaming `206 Content-Range`, reanudación y persistencia/cache.
+- [x] En preparación, solo el clip del paso activo se carga de forma diferida y puede reproducirse en bucle silenciado con control play/pause explícito; no precargar clips restantes ni reproducir con `prefers-reduced-motion`/ahorro de datos. Siempre mostrar alternativa visual/estado sin vídeo, controles por teclado y crédito/licencia accesibles; contemplar errores y formatos incompatibles en móvil. Evidencia: E2E desktop/móvil verifica un solo clip del paso activo y atribución; pruebas unitarias cubren reduced-motion, ahorro de datos, reintento/error y capacidades.
+- [x] Pruebas de proveedor/ruta para búsqueda, firma/metadata, allowlist, redirects, MIME/duración/licencia, `206 Content-Range`, cliente desconectado, abortar al cambiar de paso, límites de bytes y acceso a receta; E2E mock desktop/móvil prueba carga diferida, autoplay/pausa, reduced-motion, sin overflow, atribución e i18n. No smoke real ni cuerpos multimedia en logs; cobertura focal ≥70 % S/B/F/L, builds, check-ui, a11y, geometría y capturas sintéticas PC/móvil. Evidencia: 1817 server tests, 1564 frontend tests, 18 E2E (Chromium + Mobile Chrome), build producción y `check-ui` 250 ficheros/21 reglas.
+
+**Base técnica revalidada tras implementación (2026-10-14):** `RecipeEditComponent` comparte alta `/recipes/new` y edición `/:id/edit` con tabs; `instructionsByLevel` mantiene JSON canónico y recetas legacy conservan `steps` planos. La acción «Mejorar con IA» usa `POST /api/ai/improve-recipe`, `RECIPE_RESPONSE_FORMAT` y `aiRecipeOutputSchema`; la propuesta revisable no persiste antes de Guardar. La búsqueda licenciada de fotos y vídeos está separada del proveedor IA y consulta escenas genéricas; el vídeo seleccionado se guarda como ID, se entrega con capacidad efímera autenticada, cookie `HttpOnly` y stream same-origin con rangos. El reproductor carga solo el paso activo, respeta `prefers-reduced-motion` y ahorro de datos y conserva crédito/licencia.
+
+**Evidencia de cierre (2026-10-14):** `tests/e2e/recipe-edit.spec.ts`: 18/18 pasando en Chromium y Mobile Chrome sobre stack + SQLite temporales; fixtures de IA/Commons sintéticos, sin llamadas externas. Capturas revisadas: `.e2e-screenshots/recipe-editor/{create-desktop,create-mobile,improve-review-desktop,improve-review-mobile}.png` y `.e2e-screenshots/recipe-step-video/{chromium-cooking-step,mobile-chrome-cooking-step}.png`. Frontend: 1564/1564; cobertura 93,08/83,76/93,72/95,36 % S/B/F/L. Servidor: 1817 passed/1 skipped con `DATABASE_PATH=:memory:`; cobertura 89,97/82,46/95,95/93,16 %. Build prod, `tsc` servidor, `typecheck:e2e`, Prettier y `check-ui` (250 ficheros, 21 reglas) pasan. La prueba E2E demostró fallo con scrollTop móvil 213 al mostrar propuesta; tras el arreglo exige 0 y pasa.
+
+**Limitaciones verificadas:** no se hizo smoke real contra IA ni Wikimedia Commons; proveedor/medios/stream están mockeados y capturas del vídeo usan póster/stream sintéticos. El build termina correctamente, pero conserva avisos de optional chaining, estilos y presupuesto del bundle inicial (990,62 kB frente a 500 kB); algunos avisos pertenecen a cambios previos no relacionados.
+
+**Límites/decisiones:** Commons es la única fuente inicial de fotos/vídeos por atribución/licencia. La IA solo genera la propuesta culinaria mediante el contrato estricto compartido; no se inventa ni se genera media con el endpoint de texto. Búsqueda de medios y aplicación de propuesta son independientes de Guardar; nadie pierde el borrador si el proveedor externo falla.
+
+### QA-RECIPE.LIVE-SMOKE-OPTIONAL-TEMPERATURE.1 — smoke real, temperatura opcional y contenido sin desbordes
+
+**Decisión de producto (2026-10-14):** los pasos pueden no necesitar calor. No mostrar hueco ni control vacío de temperatura por defecto; permitir añadirla explícitamente y quitarla sin afectar el resto del paso. Los valores existentes se conservan al editar. La solicitud autorizada por el usuario permite un smoke real con una receta sintética y una única llamada al proveedor, sin guardar el resultado en la base ni en recetas del hogar. No solicitar ni almacenar claves nuevas en el repositorio; usar solo configuración ya disponible de forma segura.
+
+**Reintento autorizado (2026-10-14):** tras fallos intermitentes en WebAPI, el usuario autoriza reintentar únicamente la misma petición sintética fallida hasta 3 intentos totales. No repetir peticiones previas que terminaron correctamente ni reprocesar tickets. Mantener cada run aislado, sin persistir recetas del hogar; capturar el detalle de sesión de WebAPI si vuelve a fallar. Esta excepción aplica a la petición de recetas múltiples fallida, no amplía el resto del smoke.
+
+- [x] En alta/edición, el paso nuevo y el paso sin temperatura no renderizan fila vacía; «Añadir temperatura» revela campo y unidad, y «Quitar temperatura» la elimina. Guardar conserva `temperature: null`/ausente si no se añadió y conserva exactamente valor/unidad si sí; recetas históricas mantienen su dato.
+- [x] Inspeccionar y corregir el desbordamiento observado en el editor: ningún control, etiqueta larga, tarjeta, selector o acción se sale de su sección ni del viewport en 320×700, 393×852, 568×320 y escritorio. Mantener accesibilidad, controles tocables, foco/teclado y la geometría compartida del shell.
+- [x] Primero prueba roja reproducible de temperatura opcional y de contención geométrica; luego fix mínimo. Playwright real desktop/móvil cubre los cuatro anchos, ambos estados de temperatura, texto largo y medios; guardar capturas sintéticas comparables y revisar dimensiones/alineación con tolerancia ≤1 CSS px.
+- [x] Smoke explícitamente autorizado con proveedor real, receta y datos sintéticos mínimos, configuración existente, base/artefactos temporales y sin escritura de negocio. La petición lleva el `response_format` estricto compartido; la respuesta completa no vacía pasa `aiRecipeOutputSchema` y las restricciones mínimas de colección. No repetir una petición que pudo llegar al proveedor, salvo autorización expresa del usuario para repetir **esa misma petición fallida** hasta el máximo autorizado. Redactar secretos; registrar fecha, proveedor/modelo no sensible, resultado de validación y limitaciones. Evidencia: una generación real posterior a quitar topes, descrita arriba; el fallo previo de generación múltiple sigue sin causa probada.
+- [x] Suites focales, cobertura del alcance ≥70 % en statements/branches/functions/lines, E2E aislado, builds, typechecks, `check-ui` y diff check. Si no existe credencial/configuración utilizable o el proveedor no es accesible, mantener el smoke pendiente y declarar el bloqueo sin simular éxito.
+
+**Evidencia (2026-10-14):** `recipe-edit.component.spec.ts` pasó **19/19**; la suite E2E de recetas pasó **20/20** y la pasada final aislada con Chromium escritorio y móvil pasó **4/4**, con SQLite temporal y limpieza confirmada. Hubo prueba roja previa para el control de temperatura que aparecía sin valor y para el CTA multimedia que desbordaba 55 px. Playwright midió 320×700, 393×852, 568×320 y 1440×900: `scrollWidth == clientWidth` y ningún elemento visible fuera del viewport. El flujo real de edición temporal, sin guardar, verificó con teclado Enter añadir y quitar temperatura; al quitarla desaparecen campo y unidad. Capturas sintéticas de viewport inspeccionadas: `.e2e-screenshots/recipe-editor/optional-temperature-desktop.png`, `optional-temperature-mobile.png`, `live-mobile-scrolled.png` y `live-desktop-current.png`. El CTA incluye hover y foco visible.
+
+Los hooks pre-push pasaron formato, `check:ui` (**250 ficheros / 21 reglas**), build de servidor/cliente, `typecheck:e2e` y `pnpm run test`: frontend **1.565/1.565**, servidor **1.817 aprobadas / 1 omitida**, cobertura global **93,09/83,76/93,73/95,36 % S/B/F/L**. Cobertura de los fuentes modificados: `recipe-edit.component.ts` **83,88/70,32/83,17/83,88 %**; `recipe-edit.util.ts` **97,17/86,42/100/97,17 %**; `recipe-improve.util.ts` **97,22/81,67/92,50/97,22 %**; `dict/recipes.ts` **100 %** statements/lines (sin ramas ni funciones). La primera ejecución E2E limitada por loopback falló al arrancar; con autorización explícita de loopback la corrida aislada pasó y limpió sus datos.
+
+**Smoke real WebAPI (sin reiniciar Docker, 2026-10-14):** contenedor existente `web-api` se mantuvo en ejecución; readiness y sesión ChatGPT autenticada pasaron preflight. Una llamada directa sintética de proveedor con el contrato compartido `generated_recipe`, `response_format` estricto y `aiRecipeOutputSchema` devolvió receta válida sin calor (3 ingredientes, 3 pasos por nivel, `cookTime=0`, temperatura nula); fue provider-level, no validó la ruta HogarIA.
+
+El smoke integrado anterior hizo 3/10 llamadas (dos 200; la generación múltiple devolvió 502). Tras permiso explícito del usuario, repetimos **solo esa ruta y el mismo payload sintético** (`count=2`, 6 raciones, `hard`/`expert`, mismos 11 ingredientes QA), máximo 3 intentos, SQLite aislada y sin guardar recetas. Resultado: **3/3 HTTP 502**; proxy confirmó en todos `response_format` JSON Schema estricto `generated_recipe`; no hubo respuesta de receta que validar. Logs de sesión leídos en la UI WebAPI: `request_76be9096-4765-45f1-bcd8-d419fd690dde` (composer no listo; renderer sin respuesta), `request_ebe36410-b4e0-4c67-86b3-b966e698094d` (renderer no responsivo en ambos intentos) y `request_86f3bd03-588b-4e3e-9209-82438d5ed1f9` (composer y renderer no listos). En las tres, la salida final fue `Validated output correction could not be completed`. Detalles sanitizados y horas exactas quedan en el `webapi-problems.md` local, que debe permanecer fuera de commits. El runner retiró todos los directorios `hogaria-e2e-*` temporales; no se reinició WebAPI ni se procesaron tickets. La causa raíz de esos 502 no quedó probada; esa misma petición múltiple agotó los tres intentos autorizados y no se repetirá.
+
+**Validación real posterior a quitar topes (2026-10-14):** contra la WebAPI ya levantada se envió una única generación sintética nueva (gpt-5, `retryAttempts=0`, presupuesto del proxy 1). El proxy confirmó `generated_recipe` estricto sin `maxLength`; la respuesta fue HTTP 200, JSON completo (`finish_reason=stop`) y superó la validación de `aiRecipeOutputSchema` en la ruta HogarIA, incluidos nombre, descripción, ingredientes y pasos no vacíos en los tres niveles. El endpoint no guarda la receta; runner confirmó cierre y limpieza de SQLite/artefactos temporales. No se reinició WebAPI ni se reutilizó ninguna petición anterior. Esto verifica generación individual posterior al cambio; no demuestra que los topes causaran los 502 del flujo múltiple.
+
+### QA-RECIPE.UNBOUNDED-AI-TEXT.1 — sin topes arbitrarios en salidas culinarias de IA
+
+**Decisión de producto (2026-10-14, ampliada):** quitar máximos arbitrarios de caracteres de las salidas culinarias IA. `aiRecipeOutputSchema` es el contrato canónico compartido por generación individual/múltiple, mejora y recetas nuevas del plan semanal; resumen/motivo de eventos y candidatos de sustitución también son texto generado en esos flujos. Textos largos deben validar de extremo a extremo. Se conservan límites de texto de entrada del usuario, arrays, valores numéricos, campos obligatorios, cuerpo HTTP y tokens del proveedor. Los errores WebAPI observados en este smoke (composer/renderizador) no demuestran que un tope de caracteres los causara; la llamada real individual posterior verifica el estado actual, no explica retroactivamente esos 502.
+
+- [x] Eliminar máximos de longitud de caracteres del contrato canónico de recetas IA y esquemas de entrada/persistencia necesarios para guardarlas o volver a enviarlas a «Mejorar con IA»; mantener validaciones de texto no vacío, estructura estricta, enumeraciones y límites de cantidad/número.
+- [x] La misma salida con texto por encima de los antiguos máximos valida, llega a propuesta/guardado/recarga y puede enviarse de nuevo al endpoint de mejora; cubrir descripción, ingredientes, instrucciones de nivel, consejos, advertencias, guía y conservación.
+- [x] Quitar los `maxlength` de campos de contenido de receta que impidan revisar o guardar esos textos. TDD cubre superar los máximos anteriores tanto en desktop/móvil como en contrato API.
+- [x] Quitar `maxLength` de los campos de texto generados en recetas nuevas del plan semanal, eventos culinarios y candidatos de sustitución; comprobar esquema y validación local con texto largo (>2.500 caracteres). Ningún response schema culinario expone `maxLength`; no reenviar peticiones anteriores que pudieron llegar al proveedor.
+
+**Límite de transporte y salida:** los textos culinarios generados no tienen tope por campo. Para acotar buffering/RAM del servidor, alta/edición y `Mejorar con IA` aceptan cuerpos JSON de hasta 8 MiB y devuelven `413 RECIPE_CONTENT_BODY_TOO_LARGE` por encima. Los límites estructurales/números y el presupuesto de tokens configurado del proveedor se mantienen; quitar topes de caracteres no permite exceder ese presupuesto.
+
+**Evidencia (2026-10-14):** la prueba roja previa falló en los antiguos límites de schema y en `maxLength`; después, Vitest focal **7 archivos, 122/122 pruebas** pasó. La suite completa del servidor con coverage pasó (**1.828 pruebas, 1 omitida**; 89,99 % statements, 82,47 % branches, 95,96 % functions, 93,17 % lines; gates por fichero ≥70 %). Incluye ruta sintética de mejora con texto >2.500 caracteres en request y respuesta, y alta/lectura desde SQLite temporal con los campos largos conservados. Karma/ChromeHeadless editor **20/20**. Playwright contra stack aislado y SQLite temporal pasó **2/2** (Chromium escritorio y móvil): editó/guardó/recargó nombre, descripción y cocina de 2.501 caracteres; no hubo desbordamiento horizontal a 1440, 393 ni 320 px. Capturas sintéticas: `.e2e-screenshots/recipe-editor/unbounded-text-desktop.png` y `.e2e-screenshots/recipe-editor/unbounded-text-mobile.png`. Typecheck servidor y E2E, build frontend, `check-ui` (250 ficheros/21 reglas) y Prettier pasaron. El build mantiene avisos preexistentes de presupuesto de bundle/estilos y optional chaining.
+
+**Límite de diagnóstico:** los fallos de WebAPI ya documentados son suficientes para dejar el smoke integrado pendiente, pero no incluyen respuesta del modelo que permita enlazar el 502 con el tamaño de texto. Esta subunidad elimina restricciones verificables en HogarIA; no declara que repare el error del composer/renderizador.
+
+**Revalidación local (2026-10-14):** las pruebas TDD nuevas fallaron primero por los máximos de 240/300 caracteres en resumen/motivo semanal y 120/400/100 en candidato de sustitución. Tras quitarlos, Vitest focal pasó **26/26** en tres specs y la suite de sustitución pasó **11/11** pruebas seleccionadas: acepta textos sintéticos de 2.501 caracteres, confirma ausencia de `maxLength` en response schemas culinarios y conserva JSON estricto. La suite de propuestas domésticas pasó **36/36**. Suite completa de servidor con DB `:memory:`: **1.831/1.831 tests y 1 omitido**; cobertura global **89,99/82,47/95,96/93,17 % S/B/F/L**, `ai.schema.ts` **100/92/100/100 %** y `household-meal-proposal.schema.ts` **92,3/84,61/100/92,15 %**. No hubo llamada nueva al proveedor. `webapi-problems.md` sigue documentando fallos de composer/renderizador; no prueba que los límites fueran su causa ni que este cambio los repare. Presupuesto `maxTokens` sigue separado y sin cambios.
+
+### QA-AI.UNBOUNDED-OUTPUT-TEXT.1 — sin topes de caracteres en texto generado por IA
+
+**Decisión (2026-10-14):** quitar máximos arbitrarios por campo de texto natural en todas las salidas IA estructuradas, no solo recetas. Aplica a plano y zonas, tareas, tickets, análisis de fotos de compra y estimaciones de caducidad. Mantener límites de transporte por bytes, IDs/claves, cardinalidad de arrays, números y formatos. El máximo de tokens del proveedor es un presupuesto distinto, no un límite de caracteres.
+
+- [x] Inventariar cada `response_format` y retirar los máximos de longitud solo de sus campos de texto natural; conservar límites estructurales (IDs, claves, arrays y números).
+- [x] Aceptar texto >2.500 caracteres al validar y persistir salidas IA en hogar/tareas, recibos y líneas de compra; asegurar que formularios que revisan ese contenido no añadan `maxlength`.
+- [x] Probar con respuestas sintéticas y SQLite temporal, sin repetir llamadas reales. Mantener la investigación WebAPI separada: el error de composer/renderizador observado no aporta evidencia de truncamiento por caracteres. Documentar presupuestos de tokens y límites de cuerpo como limitaciones distintas.
+
+**Evidencia (2026-10-14):** prueba sintética nueva revisa los `response_format` culinarios, hogar, tareas, tickets, fotos de compra y caducidad, y valida textos de 2.501 caracteres. Vitest focal: **12 archivos, 219/219 pruebas**; integración sintética confirma persistencia sin recorte en tickets y análisis de foto. Suite servidor con coverage pasa: **89,99/82,48/95,96/93,17 % S/B/F/L**, gates por fichero cumplidos. Playwright aislado con SQLite temporal: **2/2** en escritorio y móvil, título de tarea >120 caracteres guardado y recargado, sin overflow horizontal; capturas revisadas. No se llamó al proveedor. Se quitaron además recortes de salida en la persistencia de tickets y topes de UI del plano, tareas, revisión de ticket y revisión de foto de compra. El 502/timeout de WebAPI sigue sin causa demostrada: los logs no contienen respuesta del modelo ni finish reason; esto quita rechazos/truncamientos locales verificables, pero no prueba que causaran ese fallo. Presupuesto de tokens, límites de cuerpo y cardinalidad/IDs siguen separados e intactos.
+
+### QA-SHELL.MOBILE-SIDEBAR-ONLY.1 — navegación móvil con menú lateral
+
+**Decisión de producto revalidada (2026-10-14):** el usuario pidió retirar la barra inferior en todas las vistas para ganar espacio y dejar solo el menú lateral. La sesión actual en móvil aún muestra esa barra (observado en `/recipes?recipe=recipe-catalog-es-tortilla-patatas`, viewport 384×844); no está resuelto. En móvil, el encabezado mantiene el botón de menú y abre el mismo menú lateral compartido; el menú inferior no se renderiza en ninguna ruta. En escritorio se conserva la barra lateral permanente.
+
+- [ ] Retirar la navegación inferior global en móvil sin reducir accesibilidad ni dejar rutas principales ocultas; el menú lateral abre/cierra por teclado/tacto, expone ruta activa, cierra tras navegar y devuelve foco al botón al cerrarse. Desktop/sidebar no cambia.
+- [ ] Revisar todas las familias de rutas afectadas por el shell compartido (inicio, inventario, recetas, calendario, compra, tickets, hogar y ajustes) en móvil estrecho/normal y horizontal; validar safe-area, scroll, foco/teclado y que ningún CTA persistente queda oculto/solapado.
+- [ ] Playwright con datos sintéticos valida menú lateral y ausencia de barra inferior en la matriz de rutas; guardar capturas comparables PC/móvil y medir geometría de elementos equivalentes a tolerancia ≤1 CSS px. a11y/i18n, check-ui, builds y coverage focal ≥70 % S/B/F/L; no rebajar gates.
 
 ### QA-PRODUCT.IMAGES.1
 
@@ -5589,7 +5842,7 @@ completa del servidor en DB temporal pasa con **91,56/82,83/95,59/94,13 % S/B/F/
 `recipe-book-seed.ts`/`recipe-images.routes.ts` con 100 % por archivo. Esta revalidación supersede el
 gate de coverage que permanecía abierto en la evidencia histórica; build cliente/servidor,
 `typecheck:e2e`, `check:ui` (**207 ficheros/21 reglas**), `test:config` (**9/9**) y `git diff --check`
- pasan. No se rebajaron umbrales; artifacts de cobertura y DB temporales.
+pasan. No se rebajaron umbrales; artifacts de cobertura y DB temporales.
 
 **Evidencia actualizada (2026-10-05):** `pnpm --filter @hogaria/server exec vitest run
 src/routes/recipes.routes.spec.ts src/utils/recipe-book-seed.spec.ts --reporter=dot`: **18/18** con
@@ -5706,3 +5959,124 @@ preferencia guardada, con español como fallback. Tickets guardan solo el locale
 ESLint no pudo arrancar: el repositorio no proporciona la configuración `eslint.config.js` que exige ESLint 9.
 No se hizo una llamada de humo a un proveedor externo en esta unidad; estas pruebas verifican el contrato del
 prompt y el transporte, no que un modelo externo obedezca siempre.
+
+## 12av — Planificación semanal por hogar: tareas y comidas
+
+El contrato funcional, las decisiones y el checklist reproducible de plano, tareas y planificación de
+comidas viven en `HOGARIA-HOUSEHOLD-PLAN-SPEC.md`; esa es la fuente activa y detallada de aceptación.
+La extensión integra las comidas del hogar en el calendario existente, mantiene la propuesta sin guardar
+hasta confirmación y calcula tareas/compras a partir de los datos reales confirmados. No modifica la
+recurrencia general del calendario de §12at.
+
+**Estado revalidado (2026-10-14):** UI, propuesta, resolución de gustos blandos, controles de alergias,
+asignaciones, calendario, consumo y compra tienen evidencia en la spec enfocada. El JSON Schema estricto
+exige `events.minItems >= 1` tanto al proveedor como a la validación local. Cada petición incluye dos
+adjuntos versionados: `meal-planning-context.json` (miembros seleccionados, preferencias efectivas,
+horarios/turnos, despensa, utensilios y plan anterior) y `household-recipes-catalog.json` (recetas
+accesibles, con alias opacos y sin identidades). Las rutas/tests decodifican ambos ficheros y el proxy
+opt-in verifica su contrato en memoria sin guardar prompt, adjuntos ni respuesta.
+
+La salida de receta IA tiene una única fuente canónica, `server/src/schemas/recipe-ai-output.schema.ts`,
+compartida por `generate-recipe`, `generate-multiple-recipes` y `newRecipes[].recipe` del plan semanal.
+La futura refactorización de Recetas debe actualizar este esquema/tipo, no abrir otro contrato.
+
+El smoke `pnpm run smoke:ai:household-meal` pasó con WebAPI autenticada: una única completion `gpt-5`,
+HTTP **200** y objeto JSON válido. Se verificaron el schema no vacío y ambos adjuntos sintéticos
+(perfiles, horarios/turnos, despensa, utensilios, catálogo y plan anterior), sin identidades. La E2E
+aislada comprobó siete turnos, cobertura de ambos participantes, ausencia de duplicados y calendario
+objetivo vacío antes/después; no confirmó ni persistió la propuesta. App/SQLite temporal y token propio
+quedaron limpios; no se enviaron tickets ni se cambió el inventario real. La E2E sintética del plan pasa
+**2/2** en Chromium/Mobile Chrome; generación de recetas valida **12/12** escenarios focales en ambas
+plataformas. Revalidación: servidor **1731 tests / 1 omitido** (cobertura 90,32/82,60/96,17/93,30 %);
+cliente **1533/1533**; `test:config` **73/73**; build, typecheck server/E2E,
+`check:ui` y `git diff --check` pasan. La semántica real solo se observó para esta propuesta sintética;
+no es una garantía universal. Esta spec enfocada conserva el procedimiento, evidencia y límites detallados.
+
+## 12aw — Alta de hogar con catálogo previo y consumo en reposo de la cola IA
+
+**Hallazgo revalidado (2026-10-14):** al crear un hogar el servidor responde `500` con `UNIQUE constraint
+failed: pantry_categories.user_id, pantry_categories.key`. El índice actual impide reutilizar las mismas
+claves de categoría de una persona en dos hogares distintos, aunque la consulta del catálogo está
+delimitada por el hogar activo. El log de `pnpm dev` contiene 177 repeticiones de
+`SELECT DISTINCT config_id FROM ai_jobs WHERE status = 'queued'` en unos 19 segundos (aprox. 9,3/s),
+procedentes de `ticket-queue.ts` (`TICK_MS = 100`) y el `verbose: console.log` de SQLite en desarrollo.
+La lectura sin filas no retiene una cola grande en RAM: el coste directo de memoria es transitorio y
+pequeño; el sondeo continuo sí añade despertares/consultas y el SQL trace puede acumular salida en
+terminales o supervisores. No se dispone de una medición de RAM de la Raspberry; no atribuirle saturación
+de RAM sin esa evidencia.
+
+**Seguimiento del fallo (2026-10-14):** tras aplicar la migración anterior, la captura nueva muestra otro
+`500`: `UNIQUE constraint failed: pantry_categories.id`. La clave ya puede repetirse por ámbito, pero
+`ensureDefaultCategories` aún genera IDs deterministas `pcat-${userId}-${index}` y
+`asegurarPadreAlimentos` genera `pcat-${userId}-alimentos`; ambos omiten `householdId`. Al crear o unirse a
+otro hogar que necesite sembrar el catálogo completo, esos IDs chocan con los del hogar anterior. Las pruebas
+anteriores insertaban una sola categoría manual con ID propio y no cubrían el catálogo sembrado completo;
+la evidencia previa verificaba unicidad de claves, no este camino real.
+
+- [x] Categorías: la unicidad refleja el ámbito (persona para despensa personal; persona + hogar para
+      catálogos de hogar); una migración repetible reemplaza el índice antiguo sin descartar filas. Crear
+      o unirse a un hogar permite reutilizar claves de otro ámbito; duplicar una clave en el mismo ámbito
+      sigue rechazándose.
+- [x] Siembra y backfill: las categorías recién generadas tienen IDs únicos entre ámbitos del mismo usuario.
+      Crear y unirse a otro hogar pasan con las 13 categorías por defecto ya sembradas en el hogar anterior;
+      el backfill del padre `alimentos` puede procesar varios ámbitos heredados sin colisión, pérdida de filas
+      ni duplicación al reiniciar.
+- [x] Cola: al iniciar, encolar/reintentar un job y liberar concurrencia se despierta el worker sin esperar
+      el sondeo de seguridad. En reposo, el poller reconcilia como máximo cada 30 s, no cada 100 ms; parar
+      el worker limpia ambos temporizadores y no duplica ejecuciones.
+- [x] TDD/aislamiento: ruta de alta y unión de hogar con categorías ya existentes, migración de índice,
+      reintento/cola y cadencia en reposo reproducibles con SQLite temporal; comprobar consultas por ventana
+      de tiempo, typecheck y coverage local sin tocar datos ni procesos de uso normal.
+- [x] Registrar evidencia, límite del análisis de memoria (sin Raspberry disponible) y efecto en el log de
+      desarrollo; no desactivar el SQL trace explícito para ocultar consultas.
+
+**Evidencia TDD de categorías (2026-10-14):** la prueba de creación devolvía primero **500** al reutilizar
+una clave presente en otro hogar. `household.routes.spec.ts -t 'another household'` pasa **2/2**;
+`database.spec.ts -t 'migra la unicidad'` pasa **1/1**. La migración conserva la categoría heredada y tras
+reiniciar permite la misma clave en otro hogar, mientras rechaza el duplicado dentro del mismo ámbito. Estas
+pruebas no sembraban el catálogo completo del hogar previo; por eso no detectaron la colisión de `id` que
+muestra la captura posterior.
+
+**Evidencia TDD seguimiento (2026-10-14):** las pruebas fallaron antes del cambio: crear y unirse
+devolvían **500** frente a 201/200, y el backfill
+fallaba con `UNIQUE constraint failed: pantry_categories.id`. `household.routes.spec.ts` ahora pasa ambos
+casos con catálogos completos de 13 categorías; `pantry-categories.spec.ts` pasa el backfill en dos hogares
+heredados repetido, con 26 filas preservadas. `ensureDefaultCategories` y `asegurarPadreAlimentos` asignan
+UUID nuevos solo a filas nuevas; IDs heredados no se reescriben. Suite del servidor: **98 archivos, 1739
+tests, 1 omitido**; coverage **90,34/82,62/96,18/93,31 %** (statements/ramas/funciones/líneas);
+`tsc --noEmit -p tsconfig.json` pasa. Pruebas con SQLite en memoria.
+
+**Evidencia de cola y cierre (2026-10-14):** con el worker original, la prueba veía **2 sondeos/250 ms**;
+ahora la reconciliación es a **30 s**, pero inicio, encolado/reintento y fin de trabajo la despiertan y
+coalescen los despertares. `ai-queue.spec.ts` valida intervalo, carga inmediata y cancelación de ambos
+temporizadores. La suite del servidor con DB aislada pasa **98 archivos, 1736 tests y 1 omitido**;
+coverage **90,34/82,62/96,18/93,31 %** (statements/ramas/funciones/líneas), y
+`tsc --noEmit -p tsconfig.json` pasa. La E2E aislada del diálogo de creación/reintento pasa **2/2**
+Chromium/Mobile Chrome y confirma el éxito contra la API temporal; el runner confirma la limpieza de DB,
+procesos y artefactos. `git diff --check` pasa. No se cambia la configuración de logging.
+
+El ritmo del SQL trace compartido fue **177/19,13 s (~9,25 consultas/s)**; el worker idle ahora ejecuta
+como máximo **1/30 s** (~99,64 % menos sondeos idle, aparte de despertares por trabajos). Una consulta vacía
+solo crea resultados transitorios; esto no demuestra saturación de RAM y no se tuvo acceso a la Raspberry
+para medirla. No hubo cambios de UI ni llamadas a proveedores. El lint del servidor no arranca porque su
+script pasa `--ext` a ESLint con flat config (`Invalid option '--ext'`); no se modificaron tooling ni
+dependencias.
+
+## QA-AI.UNBOUNDED-PROMPT-TEXT.1 — texto culinario sin topes arbitrarios antes de IA
+
+**Decisión (2026-10-15):** retirar máximos y truncamientos por caracteres del texto natural que la persona
+aporta y que HogarIA valida, persiste o envía en prompts culinarios: preferencias/notas personales y del
+hogar, alergias/gustos escritos, instrucciones libres, perfiles de invitados y notas de sustitución. La
+misma regla cubre textos generados por IA que atraviesan validadores de calendario, compras o persistencia.
+Se mantienen validaciones semánticas, enumeraciones, IDs/claves, límites de cantidad y cardinalidad, limpieza
+de datos identificativos antes de enviar notas al proveedor, límites de bytes del cuerpo y presupuesto de
+tokens del proveedor. El smoke WebAPI anterior falló en composer/renderizador; esta decisión elimina topes
+locales comprobables, pero no atribuye causalidad ni afirma reparar ese fallo remoto.
+
+- [ ] Auditar rutas, schemas, normalizadores, persistencia y UI de todo texto natural incluido en prompts IA;
+      eliminar `.max(n)`, `maxlength` y truncamientos de caracteres que lo rechazan, recortan o alteran.
+- [ ] Conservar redacción de datos personales, límites de request por bytes y topes estructurales; confirmar
+      que textos mayores que cada máximo anterior pasan completos hasta prompt, persistencia y vuelta a leer.
+- [ ] TDD focal con texto sintético >2.500 caracteres, verificar campos de preferencias, metas de hogar,
+      instrucciones de planificación, invitado, y recetas creadas desde propuesta; no llamar proveedor real.
+- [ ] Comprobar typecheck, suites focales y coverage ≥70 % S/B/F/L en el alcance; registrar límites y evidencia.

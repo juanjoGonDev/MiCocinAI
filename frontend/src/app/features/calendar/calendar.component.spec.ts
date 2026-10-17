@@ -16,7 +16,11 @@ import { RecipeService } from '../../core/services/recipe.service';
 import { TasteProfileService } from '../../core/services/taste-profile.service';
 import { ToastService } from '../../core/services/toast.service';
 import { dateLocale, setDateLocale } from '../../core/time';
-import type { CalendarMeal, HouseholdEvent } from '../../shared/models/calendar.model';
+import type {
+  CalendarHouseholdTask,
+  CalendarMeal,
+  HouseholdEvent
+} from '../../shared/models/calendar.model';
 import type { TasteGoal } from '../../shared/models/taste-profile';
 import { CalendarComponent } from './calendar.component';
 
@@ -35,6 +39,7 @@ describe('CalendarComponent meal deletion feedback', () => {
   let mealPlanState: WritableSignal<Record<string, boolean>>;
   let visibleKindsState: WritableSignal<string[]>;
   let calendarMealsState: WritableSignal<CalendarMeal[]>;
+  let calendarTasksState: WritableSignal<CalendarHouseholdTask[]>;
   let householdEventsState: WritableSignal<HouseholdEvent[]>;
   let calendarErrorState: WritableSignal<unknown>;
   let calendarLoadingState: WritableSignal<boolean>;
@@ -72,6 +77,7 @@ describe('CalendarComponent meal deletion feedback', () => {
       'toggleKind'
     ]);
     calendarMealsState = signal<CalendarMeal[]>([]);
+    calendarTasksState = signal<CalendarHouseholdTask[]>([]);
     householdEventsState = signal<HouseholdEvent[]>([]);
     calendarErrorState = signal<unknown>(null);
     calendarLoadingState = signal(false);
@@ -86,6 +92,18 @@ describe('CalendarComponent meal deletion feedback', () => {
     });
     mealsByDate = new Map<string, CalendarMeal[]>();
     Object.defineProperty(calendar, 'meals', { value: calendarMealsState });
+    Object.defineProperty(calendar, 'tasks', { value: calendarTasksState });
+    Object.defineProperty(calendar, 'tasksByDate', {
+      value: () => {
+        const byDate = new Map<string, CalendarHouseholdTask[]>();
+        for (const task of calendarTasksState()) {
+          const list = byDate.get(task.date);
+          if (list) list.push(task);
+          else byDate.set(task.date, [task]);
+        }
+        return byDate;
+      }
+    });
     Object.defineProperty(calendar, 'goals', { value: goalsState });
     Object.defineProperty(calendar, 'targetCalories', { value: targetCaloriesState });
     Object.defineProperty(calendar, 'householdEvents', { value: householdEventsState });
@@ -324,6 +342,155 @@ describe('CalendarComponent meal deletion feedback', () => {
     expect(toast.error).toHaveBeenCalledWith('ui.error', 'calendar.no_se_pudo_guardar');
   });
 
+  it('opens the consumption flow instead of the editor for an assigned active calendar participant', () => {
+    const permissions = {
+      pantry: { view: true, edit: true, manage: false },
+      recipes: { view: true, create: true, edit: true, delete: false, generateAI: false },
+      calendar: { view: true, edit: false },
+      members: { invite: false, kick: false, manageRoles: false },
+      settings: false
+    };
+    const household = makeHousehold('home-1', ['member-1']);
+    household.members[0] = {
+      ...household.members[0],
+      userId: 'user-1',
+      permissions
+    };
+    household.myPermissions = permissions;
+    householdState.set(household);
+
+    const sharedMeal: CalendarMeal = {
+      id: 'shared-meal-1',
+      date: '2026-10-05',
+      mealType: 'dinner',
+      title: 'Lentejas',
+      servings: 4,
+      completed: false,
+      isShared: true,
+      participantIds: ['user-1', 'user-2']
+    };
+    component.openEditModal(sharedMeal);
+
+    expect(component.selectedSharedMeal()).toBe(sharedMeal);
+    expect(component.selectedSharedMealHouseholdId()).toBe('home-1');
+    expect(component.isMealModalOpen()).toBeFalse();
+  });
+
+  it("keeps another member's shared meal visible but marks its consumption action unavailable", () => {
+    const permissions = {
+      pantry: { view: true, edit: false, manage: false },
+      recipes: { view: true, create: false, edit: false, delete: false, generateAI: false },
+      calendar: { view: true, edit: false },
+      members: { invite: false, kick: false, manageRoles: false },
+      settings: false
+    };
+    const household = makeHousehold('home-1', ['member-1']);
+    household.members[0] = { ...household.members[0], userId: 'user-1', permissions };
+    household.myPermissions = permissions;
+    householdState.set(household);
+    component.view.set('day');
+    component.anchor.set(new Date(2026, 9, 5, 12));
+    const sharedMeal: CalendarMeal = {
+      id: 'shared-meal-for-other-member',
+      date: '2026-10-05',
+      mealType: 'dinner',
+      title: 'Lentejas compartidas',
+      servings: 1,
+      completed: false,
+      isShared: true,
+      participantIds: ['user-2']
+    };
+    mealsByDate.set(sharedMeal.date, [sharedMeal]);
+
+    const visibleMeal = component.days()[0]?.meals[0];
+    expect(visibleMeal?.title).toBe('Lentejas compartidas');
+    expect(visibleMeal?.canRecordConsumption).toBeFalse();
+
+    component.openEditModal(visibleMeal!);
+    expect(component.selectedSharedMeal()).toBeNull();
+    expect(component.isMealModalOpen()).toBeFalse();
+
+    sharedMeal.participantIds = ['user-1'];
+    component.view.set('week');
+    component.view.set('day');
+    const participantMeal = component.days()[0]?.meals[0];
+    expect(participantMeal?.canRecordConsumption).toBeTrue();
+    component.openEditModal(participantMeal!);
+    expect(component.selectedSharedMeal()?.id).toBe(sharedMeal.id);
+  });
+
+  it('does not offer shared-meal consumption unless the current user is active, assigned and can view the calendar', () => {
+    const permissions = {
+      pantry: { view: true, edit: false, manage: false },
+      recipes: { view: true, create: false, edit: false, delete: false, generateAI: false },
+      calendar: { view: true, edit: false },
+      members: { invite: false, kick: false, manageRoles: false },
+      settings: false
+    };
+    const household = makeHousehold('home-1', ['member-1']);
+    household.members[0] = {
+      ...household.members[0],
+      userId: 'user-1',
+      permissions,
+      isActive: false
+    };
+    household.myPermissions = permissions;
+    householdState.set(household);
+    const sharedMeal: CalendarMeal = {
+      id: 'shared-meal-1',
+      date: '2026-10-05',
+      mealType: 'dinner',
+      title: 'Lentejas',
+      servings: 4,
+      completed: false,
+      isShared: true,
+      participantIds: ['user-2']
+    };
+
+    component.openEditModal(sharedMeal);
+    expect(component.selectedSharedMeal()).toBeNull();
+    expect(component.isMealModalOpen()).toBeFalse();
+
+    household.members[0].isActive = true;
+    household.members[0].permissions = { ...permissions, calendar: { view: false, edit: false } };
+    household.myPermissions = { ...permissions, calendar: { view: false, edit: false } };
+    sharedMeal.participantIds = ['user-1'];
+    component.openEditModal(sharedMeal);
+    expect(component.selectedSharedMeal()).toBeNull();
+  });
+
+  it('closes an open shared-meal form as soon as the active household changes', () => {
+    const permissions = {
+      pantry: { view: true, edit: true, manage: false },
+      recipes: { view: true, create: true, edit: true, delete: false, generateAI: false },
+      calendar: { view: true, edit: false },
+      members: { invite: false, kick: false, manageRoles: false },
+      settings: false
+    };
+    const household = makeHousehold('home-1', ['member-1']);
+    household.members[0] = { ...household.members[0], userId: 'user-1', permissions };
+    household.myPermissions = permissions;
+    householdState.set(household);
+    component.openEditModal({
+      id: 'shared-meal-1',
+      date: '2026-10-05',
+      mealType: 'dinner',
+      title: 'Lentejas',
+      servings: 4,
+      completed: false,
+      isShared: true,
+      participantIds: ['user-1']
+    });
+    expect(component.selectedSharedMeal()).not.toBeNull();
+
+    activeHouseholdIdState.set('home-2');
+    TestBed.flushEffects();
+    fixture.detectChanges();
+
+    expect(component.selectedSharedMeal()).toBeNull();
+    expect(component.selectedSharedMealHouseholdId()).toBeNull();
+  });
+
   it('edits a custom meal and supplies safe defaults for missing optional values', () => {
     component.openEditModal({
       id: 'meal-custom',
@@ -437,6 +604,7 @@ describe('CalendarComponent meal deletion feedback', () => {
     expect(component.caloriePercent()).toBe(100);
     component.showMeals.set(false);
     expect(component.days()[0].meals).toEqual([]);
+    expect(component.days()[0].tasks).toEqual([]);
     expect(component.plannedCount()).toBe(0);
   });
 
@@ -523,7 +691,7 @@ describe('CalendarComponent meal deletion feedback', () => {
     component.showMeals.set(false);
     component.writeLayers();
     expect(routerNavigate.calls.mostRecent().args[1]).toEqual(
-      jasmine.objectContaining({ queryParams: { layers: 'shopping' } })
+      jasmine.objectContaining({ queryParams: { layers: 'tasks,shopping' } })
     );
 
     const originalUrl = window.location.pathname + window.location.search + window.location.hash;
@@ -535,10 +703,12 @@ describe('CalendarComponent meal deletion feedback', () => {
       );
       component.readLayersFromUrl();
       expect(component.showMeals()).toBeTrue();
+      expect(component.showTasks()).toBeFalse();
       expect(visibleKindsState()).toEqual(['home', 'home']);
       moduleMealsEnabledState.set(false);
       component.readLayersFromUrl();
       expect(component.showMeals()).toBeFalse();
+      expect(component.showTasks()).toBeFalse();
       expect(visibleKindsState()).toEqual(['home', 'home']);
     } finally {
       window.history.replaceState({}, '', originalUrl);

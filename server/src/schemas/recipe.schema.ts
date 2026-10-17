@@ -77,6 +77,8 @@ const recipeStepSchema = z
     image: formField(recipeImageReferenceSchema),
     /** Candidate returned by the bounded photo search; the route replaces it with a local asset path. */
     imagePhotoId: formField(z.string().regex(/^[a-f0-9]{24}$/)),
+    /** A server-resolved Commons selection id; source URLs and attribution are never client-authored. */
+    videoId: formField(z.string().regex(/^[a-f0-9]{24}$/)),
     illustration: formField(recipeStepIllustrationSchema)
   })
   .superRefine((step, context) => {
@@ -112,7 +114,9 @@ const recipeGuidanceSchema = z
   .object({
     appliances: z.array(z.string().trim().min(1)).max(10),
     parallelTasks: z.array(z.string().trim().min(1)).max(10),
-    tipsAndVariations: z.array(z.string().trim().min(1)).max(10)
+    tipsAndVariations: z.array(z.string().trim().min(1)).max(10),
+    /** Optional for older saved guidance JSON; generated recipes always provide the explicit decision. */
+    batchCookingWarning: formField(z.string().trim().min(1))
   })
   .strict();
 
@@ -125,10 +129,10 @@ const instructionsByLevelSchema = z
   .strict();
 
 const createRecipeFieldsSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(200),
-  description: formField(z.string().max(1000)),
+  name: z.string().min(1, 'Name is required'),
+  description: formField(z.string()),
   difficulty: formDefault(difficultyEnum, 'medium'),
-  cuisine: formField(z.string().max(50)),
+  cuisine: formField(z.string()),
   countryCode: formField(countryCodeSchema),
   mealType: formDefault(z.array(mealTypeEnum), []),
   totalTime: formField(z.number().int().positive()),

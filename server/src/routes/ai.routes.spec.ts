@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
 import jwt from 'jsonwebtoken';
+import { MAX_RECIPE_CONTENT_REQUEST_BYTES } from '../middleware/recipe-content-body-limit.middleware.js';
 
 /**
  * Las rutas de configuracion de IA (revision de la ## 8f a peticion del usuario): la prueba de
@@ -351,7 +352,7 @@ const recetaGenerada = {
   prepTime: 10,
   cookTime: 20,
   restTime: null,
-  servings: 2,
+  baseServings: 1,
   calories: 420,
   ingredients: [
     {
@@ -368,7 +369,8 @@ const recetaGenerada = {
   guidance: {
     appliances: ['Cocina de gas'],
     parallelTasks: ['Lavar y cortar las verduras mientras hierve el caldo.'],
-    tipsAndVariations: ['Añadir pimentón fuera del fuego para que no se queme.']
+    tipsAndVariations: ['Añadir pimentón fuera del fuego para que no se queme.'],
+    batchCookingWarning: null
   },
   instructionsByLevel: {
     basic: [
@@ -376,6 +378,9 @@ const recetaGenerada = {
         stepNumber: 1,
         instruction: 'Cocer las lentejas.',
         duration: 20,
+        temperature: null,
+        timerRequired: true,
+        timerDuration: 20,
         tips: '',
         warning: '',
         illustration: null
@@ -386,6 +391,9 @@ const recetaGenerada = {
         stepNumber: 1,
         instruction: 'Sofreír y cocer las lentejas hasta que estén tiernas.',
         duration: 20,
+        temperature: null,
+        timerRequired: true,
+        timerDuration: 20,
         tips: '',
         warning: '',
         illustration: null
@@ -396,6 +404,9 @@ const recetaGenerada = {
         stepNumber: 1,
         instruction: 'Sofreír a fuego medio y cocer a hervor suave hasta textura al dente.',
         duration: 20,
+        temperature: null,
+        timerRequired: true,
+        timerDuration: 20,
         tips: '',
         warning: '',
         illustration: null
@@ -406,7 +417,7 @@ const recetaGenerada = {
   storage: {
     method: 'Refrigerar',
     duration: '3 días',
-    reheating: 'Calentar',
+    reheatingInstructions: 'Calentar',
     container: null,
     freezingPossible: true,
     freezingDuration: '3 meses'
@@ -514,6 +525,58 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
     expect(prompt).not.toContain('Responde siempre en español de España');
   });
 
+  it('genera cantidades base para una ración y conserva en la respuesta el rendimiento normalizado', async () => {
+    await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+    const requests = stubRecipeProvider();
+
+    const response = await call(alice, 'POST', '/generate-recipe', {
+      ...peticionGeneracion,
+      servings: 4
+    });
+    const result = await json(response);
+    const providerRequest = JSON.parse(requests[0].body);
+    const prompt = providerRequest.messages[1].content as string;
+
+    expect(response.status).toBe(200);
+    expect(providerRequest.response_format.type).toBe('json_schema');
+    expect(providerRequest.response_format.json_schema.strict).toBe(true);
+    expect(prompt).toContain('Raciones solicitadas para cocinar: 4');
+    expect(prompt).toContain('rendimiento base de exactamente 1 ración');
+    expect(prompt).toContain('cantidades de ingredientes por ración');
+    expect(prompt).toContain('baseServings=1');
+    expect(result.data).toMatchObject({
+      baseServings: 1,
+      ingredients: [{ name: 'lentejas', quantity: 200, unit: 'g' }],
+      guidance: { batchCookingWarning: null }
+    });
+    expect(recipeCount()).toBe(0);
+  });
+
+  it('rechaza una respuesta que no esté normalizada a una ración sin guardar nada', async () => {
+    await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+    const requests = stubRecipeProvider(
+      () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              { message: { content: JSON.stringify({ ...recetaGenerada, baseServings: 4 }) } }
+            ]
+          }),
+          { status: 200 }
+        )
+    );
+
+    const response = await call(alice, 'POST', '/generate-recipe', {
+      ...peticionGeneracion,
+      servings: 4
+    });
+
+    expect(response.status).toBe(500);
+    expect((await json(response)).success).toBe(false);
+    expect(requests).toHaveLength(1);
+    expect(recipeCount()).toBe(0);
+  });
+
   it('uses the active household member count as the default recipe servings', async () => {
     db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
       'servings-house',
@@ -534,7 +597,7 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
     }
     await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
 
-    const generated = { ...recetaGenerada, servings: 3 };
+    const generated = { ...recetaGenerada, baseServings: 1 };
     const requests = stubRecipeProvider(
       () =>
         new Response(
@@ -550,8 +613,8 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
     const prompt = JSON.parse(requests[0].body).messages[1].content as string;
 
     expect(response.status).toBe(200);
-    expect(result.data.servings).toBe(3);
-    expect(prompt).toContain('Porciones confirmadas para esta receta: 3');
+    expect(result.data.baseServings).toBe(1);
+    expect(prompt).toContain('Raciones solicitadas para cocinar: 3');
   });
 
   it('uses only selected active household tastes and ephemeral guest constraints', async () => {
@@ -610,7 +673,7 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
     const prompt = JSON.parse(requests[0].body).messages[1].content as string;
 
     expect(response.status).toBe(200);
-    expect(result.data.servings).toBe(2);
+    expect(result.data.baseServings).toBe(1);
     expect(prompt).toContain('marisco');
     expect(prompt).toContain('tomate');
     expect(prompt).toContain('huevo');
@@ -782,7 +845,8 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
     const prompt = providerBody.messages[1].content as string;
     expect(prompt).toContain('Ingredientes disponibles: 200 g de lentejas');
     expect(prompt).toContain('Utensilios disponibles: Olla');
-    expect(prompt).toContain('Porciones confirmadas para esta receta: 2');
+    expect(prompt).toContain('Raciones solicitadas para cocinar: 2');
+    expect(prompt).toContain('rendimiento base de exactamente 1 ración');
     expect(prompt).toContain('Dificultad: easy');
     expect(prompt).toContain('Nivel seleccionado al abrir la ficha: basic');
     expect(prompt).toContain('genera SIEMPRE los tres niveles completos');
@@ -881,11 +945,73 @@ describe('POST /generate-recipe y /generate-multiple-recipes', () => {
       totalTime: 30,
       prepTime: 10,
       cookTime: 20,
-      servings: 2,
+      baseServings: 1,
       ingredients: [{ name: 'lentejas', quantity: 200, unit: 'g' }],
+      guidance: { batchCookingWarning: null },
       instructionsByLevel: recetaGenerada.instructionsByLevel
     });
     expect(requests).toHaveLength(1);
+    expect(recipeCount()).toBe(0);
+  });
+
+  it('multiple comparte las raciones elegidas como contexto y devuelve cada candidata normalizada', async () => {
+    await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+    const requests = stubRecipeProvider();
+
+    const response = await call(alice, 'POST', '/generate-multiple-recipes', {
+      ...peticionGeneracion,
+      servings: 5,
+      count: 1
+    });
+    const result = await json(response);
+    const providerRequest = JSON.parse(requests[0].body);
+    const prompt = providerRequest.messages[1].content as string;
+
+    expect(response.status).toBe(200);
+    expect(providerRequest.response_format.json_schema.strict).toBe(true);
+    expect(result.data).toHaveLength(1);
+    expect(result.data.map((recipe: { baseServings: number }) => recipe.baseServings)).toEqual([1]);
+    expect(
+      result.data.map(
+        (recipe: { ingredients: { quantity: number }[] }) => recipe.ingredients[0].quantity
+      )
+    ).toEqual([200]);
+    expect(prompt).toContain('Raciones solicitadas para cocinar: 5');
+    expect(prompt).toContain('cantidades de ingredientes por ración');
+    expect(requests).toHaveLength(1);
+    expect(recipeCount()).toBe(0);
+  });
+
+  it('valida y devuelve un aviso explícito de cocinar en tandas', async () => {
+    await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+    const warning = 'Dora la cebolla en tres tandas; amontonarla haría que soltara agua.';
+    stubRecipeProvider(
+      () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    ...recetaGenerada,
+                    guidance: { ...recetaGenerada.guidance, batchCookingWarning: warning }
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+    );
+
+    const response = await call(alice, 'POST', '/generate-recipe', {
+      ...peticionGeneracion,
+      servings: 6
+    });
+    const result = await json(response);
+
+    expect(response.status).toBe(200);
+    expect(result.data.guidance.batchCookingWarning).toBe(warning);
     expect(recipeCount()).toBe(0);
   });
 
@@ -1181,6 +1307,51 @@ describe('POST /replace-meal', () => {
     expect(prompt).not.toContain('+34 600 123 456');
     expect(prompt).not.toContain(alice.id);
     expect(savedMeal?.custom_meal).toBe('Pasta con salsa');
+  });
+
+  it('accepts AI replacement text longer than the former character caps', async () => {
+    const longText = 'x'.repeat(2_501);
+    await crearConfig(alice, 'Proveedor de reemplazo', 'http://ai.test/v1', 0);
+    createMealForReplacement(alice.id, 'replace-meal-long-text');
+    const requests = stubRecipeProvider(
+      () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    safe: true,
+                    name: longText,
+                    description: longText,
+                    ingredients: [longText],
+                    estimatedTime: 30,
+                    servings: 2
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200 }
+        )
+    );
+
+    const response = await call(alice, 'POST', '/replace-meal', {
+      mealId: 'replace-meal-long-text'
+    });
+    const result = await json(response);
+    const body = JSON.parse(requests[0].body);
+
+    expect(response.status).toBe(200);
+    expect(result.data).toMatchObject({
+      name: longText,
+      description: longText,
+      ingredients: [longText]
+    });
+    expect(JSON.stringify(body.response_format.json_schema.schema)).not.toContain('"maxLength"');
+    expect(
+      db.prepare('SELECT custom_meal FROM meals WHERE id = ?').get('replace-meal-long-text')
+    ).toMatchObject({ custom_meal: 'Pasta con salsa' });
   });
 
   it('rejects an incomplete AI alternative and leaves the existing meal unchanged', async () => {
@@ -1981,5 +2152,351 @@ describe('POST /recommendations y /plan-week', () => {
     expect(
       db.prepare('SELECT COUNT(*) AS count FROM weekly_calendars WHERE user_id = ?').get(alice.id)
     ).toEqual({ count: 0 });
+  });
+
+  describe('POST /improve-recipe', () => {
+    it('enforces a byte ceiling without invoking the provider', async () => {
+      await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+      const requests = stubRecipeProvider();
+      const response = await call(alice, 'POST', '/improve-recipe', {
+        recipe: { description: 'x'.repeat(MAX_RECIPE_CONTENT_REQUEST_BYTES + 1) },
+        scopes: ['details']
+      });
+
+      expect(response.status).toBe(413);
+      expect(await json(response)).toMatchObject({
+        success: false,
+        code: 'RECIPE_CONTENT_BODY_TOO_LARGE'
+      });
+      expect(requests).toHaveLength(0);
+    });
+
+    it('accepts long recipe input and validates equally long canonical AI output', async () => {
+      await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+      const longText = 'x'.repeat(2_501);
+      const longRecipe = {
+        ...recetaGenerada,
+        name: longText,
+        description: longText,
+        cuisine: longText,
+        ingredients: [
+          {
+            ...recetaGenerada.ingredients[0],
+            name: longText,
+            preparation: longText,
+            substitutes: [longText],
+            notes: longText
+          }
+        ],
+        utensils: [longText],
+        guidance: {
+          appliances: [longText],
+          parallelTasks: [longText],
+          tipsAndVariations: [longText],
+          batchCookingWarning: longText
+        },
+        instructionsByLevel: Object.fromEntries(
+          Object.entries(recetaGenerada.instructionsByLevel).map(([level, steps]) => [
+            level,
+            steps.map((step) => ({
+              ...step,
+              instruction: longText,
+              tips: longText,
+              warning: longText
+            }))
+          ])
+        ),
+        storage: {
+          method: longText,
+          duration: longText,
+          reheatingInstructions: longText,
+          container: longText,
+          freezingPossible: true,
+          freezingDuration: longText
+        },
+        tags: [longText]
+      };
+      const requests = stubRecipeProvider(
+        () =>
+          new Response(
+            JSON.stringify({ choices: [{ message: { content: JSON.stringify(longRecipe) } }] }),
+            { status: 200 }
+          )
+      );
+
+      const response = await call(alice, 'POST', '/improve-recipe', {
+        recipe: longRecipe,
+        scopes: ['details']
+      });
+      const result = await json(response);
+      const providerBody = JSON.parse(requests[0].body);
+
+      expect(response.status).toBe(200);
+      expect(providerBody.response_format).toEqual(
+        (await import('../schemas/ai-generated-output.schema.js')).RECIPE_RESPONSE_FORMAT
+      );
+      expect(providerBody.messages[1].content).toContain(longText);
+      expect(result.data.proposal).toMatchObject({
+        name: longText,
+        description: longText,
+        ingredients: [{ name: longText, preparation: longText }],
+        instructionsByLevel: { basic: [{ instruction: longText, tips: longText }] },
+        guidance: { batchCookingWarning: longText },
+        storage: { reheatingInstructions: longText },
+        tags: [longText]
+      });
+      expect(recipeCount()).toBe(0);
+    });
+
+    it('usa contrato estricto y devuelve patch solo con ámbitos pedidos', async () => {
+      await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+      const proposal = {
+        ...recetaGenerada,
+        totalTime: 42,
+        prepTime: 12,
+        cookTime: 30,
+        restTime: 0,
+        utensils: ['Olla', 'Cuchara'],
+        guidance: {
+          ...recetaGenerada.guidance,
+          tipsAndVariations: ['Remueve con suavidad']
+        },
+        name: 'Nombre revisado',
+        ingredients: [
+          {
+            ...recetaGenerada.ingredients[0],
+            name: 'ingrediente protegido'
+          }
+        ]
+      };
+      const requests = stubRecipeProvider(
+        () =>
+          new Response(
+            JSON.stringify({ choices: [{ message: { content: JSON.stringify(proposal) } }] }),
+            { status: 200 }
+          )
+      );
+
+      const response = await call(alice, 'POST', '/improve-recipe', {
+        recipe: recetaGenerada,
+        scopes: ['timing', 'guidance']
+      });
+      const result = await json(response);
+      const providerBody = JSON.parse(requests[0].body);
+
+      expect(response.status).toBe(200);
+      expect(providerBody.response_format).toEqual(
+        (await import('../schemas/ai-generated-output.schema.js')).RECIPE_RESPONSE_FORMAT
+      );
+      expect(result).toMatchObject({
+        success: true,
+        data: {
+          proposal,
+          scopes: ['timing', 'guidance'],
+          patch: {
+            totalTime: 42,
+            prepTime: 12,
+            cookTime: 30,
+            restTime: 0,
+            utensils: ['Olla', 'Cuchara'],
+            guidance: proposal.guidance
+          }
+        }
+      });
+      expect(Object.keys(result.data.patch).sort()).toEqual(
+        ['cookTime', 'guidance', 'prepTime', 'restTime', 'totalTime', 'utensils'].sort()
+      );
+      expect(recipeCount()).toBe(0);
+    });
+
+    it('convierte preparación legacy solo cuando se pide y devuelve sus tres variantes', async () => {
+      await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+      const { instructionsByLevel: _levels, ...canonical } = recetaGenerada;
+      const legacyRecipe = {
+        ...canonical,
+        steps: [
+          {
+            stepNumber: 1,
+            instruction: 'Cocer las lentejas.',
+            duration: 20,
+            temperature: null,
+            timerRequired: true,
+            timerDuration: 20,
+            tips: null,
+            warning: null
+          }
+        ]
+      };
+      const requests = stubRecipeProvider();
+
+      const response = await call(alice, 'POST', '/improve-recipe', {
+        recipe: legacyRecipe,
+        scopes: ['preparation']
+      });
+      const result = await json(response);
+      const prompt = JSON.parse(requests[0].body).messages[1].content as string;
+
+      expect(response.status).toBe(200);
+      expect(prompt).toContain('legacy');
+      expect(result.data.patch.instructionsByLevel).toEqual(recetaGenerada.instructionsByLevel);
+      expect(result.data.patch).not.toHaveProperty('steps');
+      expect(recipeCount()).toBe(0);
+    });
+
+    it('rechaza respuesta no canónica sin proponer ni guardar y protege ámbitos no seleccionados', async () => {
+      await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+      const invalidProposal = { ...recetaGenerada, unexpected: 'forged' };
+      stubRecipeProvider(
+        () =>
+          new Response(
+            JSON.stringify({
+              choices: [{ message: { content: JSON.stringify(invalidProposal) } }]
+            }),
+            { status: 200 }
+          )
+      );
+
+      const invalid = await call(alice, 'POST', '/improve-recipe', {
+        recipe: recetaGenerada,
+        scopes: ['details']
+      });
+      expect(invalid.status).toBe(502);
+      expect((await json(invalid)).data).toBeUndefined();
+      expect(recipeCount()).toBe(0);
+
+      const adversarial = {
+        ...recetaGenerada,
+        name: 'Nombre propuesto',
+        ingredients: [{ ...recetaGenerada.ingredients[0], name: 'Cambio fuera de ámbito' }],
+        storage: { ...recetaGenerada.storage, duration: 'Otro plazo' }
+      };
+      stubRecipeProvider(
+        () =>
+          new Response(
+            JSON.stringify({ choices: [{ message: { content: JSON.stringify(adversarial) } }] }),
+            { status: 200 }
+          )
+      );
+      const protectedResponse = await call(alice, 'POST', '/improve-recipe', {
+        recipe: recetaGenerada,
+        scopes: ['details']
+      });
+      const protectedResult = await json(protectedResponse);
+
+      expect(protectedResponse.status).toBe(200);
+      expect(protectedResult.data.patch).toEqual({
+        name: adversarial.name,
+        description: adversarial.description,
+        difficulty: adversarial.difficulty,
+        cuisine: adversarial.cuisine,
+        tags: adversarial.tags
+      });
+      expect(protectedResult.data.patch).not.toHaveProperty('ingredients');
+      expect(protectedResult.data.patch).not.toHaveProperty('storage');
+      expect(recipeCount()).toBe(0);
+    });
+
+    it('bloquea ingredientes incompatibles o restricciones no verificables antes de devolver propuesta', async () => {
+      await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+      db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(
+        JSON.stringify({ taste: { allergies: ['cacahuete'], notes: 'dato privado de prueba' } }),
+        alice.id
+      );
+      const conflicting = {
+        ...recetaGenerada,
+        ingredients: [
+          {
+            ...recetaGenerada.ingredients[0],
+            name: 'cacahuete'
+          }
+        ]
+      };
+      const requests = stubRecipeProvider(
+        () =>
+          new Response(
+            JSON.stringify({ choices: [{ message: { content: JSON.stringify(conflicting) } }] }),
+            { status: 200 }
+          )
+      );
+
+      const response = await call(alice, 'POST', '/improve-recipe', {
+        recipe: recetaGenerada,
+        scopes: ['ingredients']
+      });
+      const providerBody = JSON.parse(requests[0].body);
+      const prompt = providerBody.messages[1].content as string;
+
+      expect(response.status).toBe(422);
+      expect((await json(response)).code).toBe('PARTICIPANT_RESTRICTION_CONFLICT');
+      expect(prompt).toContain('cacahuete');
+      expect(JSON.stringify(providerBody)).not.toContain('dato privado de prueba');
+      expect(JSON.stringify(providerBody)).not.toContain(alice.id);
+      expect(recipeCount()).toBe(0);
+    });
+
+    it('rechaza una alergia no verificable y mapea timeout/error de proveedor sin persistir', async () => {
+      await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+      db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(
+        JSON.stringify({ taste: { allergies: ['fructosa'] } }),
+        alice.id
+      );
+      const noCalls = stubRecipeProvider();
+      const unsupported = await call(alice, 'POST', '/improve-recipe', {
+        recipe: recetaGenerada,
+        scopes: ['ingredients']
+      });
+      expect(unsupported.status).toBe(422);
+      expect((await json(unsupported)).code).toBe('UNSUPPORTED_STRICT_RESTRICTION');
+      expect(noCalls).toHaveLength(0);
+
+      db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run('{}', alice.id);
+      vi.stubGlobal('fetch', (async () => {
+        throw new Error('request timeout');
+      }) as typeof fetch);
+      const timeout = await call(alice, 'POST', '/improve-recipe', {
+        recipe: recetaGenerada,
+        scopes: ['timing']
+      });
+      expect(timeout.status).toBe(504);
+      expect((await json(timeout)).data).toBeUndefined();
+      expect(recipeCount()).toBe(0);
+
+      vi.stubGlobal(
+        'fetch',
+        (async () => new Response('unavailable', { status: 503 })) as typeof fetch
+      );
+      const providerError = await call(alice, 'POST', '/improve-recipe', {
+        recipe: recetaGenerada,
+        scopes: ['timing']
+      });
+      expect(providerError.status).toBe(502);
+      expect((await json(providerError)).data).toBeUndefined();
+      expect(recipeCount()).toBe(0);
+    });
+
+    it('valida request estricto y exige autenticación', async () => {
+      const noAuth = await app.request('/api/ai/improve-recipe', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ recipe: recetaGenerada, scopes: ['details'] })
+      });
+      expect(noAuth.status).toBe(401);
+
+      await crearConfig(alice, 'Proveedor sin retries', 'http://ai.test/v1', 0);
+      const requests = stubRecipeProvider();
+      const invalidRequests = await Promise.all([
+        call(alice, 'POST', '/improve-recipe', {
+          recipe: recetaGenerada,
+          scopes: ['media'],
+          householdName: 'Privado'
+        }),
+        call(alice, 'POST', '/improve-recipe', {
+          recipe: { ...recetaGenerada, image: 'https://media.example/image.jpg' },
+          scopes: ['details']
+        })
+      ]);
+      expect(invalidRequests.map((response) => response.status)).toEqual([400, 400]);
+      expect(requests).toHaveLength(0);
+    });
   });
 });

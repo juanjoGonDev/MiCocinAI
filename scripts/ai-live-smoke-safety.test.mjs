@@ -9,9 +9,15 @@ import {
   prepareAiLiveSmokeSession,
   createAiLiveProxy,
   isSuccessfulAiLiveSmokeResult,
+  isSuccessfulAiLiveAssistantSmokeResult,
+  isSuccessfulAiLiveRecipeSmokeResult,
+  isSuccessfulAiLiveHouseholdMealSmokeResult,
   isolatedProcessEnvironments,
   selectAiLiveModel,
   validateAiLiveSmokeOptIn,
+  validateAiLiveRecipeSmokeRequest,
+  validateAiLiveAssistantSmokeRequest,
+  validateAiLiveHouseholdMealSmokeRequest,
   validateAiLiveSmokeRunner
 } from './ai-live-smoke-safety.mjs';
 import { AI_LIVE_SMOKE_DEADLINES } from './ai-live-smoke-contract.mjs';
@@ -20,6 +26,355 @@ test('requires explicit opt-in and rejects CI before any live setup', () => {
   assert.throws(() => validateAiLiveSmokeOptIn({}), /explicit opt-in/i);
   assert.throws(() => validateAiLiveSmokeOptIn({ HOGARIA_AI_REAL_SMOKE: '1', CI: 'true' }), /CI/i);
   assert.doesNotThrow(() => validateAiLiveSmokeOptIn({ HOGARIA_AI_REAL_SMOKE: '1', CI: '' }));
+});
+
+test('recipe-only mode permits one isolated generation and rejects other smoke inputs', () => {
+  const args = ['--config=playwright.ai-real-smoke.config.ts', 'tests/e2e/ai-real-smoke.spec.ts'];
+  const env = {
+    HOGARIA_AI_REAL_SMOKE: '1',
+    HOGARIA_AI_REAL_SMOKE_RUNNER: '1',
+    HOGARIA_AI_REAL_SMOKE_RECIPE_ONLY: '1',
+    HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN: 'synthetic-local-proxy-token',
+    HOGARIA_AI_REAL_SMOKE_PROXY_URL: 'http://127.0.0.1:41000/v1',
+    HOGARIA_AI_REAL_SMOKE_MODEL: 'gpt-5',
+    CI: ''
+  };
+
+  assert.equal(validateAiLiveRecipeSmokeRequest(env), true);
+  assert.equal(validateAiLiveSmokeRunner(env, args), true);
+  assert.throws(
+    () => validateAiLiveRecipeSmokeRequest({ ...env, HOGARIA_AI_REAL_SMOKE_RECIPE_ONLY: 'true' }),
+    /exact opt-in/i
+  );
+  assert.throws(
+    () => validateAiLiveRecipeSmokeRequest({ ...env, HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1' }),
+    /cannot combine/i
+  );
+  assert.throws(
+    () =>
+      validateAiLiveRecipeSmokeRequest({ ...env, HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY: '1' }),
+    /cannot combine/i
+  );
+  assert.throws(
+    () =>
+      validateAiLiveSmokeRunner(env, [
+        '--config=playwright.config.ts',
+        'tests/e2e/ai-real-smoke.spec.ts'
+      ]),
+    /only accepts/i
+  );
+});
+
+test('recipe-only success requires one unbounded strict recipe schema and one complete JSON response', () => {
+  const runnerExit = { code: 0, timedOut: false, cancelled: false, runnerCleaned: true };
+  const call = {
+    status: 200,
+    schemaName: 'generated_recipe',
+    requestContract: { strictJsonSchema: true, recipeTextUnbounded: true },
+    responseFormat: {
+      hasChoices: true,
+      messageContentType: 'text',
+      isJsonObject: true,
+      finishReason: 'stop'
+    }
+  };
+  const proxyMetrics = { requestAttempts: 1, rejectedRequests: 0, failed: false };
+  const input = { runnerExit, cleanupFailed: false, calls: [call], proxyMetrics };
+
+  assert.equal(isSuccessfulAiLiveRecipeSmokeResult(input), true);
+  assert.equal(isSuccessfulAiLiveRecipeSmokeResult({ ...input, calls: [] }), false);
+  assert.equal(isSuccessfulAiLiveRecipeSmokeResult({ ...input, calls: [call, call] }), false);
+  assert.equal(
+    isSuccessfulAiLiveRecipeSmokeResult({
+      ...input,
+      calls: [{ ...call, requestContract: { strictJsonSchema: true, recipeTextUnbounded: false } }]
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveRecipeSmokeResult({
+      ...input,
+      calls: [{ ...call, responseFormat: { ...call.responseFormat, finishReason: 'length' } }]
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveRecipeSmokeResult({
+      ...input,
+      proxyMetrics: { ...proxyMetrics, requestAttempts: 2 }
+    }),
+    false
+  );
+});
+
+test('assistant-only smoke requires its isolated mode and rejects every competing scenario', () => {
+  const args = ['--config=playwright.ai-real-smoke.config.ts', 'tests/e2e/ai-real-smoke.spec.ts'];
+  const env = {
+    HOGARIA_AI_REAL_SMOKE: '1',
+    HOGARIA_AI_REAL_SMOKE_RUNNER: '1',
+    HOGARIA_AI_REAL_SMOKE_ASSISTANT_ONLY: '1',
+    HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN: 'synthetic-local-proxy-token',
+    HOGARIA_AI_REAL_SMOKE_PROXY_URL: 'http://127.0.0.1:41000/v1',
+    HOGARIA_AI_REAL_SMOKE_MODEL: 'gpt-5',
+    CI: ''
+  };
+
+  assert.equal(validateAiLiveAssistantSmokeRequest(env), true);
+  assert.equal(validateAiLiveSmokeRunner(env, args), true);
+  assert.equal(validateAiLiveAssistantSmokeRequest({}), false);
+  assert.throws(
+    () =>
+      validateAiLiveAssistantSmokeRequest({
+        ...env,
+        HOGARIA_AI_REAL_SMOKE_ASSISTANT_ONLY: 'true'
+      }),
+    /exact opt-in/i
+  );
+  for (const conflictingInput of [
+    { HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1' },
+    { HOGARIA_AI_REAL_SMOKE_RECIPE_ONLY: '1' },
+    { HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY: '1' },
+    { HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH: 'C:/private/ticket.pdf' }
+  ]) {
+    assert.throws(
+      () => validateAiLiveAssistantSmokeRequest({ ...env, ...conflictingInput }),
+      /cannot combine/i
+    );
+  }
+  assert.throws(
+    () =>
+      validateAiLiveSmokeRunner(env, [
+        '--config=playwright.config.ts',
+        'tests/e2e/ai-real-smoke.spec.ts'
+      ]),
+    /only accepts/i
+  );
+});
+
+test('assistant-only success requires the complete strict action-plan matrix and cleanup', () => {
+  const runnerExit = { code: 0, timedOut: false, cancelled: false, runnerCleaned: true };
+  const call = {
+    status: 200,
+    schemaName: 'ai_action_plan',
+    requestContract: { strictJsonSchema: true },
+    responseFormat: {
+      hasChoices: true,
+      messageContentType: 'text',
+      isJsonObject: true,
+      finishReason: 'stop'
+    }
+  };
+  const proxyMetrics = { requestAttempts: 10, rejectedRequests: 0, failed: false };
+  const calls = Array.from({ length: 10 }, () => call);
+  const input = { runnerExit, cleanupFailed: false, calls, proxyMetrics };
+
+  assert.equal(isSuccessfulAiLiveAssistantSmokeResult(input), true);
+  assert.equal(
+    isSuccessfulAiLiveAssistantSmokeResult({ ...input, calls: calls.slice(0, 9) }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveAssistantSmokeResult({ ...input, calls: [...calls, call] }),
+    false
+  );
+  for (const invalidCall of [
+    { ...call, status: 500 },
+    { ...call, schemaName: 'generated_recipe' },
+    { ...call, requestContract: { strictJsonSchema: false } },
+    { ...call, responseFormat: { ...call.responseFormat, isJsonObject: false } },
+    { ...call, responseFormat: { ...call.responseFormat, finishReason: 'length' } }
+  ]) {
+    assert.equal(
+      isSuccessfulAiLiveAssistantSmokeResult({ ...input, calls: [invalidCall, ...calls.slice(1)] }),
+      false
+    );
+  }
+  assert.equal(isSuccessfulAiLiveAssistantSmokeResult({ ...input, cleanupFailed: true }), false);
+  assert.equal(
+    isSuccessfulAiLiveAssistantSmokeResult({
+      ...input,
+      proxyMetrics: { ...proxyMetrics, requestAttempts: 9 }
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveAssistantSmokeResult({
+      ...input,
+      proxyMetrics: { ...proxyMetrics, rejectedRequests: 1, failed: true }
+    }),
+    false
+  );
+});
+
+test('household meal mode is opt-in, rejects all receipt inputs and uses only its exact isolated test', () => {
+  const args = [
+    '--config=playwright.ai-household-meal-real-smoke.config.ts',
+    'tests/e2e/household-meal-planning-live-smoke.spec.ts'
+  ];
+  const env = {
+    HOGARIA_AI_REAL_SMOKE: '1',
+    HOGARIA_AI_REAL_SMOKE_RUNNER: '1',
+    HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY: '1',
+    HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN: 'synthetic-local-proxy-token',
+    HOGARIA_AI_REAL_SMOKE_PROXY_URL: 'http://127.0.0.1:41000/v1',
+    HOGARIA_AI_REAL_SMOKE_MODEL: 'gpt-5',
+    CI: ''
+  };
+
+  assert.equal(validateAiLiveHouseholdMealSmokeRequest(env), true);
+  assert.equal(validateAiLiveSmokeRunner(env, args), true);
+  assert.throws(
+    () =>
+      validateAiLiveSmokeRunner(env, [
+        '--config=playwright.ai-real-smoke.config.ts',
+        'tests/e2e/ai-real-smoke.spec.ts'
+      ]),
+    /only accepts/i
+  );
+  assert.throws(
+    () =>
+      validateAiLiveHouseholdMealSmokeRequest({
+        ...env,
+        HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH: 'C:/private/ticket.pdf'
+      }),
+    /cannot include receipt/i
+  );
+  assert.throws(
+    () =>
+      validateAiLiveHouseholdMealSmokeRequest({ ...env, HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1' }),
+    /cannot include receipt/i
+  );
+  assert.throws(
+    () =>
+      validateAiLiveHouseholdMealSmokeRequest({
+        ...env,
+        HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/private/tickets'
+      }),
+    /cannot include receipt/i
+  );
+  assert.throws(
+    () =>
+      validateAiLiveHouseholdMealSmokeRequest({
+        ...env,
+        HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY: 'true'
+      }),
+    /exact opt-in/i
+  );
+});
+
+test('household meal smoke succeeds only for one validated strict-schema provider completion', () => {
+  const runnerExit = { code: 0, timedOut: false, cancelled: false, runnerCleaned: true };
+  const call = {
+    status: 200,
+    schemaName: 'weekly_meal_proposal',
+    requestContract: {
+      strictJsonSchema: true,
+      contextJsonAttachmentCount: 1,
+      contextJsonAttachmentValid: true,
+      recipeCatalogJsonAttachmentCount: 1,
+      recipeCatalogJsonAttachmentValid: true,
+      recipeCatalogAliasesValid: true,
+      mealRecipeAliasSchemaValid: true,
+      memberProfilesValid: true,
+      planningInputsValid: true,
+      previousPlanValid: true,
+      nonEmptyEventsSchemaValid: true,
+      forbiddenIdentityTermsAbsent: true,
+      forbiddenPromptTermsAbsent: true
+    },
+    responseFormat: {
+      hasChoices: true,
+      messageContentType: 'text',
+      isJsonObject: true,
+      recipeReferencesValid: true,
+      finishReason: 'stop'
+    }
+  };
+  const proxyMetrics = { requestAttempts: 1, rejectedRequests: 0, failed: false };
+  const input = { runnerExit, cleanupFailed: false, calls: [call], proxyMetrics };
+
+  assert.equal(isSuccessfulAiLiveHouseholdMealSmokeResult(input), true);
+  assert.equal(isSuccessfulAiLiveHouseholdMealSmokeResult({ ...input, calls: [] }), false);
+  assert.equal(
+    isSuccessfulAiLiveHouseholdMealSmokeResult({ ...input, calls: [call, call] }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveHouseholdMealSmokeResult({
+      ...input,
+      calls: [{ ...call, schemaName: 'receipt' }]
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveHouseholdMealSmokeResult({
+      ...input,
+      calls: [
+        {
+          ...call,
+          requestContract: { ...call.requestContract, nonEmptyEventsSchemaValid: false }
+        }
+      ]
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveHouseholdMealSmokeResult({
+      ...input,
+      proxyMetrics: { ...proxyMetrics, requestAttempts: 2, rejectedRequests: 1, failed: true }
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveHouseholdMealSmokeResult({ ...input, cleanupFailed: true }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveHouseholdMealSmokeResult({
+      ...input,
+      calls: [
+        {
+          ...call,
+          requestContract: { strictJsonSchema: true, contextJsonAttachmentCount: 1 }
+        }
+      ]
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveHouseholdMealSmokeResult({
+      ...input,
+      calls: [{ ...call, responseFormat: { ...call.responseFormat, isJsonObject: false } }]
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveHouseholdMealSmokeResult({
+      ...input,
+      calls: [
+        {
+          ...call,
+          requestContract: {
+            ...call.requestContract,
+            recipeCatalogJsonAttachmentCount: 0
+          }
+        }
+      ]
+    }),
+    false
+  );
+  assert.equal(
+    isSuccessfulAiLiveHouseholdMealSmokeResult({
+      ...input,
+      calls: [
+        {
+          ...call,
+          responseFormat: { ...call.responseFormat, recipeReferencesValid: false }
+        }
+      ]
+    }),
+    false
+  );
 });
 
 test('dedicated runner accepts only the opt-in isolated config/spec and can route its bearer server-only', () => {
@@ -628,6 +983,116 @@ test('builds a minimal live-runner environment without inherited provider creden
   );
 });
 
+test('meal-only runner environment drops receipt inputs and keeps mode only in Playwright', () => {
+  const env = createAiLiveSmokeRunnerEnvironment(
+    {
+      PATH: 'C:/Windows/System32',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH: 'C:/private/ticket.pdf',
+      HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'unsubmitted-only',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/private/tickets',
+      HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '2'
+    },
+    {
+      proxyToken: 'synthetic-local-proxy-token',
+      proxyUrl: 'http://127.0.0.1:41000/v1',
+      model: 'gpt-5',
+      householdMealOnly: true
+    }
+  );
+  const isolated = isolatedProcessEnvironments(env);
+
+  assert.equal(env.HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY, '1');
+  for (const key of [
+    'HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH',
+    'HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY',
+    'HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION',
+    'HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY',
+    'HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL'
+  ]) {
+    assert.equal(Object.hasOwn(env, key), false);
+    assert.equal(Object.hasOwn(isolated.server, key), false);
+    assert.equal(Object.hasOwn(isolated.browser, key), false);
+    assert.equal(Object.hasOwn(isolated.playwright, key), false);
+  }
+  assert.equal(Object.hasOwn(isolated.server, 'HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY'), false);
+  assert.equal(Object.hasOwn(isolated.browser, 'HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY'), false);
+  assert.equal(isolated.playwright.HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY, '1');
+});
+
+test('recipe-only runner environment strips receipt inputs and exposes mode only to Playwright', () => {
+  const env = createAiLiveSmokeRunnerEnvironment(
+    {
+      PATH: 'C:/Windows/System32',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH: 'C:/private/ticket.pdf',
+      HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'unsubmitted-only',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/private/tickets',
+      HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '2'
+    },
+    {
+      proxyToken: 'synthetic-local-proxy-token',
+      proxyUrl: 'http://127.0.0.1:41000/v1',
+      model: 'gpt-5',
+      recipeOnly: true
+    }
+  );
+  const isolated = isolatedProcessEnvironments(env);
+
+  assert.equal(env.HOGARIA_AI_REAL_SMOKE_RECIPE_ONLY, '1');
+  for (const key of [
+    'HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH',
+    'HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY',
+    'HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION',
+    'HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY',
+    'HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL'
+  ]) {
+    assert.equal(Object.hasOwn(env, key), false);
+    assert.equal(Object.hasOwn(isolated.server, key), false);
+    assert.equal(Object.hasOwn(isolated.browser, key), false);
+    assert.equal(Object.hasOwn(isolated.playwright, key), false);
+  }
+  assert.equal(Object.hasOwn(isolated.server, 'HOGARIA_AI_REAL_SMOKE_RECIPE_ONLY'), false);
+  assert.equal(Object.hasOwn(isolated.browser, 'HOGARIA_AI_REAL_SMOKE_RECIPE_ONLY'), false);
+  assert.equal(isolated.playwright.HOGARIA_AI_REAL_SMOKE_RECIPE_ONLY, '1');
+});
+
+test('assistant-only runner environment keeps its mode in Playwright and strips receipt inputs', () => {
+  const env = createAiLiveSmokeRunnerEnvironment(
+    {
+      PATH: 'C:/Windows/System32',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH: 'C:/private/ticket.pdf',
+      HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY: '1',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION: 'unsubmitted-only',
+      HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY: 'C:/private/tickets',
+      HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL: '2'
+    },
+    {
+      proxyToken: 'synthetic-local-proxy-token',
+      proxyUrl: 'http://127.0.0.1:41000/v1',
+      model: 'gpt-5',
+      assistantOnly: true
+    }
+  );
+  assert.equal(env.HOGARIA_AI_REAL_SMOKE_ASSISTANT_ONLY, '1');
+  for (const key of [
+    'HOGARIA_AI_REAL_SMOKE_RECEIPT_PATH',
+    'HOGARIA_AI_REAL_SMOKE_RECEIPTS_ONLY',
+    'HOGARIA_AI_REAL_SMOKE_RECEIPT_SELECTION',
+    'HOGARIA_AI_REAL_SMOKE_RECEIPT_DIRECTORY',
+    'HOGARIA_AI_REAL_SMOKE_PREFERRED_JPEG_ORDINAL'
+  ]) {
+    assert.equal(env[key], undefined);
+  }
+
+  const processEnvs = isolatedProcessEnvironments(env);
+  assert.equal(processEnvs.server.HOGARIA_AI_REAL_SMOKE_ASSISTANT_ONLY, undefined);
+  assert.equal(processEnvs.browser.HOGARIA_AI_REAL_SMOKE_ASSISTANT_ONLY, undefined);
+  assert.equal(processEnvs.playwright.HOGARIA_AI_REAL_SMOKE_ASSISTANT_ONLY, '1');
+  assert.equal(processEnvs.server.HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN, 'synthetic-local-proxy-token');
+  assert.equal(processEnvs.playwright.HOGARIA_AI_REAL_SMOKE_PROXY_TOKEN, undefined);
+});
+
 test('accepts only a fully successful run with nine or ten live completions', () => {
   const calls = (count) => Array.from({ length: count }, () => ({ status: 200 }));
   const runnerExit = { code: 0, timedOut: false, cancelled: false, runnerCleaned: true };
@@ -945,6 +1410,787 @@ const SYNTHETIC_STRICT_RESPONSE_FORMAT = {
     }
   }
 };
+
+const SYNTHETIC_MEAL_RESPONSE_FORMAT = {
+  ...SYNTHETIC_STRICT_RESPONSE_FORMAT,
+  json_schema: {
+    ...SYNTHETIC_STRICT_RESPONSE_FORMAT.json_schema,
+    name: 'weekly_meal_proposal',
+    schema: {
+      type: 'object',
+      properties: {
+        newRecipes: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              alias: { type: 'string' },
+              recipe: {
+                type: 'object',
+                properties: { name: { type: 'string' } },
+                required: ['name'],
+                additionalProperties: false
+              }
+            },
+            required: ['alias', 'recipe'],
+            additionalProperties: false
+          }
+        },
+        events: {
+          type: 'array',
+          minItems: 1,
+          items: {
+            type: 'object',
+            properties: {
+              status: { type: 'string' },
+              recipeAlias: { anyOf: [{ type: 'string' }, { type: 'null' }] }
+            },
+            required: ['status', 'recipeAlias'],
+            additionalProperties: false
+          }
+        }
+      },
+      required: ['newRecipes', 'events'],
+      additionalProperties: false
+    }
+  }
+};
+
+function syntheticMealRecipeCatalog(overrides = {}) {
+  return {
+    version: 1,
+    recipes: [
+      {
+        alias: 'R1',
+        selectable: true,
+        recipe: {
+          name: 'SMOKE_RECIPE_TEST',
+          description: 'Receta sintética de prueba.',
+          difficulty: 'easy',
+          cuisine: 'synthetic',
+          mealType: ['lunch'],
+          totalTime: 30,
+          prepTime: 10,
+          cookTime: 20,
+          restTime: null,
+          baseServings: 2,
+          calories: 450,
+          ingredients: [
+            {
+              name: 'SMOKE_PANTRY_RICE',
+              quantity: 1,
+              unit: 'kg',
+              preparation: null,
+              isOptional: false,
+              substitutes: [],
+              notes: null
+            }
+          ],
+          utensils: ['SMOKE_UTENSIL_POT'],
+          guidance: null,
+          steps: null,
+          instructionsByLevel: {
+            basic: [
+              {
+                stepNumber: 1,
+                instruction: 'Paso sencillo.',
+                duration: null,
+                tips: null,
+                warning: null,
+                temperature: null,
+                timerRequired: false,
+                timerDuration: null,
+                illustration: null
+              }
+            ],
+            intermediate: [
+              {
+                stepNumber: 1,
+                instruction: 'Paso medio.',
+                duration: null,
+                tips: null,
+                warning: null,
+                temperature: null,
+                timerRequired: false,
+                timerDuration: null,
+                illustration: null
+              }
+            ],
+            expert: [
+              {
+                stepNumber: 1,
+                instruction: 'Paso avanzado.',
+                duration: null,
+                tips: null,
+                warning: null,
+                temperature: null,
+                timerRequired: false,
+                timerDuration: null,
+                illustration: null
+              }
+            ]
+          },
+          nutrition: null,
+          storage: null,
+          tags: []
+        }
+      }
+    ],
+    ...overrides
+  };
+}
+
+function syntheticMealContext(overrides = {}) {
+  const dates = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(Date.UTC(2026, 9, 19 + index));
+    return date.toISOString().slice(0, 10);
+  });
+  return {
+    version: 2,
+    targetWeek: { startDate: dates[0], endDate: dates.at(-1) },
+    household: {
+      objective: { goals: ['balanced'], notes: 'Comidas equilibradas.' },
+      schedule: { mealTypes: { lunch: true }, mealTimes: { lunch: '13:00' } }
+    },
+    participants: [
+      {
+        alias: 'P1',
+        preferences: { strictAllergies: [], likes: ['tofu'], dislikes: ['pollo'] },
+        effectiveObjective: {
+          source: 'household',
+          goals: ['balanced'],
+          notes: 'Comidas equilibradas.'
+        },
+        effectiveSchedule: {
+          source: 'household',
+          mealTypes: { lunch: true },
+          mealTimes: { lunch: '13:00' }
+        }
+      },
+      {
+        alias: 'P2',
+        preferences: { strictAllergies: [], likes: ['pollo'], dislikes: ['tofu'] },
+        effectiveObjective: {
+          source: 'household',
+          goals: ['balanced'],
+          notes: 'Comidas equilibradas.'
+        },
+        effectiveSchedule: {
+          source: 'household',
+          mealTypes: { lunch: true },
+          mealTimes: { lunch: '13:00' }
+        }
+      }
+    ],
+    requiredTurns: dates.map((date) => ({
+      date,
+      mealType: 'lunch',
+      time: '13:00',
+      eligibleParticipants: ['P1', 'P2']
+    })),
+    pantry: [{ name: 'SMOKE_PANTRY_RICE', quantity: 2, unit: 'kg', expirationDate: null }],
+    utensils: [{ name: 'SMOKE_UTENSIL_POT', category: 'cooking' }],
+    previousConfirmedPlan: {
+      weekStart: '2026-10-12',
+      weekEnd: '2026-10-18',
+      events: [
+        {
+          date: '2026-10-12',
+          mealType: 'lunch',
+          time: '13:00',
+          servings: 2,
+          participants: ['P1', 'P2'],
+          recipeName: 'SMOKE_RECIPE_TEST'
+        }
+      ]
+    },
+    ...overrides
+  };
+}
+
+function mealContextAttachment(context, options = {}) {
+  const serialized = typeof context === 'string' ? context : JSON.stringify(context);
+  const mime = options.mime ?? 'application/json';
+  const filename = options.filename ?? 'meal-planning-context.json';
+  return {
+    type: 'file',
+    file: {
+      filename,
+      file_data: `data:${mime};base64,${Buffer.from(serialized, 'utf8').toString('base64')}`
+    }
+  };
+}
+
+function mealRecipeCatalogAttachment(catalog, options = {}) {
+  const serialized = typeof catalog === 'string' ? catalog : JSON.stringify(catalog);
+  const mime = options.mime ?? 'application/json';
+  const filename = options.filename ?? 'household-recipes-catalog.json';
+  return {
+    type: 'file',
+    file: {
+      filename,
+      file_data: `data:${mime};base64,${Buffer.from(serialized, 'utf8').toString('base64')}`
+    }
+  };
+}
+
+function mealPayload({
+  context = syntheticMealContext(),
+  catalog = syntheticMealRecipeCatalog(),
+  prompt = 'Read meal-planning-context.json and household-recipes-catalog.json; create the proposal.',
+  responseFormat = SYNTHETIC_MEAL_RESPONSE_FORMAT,
+  includeAttachment = true,
+  attachmentOptions,
+  includeCatalogAttachment = true,
+  catalogAttachmentOptions,
+  extraAttachment
+} = {}) {
+  return {
+    model: 'gpt-5',
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          ...(includeAttachment ? [mealContextAttachment(context, attachmentOptions)] : []),
+          ...(includeCatalogAttachment
+            ? [mealRecipeCatalogAttachment(catalog, catalogAttachmentOptions)]
+            : []),
+          ...(extraAttachment ? [extraAttachment] : [])
+        ]
+      }
+    ],
+    response_format: responseFormat
+  };
+}
+
+test('recipe proxy admits one generated_recipe schema only when recipe text has no maxLength', async () => {
+  const forwarded = [];
+  const upstream = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    forwarded.push(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        choices: [{ message: { content: '{"name":"Synthetic recipe"}' }, finish_reason: 'stop' }]
+      })
+    );
+  });
+  const upstreamPort = await listen(upstream);
+  const recipeSchema = (maxLength) => ({
+    type: 'json_schema',
+    json_schema: {
+      name: 'generated_recipe',
+      strict: true,
+      schema: {
+        type: 'object',
+        properties: { name: { type: 'string', ...(maxLength ? { maxLength: 200 } : {}) } },
+        required: ['name'],
+        additionalProperties: false
+      }
+    }
+  });
+  const payload = (maxLength = false) => ({
+    model: 'gpt-5',
+    messages: [{ role: 'user', content: 'Unique synthetic recipe request.' }],
+    response_format: recipeSchema(maxLength)
+  });
+
+  const validProxy = await createAiLiveProxy({
+    token: 'synthetic-provider-token',
+    model: 'gpt-5',
+    targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+    maxCalls: 1,
+    expectedSchemaName: 'generated_recipe'
+  });
+  try {
+    const response = await postJson(
+      `${validProxy.baseUrl}/chat/completions`,
+      validProxy.clientToken,
+      payload()
+    );
+    assert.equal(response.status, 200);
+    assert.equal(forwarded.length, 1);
+    assert.equal(validProxy.metrics.calls[0].requestContract.recipeTextUnbounded, true);
+  } finally {
+    await validProxy.close();
+  }
+
+  const cappedProxy = await createAiLiveProxy({
+    token: 'synthetic-provider-token',
+    model: 'gpt-5',
+    targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+    maxCalls: 1,
+    expectedSchemaName: 'generated_recipe'
+  });
+  try {
+    const response = await postJson(
+      `${cappedProxy.baseUrl}/chat/completions`,
+      cappedProxy.clientToken,
+      payload(true)
+    );
+    assert.equal(response.status, 400);
+    assert.equal(forwarded.length, 1);
+    assert.equal(cappedProxy.metrics.rejectedRequests, 1);
+    assert.equal(cappedProxy.metrics.failed, true);
+  } finally {
+    await cappedProxy.close();
+    await new Promise((resolve, reject) =>
+      upstream.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test('meal proxy forwards one strict-schema completion with its verified JSON context and rejects duplicates', async () => {
+  const upstreamRequests = [];
+  const completionEvents = [];
+  const providerResponse = {
+    newRecipes: [],
+    events: [{ status: 'scheduled', recipeAlias: 'R1' }]
+  };
+  const upstream = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    upstreamRequests.push(Buffer.concat(chunks).toString('utf8'));
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        choices: [{ message: { content: JSON.stringify(providerResponse) }, finish_reason: 'stop' }]
+      })
+    );
+  });
+  const upstreamPort = await listen(upstream);
+  const proxy = await createAiLiveProxy({
+    token: 'synthetic-provider-token',
+    model: 'gpt-5',
+    targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+    maxCalls: 1,
+    expectedSchemaName: 'weekly_meal_proposal',
+    forbiddenPromptTerms: [
+      'HogarIA miembro QA uno',
+      'HogarIA miembro QA dos',
+      'HogarIA smoke hogar'
+    ],
+    onCompletion: (event) => completionEvents.push(event)
+  });
+  const context = syntheticMealContext();
+  const catalog = syntheticMealRecipeCatalog();
+  const contextData = JSON.stringify(context);
+  const catalogData = JSON.stringify(catalog);
+  const mealContextFile = mealContextAttachment(contextData);
+  const mealRecipeCatalogFile = mealRecipeCatalogAttachment(catalogData);
+  const promptSentinel =
+    'Read meal-planning-context.json and household-recipes-catalog.json; create the proposal.';
+  const request = () =>
+    postJson(`${proxy.baseUrl}/chat/completions`, proxy.clientToken, {
+      model: 'gpt-5',
+      messages: [
+        {
+          role: 'user',
+          content: [{ type: 'text', text: promptSentinel }, mealContextFile, mealRecipeCatalogFile]
+        }
+      ],
+      response_format: SYNTHETIC_MEAL_RESPONSE_FORMAT
+    });
+
+  try {
+    const first = await request();
+    assert.equal(first.status, 200);
+    assert.equal(upstreamRequests.length, 1);
+    assert.equal(proxy.metrics.calls.length, 1);
+    const sentPayload = JSON.parse(upstreamRequests[0]);
+    assert.deepEqual(sentPayload.response_format, SYNTHETIC_MEAL_RESPONSE_FORMAT);
+    const sentFiles = sentPayload.messages[0].content.filter((part) => part.type === 'file');
+    assert.deepEqual(
+      sentFiles.map((part) => part.file.filename),
+      ['meal-planning-context.json', 'household-recipes-catalog.json']
+    );
+    assert.equal(
+      Buffer.from(sentFiles[0].file.file_data.split(',')[1], 'base64').toString('utf8'),
+      contextData
+    );
+    assert.equal(
+      Buffer.from(sentFiles[1].file.file_data.split(',')[1], 'base64').toString('utf8'),
+      catalogData
+    );
+    assert.deepEqual(proxy.metrics.calls[0].requestContract, {
+      strictJsonSchema: true,
+      contextJsonAttachmentCount: 1,
+      contextJsonAttachmentValid: true,
+      recipeCatalogJsonAttachmentCount: 1,
+      recipeCatalogJsonAttachmentValid: true,
+      recipeCatalogAliasesValid: true,
+      mealRecipeAliasSchemaValid: true,
+      memberProfilesValid: true,
+      planningInputsValid: true,
+      previousPlanValid: true,
+      nonEmptyEventsSchemaValid: true,
+      forbiddenIdentityTermsAbsent: true,
+      forbiddenPromptTermsAbsent: true
+    });
+    assert.equal(proxy.metrics.calls[0].responseFormat.recipeReferencesValid, true);
+    assert.equal(proxy.metrics.calls[0].schemaName, 'weekly_meal_proposal');
+    assert.equal(JSON.stringify(proxy.metrics).includes(promptSentinel), false);
+    assert.equal(JSON.stringify(proxy.metrics).includes(contextData), false);
+    assert.equal(JSON.stringify(proxy.metrics).includes('SMOKE_PANTRY_RICE'), false);
+    assert.equal(JSON.stringify(proxy.metrics).includes('SMOKE_RECIPE_TEST'), false);
+    assert.equal(JSON.stringify(proxy.metrics).includes(JSON.stringify(providerResponse)), false);
+    assert.equal(
+      JSON.stringify(completionEvents).includes(JSON.stringify(providerResponse)),
+      false
+    );
+    assert.equal(JSON.stringify(completionEvents).includes(contextData), false);
+
+    assert.equal((await request()).status, 429);
+    assert.equal(upstreamRequests.length, 1);
+    assert.equal(proxy.metrics.calls.length, 1);
+    assert.deepEqual(
+      {
+        requestAttempts: proxy.metrics.requestAttempts,
+        rejectedRequests: proxy.metrics.rejectedRequests,
+        failed: proxy.metrics.failed
+      },
+      { requestAttempts: 2, rejectedRequests: 1, failed: true }
+    );
+  } finally {
+    await proxy.close();
+    await new Promise((resolve, reject) =>
+      upstream.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test('meal proxy validates scheduled recipe aliases without retaining proposal content', async () => {
+  const makeAttempt = async (proposal) => {
+    let upstreamCalls = 0;
+    const privateRecipeName = 'SMOKE_PRIVATE_NEW_RECIPE';
+    const upstream = createServer((_request, response) => {
+      upstreamCalls += 1;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          choices: [{ message: { content: JSON.stringify(proposal) }, finish_reason: 'stop' }]
+        })
+      );
+    });
+    const upstreamPort = await listen(upstream);
+    const proxy = await createAiLiveProxy({
+      token: 'synthetic-provider-token',
+      model: 'gpt-5',
+      targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+      maxCalls: 1,
+      expectedSchemaName: 'weekly_meal_proposal'
+    });
+    try {
+      const response = await postJson(
+        `${proxy.baseUrl}/chat/completions`,
+        proxy.clientToken,
+        mealPayload()
+      );
+      assert.equal(response.status, 200);
+      assert.equal(upstreamCalls, 1);
+      assert.equal(proxy.metrics.calls[0].responseFormat.recipeReferencesValid, true);
+      assert.equal(proxy.metrics.failed, false);
+      assert.equal(JSON.stringify(proxy.metrics).includes(privateRecipeName), false);
+    } finally {
+      await proxy.close();
+      await new Promise((resolve, reject) =>
+        upstream.close((error) => (error ? reject(error) : resolve()))
+      );
+    }
+  };
+
+  await makeAttempt({
+    newRecipes: [{ alias: 'N1', recipe: { name: 'SMOKE_PRIVATE_NEW_RECIPE' } }],
+    events: [{ status: 'scheduled', recipeAlias: 'N1' }]
+  });
+
+  let upstreamCalls = 0;
+  const upstream = createServer((_request, response) => {
+    upstreamCalls += 1;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                newRecipes: [],
+                events: [{ status: 'scheduled', recipeAlias: 'R999' }]
+              })
+            },
+            finish_reason: 'stop'
+          }
+        ]
+      })
+    );
+  });
+  const upstreamPort = await listen(upstream);
+  const proxy = await createAiLiveProxy({
+    token: 'synthetic-provider-token',
+    model: 'gpt-5',
+    targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+    maxCalls: 1,
+    expectedSchemaName: 'weekly_meal_proposal'
+  });
+  try {
+    const response = await postJson(
+      `${proxy.baseUrl}/chat/completions`,
+      proxy.clientToken,
+      mealPayload()
+    );
+    assert.equal(response.status, 200);
+    assert.equal(upstreamCalls, 1);
+    assert.equal(proxy.metrics.calls[0].responseFormat.recipeReferencesValid, false);
+    assert.equal(proxy.metrics.failed, true);
+    assert.equal(
+      isSuccessfulAiLiveHouseholdMealSmokeResult({
+        runnerExit: { code: 0, cancelled: false, timedOut: false, runnerCleaned: true },
+        cleanupFailed: false,
+        calls: proxy.metrics.calls,
+        proxyMetrics: proxy.metrics
+      }),
+      false
+    );
+  } finally {
+    await proxy.close();
+    await new Promise((resolve, reject) =>
+      upstream.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test('meal proxy rejects context profile or identity disclosure before provider forwarding', async () => {
+  let upstreamCalls = 0;
+  const upstream = createServer((_request, response) => {
+    upstreamCalls += 1;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end('{"choices":[]}');
+  });
+  const upstreamPort = await listen(upstream);
+  const attempt = async (payload) => {
+    const proxy = await createAiLiveProxy({
+      token: 'synthetic-provider-token',
+      model: 'gpt-5',
+      targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+      maxCalls: 1,
+      expectedSchemaName: 'weekly_meal_proposal',
+      forbiddenPromptTerms: ['HogarIA miembro QA uno', 'HogarIA miembro QA dos']
+    });
+    try {
+      const response = await postJson(
+        `${proxy.baseUrl}/chat/completions`,
+        proxy.clientToken,
+        payload
+      );
+      assert.equal(response.status, 400);
+      assert.equal(proxy.metrics.rejectedRequests, 1);
+      assert.equal(proxy.metrics.failed, true);
+      assert.equal(JSON.stringify(proxy.metrics).includes('HogarIA miembro QA uno'), false);
+    } finally {
+      await proxy.close();
+    }
+  };
+
+  try {
+    await attempt(
+      mealPayload({
+        context: syntheticMealContext({
+          participants: syntheticMealContext().participants.map((participant, index) =>
+            index === 0
+              ? { ...participant, preferences: { strictAllergies: [], likes: [], dislikes: [] } }
+              : participant
+          )
+        })
+      })
+    );
+    await attempt(
+      mealPayload({
+        context: syntheticMealContext(),
+        prompt: 'HogarIA miembro QA uno es el primer participante.'
+      })
+    );
+    const unsafeContext = syntheticMealContext();
+    unsafeContext.participants[0].alias = 'HogarIA miembro QA uno';
+    await attempt(mealPayload({ context: unsafeContext }));
+    assert.equal(upstreamCalls, 0);
+  } finally {
+    await new Promise((resolve, reject) =>
+      upstream.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
+
+test('meal proxy rejects wrong schema, missing or extra recipe/catalog attachments, and invalid context before forwarding', async () => {
+  let upstreamCalls = 0;
+  const upstream = createServer((_request, response) => {
+    upstreamCalls += 1;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end('{"choices":[]}');
+  });
+  const upstreamPort = await listen(upstream);
+  const assertRejected = async (payload) => {
+    const proxy = await createAiLiveProxy({
+      token: 'synthetic-provider-token',
+      model: 'gpt-5',
+      targetOrigin: `http://127.0.0.1:${upstreamPort}`,
+      maxCalls: 1,
+      expectedSchemaName: 'weekly_meal_proposal'
+    });
+    try {
+      const response = await postJson(
+        `${proxy.baseUrl}/chat/completions`,
+        proxy.clientToken,
+        payload
+      );
+      assert.equal(response.status, 400);
+      assert.equal(proxy.metrics.calls.length, 0);
+      assert.equal(proxy.metrics.rejectedRequests, 1);
+      assert.equal(proxy.metrics.failed, true);
+    } finally {
+      await proxy.close();
+    }
+  };
+
+  try {
+    await assertRejected({
+      model: 'gpt-5',
+      messages: [{ role: 'user', content: 'synthetic' }],
+      response_format: SYNTHETIC_STRICT_RESPONSE_FORMAT
+    });
+
+    const invalidInputs = [
+      mealPayload({ context: syntheticMealContext(), includeAttachment: false }),
+      mealPayload({ includeCatalogAttachment: false }),
+      mealPayload({
+        responseFormat: {
+          ...SYNTHETIC_MEAL_RESPONSE_FORMAT,
+          json_schema: {
+            ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema,
+            schema: {
+              ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema.schema,
+              properties: {
+                ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema.schema.properties,
+                events: {
+                  ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema.schema.properties.events,
+                  minItems: 0
+                }
+              }
+            }
+          }
+        }
+      }),
+      mealPayload({
+        responseFormat: {
+          ...SYNTHETIC_MEAL_RESPONSE_FORMAT,
+          json_schema: {
+            ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema,
+            schema: {
+              ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema.schema,
+              properties: {
+                ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema.schema.properties,
+                events: {
+                  ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema.schema.properties.events,
+                  items: {
+                    type: 'object',
+                    properties: { status: { type: 'string' }, alias: { type: 'string' } },
+                    required: ['status', 'alias'],
+                    additionalProperties: false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }),
+      mealPayload({
+        responseFormat: {
+          ...SYNTHETIC_MEAL_RESPONSE_FORMAT,
+          json_schema: {
+            ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema,
+            schema: {
+              ...SYNTHETIC_MEAL_RESPONSE_FORMAT.json_schema.schema,
+              required: ['events']
+            }
+          }
+        }
+      }),
+      mealPayload({
+        context: syntheticMealContext(),
+        extraAttachment: {
+          type: 'file',
+          file: { filename: 'extra.json', file_data: 'data:application/json;base64,e30=' }
+        }
+      }),
+      mealPayload({
+        context: syntheticMealContext(),
+        extraAttachment: {
+          type: 'image_url',
+          image_url: { url: 'data:image/jpeg;base64,MQ==' }
+        }
+      }),
+      mealPayload({ context: { version: 1 } }),
+      mealPayload({ context: '{not-json' }),
+      mealPayload({ catalog: syntheticMealRecipeCatalog({ version: 2 }) }),
+      mealPayload({
+        catalog: syntheticMealRecipeCatalog({
+          recipes: [
+            ...syntheticMealRecipeCatalog().recipes,
+            syntheticMealRecipeCatalog().recipes[0]
+          ]
+        })
+      }),
+      mealPayload({
+        catalog: syntheticMealRecipeCatalog({
+          recipes: [
+            {
+              ...syntheticMealRecipeCatalog().recipes[0],
+              recipe: {
+                ...syntheticMealRecipeCatalog().recipes[0].recipe,
+                guidance: { author: 'synthetic-private-author' }
+              }
+            }
+          ]
+        })
+      }),
+      mealPayload({ context: syntheticMealContext({ recipes: [] }) }),
+      mealPayload({ context: syntheticMealContext({ pantry: [] }) }),
+      mealPayload({ context: syntheticMealContext({ utensils: [] }) }),
+      mealPayload({ context: syntheticMealContext({ previousConfirmedPlan: null }) }),
+      mealPayload({
+        context: syntheticMealContext({
+          pantry: [
+            {
+              ...syntheticMealContext().pantry[0],
+              owner_user_id: 'synthetic-private-id'
+            }
+          ]
+        })
+      }),
+      mealPayload({
+        context: syntheticMealContext(),
+        attachmentOptions: { filename: 'other.json' }
+      }),
+      mealPayload({
+        context: syntheticMealContext(),
+        attachmentOptions: { mime: 'application/octet-stream' }
+      }),
+      mealPayload({
+        catalogAttachmentOptions: { filename: 'other-recipes.json' }
+      }),
+      mealPayload({
+        catalogAttachmentOptions: { mime: 'application/octet-stream' }
+      })
+    ];
+    for (const payload of invalidInputs) await assertRejected(payload);
+    assert.equal(upstreamCalls, 0);
+  } finally {
+    await new Promise((resolve, reject) =>
+      upstream.close((error) => (error ? reject(error) : resolve()))
+    );
+  }
+});
 
 test('proxy authenticates its isolated app credential, forwards the WebAPI bearer, redacts it and enforces a budget', async () => {
   const bearer = 'synthetic-webapi-bearer-secret';

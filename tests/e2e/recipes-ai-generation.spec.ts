@@ -100,7 +100,7 @@ const singleRecipe = {
   prepTime: 5,
   cookTime: 15,
   restTime: 5,
-  servings: 2,
+  baseServings: 1,
   calories: 180,
   ingredients: [
     {
@@ -117,7 +117,8 @@ const singleRecipe = {
   guidance: {
     appliances: ['Cocina de gas'],
     parallelTasks: ['Pesa los ingredientes mientras se calienta el agua.'],
-    tipsAndVariations: ['Añade limón al final para realzar el sabor.']
+    tipsAndVariations: ['Añade limón al final para realzar el sabor.'],
+    batchCookingWarning: null
   },
   instructionsByLevel: {
     basic: [
@@ -125,6 +126,9 @@ const singleRecipe = {
         stepNumber: 1,
         instruction: 'Cocer la zanahoria.',
         duration: 15,
+        temperature: null,
+        timerRequired: true,
+        timerDuration: 15,
         tips: 'Fixture de prueba',
         warning: 'No dejes la olla caliente sin vigilancia.',
         illustration: null
@@ -135,6 +139,9 @@ const singleRecipe = {
         stepNumber: 1,
         instruction: 'Cortar la zanahoria en trozos iguales y cocerla hasta que esté tierna.',
         duration: 15,
+        temperature: null,
+        timerRequired: true,
+        timerDuration: 15,
         tips: 'Fixture de prueba',
         warning: 'Usa una tabla estable y seca.',
         illustration: null
@@ -145,6 +152,9 @@ const singleRecipe = {
         stepNumber: 1,
         instruction: 'Cortar dados uniformes de 2 cm y cocer a hervor suave hasta textura tierna.',
         duration: 15,
+        temperature: null,
+        timerRequired: true,
+        timerDuration: 15,
         tips: 'Fixture de prueba',
         warning: '',
         illustration: null
@@ -155,7 +165,7 @@ const singleRecipe = {
   storage: {
     method: 'Refrigerada',
     duration: '2 días',
-    reheating: 'Calentar',
+    reheatingInstructions: 'Calentar',
     container: 'Tarro hermético',
     freezingPossible: true,
     freezingDuration: '1 mes'
@@ -186,9 +196,7 @@ const submittedInstructionsByLevel = Object.fromEntries(
     level,
     singleRecipeWithAllLevels.instructionsByLevel[level].map((step) => ({
       ...step,
-      illustration: step.illustration ?? null,
-      timerRequired: Boolean(step.duration),
-      timerDuration: step.duration
+      illustration: step.illustration ?? null
     }))
   ])
 );
@@ -200,9 +208,7 @@ const persistedInstructionsByLevel = Object.fromEntries(
       ...step,
       illustration: step.illustration ?? null,
       tips: step.tips?.trim() ? step.tips : null,
-      warning: step.warning?.trim() ? step.warning : null,
-      timerRequired: Boolean(step.duration),
-      timerDuration: step.duration
+      warning: step.warning?.trim() ? step.warning : null
     }))
   ])
 );
@@ -258,7 +264,7 @@ async function openGenerator(
 ) {
   await page.setViewportSize(viewport);
   await mockRecipeStepPhotos(page);
-  await registerAndGoto(page, '/dashboard', 'qa-recipes-ai-flow');
+  await registerWithHousehold(page, '/dashboard', 'qa-recipes-ai-flow');
   const token = await page.evaluate((key) => localStorage.getItem(key), TOKEN_KEY);
   expect(token, 'la prueba debe usar la sesión sintética del runner aislado').toBeTruthy();
 
@@ -690,12 +696,55 @@ test.describe('Generación de recetas IA', () => {
     const dialog = page.getByRole('dialog', { name: 'Generar Receta con IA' });
     await advanceRecipeWizardToOptions(page);
     await expect(dialog.locator('#recipe-serving-input')).toHaveValue('1');
-    await expect(dialog.locator('#recipe-detail-level')).toHaveAccessibleName('Nivel de detalle');
-    await expect(dialog.locator('#recipe-detail-level')).toHaveValue('basic');
+    const detailLevel = dialog.locator('#recipe-detail-level');
+    const detailLevelTrigger = detailLevel.getByRole('button');
+    await expect(detailLevelTrigger).toHaveAccessibleName('Nivel de detalle: Principiante');
+    await detailLevelTrigger.click();
+    await expect(detailLevel.getByRole('option', { name: /Principiante/ })).toBeVisible();
+    await expect(detailLevel.getByRole('option', { name: /Intermedio/ })).toBeVisible();
+    await expect(detailLevel.getByRole('option', { name: /Experto/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    const difficulty = dialog.locator('#recipe-difficulty');
+    const difficultyTrigger = difficulty.getByRole('button');
+    await expect(difficultyTrigger).toHaveAccessibleName('Dificultad: Medio');
+    const visualViewports = [
+      { name: 'desktop', width: 1440, height: 900 },
+      { name: 'tablet', width: 768, height: 1024 },
+      { name: 'mobile', width: 393, height: 851 }
+    ] as const;
+    for (const visualViewport of visualViewports) {
+      await page.setViewportSize(visualViewport);
+      const initialBox = await difficultyTrigger.boundingBox();
+      expect(initialBox).not.toBeNull();
+      for (const [value, label] of [
+        ['easy', 'Fácil'],
+        ['medium', 'Medio'],
+        ['hard', 'Difícil']
+      ] as const) {
+        await difficultyTrigger.click();
+        await difficulty.getByRole('option', { name: new RegExp(label) }).click();
+        await expect(difficultyTrigger).toHaveAccessibleName(`Dificultad: ${label}`);
+        const nextBox = await difficultyTrigger.boundingBox();
+        expect(nextBox).not.toBeNull();
+        for (const dimension of ['x', 'y', 'width', 'height'] as const) {
+          expect(Math.abs(nextBox![dimension] - initialBox![dimension])).toBeLessThanOrEqual(1);
+        }
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        visualViewport.width
+      );
+      const screenshotDirectory = process.env.E2E_SCREENSHOT_DIR;
+      if (screenshotDirectory && testInfo.project.name === 'chromium') {
+        mkdirSync(screenshotDirectory, { recursive: true });
+        await page.screenshot({
+          path: join(screenshotDirectory, `recipe-defaults-${visualViewport.name}.png`),
+          animations: 'disabled'
+        });
+      }
+    }
+    await page.setViewportSize(viewport);
     await captureScreenshot(page, 'active-household-defaults', viewport, testInfo.project.name);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
-      viewport.width
-    );
   });
 
   for (const viewport of VIEWPORTS.slice(0, 2)) {
@@ -704,16 +753,26 @@ test.describe('Generación de recetas IA', () => {
       syntheticProvider
     }, testInfo) => {
       const recipeName = `${singleRecipe.name} ${viewport.width}`;
+      const batchCookingWarning = 'Dora la zanahoria en dos tandas para que se dore y no se cueza.';
       syntheticProvider.enqueue({
-        content: { ...singleRecipeWithAllLevels, name: recipeName }
+        content: {
+          ...singleRecipeWithAllLevels,
+          name: recipeName,
+          guidance: { ...singleRecipe.guidance, batchCookingWarning }
+        }
       });
       await openGenerator(page, viewport, syntheticProvider.baseUrl);
       const recipeDialog = page.getByRole('dialog', { name: 'Generar Receta con IA' });
       await expect(recipeDialog).toHaveClass(/modal--lg/);
       await expect(recipeDialog.locator('.ai-form')).toBeVisible();
-      await expect(recipeDialog.locator('#recipe-serving-input')).toHaveValue('2');
+      // A new household starts with one member, so its default portion count is one.
+      await expect(recipeDialog.locator('#recipe-serving-input')).toHaveValue('1');
+      await recipeDialog.locator('#recipe-serving-input').fill('4');
 
       const generate = page.getByRole('button', { name: 'Generar 1 receta' });
+      const generationRequest = page.waitForRequest((request) =>
+        request.url().includes('/api/ai/generate-recipe')
+      );
       const generatedResponse = page.waitForResponse(
         (response) =>
           response.url().includes('/api/ai/generate-recipe') &&
@@ -722,23 +781,36 @@ test.describe('Generación de recetas IA', () => {
       await generate.click();
       const response = await generatedResponse;
       expect(response.status(), await response.text()).toBe(200);
+      expect((await generationRequest).postDataJSON().servings).toBe(4);
       await expect(recipeDialog).toHaveClass(/modal--full/);
       await expect(recipeDialog.locator('.ai-form')).toBeHidden();
 
-      const generatedSelector = page.locator('.generated-recipe__detail-level select');
-      await expect(generatedSelector).toHaveValue('basic');
-      await expect(generatedSelector).toHaveAccessibleName('Nivel de detalle');
+      const generatedSelector = page.locator('.generated-recipe__detail-level app-picker');
+      const generatedSelectorTrigger = generatedSelector.getByRole('button');
+      await expect(generatedSelectorTrigger).toHaveAccessibleName('Nivel de detalle: Principiante');
       await expect(page.locator('.generated-recipe__steps')).toContainText('Cocer la zanahoria.');
-      await expect(recipeDialog.locator('.generated-recipe__meta')).toContainText('2 porciones');
+      await expect(recipeDialog.locator('.generated-recipe__meta')).toContainText('4 porciones');
       await expect(recipeDialog.locator('.generated-recipe__meta')).not.toContainText('20 min');
       await expect(page.locator('.generated-recipe__list')).toContainText(
         'Añadir solo si hace falta'
       );
       const generatedPreview = page.locator('.generated-recipe');
+      const generatedServings = generatedPreview.locator('[data-test="generated-serving-count"]');
+      await expect(generatedServings).toHaveValue('4');
+      const generatedIngredients = generatedPreview.locator('.generated-recipe__list li').first();
+      await expect(generatedIngredients).toContainText('8 unit de Zanahoria QA recetas');
+      await expect(
+        generatedPreview.locator('[data-test="generated-recipe-batch-warning"]')
+      ).toContainText(batchCookingWarning);
+      await generatedServings.fill('3');
+      await expect(generatedIngredients).toContainText('6 unit de Zanahoria QA recetas');
+      await expect(generatedServings).toHaveValue('3');
+      expect(syntheticProvider.requests).toHaveLength(1);
       await expect(generatedPreview.locator('.generated-recipe__list li')).toContainText(
         '(lavada) · Añadir solo si hace falta'
       );
       const timings = generatedPreview.locator('[data-test="generated-recipe-timings"]');
+      await expect(timings).toContainText('20 min');
       await expect(timings).toContainText('Tiempo total');
       await expect(timings).toContainText('Preparación');
       await expect(timings).toContainText('Cocción');
@@ -786,18 +858,18 @@ test.describe('Generación de recetas IA', () => {
       await expect(generatedStepPhoto).toHaveCount(1);
       await expect(generatedStepPhoto.locator('img')).toHaveAttribute(
         'alt',
-        'Foto real de referencia: cook'
+        'Imagen sintética de referencia: cook'
       );
       await recipeDialog.getByRole('button', { name: 'Editar ingredientes' }).click();
       await expect(recipeDialog.locator('.ai-form')).toBeVisible();
       await recipeDialog.getByRole('button', { name: 'Ocultar formulario' }).click();
       await expect(recipeDialog.locator('.ai-form')).toBeHidden();
-      await generatedSelector.focus();
-      await expect(generatedSelector).toBeFocused();
-      await page.keyboard.press('ArrowDown');
-      await expect(generatedSelector).toHaveValue('intermediate');
-      await page.keyboard.press('ArrowDown');
-      await expect(generatedSelector).toHaveValue('expert');
+      await generatedSelectorTrigger.click();
+      await generatedSelector.getByRole('option', { name: /Intermedio/ }).click();
+      await expect(generatedSelectorTrigger).toHaveAccessibleName('Nivel de detalle: Intermedio');
+      await generatedSelectorTrigger.click();
+      await generatedSelector.getByRole('option', { name: /Experto/ }).click();
+      await expect(generatedSelectorTrigger).toHaveAccessibleName('Nivel de detalle: Experto');
       await expect(generatedStepPhoto).toHaveCount(1);
       await expect(page.locator('.generated-recipe__steps')).toContainText(
         'dados uniformes de 2 cm'
@@ -824,9 +896,11 @@ test.describe('Generación de recetas IA', () => {
       );
       await page.getByRole('button', { name: 'Guardar receta' }).click();
       const savePayload = (await saveRequest).postDataJSON();
+      expect(savePayload.servings).toBe(1);
       expect(savePayload.instructionsByLevel).toEqual(submittedInstructionsByLevel);
       expect(savePayload).not.toHaveProperty('steps');
       expect(savePayload.ingredients).toEqual(singleRecipeWithAllLevels.ingredients);
+      expect(savePayload.guidance.batchCookingWarning).toBe(batchCookingWarning);
       expect(savePayload.nutrition.fiber).toBeNull();
       expect(savePayload.storage).toEqual({
         method: 'Refrigerada',
@@ -855,7 +929,11 @@ test.describe('Generación de recetas IA', () => {
       expect(saved).toHaveLength(1);
       expect(saved[0].instructionsByLevel).toEqual(persistedInstructionsByLevel);
       expect(saved[0]).not.toHaveProperty('steps');
+      expect(saved[0].servings).toBe(1);
       expect(saved[0].ingredients).toMatchObject(singleRecipeWithAllLevels.ingredients);
+      expect((saved[0].guidance as { batchCookingWarning: string }).batchCookingWarning).toBe(
+        batchCookingWarning
+      );
       expect(saved[0].nutrition).toMatchObject(singleRecipeWithAllLevels.nutrition);
       expect(saved[0].storage).toEqual({
         method: 'Refrigerada',
@@ -868,21 +946,63 @@ test.describe('Generación de recetas IA', () => {
       expect(syntheticProvider.requests).toHaveLength(1);
 
       await page.reload();
-      const card = page.locator('.recipe-card').filter({ hasText: recipeName }).first();
-      await expect(card).toBeVisible();
-      await card.locator('.recipe-card__open').click();
+      if (viewport.width <= 600) {
+        const featured = page
+          .locator('[data-test="recipe-featured"]')
+          .filter({ hasText: recipeName });
+        await expect(featured).toBeVisible();
+        await featured.locator('.recipes__featured-title-button').click();
+      } else {
+        const card = page.locator('.recipe-card:visible').filter({ hasText: recipeName }).first();
+        await expect(card).toBeVisible();
+        await card.locator('.recipe-card__open').click();
+      }
       await expect(page.locator('[data-test="recipe-detail-page"]')).toBeVisible();
       await expect(page.getByRole('dialog')).toHaveCount(0);
-      const savedSelector = page.locator('.recipe-detail__detail-level select');
-      await expect(savedSelector).toBeVisible();
-      await expect(savedSelector).toHaveAccessibleName('Nivel de detalle');
-      await savedSelector.focus();
-      await page.keyboard.press('Home');
-      await expect(savedSelector).toHaveValue('basic');
-      await expect(
-        page.locator('[data-test="recipe-full-detail"] [data-test="recipe-step-photo"]')
-      ).toHaveCount(1);
+      const savedBasicLevel = page.locator('[data-test="recipe-detail-level-basic"]');
+      await expect(savedBasicLevel).toBeVisible();
+      await savedBasicLevel.click();
+      await expect(savedBasicLevel).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('.recipe-detail__steps')).toContainText('Cocer la zanahoria.');
+      const ingredientsTab = page.locator('[data-test="recipe-detail-tab-ingredients"]');
+      await ingredientsTab.click();
+      await expect(ingredientsTab).toHaveAttribute('aria-selected', 'true');
+      await expect(page.locator('[data-test="recipe-serving-count"]')).toHaveValue('1');
+      await expect(page.locator('[data-test="recipe-ingredients"] li').first()).toContainText(
+        '2 unit'
+      );
+      await expect(page.locator('[data-test="recipe-batch-warning"]')).toContainText(
+        batchCookingWarning
+      );
+      const savedServings = page.locator('[data-test="recipe-serving-count"]');
+      await savedServings.fill('4');
+      await expect(page.locator('[data-test="recipe-ingredients"] li').first()).toContainText(
+        '8 unit'
+      );
+      await savedServings.fill('1');
+      await page
+        .locator(
+          '[data-test="recipe-cooking-open"]:visible button, [data-test="recipe-cooking-open-sidebar"]:visible button'
+        )
+        .click();
+      const cookingView = page.locator('[data-test="recipe-cooking-view"]');
+      await expect(cookingView).toBeVisible();
+      await expect(cookingView.locator('[data-test="recipe-step-photo"]')).toHaveCount(1);
+      await expect(page.locator('[data-test="cooking-batch-warning"]')).toContainText(
+        batchCookingWarning
+      );
+      const cookingServings = page.locator('[data-test="cooking-serving-count"]');
+      await expect(cookingServings).toHaveValue('1');
+      await cookingServings.fill('4');
+      await cookingServings.press('Tab');
+      await expect(page.locator('[data-test="cooking-ingredient"]')).toContainText('8 unit');
+      expect(syntheticProvider.requests).toHaveLength(1);
+      await captureScreenshot(
+        page,
+        'saved-recipe-cooking-batches',
+        viewport,
+        testInfo.project.name
+      );
       expect(syntheticProvider.requests).toHaveLength(1);
       await dismissToasts(page);
       await captureScreenshot(page, 'saved-recipe-detail-level', viewport, testInfo.project.name);
@@ -1021,10 +1141,12 @@ test.describe('Generación de recetas IA', () => {
       await expect(generatedOptions).toHaveCount(3);
       const firstOptionLevel = generatedOptions
         .nth(0)
-        .locator('.generated-option__detail-level select');
-      await expect(firstOptionLevel).toHaveAccessibleName('Nivel de detalle');
-      await expect(firstOptionLevel).toHaveValue('basic');
-      await firstOptionLevel.selectOption('expert');
+        .locator('.generated-option__detail-level app-picker');
+      const firstOptionLevelTrigger = firstOptionLevel.getByRole('button');
+      await expect(firstOptionLevelTrigger).toHaveAccessibleName('Nivel de detalle: Principiante');
+      await firstOptionLevelTrigger.click();
+      await firstOptionLevel.getByRole('option', { name: /Experto/ }).click();
+      await expect(firstOptionLevelTrigger).toHaveAccessibleName('Nivel de detalle: Experto');
       await expect(generatedOptions.nth(0).locator('.generated-option__steps')).toContainText(
         'opción 1'
       );
@@ -1033,7 +1155,7 @@ test.describe('Generación de recetas IA', () => {
         const generatedOption = generatedOptions.nth(index);
         await expect(generatedOption.getByRole('heading')).toHaveText(`Opción sintética ${option}`);
         await expect(generatedOption.locator('.generated-option__meta')).toContainText(
-          '2 porciones'
+          '1 porciones'
         );
       }
       await expect(page.getByText('¡Recetas generadas!', { exact: true })).toBeVisible();
@@ -1047,7 +1169,7 @@ test.describe('Generación de recetas IA', () => {
       await expect(
         optionPreview.getByRole('heading', { name: 'Opción sintética 1' })
       ).toBeVisible();
-      await expect(optionPreview.locator('.generated-recipe__meta')).toContainText('2 porciones');
+      await expect(optionPreview.locator('.generated-recipe__meta')).toContainText('1 porciones');
       await expect(optionPreview.locator('[data-test="generated-recipe-timings"]')).toContainText(
         'Preparación'
       );
@@ -1081,9 +1203,9 @@ test.describe('Generación de recetas IA', () => {
       await expect(optionPreview).toContainText(
         'Pesa los ingredientes mientras se calienta el agua.'
       );
-      await expect(optionPreview.locator('.generated-recipe__detail-level select')).toHaveValue(
-        'expert'
-      );
+      await expect(
+        optionPreview.locator('.generated-recipe__detail-level app-picker').getByRole('button')
+      ).toHaveAccessibleName('Nivel de detalle: Experto');
       expect(syntheticProvider.requests).toHaveLength(4);
       await recipeDialog.locator('.modal__body').evaluate((body) => {
         body.scrollTop = 0;
@@ -1172,9 +1294,12 @@ test.describe('Generación de recetas IA', () => {
       });
       await expect(page.locator('.modal-overlay')).toHaveCount(0);
       await page.reload();
-      await expect(
-        page.locator('.recipe-card__name').filter({ hasText: 'Opción sintética 2' }).first()
-      ).toBeVisible();
+      const savedRecipeInLibrary = page
+        .locator(
+          '[data-test="recipe-featured"]:visible h2:visible, [data-test="recipe-card"]:visible .recipe-card__name:visible'
+        )
+        .filter({ hasText: 'Opción sintética 2' });
+      await expect(savedRecipeInLibrary).toHaveCount(1);
 
       const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
       expect(documentWidth).toBeLessThanOrEqual(viewport.width);

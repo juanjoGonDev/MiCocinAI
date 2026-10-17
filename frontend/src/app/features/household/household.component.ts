@@ -35,12 +35,26 @@ import {
   resolveHouseholdTab,
   type HouseholdTab
 } from './household-tabs.util';
+import { HouseholdPlanEditorComponent } from './household-plan-editor.component';
+import { HouseholdTasksComponent } from './household-tasks.component';
+import { HouseholdMealPlannerComponent } from './household-meal-planner.component';
+import { HouseholdMealSettingsComponent } from './household-meal-settings.component';
+import { HouseholdPlanningAutomationComponent } from './household-planning-automation.component';
 
 type PermissionGroup = 'pantry' | 'recipes' | 'calendar' | 'members' | 'settings';
+type HouseholdPlanningTab = 'meals' | 'tasks' | 'settings';
 interface PermissionField {
   group: PermissionGroup;
   key: string;
   label: TranslationKey;
+}
+
+function resolveHouseholdPlanningTab(value: string | null): HouseholdPlanningTab {
+  return value === 'meals' || value === 'settings' || value === 'tasks' ? value : 'tasks';
+}
+
+function isCanonicalHouseholdPlanningQuery(value: string | null): boolean {
+  return value === null || value === 'meals' || value === 'tasks' || value === 'settings';
 }
 
 function defaultMemberPermissions(role: MemberRole): MemberPermissions {
@@ -98,12 +112,20 @@ function completeMemberPermissions(value: unknown, role: MemberRole): MemberPerm
     ModalComponent,
     PickerComponent,
     LoadingComponent,
-    IconComponent
+    IconComponent,
+    HouseholdPlanEditorComponent,
+    HouseholdTasksComponent,
+    HouseholdMealPlannerComponent,
+    HouseholdMealSettingsComponent,
+    HouseholdPlanningAutomationComponent
   ],
   template: `
     <div class="household">
       <!-- Header -->
-      <div class="household__header">
+      <div
+        class="household__header"
+        [class.household__header--plan-flow]="activeTab() === 'plan' || activeTab() === 'tasks'"
+      >
         <h1 class="household__title">
           <app-icon name="group" [size]="24" [label]="null" />
           <span>{{ 'household.hogar' | t }}</span>
@@ -158,7 +180,12 @@ function completeMemberPermissions(value: unknown, role: MemberRole): MemberPerm
       </div>
 
       <!-- Household Content -->
-      <div *ngIf="householdService.household() as household" class="household__content">
+      <div
+        *ngIf="householdService.household() as household"
+        class="household__content"
+        [class.household--wide]="activeTab() === 'plan' || activeTab() === 'tasks'"
+        [class.household__content--plan-flow]="activeTab() === 'plan' || activeTab() === 'tasks'"
+      >
         <nav class="household-tabs" role="tablist" [attr.aria-label]="'household.hogar' | t">
           <button
             *ngFor="let tab of tabOptions"
@@ -445,6 +472,118 @@ function completeMemberPermissions(value: unknown, role: MemberRole): MemberPerm
             </app-button>
           </div>
         </section>
+
+        <section
+          [hidden]="activeTab() !== 'plan'"
+          id="household-panel-plan"
+          class="household-tab-panel"
+          role="tabpanel"
+          aria-labelledby="household-tab-plan"
+          tabindex="0"
+          data-test="household-panel-plan"
+        >
+          <app-household-plan-editor
+            [householdId]="household.id"
+            [canEdit]="household.myPermissions?.settings ?? household.myRole === 'admin'"
+            [members]="household.members"
+            (planSaved)="refreshTasksAfterPlanOrAssignmentSave()"
+            (assignmentSaved)="refreshTasksAfterPlanOrAssignmentSave()"
+            (zoneTasksSelected)="openTasksForZone($event)"
+          />
+        </section>
+
+        <section
+          [hidden]="activeTab() !== 'tasks'"
+          id="household-panel-tasks"
+          class="household-tab-panel"
+          role="tabpanel"
+          aria-labelledby="household-tab-tasks"
+          tabindex="0"
+          data-test="household-panel-tasks"
+        >
+          <nav
+            class="household-planning-tabs"
+            role="tablist"
+            [attr.aria-label]="'household.planning_subtabs' | t"
+          >
+            <button
+              *ngFor="let tab of planningTabOptions"
+              type="button"
+              role="tab"
+              class="household-planning-tabs__tab"
+              [id]="'household-planning-tab-' + tab.value"
+              [attr.aria-selected]="activePlanningTab() === tab.value"
+              [attr.aria-controls]="'household-planning-panel-' + tab.value"
+              [attr.tabindex]="activePlanningTab() === tab.value ? 0 : -1"
+              [attr.data-test]="'household-planning-tab-' + tab.value"
+              (click)="selectPlanningTab(tab.value)"
+              (keydown)="onPlanningTabKeydown($event)"
+            >
+              {{ tab.label | t }}
+            </button>
+          </nav>
+
+          <section
+            [hidden]="activePlanningTab() !== 'meals'"
+            id="household-planning-panel-meals"
+            class="household-planning-panel"
+            role="tabpanel"
+            aria-labelledby="household-planning-tab-meals"
+            tabindex="0"
+            data-test="household-planning-panel-meals"
+          >
+            <app-household-meal-planner
+              *ngIf="mealPlannerVisited()"
+              [householdId]="household.id"
+              [canEdit]="household.myPermissions?.calendar?.edit ?? household.myRole === 'admin'"
+              [canViewShopping]="
+                household.myPermissions?.calendar?.view ?? household.myRole === 'admin'
+              "
+              [members]="household.members"
+            />
+          </section>
+
+          <section
+            [hidden]="activePlanningTab() !== 'tasks'"
+            id="household-planning-panel-tasks"
+            class="household-planning-panel"
+            role="tabpanel"
+            aria-labelledby="household-planning-tab-tasks"
+            tabindex="0"
+            data-test="household-planning-panel-tasks"
+          >
+            <app-household-tasks
+              *ngIf="activePlanningTab() === 'tasks'"
+              [householdId]="household.id"
+              [canEdit]="household.myPermissions?.calendar?.edit ?? household.myRole === 'admin'"
+              [members]="household.members"
+              [selectedSpaceId]="selectedTaskSpaceId()"
+              [refreshToken]="tasksRefreshToken()"
+              [showMealSettings]="false"
+            />
+          </section>
+
+          <section
+            [hidden]="activePlanningTab() !== 'settings'"
+            id="household-planning-panel-settings"
+            class="household-planning-panel"
+            role="tabpanel"
+            aria-labelledby="household-planning-tab-settings"
+            tabindex="0"
+            data-test="household-planning-panel-settings"
+          >
+            <app-household-planning-automation
+              *ngIf="activePlanningTab() === 'settings'"
+              [householdId]="household.id"
+              [canEdit]="household.myPermissions?.settings ?? household.myRole === 'admin'"
+            />
+            <app-household-meal-settings
+              *ngIf="activePlanningTab() === 'settings'"
+              [householdId]="household.id"
+              [canEdit]="household.myPermissions?.settings ?? household.myRole === 'admin'"
+            />
+          </section>
+        </section>
       </div>
 
       <!-- Create Modal -->
@@ -561,6 +700,10 @@ function completeMemberPermissions(value: unknown, role: MemberRole): MemberPerm
         margin: 0 auto;
       }
 
+      .household.household--wide {
+        max-width: 1280px;
+      }
+
       .household__header {
         display: flex;
         align-items: center;
@@ -568,6 +711,22 @@ function completeMemberPermissions(value: unknown, role: MemberRole): MemberPerm
         gap: var(--space-3);
         flex-wrap: wrap;
         margin-bottom: var(--space-6);
+      }
+
+      .household__header--plan-flow {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
+      .household__content--plan-flow {
+        padding-top: 0;
       }
 
       .household__header-actions {
@@ -579,9 +738,15 @@ function completeMemberPermissions(value: unknown, role: MemberRole): MemberPerm
 
       @media (max-width: 480px) {
         .household__header-actions {
-          flex-direction: column;
-          align-items: stretch;
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           width: 100%;
+        }
+      }
+
+      @media (max-width: 767px) {
+        .household__content--plan-flow {
+          margin-inline: -6px;
         }
       }
 
@@ -599,6 +764,8 @@ function completeMemberPermissions(value: unknown, role: MemberRole): MemberPerm
       }
 
       .household-tabs__tab {
+        min-height: 44px;
+        min-width: max-content;
         flex: 0 0 auto;
         white-space: nowrap;
         padding: var(--space-3) var(--space-4);
@@ -622,10 +789,103 @@ function completeMemberPermissions(value: unknown, role: MemberRole): MemberPerm
         color: var(--primary);
       }
 
+      .household-planning-tabs {
+        display: flex;
+        gap: var(--space-2);
+        min-width: 0;
+        max-width: 100%;
+        margin: 0 0 var(--space-4);
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-inline: contain;
+        border-bottom: 1px solid var(--border-default);
+        scrollbar-width: thin;
+      }
+
+      .household-planning-tabs__tab {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 44px;
+        flex: 0 0 auto;
+        padding: var(--space-2) var(--space-4);
+        border: 0;
+        border-bottom: 2px solid transparent;
+        background: transparent;
+        color: var(--text-secondary);
+        font: inherit;
+        font-size: var(--text-sm);
+        cursor: pointer;
+      }
+
+      .household-planning-tabs__tab:hover {
+        color: var(--text-primary);
+      }
+
+      .household-planning-tabs__tab[aria-selected='true'] {
+        border-bottom-color: var(--primary);
+        color: var(--primary-dark);
+        font-weight: var(--font-semibold);
+      }
+
+      .household-planning-tabs__tab:focus-visible,
+      .household-planning-panel:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 2px;
+      }
+
+      .household-planning-panel {
+        min-width: 0;
+      }
+
+      .household-planning-panel[hidden] {
+        display: none;
+      }
+
       .household-tabs__tab:focus-visible,
       .household-tab-panel:focus-visible {
         outline: 2px solid var(--primary);
         outline-offset: 2px;
+      }
+
+      @media (max-width: 767px) {
+        .household-planning-tabs {
+          gap: 0;
+          margin-bottom: var(--space-3);
+        }
+
+        .household-planning-tabs__tab {
+          padding-inline: var(--space-3);
+        }
+
+        .household__content--plan-flow .household-tabs {
+          margin-bottom: var(--space-3);
+          gap: 0;
+          overflow-x: auto;
+        }
+      }
+
+      @media (max-width: 389px) {
+        .household__content--plan-flow .household-tabs,
+        .household-tabs {
+          gap: 0;
+          justify-content: flex-start;
+          overflow-x: auto;
+        }
+
+        .household__content--plan-flow .household-tabs__tab,
+        .household-tabs__tab {
+          min-width: max-content;
+          padding-inline: var(--space-4);
+          font-size: var(--text-sm);
+        }
+      }
+
+      @media (max-width: 339px) {
+        .household__content--plan-flow .household-tabs,
+        .household-tabs {
+          gap: 4px;
+        }
       }
 
       .household-tab-panel {
@@ -1038,11 +1298,22 @@ export class HouseholdComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   readonly activeTab = signal<HouseholdTab>('home');
+  readonly activePlanningTab = signal<HouseholdPlanningTab>('tasks');
+  readonly mealPlannerVisited = signal(false);
+  readonly selectedTaskSpaceId = signal<string | null>(null);
+  readonly tasksRefreshToken = signal(0);
   readonly tabOptions: Array<{ value: HouseholdTab; label: TranslationKey }> = [
     { value: 'home', label: 'household.tab_home' },
+    { value: 'plan', label: 'household.tab_plan' },
+    { value: 'tasks', label: 'calendar.planificacion' },
     { value: 'members', label: 'household.tab_members' },
     { value: 'permissions', label: 'household.tab_permissions' },
     { value: 'settings', label: 'household.tab_settings' }
+  ];
+  readonly planningTabOptions: Array<{ value: HouseholdPlanningTab; label: TranslationKey }> = [
+    { value: 'meals', label: 'household.planning_tab_meals' },
+    { value: 'tasks', label: 'household.planning_tab_tasks' },
+    { value: 'settings', label: 'household.planning_tab_settings' }
   ];
   readonly permissionFields: PermissionField[] = [
     { group: 'pantry', key: 'view', label: 'household.permission_pantry_view' },
@@ -1091,9 +1362,11 @@ export class HouseholdComponent implements OnInit {
       const activeHouseholdId = this.householdService.activeHouseholdId();
       if (previousHouseholdId !== null && activeHouseholdId !== previousHouseholdId) {
         this.activeTab.set('home');
+        this.activePlanningTab.set('tasks');
+        this.selectedTaskSpaceId.set(null);
         void this.router.navigate([], {
           relativeTo: this.route,
-          queryParams: { tab: null },
+          queryParams: { tab: null, space: null, planning: null },
           queryParamsHandling: 'merge',
           replaceUrl: true
         });
@@ -1122,11 +1395,25 @@ export class HouseholdComponent implements OnInit {
     this.householdService.ensureHousehold();
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const queryTab = params.get('tab');
+      const planningQuery = params.get('planning');
       this.activeTab.set(resolveHouseholdTab(queryTab));
+      const planningTab = resolveHouseholdPlanningTab(planningQuery);
+      this.activePlanningTab.set(planningTab);
+      if (planningTab === 'meals') this.mealPlannerVisited.set(true);
+      this.selectedTaskSpaceId.set(params.get('space'));
+      requestAnimationFrame(() => this.revealHouseholdTab(this.activeTab()));
       if (!isCanonicalHouseholdTabQuery(queryTab)) {
         void this.router.navigate([], {
           relativeTo: this.route,
           queryParams: { tab: null },
+          queryParamsHandling: 'merge',
+          replaceUrl: true
+        });
+      }
+      if (!isCanonicalHouseholdPlanningQuery(planningQuery)) {
+        void this.router.navigate([], {
+          relativeTo: this.route,
+          queryParams: { planning: null },
           queryParamsHandling: 'merge',
           replaceUrl: true
         });
@@ -1136,11 +1423,82 @@ export class HouseholdComponent implements OnInit {
 
   selectTab(tab: HouseholdTab): void {
     this.activeTab.set(tab);
+    void this.router
+      .navigate([], {
+        relativeTo: this.route,
+        queryParams: { tab: householdTabQueryValue(tab) },
+        queryParamsHandling: 'merge'
+      })
+      .then(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            this.revealHouseholdTab(tab);
+            window.setTimeout(() => this.revealHouseholdTab(tab), 80);
+          });
+        });
+      });
+  }
+
+  selectPlanningTab(tab: HouseholdPlanningTab): void {
+    this.activePlanningTab.set(tab);
+    if (tab === 'meals') this.mealPlannerVisited.set(true);
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { tab: householdTabQueryValue(tab) },
+      queryParams: { planning: tab === 'tasks' ? null : tab },
       queryParamsHandling: 'merge'
     });
+  }
+
+  onPlanningTabKeydown(event: KeyboardEvent): void {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const currentIndex = this.planningTabOptions.findIndex(
+      (tab) => tab.value === this.activePlanningTab()
+    );
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? this.planningTabOptions.length - 1
+          : (currentIndex +
+              (event.key === 'ArrowRight' ? 1 : -1) +
+              this.planningTabOptions.length) %
+            this.planningTabOptions.length;
+    const next = this.planningTabOptions[nextIndex];
+    const nextTab = (event.currentTarget as HTMLElement | null)?.parentElement
+      ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+      .item(nextIndex);
+    nextTab?.focus({ preventScroll: true });
+    this.selectPlanningTab(next.value);
+  }
+
+  private revealHouseholdTab(tab: HouseholdTab): void {
+    const tabElement = document.getElementById(`household-tab-${tab}`);
+    const tabList = tabElement?.closest<HTMLElement>('.household-tabs');
+    if (!tabElement || !tabList) return;
+
+    tabList.style.scrollBehavior = 'auto';
+    const listBounds = tabList.getBoundingClientRect();
+    const tabBounds = tabElement.getBoundingClientRect();
+    const leftOverflow = Math.max(0, listBounds.left - tabBounds.left);
+    const rightOverflow = Math.max(0, tabBounds.right - listBounds.right);
+    if (leftOverflow > 1) tabList.scrollLeft = 0;
+    else if (rightOverflow > 1) tabList.scrollLeft = tabList.scrollWidth - tabList.clientWidth;
+  }
+
+  openTasksForZone(spaceId: string): void {
+    this.selectedTaskSpaceId.set(spaceId);
+    this.activeTab.set('tasks');
+    this.activePlanningTab.set('tasks');
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab: 'tasks', space: spaceId, planning: null },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  refreshTasksAfterPlanOrAssignmentSave(): void {
+    this.tasksRefreshToken.update((token) => token + 1);
   }
 
   onTabKeydown(event: KeyboardEvent): void {
@@ -1155,10 +1513,10 @@ export class HouseholdComponent implements OnInit {
           : (currentIndex + (event.key === 'ArrowRight' ? 1 : -1) + this.tabOptions.length) %
             this.tabOptions.length;
     const next = this.tabOptions[nextIndex];
-    (event.currentTarget as HTMLElement | null)?.parentElement
+    const nextTab = (event.currentTarget as HTMLElement | null)?.parentElement
       ?.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-      .item(nextIndex)
-      ?.focus();
+      .item(nextIndex);
+    nextTab?.focus({ preventScroll: true });
     this.selectTab(next.value);
   }
 

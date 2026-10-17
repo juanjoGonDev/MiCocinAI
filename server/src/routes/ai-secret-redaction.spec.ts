@@ -114,7 +114,7 @@ describe('redacción de secretos en la configuración IA', () => {
       prepTime: 5,
       cookTime: 5,
       restTime: null,
-      servings: 2,
+      baseServings: 1,
       calories: 100,
       ingredients: [
         {
@@ -128,13 +128,21 @@ describe('redacción de secretos en la configuración IA', () => {
         }
       ],
       utensils: [],
-      guidance: { appliances: [], parallelTasks: [], tipsAndVariations: [] },
+      guidance: {
+        appliances: [],
+        parallelTasks: [],
+        tipsAndVariations: [],
+        batchCookingWarning: null
+      },
       instructionsByLevel: {
         basic: [
           {
             stepNumber: 1,
             instruction: 'Lava el tomate.',
             duration: null,
+            temperature: null,
+            timerRequired: false,
+            timerDuration: null,
             tips: null,
             warning: null,
             illustration: null
@@ -145,6 +153,9 @@ describe('redacción de secretos en la configuración IA', () => {
             stepNumber: 1,
             instruction: 'Lava y corta el tomate.',
             duration: null,
+            temperature: null,
+            timerRequired: false,
+            timerDuration: null,
             tips: null,
             warning: null,
             illustration: null
@@ -155,6 +166,9 @@ describe('redacción de secretos en la configuración IA', () => {
             stepNumber: 1,
             instruction: 'Lava y corta el tomate en dados regulares.',
             duration: null,
+            temperature: null,
+            timerRequired: false,
+            timerDuration: null,
             tips: null,
             warning: null,
             illustration: null

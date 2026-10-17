@@ -4,11 +4,15 @@ export interface RecipeInstructionStep {
   stepNumber: number;
   instruction: string;
   duration?: number | null;
-  temperature?: { value: number; unit: 'C' | 'F' };
+  temperature?: { value: number; unit: 'C' | 'F' } | null;
   image?: string;
   /** Short-lived Wikimedia result id; the API resolves it to a local asset before persistence. */
   imagePhotoId?: string;
   imageAttribution?: RecipeStepImageAttribution | null;
+  /** Search result ID; the API resolves and persists its licensed Commons metadata. */
+  videoId?: string;
+  /** Server-hydrated Commons attribution for an explicitly selected saved clip. */
+  video?: import('./recipe-step-video').RecipeStepVideoCandidate | null;
   tips?: string | null;
   warning?: string | null;
   timerRequired?: boolean;

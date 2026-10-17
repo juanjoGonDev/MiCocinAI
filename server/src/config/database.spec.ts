@@ -103,6 +103,177 @@ describe('adoptLegacyDatabase', () => {
 });
 
 describe('initializeDatabase con fichero heredado', () => {
+  it('migra la unicidad de categorías al ámbito y conserva claves al reiniciar', async () => {
+    const databaseFile = target();
+    const previous = new Database(databaseFile);
+    previous.exec(`
+      CREATE TABLE pantry_categories (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        household_id TEXT,
+        key TEXT NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT '#8A8F98',
+        description TEXT,
+        parent_key TEXT,
+        position INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE UNIQUE INDEX idx_pantry_categories_key ON pantry_categories(user_id, key);
+      INSERT INTO pantry_categories (id, user_id, household_id, key, name, color)
+      VALUES ('legacy-category', 'legacy-user', 'old-home', 'vegetables', 'Mi huerto', '#123456');
+    `);
+    previous.close();
+
+    let activeModule: DbModule | undefined;
+    try {
+      activeModule = await dbModuleWith(databaseFile);
+      await activeModule.initializeDatabase();
+      let db = activeModule.getDatabase();
+      db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+        'old-home',
+        'Casa anterior',
+        'OLDHOME1'
+      );
+      db.prepare('INSERT INTO households (id, name, invite_code) VALUES (?, ?, ?)').run(
+        'new-home',
+        'Casa nueva',
+        'NEWHOME1'
+      );
+      db.prepare(
+        'INSERT INTO users (id, email, name, password_hash, household_id) VALUES (?, ?, ?, ?, ?)'
+      ).run('legacy-user', 'legacy@hogaria.test', 'Usuario', 'hash', 'old-home');
+
+      expect(
+        db.prepare('SELECT name FROM pantry_categories WHERE id = ?').get('legacy-category')
+      ).toEqual({ name: 'Mi huerto' });
+      expect(
+        db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_pantry_categories_key'"
+          )
+          .get()
+      ).toBeUndefined();
+      expect(
+        db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_pantry_categories_scope_key'"
+          )
+          .get()
+      ).toEqual({ name: 'idx_pantry_categories_scope_key' });
+
+      const insert = db.prepare(
+        `INSERT INTO pantry_categories (id, user_id, household_id, key, name, color)
+         VALUES (?, 'legacy-user', ?, 'vegetables', 'Verduras', '#4CAF50')`
+      );
+      expect(() => insert.run('new-home-category', 'new-home')).not.toThrow();
+      expect(() => insert.run('duplicate-new-home-category', 'new-home')).toThrow(
+        /UNIQUE constraint/
+      );
+
+      activeModule.closeDatabase();
+      activeModule = await dbModuleWith(databaseFile);
+      await activeModule.initializeDatabase();
+      db = activeModule.getDatabase();
+      expect(
+        db
+          .prepare(
+            "SELECT COUNT(*) AS count FROM pantry_categories WHERE user_id = 'legacy-user' AND key = 'vegetables'"
+          )
+          .get()
+      ).toEqual({ count: 2 });
+      expect(
+        db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_pantry_categories_scope_key'"
+          )
+          .get()
+      ).toEqual({ name: 'idx_pantry_categories_scope_key' });
+    } finally {
+      activeModule?.closeDatabase();
+    }
+  });
+
+  it('añade claves idempotentes a meals legacy conservando la comida y crea las asignaciones aditivas', async () => {
+    const databaseFile = target();
+    const previous = new Database(databaseFile);
+    previous.exec(`
+      CREATE TABLE meals (
+        id TEXT PRIMARY KEY,
+        calendar_id TEXT NOT NULL,
+        date DATE NOT NULL,
+        meal_type TEXT NOT NULL,
+        recipe_id TEXT,
+        custom_meal TEXT,
+        time TEXT,
+        servings INTEGER DEFAULT 1,
+        notes TEXT,
+        completed INTEGER DEFAULT 0,
+        completed_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO meals (id, calendar_id, date, meal_type, custom_meal, servings, notes)
+      VALUES ('legacy-meal', 'legacy-calendar', '2026-10-14', 'dinner', 'Comida heredada', 3, 'nota antigua');
+    `);
+    previous.close();
+
+    const mod = await dbModuleWith(databaseFile);
+    let restarted: DbModule | undefined;
+    try {
+      await mod.initializeDatabase();
+      const db = mod.getDatabase();
+      expect(
+        db
+          .prepare(
+            'SELECT id, custom_meal, servings, notes, source_proposal_id, proposal_id, recipe_snapshot FROM meals WHERE id = ?'
+          )
+          .get('legacy-meal')
+      ).toEqual({
+        id: 'legacy-meal',
+        custom_meal: 'Comida heredada',
+        servings: 3,
+        notes: 'nota antigua',
+        source_proposal_id: null,
+        proposal_id: null,
+        recipe_snapshot: null
+      });
+      expect(
+        db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meal_participants'"
+          )
+          .get()
+      ).toEqual({ name: 'meal_participants' });
+      const mealIndexes = db.prepare("PRAGMA index_list('meals')").all() as Array<{
+        name: string;
+        unique: number;
+      }>;
+      expect(mealIndexes.find(({ name }) => name === 'idx_meals_source_proposal')?.unique).toBe(1);
+      expect(mealIndexes.find(({ name }) => name === 'idx_meals_proposal_group')?.unique).toBe(0);
+
+      mod.closeDatabase();
+      restarted = await dbModuleWith(databaseFile);
+      await restarted.initializeDatabase();
+      expect(
+        restarted
+          .getDatabase()
+          .prepare(
+            'SELECT id, source_proposal_id, proposal_id, recipe_snapshot FROM meals WHERE id = ?'
+          )
+          .get('legacy-meal')
+      ).toEqual({
+        id: 'legacy-meal',
+        source_proposal_id: null,
+        proposal_id: null,
+        recipe_snapshot: null
+      });
+    } finally {
+      restarted?.closeDatabase();
+      mod.closeDatabase();
+    }
+  });
+
   it('añade metadatos del libro a recetas legacy sin alterar su contenido', async () => {
     const databaseFile = target();
     const previous = new Database(databaseFile);
@@ -300,6 +471,8 @@ describe('initializeDatabase con fichero heredado', () => {
         ('admin-a', 'admin-a@test.invalid', 'Admin A', '', 'legacy-house'),
         ('admin-newer', 'admin-newer@test.invalid', 'Admin newer', '', 'legacy-house'),
         ('only-member', 'only-member@test.invalid', 'Only member', '', 'empty-admin-house');
+      UPDATE users SET preferences = '{"mealTimes":{"dinner":"19:00"},"mealPlan":{"dinner":false}}'
+        WHERE id = 'member-first';
       INSERT INTO household_members (id, household_id, user_id, role, joined_at) VALUES
         ('member-row', 'legacy-house', 'member-first', 'member', '2019-01-01 00:00:00'),
         ('admin-z-row', 'legacy-house', 'admin-z', 'admin', '2020-01-01 00:00:00'),
@@ -331,6 +504,24 @@ describe('initializeDatabase con fichero heredado', () => {
           .prepare('SELECT MIN(is_active) AS min, MAX(is_active) AS max FROM household_members')
           .get()
       ).toEqual({ min: 1, max: 1 });
+      expect(
+        db
+          .prepare(
+            `SELECT h.meal_planning_preferences AS household_preferences,
+                    hm.meal_planning_preferences AS member_preferences
+               FROM households h
+               JOIN household_members hm ON hm.household_id = h.id
+              WHERE h.id = 'legacy-house' AND hm.user_id = 'member-first'`
+          )
+          .get()
+      ).toEqual({ household_preferences: '{}', member_preferences: '{}' });
+      db.prepare('UPDATE households SET meal_planning_preferences = ? WHERE id = ?').run(
+        '{"objective":{"goals":["variety"]}}',
+        'legacy-house'
+      );
+      db.prepare(
+        'UPDATE household_members SET meal_planning_preferences = ? WHERE user_id = ?'
+      ).run('{"goalOverrideEnabled":true}', 'member-first');
 
       const configsBeforeRestart = db
         .prepare(
@@ -409,6 +600,25 @@ describe('initializeDatabase con fichero heredado', () => {
         { id: 'empty-admin-house', ai_owner_user_id: null },
         { id: 'legacy-house', ai_owner_user_id: 'admin-a' }
       ]);
+      expect(
+        restartedDb
+          .prepare(
+            `SELECT h.meal_planning_preferences AS household_preferences,
+                    hm.meal_planning_preferences AS member_preferences
+               FROM households h
+               JOIN household_members hm ON hm.household_id = h.id
+              WHERE h.id = 'legacy-house' AND hm.user_id = 'member-first'`
+          )
+          .get()
+      ).toEqual({
+        household_preferences: '{"objective":{"goals":["variety"]}}',
+        member_preferences: '{"goalOverrideEnabled":true}'
+      });
+      expect(
+        restartedDb.prepare('SELECT preferences FROM users WHERE id = ?').get('member-first')
+      ).toEqual({
+        preferences: '{"mealTimes":{"dinner":"19:00"},"mealPlan":{"dinner":false}}'
+      });
       expect(
         restartedDb
           .prepare('SELECT MIN(is_active) AS min, MAX(is_active) AS max FROM household_members')

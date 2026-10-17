@@ -7,7 +7,8 @@ import {
   inject,
   Injector,
   OnInit,
-  signal
+  signal,
+  ViewChild
 } from '@angular/core';
 import { CommonModule, DOCUMENT } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -27,8 +28,6 @@ import { BadgeComponent } from '../../shared/components/ui/badge/badge.component
 import { TagComponent } from '../../shared/components/ui/tag/tag.component';
 import { FilterTagComponent } from '../../shared/components/ui/tag/filter-tag.component';
 import { ModalComponent, type ModalSize } from '../../shared/components/ui/modal/modal.component';
-import { LoadingComponent } from '../../shared/components/ui/loading/loading.component';
-import { TimerComponent } from '../../shared/components/ui/timer/timer.component';
 import {
   PickerComponent,
   type PickerOption
@@ -37,6 +36,7 @@ import { IconComponent } from '../../shared/components/ui/icon/icon.component';
 import type { IconName } from '../../shared/components/ui/icon/icon-paths';
 import { Recipe, Difficulty, MealType, RecipeFilter } from '../../shared/models/recipe.model';
 import type {
+  AIRecipeRequest,
   AIGuestPreferences,
   AIRecipeResponse,
   DetailLevel
@@ -50,10 +50,15 @@ import { I18nService } from '../../core/services/i18n.service';
 import { resolveRecipeRouteIntent } from './recipe-route-intent';
 import { recipeCategoryEmoji } from './recipe-category-emoji';
 import { RecipeStepPhotoComponent } from './recipe-step-photo.component';
-import { RecipeCookingViewComponent } from './recipe-cooking-view.component';
+import { RecipeDetailViewComponent } from './recipe-detail-view.component';
+import {
+  RecipeCatalogResultsComponent,
+  type RecipeCatalogDisplay
+} from './recipe-catalog-results.component';
 import { AiParticipantsComponent } from '../../shared/components/ai-participants.component';
 import {
   detailLevelForCookingLevel,
+  recipeDetailLevelLabelKey,
   recipeDetailLevelFor,
   rememberRecipeDetailLevel,
   scaleRecipeQuantity,
@@ -73,6 +78,14 @@ const RECIPE_MEAL_TYPES: readonly MealType[] = [
   'dessert'
 ];
 const RECIPE_DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard'];
+const RECIPE_DETAIL_LEVELS: readonly DetailLevel[] = ['basic', 'intermediate', 'expert'];
+type RecipeDetailSection = 'preparation' | 'ingredients' | 'guidance' | 'storage';
+const RECIPE_DETAIL_SECTIONS: readonly RecipeDetailSection[] = [
+  'preparation',
+  'ingredients',
+  'guidance',
+  'storage'
+];
 
 function positiveInteger(value: string | null): number | null {
   if (!value || !/^\d+$/.test(value)) return null;
@@ -88,6 +101,10 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
   return value && RECIPE_DIFFICULTIES.includes(value as Difficulty) ? (value as Difficulty) : null;
 }
 
+function isRecipeDetailLevel(value: string | null): value is DetailLevel {
+  return value !== null && RECIPE_DETAIL_LEVELS.includes(value as DetailLevel);
+}
+
 @Component({
   selector: 'app-recipes',
   standalone: true,
@@ -100,14 +117,13 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
     TagComponent,
     FilterTagComponent,
     ModalComponent,
-    LoadingComponent,
-    TimerComponent,
     PickerComponent,
     CatalogLabelPipe,
     IconComponent,
     RecipeStepPhotoComponent,
-    RecipeCookingViewComponent,
-    AiParticipantsComponent
+    AiParticipantsComponent,
+    RecipeDetailViewComponent,
+    RecipeCatalogResultsComponent
   ],
   template: `
     <div class="recipes">
@@ -121,6 +137,15 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
             <span class="recipes__count">{{ recetasLabel() }}</span>
           </div>
           <div class="recipes__actions">
+            <app-button
+              *ngIf="collection() === 'book'"
+              variant="outline"
+              data-test="recipe-create-action"
+              (onClick)="createManualRecipe()"
+            >
+              <app-icon name="add" [size]="16" [label]="null" />
+              {{ 'recipes.create_manual' | t }}
+            </app-button>
             <app-button variant="outline" (onClick)="openFilterModal()">
               <app-icon name="filter_list" [size]="16" [label]="null" />
               {{ 'recipes.filters' | t }}
@@ -159,186 +184,112 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
           </button>
         </div>
 
-        <div *ngIf="collection() === 'book'" class="recipes__book-controls">
-          <form
-            class="recipe-book-search"
-            role="search"
-            (submit)="$event.preventDefault(); applyBookSearch()"
-          >
-            <label class="recipe-book-search__label" for="recipe-book-search">{{
-              'recipes.search.label' | t
-            }}</label>
-            <div class="recipe-book-search__field">
-              <app-icon name="search" [size]="18" [label]="null" />
-              <input
-                id="recipe-book-search"
-                data-test="recipe-book-search"
-                type="search"
-                name="recipeBookSearch"
-                [ngModel]="searchInput()"
-                (ngModelChange)="searchInput.set($event)"
-                [placeholder]="'recipes.search.placeholder' | t"
-                autocomplete="off"
-              />
-            </div>
-          </form>
-          <app-button *ngIf="hasActiveFilters()" variant="ghost" (onClick)="clearFilters()">
-            {{ 'recipes.book.clear' | t }}
-          </app-button>
-        </div>
-
-        <!-- Quick Filters -->
-        <div class="recipes__quick-filters">
-          <app-filter-tag
-            *ngFor="let filter of quickFilters"
-            [selected]="activeFilter() === filter.value"
-            (onClick)="setFilter(filter.value)"
-          >
-            <app-icon [name]="filter.icon" [size]="16" [label]="null" />
-            {{ filter.labelKey | t }}
-          </app-filter-tag>
-        </div>
-
-        <!-- Loading -->
-        <app-loading
-          *ngIf="recipeService.isLoading()"
-          [message]="'recipes.loading' | t"
-        ></app-loading>
-
-        <div
-          *ngIf="recipeService.recipesLoadError()"
-          class="recipes__load-error"
-          data-test="recipes-load-error"
-          role="alert"
-          aria-atomic="true"
-        >
-          <span>{{ 'recipes.list_load_error' | t }}</span>
-          <app-button
-            variant="outline"
-            size="sm"
-            type="button"
-            data-test="recipes-retry-load"
-            (onClick)="recipeService.retryLoadRecipes()"
-          >
-            {{ 'recipes.retry_list_load' | t }}
-          </app-button>
-        </div>
-
-        <!-- Recipes Grid -->
-        <div class="recipes__grid" *ngIf="!recipeService.isLoading()">
-          <article
-            *ngFor="let recipe of recipeService.recipes(); trackBy: trackById"
-            class="recipe-card"
-            data-test="recipe-card"
-          >
-            <button type="button" class="recipe-card__open" (click)="viewRecipe(recipe)">
-              <div class="recipe-card__image">
-                <img
-                  *ngIf="recipeImageUrl(recipe) as imageUrl; else noRecipeImage"
-                  [src]="imageUrl"
-                  [alt]="'recipes.book.cover_alt' | t: { name: recipe.name }"
-                  loading="lazy"
-                />
-                <ng-template #noRecipeImage>
-                  <span
-                    class="recipe-card__cover-fallback recipe-card__placeholder"
-                    aria-hidden="true"
-                  >
-                    <app-icon name="kitchen" [size]="48" [label]="null" />
-                  </span>
-                </ng-template>
-              </div>
-
-              <div class="recipe-card__content">
-                <h3 class="recipe-card__name">{{ recipe.name }}</h3>
-                <p class="recipe-card__description">{{ recipe.description }}</p>
-                <div *ngIf="collection() === 'book'" class="recipe-card__origin">
-                  <span *ngIf="recipe.countryCode">{{ countryLabel(recipe.countryCode) }}</span>
-                  <span *ngFor="let type of recipe.mealType">{{ mealTypeLabel(type) }}</span>
-                </div>
-
-                <div class="recipe-card__meta">
-                  <span class="recipe-card__time">{{
-                    'recipes.min' | t: { n: recipe.totalTime }
-                  }}</span>
-                  <app-badge [variant]="getDifficultyVariant(recipe.difficulty)" size="sm">
-                    {{ recipe.difficulty }}
-                  </app-badge>
-                  <span
-                    class="recipe-card__servings"
-                    [attr.aria-label]="'recipes.porciones_n' | t: { n: recipe.servings }"
-                  >
-                    <app-icon name="group" [size]="16" [label]="null" />
-                    <span aria-hidden="true">{{ recipe.servings }}</span>
-                  </span>
-                </div>
-              </div>
-            </button>
-            <button
-              type="button"
-              class="recipe-card__favorite"
-              [class.recipe-card__favorite--active]="recipe.isFavorite"
-              [attr.aria-label]="
-                (recipe.isFavorite ? 'recipes.favorito' : 'recipes.anadir_a_favoritos') | t
-              "
-              [attr.aria-pressed]="recipe.isFavorite"
-              (click)="toggleFavorite(recipe)"
-            >
-              <app-icon name="favorite" [size]="20" [label]="null" />
-            </button>
-          </article>
-
-          <!-- Empty State -->
+        <div class="recipes__filter-row">
           <div
-            *ngIf="recipeService.recipes().length === 0 && !recipeService.recipesLoadError()"
-            class="empty-state"
+            class="recipes__browse-toolbar"
+            [class.recipes__browse-toolbar--with-clear]="
+              hasActiveFilters() && recipeService.recipes().length > 0
+            "
           >
-            <span class="empty-state__icon"
-              ><app-icon name="menu_book" [size]="64" [label]="null"
-            /></span>
-            <h3 class="empty-state__title">
-              {{ collection() === 'book' ? ('recipes.book.no_results' | t) : ('recipes.none' | t) }}
-            </h3>
-            <p class="empty-state__text">
-              {{
-                collection() === 'book'
-                  ? ('recipes.book.no_results_desc' | t)
-                  : ('recipes.none.desc' | t)
-              }}
-            </p>
-            <app-button *ngIf="collection() !== 'book'" variant="primary" (onClick)="openAiModal()">
-              {{ 'recipes.generar_con_ia' | t }}
-            </app-button>
-            <app-button
-              *ngIf="collection() === 'book'"
-              variant="outline"
-              (onClick)="clearFilters()"
+            <form
+              class="recipe-book-search"
+              role="search"
+              (submit)="$event.preventDefault(); applySearch()"
             >
-              {{ 'recipes.book.clear' | t }}
-            </app-button>
+              <label class="recipe-book-search__label" for="recipe-search">{{
+                'recipes.search.label' | t
+              }}</label>
+              <div class="recipe-book-search__field">
+                <app-icon name="search" [size]="18" [label]="null" />
+                <input
+                  id="recipe-search"
+                  data-test="recipe-search"
+                  type="search"
+                  name="recipeSearch"
+                  [ngModel]="searchInput()"
+                  (ngModelChange)="searchInput.set($event)"
+                  [placeholder]="'recipes.search.placeholder' | t"
+                  autocomplete="off"
+                />
+              </div>
+            </form>
+
+            <div class="recipes__browse-actions">
+              <app-button
+                *ngIf="hasActiveFilters() && recipeService.recipes().length > 0"
+                variant="ghost"
+                (onClick)="clearFilters()"
+              >
+                {{ 'recipes.book.clear' | t }}
+              </app-button>
+              <div
+                class="recipes__view-switch"
+                role="group"
+                [attr.aria-label]="'recipes.view.label' | t"
+              >
+                <button
+                  type="button"
+                  class="recipes__view-button"
+                  [class.is-active]="viewMode() === 'grid'"
+                  [attr.aria-label]="'recipes.view.grid' | t"
+                  [attr.aria-pressed]="viewMode() === 'grid'"
+                  data-test="recipe-view-grid"
+                  (click)="setViewMode('grid')"
+                >
+                  <app-icon name="calendar_view_month" [size]="18" [label]="null" />
+                  <span class="recipes__view-label">{{ 'recipes.view.grid' | t }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="recipes__view-button"
+                  [class.is-active]="viewMode() === 'list'"
+                  [attr.aria-label]="'recipes.view.list' | t"
+                  [attr.aria-pressed]="viewMode() === 'list'"
+                  data-test="recipe-view-list"
+                  (click)="setViewMode('list')"
+                >
+                  <app-icon name="menu" [size]="18" [label]="null" />
+                  <span class="recipes__view-label">{{ 'recipes.view.list' | t }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Filters -->
+          <div class="recipes__quick-filters">
+            <app-filter-tag
+              *ngFor="let filter of quickFilters"
+              [selected]="activeFilter() === filter.value"
+              [touchTarget]="true"
+              (onClick)="setFilter(filter.value)"
+            >
+              <app-icon [name]="filter.icon" [size]="16" [label]="null" />
+              {{ filter.labelKey | t }}
+            </app-filter-tag>
           </div>
         </div>
 
-        <nav
-          *ngIf="collection() === 'book' && pageCount() > 1"
-          class="recipe-book-pagination"
-          [attr.aria-label]="'recipes.collection.book' | t"
-        >
-          <app-button variant="outline" [disabled]="page() <= 1" (onClick)="changePage(page() - 1)">
-            {{ 'recipes.book.previous_page' | t }}
-          </app-button>
-          <span aria-live="polite">{{
-            'recipes.book.page' | t: { current: page(), total: pageCount() }
-          }}</span>
-          <app-button
-            variant="outline"
-            [disabled]="page() >= pageCount()"
-            (onClick)="changePage(page() + 1)"
-          >
-            {{ 'recipes.book.next_page' | t }}
-          </app-button>
-        </nav>
-
+        <app-recipe-catalog-results
+          [collection]="collection()"
+          [featuredRecipe]="featuredRecipe()"
+          [recipes]="recipesForGrid()"
+          [viewMode]="viewMode()"
+          [showAllMobile]="showAllMobileRecipes()"
+          [loading]="recipeService.isLoading()"
+          [loadError]="!!recipeService.recipesLoadError()"
+          [total]="recipeService.total()"
+          [page]="page()"
+          [pageCount]="pageCount()"
+          [hasActiveFilters]="hasActiveFilters()"
+          [display]="recipeCatalogDisplay"
+          (showAllMobileChange)="showAllMobileRecipes.set($event)"
+          (recipeOpened)="viewRecipe($event)"
+          (favoriteToggled)="toggleFavorite($event)"
+          (openAi)="openAiModal()"
+          (clearFiltersRequested)="clearFilters()"
+          (retryRequested)="recipeService.retryLoadRecipes()"
+          (pageChange)="changePage($event)"
+        />
         <!-- Book filters -->
         <app-modal
           [isOpen]="isFilterModalOpen()"
@@ -434,6 +385,7 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
 
         <!-- AI Generation Modal -->
         <app-modal
+          #aiGenerationModal
           [isOpen]="isAiModalOpen()"
           [title]="'recipes.generar_receta_con_ia' | t"
           [size]="aiPreviewModalSize()"
@@ -599,19 +551,15 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
               </div>
               <div class="ai-form__row">
                 <div class="ai-form__field">
-                  <label class="ai-form__label" for="recipe-difficulty">{{
-                    'recipes.dificultad' | t
-                  }}</label>
-                  <select
+                  <span class="ai-form__label">{{ 'recipes.dificultad' | t }}</span>
+                  <app-picker
                     id="recipe-difficulty"
-                    [(ngModel)]="aiOptions.difficulty"
-                    [ngModelOptions]="{ standalone: true }"
-                    class="form-select"
-                  >
-                    <option value="easy">{{ 'recipes.facil' | t }}</option>
-                    <option value="medium">{{ 'recipes.medio' | t }}</option>
-                    <option value="hard">{{ 'recipes.dificil' | t }}</option>
-                  </select>
+                    [options]="difficultyOptions"
+                    [value]="aiOptions.difficulty"
+                    [label]="'recipes.dificultad' | t"
+                    [floatingPanel]="true"
+                    (valueChange)="setAiDifficulty($event)"
+                  />
                 </div>
                 <div class="ai-form__field">
                   <label class="ai-form__label" for="recipe-serving-input">{{
@@ -634,20 +582,15 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
                   </p>
                 </div>
                 <div class="ai-form__field">
-                  <label class="ai-form__label" for="recipe-detail-level">{{
-                    'recipes.detalle' | t
-                  }}</label>
-                  <select
+                  <span class="ai-form__label">{{ 'recipes.detalle' | t }}</span>
+                  <app-picker
                     id="recipe-detail-level"
-                    [ngModel]="aiOptions.detailLevel"
-                    (ngModelChange)="setAiDetailLevel($event)"
-                    [ngModelOptions]="{ standalone: true }"
-                    class="form-select"
-                  >
-                    <option value="basic">{{ 'recipes.basico' | t }}</option>
-                    <option value="intermediate">{{ 'auth.intermediate' | t }}</option>
-                    <option value="expert">{{ 'auth.expert' | t }}</option>
-                  </select>
+                    [options]="detailLevelOptions"
+                    [value]="aiOptions.detailLevel"
+                    [label]="'recipes.detalle' | t"
+                    [floatingPanel]="true"
+                    (valueChange)="setAiDetailLevel($event)"
+                  />
                 </div>
               </div>
               <p
@@ -707,16 +650,47 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
           <!-- Generated Recipe -->
           <div *ngIf="generatedPreviewRecipe() as recipe" class="generated-recipe">
             <div class="generated-recipe__header">
-              <h3 class="generated-recipe__title">{{ recipe.name }}</h3>
+              <h3 tabindex="-1" class="generated-recipe__title">{{ recipe.name }}</h3>
               <div class="generated-recipe__meta">
                 <app-badge variant="secondary">{{
-                  'recipes.porciones_n' | t: { n: recipe.servings }
+                  'recipes.porciones_n' | t: { n: generatedPreviewServings() }
                 }}</app-badge>
                 <app-badge *ngIf="recipe.calories">{{
                   'recipes.kcal_per_serving' | t: { n: recipe.calories }
                 }}</app-badge>
               </div>
             </div>
+
+            <div class="recipe-detail__servings" data-test="generated-recipe-serving-control">
+              <label for="generated-recipe-serving-count">{{
+                'recipes.servings_scaled_label' | t
+              }}</label>
+              <input
+                id="generated-recipe-serving-count"
+                class="form-input"
+                type="number"
+                min="1"
+                step="1"
+                [ngModel]="generatedPreviewServings()"
+                (ngModelChange)="setGeneratedPreviewServings($event)"
+                aria-describedby="generated-recipe-serving-hint"
+                data-test="generated-serving-count"
+              />
+              <span id="generated-recipe-serving-hint" class="recipe-detail__hint">
+                {{ 'recipes.scaled_only' | t }}
+              </span>
+            </div>
+
+            <section
+              *ngIf="recipe.guidance.batchCookingWarning"
+              class="step-card__warning generated-recipe__batch-warning"
+              data-test="generated-recipe-batch-warning"
+              role="note"
+            >
+              <app-icon name="error_outline" [size]="16" [label]="null" />
+              <strong>{{ 'recipes.batch_cooking_warning_heading' | t }}:</strong>
+              {{ recipe.guidance.batchCookingWarning }}
+            </section>
 
             <p class="generated-recipe__description">{{ recipe.description }}</p>
             <div
@@ -777,7 +751,12 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
                 <li *ngFor="let ing of recipe.ingredients">
                   {{
                     'recipes.ingrediente_de'
-                      | t: { quantity: ing.quantity, unit: ing.unit, name: ing.name }
+                      | t
+                        : {
+                            quantity: generatedPreviewIngredientQuantity(recipe, ing.quantity),
+                            unit: ing.unit,
+                            name: ing.name
+                          }
                   }}
                   <span *ngIf="ing.preparation" class="generated-recipe__prep"
                     >({{ ing.preparation }})</span
@@ -816,19 +795,17 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
                 *ngIf="recipe.instructionsByLevel"
                 class="ai-form__field generated-recipe__detail-level"
               >
-                <label class="ai-form__label" for="generated-recipe-detail-level">
+                <span class="ai-form__label">
                   {{ 'recipes.detalle' | t }}
-                </label>
-                <select
+                </span>
+                <app-picker
                   id="generated-recipe-detail-level"
-                  class="form-select"
-                  [ngModel]="generatedPreviewDetailLevel()"
-                  (ngModelChange)="setGeneratedPreviewDetailLevel($event)"
-                >
-                  <option value="basic">{{ 'recipes.basico' | t }}</option>
-                  <option value="intermediate">{{ 'auth.intermediate' | t }}</option>
-                  <option value="expert">{{ 'auth.expert' | t }}</option>
-                </select>
+                  [options]="detailLevelOptions"
+                  [value]="generatedPreviewDetailLevel()"
+                  [label]="'recipes.detalle' | t"
+                  [floatingPanel]="true"
+                  (valueChange)="setGeneratedPreviewDetailLevel($event)"
+                />
               </div>
               <div class="generated-recipe__steps">
                 <div
@@ -908,8 +885,8 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
               <p *ngIf="recipe.storage.freezingPossible === false">
                 {{ 'recipes.no_freezing' | t }}
               </p>
-              <p *ngIf="recipe.storage.reheating">
-                {{ 'recipes.recalentar' | t: { text: recipe.storage.reheating } }}
+              <p *ngIf="recipe.storage.reheatingInstructions">
+                {{ 'recipes.recalentar' | t: { text: recipe.storage.reheatingInstructions } }}
               </p>
             </section>
 
@@ -942,7 +919,9 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
             class="generated-options"
             [attr.aria-label]="'recipes.elige_una_para_guardar' | t"
           >
-            <h3 class="generated-options__title">{{ 'recipes.elige_una_para_guardar' | t }}</h3>
+            <h3 tabindex="-1" class="generated-options__title">
+              {{ 'recipes.elige_una_para_guardar' | t }}
+            </h3>
             <div class="generated-options__list">
               <article
                 *ngFor="let recipe of aiService.generatedRecipes(); let i = index"
@@ -956,7 +935,7 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
                       'recipes.min' | t: { n: recipe.totalTime }
                     }}</app-badge>
                     <app-badge variant="secondary">{{
-                      'recipes.porciones_n' | t: { n: recipe.servings }
+                      'recipes.porciones_n' | t: { n: generatedPreviewServings() }
                     }}</app-badge>
                   </div>
                 </div>
@@ -965,19 +944,17 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
                   *ngIf="recipe.instructionsByLevel"
                   class="ai-form__field generated-option__detail-level"
                 >
-                  <label class="ai-form__label" [attr.for]="'generated-option-level-' + i">
+                  <span class="ai-form__label">
                     {{ 'recipes.detalle' | t }}
-                  </label>
-                  <select
+                  </span>
+                  <app-picker
                     [id]="'generated-option-level-' + i"
-                    class="form-select"
-                    [ngModel]="generatedRecipeDetailLevel(i)"
-                    (ngModelChange)="setGeneratedRecipeDetailLevel(i, $event)"
-                  >
-                    <option value="basic">{{ 'recipes.basico' | t }}</option>
-                    <option value="intermediate">{{ 'auth.intermediate' | t }}</option>
-                    <option value="expert">{{ 'auth.expert' | t }}</option>
-                  </select>
+                    [options]="detailLevelOptions"
+                    [value]="generatedRecipeDetailLevel(i)"
+                    [label]="'recipes.detalle' | t"
+                    [floatingPanel]="true"
+                    (valueChange)="setGeneratedRecipeDetailLevel(i, $event)"
+                  />
                   <ol class="generated-option__steps">
                     <li
                       *ngFor="
@@ -1006,1439 +983,42 @@ function difficultyFromQuery(value: string | null): Difficulty | null {
       </div>
 
       <!-- Saved recipes have a shareable full-page view, not a dialog over the list. -->
-      <section
+      <app-recipe-detail-view
         *ngIf="selectedRecipe() as recipe"
-        class="recipe-detail-page"
-        [class.recipe-detail-page--cooking]="isCookingMode()"
-        data-test="recipe-detail-page"
-        aria-labelledby="recipe-detail-title"
-      >
-        <header class="recipe-detail-page__header">
-          <app-button variant="ghost" (onClick)="closeRecipeDetail()">
-            <app-icon name="chevron_left" [size]="18" [label]="null" />
-            {{ 'recipes.return_to_list' | t }}
-          </app-button>
-          <h1
-            *ngIf="!isCookingMode()"
-            id="recipe-detail-title"
-            data-test="recipe-detail-title"
-            tabindex="-1"
-          >
-            {{ recipe.name }}
-          </h1>
-          <app-button
-            *ngIf="!isCookingMode() && getRecipeSteps(recipe, selectedRecipeDetailLevel()).length"
-            variant="primary"
-            data-test="recipe-cooking-open"
-            (onClick)="enterCookingMode()"
-          >
-            <app-icon name="kitchen" [size]="16" [label]="null" />
-            {{ 'recipes.cooking.mode_open' | t }}
-          </app-button>
-          <app-button
-            *ngIf="canEditRecipe(recipe)"
-            variant="outline"
-            data-test="recipe-edit-action"
-            (onClick)="editRecipe(recipe)"
-          >
-            <app-icon name="edit" [size]="16" [label]="null" />
-            {{ 'recipes.edit_recipe' | t }}
-          </app-button>
-        </header>
-        <article class="recipe-detail" data-test="recipe-full-detail">
-          <app-recipe-cooking-view
-            *ngIf="isCookingMode()"
-            [recipe]="recipe"
-            [steps]="getRecipeSteps(recipe, selectedRecipeDetailLevel())"
-            [servings]="recipeServings()"
-            (servingsChange)="setRecipeServings($event)"
-            (exit)="exitCookingMode()"
-          />
-          <header *ngIf="!isCookingMode()" class="recipe-detail__hero">
-            <div class="recipe-detail__cover">
-              <img
-                *ngIf="recipeImageUrl(recipe) as imageUrl; else detailNoRecipeImage"
-                [src]="imageUrl"
-                [alt]="
-                  recipe.imageAttribution?.altText ||
-                  ('recipes.book.cover_alt' | t: { name: recipe.name })
-                "
-              />
-              <ng-template #detailNoRecipeImage>
-                <span
-                  class="recipe-card__cover-fallback recipe-card__placeholder"
-                  aria-hidden="true"
-                >
-                  <app-icon name="kitchen" [size]="40" [label]="null" />
-                </span>
-              </ng-template>
-              <p *ngIf="recipe.imageAttribution as credit" class="recipe-detail__image-credit">
-                <span>{{ 'recipes.step_photo_credit' | t: { author: credit.author } }}</span>
-                <a [href]="credit.licenseUrl" target="_blank" rel="noopener noreferrer">{{
-                  credit.licenseName
-                }}</a>
-                <a [href]="credit.sourceUrl" target="_blank" rel="noopener noreferrer">{{
-                  'recipes.step_photo_source' | t
-                }}</a>
-              </p>
-            </div>
-            <div class="recipe-detail__header">
-              <div class="recipe-detail__meta">
-                <span *ngIf="recipe.countryCode">{{ countryLabel(recipe.countryCode) }}</span>
-                <span *ngIf="recipe.cuisine">{{ recipe.cuisine }}</span>
-                <app-badge [variant]="getDifficultyVariant(recipe.difficulty)">
-                  {{ recipe.difficulty }}
-                </app-badge>
-              </div>
-              <p class="recipe-detail__description">{{ recipe.description }}</p>
-              <div class="recipe-detail__timings" [attr.aria-label]="'recipes.total_time' | t">
-                <span
-                  ><strong>{{ 'recipes.total_time' | t }}</strong>
-                  {{ 'recipes.min' | t: { n: recipe.totalTime } }}</span
-                >
-                <span *ngIf="recipe.prepTime"
-                  ><strong>{{ 'recipes.prep_time' | t }}</strong>
-                  {{ 'recipes.min' | t: { n: recipe.prepTime } }}</span
-                >
-                <span *ngIf="recipe.cookTime"
-                  ><strong>{{ 'recipes.cook_time' | t }}</strong>
-                  {{ 'recipes.min' | t: { n: recipe.cookTime } }}</span
-                >
-                <span *ngIf="recipe.restTime"
-                  ><strong>{{ 'recipes.rest_time' | t }}</strong>
-                  {{ 'recipes.min' | t: { n: recipe.restTime } }}</span
-                >
-                <span *ngIf="recipe.calories || recipe.nutrition?.calories"
-                  ><strong>{{ 'recipes.nutrition' | t }}</strong>
-                  {{
-                    'recipes.kcal_per_serving'
-                      | t: { n: recipe.calories || recipe.nutrition?.calories }
-                  }}</span
-                >
-              </div>
-              <div class="recipe-detail__servings">
-                <label for="saved-recipe-servings">{{ 'recipes.servings_scaled_label' | t }}</label>
-                <input
-                  id="saved-recipe-servings"
-                  class="form-input"
-                  type="number"
-                  min="1"
-                  [ngModel]="recipeServings()"
-                  (ngModelChange)="setRecipeServings($event)"
-                  data-test="recipe-serving-count"
-                />
-                <span class="recipe-detail__hint">{{ 'recipes.scaled_only' | t }}</span>
-              </div>
-            </div>
-          </header>
-
-          <section
-            *ngIf="!isCookingMode() && recipe.nutrition"
-            class="recipe-detail__section recipe-detail__panel"
-            data-test="recipe-nutrition"
-          >
-            <h3>{{ 'recipes.nutrition' | t }}</h3>
-            <dl class="recipe-detail__nutrition">
-              <div *ngIf="recipe.nutrition?.protein !== undefined">
-                <dt>{{ 'recipes.protein' | t }}</dt>
-                <dd>{{ recipe.nutrition?.protein }} g</dd>
-              </div>
-              <div *ngIf="recipe.nutrition?.carbs !== undefined">
-                <dt>{{ 'recipes.carbs' | t }}</dt>
-                <dd>{{ recipe.nutrition?.carbs }} g</dd>
-              </div>
-              <div *ngIf="recipe.nutrition?.fat !== undefined">
-                <dt>{{ 'recipes.fat' | t }}</dt>
-                <dd>{{ recipe.nutrition?.fat }} g</dd>
-              </div>
-              <div
-                *ngIf="recipe.nutrition?.fiber !== undefined && recipe.nutrition?.fiber !== null"
-              >
-                <dt>{{ 'recipes.fiber' | t }}</dt>
-                <dd>{{ recipe.nutrition?.fiber }} g</dd>
-              </div>
-              <div *ngIf="recipe.nutrition?.sugar !== undefined">
-                <dt>{{ 'recipes.sugar' | t }}</dt>
-                <dd>{{ recipe.nutrition?.sugar }} g</dd>
-              </div>
-              <div *ngIf="recipe.nutrition?.sodium !== undefined">
-                <dt>{{ 'recipes.sodium' | t }}</dt>
-                <dd>{{ recipe.nutrition?.sodium }} mg</dd>
-              </div>
-            </dl>
-          </section>
-
-          <div *ngIf="!isCookingMode()" class="recipe-detail__body">
-            <aside class="recipe-detail__sidebar" [attr.aria-label]="'dashboard.ingredients' | t">
-              <section
-                class="recipe-detail__section recipe-detail__panel"
-                data-test="recipe-ingredients"
-              >
-                <h3>{{ 'dashboard.ingredients' | t }}</h3>
-                <ul class="recipe-detail__ingredients">
-                  <li *ngFor="let ing of recipe.ingredients">
-                    <span class="recipe-detail__ingredient-line">
-                      <strong
-                        >{{ scaledIngredientQuantity(recipe, ing.quantity) | number: '1.0-2' }}
-                        {{ ing.unit }}</strong
-                      >
-                      {{ ing.name }}
-                      <span *ngIf="ing.isOptional" class="recipe-detail__optional">{{
-                        'recipes.optional' | t
-                      }}</span>
-                    </span>
-                    <span *ngIf="ing.preparation" class="recipe-detail__ingredient-note">{{
-                      ing.preparation
-                    }}</span>
-                    <span *ngIf="ing.notes" class="recipe-detail__ingredient-note">{{
-                      ing.notes
-                    }}</span>
-                    <span *ngIf="ing.substitutes?.length" class="recipe-detail__ingredient-note">
-                      <strong>{{ 'recipes.substitutes' | t }}:</strong>
-                      {{ ing.substitutes?.join(', ') }}
-                    </span>
-                  </li>
-                </ul>
-              </section>
-
-              <section
-                *ngIf="recipe.guidance?.appliances?.length || recipe.utensils.length"
-                class="recipe-detail__section recipe-detail__panel"
-                data-test="recipe-equipment"
-              >
-                <h3>{{ 'recipes.appliances' | t }}</h3>
-                <ul *ngIf="recipe.guidance?.appliances?.length" class="recipe-detail__plain-list">
-                  <li *ngFor="let appliance of recipe.guidance?.appliances">{{ appliance }}</li>
-                </ul>
-                <h4 *ngIf="recipe.utensils.length">{{ 'recipes.utensils' | t }}</h4>
-                <ul *ngIf="recipe.utensils.length" class="recipe-detail__plain-list">
-                  <li *ngFor="let utensil of recipe.utensils">{{ utensil }}</li>
-                </ul>
-              </section>
-            </aside>
-
-            <div class="recipe-detail__main">
-              <section class="recipe-detail__section" data-test="recipe-preparation">
-                <div class="recipe-detail__section-header">
-                  <h3>{{ 'recipes.preparacion' | t }}</h3>
-                  <div *ngIf="recipe.instructionsByLevel" class="recipe-detail__detail-level">
-                    <label for="saved-recipe-detail-level">{{ 'recipes.detalle' | t }}</label>
-                    <select
-                      id="saved-recipe-detail-level"
-                      class="form-select"
-                      [ngModel]="selectedRecipeDetailLevel()"
-                      (ngModelChange)="setSelectedRecipeDetailLevel($event)"
-                      data-test="recipe-detail-level"
-                    >
-                      <option value="basic">{{ 'recipes.basico' | t }}</option>
-                      <option value="intermediate">{{ 'auth.intermediate' | t }}</option>
-                      <option value="expert">{{ 'auth.expert' | t }}</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="recipe-detail__steps">
-                  <article
-                    *ngFor="let step of getRecipeSteps(recipe, selectedRecipeDetailLevel())"
-                    class="step-card"
-                    [attr.data-step-number]="step.stepNumber"
-                  >
-                    <div class="step-card__header">
-                      <span class="step-card__number">{{
-                        'recipes.paso_n' | t: { n: step.stepNumber }
-                      }}</span>
-                      <span *ngIf="step.duration" class="step-card__time">{{
-                        'recipes.min' | t: { n: step.duration }
-                      }}</span>
-                    </div>
-                    <app-recipe-step-photo
-                      [instruction]="step.instruction"
-                      [image]="step.image"
-                      [imageAttribution]="step.imageAttribution"
-                    />
-                    <p class="step-card__instruction">{{ step.instruction }}</p>
-                    <app-timer
-                      *ngIf="step.timerRequired && step.timerDuration"
-                      [duration]="step.timerDuration * 60"
-                      [label]="'recipes.timer_paso' | t: { n: step.stepNumber }"
-                    ></app-timer>
-                    <div *ngIf="step.tips" class="step-card__tip">
-                      <app-icon name="help_outline" [size]="16" [label]="null" /> {{ step.tips }}
-                    </div>
-                    <div *ngIf="step.warning" class="step-card__warning">
-                      <app-icon name="error_outline" [size]="16" [label]="null" />
-                      {{ step.warning }}
-                    </div>
-                  </article>
-                </div>
-              </section>
-
-              <section
-                *ngIf="recipe.guidance?.parallelTasks?.length"
-                class="recipe-detail__section recipe-detail__panel"
-                data-test="recipe-parallel-tasks"
-              >
-                <h3>{{ 'recipes.parallel_tasks' | t }}</h3>
-                <ul class="recipe-detail__plain-list">
-                  <li *ngFor="let task of recipe.guidance?.parallelTasks">{{ task }}</li>
-                </ul>
-              </section>
-
-              <section
-                *ngIf="recipe.guidance?.tipsAndVariations?.length"
-                class="recipe-detail__section recipe-detail__panel"
-                data-test="recipe-tips-variations"
-              >
-                <h3>{{ 'recipes.tips_variations' | t }}</h3>
-                <ul class="recipe-detail__plain-list">
-                  <li *ngFor="let tip of recipe.guidance?.tipsAndVariations">{{ tip }}</li>
-                </ul>
-              </section>
-
-              <section
-                *ngIf="recipe.storage"
-                class="recipe-detail__section recipe-detail__panel"
-                data-test="recipe-storage"
-              >
-                <h3>{{ 'recipes.conservacion' | t }}</h3>
-                <p>
-                  {{ recipe.storage.method }} ·
-                  {{ 'recipes.storage_fridge' | t: { duration: recipe.storage.duration } }}
-                </p>
-                <p *ngIf="recipe.storage.container">
-                  {{ 'recipes.container' | t: { name: recipe.storage.container } }}
-                </p>
-                <p *ngIf="recipe.storage.freezingPossible && recipe.storage.freezingDuration">
-                  {{
-                    'recipes.freezing_duration' | t: { duration: recipe.storage.freezingDuration }
-                  }}
-                </p>
-                <p *ngIf="!recipe.storage.freezingPossible">{{ 'recipes.no_freezing' | t }}</p>
-                <p *ngIf="recipe.storage.reheatingInstructions">
-                  {{ 'recipes.recalentar' | t: { text: recipe.storage.reheatingInstructions } }}
-                </p>
-              </section>
-            </div>
-          </div>
-
-          <section
-            *ngIf="!isCookingMode() && recipe.sourceAttribution as source"
-            class="recipe-detail__source"
-          >
-            <h3>{{ 'recipes.book.source' | t }}</h3>
-            <strong>{{ source.publisher }}</strong>
-            <p *ngIf="source.title">{{ source.title }}</p>
-            <p *ngIf="source.note">{{ source.note }}</p>
-            <a
-              *ngIf="attributionUrl(recipe) as sourceUrl"
-              [href]="sourceUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              >{{ 'recipes.book.open_source' | t }}</a
-            >
-          </section>
-
-          <footer *ngIf="!isCookingMode()" class="recipe-detail__actions">
-            <app-button
-              variant="primary"
-              [disabled]="cookingRecipeId() === recipe.id"
-              (onClick)="cookRecipe(recipe)"
-              >{{ 'recipes.cocinar_ahora' | t }}</app-button
-            >
-            <app-button variant="outline" (onClick)="toggleFavorite(recipe)">{{
-              recipe.isFavorite ? ('recipes.favorito' | t) : ('recipes.anadir_a_favoritos' | t)
-            }}</app-button>
-          </footer>
-        </article>
-      </section>
+        [recipe]="recipe"
+        [isCookingMode]="isCookingMode()"
+        [hasCookingSession]="hasCookingSession()"
+        [servings]="recipeServings()"
+        [detailSection]="recipeDetailSection()"
+        [checkedIngredients]="checkedRecipeIngredients()"
+        [detailLevel]="selectedRecipeDetailLevel()"
+        [cookingRecipeId]="cookingRecipeId()"
+        [canEdit]="canEditRecipe(recipe)"
+        [imageUrl]="recipeImageUrl(recipe)"
+        [difficultyLabel]="getDifficultyLabel(recipe.difficulty)"
+        [difficultyVariant]="getDifficultyVariant(recipe.difficulty)"
+        [countryLabel]="recipe.countryCode ? countryLabel(recipe.countryCode) : ''"
+        [sourceUrl]="attributionUrl(recipe)"
+        [steps]="getRecipeSteps(recipe, selectedRecipeDetailLevel())"
+        (closeRequested)="closeRecipeDetail()"
+        (editRequested)="editRecipe(recipe)"
+        (servingsChanged)="setRecipeServings($event)"
+        (detailSectionChanged)="setRecipeDetailSection($event)"
+        (detailLevelChanged)="setSelectedRecipeDetailLevel($event)"
+        (detailTabKeydown)="onRecipeDetailTabKeydown($event.event, $event.index)"
+        (ingredientChecked)="setRecipeIngredientChecked($event.index, $event.event)"
+        (cookingModeEntered)="enterCookingMode()"
+        (cookRequested)="cookRecipe(recipe)"
+        (favoriteToggled)="toggleFavorite(recipe)"
+        (cookingModeExited)="exitCookingMode()"
+      />
     </div>
   `,
-  styles: [
-    `
-      /*
-     * ── Estados de interaccion (HOGARIA-SPEC 12q-B) ───────────────────────────────────────────
-     *
-     * Todo lo que se pulsa avisa antes de que se pulse. Va aqui arriba, junto, en lugar de repartido por
-     * las reglas de cada control: asi la proxima clase que se anada se compara con esta lista, y el
-     * check-ui (regla boton-sin-afecto) no deja a nadie poner un boton sin su hover. Van sin :hover los
-     * deshabilitados —un boton apagado que se ilumina es la manera mas rapida de ensenar a desconfiar.
-     */
-      /* El corazon de la tarjeta esta encima de una tarjeta que ya es un enlace: su hover tiene que marcar
-       el icono, no la tarjeta, y por eso se pinta el circulo en lugar de cambiar el color del trazo. */
-      .recipe-card__favorite:hover {
-        background: var(--error-subtle);
-        transform: scale(1.1);
-      }
-
-      .recipes {
-        width: 100%;
-        min-width: 0;
-        padding-block: var(--container-padding);
-      }
-
-      .recipe-detail-page {
-        width: 100%;
-        min-width: 0;
-      }
-
-      .recipe-detail-page__header {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3);
-        width: 100%;
-        max-width: 1440px;
-        min-width: 0;
-        margin: 0 auto var(--space-4);
-
-        h1 {
-          min-width: 0;
-          margin: 0;
-          font-size: var(--text-2xl);
-          font-weight: var(--font-semibold);
-          overflow-wrap: anywhere;
-        }
-      }
-
-      .recipe-detail-page__header h1:focus {
-        outline: none;
-      }
-
-      .recipe-detail-page--cooking .recipe-detail-page__header {
-        min-height: 0;
-        margin-bottom: 0;
-      }
-
-      .recipe-detail-page--cooking .recipe-detail-page__header > app-button {
-        display: none;
-      }
-
-      .recipes__header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: var(--space-4);
-        flex-wrap: wrap;
-        gap: var(--space-3);
-      }
-
-      .recipes__title-section {
-        display: flex;
-        align-items: baseline;
-        gap: var(--space-3);
-      }
-
-      .recipes__title {
-        font-family: var(--font-display);
-        font-size: var(--text-2xl);
-        font-weight: var(--font-bold);
-      }
-
-      .recipes__count {
-        font-size: var(--text-sm);
-        color: var(--text-secondary);
-      }
-
-      .recipes__actions {
-        display: flex;
-        gap: var(--space-2);
-      }
-
-      .recipes__quick-filters {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-2);
-        margin-bottom: var(--space-6);
-      }
-
-      .recipes__collection-tab:hover:not(.is-active) {
-        color: var(--primary-dark);
-      }
-
-      .recipes__collection-tab:focus-visible,
-      .recipe-card__open:focus-visible {
-        outline: 2px solid var(--primary);
-        outline-offset: -2px;
-      }
-
-      .recipe-card__open:hover .recipe-card__name {
-        color: var(--primary-dark);
-      }
-
-      .recipes__grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: var(--space-4);
-      }
-
-      .recipes__load-error {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: var(--space-2);
-        padding: var(--space-3);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-md);
-        background: var(--error-subtle);
-        color: var(--color-error-700);
-      }
-
-      /* Recipe Card */
-      .recipe-card {
-        position: relative;
-        background: var(--bg-secondary);
-        border-radius: var(--radius-xl);
-        border: 1px solid var(--border-default);
-        overflow: hidden;
-        cursor: pointer;
-        transition: border-color var(--duration-150) var(--ease-out);
-
-        &:hover {
-          border-color: var(--border-strong);
-        }
-      }
-
-      .recipe-card__image {
-        position: relative;
-        aspect-ratio: 16/10;
-        background: var(--bg-tertiary);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .recipe-card__favorite {
-        position: absolute;
-        top: var(--space-2);
-        right: var(--space-2);
-        width: 44px;
-        height: 44px;
-        border-radius: var(--radius-full);
-        background: rgba(255, 255, 255, 0.9);
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .recipe-card__content {
-        padding: var(--space-4);
-      }
-
-      .recipe-card__name {
-        font-family: var(--font-display);
-        font-size: var(--text-base);
-        font-weight: var(--font-semibold);
-        margin-bottom: var(--space-1);
-      }
-
-      .recipe-card__description {
-        font-size: var(--text-xs);
-        color: var(--text-secondary);
-        margin-bottom: var(--space-3);
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-      }
-
-      .recipe-card__meta {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3);
-        font-size: var(--text-xs);
-        color: var(--text-secondary);
-      }
-
-      .recipe-card__servings {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--space-1);
-      }
-
-      /* AI Form */
-      .ai-form {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-6);
-      }
-
-      .ai-form__description {
-        font-size: var(--text-sm);
-        color: var(--text-secondary);
-      }
-
-      .ai-form__section {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-2);
-      }
-
-      .ai-form__step {
-        display: grid;
-        min-width: 0;
-        gap: var(--space-4);
-      }
-
-      .ai-form__step h3 {
-        margin: 0;
-        font-size: var(--text-lg);
-        font-weight: var(--font-semibold);
-      }
-
-      .ai-form__section-heading,
-      .ai-form__bulk-actions {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--space-2);
-      }
-
-      .ai-form__bulk-actions {
-        justify-content: flex-end;
-      }
-
-      .recipe-ai-wizard__steps {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: var(--space-2);
-        margin: 0;
-        padding: 0 0 var(--space-3);
-        border-bottom: 1px solid var(--border-default);
-        list-style: none;
-      }
-
-      .recipe-ai-wizard__steps li {
-        display: flex;
-        min-width: 0;
-        align-items: center;
-        gap: var(--space-2);
-        color: var(--text-secondary);
-        font-size: var(--text-sm);
-      }
-
-      .recipe-ai-wizard__step-number {
-        display: inline-flex;
-        flex: 0 0 24px;
-        width: 24px;
-        height: 24px;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-sm);
-        font-size: var(--text-xs);
-      }
-
-      .recipe-ai-wizard__step--active {
-        color: var(--text-primary);
-        font-weight: var(--font-semibold);
-      }
-
-      .recipe-ai-wizard__step--active .recipe-ai-wizard__step-number,
-      .recipe-ai-wizard__step--complete .recipe-ai-wizard__step-number {
-        border-color: var(--primary);
-        background: var(--primary-subtle);
-        color: var(--primary-dark);
-      }
-
-      .recipe-ai-wizard__count {
-        color: var(--text-secondary);
-        font-size: var(--text-xs);
-      }
-
-      .recipe-ai-wizard__text-action {
-        min-height: 36px;
-        padding: 4px 8px;
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-sm);
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        cursor: pointer;
-        font: inherit;
-        font-size: var(--text-xs);
-      }
-
-      .recipe-ai-wizard__text-action:disabled {
-        cursor: not-allowed;
-        opacity: 0.55;
-      }
-
-      .recipe-ai-wizard__categories {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-2);
-      }
-
-      .recipe-ai-wizard__category,
-      .recipe-ai-wizard__ingredient {
-        display: inline-flex;
-        min-height: 36px;
-        align-items: center;
-        gap: var(--space-1);
-        padding: var(--space-2) var(--space-3);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-sm);
-        background: var(--bg-primary);
-        color: var(--text-primary);
-        cursor: pointer;
-        font: inherit;
-        font-size: var(--text-sm);
-      }
-
-      .recipe-ai-wizard__category[aria-pressed='true'],
-      .recipe-ai-wizard__ingredient--selected {
-        border-color: var(--primary);
-        background: var(--primary-subtle);
-        color: var(--primary-dark);
-      }
-
-      .recipe-ai-wizard__ingredient {
-        max-width: 100%;
-        text-align: left;
-      }
-
-      .recipe-ai-wizard__validation {
-        margin: 0;
-        color: var(--text-secondary);
-        font-size: var(--text-sm);
-      }
-
-      .recipe-ai-wizard__actions {
-        align-items: center;
-      }
-
-      .recipe-ai-wizard__spacer {
-        flex: 1 1 auto;
-      }
-
-      .ai-form__label {
-        font-size: var(--text-sm);
-        font-weight: var(--font-medium);
-      }
-
-      .ai-form__ingredients,
-      .ai-form__pantry {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-2);
-        padding: var(--space-3);
-        background: var(--bg-tertiary);
-        border-radius: var(--radius-lg);
-        min-height: 60px;
-      }
-
-      .ai-form__pantry {
-        align-content: start;
-        max-height: 240px;
-        overflow: auto;
-        overscroll-behavior: contain;
-      }
-
-      .ai-form__hint {
-        font-size: var(--text-sm);
-        color: var(--text-tertiary);
-      }
-
-      .ai-form__row {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: var(--space-4);
-      }
-
-      .ai-form__field {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-1);
-      }
-
-      .ai-form__actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-3);
-      }
-
-      :where(
-        .recipe-ai-wizard__text-action,
-        .recipe-ai-wizard__category,
-        .recipe-ai-wizard__ingredient
-      ):focus-visible {
-        outline: 2px solid var(--primary);
-        outline-offset: 2px;
-      }
-
-      /* Generated Recipe */
-      .generated-recipe {
-        margin-top: var(--space-6);
-        padding-top: var(--space-6);
-        border-top: 1px solid var(--border-default);
-      }
-
-      .generated-recipe__header {
-        margin-bottom: var(--space-4);
-      }
-
-      .generated-recipe__title {
-        font-family: var(--font-display);
-        font-size: var(--text-xl);
-        font-weight: var(--font-bold);
-        margin-bottom: var(--space-2);
-      }
-
-      .generated-recipe__meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-2);
-      }
-
-      .generated-recipe__description {
-        font-size: var(--text-sm);
-        color: var(--text-secondary);
-        margin-bottom: var(--space-6);
-      }
-
-      .generated-recipe__section {
-        margin-bottom: var(--space-6);
-
-        h4 {
-          font-size: var(--text-base);
-          font-weight: var(--font-semibold);
-          margin-bottom: var(--space-3);
-        }
-      }
-
-      .generated-recipe__list {
-        list-style: none;
-        padding: 0;
-
-        li {
-          padding: var(--space-2) 0;
-          border-bottom: 1px solid var(--border-default);
-          font-size: var(--text-sm);
-        }
-      }
-
-      .generated-recipe__prep {
-        color: var(--text-tertiary);
-        font-style: italic;
-      }
-
-      .generated-recipe__steps {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-4);
-      }
-
-      .step {
-        display: flex;
-        gap: var(--space-3);
-      }
-
-      .step__number {
-        width: 28px;
-        height: 28px;
-        background: var(--primary-subtle);
-        color: var(--primary-dark);
-        border-radius: var(--radius-full);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: var(--text-xs);
-        font-weight: var(--font-bold);
-        flex-shrink: 0;
-      }
-
-      .step__instruction {
-        font-size: var(--text-sm);
-      }
-
-      .step__meta {
-        display: flex;
-        gap: var(--space-3);
-        margin-top: var(--space-2);
-        font-size: var(--text-xs);
-        color: var(--text-secondary);
-      }
-
-      .generated-recipe__actions {
-        display: flex;
-        gap: var(--space-3);
-        flex-wrap: wrap;
-        margin-top: var(--space-6);
-      }
-
-      .generated-options {
-        display: grid;
-        gap: var(--space-3);
-        margin-top: var(--space-6);
-      }
-
-      .generated-options__title {
-        margin: 0;
-        font-size: var(--text-lg);
-        font-weight: var(--font-semibold);
-      }
-
-      .generated-options__list {
-        display: grid;
-        gap: var(--space-3);
-      }
-
-      .generated-option {
-        display: grid;
-        gap: var(--space-3);
-        min-width: 0;
-        padding: var(--space-4);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-md);
-        background: var(--bg-primary);
-      }
-
-      .generated-option__header {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: var(--space-2);
-        min-width: 0;
-      }
-
-      .generated-option__title {
-        min-width: 0;
-        margin: 0;
-        font-size: var(--text-base);
-        font-weight: var(--font-semibold);
-        overflow-wrap: anywhere;
-      }
-
-      .generated-option__meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-2);
-      }
-
-      .generated-option__description {
-        margin: 0;
-        color: var(--text-secondary);
-        font-size: var(--text-sm);
-        overflow-wrap: anywhere;
-      }
-
-      .generated-option__actions {
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        gap: var(--space-2);
-      }
-
-      /* Recipe Detail */
-      .recipe-detail {
-        width: 100%;
-        max-width: 1440px;
-        margin-inline: auto;
-        color: var(--text-primary);
-      }
-
-      .recipe-detail__hero {
-        display: grid;
-        grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.8fr);
-        gap: var(--space-6);
-        align-items: stretch;
-        margin-bottom: var(--space-6);
-      }
-
-      .recipe-detail__cover {
-        width: 100%;
-        max-width: 100%;
-        min-width: 0;
-        min-height: 220px;
-        overflow: hidden;
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-xl);
-        background: var(--bg-tertiary);
-        display: flex;
-        flex-direction: column;
-
-        img {
-          display: block;
-          width: 100%;
-          max-width: 100%;
-          height: auto;
-          min-height: inherit;
-          max-height: 360px;
-          object-fit: cover;
-        }
-
-        .recipe-card__cover-fallback {
-          display: flex;
-          min-height: inherit;
-          align-items: center;
-          justify-content: center;
-        }
-      }
-
-      .recipe-detail__image-credit {
-        display: flex;
-        flex-wrap: wrap;
-        gap: var(--space-1) var(--space-3);
-        margin: 0;
-        padding: var(--space-2) var(--space-3);
-        border-top: 1px solid var(--border-default);
-        color: var(--text-secondary);
-        font-size: var(--text-xs);
-      }
-
-      .recipe-detail__image-credit a {
-        color: var(--primary);
-        text-decoration: underline;
-        text-underline-offset: 0.15em;
-      }
-
-      .recipe-detail__header {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: var(--space-4);
-        min-width: 0;
-      }
-
-      .recipe-detail__meta {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--space-2);
-        color: var(--text-secondary);
-        font-size: var(--text-sm);
-      }
-
-      .recipe-detail__description {
-        margin: 0;
-        font-size: var(--text-base);
-        color: var(--text-secondary);
-        line-height: 1.65;
-        overflow-wrap: anywhere;
-      }
-
-      .recipe-detail__timings {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-        gap: var(--space-2);
-
-        span {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-1);
-          min-width: 0;
-          padding: var(--space-3);
-          border: 1px solid var(--border-default);
-          border-radius: var(--radius-lg);
-          background: var(--bg-tertiary);
-          font-size: var(--text-sm);
-          overflow-wrap: anywhere;
-        }
-
-        strong {
-          color: var(--text-secondary);
-          font-size: var(--text-xs);
-          font-weight: var(--font-medium);
-        }
-      }
-
-      .recipe-detail__servings {
-        display: grid;
-        grid-template-columns: minmax(0, 180px) minmax(0, 1fr);
-        gap: var(--space-2) var(--space-3);
-        align-items: center;
-
-        label {
-          font-size: var(--text-sm);
-          font-weight: var(--font-semibold);
-        }
-
-        input {
-          max-width: 180px;
-        }
-      }
-
-      .recipe-detail__hint {
-        grid-column: 1 / -1;
-        color: var(--text-secondary);
-        font-size: var(--text-xs);
-      }
-
-      .recipe-detail__body {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: var(--space-6);
-        align-items: start;
-      }
-
-      .recipe-detail__sidebar,
-      .recipe-detail__main {
-        display: flex;
-        min-width: 0;
-        flex-direction: column;
-        gap: var(--space-5);
-      }
-
-      .recipe-detail__panel {
-        padding: var(--space-5);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-xl);
-        background: var(--bg-secondary);
-        box-shadow: var(--shadow-sm);
-      }
-
-      .recipe-detail__section {
-        min-width: 0;
-
-        h3 {
-          margin: 0 0 var(--space-4);
-          font-size: var(--text-lg);
-          font-weight: var(--font-semibold);
-          line-height: 1.3;
-        }
-
-        h4 {
-          margin: var(--space-4) 0 var(--space-2);
-          font-size: var(--text-sm);
-          font-weight: var(--font-semibold);
-        }
-
-        ul {
-          list-style: none;
-          padding: 0;
-          margin: 0;
-
-          li {
-            padding: var(--space-3) 0;
-            border-bottom: 1px solid var(--border-default);
-            font-size: var(--text-sm);
-            line-height: 1.5;
-            overflow-wrap: anywhere;
-
-            &:last-child {
-              border-bottom: 0;
-              padding-bottom: 0;
-            }
-          }
-        }
-      }
-
-      .recipe-detail__section-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: var(--space-4);
-        margin-bottom: var(--space-4);
-
-        h3 {
-          margin-bottom: 0;
-        }
-      }
-
-      .recipe-detail__ingredients {
-        li {
-          display: flex;
-          flex-direction: column;
-          gap: var(--space-1);
-        }
-      }
-
-      .recipe-detail__ingredient-line {
-        display: block;
-      }
-
-      .recipe-detail__ingredient-note {
-        display: block;
-        color: var(--text-secondary);
-        font-size: var(--text-xs);
-      }
-
-      .recipe-detail__optional {
-        display: inline-flex;
-        align-items: center;
-        margin-inline-start: var(--space-2);
-        padding: 0 var(--space-2);
-        border-radius: var(--radius-full);
-        background: var(--warning-subtle);
-        color: var(--color-warning-700);
-        font-size: var(--text-xs);
-      }
-
-      .recipe-detail__plain-list {
-        color: var(--text-secondary);
-      }
-
-      .recipe-detail__nutrition {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: var(--space-2);
-        margin: 0;
-
-        div {
-          min-width: 0;
-          padding: var(--space-3);
-          border-radius: var(--radius-lg);
-          background: var(--bg-tertiary);
-        }
-
-        dt {
-          color: var(--text-secondary);
-          font-size: var(--text-xs);
-        }
-
-        dd {
-          margin: var(--space-1) 0 0;
-          font-weight: var(--font-semibold);
-          overflow-wrap: anywhere;
-        }
-      }
-
-      .recipe-detail__source {
-        margin-top: var(--space-6);
-        padding: var(--space-5);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-xl);
-        background: var(--bg-tertiary);
-        overflow-wrap: anywhere;
-
-        h3,
-        p {
-          margin-block: 0 var(--space-2);
-        }
-      }
-
-      .recipe-detail__detail-level {
-        display: flex;
-        align-items: center;
-        gap: var(--space-3);
-
-        label {
-          color: var(--text-secondary);
-          font-size: var(--text-sm);
-          white-space: nowrap;
-        }
-
-        select {
-          width: auto;
-          min-width: 170px;
-        }
-      }
-
-      .recipe-detail__steps {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-4);
-      }
-
-      .step-card {
-        padding: var(--space-4);
-        border: 1px solid var(--border-default);
-        background: var(--bg-secondary);
-        border-radius: var(--radius-xl);
-        box-shadow: var(--shadow-sm);
-        scroll-margin-block: calc(var(--header-height, 64px) + var(--space-3));
-      }
-
-      .step-card__header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: var(--space-2);
-      }
-
-      .step-card__number {
-        font-weight: var(--font-semibold);
-        font-size: var(--text-sm);
-      }
-
-      .step-card__time {
-        font-size: var(--text-xs);
-        color: var(--text-secondary);
-      }
-
-      .step-card__instruction {
-        margin: 0;
-        font-size: var(--text-base);
-        line-height: 1.7;
-        overflow-wrap: anywhere;
-      }
-
-      .step-card__tip,
-      .step-card__warning {
-        font-size: var(--text-xs);
-        padding: var(--space-2);
-        border-radius: var(--radius-md);
-        margin-top: var(--space-2);
-      }
-
-      .step-card__tip {
-        background: var(--info-subtle);
-        color: var(--color-info-700);
-      }
-
-      .step-card__warning {
-        background: var(--warning-subtle);
-        color: var(--color-warning-700);
-      }
-
-      .recipe-detail__actions {
-        display: flex;
-        gap: var(--space-3);
-        margin-top: var(--space-6);
-      }
-
-      @media (max-width: 760px) {
-        .recipe-detail-page__header {
-          align-items: flex-start;
-          flex-direction: column;
-
-          h1 {
-            width: 100%;
-          }
-        }
-
-        .recipe-detail__hero,
-        .recipe-detail__body {
-          grid-template-columns: minmax(0, 1fr);
-          gap: var(--space-4);
-        }
-
-        .recipe-detail__cover {
-          min-height: 180px;
-          max-height: 300px;
-        }
-
-        .recipe-detail__cover img,
-        .recipe-detail__cover .recipe-card__cover-fallback {
-          min-height: 180px;
-          max-height: 300px;
-        }
-
-        .recipe-detail__panel {
-          padding: var(--space-4);
-        }
-
-        .recipe-detail__section-header {
-          align-items: stretch;
-          flex-direction: column;
-        }
-      }
-
-      @media (max-width: 400px) {
-        .recipe-detail__timings {
-          grid-template-columns: minmax(0, 1fr);
-        }
-
-        .recipe-detail__servings {
-          grid-template-columns: minmax(0, 1fr);
-        }
-
-        .recipe-detail__servings input {
-          max-width: none;
-        }
-
-        .recipe-detail__detail-level {
-          align-items: stretch;
-          flex-direction: column;
-        }
-
-        .recipe-detail__detail-level select {
-          width: 100%;
-        }
-
-        .recipe-detail__nutrition {
-          grid-template-columns: minmax(0, 1fr);
-        }
-      }
-
-      /* Form elements */
-      .form-select,
-      .form-input {
-        width: 100%;
-        padding: var(--space-2) var(--space-3);
-        font-family: var(--font-sans);
-        font-size: var(--text-sm);
-        color: var(--text-primary);
-        background: var(--bg-secondary);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-lg);
-
-        &:focus {
-          outline: none;
-          border-color: var(--primary);
-        }
-      }
-
-      /* Empty State */
-      .empty-state {
-        grid-column: 1 / -1;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        padding: var(--space-12);
-        text-align: center;
-      }
-
-      .empty-state__icon {
-        display: flex;
-        color: var(--text-tertiary);
-        margin-bottom: var(--space-4);
-      }
-
-      .empty-state__title {
-        font-family: var(--font-display);
-        font-size: var(--text-xl);
-        font-weight: var(--font-semibold);
-        margin-bottom: var(--space-2);
-      }
-
-      .empty-state__text {
-        font-size: var(--text-sm);
-        color: var(--text-secondary);
-        margin-bottom: var(--space-6);
-      }
-
-      @media (max-width: 480px) {
-        .recipe-ai-wizard__steps {
-          gap: var(--space-1);
-        }
-
-        .recipe-ai-wizard__steps li {
-          align-items: flex-start;
-          flex-direction: column;
-          gap: var(--space-1);
-          font-size: var(--text-xs);
-        }
-
-        .recipe-ai-wizard__text-action {
-          padding-inline: var(--space-2);
-        }
-
-        .ai-form__row {
-          grid-template-columns: 1fr;
-        }
-
-        .ai-form__actions,
-        .recipe-detail__actions,
-        .generated-recipe__actions,
-        .generated-option__actions {
-          flex-direction: column;
-        }
-
-        .generated-option__header {
-          flex-direction: column;
-        }
-
-        .generated-option__actions app-button {
-          width: 100%;
-        }
-      }
-    `
-  ]
+  styleUrls: ['./recipes.component.css']
 })
 export class RecipesComponent implements OnInit {
+  @ViewChild('aiGenerationModal') private aiGenerationModal?: ModalComponent;
+
   private readonly i18n = inject(I18nService);
   private readonly authService = inject(AuthService);
   readonly householdService = inject(HouseholdService);
@@ -2455,7 +1035,18 @@ export class RecipesComponent implements OnInit {
     return this.i18n.plural(n, 'recipes.n_recetas_uno', 'recipes.n_recetas_varios', { count: n });
   }
 
+  createManualRecipe(): void {
+    void this.router.navigate(['/recipes', 'new']);
+  }
+
   recipeService = inject(RecipeService);
+  readonly recipeCatalogDisplay: RecipeCatalogDisplay = {
+    imageUrl: (recipe) => this.recipeImageUrl(recipe),
+    difficultyVariant: (difficulty) => this.getDifficultyVariant(difficulty),
+    difficultyLabel: (difficulty) => this.getDifficultyLabel(difficulty),
+    countryLabel: (countryCode) => this.countryLabel(countryCode),
+    mealTypeLabel: (mealType) => this.mealTypeLabel(mealType)
+  };
   aiService = inject(AiService);
   pantryService = inject(PantryService);
   private toastService = inject(ToastService);
@@ -2468,7 +1059,14 @@ export class RecipesComponent implements OnInit {
 
   activeFilter = signal('');
   collection = signal<'all' | 'book'>('all');
+  featuredRecipe = computed(() => {
+    if (this.collection() !== 'all' || this.hasActiveFilters() || this.page() !== 1) return null;
+    return this.recipeService.recipes()[0] ?? null;
+  });
+  recipesForGrid = computed(() => this.recipeService.recipes());
+  showAllMobileRecipes = signal(false);
   searchInput = signal('');
+  viewMode = signal<'grid' | 'list'>(this.initialRecipeViewMode());
   isFilterModalOpen = signal(false);
   private country = signal<string | null>(null);
   private mealType = signal<MealType | null>(null);
@@ -2477,7 +1075,7 @@ export class RecipesComponent implements OnInit {
   private difficulty = signal<Difficulty | null>(null);
   private maxTime = signal<number | null>(null);
   page = signal(1);
-  private pageSize = signal(20);
+  private pageSize = signal(9);
   draftCountry = signal<string | null>(null);
   draftMealType = signal<string | null>(null);
   draftCuisine = signal('');
@@ -2488,9 +1086,14 @@ export class RecipesComponent implements OnInit {
   aiGenerationStep = signal(1);
   recipeIngredientCategory = signal('all');
   selectedRecipe = signal<Recipe | null>(null);
+  recipeDetailSection = signal<RecipeDetailSection>('preparation');
+  checkedRecipeIngredients = signal<ReadonlySet<number>>(new Set<number>());
   cookingRecipeId = signal<string | null>(null);
   isCookingMode = signal(false);
+  hasCookingSession = signal(false);
   recipeServings = signal(2);
+  private readonly recipeServingsTouched = signal(false);
+  generatedPreviewServings = signal(1);
   selectedIngredients = signal<any[]>([]);
   selectedRecipeDetailLevel = signal<DetailLevel>('intermediate');
   singleGeneratedDetailLevel = signal<DetailLevel>('intermediate');
@@ -2550,6 +1153,10 @@ export class RecipesComponent implements OnInit {
       );
     }
   });
+  private readonly synchronizeRecipeServingsDefault = effect(() => {
+    if (!this.selectedRecipe() || this.recipeServingsTouched()) return;
+    this.recipeServings.set(this.householdService.defaultServings());
+  });
 
   /** Cuatro filtros, cuatro claves. «IA» en ingles se escribe «AI», y eso un catalogo con la frase dentro no lo puede saber. */
   readonly quickFilters: { value: string; labelKey: TranslationKey; icon: IconName }[] = [
@@ -2583,6 +1190,21 @@ export class RecipesComponent implements OnInit {
       { value: 'medium', label: this.i18n.t('recipes.medio') },
       { value: 'hard', label: this.i18n.t('recipes.dificil') }
     ];
+  }
+
+  get detailLevelOptions(): PickerOption[] {
+    return RECIPE_DETAIL_LEVELS.map((level) => ({
+      value: level,
+      label: this.i18n.t(this.detailLevelLabel(level))
+    }));
+  }
+
+  constructor() {
+    effect(() => {
+      if (this.recipeService.isLoading() || this.recipeService.recipesLoadError()) return;
+      const lastPage = this.pageCount();
+      if (this.page() > lastPage) this.changePage(lastPage);
+    });
   }
 
   ngOnInit(): void {
@@ -2626,7 +1248,7 @@ export class RecipesComponent implements OnInit {
         this.difficulty.set(state.difficulty);
         this.maxTime.set(state.maxTime);
         this.page.set(state.page);
-        this.pageSize.set(Math.min(100, state.pageSize ?? (state.collection === 'book' ? 12 : 20)));
+        this.pageSize.set(Math.min(100, state.pageSize ?? 9));
         this.activeFilter.set(
           state.isFavorite
             ? 'favorites'
@@ -2639,7 +1261,7 @@ export class RecipesComponent implements OnInit {
 
         const filter: RecipeFilter = {
           page: state.page,
-          pageSize: Math.min(100, state.pageSize ?? (state.collection === 'book' ? 12 : 20))
+          pageSize: Math.min(100, state.pageSize ?? 9)
         };
         const search = state.search.trim();
         if (search) filter.search = search;
@@ -2706,6 +1328,7 @@ export class RecipesComponent implements OnInit {
   }
 
   setFilter(filter: string): void {
+    this.showAllMobileRecipes.set(false);
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {
@@ -2719,24 +1342,47 @@ export class RecipesComponent implements OnInit {
   }
 
   setCollection(collection: 'all' | 'book'): void {
+    this.showAllMobileRecipes.set(false);
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {
         collection: collection === 'book' ? 'book' : null,
         page: null,
-        pageSize: collection === 'book' ? '12' : null
+        pageSize: null
       },
       queryParamsHandling: 'merge'
     });
   }
 
-  applyBookSearch(): void {
+  applySearch(): void {
+    this.showAllMobileRecipes.set(false);
     const search = this.searchInput().trim();
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: { search: search || null, page: null },
       queryParamsHandling: 'merge'
     });
+  }
+
+  setViewMode(mode: 'grid' | 'list'): void {
+    if (this.viewMode() === mode) return;
+    this.viewMode.set(mode);
+    const user = this.authService.currentUser();
+    if (!user) return;
+
+    this.authService
+      .updateProfile({
+        preferences: { ...user.preferences, recipeViewMode: mode }
+      })
+      .subscribe();
+  }
+
+  private initialRecipeViewMode(): 'grid' | 'list' {
+    const stored = this.authService.currentUser()?.preferences?.recipeViewMode;
+    if (stored === 'grid' || stored === 'list') return stored;
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches
+      ? 'list'
+      : 'grid';
   }
 
   pageCount(): number {
@@ -2859,9 +1505,52 @@ export class RecipesComponent implements OnInit {
     return scaleRecipeQuantity(quantity, recipe.servings || 2, this.recipeServings());
   }
 
+  setRecipeDetailSection(section: RecipeDetailSection): void {
+    if (RECIPE_DETAIL_SECTIONS.includes(section)) this.recipeDetailSection.set(section);
+  }
+
+  onRecipeDetailTabKeydown(event: KeyboardEvent, index: number): void {
+    let nextIndex = index;
+    if (event.key === 'ArrowRight') nextIndex = (index + 1) % RECIPE_DETAIL_SECTIONS.length;
+    else if (event.key === 'ArrowLeft') {
+      nextIndex = (index - 1 + RECIPE_DETAIL_SECTIONS.length) % RECIPE_DETAIL_SECTIONS.length;
+    } else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = RECIPE_DETAIL_SECTIONS.length - 1;
+    else return;
+
+    event.preventDefault();
+    const section = RECIPE_DETAIL_SECTIONS[nextIndex];
+    this.setRecipeDetailSection(section);
+    this.focusAfterRender(`[data-test="recipe-detail-tab-${section}"]`);
+  }
+
+  isRecipeIngredientChecked(index: number): boolean {
+    return this.checkedRecipeIngredients().has(index);
+  }
+
+  setRecipeIngredientChecked(index: number, event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const next = new Set(this.checkedRecipeIngredients());
+    if (checked) next.add(index);
+    else next.delete(index);
+    this.checkedRecipeIngredients.set(next);
+  }
+
+  generatedPreviewIngredientQuantity(recipe: AIRecipeResponse, quantity: number): number {
+    return scaleRecipeQuantity(quantity, recipe.baseServings, this.generatedPreviewServings());
+  }
+
+  setGeneratedPreviewServings(value: number | string): void {
+    const servings = Number(value);
+    if (Number.isSafeInteger(servings) && servings >= 1) {
+      this.generatedPreviewServings.set(servings);
+    }
+  }
+
   setRecipeServings(value: number | string): void {
     const servings = Number(value);
     if (Number.isSafeInteger(servings) && servings >= 1) {
+      this.recipeServingsTouched.set(true);
       this.recipeServings.set(servings);
     }
   }
@@ -2871,7 +1560,14 @@ export class RecipesComponent implements OnInit {
     this.aiOptions.servings = Number(value);
   }
 
-  setAiDetailLevel(value: DetailLevel): void {
+  setAiDifficulty(value: string | null): void {
+    if (value && RECIPE_DIFFICULTIES.includes(value as Difficulty)) {
+      this.aiOptions.difficulty = value as Difficulty;
+    }
+  }
+
+  setAiDetailLevel(value: string | null): void {
+    if (!isRecipeDetailLevel(value)) return;
     this.detailLevelTouched.set(true);
     this.aiOptions.detailLevel = value;
   }
@@ -2910,7 +1606,8 @@ export class RecipesComponent implements OnInit {
       : this.generatedRecipeDetailLevel(optionIndex);
   }
 
-  setGeneratedPreviewDetailLevel(level: DetailLevel): void {
+  setGeneratedPreviewDetailLevel(level: string | null): void {
+    if (!isRecipeDetailLevel(level)) return;
     const optionIndex = this.selectedGeneratedOptionIndex();
     if (optionIndex === null) {
       this.setSingleGeneratedDetailLevel(level);
@@ -2923,10 +1620,12 @@ export class RecipesComponent implements OnInit {
     if (!this.aiService.generatedRecipes()[index]) return;
     this.selectedGeneratedOptionIndex.set(index);
     this.aiFormExpanded.set(false);
+    this.focusAfterRender('.generated-recipe__title', true);
   }
 
   returnToGeneratedOptions(): void {
     this.selectedGeneratedOptionIndex.set(null);
+    this.focusAfterRender('.generated-options__title', true);
   }
 
   isAiFormVisible(): boolean {
@@ -2941,6 +1640,7 @@ export class RecipesComponent implements OnInit {
     this.aiService.clearGenerated();
     this.aiFormExpanded.set(false);
     this.selectedGeneratedOptionIndex.set(null);
+    this.focusAfterRender(`[data-test="recipe-ai-step-${this.aiGenerationStep()}"] h3`, true);
   }
 
   private safeExternalUrl(value?: string | null): string | null {
@@ -3014,25 +1714,37 @@ export class RecipesComponent implements OnInit {
 
   private showRecipe(recipe: Recipe): void {
     this.isCookingMode.set(false);
+    this.hasCookingSession.set(false);
     this.selectedRecipe.set(recipe);
-    this.resetRecipeServings(recipe);
+    this.recipeDetailSection.set('preparation');
+    this.checkedRecipeIngredients.set(new Set<number>());
+    this.recipeServingsTouched.set(false);
+    this.resetRecipeServings();
     this.selectedRecipeDetailLevel.set(
       recipeDetailLevelFor(
         this.recipeDetailPreferences(),
         recipe.id,
-        this.singleGeneratedDetailLevel()
+        detailLevelForCookingLevel(this.tasteProfileService.profile().cookingLevel)
       )
     );
     this.focusAfterRender('[data-test="recipe-detail-title"]');
   }
 
-  private resetRecipeServings(recipe: Recipe): void {
-    this.recipeServings.set(Math.max(1, Math.trunc(recipe.servings || 2)));
+  private resetRecipeServings(): void {
+    this.recipeServings.set(this.householdService.defaultServings());
   }
 
-  private focusAfterRender(selector: string): void {
+  private focusAfterRender(selector: string, resetAiModalScroll = false): void {
     afterNextRender(
-      () => this.document.querySelector<HTMLElement>(selector)?.focus({ preventScroll: true }),
+      () => {
+        if (resetAiModalScroll) this.aiGenerationModal?.resetBodyScroll();
+        const target = Array.from(this.document.querySelectorAll<HTMLElement>(selector)).find(
+          (element) =>
+            element.getClientRects().length > 0 &&
+            this.document.defaultView?.getComputedStyle(element).visibility !== 'hidden'
+        );
+        target?.focus({ preventScroll: true });
+      },
       { injector: this.injector }
     );
   }
@@ -3049,7 +1761,8 @@ export class RecipesComponent implements OnInit {
     return this.generatedRecipeLevels()[index] ?? (this.aiOptions.detailLevel as DetailLevel);
   }
 
-  setGeneratedRecipeDetailLevel(index: number, level: DetailLevel): void {
+  setGeneratedRecipeDetailLevel(index: number, level: string | null): void {
+    if (!isRecipeDetailLevel(level)) return;
     this.generatedRecipeLevels.update((levels) => ({ ...levels, [index]: level }));
   }
 
@@ -3071,6 +1784,7 @@ export class RecipesComponent implements OnInit {
   closeRecipeDetail(): void {
     const clearRecipeQuery = this.route.snapshot.queryParamMap.has('recipe');
     this.isCookingMode.set(false);
+    this.hasCookingSession.set(false);
     this.selectedRecipe.set(null);
     this.focusAfterRender('[data-test="recipe-list-heading"]');
     if (clearRecipeQuery) {
@@ -3088,15 +1802,16 @@ export class RecipesComponent implements OnInit {
     const recipe = this.selectedRecipe();
     if (!recipe || this.getRecipeSteps(recipe, this.selectedRecipeDetailLevel()).length === 0)
       return;
+    this.hasCookingSession.set(true);
     this.isCookingMode.set(true);
     this.focusAfterRender('[data-test="recipe-cooking-title"]');
   }
 
   exitCookingMode(): void {
     this.isCookingMode.set(false);
-    const recipe = this.selectedRecipe();
-    if (recipe) this.resetRecipeServings(recipe);
-    this.focusAfterRender('[data-test="recipe-cooking-open"] button');
+    this.focusAfterRender(
+      '[data-test="recipe-cooking-open"] button, [data-test="recipe-cooking-open-sidebar"] button'
+    );
   }
 
   toggleIngredientSelection(ingredient: any): void {
@@ -3176,6 +1891,7 @@ export class RecipesComponent implements OnInit {
     }
     this.selectedGeneratedOptionIndex.set(null);
     this.singleGeneratedDetailLevel.set(this.aiOptions.detailLevel as DetailLevel);
+    const requestedServings = Number(this.aiOptions.servings);
     const request = {
       ingredients: this.selectedIngredients().map((i) => ({
         id: i.id,
@@ -3184,10 +1900,10 @@ export class RecipesComponent implements OnInit {
         unit: i.unit
       })),
       utensils: [],
-      servings: Number(this.aiOptions.servings),
+      servings: requestedServings,
       householdMemberIds: this.recipeMemberIds(),
       guests: this.recipeGuests(),
-      difficulty: this.aiOptions.difficulty,
+      difficulty: this.aiOptions.difficulty as AIRecipeRequest['difficulty'],
       detailLevel: this.aiOptions.detailLevel as any,
       dietaryRestrictions: [],
       allergies: [],
@@ -3200,6 +1916,7 @@ export class RecipesComponent implements OnInit {
           this.showRecipeGenerationError('recipes.no_se_pudo_generar');
           return;
         }
+        this.generatedPreviewServings.set(requestedServings);
         this.aiFormExpanded.set(false);
         this.singleGeneratedDetailLevel.set(
           recipe.selectedDetailLevel ?? (this.aiOptions.detailLevel as DetailLevel)
@@ -3208,6 +1925,7 @@ export class RecipesComponent implements OnInit {
           this.i18n.t('recipes.receta_generada'),
           this.i18n.t('recipes.la_ia_ha_creado')
         );
+        this.focusAfterRender('.generated-recipe__title', true);
       },
       error: () => this.showRecipeGenerationError('recipes.no_se_pudo_generar')
     });
@@ -3220,6 +1938,7 @@ export class RecipesComponent implements OnInit {
     }
     this.selectedGeneratedOptionIndex.set(null);
     this.generatedRecipeLevels.set({});
+    const requestedServings = Number(this.aiOptions.servings);
     const request = {
       ingredients: this.selectedIngredients().map((i) => ({
         id: i.id,
@@ -3228,10 +1947,10 @@ export class RecipesComponent implements OnInit {
         unit: i.unit
       })),
       utensils: [],
-      servings: Number(this.aiOptions.servings),
+      servings: requestedServings,
       householdMemberIds: this.recipeMemberIds(),
       guests: this.recipeGuests(),
-      difficulty: this.aiOptions.difficulty,
+      difficulty: this.aiOptions.difficulty as AIRecipeRequest['difficulty'],
       detailLevel: this.aiOptions.detailLevel as any,
       dietaryRestrictions: [],
       allergies: [],
@@ -3245,6 +1964,7 @@ export class RecipesComponent implements OnInit {
           this.showRecipeGenerationError('recipes.no_se_pudieron_generar');
           return;
         }
+        this.generatedPreviewServings.set(requestedServings);
         this.aiFormExpanded.set(false);
         const initialLevel = this.aiOptions.detailLevel as DetailLevel;
         this.generatedRecipeLevels.set(
@@ -3257,6 +1977,7 @@ export class RecipesComponent implements OnInit {
           this.i18n.t('recipes.recetas_generadas'),
           this.i18n.t('recipes.selecciona_tu_favorita')
         );
+        this.focusAfterRender('.generated-options__title', true);
       },
       error: () => this.showRecipeGenerationError('recipes.no_se_pudieron_generar')
     });
@@ -3275,19 +1996,18 @@ export class RecipesComponent implements OnInit {
         stepNumber: step.stepNumber,
         instruction: step.instruction,
         duration: step.duration,
-        timerRequired: Boolean(step.duration),
-        timerDuration: step.duration,
+        temperature: step.temperature,
+        timerRequired: step.timerRequired,
+        timerDuration: step.timerDuration,
         tips: step.tips,
         warning: step.warning,
         illustration: step.illustration ?? null
       }));
-    const instructionsByLevel = recipe.instructionsByLevel
-      ? {
-          basic: convertSteps(recipe.instructionsByLevel.basic),
-          intermediate: convertSteps(recipe.instructionsByLevel.intermediate),
-          expert: convertSteps(recipe.instructionsByLevel.expert)
-        }
-      : undefined;
+    const instructionsByLevel = {
+      basic: convertSteps(recipe.instructionsByLevel.basic),
+      intermediate: convertSteps(recipe.instructionsByLevel.intermediate),
+      expert: convertSteps(recipe.instructionsByLevel.expert)
+    };
 
     this.recipeService
       .createRecipe({
@@ -3300,7 +2020,7 @@ export class RecipesComponent implements OnInit {
         prepTime: recipe.prepTime,
         cookTime: recipe.cookTime,
         restTime: recipe.restTime,
-        servings: recipe.servings,
+        servings: recipe.baseServings,
         calories: recipe.calories,
         ingredients: recipe.ingredients.map((i) => ({
           name: i.name,
@@ -3313,9 +2033,7 @@ export class RecipesComponent implements OnInit {
         })),
         utensils: recipe.utensils,
         guidance: recipe.guidance,
-        ...(instructionsByLevel
-          ? { instructionsByLevel }
-          : { steps: convertSteps(recipe.steps ?? []) }),
+        instructionsByLevel,
         nutrition: recipe.nutrition
           ? {
               calories: recipe.nutrition.calories,
@@ -3330,8 +2048,8 @@ export class RecipesComponent implements OnInit {
               method: recipe.storage.method,
               container: recipe.storage.container,
               duration: recipe.storage.duration,
-              reheatingInstructions: recipe.storage.reheating,
-              freezingPossible: recipe.storage.freezingPossible ?? false,
+              reheatingInstructions: recipe.storage.reheatingInstructions,
+              freezingPossible: recipe.storage.freezingPossible,
               freezingDuration: recipe.storage.freezingDuration
             }
           : undefined,
@@ -3403,6 +2121,23 @@ export class RecipesComponent implements OnInit {
       default:
         return 'warning';
     }
+  }
+
+  getDifficultyLabel(difficulty: string): string {
+    switch (difficulty?.toLowerCase()) {
+      case 'easy':
+        return this.i18n.t('recipes.facil');
+      case 'medium':
+        return this.i18n.t('recipes.medio');
+      case 'hard':
+        return this.i18n.t('recipes.dificil');
+      default:
+        return difficulty;
+    }
+  }
+
+  detailLevelLabel(level: DetailLevel): TranslationKey {
+    return recipeDetailLevelLabelKey(level);
   }
 
   trackById(_index: number, item: Recipe): string {

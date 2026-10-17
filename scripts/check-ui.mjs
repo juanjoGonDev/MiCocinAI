@@ -17,6 +17,7 @@ import { join, posix } from 'node:path';
 import { findEmojiViolations } from './check-ui-emoji.mjs';
 import { findButtonGeometryViolations } from './check-ui-button-geometry.mjs';
 import { isExcludedI18nCatalogPath, isExcludedUiTestSupportPath } from './check-ui-paths.mjs';
+import { loadComponentStyles } from './check-ui-component-styles.mjs';
 
 const FRONTEND = 'frontend/src';
 const UI_DIR = 'frontend/src/app/shared/components/ui';
@@ -55,8 +56,7 @@ const LEGACY = {
     'frontend/src/app/features/ai-config/ai-config.component.ts',
     'frontend/src/app/features/calendar/calendar.component.ts',
     'frontend/src/app/features/logs/logs.component.ts',
-    'frontend/src/app/features/pantry/pantry.component.ts',
-    'frontend/src/app/features/recipes/recipes.component.ts'
+    'frontend/src/app/features/pantry/pantry.component.ts'
   ]
 };
 
@@ -499,7 +499,7 @@ for (const file of sourceFiles) {
   const text = readFileSync(file, 'utf8');
   const cut = text.indexOf('styles:');
   const template = cut > -1 ? text.slice(0, cut) : text;
-  const styles = cut > -1 ? text.slice(cut) : '';
+  const styles = loadComponentStyles(text, file);
 
   // Solo `button`: los `a` del codigo heredan el `a:hover` del global (arriba de esta regla se comprueba
   // que ese baseline siga ahi, no que alguien lo borre y la regla se quede mirando a otro sitio).

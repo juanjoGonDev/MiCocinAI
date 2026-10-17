@@ -11,8 +11,12 @@
 
 import { z } from 'zod';
 import { isIP } from 'node:net';
-import { activeHouseholdId, hasActiveHouseholdMemberships } from './household-context.js';
-import type { AiResponseFormat } from '../schemas/ai-response-format.js';
+import {
+  activeHouseholdId,
+  hasActiveHouseholdMemberships,
+  readActiveHouseholdId
+} from './household-context.js';
+import type { AiCallResponseFormat, AiResponseFormat } from '../schemas/ai-response-format.js';
 
 export type AiMessagePart =
   | { type: 'text'; text: string }
@@ -31,7 +35,10 @@ export type AiJobKind =
   | 'weekly_plan'
   | 'shopping_photo'
   | 'expiry_estimate'
+  | 'household_plan'
   | 'connection_test';
+
+export type AiProviderRequestOptions = { reasoning_effort?: 'none' };
 
 export interface AiConfigRow {
   id: string;
@@ -80,6 +87,13 @@ export class AiCallError extends Error {
 /** La fila activa de `ai_config`: se lee siempre desde la BD, no se guarda en memoria. */
 export function activeAiConfig(db: SqlDb, userId: string) {
   const householdId = activeHouseholdId(db, userId);
+  if (!householdId && hasActiveHouseholdMemberships(db, userId)) return undefined;
+  return activeAiConfigForScope(db, userId, householdId);
+}
+
+/** Resolve provider config without repairing household selection during read-only assistant requests. */
+export function readOnlyActiveAiConfig(db: SqlDb, userId: string) {
+  const householdId = readActiveHouseholdId(db, userId);
   if (!householdId && hasActiveHouseholdMemberships(db, userId)) return undefined;
   return activeAiConfigForScope(db, userId, householdId);
 }
@@ -202,18 +216,21 @@ export async function callAI(
   messages: AiMessage[],
   db: SqlDb,
   responseFormat: AiResponseFormat,
-  kind: AiJobKind = 'recipe'
+  kind: AiJobKind = 'recipe',
+  externalSignal?: AbortSignal,
+  householdId?: string | null
 ): Promise<string> {
   const { dispatchAI } = await import('./ticket-queue.js');
-  return dispatchAI(userId, messages, db, responseFormat, kind);
+  return dispatchAI(userId, messages, db, responseFormat, kind, externalSignal, householdId);
 }
 
 /** Transporte de una configuración ya fijada por el dispatcher. */
 export async function callAIWithConfig(
   active: AiConfigRow,
   messages: AiMessage[],
-  responseFormat: AiResponseFormat,
-  signal?: AbortSignal
+  responseFormat: AiCallResponseFormat,
+  signal?: AbortSignal,
+  requestOptions?: AiProviderRequestOptions
 ): Promise<string> {
   const apiKey = resolveProviderApiKey(active.base_url, active.api_key);
   let response: Response;
@@ -224,11 +241,16 @@ export async function callAIWithConfig(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`
       },
-      body: JSON.stringify(chatBody(active, { messages, response_format: responseFormat })),
+      body: JSON.stringify(
+        chatBody(active, { messages, response_format: responseFormat, ...requestOptions })
+      ),
       signal: señalConTimeout(signal, active.timeout ?? DEFAULT_TIMEOUT_MS)
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (signal?.aborted) {
+      throw new AiCallError('PROVIDER', 'AI request was cancelled', 'CANCELLED');
+    }
     const timedOut = /timeout|abort/i.test(message);
     const detail = timedOut ? 'TIMEOUT' : 'CONNECTION_FAILED';
     throw new AiCallError(
@@ -250,7 +272,18 @@ export async function callAIWithConfig(
   } catch {
     throw new AiCallError('BAD_JSON', 'Invalid AI response format');
   }
-  const content = payload?.choices?.[0]?.message?.content;
+  const choice = payload?.choices?.[0];
+  const message = choice?.message;
+  if (choice?.finish_reason === 'length') {
+    throw new AiCallError('BAD_JSON', 'AI response was truncated', 'TRUNCATED');
+  }
+  if (
+    choice?.finish_reason === 'content_filter' ||
+    (typeof message?.refusal === 'string' && message.refusal.trim())
+  ) {
+    throw new AiCallError('BAD_JSON', 'AI provider refused the response', 'REFUSED');
+  }
+  const content = message?.content;
   if (typeof content !== 'string') {
     throw new AiCallError('BAD_JSON', 'Invalid AI response format');
   }

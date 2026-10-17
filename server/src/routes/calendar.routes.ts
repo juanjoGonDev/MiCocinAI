@@ -1,7 +1,20 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
+import { isDeepStrictEqual } from 'node:util';
 import { getDatabase } from '../config/database.js';
 import { authMiddleware } from '../middleware/auth.middleware.js';
+import { zoneStampValue } from '../middleware/timestamp.middleware.js';
+import {
+  ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED,
+  ASSISTANT_HOUSEHOLD_HEADER,
+  assistantHouseholdContextMiddleware,
+  currentAssistantHouseholdSnapshot
+} from '../utils/ai-assistant-household-context.js';
+import {
+  ASSISTANT_ACTION_ID_HEADER,
+  isAssistantActionId,
+  withAssistantActionIdempotency
+} from '../utils/assistant-action-idempotency.js';
 import {
   calendarFilterSchema,
   createCalendarSchema,
@@ -13,6 +26,7 @@ import {
   createCalendarEventSchema,
   updateCalendarEventSchema
 } from '../schemas/calendar.schema.js';
+import { assistantUpdateCalendarEventSchema } from '../schemas/ai-assistant-calendar-update.schema.js';
 import { ensureWeekCalendar } from '../utils/week-calendar.js';
 import {
   dayFromISO,
@@ -27,10 +41,28 @@ import {
 import { readForm } from '../utils/form-body.js';
 import { describeIssues } from '../schemas/form.js';
 import { activeHouseholdId, activeHouseholdMemberCount } from '../utils/household-context.js';
+import {
+  canViewSharedMeals,
+  listSharedMealsForHouseholdViewer
+} from '../utils/shared-meal-calendar.store.js';
+import { listHouseholdTasksForCalendarViewer } from '../utils/household-task-calendar.store.js';
 import type { AppEnv } from '../types/hono-env.js';
 
 const calendarRoutes = new Hono<AppEnv>();
 calendarRoutes.use('*', authMiddleware);
+calendarRoutes.use('*', assistantHouseholdContextMiddleware());
+
+function sortMeals<T extends Record<string, unknown>>(meals: T[]): T[] {
+  const order: Record<string, number> = { breakfast: 1, lunch: 2, snack: 3, dinner: 4 };
+  return meals.sort((left, right) => {
+    const dateOrder = String(left.date).localeCompare(String(right.date));
+    if (dateOrder) return dateOrder;
+    const typeOrder =
+      (order[String(left.meal_type)] ?? 99) - (order[String(right.meal_type)] ?? 99);
+    if (typeOrder) return typeOrder;
+    return String(left.time ?? '').localeCompare(String(right.time ?? ''));
+  });
+}
 
 // GET /api/calendar
 calendarRoutes.get('/', async (c) => {
@@ -39,7 +71,7 @@ calendarRoutes.get('/', async (c) => {
   const householdId = activeHouseholdId(db, userId);
 
   // Get current week's calendar
-  const calendar = db
+  const personalCalendar = db
     .prepare(
       `
     SELECT * FROM weekly_calendars 
@@ -50,17 +82,48 @@ calendarRoutes.get('/', async (c) => {
     )
     .get(userId, householdId) as any;
 
+  // A confirmed home plan may exist before this member has created a personal weekly calendar.
+  // In that case, project the most recent plan week without copying another member's goals or
+  // materializing a calendar row just because it was read.
+  let sharedPlanWeek: { week_start: string; week_end: string } | undefined;
+  if (!personalCalendar && canViewSharedMeals(db, householdId, userId)) {
+    sharedPlanWeek = db
+      .prepare(
+        `SELECT wc.week_start, wc.week_end
+         FROM meals m
+         JOIN weekly_calendars wc ON wc.id = m.calendar_id
+         WHERE wc.household_id = ? AND m.source_proposal_id IS NOT NULL
+         ORDER BY m.date DESC, m.created_at DESC
+         LIMIT 1`
+      )
+      .get(householdId) as { week_start: string; week_end: string } | undefined;
+  }
+
+  const calendar =
+    personalCalendar ??
+    (sharedPlanWeek
+      ? {
+          id: null,
+          household_id: householdId,
+          user_id: userId,
+          week_start: sharedPlanWeek.week_start,
+          week_end: sharedPlanWeek.week_end,
+          goals: '{}'
+        }
+      : null);
+
   if (!calendar) {
     return c.json({ success: true, data: null });
   }
 
-  const meals = db
-    .prepare(
-      `
+  const personalMeals = personalCalendar
+    ? (db
+        .prepare(
+          `
     SELECT m.*, r.name as recipe_name
     FROM meals m
     LEFT JOIN recipes r ON r.id = m.recipe_id
-    WHERE m.calendar_id = ?
+    WHERE m.calendar_id = ? AND m.source_proposal_id IS NULL
     ORDER BY m.date,
       -- El orden del dia: merienda antes que cena. Ver MEAL_ORDER en el modelo del frontend.
       CASE m.meal_type
@@ -70,8 +133,19 @@ calendarRoutes.get('/', async (c) => {
         WHEN 'dinner' THEN 4
       END
   `
+        )
+        .all(personalCalendar.id) as Array<Record<string, unknown>>)
+    : [];
+  const meals = sortMeals([
+    ...personalMeals.map(({ source_proposal_id: _sourceProposalId, ...meal }) => meal),
+    ...listSharedMealsForHouseholdViewer(
+      db,
+      userId,
+      householdId,
+      calendar.week_start,
+      calendar.week_end
     )
-    .all(calendar.id);
+  ]);
 
   return c.json({
     success: true,
@@ -111,13 +185,14 @@ calendarRoutes.get('/range', async (c) => {
     return c.json({ success: false, message: 'startDate debe ser anterior a endDate' }, 400);
   }
 
-  const meals = db
+  const personalMeals = db
     .prepare(
       `
     SELECT m.*, r.name AS recipe_name, r.calories AS recipe_calories
     FROM meals m
     LEFT JOIN recipes r ON r.id = m.recipe_id
     WHERE m.date BETWEEN ? AND ?
+      AND m.source_proposal_id IS NULL
       AND m.calendar_id IN (
         SELECT id FROM weekly_calendars WHERE user_id = ? AND household_id IS ?
       )
@@ -131,7 +206,15 @@ calendarRoutes.get('/range', async (c) => {
       m.time
   `
     )
-    .all(startDate, endDate, userId, householdId);
+    .all(startDate, endDate, userId, householdId) as Array<Record<string, unknown>>;
+
+  // Una comida confirmada sigue siendo una sola fila de `meals`. Todos los lectores del calendario
+  // del hogar ven el plan; participants conserva a quién va asignada. No se comparte el resto del
+  // calendario personal ni se usa el switch general `shareCalendar`.
+  const meals = sortMeals([
+    ...personalMeals.map(({ source_proposal_id: _sourceProposalId, ...meal }) => meal),
+    ...listSharedMealsForHouseholdViewer(db, userId, householdId, startDate, endDate)
+  ]);
 
   // Objetivos de la semana que se esta mirando (si no existe, los ultimos).
   const goalsRow =
@@ -157,7 +240,9 @@ calendarRoutes.get('/range', async (c) => {
     goals = {};
   }
 
-  return c.json({ success: true, data: { startDate, endDate, goals, meals } });
+  const tasks = listHouseholdTasksForCalendarViewer(db, userId, householdId, startDate, endDate);
+
+  return c.json({ success: true, data: { startDate, endDate, goals, meals, tasks } });
 });
 
 // POST /api/calendar
@@ -528,11 +613,11 @@ function readRecurrenceRule(raw: string | null | undefined): RecurrenceSchedule 
 /** Subconsulta comun a las dos formas del ambito: «me invitaron a esto». */
 const INVITED_CLAUSE = 'id IN (SELECT event_id FROM calendar_event_attendees WHERE user_id = ?)';
 
-function eventScope(userId: string) {
+function eventScope(userId: string, householdSnapshot?: string | null) {
   const db = getDatabase();
   const user = db.prepare('SELECT household_id AS hid FROM users WHERE id = ?').get(userId) as
     { hid: string | null } | undefined;
-  const householdId = user?.hid ?? null;
+  const householdId = householdSnapshot === undefined ? (user?.hid ?? null) : householdSnapshot;
   // Un evento al que te han invitado se ve, casa o no casa: una invitacion que no se ve es una
   // invitacion que no ha funcionado, y esa es justo la pregunta que hace el usuario al invitar.
   return householdId
@@ -721,6 +806,10 @@ calendarRoutes.get('/events', async (c) => {
 calendarRoutes.post('/events', async (c) => {
   const db = getDatabase();
   const body = await c.req.json().catch(() => ({}));
+  const assistantSnapshot = currentAssistantHouseholdSnapshot(c);
+  if (!assistantSnapshot.valid) {
+    return c.json({ success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED }, 409);
+  }
   const parsed = createCalendarEventSchema.safeParse(body);
   if (!parsed.success) {
     // `describeIssues` en vez del primer issue de zod: el mensaje suelto decia «Invalid input» con
@@ -742,75 +831,100 @@ calendarRoutes.post('/events', async (c) => {
   }
 
   const userId = c.get('userId') as string;
-  const scope = eventScope(userId);
+  const scope = eventScope(userId, assistantSnapshot.householdId);
   const householdId = scope.householdId;
-  const id = nanoid();
+  const actionId = c.req.header(ASSISTANT_ACTION_ID_HEADER);
+  if (actionId && input.sharedWithHousehold && !householdId) {
+    return c.json({ success: false, code: 'ASSISTANT_HOUSEHOLD_REQUIRED' }, 409);
+  }
   // Sin `allDay` explicito, «sin hora» significa «todo el dia»: es la nota de la que no se sabe la
   // hora, no un evento de cero minutos a medianoche.
   const allDay = flag(input.allDay, input.startTime ? 0 : 1);
 
-  db.prepare(
-    `INSERT INTO calendar_events
+  const result = withAssistantActionIdempotency(
+    db,
+    userId,
+    actionId,
+    { operation: 'calendar.create_event', householdId, input },
+    () => {
+      if (!currentAssistantHouseholdSnapshot(c).valid) {
+        return {
+          body: { success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED },
+          status: 409,
+          record: false
+        };
+      }
+      const id = nanoid();
+      db.prepare(
+        `INSERT INTO calendar_events
      (id, household_id, user_id, title, kind, date, start_time, end_time, all_day, color, notes, location, recurrence, recurrence_rule, source)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'user')`
-  ).run(
-    id,
-    // Sin casa la suelta es solo tuya; con casa, solo se comparte si quien la escribe
-    // lo pide. Una cita medica no es automaticamente de la familia.
-    input.sharedWithHousehold ? householdId : null,
-    userId,
-    input.title,
-    input.kind,
-    input.date,
-    input.startTime ?? null,
-    input.endTime ?? null,
-    allDay,
-    input.color ?? null,
-    input.notes ?? null,
-    input.location ?? null,
-    // `exceptions` empieza vacia a proposito: no es un campo del formulario.
-    input.recurrence ?? 'none',
-    input.recurrenceRule ? JSON.stringify(input.recurrenceRule) : null
-  );
+      ).run(
+        id,
+        // Sin casa la suelta es solo tuya; con casa, solo se comparte si quien la escribe
+        // lo pide. Una cita medica no es automaticamente de la familia.
+        input.sharedWithHousehold ? householdId : null,
+        userId,
+        input.title,
+        input.kind,
+        input.date,
+        input.startTime ?? null,
+        input.endTime ?? null,
+        allDay,
+        input.color ?? null,
+        input.notes ?? null,
+        input.location ?? null,
+        // `exceptions` empieza vacia a proposito: no es un campo del formulario.
+        input.recurrence ?? 'none',
+        input.recurrenceRule ? JSON.stringify(input.recurrenceRule) : null
+      );
 
-  // Los invitados se escriben DESPUES del insert y antes de responder: si la lista era imposible
-  // (ids de fuera de la casa) el evento existe igualmente —la suelta ya estaba guardada—, pero el
-  // 400 dice quien no se pudo invitar en vez de dejarlo a medias sin decir nada.
-  let rejected: string[] = [];
-  if (input.attendeeIds) {
-    const outcome = replaceAttendees(db, id, input.attendeeIds, userId, householdId);
-    rejected = outcome.rejected;
-  }
-  if (rejected.length) {
-    return c.json(
-      {
-        success: false,
-        message: 'Algun invitado no es de tu casa',
-        code: 'ATTENDEE_NOT_IN_HOUSEHOLD',
-        data: { rejected, id }
-      },
-      400
-    );
-  }
-
-  const row = db
-    .prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`)
-    .get(id) as unknown as CalendarEventRow;
-  const attendees = attendeesByEvent(db, [id]).get(id) ?? [];
-  return c.json(
-    {
-      success: true,
-      data: {
-        ...toEvent(row, null),
-        editable: true,
-        // El dialog se rellena con esto sin otra peticion: los ids para el selector y las caras para
-        // la lista, en el mismo sitio, porque «invitado» y «invitado con nombre» no pueden divergir.
-        attendees,
-        attendeeIds: attendees.map((person) => person.id)
+      // Los invitados se escriben DESPUES del insert y antes de responder: si la lista era imposible
+      // (ids de fuera de la casa) el evento existe igualmente —la suelta ya estaba guardada—, pero el
+      // 400 dice quien no se pudo invitar en vez de dejarlo a medias sin decir nada.
+      let rejected: string[] = [];
+      if (input.attendeeIds) {
+        const outcome = replaceAttendees(db, id, input.attendeeIds, userId, householdId);
+        rejected = outcome.rejected;
       }
-    },
-    201
+      if (rejected.length) {
+        return {
+          body: {
+            success: false,
+            message: 'Algun invitado no es de tu casa',
+            code: 'ATTENDEE_NOT_IN_HOUSEHOLD',
+            data: { rejected, id }
+          },
+          status: 400
+        };
+      }
+
+      const row = db
+        .prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ?`)
+        .get(id) as unknown as CalendarEventRow;
+      const attendees = attendeesByEvent(db, [id]).get(id) ?? [];
+      return {
+        body: {
+          success: true,
+          data: {
+            ...toEvent(row, null),
+            editable: true,
+            // El dialog se rellena con esto sin otra peticion: los ids para el selector y las caras para
+            // la lista, en el mismo sitio, porque «invitado» y «invitado con nombre» no pueden divergir.
+            attendees,
+            attendeeIds: attendees.map((person) => person.id)
+          }
+        },
+        status: 201
+      };
+    }
   );
+  if ('error' in result) {
+    return result.error === 'invalid_action_id'
+      ? c.json({ success: false, code: 'ASSISTANT_ACTION_ID_INVALID' }, 400)
+      : c.json({ success: false, code: 'ASSISTANT_ACTION_ID_CONFLICT' }, 409);
+  }
+  return c.json(result.body, result.status);
 });
 
 // PATCH /api/calendar/events/:id
@@ -973,6 +1087,246 @@ calendarRoutes.patch('/events/:id', async (c) => {
       attendeeIds: attendees.map((person) => person.id)
     }
   });
+});
+
+calendarRoutes.patch('/events/:id/assistant-update', async (c) => {
+  const actionId = c.req.header(ASSISTANT_ACTION_ID_HEADER);
+  if (!actionId) return c.json({ success: false, code: 'ASSISTANT_ACTION_ID_REQUIRED' }, 400);
+  if (!isAssistantActionId(actionId)) {
+    return c.json({ success: false, code: 'ASSISTANT_ACTION_ID_INVALID' }, 400);
+  }
+  if (c.req.header(ASSISTANT_HOUSEHOLD_HEADER) === undefined) {
+    return c.json({ success: false, code: 'ASSISTANT_HOUSEHOLD_CONTEXT_REQUIRED' }, 400);
+  }
+
+  const rawBody = await c.req.json().catch(() => null);
+  const parsed = assistantUpdateCalendarEventSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    return c.json({ success: false, code: 'INVALID_ASSISTANT_EVENT_UPDATE' }, 400);
+  }
+
+  const targetId = c.req.param('id');
+  if (parsed.data.assistantAction.targetId !== targetId) {
+    return c.json({ success: false, code: 'ASSISTANT_ACTION_TARGET_MISMATCH' }, 400);
+  }
+
+  const db = getDatabase();
+  const userId = c.get('userId') as string;
+  const initialContext = currentAssistantHouseholdSnapshot(c);
+  if (!initialContext.valid) {
+    return c.json({ success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED }, 409);
+  }
+  const { changes, assistantAction } = parsed.data;
+  const before = assistantAction.before;
+  if (
+    assistantAction.householdId !== initialContext.householdId ||
+    before.householdId !== initialContext.householdId
+  ) {
+    return c.json({ success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED }, 409);
+  }
+
+  const result = withAssistantActionIdempotency(
+    db,
+    userId,
+    actionId,
+    {
+      operation: 'calendar.update_event',
+      householdId: initialContext.householdId,
+      targetId,
+      before,
+      changes
+    },
+    () => {
+      const currentContext = currentAssistantHouseholdSnapshot(c);
+      if (!currentContext.valid || currentContext.householdId !== assistantAction.householdId) {
+        return {
+          body: { success: false, code: ASSISTANT_HOUSEHOLD_CONTEXT_CHANGED },
+          status: 409,
+          record: false
+        };
+      }
+
+      const row = db
+        .prepare(
+          `SELECT id, household_id AS householdId, title, kind, date,
+                  start_time AS startTime, end_time AS endTime, all_day AS allDay,
+                  color, notes, location, recurrence,
+                  recurrence_rule AS recurrenceRule, exceptions, source,
+                  updated_at AS updatedAt
+             FROM calendar_events
+            WHERE id = ? AND user_id = ? AND source = 'user' AND kind != 'meal'`
+        )
+        .get(targetId, userId) as
+        ({ id: string } & Omit<typeof before, 'allDay'> & { allDay: number }) | undefined;
+      if (!row) {
+        return {
+          body: { success: false, message: 'Evento no encontrado' },
+          status: 404,
+          record: false
+        };
+      }
+
+      const current = {
+        householdId: row.householdId,
+        title: row.title,
+        kind: row.kind,
+        date: row.date,
+        startTime: row.startTime,
+        endTime: row.endTime,
+        allDay: Boolean(row.allDay),
+        color: row.color,
+        notes: row.notes,
+        location: row.location,
+        recurrence: row.recurrence,
+        recurrenceRule: row.recurrenceRule,
+        exceptions: row.exceptions,
+        source: row.source,
+        updatedAt: zoneStampValue(row.updatedAt, 'updatedAt')
+      };
+      const expected = {
+        ...before,
+        updatedAt: zoneStampValue(before.updatedAt, 'updatedAt')
+      };
+      if (current.recurrence !== 'none') {
+        return {
+          body: { success: false, code: 'ASSISTANT_EVENT_RECURRENCE_UNSUPPORTED' },
+          status: 409,
+          record: false
+        };
+      }
+      if (!isDeepStrictEqual(current, expected)) {
+        return {
+          body: { success: false, code: 'ASSISTANT_EVENT_STALE' },
+          status: 409,
+          record: false
+        };
+      }
+
+      const hasNewTime =
+        (changes.startTime !== undefined && changes.startTime !== null) ||
+        (changes.endTime !== undefined && changes.endTime !== null);
+      const nextAllDay = changes.allDay ?? (hasNewTime ? false : current.allDay);
+      const nextStartTime = nextAllDay
+        ? null
+        : changes.startTime !== undefined
+          ? changes.startTime
+          : current.startTime;
+      const nextEndTime = nextAllDay
+        ? null
+        : changes.endTime !== undefined
+          ? changes.endTime
+          : current.endTime;
+      if (!nextAllDay && !nextStartTime && !nextEndTime) {
+        return {
+          body: { success: false, code: 'CALENDAR_EVENT_TIME_REQUIRED' },
+          status: 400,
+          record: false
+        };
+      }
+      if (nextStartTime && nextEndTime && nextEndTime < nextStartTime) {
+        return {
+          body: { success: false, code: 'INVALID_EVENT_TIME_RANGE' },
+          status: 400,
+          record: false
+        };
+      }
+
+      const next = {
+        ...current,
+        ...changes,
+        allDay: nextAllDay,
+        startTime: nextStartTime,
+        endTime: nextEndTime
+      };
+      const fieldMap = {
+        title: 'title',
+        kind: 'kind',
+        date: 'date',
+        startTime: 'start_time',
+        endTime: 'end_time',
+        allDay: 'all_day',
+        notes: 'notes',
+        location: 'location'
+      } as const;
+      const assignments: string[] = [];
+      const values: Array<string | number | null> = [];
+      for (const field of Object.keys(fieldMap) as Array<keyof typeof fieldMap>) {
+        if (next[field] === current[field]) continue;
+        assignments.push(`${fieldMap[field]} = ?`);
+        values.push(
+          field === 'allDay' ? (next.allDay ? 1 : 0) : (next[field] as string | number | null)
+        );
+      }
+      if (!assignments.length) {
+        return {
+          body: { success: false, code: 'ASSISTANT_ACTION_NO_CHANGE' },
+          status: 400,
+          record: false
+        };
+      }
+      assignments.push('updated_at = CURRENT_TIMESTAMP');
+      const write = db
+        .prepare(
+          `UPDATE calendar_events SET ${assignments.join(', ')}
+            WHERE id = ? AND user_id = ? AND source = ? AND household_id IS ?
+              AND title IS ? AND kind IS ? AND date IS ? AND start_time IS ?
+              AND end_time IS ? AND all_day IS ? AND color IS ? AND notes IS ?
+              AND location IS ? AND recurrence IS ? AND recurrence_rule IS ?
+              AND exceptions IS ? AND updated_at IS ?`
+        )
+        .run(
+          ...values,
+          targetId,
+          userId,
+          current.source,
+          current.householdId,
+          current.title,
+          current.kind,
+          current.date,
+          current.startTime,
+          current.endTime,
+          current.allDay ? 1 : 0,
+          current.color,
+          current.notes,
+          current.location,
+          current.recurrence,
+          current.recurrenceRule,
+          current.exceptions,
+          row.updatedAt
+        );
+      if (write.changes !== 1) {
+        return {
+          body: { success: false, code: 'ASSISTANT_EVENT_STALE' },
+          status: 409,
+          record: false
+        };
+      }
+
+      const updatedRow = db
+        .prepare(`SELECT ${EVENT_COLUMNS} FROM calendar_events WHERE id = ? AND user_id = ?`)
+        .get(targetId, userId) as unknown as CalendarEventRow;
+      const attendees = attendeesByEvent(db, [targetId]).get(targetId) ?? [];
+      return {
+        body: {
+          success: true,
+          data: {
+            ...toEvent(updatedRow, null),
+            editable: true,
+            attendees,
+            attendeeIds: attendees.map((attendee) => attendee.id)
+          }
+        },
+        status: 200
+      };
+    }
+  );
+
+  if ('error' in result) {
+    return result.error === 'invalid_action_id'
+      ? c.json({ success: false, code: 'ASSISTANT_ACTION_ID_INVALID' }, 400)
+      : c.json({ success: false, code: 'ASSISTANT_ACTION_ID_CONFLICT' }, 409);
+  }
+  return c.json(result.body, result.status);
 });
 
 // DELETE /api/calendar/events/:id/attendees/me —salir de un evento ajeno.

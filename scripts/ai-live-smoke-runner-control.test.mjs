@@ -22,6 +22,34 @@ function createRunnerChild() {
   return child;
 }
 
+test('household meal smoke launches only its dedicated isolated Playwright spec', async () => {
+  const child = createRunnerChild();
+  const running = runAiLiveSmokeRunner({
+    env: { HOGARIA_AI_REAL_SMOKE_HOUSEHOLD_MEAL_ONLY: '1' },
+    watchdogMs: 60_000,
+    spawnImpl: (_command, args) => {
+      assert.deepEqual(args.slice(1), [
+        '--config=playwright.ai-household-meal-real-smoke.config.ts',
+        'tests/e2e/household-meal-planning-live-smoke.spec.ts'
+      ]);
+      return child;
+    }
+  });
+
+  child.emit('spawn');
+  child.emit('message', { type: AI_LIVE_SMOKE_RUNNER_COMPLETE_MESSAGE, cleaned: true });
+  child.exitCode = 0;
+  child.connected = false;
+  child.emit('exit', 0, null);
+
+  assert.deepEqual(await running, {
+    code: 0,
+    cancelled: false,
+    timedOut: false,
+    runnerCleaned: true
+  });
+});
+
 test('cancellation asks the owned E2E runner to shut down and waits for cleanup confirmation', async () => {
   const controller = new AbortController();
   const child = createRunnerChild();
@@ -137,6 +165,74 @@ test('runner exposes only allowlisted progress labels from its child', async () 
   });
   child.emit('message', {
     type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:recipe-only-request-start',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:assistant-proposal-response-validated',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:assistant-proposal-error-AI_PROVIDER_ERROR',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:assistant-proposal-invalid-category-invalid_type',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:assistant-proposal-invalid-action-count',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase:
+      'test-phase:assistant-proposal-action-kinds-mismatch-pantry.add_ingredient|shopping.add_item',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase:
+      'test-phase:assistant-proposal-action-kinds-mismatch-pantry.add_ingredient|prompt-secret',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:assistant-proposal-action-kinds-mismatch-none-with-questions',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase:
+      'test-phase:assistant-proposal-action-state-invalid:shopping.add_item:dependencies|payload',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:assistant-proposal-action-state-invalid:shopping.add_item:prompt-secret',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:assistant-proposal-semantic-invalid-shopping-dependency',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:assistant-proposal-error-secret-value',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
+    phase: 'test-phase:assistant-proposals-read-only-validated',
+    secret: 'must-not-be-forwarded'
+  });
+  child.emit('message', {
+    type: AI_LIVE_SMOKE_RUNNER_PROGRESS_MESSAGE,
     phase: 'test-phase:recipe-error-invalid-json',
     secret: 'must-not-be-forwarded'
   });
@@ -220,6 +316,16 @@ test('runner exposes only allowlisted progress labels from its child', async () 
     'Último hito E2E: otros ingredientes sintéticos excluidos de la estimación.',
     'Último hito E2E: la API devolvió una receta.',
     'Último hito E2E: contenido de la receta validado.',
+    'Último hito E2E: iniciando la receta sintética real.',
+    'Último hito E2E: propuesta estructurada y revisable validada.',
+    'Último hito E2E: propuesta falló con código API AI_PROVIDER_ERROR.',
+    'Último hito E2E: el campo category del payload no pasó la validación (invalid_type).',
+    'Último hito E2E: la comprobación segura action-count de la propuesta no pasó.',
+    'Último hito E2E: tipos allowlist devueltos por WebAPI no coinciden: pantry.add_ingredient, shopping.add_item.',
+    'Último hito E2E: WebAPI pidió aclaración y no propuso acciones para el escenario.',
+    'Último hito E2E: estado de shopping.add_item no válido: dependencies, payload.',
+    'Último hito E2E: falló la comprobación semántica sintética shopping-dependency.',
+    'Último hito E2E: la matriz de propuestas no escribió datos.',
     'Último hito E2E: la respuesta del proveedor no fue JSON utilizable.',
     'Último hito E2E: el borrador generado no contenía una receta utilizable.',
     'Último hito E2E: la receta generada no cumplió el esquema completo.',

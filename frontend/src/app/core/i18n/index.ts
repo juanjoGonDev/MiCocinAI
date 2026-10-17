@@ -17,7 +17,7 @@ import { shoppingListsEs, shoppingListsEn } from './dict/shopping_lists';
 import { shoppingListDetailEs, shoppingListDetailEn } from './dict/shopping_list_detail';
 import { onboardingEs, onboardingEn } from './dict/onboarding';
 import { inviteEs, inviteEn } from './dict/invite';
-import { householdEs, householdEn } from './dict/household';
+import { householdSharedEs, householdSharedEn } from './dict/household_shared';
 import { aiConfigEs, aiConfigEn } from './dict/ai_config';
 import { avatarEditorEs, avatarEditorEn } from './dict/avatar_editor';
 import { accountEs, accountEn } from './dict/account';
@@ -33,10 +33,13 @@ import { pantryEs, pantryEn } from './dict/pantry';
 import { receiptsEs, receiptsEn } from './dict/receipts';
 import { preferencesEs, preferencesEn } from './dict/preferences';
 import { profileEs, profileEn } from './dict/profile';
-import { recipesEs, recipesEn } from './dict/recipes';
 import { settingsEs, settingsEn } from './dict/settings';
 import { tasteEs, tasteEn } from './dict/taste';
 import { aiParticipantsEs, aiParticipantsEn } from './dict/ai_participants';
+import {
+  aiActionAssistantShellEs,
+  aiActionAssistantShellEn
+} from './dict/ai_action_assistant_shell';
 
 const es = {
   ...homeProfilePickerEs,
@@ -44,7 +47,7 @@ const es = {
   ...shoppingListDetailEs,
   ...onboardingEs,
   ...inviteEs,
-  ...householdEs,
+  ...householdSharedEs,
   ...aiConfigEs,
   ...avatarEditorEs,
   ...accountEs,
@@ -59,11 +62,11 @@ const es = {
   ...preferencesEs,
   ...receiptsEs,
   ...profileEs,
-  ...recipesEs,
   ...settingsEs,
   ...tasteEs,
   ...aiParticipantsEs,
-  ...uiEs,
+  ...aiActionAssistantShellEs,
+  ...uiEs
 };
 
 const en: Record<keyof typeof es, string> = {
@@ -72,7 +75,7 @@ const en: Record<keyof typeof es, string> = {
   ...shoppingListDetailEn,
   ...onboardingEn,
   ...inviteEn,
-  ...householdEn,
+  ...householdSharedEn,
   ...aiConfigEn,
   ...avatarEditorEn,
   ...accountEn,
@@ -87,17 +90,21 @@ const en: Record<keyof typeof es, string> = {
   ...preferencesEn,
   ...receiptsEn,
   ...profileEn,
-  ...recipesEn,
   ...settingsEn,
   ...tasteEn,
   ...aiParticipantsEn,
-  ...uiEn,
+  ...aiActionAssistantShellEn,
+  ...uiEn
 };
 
 export const DICTS = { es, en };
 
-/** Toda clave que existe. Una cadena nueva sin traduccion no compila, y una clave inventada tampoco. */
-export type TranslationKey = keyof typeof es;
+/** Claves estáticas y del diccionario hogar, cargado bajo demanda al entrar en su ruta. */
+export type TranslationKey =
+  | keyof typeof es
+  | keyof typeof import('./dict/household').householdEs
+  | keyof typeof import('./dict/recipes').recipesEs
+  | keyof typeof import('./dict/ai_action_assistant').aiActionAssistantEs;
 
 /** Lo que hay que traducir, por si manana el diccionario viene de un JSON y no de un literal. */
 /**

@@ -21,11 +21,24 @@ import { environment } from '../../../environments/environment';
 export type Language = 'es' | 'en' | 'auto';
 export type ResolvedLanguage = 'es' | 'en';
 
+type HouseholdDictionary = {
+  es: Readonly<Record<string, string>>;
+  en: Readonly<Record<string, string>>;
+};
+
+type RecipeDictionary = HouseholdDictionary;
+
 @Injectable({ providedIn: 'root' })
 export class I18nService {
   private readonly LANG_KEY = STORAGE_KEYS.language;
   private langSignal = signal<Language>(this.getStoredLang());
   private resolvedSignal = signal<ResolvedLanguage>(this.resolve(this.getStoredLang()));
+  private householdDictionary: HouseholdDictionary | null = null;
+  private householdDictionaryLoad: Promise<void> | null = null;
+  private recipeDictionary: RecipeDictionary | null = null;
+  private recipeDictionaryLoad: Promise<void> | null = null;
+  private assistantDictionary: HouseholdDictionary | null = null;
+  private assistantDictionaryLoad: Promise<void> | null = null;
 
   readonly lang = this.langSignal.asReadonly();
   readonly resolved = this.resolvedSignal.asReadonly();
@@ -38,7 +51,7 @@ export class I18nService {
       window.addEventListener('languagechange', () => {
         if (this.langSignal() === 'auto') {
           this.resolvedSignal.set(this.detectBrowserLang());
-          this.changeTick.update(v => v + 1);
+          this.changeTick.update((v) => v + 1);
           this.aplicaLocale();
         }
       });
@@ -47,7 +60,7 @@ export class I18nService {
     effect(() => {
       this.langSignal();
       this.resolvedSignal.set(this.resolve(this.langSignal()));
-      this.changeTick.update(v => v + 1);
+      this.changeTick.update((v) => v + 1);
       document.documentElement.lang = this.resolvedSignal();
       this.aplicaLocale();
     });
@@ -68,6 +81,60 @@ export class I18nService {
   }
 
   /**
+   * El diccionario grande de Hogar solo se descarga al entrar en esa sección. Lo espera su route resolver
+   * antes de renderizar, y el cache incluye ambos idiomas para que un cambio de idioma no repita la carga.
+   */
+  loadHouseholdTranslations(): Promise<void> {
+    if (this.householdDictionary) return Promise.resolve();
+    if (!this.householdDictionaryLoad) {
+      this.householdDictionaryLoad = import('../i18n/dict/household')
+        .then(({ householdEs, householdEn }) => {
+          this.householdDictionary = { es: householdEs, en: householdEn };
+          this.changeTick.update((value) => value + 1);
+        })
+        .catch((error: unknown) => {
+          this.householdDictionaryLoad = null;
+          throw error;
+        });
+    }
+    return this.householdDictionaryLoad;
+  }
+
+  /** La biblioteca de recetas carga ambos idiomas al entrar en su ruta, no en el bundle inicial. */
+  loadRecipeTranslations(): Promise<void> {
+    if (this.recipeDictionary) return Promise.resolve();
+    if (!this.recipeDictionaryLoad) {
+      this.recipeDictionaryLoad = import('../i18n/dict/recipes')
+        .then(({ recipesEs, recipesEn }) => {
+          this.recipeDictionary = { es: recipesEs, en: recipesEn };
+          this.changeTick.update((value) => value + 1);
+        })
+        .catch((error: unknown) => {
+          this.recipeDictionaryLoad = null;
+          throw error;
+        });
+    }
+    return this.recipeDictionaryLoad;
+  }
+
+  /** The global assistant's full bilingual copy loads only after the user opens the assistant. */
+  loadAssistantTranslations(): Promise<void> {
+    if (this.assistantDictionary) return Promise.resolve();
+    if (!this.assistantDictionaryLoad) {
+      this.assistantDictionaryLoad = import('../i18n/dict/ai_action_assistant')
+        .then(({ aiActionAssistantEs, aiActionAssistantEn }) => {
+          this.assistantDictionary = { es: aiActionAssistantEs, en: aiActionAssistantEn };
+          this.changeTick.update((value) => value + 1);
+        })
+        .catch((error: unknown) => {
+          this.assistantDictionaryLoad = null;
+          throw error;
+        });
+    }
+    return this.assistantDictionaryLoad;
+  }
+
+  /**
    * El texto de una clave, con sustitucion simple de {placeholder}.
    *
    * `key` es `TranslationKey`, no `string`: es lo que hace que un `t('shoping.title')` con una errata se
@@ -79,7 +146,12 @@ export class I18nService {
    * misma decision, y ninguna de las dos se puede tomar pegando numero y palabra en la plantilla. Se eligen
    * dos claves y el numero entra por parametro, que es la unica forma de que «1 config» no salga «1 configs».
    */
-  plural(count: number, oneKey: TranslationKey, manyKey: TranslationKey, params?: TranslationParams): string {
+  plural(
+    count: number,
+    oneKey: TranslationKey,
+    manyKey: TranslationKey,
+    params?: TranslationParams
+  ): string {
     return this.t(count === 1 ? oneKey : manyKey, params);
   }
 
@@ -99,22 +171,44 @@ export class I18nService {
           ? this.t('ui.dia_y_ano', { day: parts.day, year: parts.year })
           : this.t('ui.el_dia', { day: parts.day });
       default: {
-        const unidad = this.t(parts.unit === 'min' ? 'ui.unidad_min' : parts.unit === 'h' ? 'ui.unidad_h' : 'ui.unidad_d');
-        return this.t(parts.kind === 'in' ? 'ui.en_unidad' : 'ui.hace_unidad', { amount: parts.amount, unidad });
+        const unidad = this.t(
+          parts.unit === 'min'
+            ? 'ui.unidad_min'
+            : parts.unit === 'h'
+              ? 'ui.unidad_h'
+              : 'ui.unidad_d'
+        );
+        return this.t(parts.kind === 'in' ? 'ui.en_unidad' : 'ui.hace_unidad', {
+          amount: parts.amount,
+          unidad
+        });
       }
     }
   }
 
   t(key: TranslationKey, params?: TranslationParams): string {
-    const dict = DICTS[this.resolvedSignal()];
-    const encontrada = dict[key] ?? DICTS.es[key];
+    const language = this.resolvedSignal();
+    const activeDictionary = DICTS[language] as Record<string, string>;
+    const spanishDictionary = DICTS.es as Record<string, string>;
+    const householdDictionary = this.householdDictionary;
+    const recipeDictionary = this.recipeDictionary;
+    const assistantDictionary = this.assistantDictionary;
+    const encontrada =
+      activeDictionary[key] ??
+      assistantDictionary?.[language][key] ??
+      householdDictionary?.[language][key] ??
+      recipeDictionary?.[language][key] ??
+      spanishDictionary[key] ??
+      assistantDictionary?.es[key] ??
+      householdDictionary?.es[key] ??
+      recipeDictionary?.es[key];
     let str: string = encontrada ?? key;
     if (encontrada === undefined && !environment.production) {
       // Un hueco de texto de Angular acepta cualquier `string`, asi que una clave que no existe NO falla: se
       // pinta `profile.cooking.none` en la pestana y el unico que se entera es el usuario (HOGARIA-SPEC ## 12v).
       // En desarrollo el diagnostico va a la consola, que es donde lo ve quien escribe; en produccion la
       // pantalla no se rinde a un log.
-      console.warn(`[i18n] «${key}» no esta en el diccionario de ${this.resolvedSignal()}: se pinta la clave`);
+      console.warn(`[i18n] «${key}» no esta en el diccionario de ${language}: se pinta la clave`);
     }
     if (params) {
       for (const [k, v] of Object.entries(params)) {

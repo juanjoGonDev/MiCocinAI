@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { prettyJSON } from 'hono/pretty-json';
 import { secureHeaders } from 'hono/secure-headers';
@@ -24,12 +24,21 @@ import {
   recipePhotoPreviewRoutes,
   recipeStepPhotoRoutes
 } from './routes/recipe-step-photos.routes.js';
+import { recipeStepVideoRoutes } from './routes/recipe-step-videos.routes.js';
 import { householdRoutes } from './routes/household.routes.js';
+import { householdMealPlanningRoutes } from './routes/household-meal-planning.routes.js';
+import { householdMealProposalRoutes } from './routes/household-meal-proposals.routes.js';
+import { householdMealConsumptionRoutes } from './routes/household-meal-consumption.routes.js';
+import { householdPlanRoutes } from './routes/household-plan.routes.js';
+import { householdPlanningAutomationRoutes } from './routes/household-planning-automation.routes.js';
+import { householdTasksRoutes } from './routes/household-tasks.routes.js';
 import { calendarRoutes } from './routes/calendar.routes.js';
 import { aiRoutes } from './routes/ai.routes.js';
+import { aiAssistantRoutes } from './routes/ai-assistant.routes.js';
 import { aiQueueRoutes } from './routes/ai-queue.routes.js';
 import { healthRoutes } from './routes/health.routes.js';
 import { logRoutes } from './routes/logs.routes.js';
+import type { AppEnv } from './types/hono-env.js';
 
 /**
  * Ensamblado de la app, separado del `listen`.
@@ -65,7 +74,13 @@ export type AppOptions = {
  * treinta peticiones en la primera carga. Son ficheros estaticos con nombre unico y cache
  * `immutable`: no hay nada aqui a lo que haya que poner un techo.
  */
-const EXEMPT_PATHS = [/^\/api\/logs(\/|$)/, /^\/api\/health(\/|$)/, /^\/health$/, /\/stream(\/|$)/, /^\/api\/uploads(\/|$)/];
+const EXEMPT_PATHS = [
+  /^\/api\/logs(\/|$)/,
+  /^\/api\/health(\/|$)/,
+  /^\/health$/,
+  /\/stream(\/|$)/,
+  /^\/api\/uploads(\/|$)/
+];
 
 export function isRateLimitExempt(pathname: string): boolean {
   return EXEMPT_PATHS.some((pattern) => pattern.test(pathname));
@@ -93,7 +108,11 @@ export function fnv1a(input: string): number {
   return hash >>> 0;
 }
 
-export function rateLimitKey(authorization: string | undefined, forwarded: string | undefined, realIp: string | undefined): string {
+export function rateLimitKey(
+  authorization: string | undefined,
+  forwarded: string | undefined,
+  realIp: string | undefined
+): string {
   const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
   // Se deriva un identificador corto del token (FNV-1a): el cubo tiene que ser estable
   // para la misma sesion y no puede llevar material del token, que acaba en logs.
@@ -200,10 +219,14 @@ export function retryAfterSeconds(windowMs: number, resetHeader: string | null):
  * de config —y servir la app es lo que permite levantar el proyecto ENTERO (API +
  * interfaz) en un solo proceso, que es como se prueba el limitador en CI.
  */
-export function resolveStaticDir(env: Record<string, string | undefined> = process.env, base = process.cwd()): string | null {
+export function resolveStaticDir(
+  env: Record<string, string | undefined> = process.env,
+  base = process.cwd()
+): string | null {
   // `PUBLIC_DIR` es autoritativo, no una pista: si alguien lo pone mal, mejor un 404
   // honesto que servir una copia vieja encontrada por casualidad.
-  if (env.PUBLIC_DIR) return isAbsolute(env.PUBLIC_DIR) ? env.PUBLIC_DIR : resolve(base, env.PUBLIC_DIR);
+  if (env.PUBLIC_DIR)
+    return isAbsolute(env.PUBLIC_DIR) ? env.PUBLIC_DIR : resolve(base, env.PUBLIC_DIR);
   const candidates: string[] = [];
   for (const root of [base, resolve(base, '..'), resolve(base, '..', '..')]) {
     candidates.push(
@@ -231,14 +254,18 @@ export function resolveStaticDir(env: Record<string, string | undefined> = proce
  * pudiese navegar ni ver los logs. Mismo umbral, pero por sesion y con los
  * diagnosticos fuera del cupo.
  */
-export function rateLimitFromEnv(env: Record<string, string | undefined> = process.env): { windowMs: number; limit: number } | null {
+export function rateLimitFromEnv(
+  env: Record<string, string | undefined> = process.env
+): { windowMs: number; limit: number } | null {
   if (env.DISABLE_RATE_LIMIT === '1') return null;
   const windowMs = Number(env.RATE_LIMIT_WINDOW_MS ?? config.rateLimit.windowMs);
   const limit = Number(env.RATE_LIMIT_MAX ?? config.rateLimit.max);
   if (!Number.isFinite(windowMs) || windowMs < 1000 || !Number.isFinite(limit) || limit < 1) {
     // Un `RATE_LIMIT_MAX=0` mal puesto no puede dejar la API sin proteccion ni sin
     // respuesta: se usa el defecto y se dice, en lugar de arrancar «apagado por fuera».
-    console.warn(`[config] rate limit ignorado (windowMs=${windowMs}, max=${limit}); se usan los valores por defecto`);
+    console.warn(
+      `[config] rate limit ignorado (windowMs=${windowMs}, max=${limit}); se usan los valores por defecto`
+    );
     return { windowMs: config.rateLimit.windowMs, limit: config.rateLimit.max };
   }
   return { windowMs, limit };
@@ -264,13 +291,26 @@ export function createApp(options: AppOptions = {}): Hono {
     const ms = Date.now() - start;
     const status = c.res.status;
     const color =
-      status >= 500 ? '\x1b[31m' : status >= 400 ? '\x1b[33m' : status >= 300 ? '\x1b[36m' : '\x1b[32m';
+      status >= 500
+        ? '\x1b[31m'
+        : status >= 400
+          ? '\x1b[33m'
+          : status >= 300
+            ? '\x1b[36m'
+            : '\x1b[32m';
     const reset = '\x1b[0m';
     // eslint-disable-next-line no-console
     console.log(`--> ${color}${method} ${url} ${status}${reset} ${ms}ms`);
   });
 
   app.use('*', prettyJSON());
+  // Solo `createApp` representa el ensamblado real de producción. El marker no viene del
+  // request y permite que auth aplique los requisitos de hogar sin cambiar el contrato
+  // de las pruebas aisladas de cada router.
+  app.use('/api/*', async (c, next) => {
+    (c as unknown as Context<AppEnv>).set('householdSetupGate', true);
+    await next();
+  });
   // Despues de `prettyJSON` y antes de las rutas: lo que sale por aqui ya es el cuerpo
   // definitivo, y normalizarlo una vez en el borde evita que cada pantalla vuelva a
   // inventarse como se le echa la zona horaria a una cadena de SQLite.
@@ -281,8 +321,24 @@ export function createApp(options: AppOptions = {}): Hono {
     cors({
       origin: config.cors.origin,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Content-Type', 'Authorization'],
-      exposeHeaders: ['X-Request-Id', 'Retry-After', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
+      allowHeaders: [
+        'Content-Type',
+        'Authorization',
+        'Range',
+        'X-Assistant-Household-Id',
+        'X-Assistant-Action-Id',
+        'X-Household-Id'
+      ],
+      exposeHeaders: [
+        'X-Request-Id',
+        'Retry-After',
+        'X-RateLimit-Limit',
+        'X-RateLimit-Remaining',
+        'X-RateLimit-Reset',
+        'Accept-Ranges',
+        'Content-Range',
+        'Content-Length'
+      ],
       maxAge: 86400,
       credentials: true
     })
@@ -293,11 +349,23 @@ export function createApp(options: AppOptions = {}): Hono {
     // Credenciales: por IP y prieto, que es donde hay alguien intentando cosas.
     app.use(
       '/api/auth/login',
-      rateLimiter({ windowMs: 15 * 60 * 1000, limit: 20, standardHeaders: 'draft-6', keyGenerator: (c) => c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown' })
+      rateLimiter({
+        windowMs: 15 * 60 * 1000,
+        limit: 20,
+        standardHeaders: 'draft-6',
+        keyGenerator: (c) =>
+          c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
+      })
     );
     app.use(
       '/api/auth/refresh',
-      rateLimiter({ windowMs: 60 * 1000, limit: 30, standardHeaders: 'draft-6', keyGenerator: (c) => c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown' })
+      rateLimiter({
+        windowMs: 60 * 1000,
+        limit: 30,
+        standardHeaders: 'draft-6',
+        keyGenerator: (c) =>
+          c.req.header('x-forwarded-for') || c.req.header('x-real-ip') || 'unknown'
+      })
     );
 
     // El resto, con la clave por sesion y con los diagnosticos fuera del cupo.
@@ -310,7 +378,11 @@ export function createApp(options: AppOptions = {}): Hono {
       limit: limit.limit,
       standardHeaders: 'draft-6',
       keyGenerator: (request) =>
-        rateLimitKey(request.req.header('authorization'), request.req.header('x-forwarded-for'), request.req.header('x-real-ip')),
+        rateLimitKey(
+          request.req.header('authorization'),
+          request.req.header('x-forwarded-for'),
+          request.req.header('x-real-ip')
+        ),
       message: {
         success: false,
         error: 'Too Many Requests',
@@ -335,7 +407,9 @@ export function createApp(options: AppOptions = {}): Hono {
       if (c.res.status === 429) {
         // `draft-6` escribe `RateLimit: limit=..,remaining=..,reset=..`; se lee el reset
         // de ahi, y si no hay se usa la ventana.
-        const reset = resetFromRateLimitHeader(c.res.headers.get('ratelimit') ?? c.res.headers.get('x-rate-limit-reset'));
+        const reset = resetFromRateLimitHeader(
+          c.res.headers.get('ratelimit') ?? c.res.headers.get('x-rate-limit-reset')
+        );
         const headers = new Headers(c.res.headers);
         headers.set('Retry-After', String(retryAfterSeconds(windowMs, reset)));
         // `exposeHeaders` del CORS: sin esto, desde el navegador la cabecera no se lee.
@@ -365,9 +439,17 @@ export function createApp(options: AppOptions = {}): Hono {
       // la proxima carga tiene que poder reintentar en vez de quedarse clavada en el vacio —y es
       // lo que evita que «subi la foto y ya no hay forma de que aparezca» dure hasta el
       // hard-reload. Se responde en el JSON de la casa, no con un cuerpo vacio.
-      return c.json({ success: false, error: 'Not Found', message: `Upload ${c.req.param('kind')}/${c.req.param('file')} not on disk` }, 404, {
-        'cache-control': 'no-store'
-      });
+      return c.json(
+        {
+          success: false,
+          error: 'Not Found',
+          message: `Upload ${c.req.param('kind')}/${c.req.param('file')} not on disk`
+        },
+        404,
+        {
+          'cache-control': 'no-store'
+        }
+      );
     }
     // `immutable`: el nombre cambia con cada foto, asi que un 404 de cache no puede quedar viejo.
     return new Response(found.body, {
@@ -381,18 +463,33 @@ export function createApp(options: AppOptions = {}): Hono {
   app.route('/api/shopping', shoppingRoutes);
   app.route('/api/receipts', receiptsRoutes);
   app.route('/api/recipes/step-photos', recipeStepPhotoRoutes);
+  app.route('/api/recipes', recipeStepVideoRoutes);
   app.route('/api/recipe-photo-previews', recipePhotoPreviewRoutes);
   app.route('/api/recipe-images', recipeImageRoutes);
   app.route('/api/recipes', recipeRoutes);
   app.route('/api/household', householdRoutes);
+  app.route('/api/household', householdMealPlanningRoutes);
+  app.route('/api/household', householdMealProposalRoutes);
+  app.route('/api/household', householdMealConsumptionRoutes);
+  app.route('/api/household', householdPlanRoutes);
+  app.route('/api/household', householdPlanningAutomationRoutes);
+  app.route('/api/household', householdTasksRoutes);
   app.route('/api/calendar', calendarRoutes);
   app.route('/api/ai', aiRoutes);
+  app.route('/api/ai/assistant', aiAssistantRoutes);
   app.route('/api/ai', aiQueueRoutes);
   app.route('/api/logs', logRoutes);
 
   app.onError(errorHandler);
   app.notFound((c) =>
-    c.json({ success: false, error: 'Not Found', message: `Route ${c.req.method} ${c.req.url} not found` }, 404)
+    c.json(
+      {
+        success: false,
+        error: 'Not Found',
+        message: `Route ${c.req.method} ${c.req.url} not found`
+      },
+      404
+    )
   );
 
   const staticDir = options.staticDir;
@@ -412,7 +509,11 @@ export function createApp(options: AppOptions = {}): Hono {
         status: 200,
         headers: {
           'content-type': mimeFor(file),
-          'cache-control': file.endsWith('index.html') ? 'no-cache' : immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=3600'
+          'cache-control': file.endsWith('index.html')
+            ? 'no-cache'
+            : immutable
+              ? 'public, max-age=31536000, immutable'
+              : 'public, max-age=3600'
         }
       });
     });
@@ -424,7 +525,10 @@ export function createApp(options: AppOptions = {}): Hono {
 // `notFound` de Hono no es invocable desde un handler suelto; se replica su respuesta
 // para que un asset raro y una API inexistente contesten igual (JSON, 404).
 function next404(c: import('hono').Context) {
-  return c.json({ success: false, error: 'Not Found', message: `Route ${c.req.method} ${c.req.url} not found` }, 404);
+  return c.json(
+    { success: false, error: 'Not Found', message: `Route ${c.req.method} ${c.req.url} not found` },
+    404
+  );
 }
 
 const warnedBuckets = new Map<string, number>();

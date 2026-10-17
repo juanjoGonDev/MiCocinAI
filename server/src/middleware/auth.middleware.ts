@@ -2,6 +2,7 @@ import { Context, Next } from 'hono';
 import jwt from 'jsonwebtoken';
 import { config } from '../config/app.config.js';
 import { getDatabase } from '../config/database.js';
+import type { AppEnv } from '../types/hono-env.js';
 import { resolveAiOutputLanguage } from '../utils/ai-output-language.js';
 
 /**
@@ -22,7 +23,23 @@ function bearerToken(c: Context): string | null {
   return null;
 }
 
-export async function authMiddleware(c: Context, next: Next): Promise<Response | void> {
+export async function authMiddleware(c: Context<AppEnv>, next: Next): Promise<Response | void> {
+  return authenticate(c, next, true);
+}
+
+/** Authentication for endpoints whose contract forbids repairing user state during a read. */
+export async function readOnlyAuthMiddleware(
+  c: Context<AppEnv>,
+  next: Next
+): Promise<Response | void> {
+  return authenticate(c, next, false);
+}
+
+async function authenticate(
+  c: Context<AppEnv>,
+  next: Next,
+  repairStaleHouseholdSelection: boolean
+): Promise<Response | void> {
   const token = bearerToken(c);
 
   if (!token) {
@@ -96,10 +113,26 @@ export async function authMiddleware(c: Context, next: Next): Promise<Response |
 
     if (selection?.household_id && selection.membership_active !== 1) {
       if (activeMemberships.count === 0) {
-        db.prepare('UPDATE users SET household_id = NULL WHERE id = ?').run(payload.sub);
+        if (repairStaleHouseholdSelection) {
+          db.prepare('UPDATE users SET household_id = NULL WHERE id = ?').run(payload.sub);
+        }
       } else if (!selectionRoute) {
         return c.json({ success: false, code: 'HOUSEHOLD_SELECTION_REQUIRED' }, 409);
       }
+    }
+
+    // createApp sets the internal marker for production API requests. Route-only unit harnesses do
+    // not set it, preserving their previous isolated behavior. Accounts without any active
+    // membership must finish setup before calling the rest of the authenticated API; discovery and
+    // create/join routes stay available so registration can recover after reload or network failure.
+    // The client guard is UX only; this server-side gate is the authorization boundary.
+    if (
+      c.get('householdSetupGate') === true &&
+      activeMemberships.count === 0 &&
+      !selectionRoute &&
+      !isHouseholdSetupRoute(c)
+    ) {
+      return c.json({ success: false, code: 'HOUSEHOLD_REQUIRED' }, 409);
     }
 
     await next();
@@ -120,6 +153,16 @@ function isHouseholdSelectionRoute(c: Context): boolean {
     (c.req.method === 'GET' &&
       (path.endsWith('/api/household/memberships') || path.endsWith('/api/household'))) ||
     (c.req.method === 'POST' && path.endsWith('/api/household/active'))
+  );
+}
+
+function isHouseholdSetupRoute(c: Context): boolean {
+  if (c.req.method !== 'POST') return false;
+  const path = new URL(c.req.url).pathname.replace(/\/+$/, '') || '/';
+  return (
+    path === '/api/household' ||
+    path === '/api/household/join' ||
+    /^\/api\/household\/join\/[^/]+$/.test(path)
   );
 }
 
