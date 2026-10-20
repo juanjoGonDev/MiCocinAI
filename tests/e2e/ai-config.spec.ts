@@ -15,13 +15,16 @@ test.describe('AI Config', () => {
     await expect(page.locator('h1.ai-config__title')).toContainText('Configuración IA');
   });
 
-  test('should show info message', async ({ page }) => {
-    await expect(page.locator('.ai-config__info')).toContainText('Conecta tu proveedor de IA');
+  test('keeps the unconfigured state focused on one add action', async ({ page }) => {
+    await expect(page.locator('.ai-config__info')).toHaveCount(0);
+    await expect(page.locator('.function-provider-settings')).toHaveCount(0);
+    await expect(page.locator('.ai-config__header app-button')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Agregar configuración/ })).toHaveCount(1);
   });
 
   test('should show empty state with the add button', async ({ page }) => {
     await expect(page.locator('.empty-state__title')).toContainText('Sin configuraciones');
-    await expect(page.getByRole('button', { name: /Agregar configuración/ }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /Agregar configuración/ })).toHaveCount(1);
   });
 
   test('uses SVG decorations and clean text in the empty state', async ({ page }, testInfo) => {
@@ -390,10 +393,14 @@ test.describe('AI Config', () => {
       configReads += 1;
       const response = await route.fetch();
       if (configReads === 1) {
-        const staleSnapshot = await response.json();
+        const staleSnapshot = await response.text();
         signalStaleRead();
         await staleReadGate;
-        await route.fulfill({ response, json: staleSnapshot });
+        await route.fulfill({
+          status: response.status(),
+          contentType: 'application/json',
+          body: staleSnapshot
+        });
         signalStaleReadFinished();
         return;
       }
@@ -483,10 +490,14 @@ test.describe('AI Config', () => {
     await page.route('**/api/ai/configs', async (route) => {
       if (route.request().method() !== 'GET') return route.continue();
       const response = await route.fetch();
-      const staleSnapshot = await response.json();
+      const staleSnapshot = await response.text();
       signalStaleRead();
       await staleReadGate;
-      await route.fulfill({ response, json: staleSnapshot });
+      await route.fulfill({
+        status: response.status(),
+        contentType: 'application/json',
+        body: staleSnapshot
+      });
       signalStaleReadFinished();
     });
 
@@ -655,6 +666,10 @@ test.describe('AI Config', () => {
     });
 
     await card.getByRole('button', { name: /Desactivar/ }).click();
+    const deactivateConfirmation = page.locator('app-confirm-dialog .modal-overlay');
+    await expect(deactivateConfirmation).toBeVisible();
+    await expect(deactivateConfirmation).toContainText('Proveedor sintético');
+    await deactivateConfirmation.getByRole('button', { name: 'Desactivar' }).click();
     await expect(card.locator('app-badge').first()).toContainText('Activo');
     await expect(
       page.locator('.toast--error').filter({ hasText: 'No se pudo actualizar la configuración' })
@@ -958,10 +973,10 @@ test.describe('AI Config', () => {
     await expect(page.locator('input#apiKey')).toHaveValue('sk-timeout-secret');
   });
 
-  test('la configuracion recien creada es LA activa, y activar otra apaga la anterior', async ({
+  test('permite varios proveedores activos y reasigna funciones al desactivar uno en uso', async ({
     page
   }) => {
-    const crear = async (nombre: string) => {
+    const crear = async (nombre: string): Promise<string> => {
       await page
         .getByRole('button', { name: /Agregar configuración/ })
         .first()
@@ -970,25 +985,55 @@ test.describe('AI Config', () => {
       await page.fill('input#model', 'gpt-5');
       await page.fill('input#baseUrl', 'http://localhost:8000/v1');
       await page.fill('input#apiKey', 'sk-test');
+      const created = page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/ai/configs') && response.request().method() === 'POST'
+      );
       await page.locator('app-modal button[type=\"submit\"]').click();
+      const response = await created;
+      expect(response.status()).toBe(201);
+      const payload = (await response.json()) as { data: { id: string } };
       await expect(page.locator('.modal-overlay')).toHaveCount(0);
+      return payload.data.id;
     };
 
     await crear('La vieja');
-    await crear('La nueva');
+    await expect(page.locator('.ai-config__info')).toContainText('Conecta tu proveedor de IA');
+    await expect(page.locator('[data-test=\"ai-function-provider-assistant\"]')).toHaveCount(0);
+    await expect(
+      page.locator('.function-provider-row').filter({ hasText: 'Asistente' })
+    ).toContainText('La vieja');
+    const newProviderId = await crear('La nueva');
 
     const tarjetaDe = (nombre: string) => page.locator('.config-card').filter({ hasText: nombre });
-    // La recien creada es la activa; la anterior se apaga (antes: ambas activas y la VIEJA
-    // era la que contestaba, que era «la IA no se activa»).
-    await expect(tarjetaDe('La vieja').locator('app-badge').first()).toContainText('Inactivo');
+    await expect(tarjetaDe('La vieja').locator('app-badge').first()).toContainText('Activo');
     await expect(tarjetaDe('La nueva').locator('app-badge').first()).toContainText('Activo');
 
-    // Activar la vieja apaga la nueva: solo hay una.
-    await tarjetaDe('La vieja')
-      .getByRole('button', { name: /Activar/ })
+    const assistantProvider = page.locator('[data-test=\"ai-function-provider-assistant\"]');
+    await expect(assistantProvider).toHaveCount(1);
+    const assignmentSaved = page.waitForResponse(
+      (response) =>
+        response.url().endsWith('/api/ai/function-providers/assistant') &&
+        response.request().method() === 'PUT'
+    );
+    await assistantProvider.selectOption({ label: 'La nueva' });
+    const assignmentResponse = await assignmentSaved;
+    expect(assignmentResponse.status()).toBe(200);
+    expect((await assignmentResponse.json()).data.configId).toBe(newProviderId);
+
+    await tarjetaDe('La nueva')
+      .getByRole('button', { name: /Desactivar/ })
       .click();
+    const confirmation = page.locator('app-confirm-dialog [role=\"dialog\"]');
+    await expect(confirmation).toContainText('Asistente');
+    await expect(confirmation).toContainText('proveedor activo más antiguo');
+    await confirmation.getByRole('button', { name: 'Desactivar' }).click();
     await expect(tarjetaDe('La vieja').locator('app-badge').first()).toContainText('Activo');
     await expect(tarjetaDe('La nueva').locator('app-badge').first()).toContainText('Inactivo');
+    await expect(assistantProvider).toHaveCount(0);
+    await expect(
+      page.locator('.function-provider-row').filter({ hasText: 'Asistente' })
+    ).toContainText('La vieja');
   });
 
   test('should close modal on cancel', async ({ page }) => {

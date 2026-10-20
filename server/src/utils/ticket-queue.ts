@@ -32,13 +32,15 @@ import {
 } from './ai-config-scope.js';
 import {
   activeAiConfig,
-  activeAiConfigForScope,
+  activeAiConfigForFunction,
+  activeAiConfigForFunctionInScope,
   AiCallError,
   callAIWithConfig,
   callAIStreamingWithConfig,
   extractJsonObject,
   pingDeConexionTransport
 } from './ai-client.js';
+import { aiFunctionForJobKind } from './ai-function-providers.js';
 import type { AiConfigRow, AiJobKind, AiMessage, AiMessagePart } from './ai-client.js';
 import type { AiResponseFormat } from '../schemas/ai-response-format.js';
 import {
@@ -55,7 +57,8 @@ import { leerTicket } from './ticket-files.js';
 // The queue is local to this process/database. Jobs wake it directly; the slow
 // interval is only a recovery sweep for durable rows changed outside the API.
 const QUEUE_RECONCILIATION_INTERVAL_MS = 30_000;
-const LEASE_SEGUNDOS = 300;
+// Must outlive the maximum provider timeout (600s) so a slow request is never reclaimed early.
+export const AI_JOB_LEASE_SECONDS = 660;
 
 type Trabajador = {
   temporizador: NodeJS.Timeout;
@@ -238,10 +241,12 @@ export function dispatchAI(
 ): Promise<string> {
   // Callers with a captured household scope must never resolve configuration from a later
   // `users.household_id` selection; otherwise a switch while building the prompt can cross homes.
-  const config =
-    householdId === undefined
-      ? activeAiConfig(db, userId)
-      : activeAiConfigForScope(db, userId, householdId);
+  const functionKey = aiFunctionForJobKind(kind);
+  const config = functionKey
+    ? householdId === undefined
+      ? activeAiConfigForFunction(db, userId, functionKey)
+      : activeAiConfigForFunctionInScope(db, userId, householdId, functionKey)
+    : undefined;
   if (!config)
     return Promise.reject(new AiCallError('NO_CONFIG', 'No active AI configuration found'));
   const payloadBytes = Buffer.byteLength(
@@ -268,7 +273,7 @@ export function dispatchAIStreaming(
   responseFormat: AiResponseFormat,
   externalSignal: AbortSignal
 ): Promise<string> {
-  const config = activeAiConfig(db, userId);
+  const config = activeAiConfigForFunction(db, userId, 'shopping_pantry');
   if (!config)
     return Promise.reject(new AiCallError('NO_CONFIG', 'No active AI configuration found'));
   return submitAiTask({
@@ -310,7 +315,8 @@ export function encolarTicket(db: SqlDb, userId: string, receiptId: string): str
     .get(receiptId, userId) as { household_id: string | null } | undefined;
   if (!receipt) throw new AiCallError('PROVIDER', 'Receipt not found', 'RECEIPT_NOT_FOUND');
   const householdId = receipt.household_id;
-  const config = activeAiConfigForScope(db, userId, householdId) ?? null;
+  const config =
+    activeAiConfigForFunctionInScope(db, userId, householdId, 'shopping_pantry') ?? null;
   const id = nanoid();
   const configId = config?.id ?? null;
   db.prepare(
@@ -388,12 +394,22 @@ export function barrerArranque(db: SqlDb = getDatabase()): number {
       .run(id);
     inputsPerdidos += fallo.changes;
   }
+  // A saved provider test is not resumable: its request closure and response are volatile. Release
+  // its durable lock on restart so the UI cannot remain stuck at `testing` forever.
+  const pruebasInterrumpidas = db
+    .prepare(
+      `UPDATE ai_configs SET test_status = 'failed',
+         test_error = 'La prueba se interrumpió al reiniciar el servidor.',
+         last_tested = CURRENT_TIMESTAMP
+       WHERE test_status = 'testing'`
+    )
+    .run();
   if (info.changes > 0) {
     db.prepare(
       `UPDATE receipts SET status = 'queued', updated_at = CURRENT_TIMESTAMP WHERE status = 'analyzing'`
     ).run();
   }
-  return info.changes + inputsPerdidos;
+  return info.changes + inputsPerdidos + pruebasInterrumpidas.changes;
 }
 
 /** Máximo de trabajos IA en vuelo; `0` significa que no hay un límite configurado. */
@@ -586,7 +602,7 @@ function reclamarTrabajo(db: SqlDb, jobId: string): number | null {
       const changed = db
         .prepare(
           `UPDATE ai_jobs SET status = 'running', attempts = attempts + 1, claim_generation = ?,
-           started_at = CURRENT_TIMESTAMP, lease_until = datetime('now', '+${LEASE_SEGUNDOS} seconds'),
+           started_at = CURRENT_TIMESTAMP, lease_until = datetime('now', '+${AI_JOB_LEASE_SECONDS} seconds'),
            updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'queued'`
         )
         .run(claimGeneration, jobId).changes;
